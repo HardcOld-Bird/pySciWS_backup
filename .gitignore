@@ -1,0 +1,11 @@
+# pycache
+__pycache__/
+
+# dirs
+/.idea/
+/.vscode/
+/.augment/
+/参考资料/
+
+# Build artifacts
+*.egg-info/

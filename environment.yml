@@ -1,0 +1,24 @@
+# environment.yml
+# conda env update --name sci --file D:\XXXIIIGGG\projects\pySci\pySciWS\environment.yml --prune
+
+name: sci
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python==3.13.9
+  - pydantic
+  - ruff
+  - pre-commit
+  - pytest
+  - pytest-cov
+  - commitizen
+  - numpy
+  - scipy
+  - matplotlib
+  - sympy
+  - pandas
+  - jupyterlab
+  - seaborn

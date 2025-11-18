@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pysci"
+version = "0.1.0"
+description = "N/A"
+readme = "README.md"
+requires-python = ">=3.13"
+license = {text = "MIT"}
+authors = [
+    {name = "HardcOld-Bird", email = "antarcticbird@163.com"}
+]
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "sympy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "commitizen",
+]
+
+[project.urls]
+Homepage = "https://github.com/HardcOld-Bird/pySciWS_backup"
+Repository = "https://github.com/HardcOld-Bird/pySciWS_backup.git"
+Issues = "https://github.com/HardcOld-Bird/pySciWS_backup/issues"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+exclude = [
+    ".git/**",
+    ".idea/**",
+    "scripts/**",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort (import sorting)
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+# Configure import sorting
+known-first-party = ["src"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "0.1.0"
+version_scheme = "pep440"
+version_provider = "pep621"
+update_changelog_on_bump = true
+major_version_zero = true

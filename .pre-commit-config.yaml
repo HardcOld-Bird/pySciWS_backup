@@ -1,0 +1,42 @@
+# .pre-commit-config.yml
+
+#   1. install hooks: pre-commit install
+#      or: pre-commit install --hook-type pre-commit --hook-type commit-msg
+#   3. run manually: pre-commit run --all-files
+#   4. skip hook: SKIP=commitizen git commit -m "message"
+#   5. update: pre-commit autoupdate
+
+# ============================================================================
+# GitHub Actions
+# ============================================================================
+ci:
+    autofix_commit_msg: "style: [pre-commit.ci] auto-fixes from pre-commit.com hooks"
+    autoupdate_commit_msg: "chore: [pre-commit.ci] pre-commit autoupdate"
+
+repos:
+  # ========================================================================
+  # 1. Official
+  # ========================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+
+      - id: end-of-file-fixer
+
+      - id: check-yaml
+        exclude: ^environment\.yml$
+
+      - id: check-toml
+
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+
+  # ========================================================================
+  # 2. Commitizen
+  # ========================================================================
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.10.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg] # 在 commit-msg 阶段触发
