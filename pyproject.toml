@@ -40,7 +40,7 @@ line-length = 88
 exclude = [
     ".git/**",
     ".idea/**",
-    "scripts/**",
+#    "scripts/**",
 ]
 
 [tool.ruff.lint]

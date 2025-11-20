@@ -4,18 +4,12 @@
 该脚本通过sympy进行符号计算，验证CPA-laser条件文档中的理论计算过程。
 """
 
-import sys
-from pathlib import Path
-
-import matplotlib.pyplot as plt
 import sympy as sp
-from sympy import I, cos, simplify, sin, symbols
+from sympy import I, cos, sin, symbols
 
-# 将项目根目录添加到Python路径
-project_root = Path(__name__).parent.parent
-sys.path.insert(0, str(project_root))
-
-from src.my_plots import plot_zero_contours
+from src.my_dtypes import ParamSpace3D
+from src.numerical import get_numpy_func
+from src.space_curve import vis_complex_equation
 
 # %%
 # ============================================================================
@@ -70,9 +64,7 @@ M_gain = sp.Matrix([[1, 0], [Y_2, 1]])
 # 3. 计算总传递矩阵
 # ============================================================================
 
-# M_Tl = M_loss * M_TL * M_gain（左侧入射）
 M_T = M_loss * M_TL * M_gain
-M_T = simplify(M_T)
 
 # 提取矩阵元素
 A, B = M_T[0, 0], M_T[0, 1]
@@ -94,68 +86,17 @@ zero_func = (B / Z_0 - C * Z_0) ** 2 - (A - D) ** 2 - 4
 # 5. 数值计算和可视化
 # ============================================================================
 
-# 示例：绘制pole_func和zero_func在不同参数空间中的零等值线
-# 示例1：在 (omega_r, omega_i) 平面上绘制极点函数
-fixed_params_example1 = {
-    Z_r: 400,  # 阻抗实部
-    Z_i: -50,  # 阻抗虚部
-    d: 0.5,  # 传输线长度
-    switch_factor: 1,  # 开关因子（1表示Z1=Z2）
-}
-
-fig1, ax1 = plot_zero_contours(
-    func=pole_func,
-    param_x=omega_r,
-    param_y=omega_i,
-    x_range=(0, 2000),
-    y_range=(-100, 100),
-    fixed_params=fixed_params_example1,
-    resolution=500,
-    title="极点函数零等值线 (omega_r, omega_i 平面)",
-    colors="red",
+param_space = ParamSpace3D(
+    x=d,
+    x_range=(0, 1),
+    y=omega_r,
+    y_range=(-1000, 1000),
+    z=omega_i,
+    z_range=(-1000, 1000),
+    fixed_param={Z_r: 1, Z_i: 1, switch_factor: 1},
 )
-plt.show()
+pole_np_func = get_numpy_func(pole_func, param_space)
 
 # %%
-# 示例2：在 (Z_r, Z_i) 平面上绘制零点函数
-fixed_params_example2 = {
-    omega_r: 1000,  # 角频率实部
-    omega_i: 10,  # 角频率虚部
-    d: 0.5,  # 传输线长度
-    switch_factor: 1,  # 开关因子
-}
-
-fig2, ax2 = plot_zero_contours(
-    func=zero_func,
-    param_x=Z_r,
-    param_y=Z_i,
-    x_range=(200, 600),
-    y_range=(-200, 200),
-    fixed_params=fixed_params_example2,
-    resolution=500,
-    title="零点函数零等值线 (Z_r, Z_i 平面)",
-    colors="blue",
-)
-plt.show()
-
-# %%
-# 示例3：在 (d, omega_r) 平面上绘制极点函数
-fixed_params_example3 = {
-    Z_r: 400,
-    Z_i: -50,
-    omega_i: 0,
-    switch_factor: 1,
-}
-
-fig3, ax3 = plot_zero_contours(
-    func=pole_func,
-    param_x=d,
-    param_y=omega_r,
-    x_range=(0, 2),
-    y_range=(0, 3000),
-    fixed_params=fixed_params_example3,
-    resolution=500,
-    title="极点函数零等值线 (d, omega_r 平面)",
-    colors="green",
-)
-plt.show()
+# print(pole_np_func(1, 5, 0.6))
+_, _, _ = vis_complex_equation(pole_np_func, param_space, plot=True)

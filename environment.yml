@@ -9,6 +9,7 @@ channels:
 
 dependencies:
   - python==3.13.9
+  - pip
   - pydantic
   - ruff
   - pre-commit
@@ -19,6 +20,4 @@ dependencies:
   - scipy
   - matplotlib
   - sympy
-  - pandas
-  - jupyterlab
-  - seaborn
+  - pyvista
