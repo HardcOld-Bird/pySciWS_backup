@@ -6,6 +6,8 @@ __pycache__/
 /.vscode/
 /.augment/
 /参考资料/
+/mphs/
+/storage/
 
 # Build artifacts
 *.egg-info/

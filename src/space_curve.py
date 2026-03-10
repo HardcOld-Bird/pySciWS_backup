@@ -1,16 +1,12 @@
 """空间曲线可视化函数"""
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
 
 import numpy as np
 import pyvista as pv
 from numpy.typing import NDArray
 
 from src.my_dtypes import ParamSpace3D
-
-if TYPE_CHECKING:
-    pass
 
 
 def vis_complex_equation(
