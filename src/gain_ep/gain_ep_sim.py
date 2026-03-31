@@ -585,48 +585,69 @@ class GainEPSimulator:
             # 如果发生错误，重新抛出异常
             raise
 
-
     def solve_ground_truth(
         self,
         sim_input: SimulationInput,
-        verify: bool = True,
+        num_iterations: int = 3,
     ) -> tuple[np.ndarray, np.ndarray, float]:
-        """求解使实际波场与理想波场一致的法向位移和等效增益系数
+        """求解使实际波场与理想波场一致的法向位移和等效增益系数（迭代优化）
 
-        此方法通过求解矩阵方程，找到使实际系统（探针9-16）与理想系统（探针1-8）
+        此方法通过迭代求解矩阵方程，找到使实际系统（探针9-16）与理想系统（探针1-8）
         完全一致的法向位移值，并计算每个管槽的等效增益系数。
+
+        迭代优化机制：
+        - 第1次迭代：求解基础的法向位移，使其产生的声压接近理想反馈贡献
+        - 第2次及后续迭代：计算残差（Residual = 探针1-8 - 探针9-16），
+          将残差作为新的目标，求解法向位移修正量，累加到总法向位移上
+        - 每次迭代后都进行验证，计算并显示验证误差
+        - 理论上，迭代次数越多，验证误差越小
 
         工作流程：
         1. 运行初始仿真，获取16个探针值
         2. 使用探针1-8作为"目标场"（理想系统）
         3. 从目标场中扣除左右入射的贡献，得到"理想系统的反馈贡献"
-        4. 求解矩阵方程：找到8个法向位移，使其产生的声压等于"理想系统的反馈贡献"
-        5. （可选）验证：用求解的法向位移重新运行仿真，检查探针1-8与探针9-16是否相等
+        4. 迭代求解：
+           - 第1次：求解基础法向位移
+           - 第2次及以后：计算残差，求解修正量，累加到法向位移
+        5. 验证：每次迭代后用当前法向位移运行仿真，计算探针差值的方差
         6. 计算等效增益系数：对每个管槽，用 总声压 / 入射声压
 
         Args:
             sim_input: 初始仿真输入（包含左右入射和理想系统的法向位移）
-            verify: 是否进行验证步骤（默认True）
+            num_iterations: 迭代次数（默认3），越多精度越高但计算时间越长
+                以下是不同次数的典型误差值：
+                1：6.463286e-06
+                2：2.060303e-16
+                3：3.752095e-19（已接近最小）
+                4：1.050377e-19（已达最小）
+                5：1.760487e-19
 
         Returns:
-            tuple: (求解的法向位移, 等效增益系数, 验证误差)
+            tuple: (求解的法向位移, 等效增益系数, 最终验证误差)
                 - solved_vn: shape (8,) 的复数数组，求解得到的法向位移
                 - effective_gain_coeffs: shape (8,) 的复数数组，等效增益系数
-                - verification_error: 验证误差（探针差值的方差），越小越好
+                - verification_error: 最终验证误差（探针差值的方差），越小越好
 
         Raises:
             RuntimeError: 如果未连接到 COMSOL Server 或传递函数未计算
             np.linalg.LinAlgError: 如果矩阵方程无解
+            ValueError: 如果 num_iterations < 1
 
         Examples:
             >>> with GainEPSimulator(mph_file) as simulator:
             ...     # 先计算传递函数
             ...     simulator.calib()
-            ...     # 求解ground truth
+            ...     # 求解ground truth（默认2次迭代）
             ...     sim_input = SimulationInput(1.0, 0.0, 0j, 0j, 0j, 0j, 0j, 0j, 0j, 0j)
             ...     vn, gain_coeffs, error = simulator.solve_ground_truth(sim_input)
             ...     print(f"验证误差: {error:.6e}")
+            ...     # 或使用更多迭代次数以获得更高精度
+            ...     vn, gain_coeffs, error = simulator.solve_ground_truth(sim_input, num_iterations=5)
         """
+        # 验证参数
+        if num_iterations < 1:
+            raise ValueError(f"num_iterations 必须 >= 1，当前值: {num_iterations}")
+
         # 确保已连接
         if self.client is None:
             raise RuntimeError("未连接到 COMSOL Server，请先调用 connect() 方法")
@@ -636,7 +657,9 @@ class GainEPSimulator:
             raise RuntimeError("传递函数未计算，请先调用 calib() 方法")
 
         print("\n" + "=" * 70)
-        print("求解 Ground Truth：使实际系统与理想系统一致")
+        print(
+            f"求解 Ground Truth：使实际系统与理想系统一致（迭代次数: {num_iterations}）"
+        )
         print("=" * 70)
 
         # ========================================================================
@@ -648,7 +671,7 @@ class GainEPSimulator:
 
         # 提取探针1-8作为"目标场"（理想系统）
         target_field = output_array[0:8]  # 探针1-8（索引0-7）
-        print(f"✓ 获取目标场（探针1-8）")
+        print("✓ 获取目标场（探针1-8）")
 
         # ========================================================================
         # 第二步：计算理想系统的反馈贡献
@@ -665,44 +688,52 @@ class GainEPSimulator:
 
         # 从目标场中扣除左右入射的贡献
         ideal_feedback_contribution = (
-            target_field
-            - left_incident_contribution
-            - right_incident_contribution
+            target_field - left_incident_contribution - right_incident_contribution
         )
 
-        print(f"✓ 计算得到理想系统的反馈贡献")
+        print("✓ 计算得到理想系统的反馈贡献")
         print(f"  目标场范数: {np.linalg.norm(target_field):.6e}")
         print(f"  左入射贡献范数: {np.linalg.norm(left_incident_contribution):.6e}")
         print(f"  右入射贡献范数: {np.linalg.norm(right_incident_contribution):.6e}")
         print(f"  理想反馈贡献范数: {np.linalg.norm(ideal_feedback_contribution):.6e}")
 
         # ========================================================================
-        # 第三步：求解法向位移矩阵方程
+        # 第三步：迭代求解法向位移矩阵方程
         # ========================================================================
-        print("\n第三步：求解法向位移矩阵方程...")
+        print(f"\n第三步：迭代求解法向位移矩阵方程（共 {num_iterations} 次迭代）...")
 
         # 构建传递函数矩阵：8个法向位移对8个探针的影响
         # 从完整的传递函数矩阵中提取行2-9（法向位移1-8）
         transfer_matrix = self.transfer_functions[2:10, :]  # shape: (8, 8)
 
-        # 求解线性方程组：transfer_matrix @ vn = ideal_feedback_contribution
-        # 即：找到vn，使得8个法向位移产生的声压等于理想反馈贡献
-        try:
-            solved_vn = np.linalg.solve(transfer_matrix, ideal_feedback_contribution)
-            print(f"✓ 成功求解法向位移")
-            print(f"  求解的法向位移范数: {np.linalg.norm(solved_vn):.6e}")
-        except np.linalg.LinAlgError as e:
-            print(f"✗ 矩阵方程求解失败: {e}")
-            raise
+        # 初始化累积的法向位移
+        solved_vn = np.zeros(8, dtype=complex)
 
-        # ========================================================================
-        # 第四步：验证求解结果（可选）
-        # ========================================================================
+        # 当前的目标（第一次迭代使用理想反馈贡献）
+        current_target = ideal_feedback_contribution.copy()
+
+        # 迭代求解
         verification_error = 0.0
-        if verify:
-            print("\n第四步：验证求解结果...")
+        for iteration in range(num_iterations):
+            print(f"\n--- 迭代 {iteration + 1}/{num_iterations} ---")
 
-            # 创建新的输入：使用求解的法向位移
+            # 求解线性方程组：transfer_matrix @ vn_correction = current_target
+            try:
+                vn_correction = np.linalg.solve(transfer_matrix, current_target)
+                print("✓ 成功求解法向位移修正量")
+                print(f"  修正量范数: {np.linalg.norm(vn_correction):.6e}")
+            except np.linalg.LinAlgError as e:
+                print(f"✗ 矩阵方程求解失败: {e}")
+                raise
+
+            # 累加修正量到总法向位移
+            solved_vn += vn_correction
+            print(f"  累积法向位移范数: {np.linalg.norm(solved_vn):.6e}")
+
+            # 验证当前求解结果
+            print("  验证当前求解结果...")
+
+            # 创建新的输入：使用当前累积的法向位移
             verification_input = SimulationInput(
                 pamp_L=sim_input.pamp_L,
                 pamp_R=sim_input.pamp_R,
@@ -720,47 +751,40 @@ class GainEPSimulator:
             verification_output = self.run_simulation(verification_input)
             verification_array = verification_output.to_array()
 
-            # 计算探针1-8与探针9-16的差值
+            # 计算探针1-8与探针9-16的差值（残差 Residual）
             probes_1_8 = verification_array[0:8]
             probes_9_16 = verification_array[8:16]
-            differences = probes_1_8 - probes_9_16
+            residual = probes_1_8 - probes_9_16
 
             # 计算方差（差值的平方和）
-            verification_error = np.sum(np.abs(differences) ** 2)
+            verification_error = np.sum(np.abs(residual) ** 2)
 
-            print(f"✓ 验证完成")
-            print(f"  探针1-8与探针9-16的差值方差: {verification_error:.6e}")
-            if verification_error < 1e-10:
-                print(f"  ✓ 验证成功！差值方差接近0")
-            else:
-                print(f"  ⚠ 警告：差值方差较大，可能存在数值误差")
+            print(f"  ✓ 验证完成，差值方差: {verification_error:.6e}")
+
+            # 如果不是最后一次迭代，将残差作为下一次迭代的目标
+            if iteration < num_iterations - 1:
+                current_target = residual
+                print("  将残差作为下一次迭代的目标")
+                print(f"  残差范数: {np.linalg.norm(residual):.6e}")
+
+        # 迭代完成
+        print("\n✓ 迭代求解完成！")
+        print(f"  最终法向位移范数: {np.linalg.norm(solved_vn):.6e}")
+        print(f"  最终验证误差: {verification_error:.6e}")
+        if verification_error < 1e-10:
+            print("  ✓ 验证成功！差值方差接近0")
+        else:
+            print(f"  ⚠ 提示：差值方差为 {verification_error:.6e}")
 
         # ========================================================================
-        # 第五步：计算等效增益系数
+        # 第四步：计算等效增益系数
         # ========================================================================
-        print("\n第五步：计算等效增益系数...")
+        print("\n第四步：计算等效增益系数...")
 
         effective_gain_coeffs = np.zeros(8, dtype=complex)
 
-        # 使用验证后的输出（如果进行了验证）或重新计算
-        if verify:
-            final_output_array = verification_array
-        else:
-            # 如果没有验证，需要重新运行一次仿真
-            final_input = SimulationInput(
-                pamp_L=sim_input.pamp_L,
-                pamp_R=sim_input.pamp_R,
-                vn_1=solved_vn[0],
-                vn_2=solved_vn[1],
-                vn_3=solved_vn[2],
-                vn_4=solved_vn[3],
-                vn_5=solved_vn[4],
-                vn_6=solved_vn[5],
-                vn_7=solved_vn[6],
-                vn_8=solved_vn[7],
-            )
-            final_output = self.run_simulation(final_input)
-            final_output_array = final_output.to_array()
+        # 使用最后一次迭代的验证输出
+        final_output_array = verification_array
 
         # 对每个管槽计算等效增益系数
         for idx in range(8):
@@ -791,9 +815,9 @@ class GainEPSimulator:
             )
 
         print("\n✓ Ground Truth 求解完成！")
-        print(f"  求解的法向位移: {solved_vn}")
+        print(f"  最终法向位移: {solved_vn}")
         print(f"  等效增益系数: {effective_gain_coeffs}")
-        print(f"  验证误差: {verification_error:.6e}")
+        print(f"  最终验证误差: {verification_error:.6e}")
 
         # ========================================================================
         # 保存等效增益系数到文件（每次运行都覆盖）
@@ -808,6 +832,7 @@ class GainEPSimulator:
                 "effective_gain_coefficients": effective_gain_coeffs,
                 "solved_vn": solved_vn,
                 "verification_error": verification_error,
+                "num_iterations": num_iterations,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "mph_file": str(self.mph_file),
                 "input_pamp_L": sim_input.pamp_L,
@@ -815,8 +840,9 @@ class GainEPSimulator:
             }
             with open(truth_path, "wb") as f:
                 pickle.dump(truth_data, f)
-            print(f"✓ 等效增益系数已保存到文件")
+            print("✓ 等效增益系数已保存到文件")
             print(f"  文件路径: {truth_path}")
+            print(f"  迭代次数: {num_iterations}")
         except Exception as e:
             print(f"⚠ 保存文件失败: {e}")
 
@@ -854,59 +880,73 @@ class GainEPSimulator:
         except Exception as e:
             raise RuntimeError(f"读取 Ground Truth 文件失败: {e}")
 
-
     def _generate_feedback(
         self,
         current_input: SimulationInput,
         current_output: SimulationOutput,
-        mode: str,
+        data_source_mode: str,
+        logic_mode: str = "p_and_d",
     ) -> SimulationInput:
         """生成反馈输入
 
         根据当前输入和输出，以及指定的工作模式，计算下一次迭代的输入参数。
 
-        工作模式：
-        - from_calib: 使用校准结果中的8个增益系数作为反馈系数
-        - from_truth: 使用 solve_ground_truth 计算的8个等效增益系数作为反馈系数
-        - constant: 所有8个管槽使用相同的 self.feedback_constant 作为反馈系数
+        双模式系统：
+        1. data_source_mode（数据源模式）：
+           - from_calib: 使用校准结果中的8个增益系数
+           - from_truth: 使用 solve_ground_truth 计算的8个等效增益系数
+           - constant: 所有8个管槽使用相同的 self.feedback_constant
 
-        反馈公式（对所有模式都相同）：
-        1. 计算入射声压 = 总声压 - 法向位移自身的贡献（使用传递函数）
-        2. 计算目标总声压 = 入射声压 × 反馈系数
-        3. 计算新的法向位移（使用传递函数）
+        2. logic_mode（逻辑模式）：
+           - p_and_d: 同时使用声压和法向位移值进行反馈（传统逻辑）
+             公式：入射声压 = 总声压 - 法向位移 × 传递函数
+                   目标总声压 = 入射声压 × 增益系数A
+                   新法向位移 = (目标总声压 - 总声压) / 传递函数
+           - only_p: 仅使用声压进行反馈（简化逻辑）
+             公式：反馈系数B = (A - 1) / A
+                   目标发送声压 = 探针声压 × B
+                   新法向位移 = 目标发送声压 / 传递函数
 
         Args:
             current_input: 当前迭代的输入参数
             current_output: 当前迭代的输出结果
-            mode: 工作模式，"from_calib"、"from_truth" 或 "constant"
+            data_source_mode: 数据源模式，"from_calib"、"from_truth" 或 "constant"
+            logic_mode: 逻辑模式，"p_and_d" 或 "only_p"，默认为 "p_and_d"
 
         Returns:
             下一次迭代的输入参数
 
         Raises:
-            ValueError: 如果 mode 不合法
+            ValueError: 如果 data_source_mode 或 logic_mode 不合法
             RuntimeError: 如果传递函数未计算或所需的系数文件不存在
         """
         # 验证传递函数已计算
         if self.transfer_functions is None:
             raise RuntimeError("传递函数未计算，请先调用 calib()")
 
-        # 验证 mode 合法性
-        valid_modes = ["from_calib", "from_truth", "constant"]
-        if mode not in valid_modes:
+        # 验证 data_source_mode 合法性
+        valid_data_modes = ["from_calib", "from_truth", "constant"]
+        if data_source_mode not in valid_data_modes:
             raise ValueError(
-                f"mode 必须是 {valid_modes} 之一，当前值: {mode}"
+                f"data_source_mode 必须是 {valid_data_modes} 之一，当前值: {data_source_mode}"
             )
 
-        # 根据 mode 获取反馈系数
-        if mode == "from_calib":
+        # 验证 logic_mode 合法性
+        valid_logic_modes = ["p_and_d", "only_p"]
+        if logic_mode not in valid_logic_modes:
+            raise ValueError(
+                f"logic_mode 必须是 {valid_logic_modes} 之一，当前值: {logic_mode}"
+            )
+
+        # 根据 data_source_mode 获取增益系数 A
+        if data_source_mode == "from_calib":
             if self.gain_coefficients is None:
                 raise RuntimeError("增益系数未计算，请先调用 calib()")
-            feedback_coeffs = self.gain_coefficients
-        elif mode == "from_truth":
-            feedback_coeffs = self._load_ground_truth_coefficients()
-        elif mode == "constant":
-            feedback_coeffs = np.full(8, self.feedback_constant, dtype=complex)
+            gain_coeffs_A = self.gain_coefficients
+        elif data_source_mode == "from_truth":
+            gain_coeffs_A = self._load_ground_truth_coefficients()
+        elif data_source_mode == "constant":
+            gain_coeffs_A = np.full(8, self.feedback_constant, dtype=complex)
 
         # 获取当前法向位移和输出声压
         current_vn = np.array(
@@ -929,31 +969,51 @@ class GainEPSimulator:
         # 初始化新的法向位移
         new_vn = np.zeros(8, dtype=complex)
 
-        # 对所有8个管槽进行反馈
-        for idx in range(8):
-            total_pressure = total_pressures[idx]
+        # 根据 logic_mode 选择反馈逻辑
+        if logic_mode == "p_and_d":
+            # p_and_d 模式：同时使用声压和法向位移值进行反馈
+            for idx in range(8):
+                total_pressure = total_pressures[idx]
 
-            # 从传递函数矩阵中提取法向位移(idx+1)对探针(9+idx)的传递函数
-            # 法向位移(idx+1)在矩阵中的行索引：2 + idx
-            # 探针(9+idx)在矩阵中的列索引：idx
-            transfer_func = self.transfer_functions[2 + idx, idx]
-            feedback_coeff = feedback_coeffs[idx]  # 该管槽的反馈系数
-            current_vn_value = current_vn[idx]
+                # 从传递函数矩阵中提取法向位移(idx+1)对探针(9+idx)的传递函数
+                # 法向位移(idx+1)在矩阵中的行索引：2 + idx
+                # 探针(9+idx)在矩阵中的列索引：idx
+                transfer_func = self.transfer_functions[2 + idx, idx]
+                gain_coeff_A = gain_coeffs_A[idx]  # 该管槽的增益系数 A
+                current_vn_value = current_vn[idx]
 
-            # 计算入射声压（扣除法向位移自身的贡献）
-            incident_pressure = total_pressure - current_vn_value * transfer_func
+                # 计算入射声压（扣除法向位移自身的贡献）
+                incident_pressure = total_pressure - current_vn_value * transfer_func
 
-            # 计算目标总声压（使用该管槽的反馈系数）
-            target_total_pressure = incident_pressure * feedback_coeff
+                # 计算目标总声压（使用该管槽的增益系数 A）
+                target_total_pressure = incident_pressure * gain_coeff_A
 
-            # 计算差值
-            pressure_diff = target_total_pressure - total_pressure
+                # 计算差值
+                pressure_diff = target_total_pressure - total_pressure
 
-            # 计算法向位移增量
-            vn_increment = pressure_diff / transfer_func
+                # 计算法向位移增量
+                vn_increment = pressure_diff / transfer_func
 
-            # 计算新的法向位移（增量调整）
-            new_vn[idx] = current_vn_value + vn_increment
+                # 计算新的法向位移（增量调整）
+                new_vn[idx] = current_vn_value + vn_increment
+
+        elif logic_mode == "only_p":
+            # only_p 模式：仅使用声压进行反馈
+            for idx in range(8):
+                total_pressure = total_pressures[idx]  # 探针声压
+
+                # 从传递函数矩阵中提取法向位移(idx+1)对探针(9+idx)的传递函数
+                transfer_func = self.transfer_functions[2 + idx, idx]
+                gain_coeff_A = gain_coeffs_A[idx]  # 该管槽的增益系数 A
+
+                # 计算反馈系数 B = A - 1
+                feedback_coeff_B = gain_coeff_A - 1
+
+                # 计算目标发送声压
+                target_send_pressure = total_pressure * feedback_coeff_B
+
+                # 计算新的法向位移
+                new_vn[idx] = target_send_pressure / transfer_func
 
         # 创建新的输入（左右入射幅值保持不变）
         return SimulationInput(
@@ -973,7 +1033,8 @@ class GainEPSimulator:
         self,
         initial_input: SimulationInput,
         num_iterations: int,
-        mode: str = "from_calib",
+        data_source_mode: str = "from_calib",
+        logic_mode: str = "p_and_d",
     ) -> tuple[list[SimulationInput], list[SimulationOutput]]:
         """运行反馈环路仿真
 
@@ -989,10 +1050,13 @@ class GainEPSimulator:
         Args:
             initial_input: SimulationInput对象，第一轮仿真的初始条件
             num_iterations: 反馈迭代次数（总仿真次数）
-            mode: 反馈模式，可选值：
+            data_source_mode: 数据源模式，可选值：
                 - "from_calib": 使用校准结果中的增益系数（默认）
                 - "from_truth": 使用 solve_ground_truth 计算的等效增益系数
                 - "constant": 所有管槽使用相同的 feedback_constant
+            logic_mode: 逻辑模式，可选值：
+                - "p_and_d": 同时使用声压和法向位移值进行反馈（默认）
+                - "only_p": 仅使用声压进行反馈
 
         Returns:
             tuple: 包含2个元素的元组：
@@ -1000,26 +1064,38 @@ class GainEPSimulator:
                 - list[SimulationOutput]: 所有迭代的输出结果列表
 
         Raises:
-            ValueError: 如果num_iterations < 1 或 mode 不合法
+            ValueError: 如果num_iterations < 1 或 data_source_mode/logic_mode 不合法
             RuntimeError: 如果未连接到 COMSOL Server 或传递函数未计算
 
         Examples:
             >>> with GainEPSimulator(mph_file, feedback_constant=1.0) as simulator:
             ...     # 先计算传递函数
             ...     simulator.calib()
-            ...     # 运行反馈环路（使用校准系数）
+            ...     # 运行反馈环路（使用校准系数，p_and_d 逻辑）
             ...     initial = SimulationInput(1.0, 0.0, 0j, 0j, 0j, 0j, 0j, 0j, 0j, 0j)
-            ...     inputs, outputs = simulator.run_feedback_loop(initial, 8, mode="from_calib")
-            ...     # 或使用常数反馈
-            ...     inputs, outputs = simulator.run_feedback_loop(initial, 8, mode="constant")
+            ...     inputs, outputs = simulator.run_feedback_loop(
+            ...         initial, 8, data_source_mode="from_calib", logic_mode="p_and_d"
+            ...     )
+            ...     # 或使用 only_p 逻辑
+            ...     inputs, outputs = simulator.run_feedback_loop(
+            ...         initial, 8, data_source_mode="from_calib", logic_mode="only_p"
+            ...     )
         """
         # 验证参数
         if num_iterations < 1:
             raise ValueError(f"num_iterations必须 >= 1，当前值: {num_iterations}")
 
-        valid_modes = ["from_calib", "from_truth", "constant"]
-        if mode not in valid_modes:
-            raise ValueError(f"mode 必须是 {valid_modes} 之一，当前值: {mode}")
+        valid_data_modes = ["from_calib", "from_truth", "constant"]
+        if data_source_mode not in valid_data_modes:
+            raise ValueError(
+                f"data_source_mode 必须是 {valid_data_modes} 之一，当前值: {data_source_mode}"
+            )
+
+        valid_logic_modes = ["p_and_d", "only_p"]
+        if logic_mode not in valid_logic_modes:
+            raise ValueError(
+                f"logic_mode 必须是 {valid_logic_modes} 之一，当前值: {logic_mode}"
+            )
 
         # 确保已连接
         if self.client is None:
@@ -1029,10 +1105,10 @@ class GainEPSimulator:
         if self.transfer_functions is None:
             raise RuntimeError("传递函数未计算，请先调用 calib()")
 
-        # 根据 mode 检查所需的系数是否已准备
-        if mode == "from_calib" and self.gain_coefficients is None:
+        # 根据 data_source_mode 检查所需的系数是否已准备
+        if data_source_mode == "from_calib" and self.gain_coefficients is None:
             raise RuntimeError("增益系数未计算，请先调用 calib()")
-        elif mode == "from_truth":
+        elif data_source_mode == "from_truth":
             # 尝试加载 ground truth 系数，如果不存在会抛出异常
             try:
                 self._load_ground_truth_coefficients()
@@ -1048,11 +1124,12 @@ class GainEPSimulator:
 
         # 执行反馈环路迭代
         print(f"\n开始反馈环路仿真，共 {num_iterations} 次迭代...")
-        print(f"反馈模式: {mode}")
-        if mode == "constant":
+        print(f"数据源模式: {data_source_mode}")
+        print(f"逻辑模式: {logic_mode}")
+        if data_source_mode == "constant":
             print(f"反馈常数: {self.feedback_constant}")
         else:
-            print(f"反馈系数来源: {mode}")
+            print(f"反馈系数来源: {data_source_mode}")
 
         for iteration in range(num_iterations):
             print(f"\n--- 迭代 {iteration + 1}/{num_iterations} ---")
@@ -1068,13 +1145,17 @@ class GainEPSimulator:
 
             # 如果不是最后一次迭代，计算下一次的输入
             if iteration < num_iterations - 1:
-                current_input = self._generate_feedback(current_input, output, mode)
+                current_input = self._generate_feedback(
+                    current_input, output, data_source_mode, logic_mode
+                )
                 print("✓ 已计算下一次迭代的输入参数")
 
         print("\n反馈环路仿真全部完成！")
 
         # 绘制探针差值折线图
-        self._plot_probe_differences(all_outputs, num_iterations, mode)
+        self._plot_probe_differences(
+            all_outputs, num_iterations, data_source_mode, logic_mode
+        )
 
         return (all_inputs, all_outputs)
 
@@ -1082,7 +1163,8 @@ class GainEPSimulator:
         self,
         all_outputs: list[SimulationOutput],
         num_iterations: int,
-        mode: str = "all8",
+        data_source_mode: str = "from_calib",
+        logic_mode: str = "p_and_d",
     ) -> None:
         """在复平面上绘制探针差值演化轨迹并保存
 
@@ -1094,7 +1176,8 @@ class GainEPSimulator:
         Args:
             all_outputs: 所有迭代的输出结果列表
             num_iterations: 迭代次数
-            mode: 反馈模式，用于生成文件名
+            data_source_mode: 数据源模式，用于生成文件名
+            logic_mode: 逻辑模式，用于生成文件名
         """
         # 计算每次迭代的8个探针差值
         # probe_diffs_history[i][j] 表示第i次迭代中，探针j与探针j+8的差值
@@ -1216,17 +1299,17 @@ class GainEPSimulator:
         ax.set_ylabel("虚部", fontsize=12)
 
         # 格式化标题
-        if mode == "constant":
+        if data_source_mode == "constant":
             if self.feedback_constant.imag == 0:
-                mode_str = f"constant (值: {self.feedback_constant.real:.3f})"
+                data_str = f"constant (值: {self.feedback_constant.real:.3f})"
             else:
-                mode_str = f"constant (值: {self.feedback_constant.real:.3f}{self.feedback_constant.imag:+.3f}j)"
+                data_str = f"constant (值: {self.feedback_constant.real:.3f}{self.feedback_constant.imag:+.3f}j)"
         else:
-            mode_str = mode
+            data_str = data_source_mode
 
         ax.set_title(
             f"反馈环路仿真 - 探针差值在复平面上的演化轨迹\n"
-            f"(模式: {mode_str}, 迭代次数: {num_iterations})",
+            f"(数据源: {data_str}, 逻辑: {logic_mode}, 迭代: {num_iterations})",
             fontsize=14,
             fontweight="bold",
         )
@@ -1244,7 +1327,7 @@ class GainEPSimulator:
 
         # 生成文件名并保存
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{self.mph_file.stem}_feedback_{mode}_iter{num_iterations}_complex_plane_{timestamp}.png"
+        filename = f"{self.mph_file.stem}_feedback_{data_source_mode}_{logic_mode}_iter{num_iterations}_complex_plane_{timestamp}.png"
         save_path = self.plots_dir / filename
 
         try:
