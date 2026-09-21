@@ -1,0 +1,336 @@
+Supplementary Information for
+¡°Temporal Super-cell Engineering and Acoustic
+Amplification in Dispersive Phononic Time Crystals¡±
+Ziling Liu1., Xinghong Zhu2, 3., Zhi-Guo Zhang1., Wei-Min Zhang1, Xue Chen1,
+Yong-Qiang Yang1, Ruwen Peng4., Mu Wang4., Jensen Li5., and Hong-Wei Wu1, 4.
+1School of Mechanics and Photoelectric Physics, Center for Fundamental Physics,
+Anhui University of Science and Technology, Huainan 232001, China
+2Department of Physics, College of Science, Shantou University, Shantou 515063,
+China
+3Department of Physics, The Hong Kong University of Science and Technology, Clear
+Water Bay, Hong Kong, China
+4National Laboratory of Solid State Microstructures, School of Physics, and
+Collaborative Innovation Center of Advanced Microstructures, Nanjing University,
+Nanjing 210093, China
+5Centre for Metamaterial Research and Innovation, Department of Physics and
+Astronomy, University of Exeter, Exeter EX4 4QL, United Kingdom
+Supplementary Note 1: Performed operation in microcontroller for
+meta-atoms
+Supplementary Fig. 1 shows a single atom in a 1D airborne acoustic waveguide
+consisting of a detector and a speaker (labeled in .. and ..) interconnected by a
+microcontroller. The signals detected by the microphone D convolute with Y in time
+domain in the microcontroller and then feedback to the speaker S to generate a
+monopolar radiation:
+........ .. .. ................ .. .............
+..
+..
+(S1)
+Supplementary Fig. 1. Schematic of a single atom in the acoustic waveguide.
+The linear operation between the sound pressure at D and S in frequency domain can
+be described as:
+
+........ .. ................ (S2)
+Within the waveguide, the radiation from .. combines with the forward (backward)
+incident pressure ......
+...... and ......
+...... to become the pressure field at .. by
+........ .. ......
+...... .. ......
+...... .. ........ (S3)
+The sound pressure on the right side (........
+...... ) and on the left side (........
+......) can be written as
+........
+...... .. ......
+...... .. ........, ........
+...... .. ......
+...... .. ......... (S4)
+Combing Eqs. S(1) to S(3) gives the scattering response of the meta-atom as
+..
+........
+......
+........
+...... .. .. .... ..
+.. .... ..
+......
+......
+......
+........ (S5)
+with the reflection and transmission coefficient
+.. ..
+........
+1 .. ........
+. (S6)
+In the main text, we set
+........ ..
+......
+........
+.. .. .... .. 2......
+, (S7)
+where g, ........ and .. are the resonant strength, resonant frequency and linewidth. In
+weakly scattering regime (Born approximation), we have
+..
+..
+.
+........
+..
+..
+....
+........
+.. .. .... .. 2......
+. (S8)
+It can mimic a Helmholtz resonator with resonant frequency........, resonant strength g
+and linewidth ... In the actual program, the Fourier transform has to be turned into ztransform
+in processing discrete time signal:
+........ .. ................ ..
+..............
+1 .. ..............
+........, (S9)
+where .............. and .............. (without constant term) are polynomials of ..-1 with a finite
+number of terms while the Fourier transformed signal can be obtained by substituting
+.. .. .................... with ..s being the sampling period of the signal by the
+microcontroller so that ........ . ........ where .. . ..1 .. ...... ..
+/2../..1 .. ...... ..
+/2... In the
+implementation, we use the following ¡°program¡± to update the current sample ........ by
+........ .. .......... .. 1.. .. .......... .. 2.. (S10)
+
+.. ............ .. .......... .. 1.. .. .......... .. 2..,
+where
+.............. .. ...... .. .......... .. ............,
+.............. .. ............ .. .............
+(S11)
+To obtain a time-varying meta-atom, we only need to flip the sign of the coefficient of
+...., .... and .... in the program, effectively modulating the resonant strength ..(t).
+To provide insight into how the system behaves under temporal modulation, we
+also give the transmission and reflection of single static meta-atom with positive and
+negative Lorentzian response as shown in Supplementary Fig. 2. The resonating
+frequency is defined as 4.7kHz. The red lines and symbols represent the analytical and
+experimental transmission (T), the blue lines and symbols correspond to the analytical
+and experimental reflection (R). The yellow region indicates the amplified transmission
+region when temporal modulation with modulating frequency 8.4kHz between the two
+static cases.
+Supplementary Fig. 2. The transmission (T) and reflection (R) of single static metaatom
+with a positive and b negative Lorentzian response.
+Supplementary Note 2: Band structure for time-varying dispersive
+media with Lorentzian-type resonance
+To further clarify the Floquet band structure of phononic time crystal in Fig. 1 of main
+text, we decompose the temporal modulation between positive and negative Lorentzian
+response into unilateral modulation. In Supplementary Fig. 3, we firstly give the band
+structure of phononic time crystals with modulated resonating strength .... .. 0.025
+and .... .. ..0.025, whose real and imaginary part shown in Supplementary Figs. 3a
+and 3b. Except the k-gap around .. .. ..../2, there are extra four gaps presented in
+
+Supplementary Fig. 3a marked as ¡°A¡±, ¡°B¡±, ¡°C¡±, ¡°D¡±.
+To clearly clarifying the formation of these gaps, we calculate the Floquet band
+structure for modulating the resonating strength of positive Lorentzian response singly.
+Supplementary Figs. 3c1 and 3c2 show the real part and imaginary part for static
+positive Lorentzian response with .... .. 0.025 and .... .. 0.025. The real part of twoband
+complex band structure as red lines present the up branch ¡°F....
+.. ¡± and low branch
+¡°F....
+.. ¡± corresponding to the 0 order Floquet mode due to the Lorentzian response with
+resonating frequency 4.7 kHz. The grey bands describe the upcoming location of the -
+1st order Floquet mode when activating the temporal modulation with T.. .. 1/8.4kHz.
+The imaginary part as blue line show a cross at .. .. 0.56.... represent transform
+between the localized mode and propagated mode. When we activate the temporal
+modulation between .... .. 0.025 and .... .. 0.0 with modulating frequency 8.4kHz,
+the k-gap is open and a Floquet amplified mode presented as imaginary part in
+Supplementary Fig. 3d2, which comes from the interference between the Floquet
+modes of ¡°F....
+.. ¡± and ¡°F....
+....¡±. Furthermore, two gaps located at (0.56...., 4.7kHz) and
+(0.56...., 3.7kHz) correspond to the resonation ¡°A¡± and Floquet replica ¡°B¡± due to the
+temporal modulation. At .. .. 0.44...., the interaction between Floquet modes ¡°F....
+....¡±
+and ¡°F....
+.. ¡± are weak and the gap not be opened, which can also be seen in the blue line
+of Supplementary Fig. 3d2. Accordingly, the case between Floquet modes ¡°F....
+....¡± and
+¡°F....
+.. ¡± is similar. When we increase the modulating depth in Supplementary Fig. 2e1,
+comparing with Fig. S3d1, the opened k-gap and gaps ¡°A¡± and ¡°B¡± will further enlarge.
+Otherwise, the cross point at .. .. 0.44.... as red line will also be opened for forming
+the gaps ¡°C¡± and ¡°D¡±, and the blue line presents a cross point.
+
+Supplementary Fig. 3. The real a and imaginary b part of the complex band structure
+for temporal modulating the resonating strength between .... .. 0.025 and .... ..
+..0.025. The arrows ¡°A¡±, ¡°B¡±, ¡°C¡± and ¡°D¡± are the extra four gaps. c1 and c2
+correspond to the complex band structure of static positive Lorentzian response for
+.... .. 0.025 and .... .. 0.025. d1 and d2 for .... .. 0.025 and .... .. 0.0. e1 and e2
+for .... .. 0.05 and .... .. 0.0. f1 and f2 for .... .. ..0.025 and .... .. ..0.025. When
+activating the modulation for .... .. ..0.025 and .... .. 0.0, the complex band
+
+structure is shown in g1 (real part) and g2 (imaginary part). Band structure in h1 and
+h2 corresponds to .... .. ..0.05 and .... .. 0.0.
+At the other hand, we also calculate the complex band structure for the
+compressibility with negative Lorentzian response. Supplementary Figs. 3f1 and 3f2
+give the real and imaginary part as red line and blue line for .... .. ..0.025 and .... ..
+..0.025. Different with positive Lorentzian response, the real part of band structure
+showcase a merging point between Floquet modes ¡°F....
+.. ¡± and ¡°F....
+.. ¡±, rather than avoided
+crossing point. The upcoming -1 order Floquet modes are described as grey line ¡°F....
+....¡±
+and ¡°F....
+....¡±. The imaginary part presents a gain and a loss branch in Supplementary Fig.
+3f2. When we activate the modulation of resonating strength between .... .. ..0.025
+and .... .. 0.0, the modes ¡°F....
+....¡± and ¡°F....
+.. ¡± will interfere each other and form k-gap
+around .. .. ..../2 as shown in Supplementary Fig. 3g1, the circle presents in
+Supplementary Fig. 3g2. The arrow locations ¡°A¡± and ¡°B¡± indicate the merging points.
+When larger increasing the modulating strength to .... .. ..0.05 and .... .. 0.0, the kgap
+further enlarges, and the cross points at ¡°C¡± and ¡°D¡± are open as shown in
+Supplementary Fig. 3h1.
+United the imaginary parts of Supplementary Figs. 3d2 and 3g2 together, we can
+find that the circle of imaginary part comes from the temporal modulation, rather than
+the resonating response. Particularly, the band structures presented in Supplementary
+Fig. 3a and Supplementary Fig. 3b are a synergistic effect from the modulating positive
+and negative Lorentzian response, for example, the larger k-gap around .. .. 0.5....
+comes from the superposition between Supplementary Fig. 3d1 and Supplementary Fig.
+3g1. At .. .. 0.44...., the two cross points are pull open due to the superposition effect
+for forming the gaps as marked by ¡°C¡± and ¡°D¡± of Supplementary Fig. 3a. Nevertheless,
+at .. .. 0.56...., the avoided crossing ¡°A¡±, ¡°B¡± of Supplementary Fig. 3d1 and the
+merging point ¡°A¡±, ¡°B¡± of Supplementary Fig. 3g1 will neutralize each other for
+forming the gaps ¡°A¡± and ¡°B¡± in Supplementary Fig. 3a. These synergistic effects
+construct the symmetric complex band structure around .. .. 0.5...., which hold a kgap
+and four ¦Ø-gaps denoted by ¡°A¡±-¡°D¡±.
+
+Supplementary Note 3: The influence of meta-atom number on the
+transmission and reflection of phononic time crystal
+Supplementary Fig. 4. Transmittance (T) and reflectance (R) of 1D phononic time
+crystals for different meta-atom numbers N = 17, 13, 9, 5, 3.
+To demonstrate that the 9 meta-atoms in our work are sufficient to observe
+amplified transmission in experiment, we calculate the transmittance (T) and
+reflectance (R) of phononic time crystals with different meta-atom numbers N = 17, 13,
+9, 5. We can find that the transmission and reflection strength in the k-gap depends on
+the meta-atom number, and the phononic time crystal with more meta-atoms presents
+more obvious T&R as shown in Supplementary Fig. 4. Considering the practical
+experiment, we construct 9 meta-atoms in our work, the T&R in Supplementary Fig.
+4c clearly presents the amplified transmission, the two transmission dips located at
+4.7kHz and 3.7kHz correspond to the ¦Ø-gaps in the momentum band structure due to
+inherent resonance and Floquet replica. Though the T and R is weak comparing with
+the case of more meta-atom numbers, while the amplified T is sufficient to observe in
+experiment for demonstrating the parametric amplification under temporal modulation.
+Supplementary Note 4: Stability analysis for phononic time crystals in
+the experiment
+Since our meta-atoms involves feedback and time-varying resonant strength, the whole
+system (including all the atoms) is time dependent and frequency conversion occurs,
+we need stability analysis to make sure that the system is working in the stable regime.
+In this section, we develop a multiband harmonic model to determine the eigenmode
+(stability) of the time-dependent system. As the modulation strength and resonating
+frequency is modulated periodically, all the signals (from the detector and speaker) can
+be written in the Fourier series expansion with a set of harmonics .... .. .. .. ......, where
+.. is an integer and .... is the modulation frequency. The detector and speaker signal
+can be expanded as ........, .... .. ¦² ..................
+.. , .......... .. ¦² ..................
+.. where ..
+
+represents the .. -th atom. The modulation of resonating strength and resonating
+frequency can be written as ........ .. ¦² ............../.... .. ,where ........ .. 4.7kHz. Then, the
+response function Y can be written in terms of Fourier component (labeled by n
+harmonics): ........
+.. .. ................
+........
+.. ......
+..............
+and it connects the detector and speaker signal by
+...... .. ........
+.. ......... Since the convolution generates the secondary radiation and propagates
+in waveguide and then is detected again, there is a loop transfer function from detector
+.... to .... by ..........,............¦Ø.. .. ................|..........|........
+.. .. ................|..........| ................
+........
+.. ......
+..............
+where
+|.... .. ....| is the distance from speaker .. to detector .. (assuming .... and .... are in
+the same position since they are collocated). The ..........,.......... is a square matrix and a
+stable system means all the poles the of the system response matrix, i.e. zeros of
+.......... .. ..........,............ have to lie in the lower complex plane. The number of harmonics
+(a total of 7 in the following analysis) is taken to be enough to have converging
+numerical results. For the time-varying acoustic system in Fig. 2 (modulating resonant
+strength ........ between positive and negative to generate modulating depth 200Hz),
+we plot the .......... .. ..........,............ in the complex frequency plane, as shown in Fig. S5a.
+The minimum value of .......... .. ..........,............ in the blue dot indicates the pole of the
+system, around the frequency of (4690-..140)Hz, in the lower half plane. This means
+the system is working in the stable regime. When we increase the modulation depth,
+the system poles will gradually touch the real frequency axes and make the system
+become unstable. Supplementary Fig. 5 plots the pole diagram where one of the poles
+just touch the real frequency axes, corresponding to the maximum modulation depth
+¦¤.. .. 14.56 . 200Hz (.a =31.05.10-2). However, in the experiment, we only obtain
+the threshold at .a =10.79.10-2 due to the intrinsic response of speaker and time
+delay of microcontroller making the system easier to become unstable.
+
+Supplementary Fig. 5. a Pole diagram of time-varying meta-atoms in Fig.2, b Pole
+diagram of time-varying meta-atoms with threshold touching the real axes.
+Supplementary Note 5: Floquet mode components in phononic time
+crystal
+Supplementary Fig. 6. The outputting signal analysis for incident signal with
+frequency from 3.5kHz to 5.0kHz for a closing meta-atoms (air waveguide) and b
+opening meta-atoms (phononic time crystal).
+To demonstrate the amplified transmission for temporal modulating resonating
+strength in experiment, we do fast Fourier transform (FFT) algorithm for the outputting
+signal when the frequency of inputting signal scanning from 3.5kHz to 5.0kHz. We can
+find that the outputting signal with same frequency as the inputting signal for closing
+the meta-atoms, i.e., this is a test experiment for air waveguide as shown in
+Supplementary Fig. 6a. However, when we open all meta-atoms to temporally modulate
+the resonating strength ........ between 100Hz and -100Hz with modulating frequency
+8.4kHz, it is not difficult to find that the -1st order Floquet mode will be generated
+together with the 0 order Floquet mode, and cross at half modulating frequency 4.2kHz,
+
+as can be seen in Supplementary Fig. 6b. The result also demonstrates the statement
+that the amplification comes from the Floquet band folding and interference between
+the Floquet modes of ¡°F....
+.. ¡± and ¡°F....
+....¡±.
+Supplementary Note 6: The influence of modulating frequency on the
+amplified transmission
+Supplementary Fig. 7. The transmission and reflection of 1D phononic time crystal
+for different modulating frequency a 8.4kHz, b 8.8kHz, c 10kHz, d 15kHz by
+simulation and experiment.
+To further demonstrate that the amplified transmission originates in the temporal
+modulation, we increase the modulating frequency from 8.4kHz to 15kHz and keep the
+resonating frequency at 4.7kHz as Supplementary Fig. 7. It is not difficult to find that
+the amplified transmission region will moves away from original frequency range
+marked by yellow region to higher frequency, and finally the transmission and
+reflection restore calm in primary yellow region for .... .. 15kHz.
+Supplementary Note 7: Band structure for dispersive media with two
+Lorentzian-type resonances
+Following the same spirit of route, when we have two monopolar resonances in each
+phase, we only need to add another response function into the wave equation as
+.........., .... .. ................, .... .. ........, ...... .. 0, (S12)
+....
+.........., .... .. 2¦£.............., .... .. ......
+.. ......, .... .. ................
+.. ......, ...., (S13)
+with i = 1, 2, representing the first and second resonance mode. Combined with Eq. (2)
+in main text, we can construct a 6 by 6 eigenvalue problem as
+........ .. ......, .... ..
+.
+. . .
+0 ../.... 0 .. 0 ..
+../.... 0 0 0 0 0
+0 0 0 .... 0 0
+....................
+.. 0 ........
+.. ..2..¦£.. 0 0
+0 0 0 0 0 ....
+....................
+.. 0 0 0 ........
+.. ..2..¦£...
+. . .
+(S14)
+with .. .. ...., .., ..1, ........1, ..2, ........2..... Since now the modulation period becomes
+
+2.... , and there are 3 different phases in one modulation period: A, B and C,
+corresponding to resonant strength pairs ........, ........, ........, ........ and ........ , ......... The
+modulation cycle follows the ABAC sequence, with each phase occupying ..../2
+giving rise to the Floquet modes: ...... .. 2...... ..
+......¦Ø.. ....../2......¦Ø.. ....../2......¦Ø.. ....../2......¦Ø.. ....../2 ......... The band structure can be obtained by
+solving the secular equation:
+det.................... .. .......... ....../............ ....../............ ....../............ ....../.... .. 0. (S15)
+Supplementary Figs. 5c and 5d in the main text plotted the band structure of phononic
+time crystal according to Eq.(S15) with modulation cycle following the temporal
+supercell ABAC sequence.

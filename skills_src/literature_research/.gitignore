@@ -1,0 +1,22 @@
+# ===== 缓存与临时文件（绝不入库）=====
+cache/
+*.tmp
+*.log
+
+# ===== 原始文件（PDF/EPUB 由 Zotero 管理，不入 Git）=====
+*.pdf
+*.epub
+*.zip
+*.tar
+*.tar.gz
+
+# ===== 凭据 =====
+.env
+*.key
+*.pem
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
