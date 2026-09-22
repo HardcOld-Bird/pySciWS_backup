@@ -7,7 +7,7 @@ description: Search, read, evaluate, and manage academic physics literature (aco
 
 A single CLI drives the whole literature workflow: **search → read → note → library → index**.
 
-The backend lives in `skills_src/literature_research/` (8 client modules + a `research` facade).
+The backend lives in `src/pysci/skills/literature_research/` (8 client modules + a `research` facade).
 **You do not need to read the backend code** — treat it as a black box and drive everything
 through the `research` CLI below. Only open the code when maintaining it (see
 [references/maintenance.md](references/maintenance.md)).
@@ -17,7 +17,7 @@ through the `research` CLI below. Only open the code when maintaining it (see
 Run from the **project root**. Define this once per session:
 
 ```
-.venv\Scripts\python.exe -m skills_src.literature_research.tools.research <command> [options]
+.venv\Scripts\python.exe -m pysci.skills.literature_research.tools.research <command> [options]
 ```
 
 Below, `research …` is shorthand for that full invocation. (`uv run python -m …` also works.)
@@ -91,11 +91,11 @@ HTML) are kept permanently; manage disk with `research cache stats｜clean｜pru
 
 | Path | Contents |
 |---|---|
-| `skills_src/literature_research/papers/` | One structured note per paper (`{year}_{author}_{slug}.md`) |
-| `skills_src/literature_research/shortlists/` | One search snapshot per query |
-| `skills_src/literature_research/reviews/` | Multi-paper surveys |
-| `skills_src/literature_research/INDEX.md` | Auto-generated library index (`research index`) |
-| `skills_src/literature_research/cache/` | Downloaded PDFs + extracted full text + fetched HTML (git-ignored) |
+| `literature/papers/` | One structured note per paper (`{year}_{author}_{slug}.md`) |
+| `literature/shortlists/` | One search snapshot per query |
+| `literature/reviews/` | Multi-paper surveys |
+| `literature/INDEX.md` | Auto-generated library index (`research index`) |
+| `literature/cache/` | Downloaded PDFs + extracted full text + fetched HTML (git-ignored) |
 
 ## When something breaks
 

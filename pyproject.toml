@@ -29,16 +29,26 @@ dependencies = [
     "pydantic",
     # COMSOL 仿真接口
     "mph",
-    # 文献检索与知识库（skills_src/literature_research/ 目录下的工具脚本使用，详见其 README.md）
+    # 文献检索与知识库（代码：src/pysci/skills/literature_research/；数据：literature/，详见其 README.md）
     "requests",         # HTTP 客户端（OpenAlex / arXiv / WoS / Zotero）
     "python-dotenv",    # 加载项目根 .env
     "pyzotero",         # Zotero API 官方 Python 封装
     "markdown",         # markdown → HTML（Zotero 笔记写入时需要）
-    # PDF → Markdown 抽取（skills_src/literature_research/tools/pdf_extract.py 使用）
+    # PDF → Markdown 抽取（src/pysci/skills/literature_research/tools/pdf_extract.py 使用）
     # 公式精读首选云端 MinerU Open API（仅需 requests，无本地重型依赖）；
     # marker-pdf / magic-pdf 实测本机不可用且云端可替代，已移除。
     "pymupdf4llm",      # 本地兜底后端：纯 CPU，快，但公式会丢失
     "playwright>=1.63.0",  # 付费墙论文抓取：HTML 全文 / 正文 PDF / 补充材料
+]
+
+# ------------------------------------------------------------
+# 可选依赖组：experiment（gain_ep 实验平台，原 sweeper400）
+# 绑定 NI 数据采集硬件，仅 Windows + 安装 NI-DAQmx 驱动后可用；
+# 默认不装，保持科研/仿真环境精简。需要时：`uv sync --extra experiment`
+# ------------------------------------------------------------
+[project.optional-dependencies]
+experiment = [
+    "nidaqmx",
 ]
 
 # ------------------------------------------------------------
@@ -51,14 +61,20 @@ dev = [
     "pytest-cov",
     "pre-commit",
     "commitizen",
+    "scipy-stubs",   # scipy 类型存根（experiment/analyze 等类型检查用）
 ]
 
-[tool.uv]
-# 本项目是脚本/应用型工程：代码通过 `from src...` / `from config...` 直接导入，
-# 从不以 `import pysci` 方式使用，因此关闭打包。
-# uv 只负责创建 .venv、解析并安装依赖，不会尝试构建/安装 pysci 本身。
-package = false
+# ------------------------------------------------------------
+# 构建后端：src-layout 单包 pysci（uv sync 以 editable 方式装入 .venv）
+# ------------------------------------------------------------
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/pysci"]
+
+[tool.uv]
 # 默认索引指向清华 TUNA 镜像，加速国内下载（如需换回官方源，删除 default = true 即可）
 [[tool.uv.index]]
 name = "tuna"
@@ -97,7 +113,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 # Configure import sorting
-known-first-party = ["src"]
+known-first-party = ["pysci"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"

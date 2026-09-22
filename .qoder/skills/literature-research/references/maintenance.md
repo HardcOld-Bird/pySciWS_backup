@@ -1,10 +1,10 @@
 # Maintenance guide
 
 The `research` CLI is a thin facade over 8 backend modules in
-`skills_src/literature_research/tools/`. You rarely need to touch them; this guide is for when a
+`src/pysci/skills/literature_research/tools/`. You rarely need to touch them; this guide is for when a
 source, the PDF extractor, or a publisher page breaks, or when you want to extend the system.
 
-> Reminder: for files under `skills_src/`, verify current content from disk (e.g. PowerShell
+> Reminder: for files under `src/pysci/skills/`, verify current content from disk (e.g. PowerShell
 > `Get-Content -Encoding UTF8` / `Select-String`); an IDE/index cache may show stale content right
 > after the directory is moved or renamed.
 
@@ -27,7 +27,8 @@ research.py            ← CLI facade: doctor/search/read/get/add/library/index/
 
 Dependency direction is one-way: `research` → clients → `config`. Every client uses **relative
 imports** (`from .config import settings`), so moving the whole `literature_research/` package does
-not break imports — only the absolute path math in `config.py` (see §2). `cache_manager` depends
+not break imports; `config.py` in turn resolves all paths via `pysci.paths` (marker-based, see §2),
+so relocating the package does not break path resolution either. `cache_manager` depends
 only on `config` + stdlib; the clients import `bump_mtime` from it, which does **not** create a
 cycle (cache_manager never imports the clients).
 
@@ -43,20 +44,21 @@ record to the shared `paper_note` frontmatter. Keep new sources compatible with 
 
 ## 2. Config & paths (`config.py`)
 
-Paths are computed from the file's own location:
+Paths come from `pysci.paths`, which locates the project root by **marker** (the first ancestor dir
+containing both `pyproject.toml` and `.python-version`) — not by fragile `parents[N]` math:
 
 ```python
-_THIS_FILE   = <project_root>/skills_src/literature_research/tools/config.py
-PROJECT_ROOT = _THIS_FILE.parents[3]   # pySciWS/
-MODULE_DIR   = _THIS_FILE.parents[1]   # literature_research/  (papers, templates, cache live here)
-CACHE_DIR_ENV_DEFAULT = "skills_src/literature_research/cache"
+from pysci.paths import LITERATURE_ROOT, PROJECT_ROOT   # marker-based root discovery
+MODULE_DIR = LITERATURE_ROOT          # literature/  (papers, shortlists, reviews, templates, cache)
+CACHE_DIR_ENV_DEFAULT = "literature/cache"
 ```
 
 - `.env` is loaded from `PROJECT_ROOT/.env`; `CACHE_DIR` there overrides the default.
-- **If the package is moved again** (different directory depth), the `parents[N]` indices are the
-  first thing that breaks: `.env` won't be found and every path goes wrong. Re-count the levels and
-  update `parents[3]` / `parents[1]` / `CACHE_DIR_ENV_DEFAULT`, then run `research doctor` to
-  confirm `模块根 / 缓存目录 / 项目根` are correct.
+- The **code** lives in `src/pysci/skills/literature_research/` (installed as part of the `pysci`
+  package); the **data** (papers/shortlists/reviews/templates/cache) lives at top-level `literature/`,
+  keeping git-ignored cache + PDFs out of the package tree.
+- **If paths go wrong**, the usual cause is the project-root markers moving: check `_ROOT_MARKERS` in
+  `src/pysci/paths.py`, then run `research doctor` to confirm `模块根 / 缓存目录 / 项目根` are correct.
 - `settings.module_dir` is the base for `papers/`, `shortlists/`, `reviews/`, `templates/`,
   `INDEX.md`; `settings.cache_dir` for `pdfs/`, `extracted/`, `api_responses/`, `html_fulltext/`.
 
@@ -199,7 +201,7 @@ Cache governance config (`.env`, all optional): `CACHE_B_MAX_AGE_DAYS` (default 
 | `[wos] enrichment skipped` / no JIF | WoS key pending approval or endpoint changed | Expected — degrades to OpenAlex estimate. No action unless you have a working key. |
 | Anything Semantic Scholar | Campus network blocks S2 | **By design: ignore.** Do not troubleshoot or warn. |
 | Zotero `不可达` | Desktop app closed / local API off | Start Zotero; Settings → Advanced → *Allow other applications*; or set Web API creds. |
-| Paths wrong / `.env` not loaded | Package moved; `config.py` `parents[]` stale | Fix the indices (§2); confirm with `research doctor`. |
+| Paths wrong / `.env` not loaded | Project-root markers moved; `pysci.paths` can't find root | Check `_ROOT_MARKERS` in `src/pysci/paths.py` (§2); confirm with `research doctor`. |
 | PowerShell mangles the command | Double quotes stripped / `&&` used | Single-quote multi-word args; chain with `;`. |
 | `add` created a duplicate Zotero item | Ran `add` twice for one DOI | Check `library search` before adding; delete the dup in Zotero. |
 | Cache growing / disk pressure | Tier A artifacts kept forever by design | `research cache stats`; then `prune --max-mb N` (Tier A) or `clean` (Tier B). |
@@ -220,8 +222,8 @@ Cache governance config (`.env`, all optional): `CACHE_B_MAX_AGE_DAYS` (default 
 ## 8. Verifying changes
 
 ```
-.venv\Scripts\python.exe -m py_compile skills_src/literature_research/tools/<file>.py
-.venv\Scripts\python.exe -m skills_src.literature_research.tools.research doctor
+.venv\Scripts\python.exe -m py_compile src/pysci/skills/literature_research/tools/<file>.py
+.venv\Scripts\python.exe -m pysci.skills.literature_research.tools.research doctor
 ```
 Then smoke-test the affected command (`search`/`read`/`get`/`add`/`library`/`index`). `doctor`
 is the fastest way to confirm config, sources, backends, Playwright, and Zotero are all wired up.
