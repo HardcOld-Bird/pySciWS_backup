@@ -7,9 +7,9 @@
 import sympy as sp
 from sympy import I, cos, sin, symbols
 
-from src.my_dtypes import ParamSpace3D
-from src.numerical import get_numpy_func
-from src.space_curve import vis_complex_equation
+from pysci.common.dtypes import ParamSpace3D
+from pysci.common.numerical import get_numpy_func
+from pysci.common.space_curve import vis_complex_equation
 
 # %%
 # ============================================================================

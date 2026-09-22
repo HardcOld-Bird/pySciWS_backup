@@ -8,15 +8,8 @@
    - logic_mode: p_and_d, only_p
 """
 
-import sys
-from pathlib import Path
-
-# 添加项目根目录到Python路径
-# WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
-WORKSPACE_ROOT = Path(__name__).resolve().parent
-sys.path.insert(0, str(WORKSPACE_ROOT))
-
-from src.gain_ep.gain_ep_sim import GainEPSimulator, SimulationInput
+from pysci.paths import research_asset_dir
+from pysci.research.gain_ep.theory.sim import GainEPSimulator, SimulationInput
 
 # %
 # ============================================================================
@@ -28,7 +21,7 @@ print("测试 GainEPSimulator 完整工作流程")
 print("=" * 70)
 
 # COMSOL模型文件
-MPH_FILE = WORKSPACE_ROOT / "mphs" / "gainEP" / "gainEP_10in16out.mph"
+MPH_FILE = research_asset_dir("gain_ep") / "experiment" / "mphs" / "gainEP_10in16out.mph"
 
 if not MPH_FILE.exists():
     print(f"\n✗ 错误: COMSOL模型文件不存在: {MPH_FILE}")

@@ -7,18 +7,12 @@
 3. plot_eigenvalues_3d - 从硬盘读取数据并绘制S矩阵特征值的三维曲面图
 """
 
-import sys
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 
-# 添加项目根目录到Python路径
-WORKSPACE_ROOT = Path(__name__).resolve().parent
-sys.path.insert(0, str(WORKSPACE_ROOT))
-
 # 导入matplotlib中文配置
-from config.matplotlib_config import setup_chinese_fonts
-from src.gain_ep.gain_ep_theory import (
+from pysci.common.plotting import setup_chinese_fonts
+from pysci.paths import research_asset_dir
+from pysci.research.gain_ep.theory.theory import (
     plot_eigenvalues_3d,
     plot_scattering_matrix_2d,
     run_gain_ep_simulation,
@@ -34,14 +28,14 @@ setup_chinese_fonts()
 client = None
 
 # COMSOL模型文件
-MPH_FILE = WORKSPACE_ROOT / "mphs" / "gainEP" / "gainEP_basic.mph"
+MPH_FILE = research_asset_dir("gain_ep") / "experiment" / "mphs" / "gainEP_basic.mph"
 
 # 数据存储目录
-DATA_DIR = WORKSPACE_ROOT / "storage" / "gainEP" / "data"
+DATA_DIR = research_asset_dir("gain_ep") / "storage" / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # 图像输出目录
-OUTPUT_DIR = WORKSPACE_ROOT / "storage" / "gainEP" / "plots"
+OUTPUT_DIR = research_asset_dir("gain_ep") / "storage" / "plots"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 仿真数据保存路径

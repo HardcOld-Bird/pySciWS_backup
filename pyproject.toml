@@ -122,3 +122,46 @@ version_scheme = "pep440"
 version_provider = "pep621"
 update_changelog_on_bump = true
 major_version_zero = true
+
+# ------------------------------------------------------------
+# pytest：测试根为 tests/（合并原 sweeper400 的 pytest 配置）
+# experiment 硬件用例用 `-m "not hardware"` 过滤；无 nidaqmx / 无 COMSOL Server 时，
+# 相关目录由各自 conftest.py 守卫自动跳过收集（tests/gain_ep/experiment、.../theory）。
+# 覆盖率不写入 addopts（保持 `uv run pytest` 轻快），需要时显式 `uv run pytest --cov`。
+# ------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+]
+markers = [
+    "hardware: 需要 NI 数据采集硬件 / 步进电机 / COMSOL Server 等外部设备的用例",
+    "slow: 运行耗时较长的用例",
+]
+
+# ------------------------------------------------------------
+# coverage：统计 pysci 包源码覆盖率（原 sweeper400 的 src/sweeper400 → src/pysci）
+# ------------------------------------------------------------
+[tool.coverage.run]
+source = ["src/pysci"]
+omit = [
+    "*/tests/*",
+    "*/scripts/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

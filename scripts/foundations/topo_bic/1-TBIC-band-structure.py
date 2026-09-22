@@ -373,16 +373,9 @@ print(f"  Π模式: {eigenval_Π1_test.min():.2f} ~ {eigenval_Π2_test.max():.2f
 print()
 
 # 使用matplotlib绘制二维能带图（对应图S3）
-import sys
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 
-# 添加项目根目录到sys.path
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
-from config.matplotlib_config import setup_chinese_fonts
+from pysci.common.plotting import setup_chinese_fonts
 
 setup_chinese_fonts()
 

@@ -6,19 +6,14 @@
 探究输出和输入之间是否存在简单的数量关系（如常数传递函数、恒定幅值比、恒定相位差等）。
 """
 
-import sys
-from pathlib import Path
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 添加项目根目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from pysci.common.plotting import setup_chinese_fonts
+from pysci.paths import research_asset_dir
 
 matplotlib.use("Agg")  # 非交互式后端，避免GUI阻塞
-
-from config.matplotlib_config import setup_chinese_fonts
 
 # 导入项目通用的matplotlib配置
 setup_chinese_fonts()
@@ -207,9 +202,8 @@ ax.set_xlabel("实部"); ax.set_ylabel("虚部")
 
 plt.tight_layout()
 
-import os
-save_dir = Path(__file__).parent.parent.parent / "storage" / "管槽增益特性探究" / "plots"
-os.makedirs(save_dir, exist_ok=True)
+save_dir = research_asset_dir("gain_ep") / "storage" / "管槽增益特性探究" / "plots"
+save_dir.mkdir(parents=True, exist_ok=True)
 save_path = save_dir / "传递函数分析.png"
 plt.savefig(save_path, dpi=150, bbox_inches='tight')
 print(f"\n图表已保存至 {save_path}")

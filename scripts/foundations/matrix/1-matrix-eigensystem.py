@@ -4,18 +4,11 @@
 该脚本使用 src/matrix.py 中的函数绘制一个常数复矩阵的本征系统。
 """
 
-import sys
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 from sympy import I, symbols
 
-# 添加项目根目录到sys.path
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
-from config.matplotlib_config import setup_chinese_fonts
-from src.matrix import plot_2x2_matrix_eigensystem
+from pysci.common.matrix import plot_2x2_matrix_eigensystem
+from pysci.common.plotting import setup_chinese_fonts
 
 # 配置中文字体
 setup_chinese_fonts()

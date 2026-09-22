@@ -10,19 +10,13 @@ EP-BIC核心理论模型的符号和数值计算。
     κ̃ = κ - i√(γ₁ʳγ₂ʳ)
 """
 
-# import sys
-# from pathlib import Path
-
-# 添加项目根目录到路径
-# sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 import matplotlib.pyplot as plt
 import numpy as np
 import sympy as sp
 from sympy import I, Matrix, sqrt, symbols
 
 # 导入matplotlib中文配置
-from config.matplotlib_config import setup_chinese_fonts
+from pysci.common.plotting import setup_chinese_fonts
 
 setup_chinese_fonts()
 
