@@ -87,7 +87,8 @@ def load_data_with_fallback(
 
     Args:
         explicit_path: 用户显式提供的数据文件路径（可选）
-        default_path: 默认的全局数据文件路径
+        default_path: 默认数据文件路径。相对路径按 gain_ep 研究资产目录
+            （``research_asset_dir("gain_ep")``）解析，而非当前工作目录；绝对路径原样使用。
         data_type: 数据类型描述字符串，仅用于日志输出（如"AO补偿数据"、"TFData"等）
 
     Returns:
@@ -125,7 +126,12 @@ def load_data_with_fallback(
             raise RuntimeError(error_msg) from e
 
     # 优先级2：默认路径下的数据文件
+    # 相对默认路径按 gain_ep 研究资产目录解析（而非当前工作目录 CWD）：
+    # 资产树迁移后 storage/ 位于 data/research/1_gain_ep/storage/，若按 CWD 解析会
+    # 静默找不到默认校准/传递函数数据。绝对路径（如 simulator 已锚定的路径）原样保留。
     default_path_obj = Path(default_path)
+    if not default_path_obj.is_absolute():
+        default_path_obj = research_asset_dir("gain_ep") / default_path_obj
     if default_path_obj.exists():
         try:
             data: Any = load_compressed_data(default_path_obj, f"{data_type}")

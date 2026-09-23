@@ -4168,8 +4168,10 @@ class PowerTester:
         power_values = np.linspace(start_power, end_power, step_num)
         self.logger.info(f"功率序列: {power_values}")
 
-        # 确定结果保存路径
+        # 确定结果保存路径（相对路径按 gain_ep 研究资产目录解析，而非 CWD）
         result_path = Path(result_folder)
+        if not result_path.is_absolute():
+            result_path = research_asset_dir("gain_ep") / result_path
         result_path.mkdir(parents=True, exist_ok=True)
         self.logger.info(f"结果保存路径: {result_path}")
 

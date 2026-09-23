@@ -16,6 +16,8 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.signal import butter
 
+from pysci.paths import research_asset_dir
+
 from ..analyze import (
     Point2D,
     PointSweepData,
@@ -414,8 +416,11 @@ class Evolver:
         ) = self._build_tf_matrices(self._fishnet_tf_data["tf_dataframe"])
 
         # ---- SimScanner 扫描结果路径 ----
+        # 默认路径按 gain_ep 研究资产目录解析（而非 CWD）；用户显式路径原样使用。
         if sim_result_scan_path is None:
-            self._sim_result_scan_path: Path = Path("storage/sim/sim_result_scan")
+            self._sim_result_scan_path: Path = (
+                research_asset_dir("gain_ep") / "storage" / "sim" / "sim_result_scan"
+            )
         else:
             self._sim_result_scan_path = Path(sim_result_scan_path)
 
