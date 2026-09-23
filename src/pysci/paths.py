@@ -43,16 +43,18 @@ _THIS_FILE = Path(__file__).resolve()
 PROJECT_ROOT: Path = _find_project_root(_THIS_FILE.parent)
 
 #: 研究资产根：各研究线的非代码资产（笔记/PDF/.mph/storage/参考资料）按研究存放于此。
-ASSET_ROOT: Path = PROJECT_ROOT / "my_research"
+#: 与代码树 ``src/pysci/research/<name>/`` 镜像：``data/research/<n>_<name>/``。
+ASSET_ROOT: Path = PROJECT_ROOT / "data" / "research"
 
 #: 文献知识库数据区（papers/shortlists/reviews/cache/templates/INDEX.md）。
-LITERATURE_ROOT: Path = PROJECT_ROOT / "literature"
+#: 与代码树 ``src/pysci/skills/literature_research/`` 镜像：``data/skills/literature_research/``。
+LITERATURE_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "literature_research"
 
 
 def research_asset_dir(name: str) -> Path:
     """解析某条研究线的资产目录。
 
-    资产目录以数字序号前缀命名（如 ``my_research/1_gain_ep``），而包路径不能以数字开头
+    资产目录以数字序号前缀命名（如 ``data/research/1_gain_ep``），而包路径不能以数字开头
     （``pysci.research.gain_ep``）。本函数按 ``*_<name>`` 通配匹配对应资产目录。
 
     Args:

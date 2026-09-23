@@ -10,7 +10,7 @@ OpenAlex 是完全免费、CC0 协议的开放学术数据库（https://openalex
 - :func:`reconstruct_abstract`: 从倒排索引重建摘要文本
 - :func:`work_to_note_frontmatter`: 将 work dict 转换为 paper_note.md 的 YAML frontmatter
 
-所有 GET 响应会缓存到 ``literature/cache/api_responses/``，避免重复请求。
+所有 GET 响应会缓存到 ``data/skills/literature_research/cache/api_responses/``，避免重复请求。
 
 用法示例::
 

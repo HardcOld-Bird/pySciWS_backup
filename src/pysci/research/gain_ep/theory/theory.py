@@ -77,10 +77,10 @@ def run_gain_ep_simulation(
     Examples:
         单次仿真（自动创建连接）:
         >>> from pathlib import Path
-        >>> mph_file = Path("my_research/1_gain_ep/experiment/mphs/gainEP_basic.mph")
+        >>> mph_file = Path("data/research/1_gain_ep/experiment/mphs/gainEP_basic.mph")
         >>> cr_range = (1.003, 0.001, 1.005)
         >>> ci_range = (-0.074, 0.001, -0.072)
-        >>> save_path = Path("my_research/1_gain_ep/storage/data/simulation_result.npz")
+        >>> save_path = Path("data/research/1_gain_ep/storage/data/simulation_result.npz")
         >>> client = run_gain_ep_simulation(mph_file, cr_range, ci_range, save_path)
         >>> client.disconnect()  # 手动断开连接
 
@@ -210,7 +210,7 @@ def load_scattering_matrix(data_path: Path) -> ScatteringMatrix:
 
     Examples:
         >>> from pathlib import Path
-        >>> data_path = Path("my_research/1_gain_ep/storage/data/simulation_result.npz")
+        >>> data_path = Path("data/research/1_gain_ep/storage/data/simulation_result.npz")
         >>> s_matrix = load_scattering_matrix(data_path)
     """
     if not data_path.exists():
@@ -259,7 +259,7 @@ def plot_scattering_matrix_2d(
 
     Examples:
         >>> from pathlib import Path
-        >>> data_path = Path("my_research/1_gain_ep/storage/data/simulation_result.npz")
+        >>> data_path = Path("data/research/1_gain_ep/storage/data/simulation_result.npz")
         >>> fig = plot_scattering_matrix_2d(data_path, save_path=Path("output.png"))
         >>> plt.show()
     """
@@ -396,7 +396,7 @@ def run_10in16out_simulation(
     Examples:
         单次仿真（自动创建连接）:
         >>> from pathlib import Path
-        >>> mph_file = Path("my_research/1_gain_ep/experiment/mphs/gainEP_10in16out.mph")
+        >>> mph_file = Path("data/research/1_gain_ep/experiment/mphs/gainEP_10in16out.mph")
         >>> results = run_10in16out_simulation(
         ...     mph_file, pamp_L=1.0, pamp_R=1.0,
         ...     vn_1=0j, vn_2=0j, vn_3=0j, vn_4=0j,
@@ -531,7 +531,7 @@ def plot_eigenvalues_3d(
     Examples:
         显示实部曲面:
         >>> from pathlib import Path
-        >>> data_path = Path("my_research/1_gain_ep/storage/data/simulation_result.npz")
+        >>> data_path = Path("data/research/1_gain_ep/storage/data/simulation_result.npz")
         >>> plotter = plot_eigenvalues_3d(data_path, mode='Re', save_path=Path("eigenvals_re.png"))
         >>> plotter.show()
 

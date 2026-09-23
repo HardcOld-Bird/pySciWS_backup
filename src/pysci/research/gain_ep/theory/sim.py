@@ -119,7 +119,7 @@ class GainEPSimulator:
     Examples:
         使用上下文管理器（推荐）:
         >>> from pathlib import Path
-        >>> mph_file = Path("my_research/1_gain_ep/experiment/mphs/gainEP_10in16out.mph")
+        >>> mph_file = Path("data/research/1_gain_ep/experiment/mphs/gainEP_10in16out.mph")
         >>> with GainEPSimulator(mph_file) as simulator:
         ...     sim_input = SimulationInput(1.0, 1.0, 0j, 0j, 0j, 0j, 0j, 0j, 0j, 0j)
         ...     output = simulator.run_simulation(sim_input)
@@ -158,7 +158,7 @@ class GainEPSimulator:
         # 增益系数：shape (8,)，从only文件测量，用作all8模式的反馈系数
         self.gain_coefficients: np.ndarray | None = None
 
-        # 设置存储路径（基于平行资产树 my_research/1_gain_ep/，与 mph_file 位置解耦）
+        # 设置存储路径（基于平行资产树 data/research/1_gain_ep/，与 mph_file 位置解耦）
         self.workspace_root = research_asset_dir("gain_ep")
         self.calib_dir = self.workspace_root / "storage" / "calib"
         self.plots_dir = self.workspace_root / "storage" / "plots"
@@ -236,7 +236,7 @@ class GainEPSimulator:
            - 计算探针i / 探针(i+8)，用作 all8 模式的反馈系数
            - 结果为长度8的数组
 
-        计算完成后，两组数据会自动保存到 my_research/1_gain_ep/storage/calib/ 目录。
+        计算完成后，两组数据会自动保存到 data/research/1_gain_ep/storage/calib/ 目录。
 
         Args:
             force_recompute: 是否强制重新计算（忽略缓存），默认为 False
@@ -1171,7 +1171,7 @@ class GainEPSimulator:
         在复平面上绘制8条折线，第n条线代表每次迭代中，第n个探针减去第n+8个探针的结果
         在复平面上的演化轨迹。横轴是实部，纵轴是虚部。
 
-        图像会自动保存到 my_research/1_gain_ep/storage/plots/ 目录。
+        图像会自动保存到 data/research/1_gain_ep/storage/plots/ 目录。
 
         Args:
             all_outputs: 所有迭代的输出结果列表

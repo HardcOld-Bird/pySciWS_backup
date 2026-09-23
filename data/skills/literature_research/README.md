@@ -1,30 +1,30 @@
-# `literature/` — AI 文献调研数据区
+# `data/skills/literature_research/` — AI 文献调研数据区
 
 本目录是 pySciWS 的**结构化文献知识库（数据区）**，由 AI Agent（Qoder）主导维护、用户审校。
 它是 `literature-research` skill 的**数据后端**；工具链**代码**已随项目重构收入 `pysci` 包。三者分工如下：
 
 | 位置 | 角色 | 内容 |
 |---|---|---|
-| `literature/`（本目录） | **数据** | `papers/` 笔记、`shortlists/` 检索快照、`reviews/` 综述、`templates/` 模板、`INDEX.md` 索引、`cache/` 缓存 |
+| `data/skills/literature_research/`（本目录） | **数据** | `papers/` 笔记、`shortlists/` 检索快照、`reviews/` 综述、`templates/` 模板、`INDEX.md` 索引、`cache/` 缓存 |
 | `src/pysci/skills/literature_research/` | **代码** | `tools/` 工具链（`research` CLI + 8 个 client 模块），随 `pysci` 包 editable 安装 |
 | `.qoder/skills/literature-research/` | **Skill（说明书）** | `SKILL.md` + `references/`，教 AI 何时、如何调用 `research` CLI |
 
 > **命名对应**：代码包 `literature_research`（下划线，合法 Python 包名）↔ skill `literature-research`（连字符，skill 命名规范）。一一对应，见名知意。
-> **代码/数据分离**：代码入 `src/pysci/skills/`（纳入包与版本控制），数据留顶层 `literature/`（git-ignore 的 `cache/`、PDF 不混入包树）。数据区路径由 `pysci.paths.LITERATURE_ROOT` 统一锚定，不依赖脆弱的相对层级数学。
+> **代码/数据分离**：代码入 `src/pysci/skills/`（纳入包与版本控制），数据留 `data/skills/literature_research/`（git-ignore 的 `cache/`、PDF 不混入包树）。数据区路径由 `pysci.paths.LITERATURE_ROOT` 统一锚定，不依赖脆弱的相对层级数学。
 
 本目录与项目根目录下的 `参考资料/`（用户手动整理）**互不干涉**：
 
 | 目录 | 管理者 | 用途 | 是否入 Git |
 |---|---|---|---|
 | `参考资料/` | 用户 | 已有的手动笔记、书籍式资料 | 否（已在根 .gitignore） |
-| `literature/` | **AI Agent** + 用户审校 | 单篇论文笔记、检索快照、综述草稿 | **是**（除 `cache/`、PDF） |
+| `data/skills/literature_research/` | **AI Agent** + 用户审校 | 单篇论文笔记、检索快照、综述草稿 | **是**（除 `cache/`、PDF） |
 
 ---
 
 ## 1. 目录结构
 
 ```
-literature/                          # 本目录（数据区）
+data/skills/literature_research/     # 本目录（数据区）
 ├── README.md                # 本文件
 ├── INDEX.md                 # 全库索引（由 `research index` 自动维护，勿手改）
 ├── .gitignore               # 忽略 cache/、PDF、.env

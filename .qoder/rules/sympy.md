@@ -10,7 +10,7 @@ alwaysApply: false
 ### 1.1 项目性质
 - 本项目是一个**物理学理论探索项目**，专注于波动声学领域的符号计算和数值模拟。项目采用Python生态系统，以SymPy为核心进行符号推导，结合NumPy/SciPy进行数值计算，使用Matplotlib/PyVista进行可视化。
 - 对于有限元仿真，使用mph库通过 COMSOL Multiphysics 软件进行仿真研究和理论计算验证。
-- 代码组织为单一 **src-layout 安装包 `pysci`**（uv 以 editable 方式装入唯一 `.venv`，直接 `import pysci...`，无需任何 `sys.path` hack）；非代码资产放在平行资产树 `my_research/`。
+- 代码组织为单一 **src-layout 安装包 `pysci`**（uv 以 editable 方式装入唯一 `.venv`，直接 `import pysci...`，无需任何 `sys.path` hack）；非代码资产放在平行资产树 `data/research/`。
 - 无 CI/CD 需求，强调代码清晰性和可维护性。
 
 ### 1.2 技术栈
@@ -29,10 +29,10 @@ alwaysApply: false
 
 ```
 参考资料（手动）/     ← 理论层：foundations 各主题的学术论文和理论文档
-    └── [主题名]/         （研究线专属资料在 my_research/<n>_<name>/参考资料/）
+    └── [主题名]/         （研究线专属资料在 data/research/<n>_<name>/参考资料/）
         └── *.md
 src/pysci/            ← 实现层：唯一安装包
-    ├── paths.py          （路径锚点：PROJECT_ROOT / ASSET_ROOT / research_asset_dir()）
+    ├── paths.py          （路径锚点：PROJECT_ROOT / ASSET_ROOT / LITERATURE_ROOT / research_asset_dir()）
     ├── common/           （通用科学计算库：dtypes / numerical / space_curve / matrix / plotting）
     ├── research/<name>/  （研究线专属：theory / experiment）
     └── skills/           （LLM skill 后端）
@@ -41,7 +41,7 @@ scripts/              ← 应用层：具体研究脚本
     └── <name>/{theory,experiment}/
 ```
 
-> **包名与资产目录**：Python 包路径不能以数字开头，故资产目录 `my_research/1_gain_ep`
+> **包名与资产目录**：Python 包路径不能以数字开头，故资产目录 `data/research/1_gain_ep`
 > 对应包路径 `pysci.research.gain_ep`。资产路径统一通过 `pysci.paths.research_asset_dir(name)`
 > 定位，禁止脆弱的 `Path(__file__).parents[N]` 层级硬编码。
 
@@ -135,12 +135,12 @@ scripts/              ← 应用层：具体研究脚本
 - 功能具有通用性，不局限于特定研究主题
 - 功能逻辑复杂，封装后可提高 `scripts/` 的可读性
 
-#### 2.2.3 理论文档目录（`参考资料（手动）/` 与 `my_research/<n>_<name>/参考资料/`）
+#### 2.2.3 理论文档目录（`参考资料（手动）/` 与 `data/research/<n>_<name>/参考资料/`）
 **用途**: 存放学术论文、理论推导、技术参考文档
 
 **组织方式**:
 - foundations 各主题资料在根 `参考资料（手动）/`，目录结构**镜像** `scripts/foundations/`（每个主题一个文件夹）
-- 研究线专属资料在 `my_research/<n>_<name>/参考资料/`（如 `my_research/1_gain_ep/参考资料/TEP`）
+- 研究线专属资料在 `data/research/<n>_<name>/参考资料/`（如 `data/research/1_gain_ep/参考资料/TEP`）
 - 文件格式：主要为Markdown（`.md`）
 
 **内容示例**: 参考 `参考资料（手动）/CPA/CPAL-传递矩阵法.md`
@@ -193,7 +193,7 @@ setup_chinese_fonts()
 ## 4. LLM工作指南
 
 ### 4.1 任务执行流程
-1. **理解理论**: 查阅对应主题参考资料（`参考资料（手动）/[主题]/` 或 `my_research/<n>_<name>/参考资料/`）中的相关文档
+1. **理解理论**: 查阅对应主题参考资料（`参考资料（手动）/[主题]/` 或 `data/research/<n>_<name>/参考资料/`）中的相关文档
 2. **检查现有代码**: 使用`codebase-retrieval`查找已有实现
 3. **确认依赖**: 验证需要使用的函数/类的签名
 4. **编写代码**: 遵循项目架构和代码规范

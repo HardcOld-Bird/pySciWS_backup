@@ -29,9 +29,9 @@ from pysci.paths import LITERATURE_ROOT, PROJECT_ROOT
 # 路径解析
 # ---------------------------------------------------------------------------
 # 路径统一由 pysci.paths 收口（标记法查找项目根），不再依赖本文件所在的脆弱层级数学。
-# MODULE_DIR 指向顶层文献数据区 literature/（papers/shortlists/reviews/templates/cache 的父目录）。
+# MODULE_DIR 指向文献数据区 data/skills/literature_research/（papers/shortlists/reviews/templates/cache 的父目录）。
 MODULE_DIR: Path = LITERATURE_ROOT
-CACHE_DIR_ENV_DEFAULT: str = "literature/cache"
+CACHE_DIR_ENV_DEFAULT: str = "data/skills/literature_research/cache"
 
 
 def _resolve_cache_dir(raw: str | None) -> Path:

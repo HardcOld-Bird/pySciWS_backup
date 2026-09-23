@@ -18,7 +18,7 @@
     md = extract_pdf(pdf_path, backend="pymupdf4llm")             # 强制本地兜底
     md = extract_pdf(pdf_path, prefer_latex_source="2606.12345")  # 优先 arXiv 源码
 
-结果会缓存到 ``literature/cache/extracted/{stem}.{backend}.md``，重复调用直接命中缓存。
+结果会缓存到 ``data/skills/literature_research/cache/extracted/{stem}.{backend}.md``，重复调用直接命中缓存。
 
 云端 MinerU 需在项目根 ``.env`` 配置 ``MINERU_TOKEN=``（在 https://mineru.net/apiManage/token
 免费申请，Token 有效期约 90 天）。未配置时 auto 会回退 pymupdf4llm 并告警。

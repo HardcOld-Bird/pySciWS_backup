@@ -50,15 +50,14 @@ containing both `pyproject.toml` and `.python-version`) — not by fragile `pare
 ```python
 from pysci.paths import LITERATURE_ROOT, PROJECT_ROOT  # marker-based root discovery
 
-MODULE_DIR = (
-    LITERATURE_ROOT  # literature/  (papers, shortlists, reviews, templates, cache)
-)
-CACHE_DIR_ENV_DEFAULT = "literature/cache"
+# MODULE_DIR is the literature data area (papers/shortlists/reviews/templates/cache)
+MODULE_DIR = LITERATURE_ROOT  # = data/skills/literature_research/
+CACHE_DIR_ENV_DEFAULT = "data/skills/literature_research/cache"
 ```
 
 - `.env` is loaded from `PROJECT_ROOT/.env`; `CACHE_DIR` there overrides the default.
 - The **code** lives in `src/pysci/skills/literature_research/` (installed as part of the `pysci`
-  package); the **data** (papers/shortlists/reviews/templates/cache) lives at top-level `literature/`,
+  package); the **data** (papers/shortlists/reviews/templates/cache) lives at `data/skills/literature_research/` (mirroring the code tree),
   keeping git-ignored cache + PDFs out of the package tree.
 - **If paths go wrong**, the usual cause is the project-root markers moving: check `_ROOT_MARKERS` in
   `src/pysci/paths.py`, then run `research doctor` to confirm `模块根 / 缓存目录 / 项目根` are correct.

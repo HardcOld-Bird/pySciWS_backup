@@ -24,7 +24,7 @@ openalex_id: ""
 wos_id: ""
 zotero_key: ""
 zotero_uri: ""
-local_pdf_path: D:\XXXIIIGGG\projects\pySci\pySciWS\literature\cache\pdfs\1803.04110.pdf
+local_pdf_path: D:\XXXIIIGGG\projects\pySci\pySciWS\data\skills\literature_research\cache\pdfs\1803.04110.pdf
 oa_url: https://arxiv.org/pdf/1803.04110v1
 oa_status: green
 cited_by_count: null

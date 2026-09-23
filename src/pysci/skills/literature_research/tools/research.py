@@ -24,7 +24,7 @@
 2. S2（Semantic Scholar）为末位可选源：无 API key 时**完全跳过**；即便配置了 key，
    其所有输出与异常也被静默吞掉（校园网通常不可达，失败是预期行为，不需为它排障）。
 3. WoS（Web of Science）为可选增强源：未配置或调用失败时静默降级到 OpenAlex 估算值。
-4. 所有产物路径基于 settings.module_dir（= literature/）。
+4. 所有产物路径基于 settings.module_dir（= data/skills/literature_research/）。
 5. 不依赖 PyYAML：frontmatter 由内置 _dump_yaml 生成，避免额外依赖。
 """
 
@@ -53,7 +53,7 @@ from . import (
 from .config import settings
 
 # ---------------------------------------------------------------------------
-# 路径常量（全部基于模块根 settings.module_dir = literature/）
+# 路径常量（全部基于模块根 settings.module_dir = data/skills/literature_research/）
 # ---------------------------------------------------------------------------
 MODULE_DIR: Path = settings.module_dir
 PAPERS_DIR: Path = MODULE_DIR / "papers"

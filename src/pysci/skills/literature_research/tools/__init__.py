@@ -13,7 +13,7 @@
 
 设计原则：
 1. 所有凭据从项目根 .env 加载，代码中绝不硬编码
-2. 所有网络响应缓存到 literature/cache/api_responses/，避免重复请求
+2. 所有网络响应缓存到 data/skills/literature_research/cache/api_responses/，避免重复请求
 3. 所有客户端提供统一的 dict 返回结构，便于上层组装 markdown 笔记
 """
 

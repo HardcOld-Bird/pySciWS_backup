@@ -29,7 +29,7 @@ dependencies = [
     "pydantic",
     # COMSOL 仿真接口
     "mph",
-    # 文献检索与知识库（代码：src/pysci/skills/literature_research/；数据：literature/，详见其 README.md）
+    # 文献检索与知识库（代码：src/pysci/skills/literature_research/；数据：data/skills/literature_research/，详见其 README.md）
     "requests",         # HTTP 客户端（OpenAlex / arXiv / WoS / Zotero）
     "python-dotenv",    # 加载项目根 .env
     "pyzotero",         # Zotero API 官方 Python 封装
@@ -93,11 +93,9 @@ exclude = [
     ".git/**",
     ".idea/**",
     ".venv/**",
-    # 平行资产树：非代码资产（.mph / storage / 参考资料）与 pySweepWS 遗留的 vendored 依赖，
-    # 不参与 lint / format
-    "my_research/**",
-    # 文献缓存（PDF 与抽取产物）
-    "literature/cache/**",
+    # 平行资产树 data/：非代码资产（.mph / storage / 参考资料 / 文献缓存与 PDF），
+    # 与 src/pysci 代码树镜像（data/research ↔ research、data/skills ↔ skills），不参与 lint / format
+    "data/**",
 ]
 
 [tool.ruff.lint]

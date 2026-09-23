@@ -214,7 +214,7 @@ class SimScanner:
     # 类常量：四个 COMSOL 模型文件路径
     # =========================================================================
 
-    # 模型为非代码资产，存于研究资产树（不随包分发）：my_research/1_gain_ep/experiment/mphs/
+    # 模型为非代码资产，存于研究资产树（不随包分发）：data/research/1_gain_ep/experiment/mphs/
     _MPHS_DIR: Path = research_asset_dir("gain_ep") / "experiment" / "mphs"
 
     #: 8 周期参数扫描模型（cr/ci 参数扫描，结果表含 cr, ci, point1~8）
@@ -274,7 +274,7 @@ class SimScanner:
         self.client: mph.Client | None = None
         self._models: dict[str, mph.Model] = {}
 
-        # 存储路径：研究资产树根 my_research/1_gain_ep/ 下的 storage/sim
+        # 存储路径：研究资产树根 data/research/1_gain_ep/ 下的 storage/sim
         self._workspace_root = research_asset_dir("gain_ep")
         self.storage_dir: Path = self._workspace_root / "storage" / "sim"
         self.storage_dir.mkdir(parents=True, exist_ok=True)

@@ -21,7 +21,7 @@ uv sync --extra experiment   # 额外安装 gain_ep 实验平台依赖（nidaqmx
 ```
 pySciWS/
 ├── src/pysci/                      # 唯一安装包（src-layout）
-│   ├── paths.py                    # 路径锚点：PROJECT_ROOT / ASSET_ROOT / research_asset_dir()
+│   ├── paths.py                    # 路径锚点：PROJECT_ROOT / ASSET_ROOT / LITERATURE_ROOT / research_asset_dir()
 │   ├── common/                     # 共享工具层（可复用的理论储备与基础工具）
 │   │   ├── matrix.py               #   2×2 复矩阵本征系统可视化
 │   │   ├── numerical.py            #   sympy 表达式 → numpy 数值函数
@@ -32,24 +32,28 @@ pySciWS/
 │   │   ├── theory/                 #   理论 / 仿真：sim.py（COMSOL 接口）、theory.py（扫参与绘图）
 │   │   └── experiment/             #   实验平台（原 sweeper400）：
 │   │                               #     analyze / calib / config / gui / measure / move / sim / use
-│   └── skills/literature_research/ # LLM 文献检索 skill 后端（代码；数据在顶层 literature/）
+│   └── skills/literature_research/ # LLM 文献检索 skill 后端（代码；数据在 data/skills/literature_research/）
 ├── scripts/                        # 可执行脚本（非包代码）
 │   ├── foundations/{cpa,ep_bic,topo_bic,matrix}/   # 共享工具层的演示 / 验证脚本
 │   └── gain_ep/{theory,experiment}/                # gain_ep 研究线脚本
 ├── tests/                          # pytest 测试（testpaths = tests）
 │   └── gain_ep/{theory,experiment}/
-├── literature/                     # 文献知识库数据区（papers / shortlists / reviews / cache / …）
-├── my_research/1_gain_ep/          # 平行资产树（不入包；.mph 与 storage 不入版本控制）
-│   ├── theory/                     #   理论笔记 / PDF
-│   ├── experiment/mphs/            #   COMSOL .mph 模型
-│   ├── storage/                    #   仿真 / 校准输出（可再生）
-│   └── 参考资料/                   #   gain_ep 相关参考资料（如 TEP）
+├── data/                           # 平行资产树——数据树（与 src/pysci/ 代码树镜像；不入包）
+│   ├── research/1_gain_ep/         #   ⟷ src/pysci/research/gain_ep/（.mph 与 storage 不入版本控制）
+│   │   ├── theory/                 #     理论笔记 / PDF
+│   │   ├── experiment/mphs/        #     COMSOL .mph 模型
+│   │   ├── storage/                #     仿真 / 校准输出（可再生）
+│   │   └── 参考资料/               #     gain_ep 相关参考资料（如 TEP）
+│   └── skills/literature_research/ #   ⟷ src/pysci/skills/literature_research/（文献数据区）
+│       └── papers / shortlists / reviews / templates / cache / INDEX.md
 └── 参考资料（手动）/               # foundations 各主题参考资料（CPA / EP & BIC / Topo & BIC）
 ```
 
-> **包名与资产目录**：Python 包路径不能以数字开头，故资产目录 `my_research/1_gain_ep`
-> 对应包路径 `pysci.research.gain_ep`（数字序号只保留在资产树目录名中）。代码统一通过
-> `pysci.paths.research_asset_dir("gain_ep")` 定位资产，避免脆弱的 `parents[N]` 相对层级硬编码。
+> **代码树 / 数据树镜像**：`src/pysci/`（代码）与 `data/`（非代码资产）一一镜像——
+> `src/pysci/research/<name>/` ⟷ `data/research/<n>_<name>/`、`src/pysci/skills/literature_research/`
+> ⟷ `data/skills/literature_research/`。Python 包路径不能以数字开头，故资产目录保留数字序号：
+> `data/research/1_gain_ep` 对应包 `pysci.research.gain_ep`。代码统一通过
+> `pysci.paths.research_asset_dir("gain_ep")` 与 `LITERATURE_ROOT` 定位资产，避免脆弱的 `parents[N]` 硬编码。
 
 ## 运行方式
 
@@ -58,7 +62,7 @@ pySciWS/
 uv run python scripts/foundations/ep_bic/1-EP-BIC-Hamiltonian.py
 uv run python scripts/gain_ep/theory/传递函数分析.py
 
-# 以模块方式运行文献检索 skill（数据区在 literature/）
+# 以模块方式运行文献检索 skill（数据区在 data/skills/literature_research/）
 uv run python -m pysci.skills.literature_research.tools.research doctor
 
 # 测试

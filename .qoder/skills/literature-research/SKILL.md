@@ -91,11 +91,11 @@ HTML) are kept permanently; manage disk with `research cache stats｜clean｜pru
 
 | Path | Contents |
 |---|---|
-| `literature/papers/` | One structured note per paper (`{year}_{author}_{slug}.md`) |
-| `literature/shortlists/` | One search snapshot per query |
-| `literature/reviews/` | Multi-paper surveys |
-| `literature/INDEX.md` | Auto-generated library index (`research index`) |
-| `literature/cache/` | Downloaded PDFs + extracted full text + fetched HTML (git-ignored) |
+| `data/skills/literature_research/papers/` | One structured note per paper (`{year}_{author}_{slug}.md`) |
+| `data/skills/literature_research/shortlists/` | One search snapshot per query |
+| `data/skills/literature_research/reviews/` | Multi-paper surveys |
+| `data/skills/literature_research/INDEX.md` | Auto-generated library index (`research index`) |
+| `data/skills/literature_research/cache/` | Downloaded PDFs + extracted full text + fetched HTML (git-ignored) |
 
 ## When something breaks
 
