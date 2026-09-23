@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from pysci.paths import research_asset_dir
+
 from ..analyze import (
     CompData,
     Point2D,
@@ -298,7 +300,7 @@ class CaliberAnemone:
             lowcut: 滤波器低频截止频率（Hz），默认为100.0
             highcut: 滤波器高频截止频率（Hz），默认为20000.0
             result_folder: 可选，结果保存文件夹路径。如果为None，将使用默认路径
-                          'storage/calib/calib_result_anemone'（相对于项目根目录）。
+                          'storage/calib/calib_result_anemone'（相对于 gain_ep 研究资产目录）。
                           最终将保存raw_sweep_data.pkl、三幅绘图和一个CompData文件
             settle_time: 采集开始前的稳定等待时间（秒）。如果为None，则使用初始化时
                         计算的默认值（chunk时长 + 0.1秒）
@@ -323,7 +325,7 @@ class CaliberAnemone:
         # 确定结果保存路径
         if result_folder is None:
             result_path = (
-                Path(__file__).resolve().parents[3]
+                research_asset_dir("gain_ep")
                 / "storage"
                 / "calib"
                 / "calib_result_anemone"
@@ -1441,7 +1443,7 @@ class CaliberOctopus:
             chunks_per_start: 每次启动采集的连续chunk数，默认为3
             apply_filter: 是否应用滤波，默认为True
             result_folder: 可选，结果保存文件夹路径。如果为None，将使用默认路径
-                          'storage/calib/calib_result_octopus'（相对于项目根目录）。
+                          'storage/calib/calib_result_octopus'（相对于 gain_ep 研究资产目录）。
                           最终将保存多个raw_sweep_data_N.pkl文件、两幅绘图和一个平均后的CalibData文件
             settle_time: 通道切换后的稳定等待时间（秒）。如果为None，则使用初始化时
                         计算的默认值（chunk时长 + 0.1秒）
@@ -1460,9 +1462,9 @@ class CaliberOctopus:
 
         # 确定结果保存路径（如果未指定，使用默认路径）
         if result_folder is None:
-            # 使用默认路径：项目根目录的 storage/calib/calib_result_octopus
+            # 使用默认路径：研究资产目录的 storage/calib/calib_result_octopus
             result_path = (
-                Path(__file__).resolve().parents[3]
+                research_asset_dir("gain_ep")
                 / "storage"
                 / "calib"
                 / "calib_result_octopus"
@@ -2360,7 +2362,7 @@ class CaliberFishNet(CaliberOctopus):
             chunks_per_start: 每次启动采集的连续chunk数，默认为3
             apply_filter: 是否应用滤波，默认为True
             result_folder: 可选，结果保存文件夹路径。如果为None，将使用默认路径
-                          'storage/calib/calib_result_fishnet'（相对于项目根目录）。
+                          'storage/calib/calib_result_fishnet'（相对于 gain_ep 研究资产目录）。
                           最终将保存多个raw_sweep_data_N.pkl文件、绘图和一个平均后的TFData文件
             settle_time: 通道切换后的稳定等待时间（秒）。如果为None，则使用初始化时
                         计算的默认值（chunk时长 + 0.1秒）
@@ -2382,9 +2384,9 @@ class CaliberFishNet(CaliberOctopus):
 
         # 确定结果保存路径（如果未指定，使用默认路径）
         if result_folder is None:
-            # 使用默认路径：项目根目录的 storage/calib/calib_result_fishnet
+            # 使用默认路径：研究资产目录的 storage/calib/calib_result_fishnet
             result_path = (
-                Path(__file__).resolve().parents[3]
+                research_asset_dir("gain_ep")
                 / "storage"
                 / "calib"
                 / "calib_result_fishnet"
@@ -2996,7 +2998,7 @@ class FrequencyOptimizer:
             )
         else:
             sub_folder = (
-                Path(__file__).resolve().parents[3]
+                research_asset_dir("gain_ep")
                 / "storage"
                 / "calib"
                 / "calib_result_freq"
@@ -3149,7 +3151,7 @@ class FrequencyOptimizer:
         # 提前解析结果保存路径，用于传递给 _measure_at_frequency 保存子文件夹
         if result_folder is None:
             resolved_result_path = (
-                Path(__file__).resolve().parents[3]
+                research_asset_dir("gain_ep")
                 / "storage"
                 / "calib"
                 / "calib_result_freq"
@@ -3626,7 +3628,7 @@ class FrequencyOptimizer:
         # 确定结果保存路径
         if result_folder is None:
             result_path = (
-                Path(__file__).resolve().parents[3]
+                research_asset_dir("gain_ep")
                 / "storage"
                 / "calib"
                 / "calib_result_freq"

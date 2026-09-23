@@ -248,7 +248,7 @@ class TestCaliberAnemone:
         sampling_info,
     ):
         """测试使用默认result_folder的校准（需要硬件）"""
-        from pathlib import Path
+        from pysci.paths import research_asset_dir
 
         caliber = CaliberAnemone(
             ai_channels=ai_channels,
@@ -270,7 +270,7 @@ class TestCaliberAnemone:
 
         # 验证默认路径下的文件已保存
         default_path = (
-            Path(__file__).resolve().parents[3]
+            research_asset_dir("gain_ep")
             / "storage"
             / "calib"
             / "calib_result_anemone"

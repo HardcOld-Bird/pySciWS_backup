@@ -92,7 +92,12 @@ line-length = 88
 exclude = [
     ".git/**",
     ".idea/**",
-#    "scripts/**",
+    ".venv/**",
+    # 平行资产树：非代码资产（.mph / storage / 参考资料）与 pySweepWS 遗留的 vendored 依赖，
+    # 不参与 lint / format
+    "my_research/**",
+    # 文献缓存（PDF 与抽取产物）
+    "literature/cache/**",
 ]
 
 [tool.ruff.lint]

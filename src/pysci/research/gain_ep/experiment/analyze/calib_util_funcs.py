@@ -11,6 +11,8 @@ from typing import Any
 
 import numpy as np
 
+from pysci.paths import research_asset_dir
+
 from ..logger import get_logger
 from .filter import detrend_waveform
 from .my_dtypes import (
@@ -36,7 +38,7 @@ def load_freq_optimizer_result(
 
     Args:
         result_folder: 可选，结果文件夹路径。如果为 None，使用默认路径
-                      'storage/calib/calib_result_freq'（相对于项目根目录）。
+                      'storage/calib/calib_result_freq'（相对于 gain_ep 研究资产目录）。
 
     Returns:
         包含 'frequency' 和 'sampling_info' 键的字典，如果文件不存在则返回 None。
@@ -44,7 +46,7 @@ def load_freq_optimizer_result(
     """
     if result_folder is None:
         result_path = (
-            Path(__file__).resolve().parents[3]
+            research_asset_dir("gain_ep")
             / "storage"
             / "calib"
             / "calib_result_freq"

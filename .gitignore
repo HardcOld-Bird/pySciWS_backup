@@ -7,6 +7,11 @@ __pycache__/
 /mphs/
 /storage/
 
+# 研究资产树（my_research/）：.mph 模型体积大、storage 为可再生输出，均不入版本控制
+# （理论笔记 / 参考资料等小文本仍按需跟踪）
+/my_research/**/mphs/
+/my_research/**/storage/
+
 # Build artifacts
 *.egg-info/
 

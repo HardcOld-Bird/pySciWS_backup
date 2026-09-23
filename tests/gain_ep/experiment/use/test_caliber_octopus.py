@@ -321,7 +321,7 @@ class TestCaliberOctopus:
         sine_args,
     ):
         """测试使用默认result_folder的校准"""
-        from pathlib import Path
+        from pysci.paths import research_asset_dir
 
         caliber = CaliberOctopus(
             ai_channels=ai_channels,
@@ -344,8 +344,8 @@ class TestCaliberOctopus:
         assert len(caliber.result_final_comp_data["comp_list"]) == len(ao_channels)
 
         # 验证默认路径下的文件已保存
-        # 默认路径应该是项目根目录的 storage/calib/calib_result_octopus
-        default_path = Path(__file__).resolve().parents[3] / "storage" / "calib" / "calib_result_octopus"
+        # 默认路径应该是 gain_ep 研究资产目录的 storage/calib/calib_result_octopus
+        default_path = research_asset_dir("gain_ep") / "storage" / "calib" / "calib_result_octopus"
 
         assert default_path.exists(), f"默认路径不存在: {default_path}"
         assert (default_path / "ao_comp_data.pkl").exists(), "ao_comp_data.pkl未保存"
