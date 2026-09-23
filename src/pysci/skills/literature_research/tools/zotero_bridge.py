@@ -27,8 +27,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .config import http_session, settings
 
@@ -36,8 +37,18 @@ from .config import http_session, settings
 # 常量
 # ---------------------------------------------------------------------------
 ZOTERO_ITEM_TYPES = {
-    "journal-article", "preprint", "conference-paper", "book", "book-section",
-    "thesis", "report", "manuscript", "patent", "webpage", "note", "attachment",
+    "journal-article",
+    "preprint",
+    "conference-paper",
+    "book",
+    "book-section",
+    "thesis",
+    "report",
+    "manuscript",
+    "patent",
+    "webpage",
+    "note",
+    "attachment",
 }
 
 
@@ -74,10 +85,12 @@ class ZoteroBridge:
             - 'requests': 强制使用原生 requests
         """
         self.backend: str = ""
-        self._zot = None            # pyzotero.Zotero 实例
+        self._zot = None  # pyzotero.Zotero 实例
         self._library_type = "user"
         self._library_id: str | int | None = None
-        self._server_id: str | None = None   # 本地 API 写操作需要的 Zotero-Server-ID（由 GET 响应捕获）
+        self._server_id: str | None = (
+            None  # 本地 API 写操作需要的 Zotero-Server-ID（由 GET 响应捕获）
+        )
 
         if prefer in ("auto", "pyzotero"):
             try:
@@ -111,7 +124,9 @@ class ZoteroBridge:
                     self._library_id = int(settings.zotero_user_id or 0)
                     self.backend = "pyzotero-web"
                 elif prefer == "pyzotero":
-                    raise ZoteroNotConfigured("Neither local Zotero nor Web API credentials available")
+                    raise ZoteroNotConfigured(
+                        "Neither local Zotero nor Web API credentials available"
+                    )
             except ImportError:
                 if prefer == "pyzotero":
                     raise ZoteroNotConfigured(
@@ -146,7 +161,10 @@ class ZoteroBridge:
                     params={"limit": 1, "format": "keys"},
                     timeout=2,
                 )
-                return r.status_code in (200, 403)   # 403 也说明 Zotero 在跑，只是权限问题
+                return r.status_code in (
+                    200,
+                    403,
+                )  # 403 也说明 Zotero 在跑，只是权限问题
         except Exception:
             return False
 
@@ -182,7 +200,9 @@ class ZoteroBridge:
     def _headers(self, for_write: bool = False) -> dict[str, str]:
         h = {"Accept": "application/json", "Content-Type": "application/json"}
         # Web API 需要 API key
-        use_web = self.backend.endswith("-web") or (for_write and self.backend.endswith("-local") and settings.zotero_web_ready)
+        use_web = self.backend.endswith("-web") or (
+            for_write and self.backend.endswith("-local") and settings.zotero_web_ready
+        )
         if use_web and settings.zotero_api_key:
             h["Zotero-API-Key"] = settings.zotero_api_key
             h["Zotero-API-Version"] = "3"
@@ -195,29 +215,50 @@ class ZoteroBridge:
     def _raw_get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         url = self._url(path)
         with http_session() as s:
-            r = s.get(url, params=params or {}, headers=self._headers(), timeout=settings.http_timeout)
+            r = s.get(
+                url,
+                params=params or {},
+                headers=self._headers(),
+                timeout=settings.http_timeout,
+            )
             # 捕获 Zotero-Server-ID（本地 API 写操作需要）
             sid = r.headers.get("Zotero-Server-ID") or r.headers.get("zotero-server-id")
             if sid:
                 self._server_id = sid
             if r.status_code != 200:
-                raise ZoteroAPIError(f"GET {url} failed ({r.status_code}): {r.text[:300]}")
+                raise ZoteroAPIError(
+                    f"GET {url} failed ({r.status_code}): {r.text[:300]}"
+                )
             return r.json()
 
     def _raw_post(self, path: str, payload: Any) -> Any:
         url = self._url(path, for_write=True)
         with http_session() as s:
-            r = s.post(url, json=payload, headers=self._headers(for_write=True), timeout=settings.http_timeout)
+            r = s.post(
+                url,
+                json=payload,
+                headers=self._headers(for_write=True),
+                timeout=settings.http_timeout,
+            )
             if r.status_code not in (200, 201, 204):
-                raise ZoteroAPIError(f"POST {url} failed ({r.status_code}): {r.text[:300]}")
+                raise ZoteroAPIError(
+                    f"POST {url} failed ({r.status_code}): {r.text[:300]}"
+                )
             return r.json() if r.text else {}
 
     def _raw_patch(self, path: str, payload: Any) -> Any:
         url = self._url(path, for_write=True)
         with http_session() as s:
-            r = s.patch(url, json=payload, headers=self._headers(for_write=True), timeout=settings.http_timeout)
+            r = s.patch(
+                url,
+                json=payload,
+                headers=self._headers(for_write=True),
+                timeout=settings.http_timeout,
+            )
             if r.status_code not in (200, 204):
-                raise ZoteroAPIError(f"PATCH {url} failed ({r.status_code}): {r.text[:300]}")
+                raise ZoteroAPIError(
+                    f"PATCH {url} failed ({r.status_code}): {r.text[:300]}"
+                )
             return r.json() if r.text else {}
 
     # ------------------------------------------------------------------
@@ -234,11 +275,24 @@ class ZoteroBridge:
             # 回退到 raw GET（用 json format 避免解析错误）
             url = self._url("/items")
             with http_session() as s:
-                r = s.get(url, params={"limit": 1, "format": "json"}, headers=self._headers(), timeout=10)
+                r = s.get(
+                    url,
+                    params={"limit": 1, "format": "json"},
+                    headers=self._headers(),
+                    timeout=10,
+                )
                 if r.status_code == 200:
                     data = r.json()
-                    return {"ok": True, "backend": self.backend, "items_sample": len(data) if isinstance(data, list) else 0}
-                return {"ok": False, "backend": self.backend, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+                    return {
+                        "ok": True,
+                        "backend": self.backend,
+                        "items_sample": len(data) if isinstance(data, list) else 0,
+                    }
+                return {
+                    "ok": False,
+                    "backend": self.backend,
+                    "error": f"HTTP {r.status_code}: {r.text[:200]}",
+                }
         except Exception as e:
             return {"ok": False, "backend": self.backend, "error": str(e)}
 
@@ -293,7 +347,11 @@ class ZoteroBridge:
                     return list(self._zot.children(m.group(1), **kwargs))
                 m = re.match(r"^/collections/([^/]+)/items$", path)
                 if m:
-                    return list(self._zot.everything(self._zot.collection_items(m.group(1), **kwargs)))
+                    return list(
+                        self._zot.everything(
+                            self._zot.collection_items(m.group(1), **kwargs)
+                        )
+                    )
                 if path == "/collections":
                     return list(self._zot.everything(self._zot.collections(**kwargs)))
                 # 默认：/items
@@ -384,7 +442,13 @@ class ZoteroBridge:
     # ------------------------------------------------------------------
     # 写操作
     # ------------------------------------------------------------------
-    def create_item_from_metadata(self, meta: dict[str, Any], *, collections: Iterable[str] = (), tags: Iterable[str] = ()) -> dict[str, Any]:
+    def create_item_from_metadata(
+        self,
+        meta: dict[str, Any],
+        *,
+        collections: Iterable[str] = (),
+        tags: Iterable[str] = (),
+    ) -> dict[str, Any]:
         """由 openalex_client / arxiv_client 生成的元数据 dict 创建 Zotero 条目。
 
         meta 应包含至少 title；其他字段按需填入。
@@ -406,36 +470,50 @@ class ZoteroBridge:
         }
 
         if item_type == "journalArticle":
-            data.update({
-                "publicationTitle": meta.get("journal", ""),
-                "volume": meta.get("volume", ""),
-                "issue": meta.get("issue", ""),
-                "pages": meta.get("pages", ""),
-                "ISSN": "",
-                "publisher": meta.get("publisher", ""),
-            })
+            data.update(
+                {
+                    "publicationTitle": meta.get("journal", ""),
+                    "volume": meta.get("volume", ""),
+                    "issue": meta.get("issue", ""),
+                    "pages": meta.get("pages", ""),
+                    "ISSN": "",
+                    "publisher": meta.get("publisher", ""),
+                }
+            )
         elif item_type == "preprint":
-            data.update({
-                "repository": "arXiv",
-                "archiveID": meta.get("arxiv_id", ""),
-                "place": "",
-            })
+            data.update(
+                {
+                    "repository": "arXiv",
+                    "archiveID": meta.get("arxiv_id", ""),
+                    "place": "",
+                }
+            )
             if meta.get("arxiv_id"):
                 data["url"] = f"https://arxiv.org/abs/{meta['arxiv_id']}"
 
         # 存入 extra 字段：所有本项目自定义元数据（openalex_id, jif, quartile 等）
         extra_lines = []
-        for k in ("openalex_id", "wos_id", "arxiv_id", "jif", "jcr_quartile", "cited_by_count", "oa_status"):
+        for k in (
+            "openalex_id",
+            "wos_id",
+            "arxiv_id",
+            "jif",
+            "jcr_quartile",
+            "cited_by_count",
+            "oa_status",
+        ):
             v = meta.get(k)
             if v not in (None, "", 0):
                 extra_lines.append(f"{k}: {v}")
         if extra_lines:
             data["extra"] = "\n".join(extra_lines)
 
-        payload = [data]   # Zotero POST /items 需要数组
+        payload = [data]  # Zotero POST /items 需要数组
         return self._raw_post("/items", payload)
 
-    def add_note(self, parent_item_key: str, note_markdown: str, *, tags: Iterable[str] = ()) -> dict[str, Any]:
+    def add_note(
+        self, parent_item_key: str, note_markdown: str, *, tags: Iterable[str] = ()
+    ) -> dict[str, Any]:
         """为某条目添加子笔记。
 
         note_markdown 会被简单转换为 HTML（Zotero 笔记存 HTML）。
@@ -470,7 +548,9 @@ class ZoteroBridge:
         if collection_key not in cols:
             cols.append(collection_key)
         version = data.get("version") or item.get("version")
-        return self._raw_patch(f"/items/{item_key}", {"collections": cols, "version": version})
+        return self._raw_patch(
+            f"/items/{item_key}", {"collections": cols, "version": version}
+        )
 
     # ------------------------------------------------------------------
     # 便捷：库信息
@@ -481,7 +561,9 @@ class ZoteroBridge:
             url = self._url("/items")
             with http_session() as s:
                 r = s.head(url, params={"limit": 1}, headers=self._headers(), timeout=5)
-                v = r.headers.get("Last-Modified-Version") or r.headers.get("Zotero-Schema-Version")
+                v = r.headers.get("Last-Modified-Version") or r.headers.get(
+                    "Zotero-Schema-Version"
+                )
                 return int(v) if v else None
         except Exception:
             return None
@@ -494,7 +576,7 @@ def _to_pyzotero_kwargs(params: dict[str, Any]) -> dict[str, Any]:
     """把通用 params 转换为 pyzotero 接受的 kwargs。"""
     mapping = {
         "limit": "limit",
-        "format": None,   # pyzotero 不接受 format
+        "format": None,  # pyzotero 不接受 format
         "since": "since",
         "itemType": "itemType",
         "tag": "tag",
@@ -535,11 +617,13 @@ def _build_creators(authors: Iterable[Any]) -> list[dict[str, str]]:
         # Zotero 期望 "Last, First" 或 "First Last"（firstName + lastName）
         parts = name.split()
         if len(parts) >= 2:
-            creators.append({
-                "creatorType": "author",
-                "firstName": " ".join(parts[:-1]),
-                "lastName": parts[-1],
-            })
+            creators.append(
+                {
+                    "creatorType": "author",
+                    "firstName": " ".join(parts[:-1]),
+                    "lastName": parts[-1],
+                }
+            )
         else:
             creators.append({"creatorType": "author", "name": name})
     return creators
@@ -569,6 +653,7 @@ def _md_to_zotero_html(md: str) -> str:
     """
     try:
         import markdown  # type: ignore
+
         return markdown.markdown(md, extensions=["extra", "sane_lists"])
     except ImportError:
         pass
@@ -640,6 +725,7 @@ def _inline_md(s: str) -> str:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Zotero bridge CLI")
     sub = parser.add_subparsers(dest="cmd")
 
@@ -655,7 +741,9 @@ if __name__ == "__main__":
 
     p_get = sub.add_parser("get", help="获取单条")
     p_get.add_argument("key")
-    p_get.add_argument("--attachment", action="store_true", help="同时打印附件 PDF 路径")
+    p_get.add_argument(
+        "--attachment", action="store_true", help="同时打印附件 PDF 路径"
+    )
 
     args = parser.parse_args()
 
@@ -672,13 +760,17 @@ if __name__ == "__main__":
         items = bridge.list_items(limit=args.limit, item_type=args.type)
         for it in items:
             d = it.get("data") or it
-            print(f"[{d.get('key', '?')}] {d.get('itemType', '?')}: {d.get('title', '?')[:80]}")
+            print(
+                f"[{d.get('key', '?')}] {d.get('itemType', '?')}: {d.get('title', '?')[:80]}"
+            )
 
     elif args.cmd == "search":
         items = bridge.search_items(args.query, limit=args.limit)
         for it in items:
             d = it.get("data") or it
-            print(f"[{d.get('key', '?')}] {d.get('itemType', '?')}: {d.get('title', '?')[:80]}")
+            print(
+                f"[{d.get('key', '?')}] {d.get('itemType', '?')}: {d.get('title', '?')[:80]}"
+            )
 
     elif args.cmd == "get":
         it = bridge.get_item(args.key)

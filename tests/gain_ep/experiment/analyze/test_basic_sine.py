@@ -5,7 +5,6 @@
 """
 
 import numpy as np
-import pytest
 
 from pysci.research.gain_ep.experiment.analyze import (
     esti_vvi_multi_ch,
@@ -29,10 +28,14 @@ class TestEstiVviMultiCh:
 
         # 使用两个函数分别提取
         result_multi = esti_vvi_multi_ch(test_wave, approx_freq=500.0)
-        result_single = extract_single_tone_information_vvi(test_wave, approx_freq=500.0)
+        result_single = extract_single_tone_information_vvi(
+            test_wave, approx_freq=500.0
+        )
 
         # 验证结果一致性（转换为复振幅比较）
-        expected_complex = result_single["amplitude"] * np.exp(1j * result_single["phase"])
+        expected_complex = result_single["amplitude"] * np.exp(
+            1j * result_single["phase"]
+        )
 
         assert result_multi.shape == (1,)
         assert np.abs(result_multi[0] - expected_complex) < 0.01  # 允许1%误差
@@ -93,7 +96,7 @@ class TestEstiVviMultiCh:
         for i, (diff, expected) in enumerate(zip(phase_diffs, expected_diffs)):
             # 处理相位环绕
             diff = (diff + np.pi) % (2 * np.pi) - np.pi
-            assert np.abs(diff - expected) < 0.1, f"通道{i}和{i+1}之间的相位差不正确"
+            assert np.abs(diff - expected) < 0.1, f"通道{i}和{i + 1}之间的相位差不正确"
 
     def test_multi_channel_with_amplitude_variation(self):
         """测试多通道带幅值变化的情况"""
@@ -118,7 +121,9 @@ class TestEstiVviMultiCh:
         # 验证幅值被正确检测
         detected_amplitudes = np.abs(result)
 
-        for i, (detected, expected) in enumerate(zip(detected_amplitudes, amp_multipliers)):
+        for i, (detected, expected) in enumerate(
+            zip(detected_amplitudes, amp_multipliers)
+        ):
             assert np.abs(detected - expected) < 0.05, f"通道{i}的幅值检测不正确"
 
     def test_without_approx_freq(self):
@@ -148,9 +153,13 @@ class TestEstiVviMultiCh:
         test_wave = get_sine_multi_ch(sampling_info, sine_args, channels)
 
         # 不使用curve_fit
-        result_fast = esti_vvi_multi_ch(test_wave, approx_freq=1000.0, use_curve_fit=False)
+        result_fast = esti_vvi_multi_ch(
+            test_wave, approx_freq=1000.0, use_curve_fit=False
+        )
         # 使用curve_fit
-        result_precise = esti_vvi_multi_ch(test_wave, approx_freq=1000.0, use_curve_fit=True)
+        result_precise = esti_vvi_multi_ch(
+            test_wave, approx_freq=1000.0, use_curve_fit=True
+        )
 
         # 验证结果形状
         assert result_fast.shape == (4,)

@@ -38,6 +38,7 @@ pySciWS/
 ```python
 """模块简短描述"""
 
+
 def function_name(param: type) -> return_type:
     """Google-style docstring."""
     # 实现
@@ -88,6 +89,7 @@ from src.module import function_name
 ```python
 # 导入项目通用的matplotlib配置，并应用
 from config.matplotlib_config import setup_chinese_fonts
+
 setup_chinese_fonts()
 ```
 

@@ -285,7 +285,11 @@ def clean_tier_b(
     if purge_all:
         targets = [p for d in TIER_B_DIRS for p in _dir_files(d)]
     else:
-        days = older_than_days if older_than_days is not None else settings.cache_b_max_age_days
+        days = (
+            older_than_days
+            if older_than_days is not None
+            else settings.cache_b_max_age_days
+        )
         targets = _expired_tier_b(days)
 
     freed = 0
@@ -344,8 +348,13 @@ def _collect_tier_a_units(refs: set[Path]) -> list[dict[str, Any]]:
         for p in _dir_files(d):
             sz, mt = _size_and_mtime(p)
             units.append(
-                {"bytes": sz, "mtime": mt, "paths": [p], "is_dir": False,
-                 "ref": _is_referenced(p, refs)}
+                {
+                    "bytes": sz,
+                    "mtime": mt,
+                    "paths": [p],
+                    "is_dir": False,
+                    "ref": _is_referenced(p, refs),
+                }
             )
     hdir = settings.cache_html_fulltext
     if hdir.exists():
@@ -393,7 +402,9 @@ def prune_tier_a(
     ``keep_referenced=True`` 时跳过被 ``papers/`` 笔记引用的文件。返回
     ``(淘汰单元数, 释放字节, 淘汰清单, 淘汰后剩余总字节)``。``dry_run`` 只列不删。
     """
-    target_bytes = (max_mb if max_mb is not None else settings.cache_soft_limit_mb) * _MB
+    target_bytes = (
+        max_mb if max_mb is not None else settings.cache_soft_limit_mb
+    ) * _MB
     refs = referenced_paths() if keep_referenced else set()
     units = _collect_tier_a_units(refs)
 

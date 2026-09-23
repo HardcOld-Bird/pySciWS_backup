@@ -110,7 +110,9 @@ class TestCaliberOctopus:
         assert caliber.result_final_comp_data is not None
         assert len(caliber.result_final_comp_data["comp_list"]) == len(ao_channels)
 
-        print(f"校准完成，生成了 {len(caliber.result_final_comp_data['comp_list'])} 个通道的补偿数据")
+        print(
+            f"校准完成，生成了 {len(caliber.result_final_comp_data['comp_list'])} 个通道的补偿数据"
+        )
 
         # 验证结果文件已保存
         assert (temp_result_folder / "ao_comp_data.pkl").exists()
@@ -232,7 +234,9 @@ class TestCaliberOctopus:
 
         # 验证新实例的输出波形已经过补偿
         assert caliber2._output_waveform.channels_num == len(ao_channels)
-        print(f"使用补偿数据创建实例成功，输出波形通道数: {caliber2._output_waveform.channels_num}")
+        print(
+            f"使用补偿数据创建实例成功，输出波形通道数: {caliber2._output_waveform.channels_num}"
+        )
 
     @pytest.mark.hardware
     def test_plot_transfer_functions(
@@ -345,13 +349,19 @@ class TestCaliberOctopus:
 
         # 验证默认路径下的文件已保存
         # 默认路径应该是 gain_ep 研究资产目录的 storage/calib/calib_result_octopus
-        default_path = research_asset_dir("gain_ep") / "storage" / "calib" / "calib_result_octopus"
+        default_path = (
+            research_asset_dir("gain_ep") / "storage" / "calib" / "calib_result_octopus"
+        )
 
         assert default_path.exists(), f"默认路径不存在: {default_path}"
         assert (default_path / "ao_comp_data.pkl").exists(), "ao_comp_data.pkl未保存"
-        assert (default_path / "raw_sweep_data_1.pkl").exists(), "raw_sweep_data_1.pkl未保存"
+        assert (default_path / "raw_sweep_data_1.pkl").exists(), (
+            "raw_sweep_data_1.pkl未保存"
+        )
         assert (default_path / "transfer_function_polar.png").exists(), "polar图未保存"
-        assert (default_path / "transfer_function_cartesian.png").exists(), "cartesian图未保存"
+        assert (default_path / "transfer_function_cartesian.png").exists(), (
+            "cartesian图未保存"
+        )
 
         print(f"默认路径校准完成，所有文件已保存到: {default_path}")
 
@@ -400,7 +410,9 @@ class TestCaliberOctopus:
 
         # 验证初始校准结果
         assert caliber_before.result_final_comp_data is not None
-        assert len(caliber_before.result_final_comp_data["comp_list"]) == len(ao_channels)
+        assert len(caliber_before.result_final_comp_data["comp_list"]) == len(
+            ao_channels
+        )
         assert (before_calib_folder / "ao_comp_data.pkl").exists()
 
         # 获取初始校准的传递函数数据（用于后续对比）
@@ -417,7 +429,9 @@ class TestCaliberOctopus:
         print("\n初始校准结果:")
         print(f"  幅值比平均值: {amp_mean_before:.6f}")
         print(f"  幅值比标准差: {amp_std_before:.6f}")
-        print(f"  幅值比范围: [{min(amp_ratios_before):.6f}, {max(amp_ratios_before):.6f}]")
+        print(
+            f"  幅值比范围: [{min(amp_ratios_before):.6f}, {max(amp_ratios_before):.6f}]"
+        )
 
         # ============================================================
         # 第二阶段：使用补偿数据再次校准
@@ -451,7 +465,9 @@ class TestCaliberOctopus:
 
         # 验证补偿后的校准结果
         assert caliber_after.result_final_comp_data is not None
-        assert len(caliber_after.result_final_comp_data["comp_list"]) == len(ao_channels)
+        assert len(caliber_after.result_final_comp_data["comp_list"]) == len(
+            ao_channels
+        )
 
         # 获取补偿后的传递函数数据
         tf_data_after = caliber_after.result_averaged_tf_data
@@ -465,7 +481,9 @@ class TestCaliberOctopus:
         print("\n补偿后校准结果:")
         print(f"  幅值比平均值: {amp_mean_after:.6f}")
         print(f"  幅值比标准差: {amp_std_after:.6f}")
-        print(f"  幅值比范围: [{min(amp_ratios_after):.6f}, {max(amp_ratios_after):.6f}]")
+        print(
+            f"  幅值比范围: [{min(amp_ratios_after):.6f}, {max(amp_ratios_after):.6f}]"
+        )
 
         # ============================================================
         # 第三阶段：验证补偿效果

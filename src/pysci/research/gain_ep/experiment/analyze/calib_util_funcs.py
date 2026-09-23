@@ -46,10 +46,7 @@ def load_freq_optimizer_result(
     """
     if result_folder is None:
         result_path = (
-            research_asset_dir("gain_ep")
-            / "storage"
-            / "calib"
-            / "calib_result_freq"
+            research_asset_dir("gain_ep") / "storage" / "calib" / "calib_result_freq"
         )
     else:
         result_path = Path(result_folder)
@@ -111,9 +108,7 @@ def load_data_with_fallback(
         if explicit_path_obj.is_dir():
             default_filename = Path(default_path).name
             explicit_path_obj = explicit_path_obj / default_filename
-            f_logger.warning(
-                f"显式路径为目录，自动拼接默认文件名: {explicit_path_obj}"
-            )
+            f_logger.warning(f"显式路径为目录，自动拼接默认文件名: {explicit_path_obj}")
 
         if not explicit_path_obj.exists():
             error_msg = f"{data_type}文件不存在: {explicit_path_obj}"
@@ -121,12 +116,8 @@ def load_data_with_fallback(
             raise FileNotFoundError(error_msg)
 
         try:
-            data: Any = load_compressed_data(
-                explicit_path_obj, f"{data_type}"
-            )
-            f_logger.debug(
-                f"成功加载{data_type}（用户显式路径）: {explicit_path_obj}"
-            )
+            data: Any = load_compressed_data(explicit_path_obj, f"{data_type}")
+            f_logger.debug(f"成功加载{data_type}（用户显式路径）: {explicit_path_obj}")
             return data
         except Exception as e:
             error_msg = f"加载{data_type}文件失败: {e}"
@@ -137,12 +128,8 @@ def load_data_with_fallback(
     default_path_obj = Path(default_path)
     if default_path_obj.exists():
         try:
-            data: Any = load_compressed_data(
-                default_path_obj, f"{data_type}"
-            )
-            f_logger.debug(
-                f"成功加载{data_type}（默认全局路径）: {default_path_obj}"
-            )
+            data: Any = load_compressed_data(default_path_obj, f"{data_type}")
+            f_logger.debug(f"成功加载{data_type}（默认全局路径）: {default_path_obj}")
             return data
         except Exception as e:
             f_logger.warning(
@@ -324,7 +311,7 @@ def comp_waveform(
             # 新复振幅 = 原复振幅 × amp_multiplier × exp(1j × time_increment × 2πf)
             phase_shift = time_increment * 2 * np.pi * input_freq
             new_cca[ch_idx] = (
-                    new_cca[ch_idx] * amp_multiplier * np.exp(1j * phase_shift)
+                new_cca[ch_idx] * amp_multiplier * np.exp(1j * phase_shift)
             )
 
     f_logger.debug(f"补偿完成: {compensated_count}/{channels_num} 个通道已补偿")

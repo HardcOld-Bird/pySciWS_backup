@@ -19,7 +19,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from pysci.research.gain_ep.experiment.analyze import Waveform, get_sine, init_sampling_info
+from pysci.research.gain_ep.experiment.analyze import (
+    Waveform,
+    get_sine,
+    init_sampling_info,
+)
 from pysci.research.gain_ep.experiment.use import Evolver
 
 # ============================================================
@@ -78,14 +82,13 @@ def _make_static_waveform() -> Waveform:
     """生成测试用静态输出波形"""
     sampling_info = init_sampling_info(_SAMPLING_RATE, _SAMPLES_PER_CHUNK)
     cca = np.array([_AMPLITUDE + 0j])
-    return get_sine(
-        sampling_info, _FREQ, ("PXI1Slot2/ao0",), cca, full_cycle=True
-    )
+    return get_sine(sampling_info, _FREQ, ("PXI1Slot2/ao0",), cca, full_cycle=True)
 
 
 # ============================================================
 #  测试类
 # ============================================================
+
 
 class TestEvolverInit:
     """测试 Evolver 初始化参数验证"""
@@ -133,7 +136,8 @@ class TestEvolverHardware:
         )
         # 先调用 simulate 选取增益系数
         ev.simulate(
-            cr=_CR, ci=_CI,
+            cr=_CR,
+            ci=_CI,
             mode="eight_probes",
             pick_max=False,
             ao_amplitude_limit=_AO_AMPLITUDE_LIMIT,
@@ -172,15 +176,19 @@ class TestEvolverHardware:
         # 验证复振幅形状
         for i, amp in enumerate(evolver._ai_complex_amps_history):
             assert amp.shape == (len(_AI_CHANNELS),), (
-                f"第 {i+1} 个周期的复振幅形状应为 ({len(_AI_CHANNELS)},)，"
+                f"第 {i + 1} 个周期的复振幅形状应为 ({len(_AI_CHANNELS)},)，"
                 f"实际为 {amp.shape}"
             )
             assert amp.dtype == complex, (
-                f"第 {i+1} 个周期的复振幅应为复数类型，实际为 {amp.dtype}"
+                f"第 {i + 1} 个周期的复振幅应为复数类型，实际为 {amp.dtype}"
             )
 
-        print(f"演化完成，记录了 {len(evolver._ai_complex_amps_history)} 个周期的复振幅")
-        print(f"最后一个周期的总声场复振幅模长: {np.abs(evolver._ai_complex_amps_history[-1])}")
+        print(
+            f"演化完成，记录了 {len(evolver._ai_complex_amps_history)} 个周期的复振幅"
+        )
+        print(
+            f"最后一个周期的总声场复振幅模长: {np.abs(evolver._ai_complex_amps_history[-1])}"
+        )
 
     def test_evolve_plot(self, evolver: Evolver, tmp_path: Path):
         """

@@ -112,12 +112,13 @@ def plot_2x2_matrix_eigensystem(
     eigenvec2_comp2_raw = eigenvec2_func_comp2(param_vals)
 
     # 确保结果是数组（处理常数情况）
+    # 注：eigenvec*_comp2（本征向量第 2 分量）在当前 2x3 布局中未绘制，保留计算以备扩展
     eigenval1_vals = np.atleast_1d(eigenval1_vals_raw) * np.ones_like(param_vals)
     eigenval2_vals = np.atleast_1d(eigenval2_vals_raw) * np.ones_like(param_vals)
     eigenvec1_comp1 = np.atleast_1d(eigenvec1_comp1_raw) * np.ones_like(param_vals)
-    eigenvec1_comp2 = np.atleast_1d(eigenvec1_comp2_raw) * np.ones_like(param_vals)
+    eigenvec1_comp2 = np.atleast_1d(eigenvec1_comp2_raw) * np.ones_like(param_vals)  # noqa: F841
     eigenvec2_comp1 = np.atleast_1d(eigenvec2_comp1_raw) * np.ones_like(param_vals)
-    eigenvec2_comp2 = np.atleast_1d(eigenvec2_comp2_raw) * np.ones_like(param_vals)
+    eigenvec2_comp2 = np.atleast_1d(eigenvec2_comp2_raw) * np.ones_like(param_vals)  # noqa: F841
 
     # 创建图像
     fig, axes = plt.subplots(2, 3, figsize=figsize)
@@ -150,7 +151,9 @@ def plot_2x2_matrix_eigensystem(
 
     # 绘制本征向量1的两个分量
     axes[0, 2].plot(param_vals, np.real(eigenvec1_comp1), "b-", linewidth=2, label="Re")
-    axes[0, 2].plot(param_vals, np.imag(eigenvec1_comp1), "r--", linewidth=2, label="Im")
+    axes[0, 2].plot(
+        param_vals, np.imag(eigenvec1_comp1), "r--", linewidth=2, label="Im"
+    )
     axes[0, 2].set_xlabel(f"{param_symbol}", fontsize=12)
     axes[0, 2].set_ylabel("v₁[0]", fontsize=12)
     axes[0, 2].set_title("本征向量1 - 第1分量", fontsize=14)
@@ -159,7 +162,9 @@ def plot_2x2_matrix_eigensystem(
 
     # 绘制本征向量2的两个分量
     axes[1, 2].plot(param_vals, np.real(eigenvec2_comp1), "b-", linewidth=2, label="Re")
-    axes[1, 2].plot(param_vals, np.imag(eigenvec2_comp1), "r--", linewidth=2, label="Im")
+    axes[1, 2].plot(
+        param_vals, np.imag(eigenvec2_comp1), "r--", linewidth=2, label="Im"
+    )
     axes[1, 2].set_xlabel(f"{param_symbol}", fontsize=12)
     axes[1, 2].set_ylabel("v₂[0]", fontsize=12)
     axes[1, 2].set_title("本征向量2 - 第1分量", fontsize=14)

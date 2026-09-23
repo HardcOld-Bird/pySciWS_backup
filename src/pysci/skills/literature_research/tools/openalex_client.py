@@ -31,12 +31,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from urllib.parse import quote
 
-from .config import http_session, settings
 from .cache_manager import bump_mtime
+from .config import http_session, settings
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -47,8 +48,8 @@ OPENALEX_BASE = "https://api.openalex.org"
 # 参考: https://api.openalex.org/concepts?search=...
 KNOWN_CONCEPTS: dict[str, str] = {
     # 非厄米 / EP
-    "non-hermitian": "C121616955",       # 需要核实，占位
-    "exceptional-point": "",              # OpenAlex 未直接给出，用 keyword 检索
+    "non-hermitian": "C121616955",  # 需要核实，占位
+    "exceptional-point": "",  # OpenAlex 未直接给出，用 keyword 检索
     # 声学 / 超构
     "acoustic-metamaterial": "",
     "metasurface": "",
@@ -98,6 +99,7 @@ def _read_cache(path: Path, max_age_seconds: int = 86400 * 7) -> Any | None:
     if not path.exists():
         return None
     import time
+
     age = time.time() - path.stat().st_mtime
     if age > max_age_seconds:
         return None
@@ -137,7 +139,9 @@ def reconstruct_abstract(inv_index: dict[str, list[int]] | None) -> str:
 # ---------------------------------------------------------------------------
 # 核心 API 调用
 # ---------------------------------------------------------------------------
-def _get(url: str, params: dict[str, Any] | None = None, use_cache: bool = True) -> dict[str, Any]:
+def _get(
+    url: str, params: dict[str, Any] | None = None, use_cache: bool = True
+) -> dict[str, Any]:
     """底层 GET，自动附加 polite pool 邮箱、自动缓存。"""
     params = dict(params or {})
     if settings.openalex_email and "mailto" not in params:
@@ -171,19 +175,21 @@ def _extract_work_summary(w: dict[str, Any]) -> dict[str, Any]:
     for a in w.get("authorships", []) or []:
         au = a.get("author") or {}
         insts = [i.get("display_name", "") for i in (a.get("institutions") or [])]
-        authors.append({
-            "name": au.get("display_name", ""),
-            "orcid": au.get("orcid", ""),
-            "openalex_id": au.get("id", ""),
-            "institutions": insts,
-            "is_corresponding": bool(a.get("is_corresponding")),
-            "raw_affiliation": a.get("raw_affiliation_string", ""),
-        })
+        authors.append(
+            {
+                "name": au.get("display_name", ""),
+                "orcid": au.get("orcid", ""),
+                "openalex_id": au.get("id", ""),
+                "institutions": insts,
+                "is_corresponding": bool(a.get("is_corresponding")),
+                "raw_affiliation": a.get("raw_affiliation_string", ""),
+            }
+        )
 
     # 抽取 arXiv ID（若存在）
     arxiv_id = ""
     for loc in w.get("locations", []) or []:
-        src = (loc.get("source") or {})
+        src = loc.get("source") or {}
         if "arxiv" in (src.get("display_name") or "").lower():
             landing = loc.get("landing_page_url") or ""
             m = re.search(r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})", landing)
@@ -216,26 +222,45 @@ def _extract_work_summary(w: dict[str, Any]) -> dict[str, Any]:
         "oa_url": best_oa.get("pdf_url") or best_oa.get("landing_page_url") or "",
         "journal": source.get("display_name", ""),
         "journal_issn_l": source.get("issn_l", ""),
-        "journal_openalex_id": (source.get("id") or "").replace("https://openalex.org/", ""),
-        "publisher": source.get("host_organization_name", "") or (w.get("primary_location") or {}).get("source", {}).get("publisher", ""),
+        "journal_openalex_id": (source.get("id") or "").replace(
+            "https://openalex.org/", ""
+        ),
+        "publisher": source.get("host_organization_name", "")
+        or (w.get("primary_location") or {}).get("source", {}).get("publisher", ""),
         "volume": (w.get("biblio") or {}).get("volume", ""),
         "issue": (w.get("biblio") or {}).get("issue", ""),
         "first_page": (w.get("biblio") or {}).get("first_page", ""),
         "last_page": (w.get("biblio") or {}).get("last_page", ""),
         "authors": authors,
-        "first_author_last_name": _guess_last_name(authors[0]["name"]) if authors else "",
+        "first_author_last_name": _guess_last_name(authors[0]["name"])
+        if authors
+        else "",
         "abstract": reconstruct_abstract(w.get("abstract_inverted_index")),
         "concepts": [
-            {"name": c.get("display_name", ""), "id": c.get("id", ""), "score": c.get("score", 0.0)}
+            {
+                "name": c.get("display_name", ""),
+                "id": c.get("id", ""),
+                "score": c.get("score", 0.0),
+            }
             for c in (w.get("concepts") or [])[:10]
         ],
         "topics": [
-            {"name": t.get("display_name", ""), "id": t.get("id", ""), "score": t.get("score", 0.0)}
+            {
+                "name": t.get("display_name", ""),
+                "id": t.get("id", ""),
+                "score": t.get("score", 0.0),
+            }
             for t in (w.get("topics") or [])[:5]
         ],
         "referenced_works_count": len(w.get("referenced_works") or []),
-        "referenced_works": [x.replace("https://openalex.org/", "") for x in (w.get("referenced_works") or [])[:20]],
-        "related_works": [x.replace("https://openalex.org/", "") for x in (w.get("related_works") or [])[:10]],
+        "referenced_works": [
+            x.replace("https://openalex.org/", "")
+            for x in (w.get("referenced_works") or [])[:20]
+        ],
+        "related_works": [
+            x.replace("https://openalex.org/", "")
+            for x in (w.get("related_works") or [])[:10]
+        ],
         "counts_by_year": w.get("counts_by_year", []),
         "_raw": w,  # 保留原始 JSON，供特殊需求
     }
@@ -343,7 +368,9 @@ def search_works(
     }
 
 
-def get_work(doi: str | None = None, openalex_id: str | None = None, use_cache: bool = True) -> dict[str, Any] | None:
+def get_work(
+    doi: str | None = None, openalex_id: str | None = None, use_cache: bool = True
+) -> dict[str, Any] | None:
     """按 DOI 或 OpenAlex ID 获取单篇论文详情。
 
     示例::
@@ -370,7 +397,12 @@ def get_work(doi: str | None = None, openalex_id: str | None = None, use_cache: 
 # ---------------------------------------------------------------------------
 # Source（期刊）相关
 # ---------------------------------------------------------------------------
-def get_source(issn: str | None = None, name: str | None = None, openalex_id: str | None = None, use_cache: bool = True) -> dict[str, Any] | None:
+def get_source(
+    issn: str | None = None,
+    name: str | None = None,
+    openalex_id: str | None = None,
+    use_cache: bool = True,
+) -> dict[str, Any] | None:
     """按 ISSN、名称或 OpenAlex ID 获取期刊元数据（含 JIF 近似值、h-index、OA 政策等）。"""
     if issn:
         url = f"{OPENALEX_BASE}/sources/issn:{issn}"
@@ -379,7 +411,11 @@ def get_source(issn: str | None = None, name: str | None = None, openalex_id: st
         url = f"{OPENALEX_BASE}/sources/S{sid}"
     elif name:
         # 名称检索：走 sources?search=...
-        data = _get(f"{OPENALEX_BASE}/sources", params={"search": name, "per-page": 5}, use_cache=use_cache)
+        data = _get(
+            f"{OPENALEX_BASE}/sources",
+            params={"search": name, "per-page": 5},
+            use_cache=use_cache,
+        )
         results = data.get("results") or []
         if not results:
             return None
@@ -413,7 +449,7 @@ def _extract_source(s: dict[str, Any]) -> dict[str, Any]:
         "h_index": stats.get("h_index"),
         "works_count": stats.get("works_count"),
         "cited_by_count": stats.get("cited_by_count"),
-        "2yr_mean_citedness": stats.get("2yr_mean_citedness"),   # ≈ JIF
+        "2yr_mean_citedness": stats.get("2yr_mean_citedness"),  # ≈ JIF
         "_raw": s,
     }
 
@@ -433,7 +469,9 @@ def work_to_note_frontmatter(w: dict[str, Any]) -> dict[str, Any]:
             source_stats = src
 
     authors_names = [a["name"] for a in w.get("authors", [])]
-    corresponding = next((a["name"] for a in w.get("authors", []) if a.get("is_corresponding")), "")
+    corresponding = next(
+        (a["name"] for a in w.get("authors", []) if a.get("is_corresponding")), ""
+    )
 
     jif = source_stats.get("2yr_mean_citedness")
     # OpenAlex 不提供官方 JCR 分区，此处留空由 wos_client 补齐
@@ -459,7 +497,6 @@ def work_to_note_frontmatter(w: dict[str, Any]) -> dict[str, Any]:
         "local_pdf_path": "",
         "oa_url": w.get("oa_url", ""),
         "oa_status": w.get("oa_status", ""),
-
         "cited_by_count": w.get("cited_by_count"),
         "cited_by_count_normalized": w.get("cited_by_percentile_year"),
         "jif": round(jif, 2) if isinstance(jif, (int, float)) else None,
@@ -470,20 +507,19 @@ def work_to_note_frontmatter(w: dict[str, Any]) -> dict[str, Any]:
         "esi_highly_cited": False,
         "esi_hot_paper": False,
         "journal_h_index": source_stats.get("h_index"),
-
         "topics": [],
         "methods": [],
         "systems": [],
         "related_to_my_work": None,
         "related_to_my_work_reason": "",
-
         "status": "unread",
         "my_rating": None,
         "added_date": "",
         "last_reviewed": "",
         "review_count": 0,
-
-        "keywords_auto": [c["name"].lower() for c in (w.get("concepts") or [])[:5] if c.get("name")],
+        "keywords_auto": [
+            c["name"].lower() for c in (w.get("concepts") or [])[:5] if c.get("name")
+        ],
     }
 
 
@@ -497,7 +533,20 @@ def _make_short_title(title: str, max_words: int = 6) -> str:
     """从长标题里截取前若干实词，用于文件命名与目录显示。"""
     if not title:
         return ""
-    stop = {"on", "of", "the", "in", "a", "an", "for", "and", "to", "with", "via", "from"}
+    stop = {
+        "on",
+        "of",
+        "the",
+        "in",
+        "a",
+        "an",
+        "for",
+        "and",
+        "to",
+        "with",
+        "via",
+        "from",
+    }
     words = [w for w in re.split(r"\W+", title) if w and w.lower() not in stop]
     return " ".join(words[:max_words]) if words else title[:40]
 
@@ -507,8 +556,11 @@ def _make_short_title(title: str, max_words: int = 6) -> str:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="OpenAlex search CLI")
-    parser.add_argument("query", nargs="?", default="exceptional point acoustic active gain")
+    parser.add_argument(
+        "query", nargs="?", default="exceptional point acoustic active gain"
+    )
     parser.add_argument("--year-from", type=int, default=2023)
     parser.add_argument("--year-to", type=int, default=None)
     parser.add_argument("--min-citations", type=int, default=None)

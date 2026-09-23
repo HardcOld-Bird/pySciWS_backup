@@ -6,6 +6,7 @@
 本模块定义了pysci.research.gain_ep.experiment项目中特有的自定义**数据类型和容器**。
 主要包含用于管理时域波形数据的Waveform类。
 """
+
 # 允许类型前向引用（也即“Waveform”可以写为Waveform）
 from __future__ import annotations
 
@@ -393,7 +394,9 @@ class Waveform(np.ndarray):
         # 设置其他可选的元数据
         obj.waveform_id = waveform_id
         obj.frequency = frequency
-        obj._channel_complex_amplitudes = channel_complex_amplitudes  # 存储为只读属性，方便设置setter
+        obj._channel_complex_amplitudes = (
+            channel_complex_amplitudes  # 存储为只读属性，方便设置setter
+        )
 
         logger.debug(
             f"创建Waveform对象: shape={obj.shape}, sampling_rate={sampling_rate}Hz"

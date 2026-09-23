@@ -119,11 +119,11 @@ sim = SimScanner()
 sim.connect()
 # 执行仿真
 _ = sim.run_scan(
-    cr_min = cr_center - half_scale,
-    cr_max = cr_center + half_scale,
-    ci_min = ci_center - half_scale,
-    ci_max = ci_center + half_scale,
-    res = 50,
+    cr_min=cr_center - half_scale,
+    cr_max=cr_center + half_scale,
+    ci_min=ci_center - half_scale,
+    ci_max=ci_center + half_scale,
+    res=50,
     # swap_static_ao=True,
     fishnet_tf_data_path=tf_data_path,
     result_folder=result_folder,
@@ -302,7 +302,7 @@ _ = plot_waveform(
 swp = SweeperCore(
     ai_channels=(sweep_ai_channel,),
     sweep_ai_channel=sweep_ai_channel,
-    ao_channels_static=ao_channels_feedback+ao_channels_static_L,
+    ao_channels_static=ao_channels_feedback + ao_channels_static_L,
     static_output_waveform=evo_result_L,
     point_list=grid,
 )
@@ -342,7 +342,7 @@ _ = plot_waveform(
 swp = SweeperCore(
     ai_channels=(sweep_ai_channel,),
     sweep_ai_channel=sweep_ai_channel,
-    ao_channels_static=ao_channels_feedback+ao_channels_static_r,
+    ao_channels_static=ao_channels_feedback + ao_channels_static_r,
     static_output_waveform=evo_result_r,
     point_list=grid,
 )
@@ -387,7 +387,7 @@ _ = plot_waveform(
 swp = SweeperCore(
     ai_channels=(sweep_ai_channel,),
     sweep_ai_channel=sweep_ai_channel,
-    ao_channels_static=ao_channels_feedback+ao_channels_static_r,
+    ao_channels_static=ao_channels_feedback + ao_channels_static_r,
     static_output_waveform=evo_result_R,
     point_list=grid,
 )
@@ -428,7 +428,7 @@ _ = plot_waveform(
 swp = SweeperCore(
     ai_channels=(sweep_ai_channel,),
     sweep_ai_channel=sweep_ai_channel,
-    ao_channels_static=ao_channels_feedback+ao_channels_static_L,
+    ao_channels_static=ao_channels_feedback + ao_channels_static_L,
     static_output_waveform=evo_result_l,
     point_list=grid,
 )

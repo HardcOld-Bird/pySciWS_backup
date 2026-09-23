@@ -4,18 +4,16 @@
 这是一个用于实际硬件测试的脚本，可以直接运行来测试校准功能。
 """
 
-from pysci.research.gain_ep.experiment.analyze import load_compressed_data, plot_sweep_waveforms
+from pysci.research.gain_ep.experiment.analyze import (
+    load_compressed_data,
+    plot_sweep_waveforms,
+)
 from pysci.research.gain_ep.experiment.calib import CaliberFishNet
 from pysci.research.gain_ep.experiment.config.exp_config import (
     ai_channels,
     ao_channels,
-    ao_channels_feedback,
-    ao_channels_static,
     best_frequency,
-    grid,
-    root_folder,
     sampling_info,
-    sweep_ai_channel,
 )
 
 # 创建采样信息和正弦波参数（使用推荐的参数）
@@ -54,7 +52,9 @@ caliber.calibrate(
 )
 
 # %% 检查SweepData波形
-sd = load_compressed_data("D:\\XXXIIIGGG\\projects\\pySweep\\pySweepWS\\storage\\calib\\calib_result_fishnet\\raw_sweep_data_1.pkl")
+sd = load_compressed_data(
+    "D:\\XXXIIIGGG\\projects\\pySweep\\pySweepWS\\storage\\calib\\calib_result_fishnet\\raw_sweep_data_1.pkl"
+)
 plot_sweep_waveforms(
     sd,
     "D:\\XXXIIIGGG\\projects\\pySweep\\pySweepWS\\storage\\calib\\calib_result_fishnet",

@@ -1,6 +1,7 @@
 """
 测试nidaqmx read()方法返回的数据格式
 """
+
 import nidaqmx
 import numpy as np
 
@@ -48,11 +49,11 @@ print(f"\n数据类型: {type(data)}")
 if isinstance(data, list):
     print(f"列表长度: {len(data)}")
     if data and isinstance(data[0], list):
-        print(f"这是2D列表")
+        print("这是2D列表")
         print(f"  外层列表长度(通道数): {len(data)}")
         print(f"  内层列表长度(样本数): {len(data[0])}")
     else:
-        print(f"这是1D列表")
+        print("这是1D列表")
         print(f"  列表长度(样本数): {len(data)}")
 
 # 转换为numpy数组

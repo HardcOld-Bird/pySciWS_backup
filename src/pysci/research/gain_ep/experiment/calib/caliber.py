@@ -37,9 +37,9 @@ from ..analyze import (
     init_sampling_info,
     load_data_with_fallback,
     load_freq_optimizer_result,
+    plot_sweep_data_as_single_waveform,
     save_compressed_data,
     tf_to_comp,
-    plot_sweep_data_as_single_waveform,
 )
 from ..logger import get_logger
 from ..measure import SingleChasCSIO
@@ -386,9 +386,7 @@ class CaliberAnemone:
             elapsed_time = 0.0
 
             logger.debug(f"开始采集 {chunks_num} 个chunk")
-            while (
-                not self._chunk_collection_complete and elapsed_time < max_wait_time
-            ):
+            while not self._chunk_collection_complete and elapsed_time < max_wait_time:
                 time.sleep(poll_interval)
                 elapsed_time += poll_interval
 
@@ -472,10 +470,7 @@ class CaliberAnemone:
         for idx, ai_channel in enumerate(self._ai_channels):
             amp = np.abs(complex_amplitudes[idx])
             phase = np.angle(complex_amplitudes[idx])
-            logger.info(
-                f"AI通道 {ai_channel}: "
-                f"幅值={amp:.6f}, 相位={phase:.6f}rad"
-            )
+            logger.info(f"AI通道 {ai_channel}: 幅值={amp:.6f}, 相位={phase:.6f}rad")
 
         # 第三阶段：补偿计算
         logger.info("=" * 60)
@@ -1549,6 +1544,7 @@ class CaliberOctopus:
                 )
                 # 关闭图形以释放内存
                 import matplotlib.pyplot as plt
+
                 plt.close(fig)
 
                 logger.info(f"融合画像已保存到: {fusion_plot_path}")
@@ -1663,9 +1659,7 @@ class CaliberOctopus:
         # 保存最终的CompData
         final_comp_data_path = result_path / "ao_comp_data.pkl"
         try:
-            save_compressed_data(
-                final_comp_data, final_comp_data_path, 6, "CompData"
-            )
+            save_compressed_data(final_comp_data, final_comp_data_path, 6, "CompData")
             logger.info(f"最终平均CompData已保存到: {final_comp_data_path}")
         except Exception as e:
             logger.error(f"保存最终CompData失败: {e}", exc_info=True)
@@ -2471,6 +2465,7 @@ class CaliberFishNet(CaliberOctopus):
                 )
                 # 关闭图形以释放内存
                 import matplotlib.pyplot as plt
+
                 plt.close(fig)
 
                 logger.info(f"融合画像已保存到: {fusion_plot_path}")
@@ -2609,9 +2604,7 @@ class CaliberFishNet(CaliberOctopus):
             phase_shift_path = result_path / "tf_data_phase_shift_rad.csv"
             amp_ratio_df.to_csv(amp_ratio_path)
             phase_shift_df.to_csv(phase_shift_path)
-            logger.info(
-                f"TFData已导出为csv文件: {amp_ratio_path}, {phase_shift_path}"
-            )
+            logger.info(f"TFData已导出为csv文件: {amp_ratio_path}, {phase_shift_path}")
         except Exception as e:
             logger.error(f"导出TFData为csv失败: {e}", exc_info=True)
 
@@ -2906,9 +2899,7 @@ class FrequencyOptimizer:
         self._ao_comp_data = ao_comp_data
 
         # 测量历史记录: [(frequency, metric, metric_max, metric_min, amplitudes, phases)]
-        self._measurement_history: list[
-            dict[str, float | np.ndarray]
-        ] = []
+        self._measurement_history: list[dict[str, float | np.ndarray]] = []
 
         # 最终结果
         self._optimal_frequency: float | None = None
@@ -2993,8 +2984,7 @@ class FrequencyOptimizer:
         # 确定本次测量的子文件夹路径
         if result_path is not None:
             sub_folder = (
-                result_path
-                / f"measurement_{measurement_index}_{frequency:.2f}Hz"
+                result_path / f"measurement_{measurement_index}_{frequency:.2f}Hz"
             )
         else:
             sub_folder = (
@@ -3136,9 +3126,7 @@ class FrequencyOptimizer:
         """
         # 验证 mode 参数
         if mode not in ("amplitude", "phase"):
-            raise ValueError(
-                f"mode 必须为 'amplitude' 或 'phase'，收到: '{mode}'"
-            )
+            raise ValueError(f"mode 必须为 'amplitude' 或 'phase'，收到: '{mode}'")
 
         self._optimization_mode = mode
         logger.info("=" * 60)
@@ -3167,8 +3155,13 @@ class FrequencyOptimizer:
         # 第一次测量
         measurement_counter += 1
         metric_1, amps_1, phases_1 = self._measure_and_compute_metric(
-            initial_freq, mode, measurement_counter, starts_num,
-            chunks_per_start, settle_time, resolved_result_path,
+            initial_freq,
+            mode,
+            measurement_counter,
+            starts_num,
+            chunks_per_start,
+            settle_time,
+            resolved_result_path,
         )
 
         # 设定归一化基准：以第一次测量的|metric|为参考
@@ -3180,12 +3173,14 @@ class FrequencyOptimizer:
 
         # 归一化后存储
         metric_1_norm = metric_1 / self._metric_ref
-        self._measurement_history.append({
-            "frequency": initial_freq,
-            "metric": metric_1_norm,
-            "amplitudes": amps_1,
-            "phases": phases_1,
-        })
+        self._measurement_history.append(
+            {
+                "frequency": initial_freq,
+                "metric": metric_1_norm,
+                "amplitudes": amps_1,
+                "phases": phases_1,
+            }
+        )
 
         # Phase mode: 检查是否已满足条件（使用归一化值）
         if mode == "phase" and abs(metric_1_norm) < tolerance:
@@ -3196,16 +3191,23 @@ class FrequencyOptimizer:
         # 第二次测量
         measurement_counter += 1
         metric_2, amps_2, phases_2 = self._measure_and_compute_metric(
-            second_freq, mode, measurement_counter, starts_num,
-            chunks_per_start, settle_time, resolved_result_path,
+            second_freq,
+            mode,
+            measurement_counter,
+            starts_num,
+            chunks_per_start,
+            settle_time,
+            resolved_result_path,
         )
         metric_2_norm = metric_2 / self._metric_ref
-        self._measurement_history.append({
-            "frequency": second_freq,
-            "metric": metric_2_norm,
-            "amplitudes": amps_2,
-            "phases": phases_2,
-        })
+        self._measurement_history.append(
+            {
+                "frequency": second_freq,
+                "metric": metric_2_norm,
+                "amplitudes": amps_2,
+                "phases": phases_2,
+            }
+        )
         logger.info(
             f"频率 {second_freq:.2f}Hz: raw metric = {metric_2:.6f}, "
             f"归一化 = {metric_2_norm:.6f}"
@@ -3222,16 +3224,32 @@ class FrequencyOptimizer:
 
         if mode == "amplitude":
             iterate_result = self._iterate_amplitude(
-                initial_freq, second_freq, metric_1_norm, metric_2_norm,
-                freq_center, max_iterations, tolerance, starts_num,
-                chunks_per_start, settle_time, resolved_result_path,
+                initial_freq,
+                second_freq,
+                metric_1_norm,
+                metric_2_norm,
+                freq_center,
+                max_iterations,
+                tolerance,
+                starts_num,
+                chunks_per_start,
+                settle_time,
+                resolved_result_path,
                 measurement_counter,
             )
         else:
             iterate_result = self._iterate_phase(
-                initial_freq, second_freq, metric_1_norm, metric_2_norm,
-                freq_center, max_iterations, tolerance, starts_num,
-                chunks_per_start, settle_time, resolved_result_path,
+                initial_freq,
+                second_freq,
+                metric_1_norm,
+                metric_2_norm,
+                freq_center,
+                max_iterations,
+                tolerance,
+                starts_num,
+                chunks_per_start,
+                settle_time,
+                resolved_result_path,
                 measurement_counter,
             )
 
@@ -3280,7 +3298,9 @@ class FrequencyOptimizer:
                 settle_time=settle_time,
                 result_path=result_path,
             )
-            metric_max, amps_max, phases_max = self._compute_metric(tf_data_max, "amplitude")
+            metric_max, amps_max, phases_max = self._compute_metric(
+                tf_data_max, "amplitude"
+            )
 
             # 测量 ao_channel_min
             tf_data_min = self._measure_at_frequency(
@@ -3292,13 +3312,15 @@ class FrequencyOptimizer:
                 settle_time=settle_time,
                 result_path=result_path,
             )
-            metric_min, amps_min, phases_min = self._compute_metric(tf_data_min, "amplitude")
+            metric_min, amps_min, phases_min = self._compute_metric(
+                tf_data_min, "amplitude"
+            )
 
             # 计算比值（避免除零）
             if metric_min > 1e-12:
                 ratio = metric_max / metric_min
             else:
-                ratio = float('inf')
+                ratio = float("inf")
                 logger.warning(
                     f"频率 {frequency:.2f}Hz: ao_channel_min 的幅值之和接近零，"
                     f"ratio 设为 inf"
@@ -3324,7 +3346,6 @@ class FrequencyOptimizer:
             )
             metric, amps, phases = self._compute_metric(tf_data, "phase")
             return metric, amps, phases
-
 
     def _iterate_phase(
         self,
@@ -3382,15 +3403,16 @@ class FrequencyOptimizer:
                 result_path=resolved_result_path,
             )
             metric_new_norm = metric_new / self._metric_ref
-            self._measurement_history.append({
-                "frequency": predicted_freq,
-                "metric": metric_new_norm,
-                "amplitudes": amps_new,
-                "phases": phases_new,
-            })
+            self._measurement_history.append(
+                {
+                    "frequency": predicted_freq,
+                    "metric": metric_new_norm,
+                    "amplitudes": amps_new,
+                    "phases": phases_new,
+                }
+            )
             logger.info(
-                f"频率 {predicted_freq:.2f}Hz: "
-                f"归一化metric = {metric_new_norm:.6f}"
+                f"频率 {predicted_freq:.2f}Hz: 归一化metric = {metric_new_norm:.6f}"
             )
 
             # 检查收敛（使用归一化值）
@@ -3409,9 +3431,7 @@ class FrequencyOptimizer:
                 freq_b, metric_b = predicted_freq, metric_new_norm
 
         # 未能完全收敛，使用metric绝对值最小的频率点
-        best_entry = min(
-            self._measurement_history, key=lambda x: abs(x["metric"])
-        )
+        best_entry = min(self._measurement_history, key=lambda x: abs(x["metric"]))
         best_freq = float(best_entry["frequency"])
 
         logger.warning(
@@ -3483,15 +3503,15 @@ class FrequencyOptimizer:
             result_path=resolved_result_path,
         )
         metric_3_norm = metric_3 / self._metric_ref
-        self._measurement_history.append({
-            "frequency": third_freq,
-            "metric": metric_3_norm,
-            "amplitudes": amps_3,
-            "phases": phases_3,
-        })
-        logger.info(
-            f"频率 {third_freq:.2f}Hz: 归一化ratio = {metric_3_norm:.6f}"
+        self._measurement_history.append(
+            {
+                "frequency": third_freq,
+                "metric": metric_3_norm,
+                "amplitudes": amps_3,
+                "phases": phases_3,
+            }
         )
+        logger.info(f"频率 {third_freq:.2f}Hz: 归一化ratio = {metric_3_norm:.6f}")
 
         # --- 区间收缩迭代 ---
         for iteration in range(max_iterations):
@@ -3506,9 +3526,7 @@ class FrequencyOptimizer:
             # 检查收敛条件：是否存在3个相邻点满足极大值条件
             for i in range(n_points - 2):
                 p1, p2, p3 = sorted_hist[i], sorted_hist[i + 1], sorted_hist[i + 2]
-                is_peak = (
-                    p2["metric"] > p1["metric"] and p2["metric"] > p3["metric"]
-                )
+                is_peak = p2["metric"] > p1["metric"] and p2["metric"] > p3["metric"]
                 if (
                     is_peak
                     and abs(p2["metric"] - p1["metric"]) < tolerance
@@ -3531,22 +3549,14 @@ class FrequencyOptimizer:
             # 决定下一个测量点
             if best_idx == 0:
                 # Peak在左边缘 — 向左延伸
-                left_step = (
-                    sorted_hist[1]["frequency"] - sorted_hist[0]["frequency"]
-                )
+                left_step = sorted_hist[1]["frequency"] - sorted_hist[0]["frequency"]
                 new_freq = sorted_hist[0]["frequency"] - left_step
-                logger.info(
-                    f"Peak在左边缘，向左延伸: {new_freq:.2f}Hz"
-                )
+                logger.info(f"Peak在左边缘，向左延伸: {new_freq:.2f}Hz")
             elif best_idx == n_points - 1:
                 # Peak在右边缘 — 向右延伸
-                right_step = (
-                    sorted_hist[-1]["frequency"] - sorted_hist[-2]["frequency"]
-                )
+                right_step = sorted_hist[-1]["frequency"] - sorted_hist[-2]["frequency"]
                 new_freq = sorted_hist[-1]["frequency"] + right_step
-                logger.info(
-                    f"Peak在右边缘，向右延伸: {new_freq:.2f}Hz"
-                )
+                logger.info(f"Peak在右边缘，向右延伸: {new_freq:.2f}Hz")
             else:
                 # Peak被包围 — 在较宽半区间的中点测量
                 left_freq = sorted_hist[best_idx - 1]["frequency"]
@@ -3588,15 +3598,15 @@ class FrequencyOptimizer:
                 result_path=resolved_result_path,
             )
             metric_new_norm = metric_new / self._metric_ref
-            self._measurement_history.append({
-                "frequency": new_freq,
-                "metric": metric_new_norm,
-                "amplitudes": amps_new,
-                "phases": phases_new,
-            })
-            logger.info(
-                f"频率 {new_freq:.2f}Hz: 归一化ratio = {metric_new_norm:.6f}"
+            self._measurement_history.append(
+                {
+                    "frequency": new_freq,
+                    "metric": metric_new_norm,
+                    "amplitudes": amps_new,
+                    "phases": phases_new,
+                }
             )
+            logger.info(f"频率 {new_freq:.2f}Hz: 归一化ratio = {metric_new_norm:.6f}")
 
         # 未能完全收敛，使用ratio最大的测量点
         best_entry = max(self._measurement_history, key=lambda x: x["metric"])
@@ -3695,9 +3705,7 @@ class FrequencyOptimizer:
         frequencies = np.array(
             [entry["frequency"] for entry in self._measurement_history]
         )
-        metrics = np.array(
-            [entry["metric"] for entry in self._measurement_history]
-        )
+        metrics = np.array([entry["metric"] for entry in self._measurement_history])
 
         # 创建图表
         fig, ax = plt.subplots(1, 1, figsize=(12, 7))
@@ -3715,9 +3723,7 @@ class FrequencyOptimizer:
         )
 
         # 为每个散点添加序号标注
-        for idx, (freq, metric) in enumerate(
-            zip(frequencies, metrics, strict=True)
-        ):
+        for idx, (freq, metric) in enumerate(zip(frequencies, metrics, strict=True)):
             ax.annotate(
                 f"#{idx + 1}",
                 xy=(freq, metric),
@@ -3728,9 +3734,7 @@ class FrequencyOptimizer:
             )
 
         # 根据模式绘制趋势线
-        freq_range = np.linspace(
-            frequencies.min() - 5, frequencies.max() + 5, 200
-        )
+        freq_range = np.linspace(frequencies.min() - 5, frequencies.max() + 5, 200)
 
         if mode == "phase":
             self._plot_trend(ax, frequencies, metrics, freq_range, "phase")
@@ -3753,9 +3757,7 @@ class FrequencyOptimizer:
         if mode == "phase":
             ax.set_ylabel("归一化相位偏差", fontsize=12)
             # 绘制零线
-            ax.axhline(
-                0, color="gray", linestyle="-", linewidth=0.8, alpha=0.5
-            )
+            ax.axhline(0, color="gray", linestyle="-", linewidth=0.8, alpha=0.5)
         else:
             ax.set_ylabel("归一化幅值比 (max/min)", fontsize=12)
 
@@ -3993,7 +3995,9 @@ class PowerTester:
         self._ao_comp_data_path = ao_comp_data
 
         # 尝试使用load_data_with_fallback加载ao_comp_data（必须成功）
-        default_ao_comp_path = Path("storage/calib/calib_result_octopus/ao_comp_data.pkl")
+        default_ao_comp_path = Path(
+            "storage/calib/calib_result_octopus/ao_comp_data.pkl"
+        )
         loaded_ao_comp_data = load_data_with_fallback(
             explicit_path=ao_comp_data,
             default_path=default_ao_comp_path,
@@ -4179,9 +4183,11 @@ class PowerTester:
         # 遍历每个功率值进行测试
         for power_idx, power in enumerate(power_values):
             self.logger.info(
-                "\n" + "=" * 60
+                "\n"
+                + "=" * 60
                 + f"\n开始第 {power_idx + 1}/{step_num} 个功率点测试: {power}V"
-                + "\n" + "=" * 60
+                + "\n"
+                + "=" * 60
             )
 
             # 创建CaliberOctopus对象
@@ -4196,7 +4202,9 @@ class PowerTester:
             )
 
             # 第一阶段：work（高强度工作模拟）
-            self.logger.info(f"开始work阶段（高强度工作模拟），chunks_num={work_chunks_num}")
+            self.logger.info(
+                f"开始work阶段（高强度工作模拟），chunks_num={work_chunks_num}"
+            )
             try:
                 # 调用_single_calibrate进行工作模拟（不保存数据）
                 caliber._single_calibrate(
@@ -4210,8 +4218,7 @@ class PowerTester:
 
             # 冷却等待阶段：消除温度对传递函数的影响
             self.logger.info(
-                f"开始冷却等待阶段，等待 {self.COOLING_TIME}s "
-                f"以消除温度影响..."
+                f"开始冷却等待阶段，等待 {self.COOLING_TIME}s 以消除温度影响..."
             )
             time.sleep(self.COOLING_TIME)
             self.logger.info("冷却等待完成")
@@ -4256,16 +4263,12 @@ class PowerTester:
                     test_results.append((float(power), complex(np.nan, np.nan)))
 
             except Exception as e:
-                self.logger.error(
-                    f"examine阶段发生错误: {e}", exc_info=True
-                )
+                self.logger.error(f"examine阶段发生错误: {e}", exc_info=True)
                 # 使用NaN标记失败的数据点
                 test_results.append((float(power), complex(np.nan, np.nan)))
 
             # 两次校准之间的间隔等待
-            self.logger.info(
-                f"等待校准间隔 {self.EXAMINE_INTERVAL}s..."
-            )
+            self.logger.info(f"等待校准间隔 {self.EXAMINE_INTERVAL}s...")
             time.sleep(self.EXAMINE_INTERVAL)
 
             # 第三阶段：near-zero examine（在近零功率点检测线性度）
@@ -4303,9 +4306,7 @@ class PowerTester:
                 if tf_data_nz is not None:
                     tf_df_nz = tf_data_nz["tf_dataframe"]
                     tf_complex_nz = tf_df_nz.iloc[0, 0]
-                    near_zero_results.append(
-                        (float(power), complex(tf_complex_nz))
-                    )
+                    near_zero_results.append((float(power), complex(tf_complex_nz)))
                     self.logger.info(
                         f"near-zero examine阶段完成 - "
                         f"work功率: {power}V, "
@@ -4316,17 +4317,11 @@ class PowerTester:
                     self.logger.warning(
                         f"near-zero examine阶段未产生有效数据，work功率: {power}V"
                     )
-                    near_zero_results.append(
-                        (float(power), complex(np.nan, np.nan))
-                    )
+                    near_zero_results.append((float(power), complex(np.nan, np.nan)))
 
             except Exception as e:
-                self.logger.error(
-                    f"near-zero examine阶段发生错误: {e}", exc_info=True
-                )
-                near_zero_results.append(
-                    (float(power), complex(np.nan, np.nan))
-                )
+                self.logger.error(f"near-zero examine阶段发生错误: {e}", exc_info=True)
+                near_zero_results.append((float(power), complex(np.nan, np.nan)))
 
         # 绘制PowerTest概览图
         self.logger.info("=" * 60)

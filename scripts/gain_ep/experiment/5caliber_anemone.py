@@ -4,9 +4,11 @@
 这是一个用于实际硬件测试的脚本，可以直接运行来测试校准功能。
 """
 
-from pysci.research.gain_ep.experiment.analyze import plot_sweep_waveforms
+from pysci.research.gain_ep.experiment.analyze import (
+    load_compressed_data,
+    plot_sweep_waveforms,
+)
 from pysci.research.gain_ep.experiment.calib import CaliberAnemone
-from pysci.research.gain_ep.experiment.analyze import load_compressed_data
 
 # %% 定义通道配置
 ai_channels = (

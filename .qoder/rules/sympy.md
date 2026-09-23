@@ -175,6 +175,7 @@ scripts/         ← 应用层：具体研究脚本
 ```python
 # 导入项目通用的matplotlib配置，并应用
 from config.matplotlib_config import setup_chinese_fonts
+
 setup_chinese_fonts()
 ```
 

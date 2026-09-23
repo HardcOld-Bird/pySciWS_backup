@@ -4,26 +4,17 @@ import numpy as np
 
 from pysci.research.gain_ep.experiment.analyze import (
     get_sine,
-    plot_waveform,
 )
-from pysci.research.gain_ep.experiment.calib import CaliberFishNet, FrequencyOptimizer
 from pysci.research.gain_ep.experiment.config.exp_config import (
-    ai_channels,
-    ao_channels,
-    ao_channels_feedback,
     ao_channels_static_L,
     ao_channels_static_r,
     best_frequency,
     grid,
-    root_folder,
     sampling_info,
     sweep_ai_channel,
 )
-from pysci.research.gain_ep.experiment.sim import SimScanner
 from pysci.research.gain_ep.experiment.use import (
-    Evolver,
     SweeperCore,
-    load_evolved_waveform,
 )
 
 ao_channels_static = ao_channels_static_L + ao_channels_static_r

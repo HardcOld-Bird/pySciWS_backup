@@ -291,7 +291,7 @@ def average_sweep_data(
     first_waveform = ai_data_list[0]["ai_data"][0]
     sampling_rate = first_waveform.sampling_rate
     samples_num = first_waveform.samples_num
-    channels_num= first_waveform.channels_num
+    channels_num = first_waveform.channels_num
 
     f_logger.debug(f"波形信息: 通道数={channels_num}, 采样点数={samples_num}")
 
@@ -473,9 +473,7 @@ def comp_to_tf(comp_data: CompData) -> TFData:
         f_logger.error(
             f"CompData的DataFrame应该有2列（amp_multiplier和time_increment），实际列数: {comp_df.shape[1]}"
         )
-        raise ValueError(
-            f"CompData的DataFrame应该有2列，实际列数: {comp_df.shape[1]}"
-        )
+        raise ValueError(f"CompData的DataFrame应该有2列，实际列数: {comp_df.shape[1]}")
 
     # 提取补偿参数
     amp_multipliers = comp_df["amp_multiplier"].values

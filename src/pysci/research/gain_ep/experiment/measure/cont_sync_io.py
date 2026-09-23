@@ -18,18 +18,18 @@ import numpy as np
 from nidaqmx.constants import (
     AcquisitionType,
     ExcitationSource,
+    ProductCategory,
     RegenerationMode,
     SoundPressureUnits,
     WriteRelativeTo,
-    ProductCategory,
 )
 
 from ..analyze import (
     PositiveInt,
     TFData,
     Waveform,
-    load_data_with_fallback,
     comp_waveform,
+    load_data_with_fallback,
     pick_waveform_channels,
 )
 from ..logger import get_logger
@@ -157,8 +157,11 @@ class SingleChasCSIO:
         ao_channels_static: tuple[str, ...],
         ao_channels_feedback: tuple[str, ...],
         static_output_waveform: Waveform,
-        export_function: Callable[[Waveform, Waveform, Waveform | None, PositiveInt], Any],
-        feedback_function: Callable[[Waveform, Waveform, Waveform, TFData], Waveform] | None = None,
+        export_function: Callable[
+            [Waveform, Waveform, Waveform | None, PositiveInt], Any
+        ],
+        feedback_function: Callable[[Waveform, Waveform, Waveform, TFData], Waveform]
+        | None = None,
         buffer_size_multiplier: PositiveInt = 5,
         ai_comp_data: str | Path | None = None,
         ao_comp_data: str | Path | None = None,
@@ -210,7 +213,9 @@ class SingleChasCSIO:
         self._export_function = export_function
         # 如果feedback_function为None，使用默认的静音函数
         self._feedback_function = (
-            feedback_function if feedback_function is not None else self._default_feedback_function
+            feedback_function
+            if feedback_function is not None
+            else self._default_feedback_function
         )
 
         # 缓冲区配置参数
@@ -238,7 +243,9 @@ class SingleChasCSIO:
 
         # 私有属性 - 数据缓冲和控制
         self._ai_queue: deque[Any] = deque()  # 存储AI数据的双端队列
-        self._feedback_ao_queue: deque[Waveform] = deque()  # 存储已写入的feedback波形副本
+        self._feedback_ao_queue: deque[Waveform] = (
+            deque()
+        )  # 存储已写入的feedback波形副本
         self._chunks_num = 0
         self._enable_export = False
 
@@ -381,7 +388,9 @@ class SingleChasCSIO:
 
             # 将单通道数据复制到所有通道
             single_ch_data = np.asarray(waveform)[0, :]  # (n_samples,)
-            multi_ch_data = np.tile(single_ch_data, (channels_num, 1))  # (channels_num, n_samples)
+            multi_ch_data = np.tile(
+                single_ch_data, (channels_num, 1)
+            )  # (channels_num, n_samples)
 
             # 扩展channel_complex_amplitude（如果存在）
             if waveform.channel_complex_amplitudes is not None:
@@ -762,7 +771,9 @@ class SingleChasCSIO:
             # 缓存写入的波形副本（保持2D格式）
             self._feedback_ao_queue.append(raw_feedback_waveform.copy())
 
-            logger.debug(f"成功写入反馈波形数据，shape: {comped_feedback_waveform.shape}")
+            logger.debug(
+                f"成功写入反馈波形数据，shape: {comped_feedback_waveform.shape}"
+            )
 
         except Exception as e:
             logger.error(f"反馈波形写入失败: {e}", exc_info=True)

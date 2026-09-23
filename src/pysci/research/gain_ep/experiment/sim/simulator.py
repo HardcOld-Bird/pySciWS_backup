@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -29,7 +29,11 @@ from matplotlib.lines import Line2D
 
 from pysci.paths import research_asset_dir
 
-from ..analyze import load_compressed_data, load_data_with_fallback, save_compressed_data
+from ..analyze import (
+    load_compressed_data,
+    load_data_with_fallback,
+    save_compressed_data,
+)
 from ..config import setup_chinese_fonts
 from ..logger import get_logger
 
@@ -231,18 +235,26 @@ class SimScanner:
 
     #: 8 个扬声器 AO 通道（speaker 1~8）
     _SPEAKER_CHANNELS: tuple[str, ...] = (
-        "PXI1Slot3/ao0", "PXI1Slot3/ao1",
-        "PXI1Slot4/ao0", "PXI1Slot4/ao1",
-        "PXI1Slot5/ao0", "PXI1Slot5/ao1",
-        "PXI1Slot6/ao0", "PXI1Slot6/ao1",
+        "PXI1Slot3/ao0",
+        "PXI1Slot3/ao1",
+        "PXI1Slot4/ao0",
+        "PXI1Slot4/ao1",
+        "PXI1Slot5/ao0",
+        "PXI1Slot5/ao1",
+        "PXI1Slot6/ao0",
+        "PXI1Slot6/ao1",
     )
 
     #: 8 个传声器 AI 通道（point 1~8）
     _POINT_CHANNELS: tuple[str, ...] = (
-        "PXI1Slot3/ai0", "PXI1Slot3/ai1",
-        "PXI1Slot4/ai0", "PXI1Slot4/ai1",
-        "PXI1Slot5/ai0", "PXI1Slot5/ai1",
-        "PXI1Slot6/ai0", "PXI1Slot6/ai1",
+        "PXI1Slot3/ai0",
+        "PXI1Slot3/ai1",
+        "PXI1Slot4/ai0",
+        "PXI1Slot4/ai1",
+        "PXI1Slot5/ai0",
+        "PXI1Slot5/ai1",
+        "PXI1Slot6/ai0",
+        "PXI1Slot6/ai1",
     )
 
     #: 静态激励 AO 通道（左入射）
@@ -335,7 +347,8 @@ class SimScanner:
 
         try:
             cache = load_compressed_data(
-                self._sim_cache_file, data_type_name="仿真缓存",
+                self._sim_cache_file,
+                data_type_name="仿真缓存",
             )
         except Exception as e:
             logger.warning(f"加载仿真缓存失败，将重新计算: {e}")
@@ -347,8 +360,7 @@ class SimScanner:
 
         if not cache.matches(f):
             logger.info(
-                f"仿真缓存参数不匹配 (缓存: f={cache.f}; "
-                f"当前: f={f})，将重新计算"
+                f"仿真缓存参数不匹配 (缓存: f={cache.f}; 当前: f={f})，将重新计算"
             )
             return None
 
@@ -365,7 +377,8 @@ class SimScanner:
         """
         try:
             save_compressed_data(
-                cache, self._sim_cache_file,
+                cache,
+                self._sim_cache_file,
                 data_type_name="仿真缓存",
             )
         except Exception as e:
@@ -439,12 +452,22 @@ class SimScanner:
             # 提取实验传递矩阵: speaker→probe, shape (8, 8)
             # tf_matrix[i, j] = speaker_i 到 point_j 的传递函数
             exp_tf_matrix = np.asarray(
-                tf_df.loc[list(self._SPEAKER_CHANNELS), list(self._POINT_CHANNELS)].values,
+                tf_df.loc[
+                    list(self._SPEAKER_CHANNELS), list(self._POINT_CHANNELS)
+                ].values,
                 dtype=np.complex128,
             )
             # 确定左/右入射 AO 通道（支持对调）
-            ch_l = self._STATIC_AO_CHANNEL_R if swap_static_ao else self._STATIC_AO_CHANNEL_L
-            ch_r = self._STATIC_AO_CHANNEL_L if swap_static_ao else self._STATIC_AO_CHANNEL_R
+            ch_l = (
+                self._STATIC_AO_CHANNEL_R
+                if swap_static_ao
+                else self._STATIC_AO_CHANNEL_L
+            )
+            ch_r = (
+                self._STATIC_AO_CHANNEL_L
+                if swap_static_ao
+                else self._STATIC_AO_CHANNEL_R
+            )
             # 初态: 静态激励 AO 通道在各 AI 通道的贡献 (激励=1)
             exp_initial_state_l = np.asarray(
                 tf_df.loc[ch_l, list(self._POINT_CHANNELS)].values,
@@ -488,8 +511,17 @@ class SimScanner:
         # 1. 参数扫描 → 目标稳态 (res*res 组, 每组 8 个探针)
         logger.info("1/10: eight_probes_para_scan 参数扫描...")
         eight_target_flat = self._run_single_simulation(
-            "eight_scan", f, cr, cr_min, cr_max, ci, ci_min, ci_max, res,
-            input_amp_l=input_amp_l, input_amp_r=input_amp_r,
+            "eight_scan",
+            f,
+            cr,
+            cr_min,
+            cr_max,
+            ci,
+            ci_min,
+            ci_max,
+            res,
+            input_amp_l=input_amp_l,
+            input_amp_r=input_amp_r,
             speaker_amps_8=np.zeros(8, dtype=complex),
         )
         eight_target = eight_target_flat.reshape(res, res, 8)
@@ -503,14 +535,32 @@ class SimScanner:
         else:
             logger.info("2/10: eight_probes_single 空管槽左入射初态...")
             eight_initial_l = self._run_single_simulation(
-                "eight_single", f, 1.0, ci_min, ci_max, 0.0, ci_min, ci_max, res,
-                input_amp_l=input_amp_l, input_amp_r=input_amp_r,
+                "eight_single",
+                f,
+                1.0,
+                ci_min,
+                ci_max,
+                0.0,
+                ci_min,
+                ci_max,
+                res,
+                input_amp_l=input_amp_l,
+                input_amp_r=input_amp_r,
                 speaker_amps_8=np.zeros(8, dtype=complex),
             )
             logger.info("2/10: eight_probes_single 空管槽右入射初态...")
             eight_initial_r = self._run_single_simulation(
-                "eight_single", f, 1.0, ci_min, ci_max, 0.0, ci_min, ci_max, res,
-                input_amp_l=input_amp_r, input_amp_r=input_amp_l,
+                "eight_single",
+                f,
+                1.0,
+                ci_min,
+                ci_max,
+                0.0,
+                ci_min,
+                ci_max,
+                res,
+                input_amp_l=input_amp_r,
+                input_amp_r=input_amp_l,
                 speaker_amps_8=np.zeros(8, dtype=complex),
             )
         logger.info(f"  左初态: {np.abs(eight_initial_l)}")
@@ -540,10 +590,14 @@ class SimScanner:
         if exp_tf_matrix is not None and exp_initial_state_l is not None:
             logger.info("5/10: 计算真实实验系统稳态（8 周期增益，双方向）...")
             exp_eight_steady_l = self._solve_exp_steady_batch(
-                eight_gains, exp_tf_matrix, exp_initial_state_l,
+                eight_gains,
+                exp_tf_matrix,
+                exp_initial_state_l,
             )
             exp_eight_steady_r = self._solve_exp_steady_batch(
-                eight_gains, exp_tf_matrix, exp_initial_state_r,
+                eight_gains,
+                exp_tf_matrix,
+                exp_initial_state_r,
             )
             logger.info(
                 f"  左入射稳态: mean |steady|={np.mean(np.abs(exp_eight_steady_l)):.4f}"
@@ -562,12 +616,12 @@ class SimScanner:
                 self._analyze_convergence_batch(eight_gains, exp_tf_matrix)
             )
             safe_8 = int(np.sum(exp_eight_rho < 1.0))
-            recoverable_8 = int(np.sum(
-                (exp_eight_rho >= 1.0) & (exp_eight_rho_relaxed < 1.0)
-            ))
+            recoverable_8 = int(
+                np.sum((exp_eight_rho >= 1.0) & (exp_eight_rho_relaxed < 1.0))
+            )
             logger.info(
-                f"  8周期: 安全区={safe_8}/{res*res}, "
-                f"可恢复区={recoverable_8}/{res*res}"
+                f"  8周期: 安全区={safe_8}/{res * res}, "
+                f"可恢复区={recoverable_8}/{res * res}"
             )
 
         # =================================================================
@@ -578,8 +632,17 @@ class SimScanner:
         # 7. 参数扫描 → 目标稳态 (res*res 组, 每组 bnd1+bnd2+point1)
         logger.info("6/10: floquet_probes_para_scan 参数扫描...")
         floquet_target_flat = self._run_single_simulation(
-            "floquet_scan", f, cr, cr_min, cr_max, ci, ci_min, ci_max, res,
-            positive_is_left="1", input_amp="1[Pa]",
+            "floquet_scan",
+            f,
+            cr,
+            cr_min,
+            cr_max,
+            ci,
+            ci_min,
+            ci_max,
+            res,
+            positive_is_left="1",
+            input_amp="1[Pa]",
             speaker_amp_floquet="0",
         )
         floquet_target = floquet_target_flat.reshape(res, res, 3)
@@ -593,14 +656,32 @@ class SimScanner:
         else:
             logger.info("7/10: floquet_probes_single 空管槽左入射初态...")
             floquet_initial_l = self._run_single_simulation(
-                "floquet_single", f, 1.0, ci_min, ci_max, 0.0, ci_min, ci_max, res,
-                positive_is_left="1", input_amp="1[Pa]",
+                "floquet_single",
+                f,
+                1.0,
+                ci_min,
+                ci_max,
+                0.0,
+                ci_min,
+                ci_max,
+                res,
+                positive_is_left="1",
+                input_amp="1[Pa]",
                 speaker_amp_floquet="0",
             )
             logger.info("7/10: floquet_probes_single 空管槽右入射初态...")
             floquet_initial_r = self._run_single_simulation(
-                "floquet_single", f, 1.0, ci_min, ci_max, 0.0, ci_min, ci_max, res,
-                positive_is_left="-1", input_amp="1[Pa]",
+                "floquet_single",
+                f,
+                1.0,
+                ci_min,
+                ci_max,
+                0.0,
+                ci_min,
+                ci_max,
+                res,
+                positive_is_left="-1",
+                input_amp="1[Pa]",
                 speaker_amp_floquet="0",
             )
         logger.info(f"  左初态: {np.abs(floquet_initial_l)}")
@@ -608,13 +689,24 @@ class SimScanner:
 
         # 9. 传递函数 (1 次仿真, speaker_amp=1, input_amp=0)（可缓存）
         if cache_hit:
-            logger.info("8/10: floquet_probes_single 传递函数 (speaker_amp=1) [缓存]...")
+            logger.info(
+                "8/10: floquet_probes_single 传递函数 (speaker_amp=1) [缓存]..."
+            )
             floquet_tf = cache.floquet_tf
         else:
             logger.info("8/10: floquet_probes_single 传递函数 (speaker_amp=1)...")
             floquet_tf = self._run_single_simulation(
-                "floquet_single", f, 1.0, ci_min, ci_max, 0.0, ci_min, ci_max, res,
-                positive_is_left="1", input_amp="0[Pa]",
+                "floquet_single",
+                f,
+                1.0,
+                ci_min,
+                ci_max,
+                0.0,
+                ci_min,
+                ci_max,
+                res,
+                positive_is_left="1",
+                input_amp="0[Pa]",
                 speaker_amp_floquet="1",
             )
         logger.info(f"  传递函数: {np.abs(floquet_tf)}")
@@ -661,10 +753,14 @@ class SimScanner:
         if exp_tf_matrix is not None and exp_initial_state_l is not None:
             logger.info("10/10: 计算真实实验系统稳态（Floquet 增益，双方向）...")
             exp_floquet_steady_l = self._solve_exp_steady_batch(
-                floquet_point1_gains, exp_tf_matrix, exp_initial_state_l,
+                floquet_point1_gains,
+                exp_tf_matrix,
+                exp_initial_state_l,
             )
             exp_floquet_steady_r = self._solve_exp_steady_batch(
-                floquet_point1_gains, exp_tf_matrix, exp_initial_state_r,
+                floquet_point1_gains,
+                exp_tf_matrix,
+                exp_initial_state_r,
             )
             logger.info(
                 f"  左入射稳态: mean |steady|={np.mean(np.abs(exp_floquet_steady_l)):.4f}"
@@ -680,38 +776,45 @@ class SimScanner:
         if exp_tf_matrix is not None:
             logger.info("  计算 Floquet 模式收敛性...")
             exp_floquet_rho, exp_floquet_alpha, exp_floquet_rho_relaxed = (
-                self._analyze_convergence_batch(
-                    floquet_point1_gains, exp_tf_matrix
-                )
+                self._analyze_convergence_batch(floquet_point1_gains, exp_tf_matrix)
             )
             safe_f = int(np.sum(exp_floquet_rho < 1.0))
-            recoverable_f = int(np.sum(
-                (exp_floquet_rho >= 1.0) & (exp_floquet_rho_relaxed < 1.0)
-            ))
+            recoverable_f = int(
+                np.sum((exp_floquet_rho >= 1.0) & (exp_floquet_rho_relaxed < 1.0))
+            )
             logger.info(
-                f"  Floquet: 安全区={safe_f}/{res*res}, "
-                f"可恢复区={recoverable_f}/{res*res}"
+                f"  Floquet: 安全区={safe_f}/{res * res}, "
+                f"可恢复区={recoverable_f}/{res * res}"
             )
 
         # ---- 保存仿真缓存（仅缓存未命中时） ----
         if not cache_hit:
-            self._save_sim_cache(_SimCache(
-                f=f,
-                eight_initial_l=eight_initial_l,
-                eight_initial_r=eight_initial_r,
-                eight_tf_matrix=eight_tf_matrix,
-                floquet_initial_l=floquet_initial_l,
-                floquet_initial_r=floquet_initial_r,
-                floquet_tf=floquet_tf,
-            ))
+            self._save_sim_cache(
+                _SimCache(
+                    f=f,
+                    eight_initial_l=eight_initial_l,
+                    eight_initial_r=eight_initial_r,
+                    eight_tf_matrix=eight_tf_matrix,
+                    floquet_initial_l=floquet_initial_l,
+                    floquet_initial_r=floquet_initial_r,
+                    floquet_tf=floquet_tf,
+                )
+            )
 
         # =================================================================
         # 组装结果
         # =================================================================
         result = ScanResult(
-            f=f, cr=cr, cr_min=cr_min, cr_max=cr_max,
-            ci=ci, ci_min=ci_min, ci_max=ci_max, res=res,
-            cr_values=cr_values, ci_values=ci_values,
+            f=f,
+            cr=cr,
+            cr_min=cr_min,
+            cr_max=cr_max,
+            ci=ci,
+            ci_min=ci_min,
+            ci_max=ci_max,
+            res=res,
+            cr_values=cr_values,
+            ci_values=ci_values,
             eight_target=eight_target,
             eight_initial_l=eight_initial_l,
             eight_initial_r=eight_initial_r,
@@ -807,7 +910,16 @@ class SimScanner:
 
         # 设置参数
         self._set_params(
-            java_model, mode, f, cr, cr_min, cr_max, ci, ci_min, ci_max, res,
+            java_model,
+            mode,
+            f,
+            cr,
+            cr_min,
+            cr_max,
+            ci,
+            ci_min,
+            ci_max,
+            res,
             input_amp_l=input_amp_l,
             input_amp_r=input_amp_r,
             speaker_amps=speaker_amps_8,
@@ -822,13 +934,21 @@ class SimScanner:
 
         # 提取数据
         if mode == "eight_scan":
-            return self._extract_scan_table(java_model, "point1", probe_start=3, n_probes=8)
+            return self._extract_scan_table(
+                java_model, "point1", probe_start=3, n_probes=8
+            )
         elif mode == "eight_single":
-            return self._extract_single_row(java_model, "point1", probe_start=1, n_probes=8)
+            return self._extract_single_row(
+                java_model, "point1", probe_start=1, n_probes=8
+            )
         elif mode == "floquet_scan":
-            return self._extract_scan_table(java_model, "bnd1", probe_start=3, n_probes=3)
+            return self._extract_scan_table(
+                java_model, "bnd1", probe_start=3, n_probes=3
+            )
         else:  # floquet_single
-            return self._extract_single_row(java_model, "bnd1", probe_start=1, n_probes=3)
+            return self._extract_single_row(
+                java_model, "bnd1", probe_start=1, n_probes=3
+            )
 
     # =========================================================================
     # 参数设置
@@ -936,8 +1056,11 @@ class SimScanner:
         return data_rows
 
     def _extract_scan_table(
-        self, java_model, probe_name: str,
-        probe_start: int, n_probes: int,
+        self,
+        java_model,
+        probe_name: str,
+        probe_start: int,
+        n_probes: int,
     ) -> np.ndarray:
         """从参数扫描结果表提取探针数据
 
@@ -968,8 +1091,11 @@ class SimScanner:
         return result
 
     def _extract_single_row(
-        self, java_model, probe_name: str,
-        probe_start: int, n_probes: int,
+        self,
+        java_model,
+        probe_name: str,
+        probe_start: int,
+        n_probes: int,
     ) -> np.ndarray:
         """从单点仿真结果表提取探针数据
 
@@ -1034,7 +1160,8 @@ class SimScanner:
     # =========================================================================
 
     def _compute_eight_transfer_matrix(
-        self, f: float,
+        self,
+        f: float,
     ) -> np.ndarray:
         """计算 8 周期模式 8×8 传递矩阵 (speaker→probe)
 
@@ -1056,10 +1183,17 @@ class SimScanner:
 
             logger.info(f"  传递矩阵: speaker_{speaker_idx + 1}/8 ...")
             probes = self._run_single_simulation(
-                "eight_single", f,
-                cr=1.0, cr_min=1.0, cr_max=1.0,
-                ci=0.0, ci_min=0.0, ci_max=0.0, res=1,
-                input_amp_l="0[Pa]", input_amp_r="0[Pa]",
+                "eight_single",
+                f,
+                cr=1.0,
+                cr_min=1.0,
+                cr_max=1.0,
+                ci=0.0,
+                ci_min=0.0,
+                ci_max=0.0,
+                res=1,
+                input_amp_l="0[Pa]",
+                input_amp_r="0[Pa]",
                 speaker_amps_8=speaker_amps,
             )
             tf_matrix[speaker_idx, :] = probes
@@ -1100,6 +1234,7 @@ class SimScanner:
         # 预计算 LU 分解（传递矩阵对所有参数组合相同）
         mt = tf_matrix.T  # (8, 8)
         from numpy.linalg import solve
+
         # 使用 numpy 的 broadcast solve: (8,8) 矩阵, (8, total) 右端项
         delta = flat_target - probes_initial[np.newaxis, :]  # (total, 8)
         # solve(M^T, delta^T) → (8, total) → 转置为 (total, 8)
@@ -1206,9 +1341,7 @@ class SimScanner:
         I_n = np.eye(n)
         fixed_part = I_n - d_inv_mt  # (8, 8)，所有参数组合共享
         # 向量化构建 diag(gain) 批量矩阵: (total, 8, 8)
-        gain_matrices = I_n - (
-            flat_gains[:, :, None] * np.eye(n)[None, :, :]
-        )
+        gain_matrices = I_n - (flat_gains[:, :, None] * np.eye(n)[None, :, :])
         A_batch = gain_matrices @ fixed_part[np.newaxis, :, :]  # (total, 8, 8)
 
         # 批量特征值
@@ -1220,10 +1353,8 @@ class SimScanner:
         # 网格扫描最优松弛因子 α* ∈ (0, 1]
         alpha_grid = np.linspace(1e-3, 1.0, 1001)  # (1001,)
         # μ_i(α) = 1 - α(1 - λ_i)
-        mu = (
-            1.0
-            - alpha_grid[:, None, None]
-            * (1.0 - eigenvalues_batch[None, :, :])
+        mu = 1.0 - alpha_grid[:, None, None] * (
+            1.0 - eigenvalues_batch[None, :, :]
         )  # (1001, total, 8)
         rho_curve = np.max(np.abs(mu), axis=2)  # (1001, total)
         best_idx = np.argmin(rho_curve, axis=0)  # (total,)
@@ -1242,7 +1373,9 @@ class SimScanner:
     # =========================================================================
 
     def _save_scan_result(
-        self, result: ScanResult, result_folder: str | Path | None = None,
+        self,
+        result: ScanResult,
+        result_folder: str | Path | None = None,
     ) -> Path:
         """将扫描结果保存到磁盘
 
@@ -1265,10 +1398,15 @@ class SimScanner:
             save_dir / "scan_result.npz",
             # 输入参数
             f=result.f,
-            cr=result.cr, cr_min=result.cr_min, cr_max=result.cr_max,
-            ci=result.ci, ci_min=result.ci_min, ci_max=result.ci_max,
+            cr=result.cr,
+            cr_min=result.cr_min,
+            cr_max=result.cr_max,
+            ci=result.ci,
+            ci_min=result.ci_min,
+            ci_max=result.ci_max,
             res=result.res,
-            cr_values=result.cr_values, ci_values=result.ci_values,
+            cr_values=result.cr_values,
+            ci_values=result.ci_values,
             # 8 周期模式
             eight_target=result.eight_target,
             eight_initial_l=result.eight_initial_l,
@@ -1320,7 +1458,9 @@ class SimScanner:
         # ------------------------------------------------------------------
         eight_gain_mean = np.mean(np.abs(result.eight_gains), axis=2)
         self._plot_discrete_heatmap(
-            cr, ci, eight_gain_mean,
+            cr,
+            ci,
+            eight_gain_mean,
             title="8 周期模式 - 增益系数模长平均值",
             save_path=save_dir / "eight_gains_mean.png",
         )
@@ -1330,7 +1470,9 @@ class SimScanner:
         # ------------------------------------------------------------------
         eight_target_mean = np.mean(np.abs(result.eight_target), axis=2)
         self._plot_discrete_heatmap(
-            cr, ci, eight_target_mean,
+            cr,
+            ci,
+            eight_target_mean,
             title="8 周期模式 - 最终稳态模长平均值",
             save_path=save_dir / "eight_target_mean.png",
             colorbar_label="稳态模长",
@@ -1344,7 +1486,9 @@ class SimScanner:
         sum_eight_r = np.sum(np.abs(result.exp_eight_steady_r), axis=2)
         with np.errstate(divide="ignore", invalid="ignore"):
             response_ratio_eight = np.where(
-                sum_eight_r > 0, sum_eight_l / sum_eight_r, np.inf,
+                sum_eight_r > 0,
+                sum_eight_l / sum_eight_r,
+                np.inf,
             )
         conv_eight = None
         if result.exp_eight_rho is not None:
@@ -1358,7 +1502,9 @@ class SimScanner:
                 "best_metric_label": "响应比",
             }
         self._plot_discrete_heatmap(
-            cr, ci, response_ratio_eight,
+            cr,
+            ci,
+            response_ratio_eight,
             title="真实实验系统 - 左/右入射响应比（8 周期增益）",
             save_path=save_dir / "exp_eight_response_ratio.png",
             colorbar_label="响应比",
@@ -1370,7 +1516,9 @@ class SimScanner:
         # ------------------------------------------------------------------
         floquet_point1_gain = np.abs(result.floquet_gains[:, :, 2])
         self._plot_discrete_heatmap(
-            cr, ci, floquet_point1_gain,
+            cr,
+            ci,
+            floquet_point1_gain,
             title="Floquet 模式 - 基于传声器 (point1) 增益系数模长",
             save_path=save_dir / "floquet_gain_point1.png",
         )
@@ -1380,7 +1528,9 @@ class SimScanner:
         # ------------------------------------------------------------------
         floquet_point1_target = np.abs(result.floquet_target[:, :, 2])
         self._plot_discrete_heatmap(
-            cr, ci, floquet_point1_target,
+            cr,
+            ci,
+            floquet_point1_target,
             title="Floquet 模式 - 基于传声器 (point1) 最终稳态模长",
             save_path=save_dir / "floquet_target_point1.png",
             colorbar_label="稳态模长",
@@ -1393,7 +1543,9 @@ class SimScanner:
         sum_floquet_r = np.sum(np.abs(result.exp_floquet_steady_r), axis=2)
         with np.errstate(divide="ignore", invalid="ignore"):
             response_ratio_floquet = np.where(
-                sum_floquet_r > 0, sum_floquet_l / sum_floquet_r, np.inf,
+                sum_floquet_r > 0,
+                sum_floquet_l / sum_floquet_r,
+                np.inf,
             )
         conv_floquet = None
         if result.exp_floquet_rho is not None:
@@ -1407,7 +1559,9 @@ class SimScanner:
                 "best_metric_label": "响应比",
             }
         self._plot_discrete_heatmap(
-            cr, ci, response_ratio_floquet,
+            cr,
+            ci,
+            response_ratio_floquet,
             title="真实实验系统 - 左/右入射响应比（Floquet 增益）",
             save_path=save_dir / "exp_floquet_response_ratio.png",
             colorbar_label="响应比",
@@ -1477,8 +1631,11 @@ class SimScanner:
 
         # data_2d shape (n_cr, n_ci), pcolormesh 需要 (n_ci, n_cr) 或使用 indexing
         im = ax.pcolormesh(
-            cr_edges, ci_edges, data_2d.T,
-            cmap="viridis", shading="flat",
+            cr_edges,
+            ci_edges,
+            data_2d.T,
+            cmap="viridis",
+            shading="flat",
         )
 
         cbar = fig.colorbar(im, ax=ax)
@@ -1493,7 +1650,8 @@ class SimScanner:
             data_for_best = convergence_overlay["data_for_best"]
             label_prefix = convergence_overlay["best_label_prefix"]
             metric_label = convergence_overlay.get(
-                "best_metric_label", "稳态模长均值",
+                "best_metric_label",
+                "稳态模长均值",
             )
 
             # 分类掩码
@@ -1534,22 +1692,34 @@ class SimScanner:
             # ---- 不可达区：红色矩形轮廓线 + 对角红叉（先画，在下层） ----
             unreach_rects, unreach_crosses = _build_cell_rects(unreachable_mask)
             if unreach_rects:
-                ax.add_collection(LineCollection(
-                    unreach_rects, colors="red",
-                    linewidths=lw_red, zorder=3,
-                ))
-                ax.add_collection(LineCollection(
-                    unreach_crosses, colors="red",
-                    linewidths=lw_cross, zorder=3,
-                ))
+                ax.add_collection(
+                    LineCollection(
+                        unreach_rects,
+                        colors="red",
+                        linewidths=lw_red,
+                        zorder=3,
+                    )
+                )
+                ax.add_collection(
+                    LineCollection(
+                        unreach_crosses,
+                        colors="red",
+                        linewidths=lw_cross,
+                        zorder=3,
+                    )
+                )
 
             # ---- 危险区：中黄色矩形轮廓线（后画，在上层，线宽加倍） ----
             danger_rects, _ = _build_cell_rects(danger_mask)
             if danger_rects:
-                ax.add_collection(LineCollection(
-                    danger_rects, colors="#FFD700",
-                    linewidths=lw_yellow, zorder=4,
-                ))
+                ax.add_collection(
+                    LineCollection(
+                        danger_rects,
+                        colors="#FFD700",
+                        linewidths=lw_yellow,
+                        zorder=4,
+                    )
+                )
 
             # ---- 标记安全区中指标最大的参数点 ----
             if np.any(safe_mask):
@@ -1562,8 +1732,12 @@ class SimScanner:
 
                 # 绿色五角星标记
                 ax.plot(
-                    best_cr, best_ci, marker="*", markersize=star_size,
-                    color="lime", markeredgecolor="black",
+                    best_cr,
+                    best_ci,
+                    marker="*",
+                    markersize=star_size,
+                    color="lime",
+                    markeredgecolor="black",
                     markeredgewidth=star_edge,
                     zorder=5,
                 )
@@ -1574,10 +1748,12 @@ class SimScanner:
                     f"{metric_label}={best_val:.4f}"
                 )
                 ax.annotate(
-                    label_text, xy=(best_cr, best_ci),
+                    label_text,
+                    xy=(best_cr, best_ci),
                     xytext=(anno_offset, anno_offset),
                     textcoords="offset points",
-                    fontsize=anno_font, color="black",
+                    fontsize=anno_font,
+                    color="black",
                     bbox={
                         "boxstyle": "round,pad=0.3",
                         "facecolor": "white",
@@ -1593,32 +1769,40 @@ class SimScanner:
             if np.any(safe_mask):
                 legend_handles.append(
                     Line2D(
-                        [0], [0], color="green", linewidth=2.0,
+                        [0],
+                        [0],
+                        color="green",
+                        linewidth=2.0,
                         label=f"安全区 (\u03c1<1, {int(np.sum(safe_mask))}点)",
                     )
                 )
             if np.any(danger_mask):
                 legend_handles.append(
                     Line2D(
-                        [0], [0], color="#FFD700",
+                        [0],
+                        [0],
+                        color="#FFD700",
                         linewidth=max(1.5, lw_yellow),
                         label=f"危险区 (\u03c1\u22651, \u03b1*可恢复, "
-                              f"{int(np.sum(danger_mask))}点)",
+                        f"{int(np.sum(danger_mask))}点)",
                     )
                 )
             if np.any(unreachable_mask):
                 legend_handles.append(
                     Line2D(
-                        [0], [0], color="red",
+                        [0],
+                        [0],
+                        color="red",
                         linewidth=max(1.5, lw_red),
                         label=f"不可达区 (\u03c1\u22651, \u03b1*不可恢复, "
-                              f"{int(np.sum(unreachable_mask))}点)",
+                        f"{int(np.sum(unreachable_mask))}点)",
                     )
                 )
             if legend_handles:
                 ax.legend(
                     handles=legend_handles,
-                    loc="upper right", fontsize=8,
+                    loc="upper right",
+                    fontsize=8,
                     framealpha=0.9,
                 )
 
@@ -1639,6 +1823,7 @@ class SimScanner:
 # =============================================================================
 # 模块级辅助函数
 # =============================================================================
+
 
 def _format_complex(value: complex, unit: str = "") -> str:
     """将复数值格式化为 COMSOL 参数字符串"""

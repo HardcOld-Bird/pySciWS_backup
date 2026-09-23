@@ -4,7 +4,11 @@
 这是一个用于实际硬件测试的脚本，可以直接运行来测试校准功能。
 """
 
-from pysci.research.gain_ep.experiment.analyze import init_sampling_info, load_compressed_data, plot_sweep_waveforms
+from pysci.research.gain_ep.experiment.analyze import (
+    init_sampling_info,
+    load_compressed_data,
+    plot_sweep_waveforms,
+)
 from pysci.research.gain_ep.experiment.calib import CaliberOctopus
 
 ai_channels = ("PXI1Slot3/ai0",)
@@ -19,7 +23,7 @@ ao_channels = (
     "PXI1Slot6/ao1",
 )
 temp_freq = 3400.0
-temp_sampling_info = init_sampling_info(temp_freq*50,34300)
+temp_sampling_info = init_sampling_info(temp_freq * 50, 34300)
 
 # 创建校准对象
 caliber = CaliberOctopus(
@@ -80,7 +84,9 @@ caliber.calibrate(
 )
 
 # %% 检查SweepData波形
-sd = load_compressed_data("D:\\XXXIIIGGG\\projects\\pySweep\\pySweepWS\\storage\\calib\\calib_result_octopus\\raw_sweep_data_1.pkl")
+sd = load_compressed_data(
+    "D:\\XXXIIIGGG\\projects\\pySweep\\pySweepWS\\storage\\calib\\calib_result_octopus\\raw_sweep_data_1.pkl"
+)
 plot_sweep_waveforms(
     sd,
     "D:\\XXXIIIGGG\\projects\\pySweep\\pySweepWS\\storage\\calib\\calib_result_octopus",

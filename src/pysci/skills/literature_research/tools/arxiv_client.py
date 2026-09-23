@@ -22,12 +22,13 @@ from __future__ import annotations
 import re
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from urllib.parse import quote
 
-from .config import http_session, settings
 from .cache_manager import bump_mtime
+from .config import http_session, settings
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -61,6 +62,7 @@ KNOWN_CATEGORIES: dict[str, str] = {
 # ---------------------------------------------------------------------------
 def _parse_entry(e: ET.Element) -> dict[str, Any]:
     """将 Atom <entry> 解析为统一 dict。"""
+
     def _text(tag: str, ns: str = ATOM_NS) -> str:
         el = e.find(f"{ns}{tag}")
         return (el.text or "").strip() if el is not None else ""
@@ -75,14 +77,22 @@ def _parse_entry(e: ET.Element) -> dict[str, Any]:
     for a in e.findall(f"{ATOM_NS}author"):
         name_el = a.find(f"{ATOM_NS}name")
         aff_el = a.find(f"{ATOM_NS}affiliation")
-        authors.append({
-            "name": (name_el.text or "").strip() if name_el is not None else "",
-            "affiliation": (aff_el.text or "").strip() if aff_el is not None else "",
-        })
+        authors.append(
+            {
+                "name": (name_el.text or "").strip() if name_el is not None else "",
+                "affiliation": (aff_el.text or "").strip()
+                if aff_el is not None
+                else "",
+            }
+        )
 
     categories = [c.get("term", "") for c in e.findall(f"{ATOM_NS}category")]
     primary_cat_el = e.find(f"{ARXIV_NS}primary_category")
-    primary_cat = primary_cat_el.get("term", "") if primary_cat_el is not None else (categories[0] if categories else "")
+    primary_cat = (
+        primary_cat_el.get("term", "")
+        if primary_cat_el is not None
+        else (categories[0] if categories else "")
+    )
 
     # 期刊引用与 DOI（若已发表）
     journal_ref = _text("journal_ref", ns=ARXIV_NS)
@@ -104,7 +114,9 @@ def _parse_entry(e: ET.Element) -> dict[str, Any]:
         "title": re.sub(r"\s+", " ", _text("title")),
         "abstract": re.sub(r"\s+", " ", _text("summary")),
         "authors": authors,
-        "first_author_last_name": _guess_last_name(authors[0]["name"]) if authors else "",
+        "first_author_last_name": _guess_last_name(authors[0]["name"])
+        if authors
+        else "",
         "published": _text("published"),
         "updated": _text("updated"),
         "primary_category": primary_cat,
@@ -136,8 +148,8 @@ def search_arxiv(
     categories: Iterable[str] | None = None,
     max_results: int = 50,
     start: int = 0,
-    sort_by: str = "relevance",       # relevance | lastUpdatedDate | submittedDate
-    sort_order: str = "descending",   # ascending | descending
+    sort_by: str = "relevance",  # relevance | lastUpdatedDate | submittedDate
+    sort_order: str = "descending",  # ascending | descending
     use_cache: bool = True,
 ) -> dict[str, Any]:
     """按 query 检索 arXiv。
@@ -164,10 +176,13 @@ def search_arxiv(
             cat_expr = " OR ".join(f"cat:{c}" for c in cats)
             params["search_query"] = f"({query}) AND ({cat_expr})"
 
-    from .openalex_client import _cache_key, _read_cache, _write_cache
+    from .openalex_client import _cache_key, _read_cache
+
     cache_path = _cache_key("arxiv_search", params)
     if use_cache:
-        cached = _read_cache(cache_path, max_age_seconds=86400)   # arXiv 每日更新，缓存 1 天
+        cached = _read_cache(
+            cache_path, max_age_seconds=86400
+        )  # arXiv 每日更新，缓存 1 天
         if cached is not None:
             return cached
 
@@ -176,7 +191,12 @@ def search_arxiv(
         headers = {}
         if settings.arxiv_user_agent:
             headers["User-Agent"] = settings.arxiv_user_agent
-        r = s.get(ARXIV_API_BASE, params=params, headers=headers, timeout=settings.http_timeout)
+        r = s.get(
+            ARXIV_API_BASE,
+            params=params,
+            headers=headers,
+            timeout=settings.http_timeout,
+        )
         r.raise_for_status()
         raw_xml = r.text
 
@@ -194,6 +214,7 @@ def search_arxiv(
     }
 
     from .openalex_client import _write_cache as _wc
+
     _wc(cache_path, {k: v for k, v in result.items() if k != "_raw_xml_len"})
     return result
 
@@ -204,8 +225,11 @@ def get_paper(arxiv_id: str, use_cache: bool = True) -> dict[str, Any] | None:
     if not re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id):
         # 可能是老式 ID，如 cond-mat/0601234
         arxiv_id = quote(arxiv_id, safe="/")
-    return search_arxiv(f"id:{arxiv_id}", max_results=1, use_cache=use_cache)["entries"][0] \
-        if search_arxiv(f"id:{arxiv_id}", max_results=1, use_cache=use_cache)["entries"] else None
+    return (
+        search_arxiv(f"id:{arxiv_id}", max_results=1, use_cache=use_cache)["entries"][0]
+        if search_arxiv(f"id:{arxiv_id}", max_results=1, use_cache=use_cache)["entries"]
+        else None
+    )
 
 
 def list_recent(
@@ -225,7 +249,7 @@ def list_recent(
         max_results=max_results,
         sort_by="submittedDate",
         sort_order="descending",
-        use_cache=False,   # 追踪最新时不用缓存
+        use_cache=False,  # 追踪最新时不用缓存
     )
     if days_back:
         cutoff = time.time() - days_back * 86400
@@ -244,7 +268,9 @@ def list_recent(
 # ---------------------------------------------------------------------------
 # 下载：PDF / LaTeX 源码
 # ---------------------------------------------------------------------------
-def download_pdf(arxiv_id: str, dest_dir: Path | None = None, overwrite: bool = False) -> Path:
+def download_pdf(
+    arxiv_id: str, dest_dir: Path | None = None, overwrite: bool = False
+) -> Path:
     """下载 arXiv PDF 到 cache/pdfs/{arxiv_id}.pdf。"""
     dest_dir = dest_dir or settings.cache_pdfs
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -268,7 +294,9 @@ def download_pdf(arxiv_id: str, dest_dir: Path | None = None, overwrite: bool = 
     return dest
 
 
-def download_source(arxiv_id: str, dest_dir: Path | None = None, overwrite: bool = False) -> Path | None:
+def download_source(
+    arxiv_id: str, dest_dir: Path | None = None, overwrite: bool = False
+) -> Path | None:
     """下载 arXiv LaTeX 源码 tar.gz（若有）到 cache/pdfs/{arxiv_id}_src.tar.gz。
 
     LaTeX 源码对物理论文极有价值：公式、图表 caption、参考文献都比 PDF 解析更准。
@@ -285,14 +313,20 @@ def download_source(arxiv_id: str, dest_dir: Path | None = None, overwrite: bool
         headers["User-Agent"] = settings.arxiv_user_agent
     try:
         with http_session() as s:
-            r = s.get(url, headers=headers, timeout=settings.http_timeout * 2, stream=True)
+            r = s.get(
+                url, headers=headers, timeout=settings.http_timeout * 2, stream=True
+            )
             if r.status_code != 200:
-                print(f"[arxiv] Source not available for {arxiv_id} (HTTP {r.status_code})")
+                print(
+                    f"[arxiv] Source not available for {arxiv_id} (HTTP {r.status_code})"
+                )
                 return None
             with dest.open("wb") as f:
                 for chunk in r.iter_content(chunk_size=65536):
                     f.write(chunk)
-        print(f"[arxiv] Downloaded source: {dest}  ({dest.stat().st_size / 1024:.1f} KB)")
+        print(
+            f"[arxiv] Downloaded source: {dest}  ({dest.stat().st_size / 1024:.1f} KB)"
+        )
         return dest
     except Exception as e:
         print(f"[arxiv] Failed to download source for {arxiv_id}: {e}")
@@ -302,6 +336,7 @@ def download_source(arxiv_id: str, dest_dir: Path | None = None, overwrite: bool
 def extract_tex_from_source(tar_path: Path) -> str | None:
     """从 tar.gz 中提取主 .tex 文件内容（启发式：找含 \\documentclass 的 .tex）。"""
     import tarfile
+
     if not tar_path.exists():
         return None
     try:
@@ -367,8 +402,7 @@ def arxiv_to_note_frontmatter(e: dict[str, Any]) -> dict[str, Any]:
         "zotero_uri": "",
         "local_pdf_path": "",
         "oa_url": e.get("pdf_url", ""),
-        "oa_status": "green",   # arXiv 属绿色 OA
-
+        "oa_status": "green",  # arXiv 属绿色 OA
         "cited_by_count": None,
         "cited_by_count_normalized": None,
         "jif": None,
@@ -379,19 +413,16 @@ def arxiv_to_note_frontmatter(e: dict[str, Any]) -> dict[str, Any]:
         "esi_highly_cited": False,
         "esi_hot_paper": False,
         "journal_h_index": None,
-
         "topics": e.get("categories", []),
         "methods": [],
         "systems": [],
         "related_to_my_work": None,
         "related_to_my_work_reason": "",
-
         "status": "unread",
         "my_rating": None,
         "added_date": "",
         "last_reviewed": "",
         "review_count": 0,
-
         "keywords_auto": e.get("categories", [])[:5],
     }
 
@@ -401,8 +432,11 @@ def arxiv_to_note_frontmatter(e: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="arXiv search CLI")
-    parser.add_argument("query", nargs="?", default='all:"exceptional point" AND all:acoustic')
+    parser.add_argument(
+        "query", nargs="?", default='all:"exceptional point" AND all:acoustic'
+    )
     parser.add_argument("--max-results", type=int, default=10)
     parser.add_argument("--sort", default="submittedDate")
     args = parser.parse_args()
@@ -411,7 +445,11 @@ if __name__ == "__main__":
     print(f"[arxiv] total: {res['total_results']}   returned: {len(res['entries'])}")
     for i, e in enumerate(res["entries"], 1):
         print(f"\n#{i} [{e['published'][:10]}] {e['title']}")
-        print(f"   arXiv   : {e['arxiv_id']}v{e['version'][-1] if e['version'] else '1'}  ({e['primary_category']})")
+        print(
+            f"   arXiv   : {e['arxiv_id']}v{e['version'][-1] if e['version'] else '1'}  ({e['primary_category']})"
+        )
         print(f"   Authors : {', '.join(a['name'] for a in e['authors'][:5])}")
-        print(f"   Journal : {e['journal_ref'] or '(preprint)'}   DOI: {e['doi'] or '-'}")
+        print(
+            f"   Journal : {e['journal_ref'] or '(preprint)'}   DOI: {e['doi'] or '-'}"
+        )
         print(f"   Abs     : {e['abs_url']}")

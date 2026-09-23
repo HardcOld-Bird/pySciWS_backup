@@ -315,9 +315,7 @@ def filter_sweep_data(
             # 有状态滤波：在同一测量点的chunk间传递zi
             filtered_wf, zf = filter_waveform(detrended_wf, sos, zi=zi)
             zi = zf  # 更新状态供该点的下一个chunk使用
-            f_logger.debug(
-                f"  波形 {waveform_idx}: 点内连续滤波，传递zi状态"
-            )
+            f_logger.debug(f"  波形 {waveform_idx}: 点内连续滤波，传递zi状态")
 
             # 如果需要切除开头的采样点
             if trim_samples > 0:

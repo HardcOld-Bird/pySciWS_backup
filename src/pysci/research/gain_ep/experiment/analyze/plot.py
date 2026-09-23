@@ -115,7 +115,9 @@ def sweep_data_to_point_tf_data_list(
         ref_complex_amp: complex = complex(cca[0])
     else:
         ref_complex_amp = 1.0 + 0j
-        f_logger.warning("ao_data未设置channel_complex_amplitudes，使用默认参考复振幅=1+0j")
+        f_logger.warning(
+            "ao_data未设置channel_complex_amplitudes，使用默认参考复振幅=1+0j"
+        )
 
     # 避免参考复振幅为零
     if ref_complex_amp == 0:
@@ -161,10 +163,12 @@ def sweep_data_to_point_tf_data_list(
             result_wf.channel_complex_amplitudes[0] / ref_complex_amp
         )
 
-        tf_results.append({
-            "position": position,
-            "complex_amplitude": complex_amplitude,
-        })
+        tf_results.append(
+            {
+                "position": position,
+                "complex_amplitude": complex_amplitude,
+            }
+        )
 
     f_logger.info(f"SweepData转换完成，共 {len(tf_results)} 个点的传递函数数据")
 
@@ -221,10 +225,12 @@ def combine_point_tf_data_list(
             combined = point_a["complex_amplitude"] + point_b["complex_amplitude"]
         else:
             combined = point_a["complex_amplitude"] - point_b["complex_amplitude"]
-        result_list.append({
-            "position": point_a["position"],
-            "complex_amplitude": combined,
-        })
+        result_list.append(
+            {
+                "position": point_a["position"],
+                "complex_amplitude": combined,
+            }
+        )
 
     f_logger.info("运算完成")
     return result_list
@@ -376,7 +382,9 @@ def plot_point_tf_data_list(
     # 提取公共数据
     x_coords = np.array([result["position"].x for result in plot_tf_results])
     y_coords = np.array([result["position"].y for result in plot_tf_results])
-    complex_amplitudes = np.array([result["complex_amplitude"] for result in plot_tf_results])
+    complex_amplitudes = np.array(
+        [result["complex_amplitude"] for result in plot_tf_results]
+    )
     amp_ratios = np.abs(complex_amplitudes)
     phase_shifts = np.angle(complex_amplitudes)
 
@@ -401,9 +409,15 @@ def plot_point_tf_data_list(
     else:  # instantaneous
         fig, ax = plt.subplots(1, 1, figsize=(10, 8))
         _plot_instantaneous_on_ax(
-            ax, fig, x_coords, y_coords, complex_amplitudes,
-            vmin=vmin, vmax=vmax,
-            show_colorbar=True, colorbar_label="瞬时声压场强度",
+            ax,
+            fig,
+            x_coords,
+            y_coords,
+            complex_amplitudes,
+            vmin=vmin,
+            vmax=vmax,
+            show_colorbar=True,
+            colorbar_label="瞬时声压场强度",
             title="瞬时声压场分布 Re(H)",
         )
         plt.tight_layout()
@@ -531,10 +545,18 @@ def _plot_interpolated(
             points, amp_ratios, (Xi, Yi), method=interpolation_method, fill_value=np.nan
         )
         phase_real_interp = griddata(
-            points, phase_complex.real, (Xi, Yi), method=interpolation_method, fill_value=np.nan
+            points,
+            phase_complex.real,
+            (Xi, Yi),
+            method=interpolation_method,
+            fill_value=np.nan,
         )
         phase_imag_interp = griddata(
-            points, phase_complex.imag, (Xi, Yi), method=interpolation_method, fill_value=np.nan
+            points,
+            phase_complex.imag,
+            (Xi, Yi),
+            method=interpolation_method,
+            fill_value=np.nan,
         )
         phase_interpolated = np.angle(phase_real_interp + 1j * phase_imag_interp)
     except Exception as e:
@@ -553,7 +575,9 @@ def _plot_interpolated(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     # 幅值比插值图
-    im1 = ax1.contourf(Xi, Yi, amp_interpolated, levels=50, cmap="viridis", extend="both")
+    im1 = ax1.contourf(
+        Xi, Yi, amp_interpolated, levels=50, cmap="viridis", extend="both"
+    )
     ax1.set_xlabel("X 坐标 (mm)", fontsize=12)
     ax1.set_ylabel("Y 坐标 (mm)", fontsize=12)
     ax1.set_title("传递函数 - 幅值比插值分布", fontsize=14, fontweight="bold")
@@ -562,7 +586,9 @@ def _plot_interpolated(
     cbar1.ax.tick_params(labelsize=10)
 
     # 相位差插值图
-    im2 = ax2.contourf(Xi, Yi, phase_interpolated, levels=50, cmap="twilight", extend="both")
+    im2 = ax2.contourf(
+        Xi, Yi, phase_interpolated, levels=50, cmap="twilight", extend="both"
+    )
     ax2.set_xlabel("X 坐标 (mm)", fontsize=12)
     ax2.set_ylabel("Y 坐标 (mm)", fontsize=12)
     ax2.set_title("传递函数 - 相位差插值分布", fontsize=14, fontweight="bold")
@@ -607,21 +633,29 @@ def _plot_instantaneous_on_ax(
     points = np.column_stack((x_coords, y_coords))
     try:
         field_interp = griddata(
-            points, instantaneous_field, (Xi, Yi),
-            method="cubic", fill_value=np.nan,
+            points,
+            instantaneous_field,
+            (Xi, Yi),
+            method="cubic",
+            fill_value=np.nan,
         )
     except Exception:
         field_interp = griddata(
-            points, instantaneous_field, (Xi, Yi),
-            method="linear", fill_value=np.nan,
+            points,
+            instantaneous_field,
+            (Xi, Yi),
+            method="linear",
+            fill_value=np.nan,
         )
 
     # 强制对称颜色范围，确保白色始终代表零声压
     if vmin is None or vmax is None:
-        auto_vmax = float(max(
-            np.max(np.abs(instantaneous_field)),
-            np.nanmax(np.abs(field_interp)),
-        ))
+        auto_vmax = float(
+            max(
+                np.max(np.abs(instantaneous_field)),
+                np.nanmax(np.abs(field_interp)),
+            )
+        )
         if vmin is None:
             vmin = -auto_vmax
         if vmax is None:
@@ -631,8 +665,13 @@ def _plot_instantaneous_on_ax(
     vmin, vmax = -abs_max, abs_max
 
     im = ax.contourf(
-        Xi, Yi, field_interp,
-        levels=50, cmap="RdBu_r", vmin=vmin, vmax=vmax,
+        Xi,
+        Yi,
+        field_interp,
+        levels=50,
+        cmap="RdBu_r",
+        vmin=vmin,
+        vmax=vmax,
     )
     ax.set_xlabel("X 坐标 (mm)", fontsize=10)
     ax.set_ylabel("Y 坐标 (mm)", fontsize=10)
@@ -653,10 +692,12 @@ def _plot_instantaneous_on_ax(
 
 
 def _render_subplot(
-    ax: Axes, fig: Figure,
+    ax: Axes,
+    fig: Figure,
     data_list: list[PointTFData] | None,
     state: str,
-    vmin: float, vmax: float,
+    vmin: float,
+    vmax: float,
     picked_center: Point2D,
     picked_area_radius: float,
     area_shape: str,
@@ -676,9 +717,15 @@ def _render_subplot(
     _y = np.array([p["position"].y for p in data_list])
     _ca = np.array([p["complex_amplitude"] for p in data_list])
     _plot_instantaneous_on_ax(
-        ax, fig, _x, _y, _ca,
-        vmin=vmin, vmax=vmax,
-        show_colorbar=False, title=title,
+        ax,
+        fig,
+        _x,
+        _y,
+        _ca,
+        vmin=vmin,
+        vmax=vmax,
+        show_colorbar=False,
+        title=title,
     )
 
     if state == "partial":
@@ -691,15 +738,21 @@ def _render_subplot(
     r = picked_area_radius
     if area_shape == "circle":
         patch = Circle(
-            (cx, cy), r, fill=False,
-            edgecolor="orange", linewidth=2, linestyle="--",
+            (cx, cy),
+            r,
+            fill=False,
+            edgecolor="orange",
+            linewidth=2,
+            linestyle="--",
         )
         ax.add_patch(patch)
     else:
         ax.plot(
             [cx - r, cx + r, cx + r, cx - r, cx - r],
             [cy - r, cy - r, cy + r, cy + r, cy - r],
-            color="orange", linewidth=2, linestyle="--",
+            color="orange",
+            linewidth=2,
+            linestyle="--",
         )
 
 
@@ -802,6 +855,7 @@ def prepare_comprehensive_experiment_data(
     f_logger.info("预处理完成")
     return save_path
 
+
 def plot_comprehensive_experiment(
     # --- 预处理数据路径 ---
     data_pkl_path: str | Path,
@@ -864,24 +918,47 @@ def plot_comprehensive_experiment(
             lines.append(f"[ {'  '.join(cells)} ]")
         matrix_text = "S = " + lines[0] + "\n    " + "\n    ".join(lines[1:])
         y_pos = 0.65 if s_complex is not None else 0.5
-        ax.text(0.5, y_pos, matrix_text, fontsize=16, ha="center", va="center",
-                fontfamily="monospace", linespacing=1.8)
+        ax.text(
+            0.5,
+            y_pos,
+            matrix_text,
+            fontsize=16,
+            ha="center",
+            va="center",
+            fontfamily="monospace",
+            linespacing=1.8,
+        )
         # 复数矩阵（fourier 模式）
         if s_complex is not None:
-            c_strs = [[f"{v.real:+.3f}{v.imag:+.3f}i" for v in row] for row in s_complex]
-            c_col_w = [max(len(c_strs[r][c]) for r in range(len(c_strs))) for c in range(len(c_strs[0]))]
+            c_strs = [
+                [f"{v.real:+.3f}{v.imag:+.3f}i" for v in row] for row in s_complex
+            ]
+            c_col_w = [
+                max(len(c_strs[r][c]) for r in range(len(c_strs)))
+                for c in range(len(c_strs[0]))
+            ]
             c_lines = []
             for row in c_strs:
                 cells = [v.rjust(c_col_w[c]) for c, v in enumerate(row)]
                 c_lines.append(f"[ {'  '.join(cells)} ]")
             cmat_text = "\n".join(c_lines)
-            ax.text(0.5, 0.22, cmat_text, fontsize=11, ha="center", va="center",
-                    fontfamily="monospace", linespacing=1.8)
+            ax.text(
+                0.5,
+                0.22,
+                cmat_text,
+                fontsize=11,
+                ha="center",
+                va="center",
+                fontfamily="monospace",
+                linespacing=1.8,
+            )
 
     # ==================================================================
     # 1. 加载预处理数据
     # ==================================================================
-    preprocessed = load_compressed_data(data_pkl_path, data_type_name="综合实验预处理数据")
+    preprocessed = load_compressed_data(
+        data_pkl_path, data_type_name="综合实验预处理数据"
+    )
     ref_freq: float = preprocessed["ref_freq"]
     tf: dict[str, list[PointTFData] | None] = preprocessed["tf"]
     f_logger.info(f"已加载预处理数据, 实验频率: {ref_freq} Hz")
@@ -943,9 +1020,12 @@ def plot_comprehensive_experiment(
         if data is None:
             return 0.0, None
         picked = pick_area(data, picked_center, picked_area_radius, area_shape)
-        amp = calculate_amplitude_integral(picked, mode=integral_mode,
-                                           k_modulus=k_modulus,
-                                           k_angle_deg=k_angle if k_angle is not None else k_angle_deg)
+        amp = calculate_amplitude_integral(
+            picked,
+            mode=integral_mode,
+            k_modulus=k_modulus,
+            k_angle_deg=k_angle if k_angle is not None else k_angle_deg,
+        )
         if integral_mode == "fourier":
             return abs(amp), amp  # type: ignore[return-value]
         return float(amp), None
@@ -954,16 +1034,16 @@ def plot_comprehensive_experiment(
 
     # 中央四幅子图统一使用 k_angle_deg；背景场使用 k_angle_deg + 180
     p_results = [
-        _pick_and_integrate(passive_info[0][0], k_angle=k_angle_deg),   # l_r0 (left)
-        _pick_and_integrate(passive_info[1][0], k_angle=k_angle_deg),   # r_rp1 (right)
-        _pick_and_integrate(passive_info[2][0], k_angle=k_angle_deg),   # l_rm1 (left)
-        _pick_and_integrate(passive_info[3][0], k_angle=k_angle_deg),   # r_r0 (right)
+        _pick_and_integrate(passive_info[0][0], k_angle=k_angle_deg),  # l_r0 (left)
+        _pick_and_integrate(passive_info[1][0], k_angle=k_angle_deg),  # r_rp1 (right)
+        _pick_and_integrate(passive_info[2][0], k_angle=k_angle_deg),  # l_rm1 (left)
+        _pick_and_integrate(passive_info[3][0], k_angle=k_angle_deg),  # r_r0 (right)
     ]
     a_results = [
-        _pick_and_integrate(active_info[0][0], k_angle=k_angle_deg),    # l_r0 (left)
-        _pick_and_integrate(active_info[1][0], k_angle=k_angle_deg),    # r_rp1 (right)
-        _pick_and_integrate(active_info[2][0], k_angle=k_angle_deg),    # l_rm1 (left)
-        _pick_and_integrate(active_info[3][0], k_angle=k_angle_deg),    # r_r0 (right)
+        _pick_and_integrate(active_info[0][0], k_angle=k_angle_deg),  # l_r0 (left)
+        _pick_and_integrate(active_info[1][0], k_angle=k_angle_deg),  # r_rp1 (right)
+        _pick_and_integrate(active_info[2][0], k_angle=k_angle_deg),  # l_rm1 (left)
+        _pick_and_integrate(active_info[3][0], k_angle=k_angle_deg),  # r_r0 (right)
     ]
     bg_result = _pick_and_integrate(bg_data, k_angle=k_reflect)
 
@@ -984,7 +1064,9 @@ def plot_comprehensive_experiment(
         _max = 0.0
         for data, state, _ in info_list:
             if data is not None and state != "unavailable":
-                inst_vals = np.array([point["complex_amplitude"].real for point in data])
+                inst_vals = np.array(
+                    [point["complex_amplitude"].real for point in data]
+                )
                 if inst_vals.size:
                     _max = max(_max, float(np.max(np.abs(inst_vals))))
         if _max == 0.0:
@@ -1027,16 +1109,26 @@ def plot_comprehensive_experiment(
     ) -> Figure:
         fig = plt.figure(figsize=(24, 12))
         gs = GridSpec(
-            2, 5, figure=fig,
+            2,
+            5,
+            figure=fig,
             width_ratios=[1.2, 1, 1, 0.12, 0.55],
-            hspace=0.32, wspace=0.28,
+            hspace=0.32,
+            wspace=0.28,
         )
 
         # 左侧背景子图（跨两行）
         ax_bg = fig.add_subplot(gs[:, 0])
         _render_subplot(
-            ax_bg, fig, bg_data, bg_st, vmin, vmax,
-            picked_center, picked_area_radius, area_shape,
+            ax_bg,
+            fig,
+            bg_data,
+            bg_st,
+            vmin,
+            vmax,
+            picked_center,
+            picked_area_radius,
+            area_shape,
             title="Background (left)",
         )
 
@@ -1046,8 +1138,15 @@ def plot_comprehensive_experiment(
         for (data, state, title), (r, c) in zip(info_list, positions):
             ax = fig.add_subplot(gs[r, c])
             _render_subplot(
-                ax, fig, data, state, vmin, vmax,
-                picked_center, picked_area_radius, area_shape,
+                ax,
+                fig,
+                data,
+                state,
+                vmin,
+                vmax,
+                picked_center,
+                picked_area_radius,
+                area_shape,
                 title=title,
             )
             center_axes.append(ax)
@@ -1097,10 +1196,13 @@ def plot_comprehensive_experiment(
                     "",
                     xy=(start_x + dx_mm, start_y + dy_mm),
                     xytext=(start_x, start_y),
-                    xycoords="data", textcoords="data",
+                    xycoords="data",
+                    textcoords="data",
                     arrowprops=dict(
-                        arrowstyle="-|>", color="black",
-                        lw=2.5, mutation_scale=18,
+                        arrowstyle="-|>",
+                        color="black",
+                        lw=2.5,
+                        mutation_scale=18,
                     ),
                     annotation_clip=False,
                 )
@@ -1113,10 +1215,14 @@ def plot_comprehensive_experiment(
                 if cplx_val is not None:
                     text_str += f"  ∫ = {cplx_val:.4f}"
                 fig.text(
-                    bbox.x0 + bbox.width / 2, bbox.y0 - 0.055,
+                    bbox.x0 + bbox.width / 2,
+                    bbox.y0 - 0.055,
                     text_str,
-                    fontsize=8, ha="center", va="top",
-                    fontfamily="monospace", color="darkred",
+                    fontsize=8,
+                    ha="center",
+                    va="top",
+                    fontfamily="monospace",
+                    color="darkred",
                 )
 
             # 背景子图下方标注积分幅值结果（置于 x 轴标题下方）
@@ -1126,10 +1232,14 @@ def plot_comprehensive_experiment(
             if bg_cplx_result is not None:
                 bg_text_str += f"  ∫ = {bg_cplx_result:.4f}"
             fig.text(
-                bg_bbox.x0 + bg_bbox.width / 2, bg_bbox.y0 - 0.055,
+                bg_bbox.x0 + bg_bbox.width / 2,
+                bg_bbox.y0 - 0.055,
                 bg_text_str,
-                fontsize=8, ha="center", va="top",
-                fontfamily="monospace", color="darkred",
+                fontsize=8,
+                ha="center",
+                va="top",
+                fontfamily="monospace",
+                color="darkred",
             )
 
         # 共享 ColorBar（第4列，位于中央子图右侧、S矩阵左侧，归一化至背景振幅）
@@ -1172,7 +1282,12 @@ def plot_comprehensive_experiment(
         - S[1][0] = l_rm1 / l_bg  （左入射逆反射）
         - S[1][1] = r_r0 / l_bg   （右入射镜面反射）
         """
-        if integral_mode == "fourier" and cplx is not None and bg_cplx is not None and bg_cplx != 0:
+        if (
+            integral_mode == "fourier"
+            and cplx is not None
+            and bg_cplx is not None
+            and bg_cplx != 0
+        ):
             # 复数除法得到复S矩阵；缺失数据(None)回退为 0+0j
             _safe = lambda v: v if v is not None else 0.0 + 0j
             s_c = [
@@ -1193,10 +1308,18 @@ def plot_comprehensive_experiment(
         ]
         return s_r, None
 
-    s_real_p, s_cplx_p = _build_s_matrix(p_amps, p_complex, bg_amp_abs,
-                                         bg_complex_val if integral_mode == "fourier" else None)
-    s_real_a, s_cplx_a = _build_s_matrix(a_amps, a_complex, bg_amp_abs,
-                                         bg_complex_val if integral_mode == "fourier" else None)
+    s_real_p, s_cplx_p = _build_s_matrix(
+        p_amps,
+        p_complex,
+        bg_amp_abs,
+        bg_complex_val if integral_mode == "fourier" else None,
+    )
+    s_real_a, s_cplx_a = _build_s_matrix(
+        a_amps,
+        a_complex,
+        bg_amp_abs,
+        bg_complex_val if integral_mode == "fourier" else None,
+    )
 
     # ==================================================================
     # 9. 绘制 Passive 图
@@ -1205,9 +1328,13 @@ def plot_comprehensive_experiment(
     _title_suffix = f"  k_angle={k_angle_deg}°" if integral_mode == "fourier" else ""
 
     fig_passive = _build_figure(
-        passive_info, bg_state, s_real_p, s_cplx_p,
+        passive_info,
+        bg_state,
+        s_real_p,
+        s_cplx_p,
         f"Passive  |  mode={integral_mode}  freq={ref_freq:.0f} Hz{_title_suffix}",
-        vmin=p_vmin, vmax=p_vmax,
+        vmin=p_vmin,
+        vmax=p_vmax,
         integral_results=p_results,
         bg_integral=bg_result,
     )
@@ -1216,9 +1343,13 @@ def plot_comprehensive_experiment(
     # 10. 绘制 Active 图
     # ==================================================================
     fig_active = _build_figure(
-        active_info, bg_state, s_real_a, s_cplx_a,
+        active_info,
+        bg_state,
+        s_real_a,
+        s_cplx_a,
         f"Active  |  mode={integral_mode}  freq={ref_freq:.0f} Hz{_title_suffix}",
-        vmin=a_vmin, vmax=a_vmax,
+        vmin=a_vmin,
+        vmax=a_vmax,
         integral_results=a_results,
         bg_integral=bg_result,
     )
@@ -1229,10 +1360,12 @@ def plot_comprehensive_experiment(
     if save_path is not None:
         sp = Path(save_path)
         sp.parent.mkdir(parents=True, exist_ok=True)
-        fig_passive.savefig(sp.with_stem(sp.stem + "_passive"),
-                            dpi=300, bbox_inches="tight")
-        fig_active.savefig(sp.with_stem(sp.stem + "_active"),
-                           dpi=300, bbox_inches="tight")
+        fig_passive.savefig(
+            sp.with_stem(sp.stem + "_passive"), dpi=300, bbox_inches="tight"
+        )
+        fig_active.savefig(
+            sp.with_stem(sp.stem + "_active"), dpi=300, bbox_inches="tight"
+        )
         f_logger.info(f"图片已保存至: {save_path}")
 
     f_logger.info("综合实验绘图完成")
@@ -1622,9 +1755,7 @@ def plot_sweep_data_as_single_waveform(
     samples_num = first_point_waveform.samples_num
     num_channels = first_point_waveform.channels_num
 
-    f_logger.debug(
-        f"波形信息: 通道数={num_channels}，采样点数={samples_num}"
-    )
+    f_logger.debug(f"波形信息: 通道数={num_channels}，采样点数={samples_num}")
 
     # 第三步：按位相加所有测量点的所有AI波形
     total_waveforms = 0  # 计算总波形数
@@ -1635,7 +1766,10 @@ def plot_sweep_data_as_single_waveform(
     for point_data in averaged_sweep_data["ai_data_list"]:
         for waveform in point_data["ai_data"]:
             # 验证波形维度
-            if waveform.channels_num != num_channels or waveform.samples_num != samples_num:
+            if (
+                waveform.channels_num != num_channels
+                or waveform.samples_num != samples_num
+            ):
                 f_logger.warning(
                     f"波形维度不一致：期望 ({num_channels}, {samples_num})，"
                     f"实际 ({waveform.channels_num}, {waveform.samples_num})，跳过此波形"
@@ -1659,9 +1793,7 @@ def plot_sweep_data_as_single_waveform(
         channel_names=first_point_waveform.channel_names,
     )
 
-    f_logger.info(
-        f"融合完成: {num_channels}个通道，融合了{total_waveforms}个波形"
-    )
+    f_logger.info(f"融合完成: {num_channels}个通道，融合了{total_waveforms}个波形")
 
     # 第四步：使用plot_waveform函数绘制融合波形
     f_logger.info("绘制融合波形")

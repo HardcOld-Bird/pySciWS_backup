@@ -137,7 +137,10 @@ class MotorController:
         """
         try:
             # 如果DLL已经初始化过，直接复用共享句柄
-            if MotorController._dll_initialized and MotorController._dll_api is not None:
+            if (
+                MotorController._dll_initialized
+                and MotorController._dll_api is not None
+            ):
                 self._api = MotorController._dll_api
                 self._is_initialized = True
                 logger.debug("DLL已初始化，复用共享句柄")
@@ -734,7 +737,7 @@ class MotorController:
 
     @staticmethod
     def _calculate_smart_motion_parameters(
-        distance_abs: float
+        distance_abs: float,
     ) -> tuple[int, int, int, float]:
         """根据运动距离智能计算运动参数（简化版）
 
@@ -782,7 +785,7 @@ class MotorController:
 
     @staticmethod
     def _calculate_smart_motion_parameters_backup(  # 暂停维护
-        distance_abs: float
+        distance_abs: float,
     ) -> tuple[int, int, int, float]:
         """根据运动距离智能计算运动参数
 

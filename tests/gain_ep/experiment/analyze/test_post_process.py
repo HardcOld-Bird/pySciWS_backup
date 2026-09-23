@@ -8,7 +8,9 @@ import numpy as np
 import pytest
 
 from pysci.research.gain_ep.experiment.analyze.my_dtypes import Waveform, init_sine_args
-from pysci.research.gain_ep.experiment.analyze.post_process import average_single_waveform
+from pysci.research.gain_ep.experiment.analyze.post_process import (
+    average_single_waveform,
+)
 
 
 class TestAverageSingleWaveform:

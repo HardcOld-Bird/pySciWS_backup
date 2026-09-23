@@ -21,7 +21,9 @@ print("测试 GainEPSimulator 完整工作流程")
 print("=" * 70)
 
 # COMSOL模型文件
-MPH_FILE = research_asset_dir("gain_ep") / "experiment" / "mphs" / "gainEP_10in16out.mph"
+MPH_FILE = (
+    research_asset_dir("gain_ep") / "experiment" / "mphs" / "gainEP_10in16out.mph"
+)
 
 if not MPH_FILE.exists():
     print(f"\n✗ 错误: COMSOL模型文件不存在: {MPH_FILE}")

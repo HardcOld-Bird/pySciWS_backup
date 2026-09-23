@@ -30,12 +30,12 @@ half_scale = 1
 sim_result = simer.run_scan(
     # f = 3430.0,
     # cr = 1.006,
-    cr_min = cr_center - half_scale,
-    cr_max = cr_center + half_scale,
+    cr_min=cr_center - half_scale,
+    cr_max=cr_center + half_scale,
     # ci = -0.073,
-    ci_min = ci_center - half_scale,
-    ci_max = ci_center + half_scale,
-    res = 50,
+    ci_min=ci_center - half_scale,
+    ci_max=ci_center + half_scale,
+    res=50,
 )
 
 # %% Evolver协同测试

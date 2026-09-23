@@ -15,14 +15,17 @@
 4. 测试不同的settle_time和chunks_per_start参数
 """
 
-import pytest
-from pathlib import Path
-
-from pysci.research.gain_ep.experiment.analyze import init_sampling_info, init_sine_args
-from pysci.research.gain_ep.experiment.measure import SingleChasCSIO
-from pysci.research.gain_ep.experiment.analyze import Waveform
-import numpy as np
 import time
+
+import numpy as np
+import pytest
+
+from pysci.research.gain_ep.experiment.analyze import (
+    Waveform,
+    init_sampling_info,
+    init_sine_args,
+)
+from pysci.research.gain_ep.experiment.measure import SingleChasCSIO
 
 
 class TestMultiChassisAIDataCollection:
@@ -53,7 +56,9 @@ class TestMultiChassisAIDataCollection:
         )
 
     @pytest.mark.hardware
-    def test_single_ai_channel_single_chassis(self, sampling_info, sine_args, ao_channels):
+    def test_single_ai_channel_single_chassis(
+        self, sampling_info, sine_args, ao_channels
+    ):
         """
         测试1: 单个AI通道,单个机箱 (基线测试)
 
@@ -67,6 +72,7 @@ class TestMultiChassisAIDataCollection:
 
         # 创建输出波形
         from pysci.research.gain_ep.experiment.analyze import get_sine_cycles
+
         single_waveform = get_sine_cycles(sampling_info, sine_args)
         multi_channel_data = np.tile(single_waveform, (len(ao_channels), 1))
         output_waveform = Waveform(
@@ -82,10 +88,14 @@ class TestMultiChassisAIDataCollection:
         target_chunks = 3
         collection_complete = False
 
-        def export_function(ai_waveform, ao_static_waveform, ao_feedback_waveform, chunks_num):
+        def export_function(
+            ai_waveform, ao_static_waveform, ao_feedback_waveform, chunks_num
+        ):
             nonlocal collection_complete
             collected_data.append(ai_waveform)
-            print(f"  导出回调被调用: 已收集 {len(collected_data)}/{target_chunks} 个chunk")
+            print(
+                f"  导出回调被调用: 已收集 {len(collected_data)}/{target_chunks} 个chunk"
+            )
             if len(collected_data) >= target_chunks:
                 collection_complete = True
 
@@ -105,12 +115,12 @@ class TestMultiChassisAIDataCollection:
         try:
             # 启动任务
             sync_io.start()
-            print(f"SingleChasCSIO任务已启动")
+            print("SingleChasCSIO任务已启动")
             time.sleep(2.0)  # 等待稳定
 
             # 启用数据导出
             sync_io.enable_export = True
-            print(f"数据导出已启用,开始采集...")
+            print("数据导出已启用,开始采集...")
 
             # 等待采集完成
             max_wait_time = 2.0
@@ -123,7 +133,7 @@ class TestMultiChassisAIDataCollection:
 
             # 禁用数据导出
             sync_io.enable_export = False
-            print(f"数据导出已禁用")
+            print("数据导出已禁用")
 
             # 验证结果
             print(f"\n结果: 采集到 {len(collected_data)} 个chunk")
@@ -154,7 +164,9 @@ class TestMultiChassisAIDataCollection:
         )
 
     @pytest.mark.hardware
-    def test_three_ai_channels_three_chassis(self, sampling_info, sine_args, ao_channels):
+    def test_three_ai_channels_three_chassis(
+        self, sampling_info, sine_args, ao_channels
+    ):
         """
         测试3: 三个AI通道,三个机箱 (每个机箱一个)
 
@@ -171,7 +183,9 @@ class TestMultiChassisAIDataCollection:
         )
 
     @pytest.mark.hardware
-    def test_nine_ai_channels_three_chassis(self, sampling_info, sine_args, ao_channels):
+    def test_nine_ai_channels_three_chassis(
+        self, sampling_info, sine_args, ao_channels
+    ):
         """
         测试4: 九个AI通道,三个机箱 (完整的CaliberFishNet配置)
 
@@ -216,6 +230,7 @@ class TestMultiChassisAIDataCollection:
 
         # 创建输出波形
         from pysci.research.gain_ep.experiment.analyze import get_sine_cycles
+
         single_waveform = get_sine_cycles(sampling_info, sine_args)
         multi_channel_data = np.tile(single_waveform, (len(ao_channels), 1))
         output_waveform = Waveform(
@@ -232,7 +247,9 @@ class TestMultiChassisAIDataCollection:
         collection_complete = False
         export_call_count = 0
 
-        def export_function(ai_waveform, ao_static_waveform, ao_feedback_waveform, chunks_num):
+        def export_function(
+            ai_waveform, ao_static_waveform, ao_feedback_waveform, chunks_num
+        ):
             nonlocal collection_complete, export_call_count
             export_call_count += 1
             collected_data.append(ai_waveform)
@@ -241,7 +258,7 @@ class TestMultiChassisAIDataCollection:
             print(f"  [回调 #{export_call_count}] 导出函数被调用:")
             print(f"    AI波形shape={ai_waveform.shape}")
             print(f"    AI波形ndim={ai_waveform.ndim}")
-            if hasattr(ai_waveform, '_channel_names'):
+            if hasattr(ai_waveform, "_channel_names"):
                 print(f"    通道名称数量={len(ai_waveform._channel_names)}")
                 print(f"    通道名称={ai_waveform._channel_names}")
             print(f"    已收集 {len(collected_data)}/{target_chunks} 个chunk")
@@ -253,7 +270,7 @@ class TestMultiChassisAIDataCollection:
             return np.zeros_like(ai_waveform)
 
         # 创建SingleChasCSIO
-        print(f"\n创建SingleChasCSIO...")
+        print("\n创建SingleChasCSIO...")
         sync_io = SingleChasCSIO(
             ai_channels=ai_channels,
             ao_channels_static=ao_channels,
@@ -265,9 +282,9 @@ class TestMultiChassisAIDataCollection:
 
         try:
             # 启动任务
-            print(f"启动SingleChasCSIO任务...")
+            print("启动SingleChasCSIO任务...")
             sync_io.start()
-            print(f"✓ SingleChasCSIO任务已启动")
+            print("✓ SingleChasCSIO任务已启动")
 
             # 等待稳定
             settle_time = 2.0
@@ -293,26 +310,28 @@ class TestMultiChassisAIDataCollection:
 
                 # 每0.5秒打印一次进度
                 if int(elapsed_time / 0.5) > int((elapsed_time - poll_interval) / 0.5):
-                    print(f"  等待中... 已过 {elapsed_time:.1f}s, "
-                          f"已收集 {len(collected_data)} 个chunk")
+                    print(
+                        f"  等待中... 已过 {elapsed_time:.1f}s, "
+                        f"已收集 {len(collected_data)} 个chunk"
+                    )
 
             # 禁用数据导出
             sync_io.enable_export = False
-            print(f"\n✓ 数据导出已禁用")
+            print("\n✓ 数据导出已禁用")
 
             # 打印结果
-            print(f"\n" + "=" * 60)
-            print(f"测试结果:")
+            print("\n" + "=" * 60)
+            print("测试结果:")
             print(f"  导出函数调用次数: {export_call_count}")
             print(f"  采集到的chunk数: {len(collected_data)}")
             print(f"  期望的chunk数: {expected_chunks}")
-            print(f"=" * 60)
+            print("=" * 60)
 
             # 验证结果
             if len(collected_data) == expected_chunks:
                 print("✓ 测试通过!")
             else:
-                print(f"✗ 测试失败!")
+                print("✗ 测试失败!")
                 print(f"  预期采集 {expected_chunks} 个chunk")
                 print(f"  实际采集 {len(collected_data)} 个chunk")
 

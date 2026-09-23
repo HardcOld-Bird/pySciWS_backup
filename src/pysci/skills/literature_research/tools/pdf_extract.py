@@ -35,11 +35,12 @@ import re
 import sys
 import time
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
-from .config import settings
 from .cache_manager import bump_mtime
+from .config import settings
+
 
 # ---------------------------------------------------------------------------
 # 异常
@@ -145,10 +146,10 @@ def _write_cache(path: Path, text: str) -> None:
 # ---------------------------------------------------------------------------
 # MinerU 云端 Open API 配置（本地 PDF 走“批量上传”流程）
 MINERU_API_BASE = "https://mineru.net"
-MINERU_MODEL_VERSION = "vlm"      # vlm：公式/表格质量最好（推荐）
-MINERU_IS_OCR = True              # 强制 OCR：确保图片/扫描公式也被识别（数字版可改 False）
-MINERU_POLL_INTERVAL = 8          # 轮询间隔（秒）
-MINERU_POLL_TIMEOUT = 900         # 轮询总超时（秒）
+MINERU_MODEL_VERSION = "vlm"  # vlm：公式/表格质量最好（推荐）
+MINERU_IS_OCR = True  # 强制 OCR：确保图片/扫描公式也被识别（数字版可改 False）
+MINERU_POLL_INTERVAL = 8  # 轮询间隔（秒）
+MINERU_POLL_TIMEOUT = 900  # 轮询总超时（秒）
 
 
 def _extract_with_mineru_cloud(pdf_path: Path) -> str:
@@ -179,7 +180,7 @@ def _extract_with_mineru_cloud(pdf_path: Path) -> str:
         "enable_formula": True,
         "enable_table": True,
         "language": "en",
-        "extra_formats": ["latex"],   # 额外产出 LaTeX，便于精读公式
+        "extra_formats": ["latex"],  # 额外产出 LaTeX，便于精读公式
     }
     r = requests.post(
         f"{base}/api/v4/file-urls/batch",
@@ -201,7 +202,9 @@ def _extract_with_mineru_cloud(pdf_path: Path) -> str:
     with pdf_path.open("rb") as f:
         up = requests.put(file_urls[0], data=f, timeout=600)
     if up.status_code not in (200, 201):
-        raise ExtractionFailed(f"MinerU 上传失败: HTTP {up.status_code} {up.text[:200]}")
+        raise ExtractionFailed(
+            f"MinerU 上传失败: HTTP {up.status_code} {up.text[:200]}"
+        )
 
     # 3. 轮询解析结果
     poll_url = f"{base}/api/v4/extract-results/batch/{batch_id}"
@@ -232,16 +235,17 @@ def _extract_with_mineru_cloud(pdf_path: Path) -> str:
                 f"{prog.get('extracted_pages')}/{prog.get('total_pages')} 页"
             )
     if not full_zip_url:
-        raise ExtractionFailed(f"MinerU 轮询超时（>{MINERU_POLL_TIMEOUT}s），未取得结果")
+        raise ExtractionFailed(
+            f"MinerU 轮询超时（>{MINERU_POLL_TIMEOUT}s），未取得结果"
+        )
 
     # 4. 下载 zip，解压取 full.md
     zr = requests.get(full_zip_url, timeout=300)
     zr.raise_for_status()
     with zipfile.ZipFile(io.BytesIO(zr.content)) as zf:
         names = zf.namelist()
-        target = (
-            next((n for n in names if n.endswith("full.md")), None)
-            or next((n for n in names if n.endswith(".md")), None)
+        target = next((n for n in names if n.endswith("full.md")), None) or next(
+            (n for n in names if n.endswith(".md")), None
         )
         if target is None:
             raise ExtractionFailed(f"MinerU 结果 zip 内未找到 .md：{names[:10]}")
@@ -252,6 +256,7 @@ def _extract_with_pymupdf4llm(pdf_path: Path) -> str:
     """pymupdf4llm 后端：速度最快，公式丢失但文本准确。"""
     try:
         import pymupdf4llm  # type: ignore
+
         return pymupdf4llm.to_markdown(str(pdf_path))
     except ImportError:
         pass
@@ -301,12 +306,12 @@ def _tex_to_markdown(tex: str) -> str:
     # 去掉 preamble
     m = re.search(r"\\begin\{document\}", tex)
     if m:
-        body = tex[m.end():]
+        body = tex[m.end() :]
     else:
         body = tex
     m = re.search(r"\\end\{document\}", body)
     if m:
-        body = body[:m.start()]
+        body = body[: m.start()]
 
     # 章节标题
     body = re.sub(r"\\section\*?\{(.+?)\}", r"\n## \1\n", body)
@@ -315,14 +320,31 @@ def _tex_to_markdown(tex: str) -> str:
     body = re.sub(r"\\paragraph\*?\{(.+?)\}", r"\n**\1** ", body)
 
     # 摘要
-    body = re.sub(r"\\begin\{abstract\}(.+?)\\end\{abstract\}", r"\n> **Abstract:**\n> \1\n", body, flags=re.S)
+    body = re.sub(
+        r"\\begin\{abstract\}(.+?)\\end\{abstract\}",
+        r"\n> **Abstract:**\n> \1\n",
+        body,
+        flags=re.S,
+    )
 
     # 图表 caption
-    body = re.sub(r"\\caption\{(.+?)\}", r"\n_Figure/Table caption: \1_\n", body, flags=re.S)
+    body = re.sub(
+        r"\\caption\{(.+?)\}", r"\n_Figure/Table caption: \1_\n", body, flags=re.S
+    )
 
     # itemize / enumerate → markdown list
-    body = re.sub(r"\\begin\{itemize\}(.+?)\\end\{itemize\}", lambda m: _tex_items_to_md(m.group(1), ordered=False), body, flags=re.S)
-    body = re.sub(r"\\begin\{enumerate\}(.+?)\\end\{enumerate\}", lambda m: _tex_items_to_md(m.group(1), ordered=True), body, flags=re.S)
+    body = re.sub(
+        r"\\begin\{itemize\}(.+?)\\end\{itemize\}",
+        lambda m: _tex_items_to_md(m.group(1), ordered=False),
+        body,
+        flags=re.S,
+    )
+    body = re.sub(
+        r"\\begin\{enumerate\}(.+?)\\end\{enumerate\}",
+        lambda m: _tex_items_to_md(m.group(1), ordered=True),
+        body,
+        flags=re.S,
+    )
 
     # \item → -
     body = re.sub(r"\\item\s*", "- ", body)
@@ -335,18 +357,38 @@ def _tex_to_markdown(tex: str) -> str:
 
     # 文本样式
     body = re.sub(r"\\textbf\{(.+?)\}", r"**\1**", body)
-    body = re.sub(r"\\textit\{(.+?)\}|\\emph\{(.+?)\}", lambda m: f"*{m.group(1) or m.group(2)}*", body)
+    body = re.sub(
+        r"\\textit\{(.+?)\}|\\emph\{(.+?)\}",
+        lambda m: f"*{m.group(1) or m.group(2)}*",
+        body,
+    )
     body = re.sub(r"\\texttt\{(.+?)\}", r"`\1`", body)
 
     # 保留 display math（$$...$$ 或 \[...\]）
-    body = re.sub(r"\\begin\{equation\*?\}(.+?)\\end\{equation\*?\}", r"\n$$\1\n$$\n", body, flags=re.S)
-    body = re.sub(r"\\begin\{align\*?\}(.+?)\\end\{align\*?\}", r"\n$$\n\\begin{aligned}\1\\end{aligned}\n$$\n", body, flags=re.S)
-    body = re.sub(r"\\begin\{gather\*?\}(.+?)\\end\{gather\*?\}", r"\n$$\1$$\n", body, flags=re.S)
+    body = re.sub(
+        r"\\begin\{equation\*?\}(.+?)\\end\{equation\*?\}",
+        r"\n$$\1\n$$\n",
+        body,
+        flags=re.S,
+    )
+    body = re.sub(
+        r"\\begin\{align\*?\}(.+?)\\end\{align\*?\}",
+        r"\n$$\n\\begin{aligned}\1\\end{aligned}\n$$\n",
+        body,
+        flags=re.S,
+    )
+    body = re.sub(
+        r"\\begin\{gather\*?\}(.+?)\\end\{gather\*?\}", r"\n$$\1$$\n", body, flags=re.S
+    )
     body = re.sub(r"\\\[(.+?)\\\]", r"\n$$\1$$\n", body, flags=re.S)
     body = re.sub(r"\\\((.+?)\\\)", r"$\1$", body, flags=re.S)
 
     # 移除剩余 LaTeX 命令（保守：只移除已知的排版命令）
-    body = re.sub(r"\\(?:noindent|par|clearpage|newpage|medskip|smallskip|bigskip|vspace\*?\{[^}]*\}|hspace\*?\{[^}]*\})", "", body)
+    body = re.sub(
+        r"\\(?:noindent|par|clearpage|newpage|medskip|smallskip|bigskip|vspace\*?\{[^}]*\}|hspace\*?\{[^}]*\})",
+        "",
+        body,
+    )
 
     # 表格保留原样（markdown 表格与 LaTeX 表格差异太大，不做转换）
 
@@ -359,7 +401,7 @@ def _tex_items_to_md(content: str, ordered: bool) -> str:
     items = re.split(r"\\item\s*", content)
     items = [i.strip() for i in items if i.strip()]
     if ordered:
-        return "\n" + "\n".join(f"{i+1}. {it}" for i, it in enumerate(items)) + "\n"
+        return "\n" + "\n".join(f"{i + 1}. {it}" for i, it in enumerate(items)) + "\n"
     return "\n" + "\n".join(f"- {it}" for it in items) + "\n"
 
 
@@ -469,7 +511,9 @@ def extract_pdf(
             return md
         except Exception as e:
             elapsed = time.time() - t0
-            print(f"[pdf_extract] {b} failed after {elapsed:.1f}s: {e}", file=sys.stderr)
+            print(
+                f"[pdf_extract] {b} failed after {elapsed:.1f}s: {e}", file=sys.stderr
+            )
             last_err = e
             nxt = backends_to_try[idx + 1] if idx + 1 < len(backends_to_try) else None
             if b == "mineru-cloud" and nxt == "pymupdf4llm":
@@ -509,6 +553,7 @@ def extract_many(
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="PDF extraction CLI")
     sub = parser.add_subparsers(dest="cmd")
 
@@ -516,9 +561,15 @@ if __name__ == "__main__":
 
     p_extract = sub.add_parser("extract", help="抽取单个 PDF")
     p_extract.add_argument("pdf", type=Path)
-    p_extract.add_argument("--backend", default=None, help="mineru-cloud|pymupdf4llm|auto")
-    p_extract.add_argument("--arxiv-id", default=None, help="若有对应 arXiv ID，优先尝试 LaTeX 源码")
-    p_extract.add_argument("--output", type=Path, default=None, help="输出 .md 文件；默认打印到 stdout")
+    p_extract.add_argument(
+        "--backend", default=None, help="mineru-cloud|pymupdf4llm|auto"
+    )
+    p_extract.add_argument(
+        "--arxiv-id", default=None, help="若有对应 arXiv ID，优先尝试 LaTeX 源码"
+    )
+    p_extract.add_argument(
+        "--output", type=Path, default=None, help="输出 .md 文件；默认打印到 stdout"
+    )
     p_extract.add_argument("--no-cache", action="store_true")
 
     args = parser.parse_args()
@@ -530,7 +581,9 @@ if __name__ == "__main__":
         print(f"MINERU_TOKEN set   : {bool(settings.mineru_token)}")
         if "mineru-cloud" not in avail:
             print("\n云端 MinerU 未就绪：在 .env 配置 MINERU_TOKEN=")
-            print("  申请地址：https://mineru.net/apiManage/token （免费，约 90 天有效）")
+            print(
+                "  申请地址：https://mineru.net/apiManage/token （免费，约 90 天有效）"
+            )
         if not avail:
             print("\n本地兜底后端也未安装：uv add pymupdf4llm")
 

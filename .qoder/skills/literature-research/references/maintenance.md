@@ -48,8 +48,11 @@ Paths come from `pysci.paths`, which locates the project root by **marker** (the
 containing both `pyproject.toml` and `.python-version`) — not by fragile `parents[N]` math:
 
 ```python
-from pysci.paths import LITERATURE_ROOT, PROJECT_ROOT   # marker-based root discovery
-MODULE_DIR = LITERATURE_ROOT          # literature/  (papers, shortlists, reviews, templates, cache)
+from pysci.paths import LITERATURE_ROOT, PROJECT_ROOT  # marker-based root discovery
+
+MODULE_DIR = (
+    LITERATURE_ROOT  # literature/  (papers, shortlists, reviews, templates, cache)
+)
 CACHE_DIR_ENV_DEFAULT = "literature/cache"
 ```
 
@@ -127,7 +130,8 @@ same-host PDF links.
 2. In `browser_fetch.py`, add an adapter and register it:
    ```python
    NATURE_ADAPTER = PublisherAdapter(
-       name="nature", hosts=("www.nature.com", "nature.com"),
+       name="nature",
+       hosts=("www.nature.com", "nature.com"),
        fulltext_selectors=("article", "div.c-article-body", "main"),
        wait_selector="article",
    )

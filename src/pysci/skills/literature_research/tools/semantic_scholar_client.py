@@ -36,7 +36,7 @@ import json
 import random
 import re
 import time
-from typing import Any, Iterable
+from typing import Any
 
 from .config import http_session, settings
 
@@ -47,29 +47,65 @@ S2_BASE = "https://api.semanticscholar.org/graph/v1"
 
 # 指数退避参数（满足 S2 API 使用条款中对 backoff 的承诺）
 # 申请 key 时需勾选 "I will apply exponential backoff ..."，本模块在客户端落实该策略。
-S2_MAX_RETRIES = 5          # 429/5xx 最多重试次数
-S2_BASE_DELAY = 1.0         # 首次退避基数（秒），按 2^attempt 递增
-S2_MAX_DELAY = 60.0         # 单次退避上限（秒）
+S2_MAX_RETRIES = 5  # 429/5xx 最多重试次数
+S2_BASE_DELAY = 1.0  # 首次退避基数（秒），按 2^attempt 递增
+S2_MAX_DELAY = 60.0  # 单次退避上限（秒）
 S2_RETRY_STATUS = (429, 500, 502, 503, 504)
 
 # 默认返回字段（平衡信息量与响应大小）
-DEFAULT_FIELDS = ",".join([
-    "paperId", "externalIds", "url", "title", "abstract",
-    "venue", "publicationVenue", "year", "publicationDate",
-    "citationCount", "influentialCitationCount", "referenceCount",
-    "authors", "tldr", "openAccessPdf", "isOpenAccess", "fieldsOfStudy",
-    "s2FieldsOfStudy", "journal", "citationStyles",
-])
+DEFAULT_FIELDS = ",".join(
+    [
+        "paperId",
+        "externalIds",
+        "url",
+        "title",
+        "abstract",
+        "venue",
+        "publicationVenue",
+        "year",
+        "publicationDate",
+        "citationCount",
+        "influentialCitationCount",
+        "referenceCount",
+        "authors",
+        "tldr",
+        "openAccessPdf",
+        "isOpenAccess",
+        "fieldsOfStudy",
+        "s2FieldsOfStudy",
+        "journal",
+        "citationStyles",
+    ]
+)
 
-CITATION_FIELDS = ",".join([
-    "paperId", "title", "year", "venue", "citationCount",
-    "authors", "tldr", "contexts", "intents", "isInfluential",
-])
+CITATION_FIELDS = ",".join(
+    [
+        "paperId",
+        "title",
+        "year",
+        "venue",
+        "citationCount",
+        "authors",
+        "tldr",
+        "contexts",
+        "intents",
+        "isInfluential",
+    ]
+)
 
-RECOMMENDATION_FIELDS = ",".join([
-    "paperId", "title", "year", "venue", "citationCount",
-    "authors", "tldr", "openAccessPdf", "externalIds",
-])
+RECOMMENDATION_FIELDS = ",".join(
+    [
+        "paperId",
+        "title",
+        "year",
+        "venue",
+        "citationCount",
+        "authors",
+        "tldr",
+        "openAccessPdf",
+        "externalIds",
+    ]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +146,8 @@ def _backoff_delay(attempt: int, retry_after: str | None) -> float:
             return min(float(retry_after), S2_MAX_DELAY)
         except ValueError:
             pass
-    delay = S2_BASE_DELAY * (2 ** attempt)
-    delay += random.uniform(0, delay * 0.1)   # 拖动，避免多客户端同步重试
+    delay = S2_BASE_DELAY * (2**attempt)
+    delay += random.uniform(0, delay * 0.1)  # 拖动，避免多客户端同步重试
     return min(delay, S2_MAX_DELAY)
 
 
@@ -130,20 +166,26 @@ def _request_with_backoff(method: str, url: str, **kwargs: Any) -> Any:
         try:
             with http_session(retries=0, retry_on_status=False) as s:
                 r = s.request(method, url, **kwargs)
-        except Exception as e:   # 网络异常也退避重试
+        except Exception as e:  # 网络异常也退避重试
             delay = _backoff_delay(attempt, None)
-            print(f"[s2] {method} network error ({e}); retry {attempt + 1}/{S2_MAX_RETRIES} in {delay:.1f}s")
+            print(
+                f"[s2] {method} network error ({e}); retry {attempt + 1}/{S2_MAX_RETRIES} in {delay:.1f}s"
+            )
             if attempt < S2_MAX_RETRIES:
                 time.sleep(delay)
                 continue
-            raise S2APIError(f"S2 API {method} {url} failed after {S2_MAX_RETRIES} retries: {e}") from e
+            raise S2APIError(
+                f"S2 API {method} {url} failed after {S2_MAX_RETRIES} retries: {e}"
+            ) from e
 
         if r.status_code == 200:
             return r
         if r.status_code in S2_RETRY_STATUS and attempt < S2_MAX_RETRIES:
             last_status, last_text = r.status_code, r.text[:200]
             delay = _backoff_delay(attempt, r.headers.get("Retry-After"))
-            print(f"[s2] HTTP {r.status_code}; retry {attempt + 1}/{S2_MAX_RETRIES} in {delay:.1f}s")
+            print(
+                f"[s2] HTTP {r.status_code}; retry {attempt + 1}/{S2_MAX_RETRIES} in {delay:.1f}s"
+            )
             time.sleep(delay)
             continue
         # 不可重试的状态码或重试耗尽：返回响应由调用方处理
@@ -166,7 +208,9 @@ def _post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     url = f"{S2_BASE}{endpoint}"
     r = _request_with_backoff("POST", url, json=payload, headers=_headers())
     if r.status_code != 200:
-        raise S2APIError(f"S2 API POST {endpoint} failed ({r.status_code}): {r.text[:500]}")
+        raise S2APIError(
+            f"S2 API POST {endpoint} failed ({r.status_code}): {r.text[:500]}"
+        )
     return r.json()
 
 
@@ -176,15 +220,15 @@ def _post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
 def search_papers(
     query: str,
     *,
-    year_range: str | None = None,      # 例如 "2024-2026" 或 "2024-"
+    year_range: str | None = None,  # 例如 "2024-2026" 或 "2024-"
     venue: str | None = None,
     fields_of_study: str | None = None,  # 例如 "Physics"
     min_citation_count: int | None = None,
     open_access_only: bool = False,
     fields: str | None = None,
-    limit: int = 20,                     # S2 最大 100
+    limit: int = 20,  # S2 最大 100
     offset: int = 0,
-    sort: str | None = None,             # 例如 "citationCount:desc"
+    sort: str | None = None,  # 例如 "citationCount:desc"
 ) -> dict[str, Any]:
     """关键词检索论文。
 
@@ -422,7 +466,9 @@ def _normalize_paper(p: dict[str, Any]) -> dict[str, Any]:
         "journal_volume": journal.get("volume", ""),
         "journal_pages": journal.get("pages", ""),
         "authors": authors,
-        "first_author_last_name": _guess_last_name(authors[0]["name"]) if authors else "",
+        "first_author_last_name": _guess_last_name(authors[0]["name"])
+        if authors
+        else "",
         "citation_count": p.get("citationCount", 0),
         "influential_citation_count": p.get("influentialCitationCount", 0),
         "reference_count": p.get("referenceCount", 0),
@@ -444,7 +490,9 @@ def _guess_last_name(full_name: str) -> str:
         return ""
     parts = re.split(r"\s+", full_name.strip())
     last = parts[-1] if parts else ""
-    return re.sub(r"[^a-zA-Z]", "", last).lower() or (parts[-1].lower() if parts else "")
+    return re.sub(r"[^a-zA-Z]", "", last).lower() or (
+        parts[-1].lower() if parts else ""
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -478,10 +526,9 @@ def paper_to_note_frontmatter(p: dict[str, Any]) -> dict[str, Any]:
         "local_pdf_path": "",
         "oa_url": p.get("oa_pdf_url", ""),
         "oa_status": "gold" if p.get("is_open_access") else "closed",
-
         "cited_by_count": p.get("citation_count"),
         "cited_by_count_normalized": None,
-        "jif": None,                    # S2 不提供，由 OpenAlex/WoS 补齐
+        "jif": None,  # S2 不提供，由 OpenAlex/WoS 补齐
         "jif_5yr": None,
         "jcr_quartile": "",
         "scimago_quartile": "",
@@ -489,24 +536,20 @@ def paper_to_note_frontmatter(p: dict[str, Any]) -> dict[str, Any]:
         "esi_highly_cited": False,
         "esi_hot_paper": False,
         "journal_h_index": None,
-
         # S2 独有字段（附加到 frontmatter）
         "influential_citation_count": p.get("influential_citation_count", 0),
         "tldr": p.get("tldr", ""),
         "s2_id": p.get("s2_id", ""),
-
         "topics": [f["category"] for f in (p.get("s2_fields_of_study") or [])],
         "methods": [],
         "systems": [],
         "related_to_my_work": None,
         "related_to_my_work_reason": "",
-
         "status": "unread",
         "my_rating": None,
         "added_date": "",
         "last_reviewed": "",
         "review_count": 0,
-
         "keywords_auto": p.get("fields_of_study", [])[:5],
     }
 
@@ -527,7 +570,9 @@ def enrich_from_s2(openalex_work: dict[str, Any]) -> dict[str, Any]:
 
     paper_id = f"DOI:{doi}" if doi else f"ARXIV:{arxiv_id}"
     try:
-        s2_paper = get_paper(paper_id, fields="paperId,tldr,influentialCitationCount,citationCount")
+        s2_paper = get_paper(
+            paper_id, fields="paperId,tldr,influentialCitationCount,citationCount"
+        )
     except (S2APIError, S2NotConfigured):
         return openalex_work
     except Exception:
@@ -539,7 +584,9 @@ def enrich_from_s2(openalex_work: dict[str, Any]) -> dict[str, Any]:
     enriched = dict(openalex_work)
     enriched["s2_id"] = s2_paper.get("s2_id", "")
     enriched["tldr"] = s2_paper.get("tldr", "")
-    enriched["influential_citation_count"] = s2_paper.get("influential_citation_count", 0)
+    enriched["influential_citation_count"] = s2_paper.get(
+        "influential_citation_count", 0
+    )
     return enriched
 
 
@@ -548,11 +595,14 @@ def enrich_from_s2(openalex_work: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Semantic Scholar CLI")
     sub = parser.add_subparsers(dest="cmd")
 
     p_search = sub.add_parser("search", help="检索论文")
-    p_search.add_argument("query", nargs="?", default="exceptional point acoustic metasurface")
+    p_search.add_argument(
+        "query", nargs="?", default="exceptional point acoustic metasurface"
+    )
     p_search.add_argument("--year", default="2024-2026")
     p_search.add_argument("--limit", type=int, default=5)
     p_search.add_argument("--sort", default=None)
@@ -567,24 +617,38 @@ if __name__ == "__main__":
     if args.cmd == "check" or args.cmd is None:
         has_key = bool(settings.semantic_scholar_api_key)
         print(f"semantic_scholar_api_key: {'(set)' if has_key else '(unset)'}")
-        print(f"Rate limit: {'100 req/5min (with key)' if has_key else '1 req/s (no key, unstable)'}")
+        print(
+            f"Rate limit: {'100 req/5min (with key)' if has_key else '1 req/s (no key, unstable)'}"
+        )
         if not has_key:
-            print("\n[!] Request a free key at: https://www.semanticscholar.org/product/api#api-key")
+            print(
+                "\n[!] Request a free key at: https://www.semanticscholar.org/product/api#api-key"
+            )
 
     elif args.cmd == "search":
-        res = search_papers(args.query, year_range=args.year, limit=args.limit, sort=args.sort)
+        res = search_papers(
+            args.query, year_range=args.year, limit=args.limit, sort=args.sort
+        )
         print(f"[s2] total: {res['total']}   returned: {len(res['data'])}")
         for i, p in enumerate(res["data"], 1):
             print(f"\n#{i} [{p['year']}] {p['title']}")
             print(f"   Venue   : {p['venue']}")
             print(f"   DOI     : {p['doi']}   arXiv: {p['arxiv_id']}")
-            print(f"   Citations: {p['citation_count']} (influential: {p['influential_citation_count']})")
+            print(
+                f"   Citations: {p['citation_count']} (influential: {p['influential_citation_count']})"
+            )
             print(f"   TLDR    : {p['tldr'][:120] or '(none)'}")
             print(f"   Authors : {', '.join(a['name'] for a in p['authors'][:4])}")
 
     elif args.cmd == "get":
         p = get_paper(args.paper_id)
         if p:
-            print(json.dumps({k: v for k, v in p.items() if k != "_raw"}, indent=2, ensure_ascii=False)[:3000])
+            print(
+                json.dumps(
+                    {k: v for k, v in p.items() if k != "_raw"},
+                    indent=2,
+                    ensure_ascii=False,
+                )[:3000]
+            )
         else:
             print(f"Paper not found: {args.paper_id}")

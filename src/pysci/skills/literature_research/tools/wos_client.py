@@ -32,7 +32,6 @@ WoS Starter API 支持两种鉴权方式：
 
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
@@ -44,10 +43,10 @@ from .config import http_session, settings
 WOS_BASE = settings.wos_api_base_url.rstrip("/")
 
 # 常用端点
-EP_SEARCH = "/documents"                # 检索文献
-EP_CITATION_REPORT = "/citation-report" # 引用报告
-EP_JIF = "/journals"                    # 期刊指标（若 Starter API 提供）
-EP_ESI = "/esi-highly-cited"            # ESI 高被引（若 Starter API 提供）
+EP_SEARCH = "/documents"  # 检索文献
+EP_CITATION_REPORT = "/citation-report"  # 引用报告
+EP_JIF = "/journals"  # 期刊指标（若 Starter API 提供）
+EP_ESI = "/esi-highly-cited"  # ESI 高被引（若 Starter API 提供）
 
 # 令牌缓存
 _TOKEN_CACHE: dict[str, Any] = {"access_token": None, "expires_at": 0.0}
@@ -103,7 +102,9 @@ def _get_access_token() -> str:
             timeout=settings.http_timeout,
         )
         if r.status_code != 200:
-            raise WOSAPIError(f"OAuth2 token request failed ({r.status_code}): {r.text[:500]}")
+            raise WOSAPIError(
+                f"OAuth2 token request failed ({r.status_code}): {r.text[:500]}"
+            )
         data = r.json()
 
     token = data.get("access_token")
@@ -152,16 +153,30 @@ class WOSClient:
         token = _get_access_token()
         return {"Authorization": f"Bearer {token}"}
 
-    def _get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _get(
+        self, endpoint: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         url = f"{WOS_BASE}{endpoint}"
         with http_session() as s:
-            r = s.get(url, params=params or {}, headers=self._headers(), timeout=settings.http_timeout)
+            r = s.get(
+                url,
+                params=params or {},
+                headers=self._headers(),
+                timeout=settings.http_timeout,
+            )
             if r.status_code == 401:
                 # 令牌过期或无效，重试一次
                 _TOKEN_CACHE["access_token"] = None
-                r = s.get(url, params=params or {}, headers=self._headers(), timeout=settings.http_timeout)
+                r = s.get(
+                    url,
+                    params=params or {},
+                    headers=self._headers(),
+                    timeout=settings.http_timeout,
+                )
             if r.status_code != 200:
-                raise WOSAPIError(f"WoS API {endpoint} failed ({r.status_code}): {r.text[:500]}")
+                raise WOSAPIError(
+                    f"WoS API {endpoint} failed ({r.status_code}): {r.text[:500]}"
+                )
             return r.json()
 
     # -----------------------------------------------------------------------
@@ -212,11 +227,16 @@ class WOSClient:
         data = self._get(EP_SEARCH, params=params)
         return {
             "total": data.get("totalRecords", data.get("total", 0)),
-            "hits": [_normalize_hit(h) for h in (data.get("hits") or data.get("records") or [])],
+            "hits": [
+                _normalize_hit(h)
+                for h in (data.get("hits") or data.get("records") or [])
+            ],
             "_raw": data,
         }
 
-    def get_document(self, ut: str | None = None, doi: str | None = None) -> dict[str, Any] | None:
+    def get_document(
+        self, ut: str | None = None, doi: str | None = None
+    ) -> dict[str, Any] | None:
         """按 UT (Web of Science accession number) 或 DOI 获取单篇详情。"""
         if ut:
             return _normalize_hit(self._get(f"/documents/{ut}"))
@@ -228,7 +248,9 @@ class WOSClient:
     # -----------------------------------------------------------------------
     # 期刊指标（JIF / JCR）
     # -----------------------------------------------------------------------
-    def get_journal_metrics(self, issn: str | None = None, name: str | None = None, year: int | None = None) -> dict[str, Any] | None:
+    def get_journal_metrics(
+        self, issn: str | None = None, name: str | None = None, year: int | None = None
+    ) -> dict[str, Any] | None:
         """获取期刊的官方 JIF、JCR 分区、5-year JIF 等。
 
         Starter API 的期刊端点在不同账户下开放程度不同；本函数按公开文档编写，
@@ -361,12 +383,15 @@ def enrich_openalex_work(w: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="WoS Starter API CLI")
     sub = parser.add_subparsers(dest="cmd")
 
     p_check = sub.add_parser("check", help="检查凭据是否配置正确")
     p_search = sub.add_parser("search", help="检索测试")
-    p_search.add_argument("query", nargs="?", default='"exceptional point" AND acoustic')
+    p_search.add_argument(
+        "query", nargs="?", default='"exceptional point" AND acoustic'
+    )
     p_search.add_argument("--limit", type=int, default=5)
 
     args = parser.parse_args()
@@ -374,10 +399,14 @@ if __name__ == "__main__":
     if args.cmd == "check" or args.cmd is None:
         print(f"wos_ready       : {settings.wos_ready}")
         print(f"wos_api_key     : {'(set)' if settings.wos_api_key else '(unset)'}")
-        print(f"wos_api_secret  : {'(set)' if settings.wos_api_secret else '(unset — Starter API 不需要)'}")
+        print(
+            f"wos_api_secret  : {'(set)' if settings.wos_api_secret else '(unset — Starter API 不需要)'}"
+        )
         print(f"wos_api_base_url: {settings.wos_api_base_url}")
         if settings.wos_ready:
-            print("\n[OK] API Key present. Try: python -m pysci.skills.literature_research.tools.wos_client search")
+            print(
+                "\n[OK] API Key present. Try: python -m pysci.skills.literature_research.tools.wos_client search"
+            )
         else:
             print("\n[!] API Key missing. Please fill WOS_API_KEY in .env")
 
@@ -389,8 +418,12 @@ if __name__ == "__main__":
             for i, h in enumerate(r["hits"], 1):
                 print(f"\n#{i} [{h['published_year']}] {h['title']}")
                 print(f"   UT      : {h['ut']}")
-                print(f"   Source  : {h['source']}   JIF={h['jif']}  Q={h['jcr_quartile']}")
+                print(
+                    f"   Source  : {h['source']}   JIF={h['jif']}  Q={h['jcr_quartile']}"
+                )
                 print(f"   Cited by: {h['cited_by_count']}")
-                print(f"   ESI     : highly_cited={h['esi_highly_cited']}  hot={h['esi_hot_paper']}")
+                print(
+                    f"   ESI     : highly_cited={h['esi_highly_cited']}  hot={h['esi_hot_paper']}"
+                )
         except WOSNotConfigured as e:
             print(e)

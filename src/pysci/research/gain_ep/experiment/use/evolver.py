@@ -171,9 +171,7 @@ class _AndersonAccelerator:
             # 最小二乘：min_γ ||ΔG^T γ - f_k||_2
             # ΔG^T: (dim, m_k)，f_k: (dim,)
             gram = delta_g_mat.T  # (dim, m_k)
-            gamma, _res, _rank, _sv = np.linalg.lstsq(
-                gram, residual, rcond=None
-            )
+            gamma, _res, _rank, _sv = np.linalg.lstsq(gram, residual, rcond=None)
 
             # Anderson 外推：
             # a_{k+1} = G_α(a_k) - Σ γ_j (Δx_j - Δg_j)
@@ -417,9 +415,7 @@ class Evolver:
 
         # ---- SimScanner 扫描结果路径 ----
         if sim_result_scan_path is None:
-            self._sim_result_scan_path: Path = (
-                Path("storage/sim/sim_result_scan")
-            )
+            self._sim_result_scan_path: Path = Path("storage/sim/sim_result_scan")
         else:
             self._sim_result_scan_path = Path(sim_result_scan_path)
 
@@ -818,8 +814,8 @@ class Evolver:
         data = self._load_scan_result()
         cr_values = data["cr_values"]
         ci_values = data["ci_values"]
-        eight_gains = data["eight_gains"]       # (res, res, 8)
-        floquet_gains = data["floquet_gains"]   # (res, res, 3)
+        eight_gains = data["eight_gains"]  # (res, res, 8)
+        floquet_gains = data["floquet_gains"]  # (res, res, 3)
 
         if pick_max:
             if mode == "eight_probes":
@@ -924,15 +920,15 @@ class Evolver:
             RuntimeError: 当闭环矩阵 (I - tf_feedback^T @ diag(β)) 奇异时。
         """
         n = len(self._ai_channels)
-        gf = self._gain_coefficients          # (n,)
-        amps_static = self._static_ao_complex_amps   # (n_static,)
+        gf = self._gain_coefficients  # (n,)
+        amps_static = self._static_ao_complex_amps  # (n_static,)
 
-        tf_static = self._tf_static_to_ai          # (n_static, n_ai)
-        tf_feedback = self._tf_feedback_to_ai      # (n_feedback, n_ai)
-        tf_diag = self._tf_diag                    # (n_feedback,)，即 tf_feedback[i, i]
+        tf_static = self._tf_static_to_ai  # (n_static, n_ai)
+        tf_feedback = self._tf_feedback_to_ai  # (n_feedback, n_ai)
+        tf_diag = self._tf_diag  # (n_feedback,)，即 tf_feedback[i, i]
 
         # ---- 静态激励在各 AI 通道的贡献 S[i] = sum_s amps_static[s] * tf_static[s, i] ----
-        static_contribution = amps_static @ tf_static                       # (n_ai,)
+        static_contribution = amps_static @ tf_static  # (n_ai,)
 
         # ---- 反馈增益因子 β[i] = (gf[i] - 1) / (gf[i] * tf_diag[i]) ----
         # 物理意义：为满足增益约束，a_feedback[i] = β[i] * T[i]
@@ -941,13 +937,13 @@ class Evolver:
                 "gain_coefficients 中存在零值（要求总声场为零），"
                 "无法使用闭环反馈方程求解（β_i 将发散）。"
             )
-        beta = (gf - 1.0) / (gf * tf_diag)                            # (n,)
+        beta = (gf - 1.0) / (gf * tf_diag)  # (n,)
 
         # ---- 闭环反馈方程：(I - tf_feedback^T @ diag(β)) @ T = S ----
         # tf_feedback^T 形状 (n_ai, n_feedback)，其 [i, j] 元素 = tf_feedback[j, i]；
         # 右乘 diag(β) 等价于将 tf_feedback^T 的第 j 列乘以 β[j]，即按列广播。
-        loop_gain_matrix = tf_feedback.T * beta                     # (n_ai, n_feedback) = (n, n)
-        closed_loop_matrix = np.eye(n) - loop_gain_matrix           # (n, n)
+        loop_gain_matrix = tf_feedback.T * beta  # (n_ai, n_feedback) = (n, n)
+        closed_loop_matrix = np.eye(n) - loop_gain_matrix  # (n, n)
 
         try:
             theoretical_total_ai = np.linalg.solve(
@@ -963,7 +959,7 @@ class Evolver:
             ) from e
 
         # ---- 由反馈律求反馈 AO 复振幅：a_fb[i] = β[i] * T[i] ----
-        theoretical_feedback = beta * theoretical_total_ai          # (n,)
+        theoretical_feedback = beta * theoretical_total_ai  # (n,)
 
         return (
             theoretical_feedback.astype(np.complex128),
@@ -1099,12 +1095,8 @@ class Evolver:
         theoretical_feedback, theoretical_total_ai = self._simulate_matrix()
         self._theoretical_feedback_ao_complex_amps = theoretical_feedback
         self._theoretical_total_ai_complex_amps = theoretical_total_ai
-        self.logger.info(
-            f"理论解 - 反馈 AO 复振幅模长: {np.abs(theoretical_feedback)}"
-        )
-        self.logger.info(
-            f"理论解 - 总声场复振幅模长: {np.abs(theoretical_total_ai)}"
-        )
+        self.logger.info(f"理论解 - 反馈 AO 复振幅模长: {np.abs(theoretical_feedback)}")
+        self.logger.info(f"理论解 - 总声场复振幅模长: {np.abs(theoretical_total_ai)}")
 
         # ---- 阶段 3：解析迭代仿真（基于收敛判据的自动终止） ----
         # 创建 Anderson 加速器
@@ -1131,9 +1123,7 @@ class Evolver:
             if prev_ai_complex_amps is not None:
                 diff_norm = np.linalg.norm(current_ai - prev_ai_complex_amps)
                 ref_norm = np.linalg.norm(prev_ai_complex_amps)
-                relative_change = (
-                    diff_norm / ref_norm if ref_norm > 0 else diff_norm
-                )
+                relative_change = diff_norm / ref_norm if ref_norm > 0 else diff_norm
                 if relative_change < self._ITERATION_TOLERANCE:
                     self.logger.info(
                         f"迭代仿真于第 {cycle_idx} 轮收敛 "
@@ -1214,7 +1204,10 @@ class Evolver:
             合并的多通道 Waveform。
         """
         combined_cca = np.concatenate(
-            [self._static_ao_complex_amps, np.asarray(feedback_complex_amps, dtype=np.complex128)]
+            [
+                self._static_ao_complex_amps,
+                np.asarray(feedback_complex_amps, dtype=np.complex128),
+            ]
         )
         combined_waveform = get_sine(
             sampling_info=self._user_static_output_waveform.sampling_info,
@@ -1333,9 +1326,9 @@ class Evolver:
         target_total_ai = incident_complex_amps * self._gain_coefficients
         delta_ai = target_total_ai - total_ai_complex_amps
         delta_ao = delta_ai / self._tf_diag
-        picard_ao = (
-            old_ao_complex_amps + self._relaxation_factor * delta_ao
-        ).astype(np.complex128)
+        picard_ao = (old_ao_complex_amps + self._relaxation_factor * delta_ao).astype(
+            np.complex128
+        )
 
         # ---- Step 5: Anderson 加速（可选） ----
         # 若提供了 AA 加速器，将 (a_k, G_α(a_k)) 送入外推，
@@ -1344,8 +1337,7 @@ class Evolver:
         if aa is not None and aa.depth > 0:
             new_ao_complex_amps = aa.apply(old_ao_complex_amps, picard_ao)
             self.logger.debug(
-                f"[{mode}] Anderson 加速 (m={aa.depth}, "
-                f"历史步数={aa.current_count})"
+                f"[{mode}] Anderson 加速 (m={aa.depth}, 历史步数={aa.current_count})"
             )
         else:
             new_ao_complex_amps = picard_ao
@@ -1560,13 +1552,12 @@ class Evolver:
                 # 6. 构建新的合并波形并切换稳态输出
                 new_combined = self._build_combined_waveform(new_ao_complex_amps)
                 self._measure_controller.update_static_output_waveform(new_combined)
-                self.logger.info(
-                    f"周期 {cycle_idx}/{cycles_num} 完成，"
-                    f"已切换稳态输出"
-                )
+                self.logger.info(f"周期 {cycle_idx}/{cycles_num} 完成，已切换稳态输出")
 
             # ---- 演化成功，构建最终合并波形 ----
-            final_waveform = self._build_combined_waveform(self._current_ao_complex_amps)
+            final_waveform = self._build_combined_waveform(
+                self._current_ao_complex_amps
+            )
 
             # ---- 可选：保存结果 ----
             if result_folder is not None:
@@ -1600,12 +1591,14 @@ class Evolver:
                         target="ao",
                     )
                     self.plot_evolution(
-                        save_path=result_folder_path / f"evo_ai(diff)_{cycles_num}steps.png",
+                        save_path=result_folder_path
+                        / f"evo_ai(diff)_{cycles_num}steps.png",
                         target="ai",
                         mode="diff",
                     )
                     self.plot_evolution(
-                        save_path=result_folder_path / f"evo_ao(diff)_{cycles_num}steps.png",
+                        save_path=result_folder_path
+                        / f"evo_ao(diff)_{cycles_num}steps.png",
                         target="ao",
                         mode="diff",
                     )
@@ -1624,9 +1617,7 @@ class Evolver:
 
         self.logger.info("=" * 60)
         self.logger.info("反馈演化完成")
-        self.logger.info(
-            f"共完成 {len(self._ai_complex_amps_history)} 个演化周期"
-        )
+        self.logger.info(f"共完成 {len(self._ai_complex_amps_history)} 个演化周期")
         self.logger.info("=" * 60)
 
         return final_waveform
@@ -1683,14 +1674,10 @@ class Evolver:
             channel_names = self._ao_channels_feedback
             quantity_label = "反馈 AO 复振幅"
         else:
-            raise ValueError(
-                f"非法 target: {target!r}，仅支持 'ai' 或 'ao'。"
-            )
+            raise ValueError(f"非法 target: {target!r}，仅支持 'ai' 或 'ao'。")
 
         if mode not in ("diff", "absolute"):
-            raise ValueError(
-                f"非法 mode: {mode!r}，仅支持 'absolute' 或 'diff'。"
-            )
+            raise ValueError(f"非法 mode: {mode!r}，仅支持 'absolute' 或 'diff'。")
 
         if not history:
             raise ValueError(
@@ -1716,46 +1703,34 @@ class Evolver:
                 f"mode={self._picked_mode}）"
             )
         else:
-            param_subtitle = (
-                f"（周期数: {num_cycles}，频率: {self._frequency:.1f} Hz）"
-            )
+            param_subtitle = f"（周期数: {num_cycles}，频率: {self._frequency:.1f} Hz）"
 
         if mode == "absolute":
             plot_array = data_array
             xlabel = f"实部（{quantity_label}）"
             ylabel = f"虚部（{quantity_label}）"
-            title = (
-                f"反馈演化 - {quantity_label} 复平面轨迹\n"
-                f"{param_subtitle}"
-            )
+            title = f"反馈演化 - {quantity_label} 复平面轨迹\n{param_subtitle}"
         else:  # mode == "diff"
             # 相对于理论解的差值轨迹
             plot_array = data_array - theoretical[None, :]
             xlabel = f"实部（{quantity_label} - 理论）"
             ylabel = f"虚部（{quantity_label} - 理论）"
-            title = (
-                f"反馈演化 - {quantity_label} 与 理论稳态解 之差\n"
-                f"{param_subtitle}"
-            )
+            title = f"反馈演化 - {quantity_label} 与 理论稳态解 之差\n{param_subtitle}"
 
         fig, ax = plt.subplots(1, 1, figsize=(12, 10))
 
         # ---- 通道配色：奇数通道（第1,3,5,7...）蓝色系，偶数通道（第2,4,6,8...）红色系 ----
-        n_odd = (n_ch + 1) // 2   # 奇数通道数（1-indexed: 1,3,5,7...）
-        n_even = n_ch // 2        # 偶数通道数（1-indexed: 2,4,6,8...）
-        odd_colors = plt.cm.Blues(
-            np.linspace(0.4, 0.9, max(n_odd, 1))
-        )  # 蓝色系
-        even_colors = plt.cm.Reds(
-            np.linspace(0.4, 0.9, max(n_even, 1))
-        )  # 红色系
+        n_odd = (n_ch + 1) // 2  # 奇数通道数（1-indexed: 1,3,5,7...）
+        n_even = n_ch // 2  # 偶数通道数（1-indexed: 2,4,6,8...）
+        odd_colors = plt.cm.Blues(np.linspace(0.4, 0.9, max(n_odd, 1)))  # 蓝色系
+        even_colors = plt.cm.Reds(np.linspace(0.4, 0.9, max(n_even, 1)))  # 红色系
         colors = []
         odd_idx, even_idx = 0, 0
         for i in range(n_ch):
             if i % 2 == 0:  # 0-indexed 偶数 = 1-indexed 奇数通道（第1,3,5...通道）
                 colors.append(odd_colors[odd_idx])
                 odd_idx += 1
-            else:            # 0-indexed 奇数 = 1-indexed 偶数通道（第2,4,6...通道）
+            else:  # 0-indexed 奇数 = 1-indexed 偶数通道（第2,4,6...通道）
                 colors.append(even_colors[even_idx])
                 even_idx += 1
 
@@ -1771,31 +1746,52 @@ class Evolver:
 
             # 折线
             ax.plot(
-                real_parts, imag_parts,
-                color=color, linewidth=2, alpha=0.7,
-                label=channel_label, zorder=1,
+                real_parts,
+                imag_parts,
+                color=color,
+                linewidth=2,
+                alpha=0.7,
+                label=channel_label,
+                zorder=1,
             )
 
             # 中间点
             if num_cycles > 2:
                 ax.scatter(
-                    real_parts[1:-1], imag_parts[1:-1],
-                    color=color, s=30, alpha=0.5,
-                    edgecolors="white", linewidths=0.5, zorder=2,
+                    real_parts[1:-1],
+                    imag_parts[1:-1],
+                    color=color,
+                    s=30,
+                    alpha=0.5,
+                    edgecolors="white",
+                    linewidths=0.5,
+                    zorder=2,
                 )
 
             # 起点（方形）
             ax.scatter(
-                real_parts[0], imag_parts[0],
-                marker="s", s=150, color=color,
-                edgecolors="black", linewidths=2, alpha=0.9, zorder=3,
+                real_parts[0],
+                imag_parts[0],
+                marker="s",
+                s=150,
+                color=color,
+                edgecolors="black",
+                linewidths=2,
+                alpha=0.9,
+                zorder=3,
             )
 
             # 终点（星形）
             ax.scatter(
-                real_parts[-1], imag_parts[-1],
-                marker="*", s=300, color=color,
-                edgecolors="black", linewidths=2, alpha=0.9, zorder=3,
+                real_parts[-1],
+                imag_parts[-1],
+                marker="*",
+                s=300,
+                color=color,
+                edgecolors="black",
+                linewidths=2,
+                alpha=0.9,
+                zorder=3,
             )
 
             if i == 0:
@@ -1804,16 +1800,26 @@ class Evolver:
                     xy=(real_parts[0], imag_parts[0]),
                     xytext=(10, 10),
                     textcoords="offset points",
-                    fontsize=9, fontweight="bold",
-                    bbox={"boxstyle": "round,pad=0.3", "facecolor": "yellow", "alpha": 0.7},
+                    fontsize=9,
+                    fontweight="bold",
+                    bbox={
+                        "boxstyle": "round,pad=0.3",
+                        "facecolor": "yellow",
+                        "alpha": 0.7,
+                    },
                 )
                 ax.annotate(
                     "终点",
                     xy=(real_parts[-1], imag_parts[-1]),
                     xytext=(10, 10),
                     textcoords="offset points",
-                    fontsize=9, fontweight="bold",
-                    bbox={"boxstyle": "round,pad=0.3", "facecolor": "lightgreen", "alpha": 0.7},
+                    fontsize=9,
+                    fontweight="bold",
+                    bbox={
+                        "boxstyle": "round,pad=0.3",
+                        "facecolor": "lightgreen",
+                        "alpha": 0.7,
+                    },
                 )
 
         # 坐标轴参考线
@@ -1824,17 +1830,23 @@ class Evolver:
         if mode == "diff":
             # diff 模式：理论解恒在原点
             ax.plot(
-                0, 0,
-                marker="x", markersize=12,
-                color="red", markeredgewidth=2,
+                0,
+                0,
+                marker="x",
+                markersize=12,
+                color="red",
+                markeredgewidth=2,
                 label="理论稳态解（原点）",
             )
         elif theoretical is not None:
             # absolute 模式：若理论解已存在，将其逐通道作为红色 × 标注
             ax.scatter(
-                theoretical.real, theoretical.imag,
-                marker="x", s=120,
-                color="red", linewidths=2,
+                theoretical.real,
+                theoretical.imag,
+                marker="x",
+                s=120,
+                color="red",
+                linewidths=2,
                 label="理论稳态解",
                 zorder=4,
             )
@@ -1886,15 +1898,10 @@ class Evolver:
         Raises:
             RuntimeError: 当尚未调用 simulate() 选取增益系数时。
         """
-        if (
-            self._picked_gain_8 is None
-            or self._picked_floquet_gains_3 is None
-        ):
-            raise RuntimeError(
-                "尚未选取增益系数，请先调用 simulate(...) 方法。"
-            )
+        if self._picked_gain_8 is None or self._picked_floquet_gains_3 is None:
+            raise RuntimeError("尚未选取增益系数，请先调用 simulate(...) 方法。")
 
-        gain_8 = self._picked_gain_8          # shape (8,)
+        gain_8 = self._picked_gain_8  # shape (8,)
         floquet_3 = self._picked_floquet_gains_3  # shape (3,) [bnd1, bnd2, point1]
         picked_cr = self._picked_cr
         picked_ci = self._picked_ci
@@ -1906,16 +1913,25 @@ class Evolver:
         colors_8 = plt.cm.tab10(np.linspace(0, 0.8, 8))
         for i in range(8):
             ax.scatter(
-                gain_8[i].real, gain_8[i].imag,
-                marker="o", s=120, color=colors_8[i],
-                edgecolors="black", linewidths=1, zorder=3,
+                gain_8[i].real,
+                gain_8[i].imag,
+                marker="o",
+                s=120,
+                color=colors_8[i],
+                edgecolors="black",
+                linewidths=1,
+                zorder=3,
                 label=f"8周期 g{i + 1} ({np.abs(gain_8[i]):.3f})",
             )
         # 折线连接 1→2→...→8（不闭合）
         ax.plot(
-            gain_8.real, gain_8.imag,
-            color="steelblue", linewidth=1.5, alpha=0.6,
-            linestyle="-", zorder=2,
+            gain_8.real,
+            gain_8.imag,
+            color="steelblue",
+            linewidth=1.5,
+            alpha=0.6,
+            linestyle="-",
+            zorder=2,
         )
 
         # ---- 绘制 Floquet 模式增益系数 ----
@@ -1925,14 +1941,15 @@ class Evolver:
         floquet_colors = ["forestgreen", "darkorange", "crimson"]
         for i in range(3):
             ax.scatter(
-                floquet_3[i].real, floquet_3[i].imag,
-                marker=floquet_markers[i], s=180,
+                floquet_3[i].real,
+                floquet_3[i].imag,
+                marker=floquet_markers[i],
+                s=180,
                 color=floquet_colors[i],
-                edgecolors="black", linewidths=1.5, zorder=4,
-                label=(
-                    f"Floquet {floquet_labels[i]} "
-                    f"({np.abs(floquet_3[i]):.3f})"
-                ),
+                edgecolors="black",
+                linewidths=1.5,
+                zorder=4,
+                label=(f"Floquet {floquet_labels[i]} ({np.abs(floquet_3[i]):.3f})"),
             )
 
         # ---- 参考线和装饰 ----
@@ -1940,8 +1957,14 @@ class Evolver:
         ax.axvline(x=0, color="gray", linestyle="--", linewidth=0.8, alpha=0.5)
         # 绘制单位圆参考线
         theta = np.linspace(0, 2 * np.pi, 200)
-        ax.plot(np.cos(theta), np.sin(theta),
-                color="lightgray", linewidth=1, linestyle=":", alpha=0.5)
+        ax.plot(
+            np.cos(theta),
+            np.sin(theta),
+            color="lightgray",
+            linewidth=1,
+            linestyle=":",
+            alpha=0.5,
+        )
 
         ax.set_xlabel("实部", fontsize=12)
         ax.set_ylabel("虚部", fontsize=12)
@@ -1949,7 +1972,8 @@ class Evolver:
             f"增益系数极坐标复平面\n"
             f"(cr={picked_cr:.6f}, ci={picked_ci:.6f}, "
             f"频率={self._frequency:.1f} Hz)",
-            fontsize=14, fontweight="bold",
+            fontsize=14,
+            fontweight="bold",
         )
         ax.legend(loc="best", fontsize=9, framealpha=0.9)
         ax.grid(True, alpha=0.3, linestyle=":", linewidth=0.5)
@@ -2001,6 +2025,7 @@ class Evolver:
 # =============================================================================
 #  独立辅助函数
 # =============================================================================
+
 
 def load_evolved_waveform(
     file_path: str | Path,
@@ -2059,8 +2084,7 @@ def load_evolved_waveform(
     loaded_data = load_compressed_data(file_path, data_type_name="演化波形")
     if not isinstance(loaded_data, Waveform):
         raise ValueError(
-            f"加载的数据类型不正确，期望 Waveform，"
-            f"实际为 {type(loaded_data).__name__}"
+            f"加载的数据类型不正确，期望 Waveform，实际为 {type(loaded_data).__name__}"
         )
 
     f_logger.info(
@@ -2097,9 +2121,7 @@ def load_evolved_waveform(
             loaded_data.channel_complex_amplitudes = (
                 loaded_data.channel_complex_amplitudes * amp_multiplier
             )
-        f_logger.info(
-            f"已应用幅值缩放: amp_multiplier={amp_multiplier}"
-        )
+        f_logger.info(f"已应用幅值缩放: amp_multiplier={amp_multiplier}")
 
     # ---- 通道重命名 ----
     if rename_channel_dict is not None:

@@ -40,17 +40,17 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from .config import settings
 from . import (
-    openalex_client,
     arxiv_client,
+    browser_fetch,
+    cache_manager,
+    openalex_client,
+    pdf_extract,
     semantic_scholar_client,
     wos_client,
     zotero_bridge,
-    browser_fetch,
-    pdf_extract,
-    cache_manager,
 )
+from .config import settings
 
 # ---------------------------------------------------------------------------
 # 路径常量（全部基于模块根 settings.module_dir = literature/）
@@ -258,7 +258,10 @@ def _resolve_work(raw: str) -> tuple[str | None, dict[str, Any] | None]:
             # DOI 未收录于 OpenAlex：若形如 arXiv DOI 再试 arXiv
             return (None, None)
     except Exception as e:  # 网络/解析异常不致命
-        print(f"[research] 元数据解析失败（{kind}={val}）：{type(e).__name__}: {e}", file=sys.stderr)
+        print(
+            f"[research] 元数据解析失败（{kind}={val}）：{type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
     return (None, None)
 
 
@@ -269,7 +272,9 @@ def _frontmatter_from_work(source: str, work: dict[str, Any]) -> dict[str, Any]:
     return openalex_client.work_to_note_frontmatter(work)
 
 
-def _enrich_work(work: dict[str, Any], *, collect: list[str] | None = None) -> dict[str, Any]:
+def _enrich_work(
+    work: dict[str, Any], *, collect: list[str] | None = None
+) -> dict[str, Any]:
     """用 WoS（官方 JIF/JCR/ESI）+ S2（TLDR，若有 key）增强单个 work dict。
 
     两源均静默降级：全程重定向 stdout/stderr，任何异常都吞掉并返回原 dict。
@@ -299,7 +304,14 @@ def _enrich_work(work: dict[str, Any], *, collect: list[str] | None = None) -> d
 
 def _overlay_enrichment(fm: dict[str, Any], work: dict[str, Any]) -> dict[str, Any]:
     """把 _enrich_work 写进 work 的独家字段叠加到 frontmatter（覆盖 OpenAlex 估算值）。"""
-    for k in ("wos_id", "jif", "jif_5yr", "jcr_quartile", "esi_highly_cited", "esi_hot_paper"):
+    for k in (
+        "wos_id",
+        "jif",
+        "jif_5yr",
+        "jcr_quartile",
+        "esi_highly_cited",
+        "esi_hot_paper",
+    ):
         v = work.get(k)
         if v not in (None, "", False):
             fm[k] = v
@@ -327,7 +339,9 @@ def _row(src: str, w: dict[str, Any]) -> dict[str, Any]:
         "title": title,
         "first_author_last_name": w.get("first_author_last_name") or "",
         "year": year,
-        "journal": w.get("journal") or w.get("journal_ref") or ("arXiv" if src == "arxiv" else ""),
+        "journal": w.get("journal")
+        or w.get("journal_ref")
+        or ("arXiv" if src == "arxiv" else ""),
         "doi": w.get("doi") or "",
         "arxiv_id": w.get("arxiv_id") or "",
         "openalex_id": w.get("openalex_id") or "",
@@ -434,7 +448,9 @@ def _parse_year(spec: str | None) -> tuple[int | None, int | None]:
     return None, None
 
 
-def _write_shortlist(query: str, args: argparse.Namespace, rows: list[tuple[str, dict]]) -> Path:
+def _write_shortlist(
+    query: str, args: argparse.Namespace, rows: list[tuple[str, dict]]
+) -> Path:
     """套用 templates/shortlist.md 生成检索快照，写入 shortlists/。"""
     SHORTLISTS_DIR.mkdir(parents=True, exist_ok=True)
     today = _today()
@@ -496,36 +512,58 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print()
 
     print("【检索源】")
-    oa = "就绪" if settings.openalex_email else "可用（未设 OPENALEX_EMAIL，仍能用；建议设置以进入 polite pool 提速）"
+    oa = (
+        "就绪"
+        if settings.openalex_email
+        else "可用（未设 OPENALEX_EMAIL，仍能用；建议设置以进入 polite pool 提速）"
+    )
     print(f"  OpenAlex         : {oa}（主源，无需 key）")
     print("  arXiv            : 就绪（无需 key）")
-    print(f"  Web of Science   : {'就绪（官方 JIF/JCR/ESI 增强）' if settings.wos_ready else '未配置（可选增强源）'}")
-    s2 = "已配置 key" if settings.semantic_scholar_api_key else "未配置（可选末位源；校园网通常不可达，属预期，无需处理）"
+    print(
+        f"  Web of Science   : {'就绪（官方 JIF/JCR/ESI 增强）' if settings.wos_ready else '未配置（可选增强源）'}"
+    )
+    s2 = (
+        "已配置 key"
+        if settings.semantic_scholar_api_key
+        else "未配置（可选末位源；校园网通常不可达，属预期，无需处理）"
+    )
     print(f"  Semantic Scholar : {s2}")
-    print(f"  Elsevier/Scopus  : {'已配置 key' if settings.elsevier_api_key else '未配置（预留）'}")
+    print(
+        f"  Elsevier/Scopus  : {'已配置 key' if settings.elsevier_api_key else '未配置（预留）'}"
+    )
     print()
 
     print("【PDF → Markdown 后端】")
     backends = pdf_extract.available_backends()
     print(f"  可用后端         : {', '.join(backends) or '（无——公式抽取将不可用）'}")
     print(f"  当前默认         : {settings.pdf_extract_backend}")
-    print(f"  MinerU 云端      : {'就绪（公式→LaTeX 首选）' if settings.mineru_token else '未配置 MINERU_TOKEN'}")
-    print(f"  pymupdf4llm 本地 : {'可用（兜底，公式会丢失）' if _module_available('pymupdf4llm') or _module_available('fitz') else '未安装'}")
+    print(
+        f"  MinerU 云端      : {'就绪（公式→LaTeX 首选）' if settings.mineru_token else '未配置 MINERU_TOKEN'}"
+    )
+    print(
+        f"  pymupdf4llm 本地 : {'可用（兜底，公式会丢失）' if _module_available('pymupdf4llm') or _module_available('fitz') else '未安装'}"
+    )
     print()
 
     print("【付费墙抓取 Playwright】")
-    print(f"  playwright 库    : {'已安装' if _module_available('playwright') else '未安装（read 抓取付费墙 PDF 会失败）'}")
+    print(
+        f"  playwright 库    : {'已安装' if _module_available('playwright') else '未安装（read 抓取付费墙 PDF 会失败）'}"
+    )
     print("  浏览器           : 运行时自动探测 chrome → msedge → bundled chromium")
     print()
 
     print("【Zotero 文献库】")
-    print(f"  Web API 凭据     : {'就绪' if settings.zotero_web_ready else '未配置（ZOTERO_USER_ID / ZOTERO_API_KEY）'}")
+    print(
+        f"  Web API 凭据     : {'就绪' if settings.zotero_web_ready else '未配置（ZOTERO_USER_ID / ZOTERO_API_KEY）'}"
+    )
     try:
         zb = zotero_bridge.ZoteroBridge()
         info = zb.ping()
         print(f"  连通性           : 后端={zb.backend or '—'}；ping={info}")
     except Exception as e:
-        print(f"  连通性           : 不可达（{type(e).__name__}）——本地 API 需 Zotero 桌面版开启 Settings→Advanced→Allow other applications")
+        print(
+            f"  连通性           : 不可达（{type(e).__name__}）——本地 API 需 Zotero 桌面版开启 Settings→Advanced→Allow other applications"
+        )
     print()
     print("=== 自检结束 ===")
     return 0
@@ -555,7 +593,9 @@ def cmd_search(args: argparse.Namespace) -> int:
         )
         results = res.get("results", [])
         rows.extend(("openalex", w) for w in results)
-        print(f"[search] OpenAlex: 取回 {len(results)} 条（库中匹配 {res.get('meta', {}).get('count')}）")
+        print(
+            f"[search] OpenAlex: 取回 {len(results)} 条（库中匹配 {res.get('meta', {}).get('count')}）"
+        )
 
     if source in ("auto", "arxiv"):
         res = arxiv_client.search_arxiv(
@@ -565,24 +605,37 @@ def cmd_search(args: argparse.Namespace) -> int:
         )
         entries = res.get("entries", [])
         rows.extend(("arxiv", e) for e in entries)
-        print(f"[search] arXiv: 取回 {len(entries)} 条（总匹配 {res.get('total_results')}）")
+        print(
+            f"[search] arXiv: 取回 {len(entries)} 条（总匹配 {res.get('total_results')}）"
+        )
 
     if source == "wos":
         if not settings.wos_ready:
-            print("[search] WoS 未配置（缺 WOS_API_KEY），无法作为主源。", file=sys.stderr)
+            print(
+                "[search] WoS 未配置（缺 WOS_API_KEY），无法作为主源。", file=sys.stderr
+            )
             return 2
         client = wos_client.WOSClient()
         res = client.search(query, limit=limit)
         rows.extend(("wos", h) for h in res.get("hits", []))
-        print(f"[search] WoS: 取回 {len(res.get('hits', []))} 条（总匹配 {res.get('total')}）")
+        print(
+            f"[search] WoS: 取回 {len(res.get('hits', []))} 条（总匹配 {res.get('total')}）"
+        )
 
     if source == "s2":
         if not settings.semantic_scholar_api_key:
-            print("[search] S2 未配置 key——可选末位源，已跳过（校园网通常不可达，属预期）。")
+            print(
+                "[search] S2 未配置 key——可选末位源，已跳过（校园网通常不可达，属预期）。"
+            )
             return 0
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
             try:
-                res = semantic_scholar_client.search_papers(query, limit=limit, year_range=args.year)
+                res = semantic_scholar_client.search_papers(
+                    query, limit=limit, year_range=args.year
+                )
             except Exception:
                 res = {"data": []}
         rows.extend(("s2", p) for p in res.get("data", []))
@@ -610,7 +663,9 @@ def cmd_search(args: argparse.Namespace) -> int:
     _print_rows(rows)
 
     if collected:
-        print(f"[search] 注：{len(collected)} 处 WoS/S2 增强不可用，相关条目已回退到 OpenAlex 估算值。")
+        print(
+            f"[search] 注：{len(collected)} 处 WoS/S2 增强不可用，相关条目已回退到 OpenAlex 估算值。"
+        )
 
     if args.save:
         path = _write_shortlist(query, args, rows)
@@ -671,7 +726,9 @@ def cmd_read(args: argparse.Namespace) -> int:
     if fulltext_path is not None and fulltext_path.exists() and not force:
         md = fulltext_path.read_text(encoding="utf-8")
         cache_manager.bump_mtime(fulltext_path)
-        print(f"[read] 命中缓存全文，跳过抓取/抽取（--force 强制重取）：{fulltext_path}")
+        print(
+            f"[read] 命中缓存全文，跳过抓取/抽取（--force 强制重取）：{fulltext_path}"
+        )
 
     # 2) 抓取 PDF / 全套（命中缓存则整体跳过）
     bundle = None
@@ -685,7 +742,10 @@ def cmd_read(args: argparse.Namespace) -> int:
                     if cand.exists():
                         pdf_path = cand
             except Exception as e:
-                print(f"[read] arXiv PDF 下载失败：{type(e).__name__}: {e}", file=sys.stderr)
+                print(
+                    f"[read] arXiv PDF 下载失败：{type(e).__name__}: {e}",
+                    file=sys.stderr,
+                )
             if not pdf_path:
                 url = f"https://arxiv.org/abs/{val}"
                 print(f"[read] 回退浏览器抓取：{url}")
@@ -699,9 +759,13 @@ def cmd_read(args: argparse.Namespace) -> int:
             else:  # openalex
                 url = ""
                 if work:
-                    url = work.get("oa_url") or (f"https://doi.org/{work['doi']}" if work.get("doi") else "")
+                    url = work.get("oa_url") or (
+                        f"https://doi.org/{work['doi']}" if work.get("doi") else ""
+                    )
                 if not url:
-                    print("[read] 无法从 OpenAlex id 解析出可抓取 URL。", file=sys.stderr)
+                    print(
+                        "[read] 无法从 OpenAlex id 解析出可抓取 URL。", file=sys.stderr
+                    )
                     return 2
             print(f"[read] 抓取：{url}")
             bundle = _safe_fetch(url, out_dir, args)
@@ -711,7 +775,9 @@ def cmd_read(args: argparse.Namespace) -> int:
         if pdf_path and Path(pdf_path).exists():
             print(f"[read] 抽取 PDF（backend={args.backend or 'auto'}）...")
             try:
-                md = pdf_extract.extract_pdf(pdf_path, backend=args.backend or None, write_cache=False)
+                md = pdf_extract.extract_pdf(
+                    pdf_path, backend=args.backend or None, write_cache=False
+                )
             except Exception as e:
                 print(f"[read] PDF 抽取失败：{type(e).__name__}: {e}", file=sys.stderr)
         if not md and bundle and bundle.html_path and Path(bundle.html_path).exists():
@@ -730,7 +796,9 @@ def cmd_read(args: argparse.Namespace) -> int:
     if md:
         settings.cache_extracted.mkdir(parents=True, exist_ok=True)
         if fulltext_path is None:
-            stem = _slugify(str(fm.get("short_title") or fm.get("title") or "paper"), 40)
+            stem = _slugify(
+                str(fm.get("short_title") or fm.get("title") or "paper"), 40
+            )
             fulltext_path = settings.cache_extracted / f"{stem}_fulltext.md"
         if force or not fulltext_path.exists():
             fulltext_path.write_text(md, encoding="utf-8")
@@ -750,11 +818,15 @@ def cmd_read(args: argparse.Namespace) -> int:
             f"耗时={bundle.seconds:.1f}s Cloudflare={bundle.cloudflare} 机构访问={bundle.institutional_access}"
         )
         if bundle.supp_paths:
-            print(f"[read] 补充材料 {len(bundle.supp_paths)} 份：{', '.join(str(p.name) for p in bundle.supp_paths)}")
+            print(
+                f"[read] 补充材料 {len(bundle.supp_paths)} 份：{', '.join(str(p.name) for p in bundle.supp_paths)}"
+            )
     if pdf_path:
         print(f"[read] PDF      : {pdf_path}")
     if fulltext_path:
-        print(f"[read] 全文 MD  : {fulltext_path}（{len(md)} 字符）——精读请 Read 此文件")
+        print(
+            f"[read] 全文 MD  : {fulltext_path}（{len(md)} 字符）——精读请 Read 此文件"
+        )
     else:
         print("[read] 警告：未获得全文（PDF 抓取与抽取均失败）。", file=sys.stderr)
     if note_path:
@@ -773,7 +845,10 @@ def _safe_fetch(url: str, out_dir: Path, args: argparse.Namespace) -> Any:
         )
     except Exception as e:
         print(f"[read] 浏览器抓取失败：{type(e).__name__}: {e}", file=sys.stderr)
-        print("[read] 提示：付费墙/Cloudflare 可加 --headed 用有头浏览器重试。", file=sys.stderr)
+        print(
+            "[read] 提示：付费墙/Cloudflare 可加 --headed 用有头浏览器重试。",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -794,7 +869,10 @@ def cmd_get(args: argparse.Namespace) -> int:
     else:
         print(f"---\n{_dump_yaml(fm)}---")
     if collected:
-        print(f"[get] 注：{len(collected)} 处 WoS/S2 增强不可用，已用 OpenAlex 估算值。", file=sys.stderr)
+        print(
+            f"[get] 注：{len(collected)} 处 WoS/S2 增强不可用，已用 OpenAlex 估算值。",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -830,7 +908,10 @@ def cmd_add(args: argparse.Namespace) -> int:
     tags = [t.strip() for t in args.tags.split(",")] if args.tags else []
 
     if not settings.zotero_web_ready:
-        print("[add] Zotero Web API 未配置（缺 ZOTERO_USER_ID/API_KEY），跳过入库，仅生成笔记骨架。", file=sys.stderr)
+        print(
+            "[add] Zotero Web API 未配置（缺 ZOTERO_USER_ID/API_KEY），跳过入库，仅生成笔记骨架。",
+            file=sys.stderr,
+        )
     else:
         try:
             zb = zotero_bridge.ZoteroBridge()
@@ -838,7 +919,9 @@ def cmd_add(args: argparse.Namespace) -> int:
             key = _extract_zotero_key(resp)
             if key:
                 fm["zotero_key"] = key
-                fm["zotero_uri"] = f"https://zotero.org/users/{settings.zotero_user_id}/items/{key}"
+                fm["zotero_uri"] = (
+                    f"https://zotero.org/users/{settings.zotero_user_id}/items/{key}"
+                )
                 print(f"[add] 已入库 Zotero：{key}")
             else:
                 print(f"[add] Zotero 响应未含 key：{resp}", file=sys.stderr)
@@ -935,7 +1018,11 @@ def _parse_frontmatter(text: str) -> dict[str, Any]:
         return fm
     for line in m.group(1).splitlines():
         line = line.rstrip()
-        if not line or line.lstrip().startswith("#") or line.startswith((" ", "\t", "-")):
+        if (
+            not line
+            or line.lstrip().startswith("#")
+            or line.startswith((" ", "\t", "-"))
+        ):
             continue
         if ":" not in line:
             continue
@@ -989,7 +1076,9 @@ def cmd_index(args: argparse.Namespace) -> int:
         try:
             fm = _parse_frontmatter(p.read_text(encoding="utf-8"))
         except Exception as e:
-            print(f"[index] 解析 {p.name} 失败：{type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"[index] 解析 {p.name} 失败：{type(e).__name__}: {e}", file=sys.stderr
+            )
             fm = {}
         entries.append((p.stem, fm))
 
@@ -1045,11 +1134,17 @@ def cmd_cache(args: argparse.Namespace) -> int:
             older_than_days=args.older_than,
             dry_run=args.dry_run,
         )
-        days = args.older_than if args.older_than is not None else settings.cache_b_max_age_days
+        days = (
+            args.older_than
+            if args.older_than is not None
+            else settings.cache_b_max_age_days
+        )
         scope = "全部" if args.all else f"> {days} 天"
         verb = "将清理" if args.dry_run else "已清理"
         _print_removed(removed, args.dry_run)
-        print(f"[cache] {verb} Tier B（api_responses，{scope}）：{n} 个文件，释放 {_fmt_bytes(freed)}。")
+        print(
+            f"[cache] {verb} Tier B（api_responses，{scope}）：{n} 个文件，释放 {_fmt_bytes(freed)}。"
+        )
         return 0
 
     # prune
@@ -1065,7 +1160,9 @@ def cmd_cache(args: argparse.Namespace) -> int:
         print(f"[cache] Tier A 占用未超目标（{target} MB），无需淘汰。")
     else:
         keep = "（保留被笔记引用者）" if args.keep_referenced else ""
-        print(f"[cache] {verb} Tier A {n} 个单元{keep}，释放 {_fmt_bytes(freed)}，剩余 {_fmt_bytes(remain)}。")
+        print(
+            f"[cache] {verb} Tier A {n} 个单元{keep}，释放 {_fmt_bytes(freed)}，剩余 {_fmt_bytes(remain)}。"
+        )
     return 0
 
 
@@ -1084,24 +1181,46 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("search", help="多源融合检索（OpenAlex + arXiv）")
     sp.add_argument("query", help="检索式（多词请用单引号包裹）")
-    sp.add_argument("--source", default="auto", choices=["auto", "openalex", "arxiv", "wos", "s2"])
+    sp.add_argument(
+        "--source", default="auto", choices=["auto", "openalex", "arxiv", "wos", "s2"]
+    )
     sp.add_argument("--year", default=None, help="如 2023-2026 / 2023- / 2023")
     sp.add_argument("--limit", type=int, default=15)
-    sp.add_argument("--sort", default="relevance", choices=["relevance", "date", "citations"])
+    sp.add_argument(
+        "--sort", default="relevance", choices=["relevance", "date", "citations"]
+    )
     sp.add_argument("--min-citations", type=int, default=None, dest="min_citations")
     sp.add_argument("--oa-only", action="store_true", dest="oa_only", help="仅开放获取")
-    sp.add_argument("--enrich", action="store_true", help="补 WoS 官方 JIF/JCR + S2 TLDR（逐条调用，较慢）")
+    sp.add_argument(
+        "--enrich",
+        action="store_true",
+        help="补 WoS 官方 JIF/JCR + S2 TLDR（逐条调用，较慢）",
+    )
     sp.add_argument("--save", action="store_true", help="保存检索快照到 shortlists/")
     sp.add_argument("--purpose", default=None, help="本次检索目的（写入快照）")
     sp.set_defaults(func=cmd_search)
 
     sp = sub.add_parser("read", help="抓全文 + 抽取 + 建 papers/ 笔记骨架")
     sp.add_argument("target", help="DOI / URL / arXiv id / OpenAlex id")
-    sp.add_argument("--backend", default=None, help="PDF 抽取后端：mineru-cloud / pymupdf4llm / auto")
-    sp.add_argument("--headed", action="store_true", help="有头浏览器（应对 Cloudflare 等）")
-    sp.add_argument("--no-note", dest="note", action="store_false", help="只抓全文，不建笔记骨架")
+    sp.add_argument(
+        "--backend",
+        default=None,
+        help="PDF 抽取后端：mineru-cloud / pymupdf4llm / auto",
+    )
+    sp.add_argument(
+        "--headed", action="store_true", help="有头浏览器（应对 Cloudflare 等）"
+    )
+    sp.add_argument(
+        "--no-note", dest="note", action="store_false", help="只抓全文，不建笔记骨架"
+    )
     sp.add_argument("--overwrite", action="store_true", help="覆盖已存在的同名笔记")
-    sp.add_argument("--force", "--refresh", action="store_true", dest="force", help="忽略缓存全文，强制重新抓取/抽取")
+    sp.add_argument(
+        "--force",
+        "--refresh",
+        action="store_true",
+        dest="force",
+        help="忽略缓存全文，强制重新抓取/抽取",
+    )
     sp.set_defaults(func=cmd_read, note=True)
 
     sp = sub.add_parser("get", help="输出融合元数据")
@@ -1128,13 +1247,40 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--force", action="store_true", help="papers/ 为空时也重建")
     sp.set_defaults(func=cmd_index)
 
-    sp = sub.add_parser("cache", help="缓存治理（stats 概览 / clean 清 Tier B / prune 淘汰 Tier A）")
+    sp = sub.add_parser(
+        "cache", help="缓存治理（stats 概览 / clean 清 Tier B / prune 淘汰 Tier A）"
+    )
     sp.add_argument("action", choices=["stats", "clean", "prune"])
-    sp.add_argument("--all", action="store_true", help="clean：删除全部 Tier B（不限过期）")
-    sp.add_argument("--older-than", type=int, default=None, dest="older_than", help="clean：清理超过 N 天的 Tier B")
-    sp.add_argument("--max-mb", type=int, default=None, dest="max_mb", help="prune：淘汰到总占用 ≤ N MB（默认软上限）")
-    sp.add_argument("--dry-run", action="store_true", dest="dry_run", help="只列将删除项，不实际删除")
-    sp.add_argument("--keep-referenced", action=argparse.BooleanOptionalAction, default=True, dest="keep_referenced", help="prune：跳过被 papers/ 笔记引用的文件（默认开）")
+    sp.add_argument(
+        "--all", action="store_true", help="clean：删除全部 Tier B（不限过期）"
+    )
+    sp.add_argument(
+        "--older-than",
+        type=int,
+        default=None,
+        dest="older_than",
+        help="clean：清理超过 N 天的 Tier B",
+    )
+    sp.add_argument(
+        "--max-mb",
+        type=int,
+        default=None,
+        dest="max_mb",
+        help="prune：淘汰到总占用 ≤ N MB（默认软上限）",
+    )
+    sp.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help="只列将删除项，不实际删除",
+    )
+    sp.add_argument(
+        "--keep-referenced",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="keep_referenced",
+        help="prune：跳过被 papers/ 笔记引用的文件（默认开）",
+    )
     sp.set_defaults(func=cmd_cache)
 
     return p

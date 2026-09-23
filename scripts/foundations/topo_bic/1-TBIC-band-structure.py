@@ -25,10 +25,10 @@ print("=" * 70)
 print("TBIC系统能带结构计算")
 print("=" * 70)
 print("\n定义的符号变量:")
-print(f"  波数: k")
-print(f"  腔体高度: C")
-print(f"  Σ模式参数: f_Σ, v_Σ, u_Σ")
-print(f"  Π模式参数: f_Π, v_Π, u_Π")
+print("  波数: k")
+print("  腔体高度: C")
+print("  Σ模式参数: f_Σ, v_Σ, u_Σ")
+print("  Π模式参数: f_Π, v_Π, u_Π")
 print()
 
 # %%
@@ -41,19 +41,13 @@ print("构建哈密顿量矩阵")
 print("=" * 70)
 
 # Σ模式的哈密顿量 (方程S4)
-HΣ = Matrix([
-    [fΣ, vΣ + uΣ * exp(-I * k)],
-    [vΣ + uΣ * exp(I * k), fΣ]
-])
+HΣ = Matrix([[fΣ, vΣ + uΣ * exp(-I * k)], [vΣ + uΣ * exp(I * k), fΣ]])
 
 print("\nΣ模式的哈密顿量 H_Σ:")
 sp.pprint(HΣ)
 
 # Π模式的哈密顿量 (方程S6)
-HΠ = Matrix([
-    [fΠ, vΠ + uΠ * exp(-I * k)],
-    [vΠ + uΠ * exp(I * k), fΠ]
-])
+HΠ = Matrix([[fΠ, vΠ + uΠ * exp(-I * k)], [vΠ + uΠ * exp(I * k), fΠ]])
 
 print("\nΠ模式的哈密顿量 H_Π:")
 sp.pprint(HΠ)
@@ -74,9 +68,9 @@ vΣ_expr = 1050 - 12.17 * C
 uΣ_expr = 440 + 3.65 * C
 
 print("\nΣ模式 (方程S5):")
-print(f"  f_Σ = 3890 - 10.29C")
-print(f"  v_Σ = 1050 - 12.17C")
-print(f"  u_Σ = 440 + 3.65C")
+print("  f_Σ = 3890 - 10.29C")
+print("  v_Σ = 1050 - 12.17C")
+print("  u_Σ = 440 + 3.65C")
 
 # Π模式的线性关系 (方程S7)
 fΠ_expr = 5850 - 41.20 * C
@@ -84,9 +78,9 @@ vΠ_expr = 30 - 0.35 * C
 uΠ_expr = 290 - 2.89 * C
 
 print("\nΠ模式 (方程S7):")
-print(f"  f_Π = 5850 - 41.20C")
-print(f"  v_Π = 30 - 0.35C")
-print(f"  u_Π = 290 - 2.89C")
+print("  f_Π = 5850 - 41.20C")
+print("  v_Π = 30 - 0.35C")
+print("  u_Π = 290 - 2.89C")
 print()
 
 # 将线性关系代入哈密顿量
@@ -112,7 +106,7 @@ eigenvals_Σ_list = list(eigenvals_Σ.keys())
 
 print("Σ模式的本征值（符号形式）:")
 for i, ev in enumerate(eigenvals_Σ_list):
-    print(f"\n  λ_Σ{i+1} =")
+    print(f"\n  λ_Σ{i + 1} =")
     sp.pprint(sp.simplify(ev))
 
 # 计算Π模式的本征值
@@ -122,7 +116,7 @@ eigenvals_Π_list = list(eigenvals_Π.keys())
 
 print("\nΠ模式的本征值（符号形式）:")
 for i, ev in enumerate(eigenvals_Π_list):
-    print(f"\n  λ_Π{i+1} =")
+    print(f"\n  λ_Π{i + 1} =")
     sp.pprint(sp.simplify(ev))
 print()
 
@@ -145,7 +139,6 @@ print("\n本征值函数已转换为numpy函数")
 print()
 
 
-
 # %%
 # ============================================================================
 # 6. 创建参数网格并计算本征值
@@ -161,7 +154,7 @@ C_range = (0, 100)  # C的范围：0到100 mm
 k_resolution = 100  # k方向的分辨率
 C_resolution = 100  # C方向的分辨率
 
-print(f"\n参数范围:")
+print("\n参数范围:")
 print(f"  k: {k_range[0]:.2f} ~ {k_range[1]:.2f} (一个周期)")
 print(f"  C: {C_range[0]:.2f} ~ {C_range[1]:.2f} mm")
 print(f"  分辨率: {k_resolution} × {C_resolution}")
@@ -224,7 +217,7 @@ k_scale = ref_length / k_range_len
 C_scale = ref_length / C_range_len
 eigenval_scale = ref_length / eigenval_range_len
 
-print(f"\n自动计算的缩放因子:")
+print("\n自动计算的缩放因子:")
 print(f"  k轴缩放: {k_scale:.2f}")
 print(f"  C轴缩放: {C_scale:.2f}")
 print(f"  本征值轴缩放: {eigenval_scale:.2f}")

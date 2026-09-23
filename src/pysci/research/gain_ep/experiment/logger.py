@@ -172,7 +172,9 @@ class SmartLevelFilter(logging.Filter):
 
         # 找出所有pysci.research.gain_ep.experiment包内的活跃logger，按层级深度分组
         sweeper_loggers = [
-            name for name in active_loggers if name.startswith("pysci.research.gain_ep.experiment.")
+            name
+            for name in active_loggers
+            if name.startswith("pysci.research.gain_ep.experiment.")
         ]
 
         # 找出最短的路径长度（最顶层的调用）
@@ -187,9 +189,13 @@ class SmartLevelFilter(logging.Filter):
 
         # 特殊处理：如果有use包的logger活跃，则只显示use包的日志
         use_loggers = [
-            name for name in sweeper_loggers if name.startswith("pysci.research.gain_ep.experiment.use.")
+            name
+            for name in sweeper_loggers
+            if name.startswith("pysci.research.gain_ep.experiment.use.")
         ]
-        if use_loggers and not logger_name.startswith("pysci.research.gain_ep.experiment.use."):
+        if use_loggers and not logger_name.startswith(
+            "pysci.research.gain_ep.experiment.use."
+        ):
             return False
 
         # 否则，只显示最浅层级的日志

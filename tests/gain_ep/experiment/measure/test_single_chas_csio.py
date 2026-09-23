@@ -13,7 +13,6 @@ import pytest
 
 from pysci.research.gain_ep.experiment.analyze import (
     Waveform,
-    extract_single_tone_information_vvi,
     get_sine_cycles,
     init_sampling_info,
     init_sine_args,
@@ -273,7 +272,9 @@ class TestSingleChasCSIO:
 
         while len(export_data_collector.collected_data) < target_chunks:
             if time.time() - start_time > timeout:
-                raise TimeoutError(f"数据收集超时，仅收集到 {len(export_data_collector.collected_data)} 个数据块")
+                raise TimeoutError(
+                    f"数据收集超时，仅收集到 {len(export_data_collector.collected_data)} 个数据块"
+                )
             time.sleep(0.1)
 
         # 停止任务
@@ -335,7 +336,9 @@ class TestSingleChasCSIO:
 
         while len(export_data_collector.collected_data) < target_chunks:
             if time.time() - start_time > timeout:
-                raise TimeoutError(f"数据收集超时，仅收集到 {len(export_data_collector.collected_data)} 个数据块")
+                raise TimeoutError(
+                    f"数据收集超时，仅收集到 {len(export_data_collector.collected_data)} 个数据块"
+                )
             time.sleep(0.1)
 
         # 停止任务
@@ -458,7 +461,7 @@ class TestSingleChasCSIO:
 
         while len(export_data_collector.collected_data) < target_chunks:
             if time.time() - start_time > timeout:
-                raise TimeoutError(f"数据收集超时")
+                raise TimeoutError("数据收集超时")
             time.sleep(0.1)
 
         # 停止任务

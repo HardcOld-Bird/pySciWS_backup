@@ -120,11 +120,11 @@ sim = SimScanner()
 sim.connect()
 # 执行仿真
 _ = sim.run_scan(
-    cr_min = cr_center - half_scale,
-    cr_max = cr_center + half_scale,
-    ci_min = ci_center - half_scale,
-    ci_max = ci_center + half_scale,
-    res = 50,
+    cr_min=cr_center - half_scale,
+    cr_max=cr_center + half_scale,
+    ci_min=ci_center - half_scale,
+    ci_max=ci_center + half_scale,
+    res=50,
     input_amp_l="1[Pa]",
     input_amp_r="0[Pa]",
     fishnet_tf_data_path=tf_data_path,
@@ -368,11 +368,11 @@ sim = SimScanner()
 sim.connect()
 # 执行仿真
 _ = sim.run_scan(
-    cr_min = cr_center - half_scale,
-    cr_max = cr_center + half_scale,
-    ci_min = ci_center - half_scale,
-    ci_max = ci_center + half_scale,
-    res = 50,
+    cr_min=cr_center - half_scale,
+    cr_max=cr_center + half_scale,
+    ci_min=ci_center - half_scale,
+    ci_max=ci_center + half_scale,
+    res=50,
     input_amp_l="0[Pa]",
     input_amp_r="1[Pa]",
     fishnet_tf_data_path=tf_data_path,

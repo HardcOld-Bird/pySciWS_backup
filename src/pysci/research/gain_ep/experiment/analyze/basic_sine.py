@@ -202,9 +202,7 @@ def extract_single_tone_information_vvi(
         freq_result = load_freq_optimizer_result()
         if freq_result is not None:
             approx_freq = freq_result["frequency"]
-            f_logger.info(
-                f"approx_freq 从频率优化结果加载: {approx_freq:.2f}Hz"
-            )
+            f_logger.info(f"approx_freq 从频率优化结果加载: {approx_freq:.2f}Hz")
 
     channels_num = input_waveform.channels_num
     samples_num = input_waveform.samples_num
@@ -371,13 +369,12 @@ def extract_single_tone_information_vvi(
 
         # 第二步：使用优化后的频率，对其余通道优化幅值和相位
         if channels_num > 1:
+
             def sine_model_fixed_freq(
                 t: np.ndarray, amplitude: float, phase: float
             ) -> np.ndarray:
                 """正弦波模型（固定频率）"""
-                return amplitude * np.sin(
-                    2 * np.pi * optimized_frequency * t + phase
-                )
+                return amplitude * np.sin(2 * np.pi * optimized_frequency * t + phase)
 
             for ch_idx in range(1, channels_num):
                 channel_data = input_waveform[ch_idx, :]
@@ -430,8 +427,7 @@ def extract_single_tone_information_vvi(
         )
     if input_waveform.channel_complex_amplitudes is not None:
         f_logger.warning(
-            "input_waveform的channel_complex_amplitudes属性不为None，"
-            "将被覆盖为新估计值"
+            "input_waveform的channel_complex_amplitudes属性不为None，将被覆盖为新估计值"
         )
 
     # 创建output_waveform：使用input_waveform的数据和元数据，更新频率和复振幅

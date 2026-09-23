@@ -39,8 +39,12 @@ class TestCaliberAnemone:
 
     def test_infer_dummy_ao_channel(self):
         """测试虚拟AO通道推断逻辑"""
-        assert CaliberAnemone._infer_dummy_ao_channel("PXI1Slot2/ai0") == "PXI1Slot2/ao0"
-        assert CaliberAnemone._infer_dummy_ao_channel("PXI1Slot3/ai1") == "PXI1Slot3/ao1"
+        assert (
+            CaliberAnemone._infer_dummy_ao_channel("PXI1Slot2/ai0") == "PXI1Slot2/ao0"
+        )
+        assert (
+            CaliberAnemone._infer_dummy_ao_channel("PXI1Slot3/ai1") == "PXI1Slot3/ao1"
+        )
         assert CaliberAnemone._infer_dummy_ao_channel("Dev1/ai0") == "Dev1/ao0"
 
     def test_caliber_initialization(self, ai_channels, sampling_info):
@@ -60,7 +64,9 @@ class TestCaliberAnemone:
 
         print(f"CaliberAnemone初始化成功，AI通道数: {len(caliber.ai_channels)}")
 
-    def test_caliber_initialization_with_custom_frequency(self, ai_channels, sampling_info):
+    def test_caliber_initialization_with_custom_frequency(
+        self, ai_channels, sampling_info
+    ):
         """测试使用自定义频率的初始化"""
         caliber = CaliberAnemone(
             ai_channels=ai_channels,
@@ -270,16 +276,17 @@ class TestCaliberAnemone:
 
         # 验证默认路径下的文件已保存
         default_path = (
-            research_asset_dir("gain_ep")
-            / "storage"
-            / "calib"
-            / "calib_result_anemone"
+            research_asset_dir("gain_ep") / "storage" / "calib" / "calib_result_anemone"
         )
 
         assert default_path.exists(), f"默认路径不存在: {default_path}"
         assert (default_path / "ai_comp_data.pkl").exists(), "ai_comp_data.pkl未保存"
-        assert (default_path / "raw_sweep_data.pkl").exists(), "raw_sweep_data.pkl未保存"
+        assert (default_path / "raw_sweep_data.pkl").exists(), (
+            "raw_sweep_data.pkl未保存"
+        )
         assert (default_path / "transfer_function_polar.png").exists(), "polar图未保存"
-        assert (default_path / "compensation_cartesian.png").exists(), "cartesian图未保存"
+        assert (default_path / "compensation_cartesian.png").exists(), (
+            "cartesian图未保存"
+        )
 
         print(f"默认路径校准完成，所有文件已保存到: {default_path}")

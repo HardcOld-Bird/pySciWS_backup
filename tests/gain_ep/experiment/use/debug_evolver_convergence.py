@@ -30,7 +30,6 @@ import numpy as np
 
 from pysci.research.gain_ep.experiment.analyze import TFData, load_data_with_fallback
 
-
 # =============================================================================
 #  与 scripts/8演化测量.py 完全一致的配置
 # =============================================================================
@@ -84,6 +83,7 @@ CASES = {
 #  核心分析函数
 # =============================================================================
 
+
 def build_matrices(tf_data: TFData) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """从 TFData 中按 Evolver 的索引顺序抽取子矩阵。
 
@@ -114,9 +114,9 @@ def matrix_solution(
 ) -> tuple[np.ndarray, np.ndarray]:
     """一次性解出理论稳态：(I - M^T diag(beta)) T = S。"""
     n = len(tf_diag)
-    beta = (gain - 1.0) / (gain * tf_diag)             # (n,)
-    static_contribution = static_amps @ tf_static      # (n,)
-    closed_loop = np.eye(n) - tf_feedback.T * beta     # (n,n)
+    beta = (gain - 1.0) / (gain * tf_diag)  # (n,)
+    static_contribution = static_amps @ tf_static  # (n,)
+    closed_loop = np.eye(n) - tf_feedback.T * beta  # (n,n)
     T_star = np.linalg.solve(closed_loop, static_contribution)
     a_star = beta * T_star
     return T_star, a_star
@@ -160,7 +160,7 @@ def analytical_iterate(
 
     for _ in range(cycles_num):
         # 解析模式下的 T
-        T = static_amps @ tf_static + a_old @ tf_feedback   # (n_ai,)
+        T = static_amps @ tf_static + a_old @ tf_feedback  # (n_ai,)
         # 入射、目标、新 ao（与 _feedback_method 完全一致）
         incident = T - a_old * tf_diag
         target_total = incident * gain
@@ -178,6 +178,7 @@ def analytical_iterate(
 # =============================================================================
 #  打印辅助
 # =============================================================================
+
 
 def print_section(title: str) -> None:
     print()
@@ -208,6 +209,7 @@ def diag_dominance_metric(M: np.ndarray) -> tuple[float, np.ndarray]:
 #  主流程
 # =============================================================================
 
+
 def analyze_one_case(label: str, tf_path: str) -> None:
     print_section(f"CASE: {label}\n  path = {tf_path}")
 
@@ -228,15 +230,15 @@ def analyze_one_case(label: str, tf_path: str) -> None:
     static_amps = np.full(len(AO_CHANNELS_STATIC), STATIC_AMP, dtype=np.complex128)
 
     # ---- 1. TF 子矩阵尺度 ----
-    print_subsection("(1) tf_feedback 子矩阵概览（与 ao_channels_feedback × ai_channels 对齐）")
+    print_subsection(
+        "(1) tf_feedback 子矩阵概览（与 ao_channels_feedback × ai_channels 对齐）"
+    )
     np.set_printoptions(precision=3, suppress=False, linewidth=200)
     print("|tf_feedback| (8×8 模长)：")
     print(np.abs(tf_feedback))
     print("\n|tf_diag| =", np.abs(tf_diag))
     min_ratio, all_ratios = diag_dominance_metric(tf_feedback)
-    print(
-        "\n各行对角占优比 |M_ii| / sum_{j!=i}|M_ij|："
-    )
+    print("\n各行对角占优比 |M_ii| / sum_{j!=i}|M_ij|：")
     for i, r in enumerate(all_ratios):
         flag = "  <-- 不占优" if r < 1.0 else ""
         print(f"  ch{i}: {r:.4f}{flag}")
@@ -268,8 +270,12 @@ def analyze_one_case(label: str, tf_path: str) -> None:
     # ---- 4. 解析迭代轨迹 ----
     print_subsection("(4) 解析迭代轨迹（与 simulate(mode='analytical') 等价）")
     T_hist, a_hist = analytical_iterate(
-        tf_static, tf_feedback, tf_diag,
-        GAIN_COEFFICIENTS, static_amps, CYCLES_NUM,
+        tf_static,
+        tf_feedback,
+        tf_diag,
+        GAIN_COEFFICIENTS,
+        static_amps,
+        CYCLES_NUM,
     )
     print(f"{'周期':>4} | {'max|T - T*|':>14} | {'max|a - a*|':>14} | {'max|a|':>10}")
     print("-" * 64)
@@ -277,7 +283,7 @@ def analyze_one_case(label: str, tf_path: str) -> None:
         err_T = np.max(np.abs(T_hist[k] - T_star))
         err_a = np.max(np.abs(a_hist[k] - a_star))
         max_a = np.max(np.abs(a_hist[k]))
-        print(f"{k+1:>4} | {err_T:>14.4e} | {err_a:>14.4e} | {max_a:>10.4f}")
+        print(f"{k + 1:>4} | {err_T:>14.4e} | {err_a:>14.4e} | {max_a:>10.4f}")
 
     # ---- 5. 与谱半径预测对比 ----
     print_subsection("(5) 误差衰减比 vs 理论 ρ(A)")
@@ -289,9 +295,7 @@ def analyze_one_case(label: str, tf_path: str) -> None:
             curr = np.linalg.norm(a_hist[k] - a_star)
             if prev > 0:
                 ratios_step.append(curr / prev)
-        print(
-            "实测 ||a_k - a*|| / ||a_{k-1} - a*||（应稳定地接近 ρ(A)）："
-        )
+        print("实测 ||a_k - a*|| / ||a_{k-1} - a*||（应稳定地接近 ρ(A)）：")
         for i, r in enumerate(ratios_step, start=2):
             print(f"  k={i}: {r:.4f}")
 

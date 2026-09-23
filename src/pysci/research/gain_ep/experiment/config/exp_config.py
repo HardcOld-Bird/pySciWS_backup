@@ -4,8 +4,6 @@
 扫场点阵、仿真参数等，方便在多个脚本和模块间共用。
 """
 
-import numpy as np
-
 from pysci.research.gain_ep.experiment.analyze import init_sampling_info
 from pysci.research.gain_ep.experiment.use import get_square_grid
 
@@ -45,7 +43,9 @@ ao_channels_static_L: tuple[str, ...] = ("PXI1Slot2/ao0",)
 ao_channels_static_r: tuple[str, ...] = ("PXI1Slot2/ao1",)
 
 # 所有模拟输出通道（反馈 + 声源）
-ao_channels: tuple[str, ...] = ao_channels_feedback + ao_channels_static_L + ao_channels_static_r
+ao_channels: tuple[str, ...] = (
+    ao_channels_feedback + ao_channels_static_L + ao_channels_static_r
+)
 
 # ============================================================================
 # 采样参数配置

@@ -57,8 +57,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from .config import settings
 from .cache_manager import bump_mtime
+from .config import settings
+
 
 # ---------------------------------------------------------------------------
 # 异常
@@ -98,7 +99,11 @@ APS_ADAPTER = PublisherAdapter(
     name="aps",
     hosts=("journals.aps.org",),
     # 实测：全文位于 <div class="content" id="fulltext-content">，不含站点导航噪声
-    fulltext_selectors=("#fulltext-content", "section.fulltext div.content", "div.article-fulltext"),
+    fulltext_selectors=(
+        "#fulltext-content",
+        "section.fulltext div.content",
+        "div.article-fulltext",
+    ),
     wait_selector="#fulltext-content",
 )
 GENERIC_ADAPTER = PublisherAdapter(
@@ -233,7 +238,8 @@ def _launch(p: Any, channel: str, headless: bool) -> tuple[Any, str]:
     except Exception as e:  # noqa: BLE001
         tried.append(f"bundled-chromium: {e}")
     raise BrowserNotAvailable(
-        "无法启动浏览器。已尝试:\n  " + "\n  ".join(tried)
+        "无法启动浏览器。已尝试:\n  "
+        + "\n  ".join(tried)
         + "\n提示：确认本机已安装 Chrome/Edge，或运行 `playwright install chromium`。"
     )
 
@@ -271,7 +277,7 @@ def _slug(res: FetchResult) -> str:
     base = _first(res.meta, "citation_doi") or res.title or res.url
     base = re.sub(r"https?://", "", base)
     s = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("_").lower()
-    return (s[:80] or "article")
+    return s[:80] or "article"
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +317,9 @@ def fetch_html(
         browser, used = _launch(p, channel, headless)
         res.browser = used
         try:
-            ctx = browser.new_context(viewport={"width": 1400, "height": 2200}, locale="en-US")
+            ctx = browser.new_context(
+                viewport={"width": 1400, "height": 2200}, locale="en-US"
+            )
             page = ctx.new_page()
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
 
@@ -328,7 +336,9 @@ def fetch_html(
 
             html_low = page.content().lower()
             title_low = (page.title() or "").lower()
-            res.cloudflare = any(m in html_low for m in CF_MARKERS) or "just a moment" in title_low
+            res.cloudflare = (
+                any(m in html_low for m in CF_MARKERS) or "just a moment" in title_low
+            )
             res.institutional_access = (
                 "access provided by" in html_low
                 or "tongji" in html_low
@@ -355,10 +365,17 @@ def fetch_html(
     res.seconds = round(time.time() - t0, 1)
 
     if res.cloudflare and headless and retry_headed_on_cloudflare:
-        print("[browser_fetch] headless 触发 Cloudflare，改用 headed 重试…", file=sys.stderr)
+        print(
+            "[browser_fetch] headless 触发 Cloudflare，改用 headed 重试…",
+            file=sys.stderr,
+        )
         return fetch_html(
-            url, headless=False, channel=channel, timeout_ms=timeout_ms,
-            adapter=ad, retry_headed_on_cloudflare=False,
+            url,
+            headless=False,
+            channel=channel,
+            timeout_ms=timeout_ms,
+            adapter=ad,
+            retry_headed_on_cloudflare=False,
         )
     return res
 
@@ -380,17 +397,25 @@ def to_markdown(res: FetchResult) -> str:
     authors = res.meta.get("citation_author") or []
     lines.append("authors: [" + ", ".join(_yaml_str(a) for a in authors) + "]")
     lines.append(f"fetched_at: {datetime.now().isoformat(timespec='seconds')}")
-    lines.append(f"fetcher: browser_fetch (playwright, adapter={res.adapter}, browser={res.browser})")
+    lines.append(
+        f"fetcher: browser_fetch (playwright, adapter={res.adapter}, browser={res.browser})"
+    )
     lines.append(f"institutional_access: {str(bool(res.institutional_access)).lower()}")
     lines.append(f"cloudflare_passed: {str(not res.cloudflare).lower()}")
     lines.append(f"char_count: {len(res.text)}")
     lines.append(
         "equations_note: "
-        + _yaml_str("公式可能以图片/SVG 呈现而未被提取；需公式请走 PDF + 云端识别或 arXiv LaTeX")
+        + _yaml_str(
+            "公式可能以图片/SVG 呈现而未被提取；需公式请走 PDF + 云端识别或 arXiv LaTeX"
+        )
     )
     lines += ["---", "", f"# {res.title}", "", res.text.strip()]
     if res.math_latex:
-        lines += ["", f"<!-- 另检测到 {len(res.math_latex)} 条 MathML alttext(LaTeX) 公式 -->", ""]
+        lines += [
+            "",
+            f"<!-- 另检测到 {len(res.math_latex)} 条 MathML alttext(LaTeX) 公式 -->",
+            "",
+        ]
         lines += [f"$$ {m} $$" for m in res.math_latex]
     return "\n".join(lines) + "\n"
 
@@ -527,7 +552,11 @@ def _read_bundle_cache(
     except (OSError, json.JSONDecodeError):
         return None
     ts = float(m.get("ts") or 0.0)
-    if max_age_days is not None and max_age_days > 0 and (time.time() - ts) > max_age_days * 86400:
+    if (
+        max_age_days is not None
+        and max_age_days > 0
+        and (time.time() - ts) > max_age_days * 86400
+    ):
         return None
     html_p = Path(m["html_path"]) if m.get("html_path") else None
     pdf_p = Path(m["pdf_path"]) if m.get("pdf_path") else None
@@ -616,7 +645,11 @@ def fetch_bundle(
 
     if use_cache:
         cached = _read_bundle_cache(
-            url, base_out, max_age_days=max_age_days, want_html=want_html, want_pdf=want_pdf
+            url,
+            base_out,
+            max_age_days=max_age_days,
+            want_html=want_html,
+            want_pdf=want_pdf,
         )
         if cached is not None:
             print(f"[browser_fetch] 命中缓存 bundle：{cached.slug}（未启动浏览器）")
@@ -654,9 +687,10 @@ def fetch_bundle(
             page.wait_for_timeout(1000)
 
             html_low = page.content().lower()
-            res.cloudflare = any(m in html_low for m in CF_MARKERS) or "just a moment" in (
-                page.title() or ""
-            ).lower()
+            res.cloudflare = (
+                any(m in html_low for m in CF_MARKERS)
+                or "just a moment" in (page.title() or "").lower()
+            )
             res.institutional_access = (
                 "access provided by" in html_low
                 or "tongji" in html_low
@@ -669,7 +703,12 @@ def fetch_bundle(
             meta = page.evaluate(_JS_META) or {}
             res.title = _pick_title(meta)
             fr = FetchResult(
-                url=url, ok=True, title=res.title, meta=meta, adapter=ad.name, browser=used
+                url=url,
+                ok=True,
+                title=res.title,
+                meta=meta,
+                adapter=ad.name,
+                browser=used,
             )
             fr.institutional_access = res.institutional_access
             res.slug = _slug(fr)
@@ -715,9 +754,14 @@ def fetch_bundle(
                     href = lk.get("href")
                     if not href:
                         continue
-                    data = _download_bytes(ctx, href, timeout_ms) or _download_via_click(page, href)
+                    data = _download_bytes(
+                        ctx, href, timeout_ms
+                    ) or _download_via_click(page, href)
                     if data:
-                        fname = _filename_from_url(href, lk.get("text")) or f"{res.slug}_supp{i}.bin"
+                        fname = (
+                            _filename_from_url(href, lk.get("text"))
+                            or f"{res.slug}_supp{i}.bin"
+                        )
                         sp = art_dir / _safe_filename(fname, f"{res.slug}_supp{i}")
                         sp.write_bytes(data)
                         res.supp_paths.append(sp)
@@ -734,7 +778,9 @@ def fetch_bundle(
     return res
 
 
-def fetch_all(url: str, *, out_dir: Path | str | None = None, **kw: Any) -> BundleResult:
+def fetch_all(
+    url: str, *, out_dir: Path | str | None = None, **kw: Any
+) -> BundleResult:
     """一次拿全套（HTML 正文 + 正文 PDF + 补充材料）。"""
     return fetch_bundle(
         url, want_html=True, want_pdf=True, want_supplements=True, out_dir=out_dir, **kw
@@ -744,7 +790,12 @@ def fetch_all(url: str, *, out_dir: Path | str | None = None, **kw: Any) -> Bund
 def fetch_pdf(url: str, *, out_dir: Path | str | None = None, **kw: Any) -> Path | None:
     """仅下载正文 PDF，返回保存路径。"""
     r = fetch_bundle(
-        url, want_html=False, want_pdf=True, want_supplements=False, out_dir=out_dir, **kw
+        url,
+        want_html=False,
+        want_pdf=True,
+        want_supplements=False,
+        out_dir=out_dir,
+        **kw,
     )
     return r.pdf_path
 
@@ -754,7 +805,12 @@ def fetch_supplements(
 ) -> list[Path]:
     """仅下载补充材料，返回保存路径列表（无则空列表）。"""
     r = fetch_bundle(
-        url, want_html=False, want_pdf=False, want_supplements=True, out_dir=out_dir, **kw
+        url,
+        want_html=False,
+        want_pdf=False,
+        want_supplements=True,
+        out_dir=out_dir,
+        **kw,
     )
     return r.supp_paths
 
@@ -770,13 +826,19 @@ if __name__ == "__main__":
 
     pf = sub.add_parser("fetch", help="抓取单个 URL")
     pf.add_argument("url")
-    pf.add_argument("--output", type=Path, default=None, help="输出 .md；默认打印到 stdout")
-    pf.add_argument("--headed", action="store_true", help="有头模式（Cloudflare 更稳，但弹窗）")
+    pf.add_argument(
+        "--output", type=Path, default=None, help="输出 .md；默认打印到 stdout"
+    )
+    pf.add_argument(
+        "--headed", action="store_true", help="有头模式（Cloudflare 更稳，但弹窗）"
+    )
     pf.add_argument("--channel", default="auto", help="auto|chrome|msedge|chromium")
 
     pb = sub.add_parser("batch", help="批量抓取并保存到 out-dir")
     pb.add_argument("urls", nargs="*")
-    pb.add_argument("--from-file", type=Path, default=None, help="每行一个 URL，# 开头忽略")
+    pb.add_argument(
+        "--from-file", type=Path, default=None, help="每行一个 URL，# 开头忽略"
+    )
     pb.add_argument("--out-dir", type=Path, default=None)
     pb.add_argument("--headed", action="store_true")
     pb.add_argument("--channel", default="auto")
@@ -801,7 +863,9 @@ if __name__ == "__main__":
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(md, encoding="utf-8")
-            print(f"[browser_fetch] written {args.output} ({len(r.text)} chars, ok={r.ok})")
+            print(
+                f"[browser_fetch] written {args.output} ({len(r.text)} chars, ok={r.ok})"
+            )
         else:
             print(md)
     elif args.cmd == "batch":
@@ -824,7 +888,10 @@ if __name__ == "__main__":
         print(f"[browser_fetch] batch done: {ok}/{len(results)} saved")
     elif args.cmd == "all":
         r = fetch_all(
-            args.url, out_dir=args.out_dir, headless=not args.headed, channel=args.channel
+            args.url,
+            out_dir=args.out_dir,
+            headless=not args.headed,
+            channel=args.channel,
         )
         print(
             f"[browser_fetch] bundle ok={r.ok} ({r.seconds}s, "
@@ -839,7 +906,10 @@ if __name__ == "__main__":
             print(f"  note:  {n}", file=sys.stderr)
     elif args.cmd == "pdf":
         path = fetch_pdf(
-            args.url, out_dir=args.out_dir, headless=not args.headed, channel=args.channel
+            args.url,
+            out_dir=args.out_dir,
+            headless=not args.headed,
+            channel=args.channel,
         )
         print(f"[browser_fetch] pdf -> {path}")
     else:

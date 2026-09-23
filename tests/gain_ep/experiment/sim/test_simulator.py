@@ -9,8 +9,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import matplotlib
 import numpy as np
@@ -24,7 +23,6 @@ from pysci.research.gain_ep.experiment.sim.simulator import (
     _format_complex,
     _parse_complex_str,
 )
-
 
 # =============================================================================
 # 辅助函数测试
@@ -106,19 +104,34 @@ class TestScanResult:
         cr_values = np.linspace(1.004, 1.006, res)
         ci_values = np.linspace(-0.074, -0.072, res)
         return ScanResult(
-            f=3430.0, cr=1.005, cr_min=1.004, cr_max=1.006,
-            ci=-0.073, ci_min=-0.074, ci_max=-0.072, res=res,
-            cr_values=cr_values, ci_values=ci_values,
-            eight_target=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
+            f=3430.0,
+            cr=1.005,
+            cr_min=1.004,
+            cr_max=1.006,
+            ci=-0.073,
+            ci_min=-0.074,
+            ci_max=-0.072,
+            res=res,
+            cr_values=cr_values,
+            ci_values=ci_values,
+            eight_target=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
             eight_tf_matrix=np.random.randn(8, 8) + 1j * np.random.randn(8, 8),
-            eight_gains=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
-            floquet_target=np.random.randn(res, res, 3) + 1j * np.random.randn(res, res, 3),
+            eight_gains=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
+            floquet_target=np.random.randn(res, res, 3)
+            + 1j * np.random.randn(res, res, 3),
             floquet_tf=np.random.randn(3) + 1j * np.random.randn(3),
-            floquet_gains=np.random.randn(res, res, 3) + 1j * np.random.randn(res, res, 3),
-            exp_eight_steady_l=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
-            exp_eight_steady_r=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
-            exp_floquet_steady_l=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
-            exp_floquet_steady_r=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
+            floquet_gains=np.random.randn(res, res, 3)
+            + 1j * np.random.randn(res, res, 3),
+            exp_eight_steady_l=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
+            exp_eight_steady_r=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
+            exp_floquet_steady_l=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
+            exp_floquet_steady_r=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
             eight_initial_l=np.random.randn(8) + 1j * np.random.randn(8),
             eight_initial_r=np.random.randn(8) + 1j * np.random.randn(8),
             floquet_initial_l=np.random.randn(3) + 1j * np.random.randn(3),
@@ -266,7 +279,9 @@ class TestSolveGainsBatch:
         probes_target = np.random.randn(res, res, n) + 1j * np.random.randn(res, res, n)
 
         # 批量求解
-        gains_batch = SimScanner._solve_gains_batch(probes_target, probes_initial, tf_matrix)
+        gains_batch = SimScanner._solve_gains_batch(
+            probes_target, probes_initial, tf_matrix
+        )
 
         # 手动逐点求解
         gains_manual = np.zeros((res, res, n), dtype=complex)
@@ -287,9 +302,13 @@ class TestSolveGainsBatch:
         for res in [1, 2, 5, 10]:
             tf_matrix = np.eye(8, dtype=complex) * 0.5
             probes_initial = np.ones(8, dtype=complex) * 0.2
-            probes_target = np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8)
+            probes_target = np.random.randn(res, res, 8) + 1j * np.random.randn(
+                res, res, 8
+            )
 
-            gains = SimScanner._solve_gains_batch(probes_target, probes_initial, tf_matrix)
+            gains = SimScanner._solve_gains_batch(
+                probes_target, probes_initial, tf_matrix
+            )
             assert gains.shape == (res, res, 8)
             assert np.all(np.isfinite(gains))
 
@@ -317,7 +336,9 @@ class TestFloquetGainComputation:
 
     @staticmethod
     def compute_floquet_gains_scalar(
-        target: np.ndarray, initial: complex, tf: complex,
+        target: np.ndarray,
+        initial: complex,
+        tf: complex,
     ) -> np.ndarray:
         """复现 run_scan 中的 Floquet 标量增益计算"""
         delta = target - initial
@@ -369,19 +390,37 @@ class TestTableDataExtraction:
         mock_java_model.probe.return_value = mock_probe
 
         mock_table = MagicMock()
+
         # 模拟 java.lang.String 的行为：str() 可以转换
         class FakeJavaString:
             def __init__(self, val):
                 self._val = val
+
             def __str__(self):
                 return self._val
+
             def __repr__(self):
                 return f"JavaString({self._val})"
 
         mock_table.getTableData.return_value = [
-            [FakeJavaString("freq"), FakeJavaString("cr"), FakeJavaString("ci"), FakeJavaString("point1")],
-            [FakeJavaString("3430"), FakeJavaString("1.005"), FakeJavaString("-0.073"), FakeJavaString("0.5+0.3i")],
-            [FakeJavaString("3430"), FakeJavaString("1.006"), FakeJavaString("-0.072"), FakeJavaString("0.6-0.2i")],
+            [
+                FakeJavaString("freq"),
+                FakeJavaString("cr"),
+                FakeJavaString("ci"),
+                FakeJavaString("point1"),
+            ],
+            [
+                FakeJavaString("3430"),
+                FakeJavaString("1.005"),
+                FakeJavaString("-0.073"),
+                FakeJavaString("0.5+0.3i"),
+            ],
+            [
+                FakeJavaString("3430"),
+                FakeJavaString("1.006"),
+                FakeJavaString("-0.072"),
+                FakeJavaString("0.6-0.2i"),
+            ],
         ]
         mock_java_model.result.return_value.table.return_value = mock_table
 
@@ -410,7 +449,10 @@ class TestTableDataExtraction:
         mock_java_model.result.return_value.table.return_value = mock_table
 
         result = scanner._extract_scan_table(
-            mock_java_model, "point1", probe_start=3, n_probes=2,
+            mock_java_model,
+            "point1",
+            probe_start=3,
+            n_probes=2,
         )
         assert result.shape == (3, 2)
         assert result.dtype == np.complex128
@@ -435,7 +477,10 @@ class TestTableDataExtraction:
         mock_java_model.result.return_value.table.return_value = mock_table
 
         result = scanner._extract_single_row(
-            mock_java_model, "point1", probe_start=1, n_probes=3,
+            mock_java_model,
+            "point1",
+            probe_start=1,
+            n_probes=3,
         )
         assert result.shape == (3,)
         assert result[0] == pytest.approx(1.0 + 0.5j)
@@ -475,7 +520,11 @@ class TestPlotDiscreteHeatmap:
 
         save_path = tmp_path / "test_heatmap.png"
         result = SimScanner._plot_discrete_heatmap(
-            cr, ci, data, title="Test Heatmap", save_path=save_path,
+            cr,
+            ci,
+            data,
+            title="Test Heatmap",
+            save_path=save_path,
         )
 
         assert result.exists()
@@ -489,7 +538,11 @@ class TestPlotDiscreteHeatmap:
 
         save_path = tmp_path / "single_point.png"
         SimScanner._plot_discrete_heatmap(
-            cr, ci, data, title="Single Point", save_path=save_path,
+            cr,
+            ci,
+            data,
+            title="Single Point",
+            save_path=save_path,
         )
         assert save_path.exists()
 
@@ -501,7 +554,11 @@ class TestPlotDiscreteHeatmap:
 
         save_path = tmp_path / "asymmetric.png"
         SimScanner._plot_discrete_heatmap(
-            cr, ci, data, title="Asymmetric", save_path=save_path,
+            cr,
+            ci,
+            data,
+            title="Asymmetric",
+            save_path=save_path,
         )
         assert save_path.exists()
 
@@ -521,8 +578,14 @@ class TestSaveScanResult:
 
         res = 2
         result = ScanResult(
-            f=3430.0, cr=1.005, cr_min=1.004, cr_max=1.006,
-            ci=-0.073, ci_min=-0.074, ci_max=-0.072, res=res,
+            f=3430.0,
+            cr=1.005,
+            cr_min=1.004,
+            cr_max=1.006,
+            ci=-0.073,
+            ci_min=-0.074,
+            ci_max=-0.072,
+            res=res,
             cr_values=np.linspace(1.004, 1.006, res),
             ci_values=np.linspace(-0.074, -0.072, res),
             eight_target=np.ones((res, res, 8), dtype=complex),
@@ -568,8 +631,14 @@ class TestSaveScanResult:
         res = 3
         eight_gains = np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8)
         result = ScanResult(
-            f=3430.0, cr=1.005, cr_min=1.004, cr_max=1.006,
-            ci=-0.073, ci_min=-0.074, ci_max=-0.072, res=res,
+            f=3430.0,
+            cr=1.005,
+            cr_min=1.004,
+            cr_max=1.006,
+            ci=-0.073,
+            ci_min=-0.074,
+            ci_max=-0.072,
+            res=res,
             cr_values=np.linspace(1.004, 1.006, res),
             ci_values=np.linspace(-0.074, -0.072, res),
             eight_target=np.zeros((res, res, 8), dtype=complex),
@@ -614,20 +683,34 @@ class TestPlotScanResults:
 
         res = 3
         result = ScanResult(
-            f=3430.0, cr=1.005, cr_min=1.004, cr_max=1.006,
-            ci=-0.073, ci_min=-0.074, ci_max=-0.072, res=res,
+            f=3430.0,
+            cr=1.005,
+            cr_min=1.004,
+            cr_max=1.006,
+            ci=-0.073,
+            ci_min=-0.074,
+            ci_max=-0.072,
+            res=res,
             cr_values=np.linspace(1.004, 1.006, res),
             ci_values=np.linspace(-0.074, -0.072, res),
-            eight_target=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
+            eight_target=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
             eight_tf_matrix=np.eye(8, dtype=complex) * 0.5,
-            eight_gains=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
-            floquet_target=np.random.randn(res, res, 3) + 1j * np.random.randn(res, res, 3),
+            eight_gains=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
+            floquet_target=np.random.randn(res, res, 3)
+            + 1j * np.random.randn(res, res, 3),
             floquet_tf=np.ones(3, dtype=complex) * 0.3,
-            floquet_gains=np.random.randn(res, res, 3) + 1j * np.random.randn(res, res, 3),
-            exp_eight_steady_l=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
-            exp_eight_steady_r=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
-            exp_floquet_steady_l=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
-            exp_floquet_steady_r=np.random.randn(res, res, 8) + 1j * np.random.randn(res, res, 8),
+            floquet_gains=np.random.randn(res, res, 3)
+            + 1j * np.random.randn(res, res, 3),
+            exp_eight_steady_l=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
+            exp_eight_steady_r=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
+            exp_floquet_steady_l=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
+            exp_floquet_steady_r=np.random.randn(res, res, 8)
+            + 1j * np.random.randn(res, res, 8),
             eight_initial_l=np.ones(8, dtype=complex) * 0.1,
             eight_initial_r=np.ones(8, dtype=complex) * 0.05,
             floquet_initial_l=np.ones(3, dtype=complex) * 0.1,

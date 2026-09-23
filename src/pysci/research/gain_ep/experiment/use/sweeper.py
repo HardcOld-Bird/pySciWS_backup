@@ -303,7 +303,8 @@ class SweeperCore:
         ao_channels_static: tuple[str, ...] = (),
         ao_channels_feedback: tuple[str, ...] = (),
         static_output_waveform: Waveform | None = None,
-        feedback_function: Callable[[Waveform, Waveform, Waveform, TFData], Waveform] | None = None,
+        feedback_function: Callable[[Waveform, Waveform, Waveform, TFData], Waveform]
+        | None = None,
         buffer_size_multiplier: PositiveInt = 5,
         point_list: list[Point2D] | None = None,
         chunks_per_point: PositiveInt = 3,
@@ -331,13 +332,13 @@ class SweeperCore:
         # 验证并设置sweep_ai_channel
         if sweep_ai_channel is None:
             if not ai_channels:
-                raise ValueError(
-                    "ai_channels不能为空，必须至少包含一个元素"
-                )
+                raise ValueError("ai_channels不能为空，必须至少包含一个元素")
             sweep_ai_channel = ai_channels[0]
             logger.warning("sweep_ai_channel未提供，将使用ai_channels的第一个元素")
         elif sweep_ai_channel not in ai_channels:
-            raise ValueError(f"sweep_ai_channel '{sweep_ai_channel}' 必须在ai_channels中")
+            raise ValueError(
+                f"sweep_ai_channel '{sweep_ai_channel}' 必须在ai_channels中"
+            )
         # 存储sweep_ai_channel参数
         assert sweep_ai_channel is not None
         self._sweep_ai_channel = sweep_ai_channel
@@ -502,7 +503,9 @@ class SweeperCore:
         try:
             channel_idx = self._ai_channels.index(self._sweep_ai_channel)
         except ValueError:
-            logger.error(f"sweep_ai_channel '{self._sweep_ai_channel}' 不在ai_channels中")
+            logger.error(
+                f"sweep_ai_channel '{self._sweep_ai_channel}' 不在ai_channels中"
+            )
             return
 
         # 从多通道波形中提取单通道数据
@@ -516,14 +519,16 @@ class SweeperCore:
             waveform_id=ai_waveform.waveform_id,
             frequency=ai_waveform.frequency,
             channel_complex_amplitudes=(
-                ai_waveform.channel_complex_amplitudes[channel_idx:channel_idx+1]
+                ai_waveform.channel_complex_amplitudes[channel_idx : channel_idx + 1]
                 if ai_waveform.channel_complex_amplitudes is not None
                 else None
             ),
         )
 
         # 存储单通道AI数据
-        self._sweep_data["ai_data_list"][point_idx]["ai_data"].append(single_channel_waveform)
+        self._sweep_data["ai_data_list"][point_idx]["ai_data"].append(
+            single_channel_waveform
+        )
 
         # 检查是否已采集足够chunk
         if chunks_num >= self._CHUNKS_PER_POINT:
@@ -659,7 +664,8 @@ class SweeperCore:
         ao_channels_static: tuple[str, ...] = (),
         ao_channels_feedback: tuple[str, ...] = (),
         static_output_waveform: Waveform | None = None,
-        feedback_function: Callable[[Waveform, Waveform, Waveform, TFData], Waveform] | None = None,
+        feedback_function: Callable[[Waveform, Waveform, Waveform, TFData], Waveform]
+        | None = None,
         buffer_size_multiplier: PositiveInt = 5,
     ) -> None:
         """
@@ -1274,7 +1280,9 @@ class SweeperCore:
             # 更新点列表（从导入的数据中提取）
             ai_data_list = loaded_data["ai_data_list"]
             if ai_data_list:
-                self._point_list = [point_data["position"] for point_data in ai_data_list]
+                self._point_list = [
+                    point_data["position"] for point_data in ai_data_list
+                ]
                 self._TOTAL_POINTS_NUM = len(self._point_list)
 
             logger.info(f"数据导入成功，共 {len(ai_data_list)} 个点")
@@ -1395,7 +1403,9 @@ class SweeperCore:
         # 依次绘制三种模式的图像
         for mode_name in ("discrete", "interpolated", "instantaneous"):
             try:
-                save_path_with_mode = save_path_base.parent / f"{save_path_base.name}_{mode_name}.png"
+                save_path_with_mode = (
+                    save_path_base.parent / f"{save_path_base.name}_{mode_name}.png"
+                )
                 fig, _ = plot_point_tf_data_list(
                     plot_tf_results,
                     mode=mode_name,
@@ -1422,7 +1432,10 @@ class SweeperCore:
             self.stop(timeout=15.0)
 
         # 清理数据采集控制器
-        if hasattr(self, "_measure_controller") and self._measure_controller is not None:
+        if (
+            hasattr(self, "_measure_controller")
+            and self._measure_controller is not None
+        ):
             try:
                 logger.debug("正在清理数据采集控制器...")
                 self._measure_controller.stop()  # 确保停止任务

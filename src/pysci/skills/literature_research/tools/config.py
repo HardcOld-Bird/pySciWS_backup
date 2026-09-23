@@ -134,9 +134,9 @@ class Settings:
     http_user_agent: str
 
     # --- 缓存治理 ---
-    cache_b_max_age_days: int           # Tier B(api_responses) 清理阈值（天）
+    cache_b_max_age_days: int  # Tier B(api_responses) 清理阈值（天）
     cache_autoclean_interval_days: int  # 自动清理钩子最小间隔（天）
-    cache_soft_limit_mb: int            # Tier A 软上限（MB）：stats 告警 + prune 默认目标
+    cache_soft_limit_mb: int  # Tier A 软上限（MB）：stats 告警 + prune 默认目标
 
     # --- 原始 env 快照（便于调试） ---
     _raw_env: dict[str, str] = field(default_factory=dict, repr=False)
@@ -158,6 +158,7 @@ class Settings:
 
     def summary(self) -> str:
         """人类可读的配置摘要，用于日志。敏感字段做脱敏。"""
+
         def mask(v: str | None) -> str:
             if not v:
                 return "(unset)"
@@ -214,7 +215,10 @@ def _get_env_int(key: str, default: int) -> int:
     try:
         return int(v)
     except ValueError:
-        print(f"[config] WARNING: {key}={v!r} is not an int, using default {default}", file=sys.stderr)
+        print(
+            f"[config] WARNING: {key}={v!r} is not an int, using default {default}",
+            file=sys.stderr,
+        )
         return default
 
 
@@ -242,37 +246,54 @@ def build_settings() -> Settings:
         cache_extracted=cache_extracted,
         cache_html_fulltext=cache_html,
         zotero_data_dir=zotero_data_dir,
-
         openalex_email=_get_env("OPENALEX_EMAIL"),
         arxiv_user_agent=_get_env("ARXIV_USER_AGENT"),
-
         wos_api_key=_get_env("WOS_API_KEY"),
         wos_api_secret=_get_env("WOS_API_SECRET"),
-        wos_api_base_url=_get_env("WOS_API_BASE_URL", "https://api.clarivate.com/apis/wos-starter/v1") or "",
-
+        wos_api_base_url=_get_env(
+            "WOS_API_BASE_URL", "https://api.clarivate.com/apis/wos-starter/v1"
+        )
+        or "",
         zotero_user_id=_get_env("ZOTERO_USER_ID"),
         zotero_api_key=_get_env("ZOTERO_API_KEY"),
-        zotero_local_api_base=_get_env("ZOTERO_LOCAL_API_BASE", "http://127.0.0.1:23119/api") or "",
-        zotero_web_api_base=_get_env("ZOTERO_WEB_API_BASE", "https://api.zotero.org") or "",
-
+        zotero_local_api_base=_get_env(
+            "ZOTERO_LOCAL_API_BASE", "http://127.0.0.1:23119/api"
+        )
+        or "",
+        zotero_web_api_base=_get_env("ZOTERO_WEB_API_BASE", "https://api.zotero.org")
+        or "",
         semantic_scholar_api_key=_get_env("SEMANTIC_SCHOLAR_API_KEY"),
         elsevier_api_key=_get_env("ELSEVIER_API_KEY"),
-
         pdf_extract_backend=(_get_env("PDF_EXTRACT_BACKEND", "auto") or "auto").lower(),
         mineru_token=_get_env("MINERU_TOKEN"),
-
         http_timeout=_get_env_int("HTTP_TIMEOUT_SECONDS", 30),
         http_max_retries=_get_env_int("HTTP_MAX_RETRIES", 3),
         http_user_agent=_get_env(
             "HTTP_USER_AGENT",
             "pySciWS/0.1 (research-tool; contact via .env)",
-        ) or "pySciWS/0.1",
-
+        )
+        or "pySciWS/0.1",
         cache_b_max_age_days=_get_env_int("CACHE_B_MAX_AGE_DAYS", 7),
         cache_autoclean_interval_days=_get_env_int("CACHE_AUTOCLEAN_INTERVAL_DAYS", 7),
         cache_soft_limit_mb=_get_env_int("CACHE_SOFT_LIMIT_MB", 2048),
-
-        _raw_env={k: v for k, v in os.environ.items() if k.startswith(("WOS_", "ZOTERO_", "OPENALEX_", "ARXIV_", "SEMANTIC_", "ELSEVIER_", "PDF_", "HTTP_", "CACHE_", "MINERU_"))},
+        _raw_env={
+            k: v
+            for k, v in os.environ.items()
+            if k.startswith(
+                (
+                    "WOS_",
+                    "ZOTERO_",
+                    "OPENALEX_",
+                    "ARXIV_",
+                    "SEMANTIC_",
+                    "ELSEVIER_",
+                    "PDF_",
+                    "HTTP_",
+                    "CACHE_",
+                    "MINERU_",
+                )
+            )
+        },
     )
 
 
@@ -309,8 +330,7 @@ def http_session(retries: int | None = None, *, retry_on_status: bool = True) ->
         from urllib3.util.retry import Retry
     except ImportError as e:
         raise ImportError(
-            "requests is required for http_session(). "
-            "Install with: uv sync"
+            "requests is required for http_session(). Install with: uv sync"
         ) from e
 
     s = requests.Session()
@@ -325,10 +345,12 @@ def http_session(retries: int | None = None, *, retry_on_status: bool = True) ->
     adapter = HTTPAdapter(max_retries=retry)
     s.mount("http://", adapter)
     s.mount("https://", adapter)
-    s.headers.update({
-        "User-Agent": settings.http_user_agent,
-        "Accept": "application/json",
-    })
+    s.headers.update(
+        {
+            "User-Agent": settings.http_user_agent,
+            "Accept": "application/json",
+        }
+    )
     return s
 
 
