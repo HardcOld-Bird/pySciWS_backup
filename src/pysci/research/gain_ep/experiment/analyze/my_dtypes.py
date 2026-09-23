@@ -225,7 +225,7 @@ def _rebuild_waveform_from_pickle(
         重建的Waveform对象
     """
     # 转换为Waveform类型
-    waveform_obj: Waveform = array_data.view(Waveform)  # noqafrom __future__ import annotations
+    waveform_obj: Waveform = array_data.view(Waveform)  # noqa
 
     # 设置所有自定义属性（包括None值，确保属性存在）
     waveform_obj._sampling_rate = sampling_rate
