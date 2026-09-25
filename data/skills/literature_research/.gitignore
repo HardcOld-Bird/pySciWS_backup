@@ -1,5 +1,9 @@
-# ===== 缓存与临时文件（绝不入库）=====
-cache/
+# ===== 缓存与临时文件（默认绝不入库）=====
+# cache 下的一切默认忽略（PDF/html/api_responses 等大文件或易失产物），
+# 唯独 cache/extracted/ 例外——它是 MinerU 配额换来的转换全文（.md），
+# 重获代价高，故纳入 Git 跟踪做备份（与 skill 的 read 缓存复用、cache 治理完全兼容）。
+cache/*
+!cache/extracted/
 *.tmp
 *.log
 
