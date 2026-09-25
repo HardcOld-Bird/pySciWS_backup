@@ -1,0 +1,11381 @@
+{
+ "6416599ac34277f636af58d66877170a8dd9ead7": {
+  "rel": "images/s002_p1_6416599a.png",
+  "ext": "png",
+  "bytes": 42504,
+  "px": [
+   745,
+   318
+  ],
+  "first_label": "Slide 002 图 1",
+  "first_slide": 2,
+  "occurrences": [
+   {
+    "slide": 2,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "f6566663f2af2ed7a1447ef8602e9a602ae6b7c0": {
+  "rel": "images/s002_p2_f6566663.png",
+  "ext": "png",
+  "bytes": 160585,
+  "px": [
+   388,
+   318
+  ],
+  "first_label": "Slide 002 图 2",
+  "first_slide": 2,
+  "occurrences": [
+   {
+    "slide": 2,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "d1edce7ffecc7a0cc2772fb698f326400cabf0d4": {
+  "rel": "images/s002_p3_d1edce7f.png",
+  "ext": "png",
+  "bytes": 199065,
+  "px": [
+   705,
+   366
+  ],
+  "first_label": "Slide 002 图 3",
+  "first_slide": 2,
+  "occurrences": [
+   {
+    "slide": 2,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "2678e567f0fa273ee4e45ffe365962f7d83d5c2d": {
+  "rel": "images/s002_p4_2678e567.png",
+  "ext": "png",
+  "bytes": 144146,
+  "px": [
+   497,
+   522
+  ],
+  "first_label": "Slide 002 图 4",
+  "first_slide": 2,
+  "occurrences": [
+   {
+    "slide": 2,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "3a5785758b2a4e08a58f1f414b744b61a1cf811a": {
+  "rel": "images/s003_p1_3a578575.png",
+  "ext": "png",
+  "bytes": 211559,
+  "px": [
+   683,
+   376
+  ],
+  "first_label": "Slide 003 图 1",
+  "first_slide": 3,
+  "occurrences": [
+   {
+    "slide": 3,
+    "idx": 1,
+    "pos": "右下"
+   },
+   {
+    "slide": 232,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "c6582d9ae2117245c823eb6c65f570c18b0db6a1": {
+  "rel": "images/s003_p2_c6582d9a.png",
+  "ext": "png",
+  "bytes": 55534,
+  "px": [
+   694,
+   247
+  ],
+  "first_label": "Slide 003 图 2",
+  "first_slide": 3,
+  "occurrences": [
+   {
+    "slide": 3,
+    "idx": 2,
+    "pos": "左中"
+   },
+   {
+    "slide": 130,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "4deb544a11d05fcad50b5694e9c49b5aae7f0a23": {
+  "rel": "images/s003_p3_4deb544a.png",
+  "ext": "png",
+  "bytes": 26930,
+  "px": [
+   176,
+   127
+  ],
+  "first_label": "Slide 003 图 3",
+  "first_slide": 3,
+  "occurrences": [
+   {
+    "slide": 3,
+    "idx": 3,
+    "pos": "居中"
+   },
+   {
+    "slide": 130,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "a45c90c9e33bc9934c6d91df37ffd97c6b1ec125": {
+  "rel": "images/s003_p4_a45c90c9.png",
+  "ext": "png",
+  "bytes": 7841,
+  "px": [
+   388,
+   227
+  ],
+  "first_label": "Slide 003 图 4",
+  "first_slide": 3,
+  "occurrences": [
+   {
+    "slide": 3,
+    "idx": 4,
+    "pos": "右中"
+   },
+   {
+    "slide": 130,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "f5564a5675eaa5ef7013dd3781ee1f03ad82fc60": {
+  "rel": "images/s003_p5_f5564a56.png",
+  "ext": "png",
+  "bytes": 16584,
+  "px": [
+   321,
+   167
+  ],
+  "first_label": "Slide 003 图 5",
+  "first_slide": 3,
+  "occurrences": [
+   {
+    "slide": 3,
+    "idx": 5,
+    "pos": "中下"
+   },
+   {
+    "slide": 232,
+    "idx": 4,
+    "pos": "右上"
+   }
+  ]
+ },
+ "6666cce078a94efb5063a68142c6cbe161c41bf7": {
+  "rel": "images/s004_p1_6666cce0.png",
+  "ext": "png",
+  "bytes": 7860,
+  "px": [
+   221,
+   366
+  ],
+  "first_label": "Slide 004 图 1",
+  "first_slide": 4,
+  "occurrences": [
+   {
+    "slide": 4,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 176,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 228,
+    "idx": 1,
+    "pos": "左下"
+   }
+  ]
+ },
+ "6b65bf80fcee2c6a30dd519a875378d90f328fdc": {
+  "rel": "images/s004_p2_6b65bf80.gif",
+  "ext": "gif",
+  "bytes": 423356,
+  "px": [
+   640,
+   480
+  ],
+  "first_label": "Slide 004 图 2",
+  "first_slide": 4,
+  "occurrences": [
+   {
+    "slide": 4,
+    "idx": 2,
+    "pos": "居中"
+   },
+   {
+    "slide": 176,
+    "idx": 2,
+    "pos": "居中"
+   },
+   {
+    "slide": 228,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ],
+  "frame_count": 25,
+  "previews": [
+   "images/previews/s004_p2_6b65bf80_f1of3_frame1.png",
+   "images/previews/s004_p2_6b65bf80_f2of3_frame13.png",
+   "images/previews/s004_p2_6b65bf80_f3of3_frame25.png"
+  ],
+  "preview_frames": [
+   0,
+   12,
+   24
+  ]
+ },
+ "9e8599f0d3e4dd5d59fe1288d1212b29a87c847f": {
+  "rel": "images/s004_p3_9e8599f0.gif",
+  "ext": "gif",
+  "bytes": 373020,
+  "px": [
+   640,
+   480
+  ],
+  "first_label": "Slide 004 图 3",
+  "first_slide": 4,
+  "occurrences": [
+   {
+    "slide": 4,
+    "idx": 3,
+    "pos": "中下"
+   },
+   {
+    "slide": 176,
+    "idx": 3,
+    "pos": "中下"
+   },
+   {
+    "slide": 228,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ],
+  "frame_count": 25,
+  "previews": [
+   "images/previews/s004_p3_9e8599f0_f1of3_frame1.png",
+   "images/previews/s004_p3_9e8599f0_f2of3_frame13.png",
+   "images/previews/s004_p3_9e8599f0_f3of3_frame25.png"
+  ],
+  "preview_frames": [
+   0,
+   12,
+   24
+  ]
+ },
+ "123f1022b62df830f483a1db2a2526aa58ef77e8": {
+  "rel": "images/s004_p4_123f1022.gif",
+  "ext": "gif",
+  "bytes": 363048,
+  "px": [
+   640,
+   480
+  ],
+  "first_label": "Slide 004 图 4",
+  "first_slide": 4,
+  "occurrences": [
+   {
+    "slide": 4,
+    "idx": 4,
+    "pos": "右中"
+   },
+   {
+    "slide": 6,
+    "idx": 1,
+    "pos": "中上"
+   },
+   {
+    "slide": 176,
+    "idx": 4,
+    "pos": "右中"
+   },
+   {
+    "slide": 228,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ],
+  "frame_count": 25,
+  "previews": [
+   "images/previews/s004_p4_123f1022_f1of3_frame1.png",
+   "images/previews/s004_p4_123f1022_f2of3_frame13.png",
+   "images/previews/s004_p4_123f1022_f3of3_frame25.png"
+  ],
+  "preview_frames": [
+   0,
+   12,
+   24
+  ]
+ },
+ "f2d7109d6e17eab5cb71106740ca3fcaf54624e6": {
+  "rel": "images/s004_p5_f2d7109d.gif",
+  "ext": "gif",
+  "bytes": 356611,
+  "px": [
+   640,
+   480
+  ],
+  "first_label": "Slide 004 图 5",
+  "first_slide": 4,
+  "occurrences": [
+   {
+    "slide": 4,
+    "idx": 5,
+    "pos": "右下"
+   },
+   {
+    "slide": 6,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 176,
+    "idx": 5,
+    "pos": "右下"
+   },
+   {
+    "slide": 228,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ],
+  "frame_count": 25,
+  "previews": [
+   "images/previews/s004_p5_f2d7109d_f1of3_frame1.png",
+   "images/previews/s004_p5_f2d7109d_f2of3_frame13.png",
+   "images/previews/s004_p5_f2d7109d_f3of3_frame25.png"
+  ],
+  "preview_frames": [
+   0,
+   12,
+   24
+  ]
+ },
+ "198a1fefb813f662787ca8c86194942b28448b51": {
+  "rel": "images/s005_p1_198a1fef.png",
+  "ext": "png",
+  "bytes": 22158,
+  "px": [
+   573,
+   39
+  ],
+  "first_label": "Slide 005 图 1",
+  "first_slide": 5,
+  "occurrences": [
+   {
+    "slide": 5,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "8ee1779951929c6ebf467132b1ea4d6ef00e5df9": {
+  "rel": "images/s007_p1_8ee17799.png",
+  "ext": "png",
+  "bytes": 28242,
+  "px": [
+   433,
+   383
+  ],
+  "first_label": "Slide 007 图 1",
+  "first_slide": 7,
+  "occurrences": [
+   {
+    "slide": 7,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 52,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 53,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 62,
+    "idx": 4,
+    "pos": "左下"
+   },
+   {
+    "slide": 63,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "28004b08573f96483da484def5d2504f201567df": {
+  "rel": "images/s007_p2_28004b08.jpg",
+  "ext": "jpg",
+  "bytes": 81975,
+  "px": [
+   800,
+   800
+  ],
+  "first_label": "Slide 007 图 2",
+  "first_slide": 7,
+  "occurrences": [
+   {
+    "slide": 7,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "6c0878df9615fc2c88f041a7021eb1989416e087": {
+  "rel": "images/s007_p3_6c0878df.jpg",
+  "ext": "jpg",
+  "bytes": 88590,
+  "px": [
+   800,
+   800
+  ],
+  "first_label": "Slide 007 图 3",
+  "first_slide": 7,
+  "occurrences": [
+   {
+    "slide": 7,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "c4b9010d6b14e54ec74788e2d3df202256787dd2": {
+  "rel": "images/s007_p4_c4b9010d.jpg",
+  "ext": "jpg",
+  "bytes": 40245,
+  "px": [
+   621,
+   485
+  ],
+  "first_label": "Slide 007 图 4",
+  "first_slide": 7,
+  "occurrences": [
+   {
+    "slide": 7,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "258600906f4f7a7d813df2714f7c47dfd12bc958": {
+  "rel": "images/s008_p1_25860090.png",
+  "ext": "png",
+  "bytes": 87960,
+  "px": [
+   408,
+   406
+  ],
+  "first_label": "Slide 008 图 1",
+  "first_slide": 8,
+  "occurrences": [
+   {
+    "slide": 8,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "942968dd2e3d4530d41be89a07a8bcf79c0b931a": {
+  "rel": "images/s008_p2_942968dd.png",
+  "ext": "png",
+  "bytes": 93086,
+  "px": [
+   346,
+   364
+  ],
+  "first_label": "Slide 008 图 2",
+  "first_slide": 8,
+  "occurrences": [
+   {
+    "slide": 8,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "07f7ca0132df121b13073da2f0f5b10806e3fdd4": {
+  "rel": "images/s008_p3_07f7ca01.jpg",
+  "ext": "jpg",
+  "bytes": 1130383,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 008 图 3",
+  "first_slide": 8,
+  "occurrences": [
+   {
+    "slide": 8,
+    "idx": 3,
+    "pos": "中上"
+   }
+  ]
+ },
+ "1529f20f9982e3e5e46294d3671378ecec821307": {
+  "rel": "images/s008_p4_1529f20f.jpg",
+  "ext": "jpg",
+  "bytes": 876709,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 008 图 4",
+  "first_slide": 8,
+  "occurrences": [
+   {
+    "slide": 8,
+    "idx": 4,
+    "pos": "右上"
+   }
+  ]
+ },
+ "224f33d7a8e06c779e3f7944543ee45ba5ebcf23": {
+  "rel": "images/s009_p1_224f33d7.png",
+  "ext": "png",
+  "bytes": 54632,
+  "px": [
+   733,
+   528
+  ],
+  "first_label": "Slide 009 图 1",
+  "first_slide": 9,
+  "occurrences": [
+   {
+    "slide": 9,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "20b7cd88a98afb7940e18ac708e6e12d7ad6826d": {
+  "rel": "images/s009_p2_20b7cd88.gif",
+  "ext": "gif",
+  "bytes": 390214,
+  "px": [
+   640,
+   480
+  ],
+  "first_label": "Slide 009 图 2",
+  "first_slide": 9,
+  "occurrences": [
+   {
+    "slide": 9,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ],
+  "frame_count": 25,
+  "previews": [
+   "images/previews/s009_p2_20b7cd88_f1of3_frame1.png",
+   "images/previews/s009_p2_20b7cd88_f2of3_frame13.png",
+   "images/previews/s009_p2_20b7cd88_f3of3_frame25.png"
+  ],
+  "preview_frames": [
+   0,
+   12,
+   24
+  ]
+ },
+ "fe5d74f84841314aacbae033832384f0cfd93524": {
+  "rel": "images/s009_p3_fe5d74f8.gif",
+  "ext": "gif",
+  "bytes": 403183,
+  "px": [
+   640,
+   480
+  ],
+  "first_label": "Slide 009 图 3",
+  "first_slide": 9,
+  "occurrences": [
+   {
+    "slide": 9,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ],
+  "frame_count": 25,
+  "previews": [
+   "images/previews/s009_p3_fe5d74f8_f1of3_frame1.png",
+   "images/previews/s009_p3_fe5d74f8_f2of3_frame13.png",
+   "images/previews/s009_p3_fe5d74f8_f3of3_frame25.png"
+  ],
+  "preview_frames": [
+   0,
+   12,
+   24
+  ]
+ },
+ "e48879280fb0914b67e55e0b7be4f4efebc200b3": {
+  "rel": "images/s010_p1_e4887928.png",
+  "ext": "png",
+  "bytes": 109878,
+  "px": [
+   425,
+   474
+  ],
+  "first_label": "Slide 010 图 1",
+  "first_slide": 10,
+  "occurrences": [
+   {
+    "slide": 10,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "ab0c60422694c52437d23507faf1566feb12e506": {
+  "rel": "images/s012_p1_ab0c6042.png",
+  "ext": "png",
+  "bytes": 81687,
+  "px": [
+   696,
+   397
+  ],
+  "first_label": "Slide 012 图 1",
+  "first_slide": 12,
+  "occurrences": [
+   {
+    "slide": 12,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "f007a0b2b9f0349c5b872d4716f982fca9b4a28b": {
+  "rel": "images/s012_p2_f007a0b2.png",
+  "ext": "png",
+  "bytes": 59465,
+  "px": [
+   538,
+   241
+  ],
+  "first_label": "Slide 012 图 2",
+  "first_slide": 12,
+  "occurrences": [
+   {
+    "slide": 12,
+    "idx": 2,
+    "pos": "右下"
+   },
+   {
+    "slide": 13,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 18,
+    "idx": 7,
+    "pos": "右上"
+   }
+  ]
+ },
+ "f3774122258e9944a888617f007e079ab1896517": {
+  "rel": "images/s012_p3_f3774122.png",
+  "ext": "png",
+  "bytes": 10116,
+  "px": [
+   340,
+   220
+  ],
+  "first_label": "Slide 012 图 3",
+  "first_slide": 12,
+  "occurrences": [
+   {
+    "slide": 12,
+    "idx": 3,
+    "pos": "右上"
+   },
+   {
+    "slide": 13,
+    "idx": 2,
+    "pos": "左上"
+   }
+  ]
+ },
+ "38e0e86838c6ad4259e237b5683472ab9ef5f99a": {
+  "rel": "images/s013_p3_38e0e868.png",
+  "ext": "png",
+  "bytes": 18197,
+  "px": [
+   624,
+   184
+  ],
+  "first_label": "Slide 013 图 3",
+  "first_slide": 13,
+  "occurrences": [
+   {
+    "slide": 13,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "c1c7d43d227fbb707f45fab9ad2d3e0a52bdffe7": {
+  "rel": "images/s013_p4_c1c7d43d.png",
+  "ext": "png",
+  "bytes": 26620,
+  "px": [
+   618,
+   188
+  ],
+  "first_label": "Slide 013 图 4",
+  "first_slide": 13,
+  "occurrences": [
+   {
+    "slide": 13,
+    "idx": 4,
+    "pos": "中下"
+   },
+   {
+    "slide": 14,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 15,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 18,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 19,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 25,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 26,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 27,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "c76d4c57a1aa0330630c1f003faea3fb36eab125": {
+  "rel": "images/s013_p5_c76d4c57.png",
+  "ext": "png",
+  "bytes": 126798,
+  "px": [
+   489,
+   307
+  ],
+  "first_label": "Slide 013 图 5",
+  "first_slide": 13,
+  "occurrences": [
+   {
+    "slide": 13,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "4c53edc07bc1edc4da8cbaa44a0eef462163fb82": {
+  "rel": "images/s013_p6_4c53edc0.png",
+  "ext": "png",
+  "bytes": 3607,
+  "px": [
+   239,
+   58
+  ],
+  "first_label": "Slide 013 图 6",
+  "first_slide": 13,
+  "occurrences": [
+   {
+    "slide": 13,
+    "idx": 6,
+    "pos": "右中"
+   }
+  ]
+ },
+ "3625d0874e254b3610ab16c9ad87676fe5402bef": {
+  "rel": "images/s014_p2_3625d087.png",
+  "ext": "png",
+  "bytes": 5808,
+  "px": [
+   371,
+   55
+  ],
+  "first_label": "Slide 014 图 2",
+  "first_slide": 14,
+  "occurrences": [
+   {
+    "slide": 14,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 15,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 18,
+    "idx": 8,
+    "pos": "右下"
+   },
+   {
+    "slide": 19,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 25,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 26,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 27,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "3cafee770eab348d603f1e1ad2e3fab2d4844470": {
+  "rel": "images/s014_p3_3cafee77.png",
+  "ext": "png",
+  "bytes": 88816,
+  "px": [
+   1158,
+   360
+  ],
+  "first_label": "Slide 014 图 3",
+  "first_slide": 14,
+  "occurrences": [
+   {
+    "slide": 14,
+    "idx": 3,
+    "pos": "中下"
+   },
+   {
+    "slide": 21,
+    "idx": 3,
+    "pos": "中下"
+   },
+   {
+    "slide": 25,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "79d19d2fb9ff8d15adf6b5a5d680985b8db0be3f": {
+  "rel": "images/s015_p3_79d19d2f.png",
+  "ext": "png",
+  "bytes": 15876,
+  "px": [
+   308,
+   223
+  ],
+  "first_label": "Slide 015 图 3",
+  "first_slide": 15,
+  "occurrences": [
+   {
+    "slide": 15,
+    "idx": 3,
+    "pos": "左中"
+   },
+   {
+    "slide": 19,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "6b87f93dd41fed5e8ff7fc78b0fbcf6baed2ae1a": {
+  "rel": "images/s015_p4_6b87f93d.png",
+  "ext": "png",
+  "bytes": 36690,
+  "px": [
+   514,
+   125
+  ],
+  "first_label": "Slide 015 图 4",
+  "first_slide": 15,
+  "occurrences": [
+   {
+    "slide": 15,
+    "idx": 4,
+    "pos": "居中"
+   }
+  ]
+ },
+ "7957a78d557b56bd20b2e58200feb7ae56ab7218": {
+  "rel": "images/s015_p5_7957a78d.png",
+  "ext": "png",
+  "bytes": 69674,
+  "px": [
+   604,
+   486
+  ],
+  "first_label": "Slide 015 图 5",
+  "first_slide": 15,
+  "occurrences": [
+   {
+    "slide": 15,
+    "idx": 5,
+    "pos": "左下"
+   }
+  ]
+ },
+ "a23603b251cb605f0c1b89e7cc2f2a1c59452ccf": {
+  "rel": "images/s015_p6_a23603b2.png",
+  "ext": "png",
+  "bytes": 86623,
+  "px": [
+   407,
+   405
+  ],
+  "first_label": "Slide 015 图 6",
+  "first_slide": 15,
+  "occurrences": [
+   {
+    "slide": 15,
+    "idx": 6,
+    "pos": "中下"
+   },
+   {
+    "slide": 16,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "dcd2710f37cd2425d2abab8bbeca1436a725729a": {
+  "rel": "images/s015_p7_dcd2710f.png",
+  "ext": "png",
+  "bytes": 61341,
+  "px": [
+   406,
+   404
+  ],
+  "first_label": "Slide 015 图 7",
+  "first_slide": 15,
+  "occurrences": [
+   {
+    "slide": 15,
+    "idx": 7,
+    "pos": "右下"
+   }
+  ]
+ },
+ "5d5a875b7b3f23ef10ab2eb24427d38001ba4afa": {
+  "rel": "images/s015_p8_5d5a875b.png",
+  "ext": "png",
+  "bytes": 86346,
+  "px": [
+   406,
+   403
+  ],
+  "first_label": "Slide 015 图 8",
+  "first_slide": 15,
+  "occurrences": [
+   {
+    "slide": 15,
+    "idx": 8,
+    "pos": "中下"
+   }
+  ]
+ },
+ "99b221bb351d6a93073473f6b14edcd9714e64c9": {
+  "rel": "images/s015_p9_99b221bb.png",
+  "ext": "png",
+  "bytes": 14085,
+  "px": [
+   246,
+   260
+  ],
+  "first_label": "Slide 015 图 9",
+  "first_slide": 15,
+  "occurrences": [
+   {
+    "slide": 15,
+    "idx": 9,
+    "pos": "右中"
+   }
+  ]
+ },
+ "c8b53a5c97043a7db825c914fb2f01fbe966f25a": {
+  "rel": "images/s016_p2_c8b53a5c.png",
+  "ext": "png",
+  "bytes": 54403,
+  "px": [
+   819,
+   477
+  ],
+  "first_label": "Slide 016 图 2",
+  "first_slide": 16,
+  "occurrences": [
+   {
+    "slide": 16,
+    "idx": 2,
+    "pos": "居中"
+   },
+   {
+    "slide": 19,
+    "idx": 6,
+    "pos": "左下"
+   }
+  ]
+ },
+ "d3989d94c41f7fd363b1bc3f2385e39703104a73": {
+  "rel": "images/s016_p3_d3989d94.png",
+  "ext": "png",
+  "bytes": 39870,
+  "px": [
+   613,
+   470
+  ],
+  "first_label": "Slide 016 图 3",
+  "first_slide": 16,
+  "occurrences": [
+   {
+    "slide": 16,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "37b7d83c6efa55a48feddd585aa099d5d2cf2dd0": {
+  "rel": "images/s016_p4_37b7d83c.png",
+  "ext": "png",
+  "bytes": 35078,
+  "px": [
+   822,
+   407
+  ],
+  "first_label": "Slide 016 图 4",
+  "first_slide": 16,
+  "occurrences": [
+   {
+    "slide": 16,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "4a7857b3903fd11b74e2f60172b3f78e211d937a": {
+  "rel": "images/s017_p1_4a7857b3.png",
+  "ext": "png",
+  "bytes": 62450,
+  "px": [
+   987,
+   437
+  ],
+  "first_label": "Slide 017 图 1",
+  "first_slide": 17,
+  "occurrences": [
+   {
+    "slide": 17,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "671f056862fef272ccaa569c1908eb1f1b15d3d7": {
+  "rel": "images/s017_p2_671f0568.png",
+  "ext": "png",
+  "bytes": 71222,
+  "px": [
+   931,
+   957
+  ],
+  "first_label": "Slide 017 图 2",
+  "first_slide": 17,
+  "occurrences": [
+   {
+    "slide": 17,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "11bf9ca6fb3ec153597c0f6cd7dfee9cae0103c3": {
+  "rel": "images/s017_p3_11bf9ca6.png",
+  "ext": "png",
+  "bytes": 78222,
+  "px": [
+   897,
+   906
+  ],
+  "first_label": "Slide 017 图 3",
+  "first_slide": 17,
+  "occurrences": [
+   {
+    "slide": 17,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "38506d4824c9fe161c58e221654e70723dec9761": {
+  "rel": "images/s018_p2_38506d48.png",
+  "ext": "png",
+  "bytes": 6171,
+  "px": [
+   341,
+   74
+  ],
+  "first_label": "Slide 018 图 2",
+  "first_slide": 18,
+  "occurrences": [
+   {
+    "slide": 18,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "dd2d37653426ca3fed34a30a7cbcfdac93cb83a7": {
+  "rel": "images/s018_p3_dd2d3765.png",
+  "ext": "png",
+  "bytes": 7552,
+  "px": [
+   243,
+   101
+  ],
+  "first_label": "Slide 018 图 3",
+  "first_slide": 18,
+  "occurrences": [
+   {
+    "slide": 18,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "aae84e9b15ff627d7e199c22241f4ecb00e2931f": {
+  "rel": "images/s018_p4_aae84e9b.png",
+  "ext": "png",
+  "bytes": 24218,
+  "px": [
+   577,
+   304
+  ],
+  "first_label": "Slide 018 图 4",
+  "first_slide": 18,
+  "occurrences": [
+   {
+    "slide": 18,
+    "idx": 4,
+    "pos": "左中"
+   }
+  ]
+ },
+ "2e2b95beda5d6ed9057b693620ecd481ab0e185e": {
+  "rel": "images/s018_p5_2e2b95be.png",
+  "ext": "png",
+  "bytes": 8210,
+  "px": [
+   388,
+   65
+  ],
+  "first_label": "Slide 018 图 5",
+  "first_slide": 18,
+  "occurrences": [
+   {
+    "slide": 18,
+    "idx": 5,
+    "pos": "右中"
+   }
+  ]
+ },
+ "8875d3f390451406d5c52c76381d53ca134d3d38": {
+  "rel": "images/s018_p6_8875d3f3.png",
+  "ext": "png",
+  "bytes": 1873,
+  "px": [
+   165,
+   46
+  ],
+  "first_label": "Slide 018 图 6",
+  "first_slide": 18,
+  "occurrences": [
+   {
+    "slide": 18,
+    "idx": 6,
+    "pos": "左下"
+   },
+   {
+    "slide": 19,
+    "idx": 4,
+    "pos": "中上"
+   },
+   {
+    "slide": 27,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "8a22d649a0e5ec69b462273096c1477ab8520c82": {
+  "rel": "images/s019_p5_8a22d649.png",
+  "ext": "png",
+  "bytes": 18000,
+  "px": [
+   722,
+   114
+  ],
+  "first_label": "Slide 019 图 5",
+  "first_slide": 19,
+  "occurrences": [
+   {
+    "slide": 19,
+    "idx": 5,
+    "pos": "居中"
+   }
+  ]
+ },
+ "f8bcc96f3a2ed71d4b958411d6986ea45ba148db": {
+  "rel": "images/s019_p7_f8bcc96f.png",
+  "ext": "png",
+  "bytes": 31874,
+  "px": [
+   908,
+   321
+  ],
+  "first_label": "Slide 019 图 7",
+  "first_slide": 19,
+  "occurrences": [
+   {
+    "slide": 19,
+    "idx": 7,
+    "pos": "右下"
+   },
+   {
+    "slide": 27,
+    "idx": 5,
+    "pos": "左下"
+   }
+  ]
+ },
+ "3af6c9ed88dbafba9a912c011a55a45eaa3bb09f": {
+  "rel": "images/s020_p1_3af6c9ed.png",
+  "ext": "png",
+  "bytes": 50183,
+  "px": [
+   832,
+   462
+  ],
+  "first_label": "Slide 020 图 1",
+  "first_slide": 20,
+  "occurrences": [
+   {
+    "slide": 20,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "55544d0c29f744dd4f647feee2bed26e37f3c019": {
+  "rel": "images/s020_p2_55544d0c.png",
+  "ext": "png",
+  "bytes": 49535,
+  "px": [
+   897,
+   451
+  ],
+  "first_label": "Slide 020 图 2",
+  "first_slide": 20,
+  "occurrences": [
+   {
+    "slide": 20,
+    "idx": 2,
+    "pos": "居中"
+   },
+   {
+    "slide": 26,
+    "idx": 5,
+    "pos": "右中"
+   }
+  ]
+ },
+ "d726bdf02d902bcba784fd1a5e60370759664e54": {
+  "rel": "images/s020_p3_d726bdf0.png",
+  "ext": "png",
+  "bytes": 104211,
+  "px": [
+   925,
+   842
+  ],
+  "first_label": "Slide 020 图 3",
+  "first_slide": 20,
+  "occurrences": [
+   {
+    "slide": 20,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "a4682f2aca78b06396d716c7eacd419d30cc37d8": {
+  "rel": "images/s020_p4_a4682f2a.png",
+  "ext": "png",
+  "bytes": 34910,
+  "px": [
+   904,
+   449
+  ],
+  "first_label": "Slide 020 图 4",
+  "first_slide": 20,
+  "occurrences": [
+   {
+    "slide": 20,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "2cb34a13727524588378943046a66c6f649c1720": {
+  "rel": "images/s020_p5_2cb34a13.png",
+  "ext": "png",
+  "bytes": 13108,
+  "px": [
+   251,
+   175
+  ],
+  "first_label": "Slide 020 图 5",
+  "first_slide": 20,
+  "occurrences": [
+   {
+    "slide": 20,
+    "idx": 5,
+    "pos": "左下"
+   }
+  ]
+ },
+ "d8973446d708caa001f66fbca6d4204746c819d4": {
+  "rel": "images/s021_p1_d8973446.png",
+  "ext": "png",
+  "bytes": 31903,
+  "px": [
+   730,
+   294
+  ],
+  "first_label": "Slide 021 图 1",
+  "first_slide": 21,
+  "occurrences": [
+   {
+    "slide": 21,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "56dc3a681eeed9c217d93d531e15375c3af85a26": {
+  "rel": "images/s021_p2_56dc3a68.png",
+  "ext": "png",
+  "bytes": 49002,
+  "px": [
+   954,
+   491
+  ],
+  "first_label": "Slide 021 图 2",
+  "first_slide": 21,
+  "occurrences": [
+   {
+    "slide": 21,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "77700d6d0e5a4e46aac5e3e5b2127a6cab3d95d9": {
+  "rel": "images/s025_p4_77700d6d.png",
+  "ext": "png",
+  "bytes": 20601,
+  "px": [
+   680,
+   167
+  ],
+  "first_label": "Slide 025 图 4",
+  "first_slide": 25,
+  "occurrences": [
+   {
+    "slide": 25,
+    "idx": 4,
+    "pos": "左上"
+   }
+  ]
+ },
+ "abfac3b048a2ecf0e5302ba4fc75166ef979ec8c": {
+  "rel": "images/s026_p3_abfac3b0.png",
+  "ext": "png",
+  "bytes": 72757,
+  "px": [
+   1434,
+   677
+  ],
+  "first_label": "Slide 026 图 3",
+  "first_slide": 26,
+  "occurrences": [
+   {
+    "slide": 26,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "2de741e2d85771febe4d6e9baf635312b58fb8d5": {
+  "rel": "images/s026_p4_2de741e2.png",
+  "ext": "png",
+  "bytes": 10722,
+  "px": [
+   811,
+   90
+  ],
+  "first_label": "Slide 026 图 4",
+  "first_slide": 26,
+  "occurrences": [
+   {
+    "slide": 26,
+    "idx": 4,
+    "pos": "左下"
+   },
+   {
+    "slide": 27,
+    "idx": 4,
+    "pos": "左上"
+   }
+  ]
+ },
+ "087b1a598615773ce1d2fc7570abd214e3d2631f": {
+  "rel": "images/s026_p6_087b1a59.png",
+  "ext": "png",
+  "bytes": 11066,
+  "px": [
+   331,
+   102
+  ],
+  "first_label": "Slide 026 图 6",
+  "first_slide": 26,
+  "occurrences": [
+   {
+    "slide": 26,
+    "idx": 6,
+    "pos": "右下"
+   }
+  ]
+ },
+ "12de5d44647b430847e2fb8f43d830cdae86d60b": {
+  "rel": "images/s027_p6_12de5d44.png",
+  "ext": "png",
+  "bytes": 8208,
+  "px": [
+   683,
+   84
+  ],
+  "first_label": "Slide 027 图 6",
+  "first_slide": 27,
+  "occurrences": [
+   {
+    "slide": 27,
+    "idx": 6,
+    "pos": "左中"
+   }
+  ]
+ },
+ "64ee48e48733a9ee8bc709710a39f73cd82f18e3": {
+  "rel": "images/s027_p7_64ee48e4.png",
+  "ext": "png",
+  "bytes": 8302,
+  "px": [
+   686,
+   88
+  ],
+  "first_label": "Slide 027 图 7",
+  "first_slide": 27,
+  "occurrences": [
+   {
+    "slide": 27,
+    "idx": 7,
+    "pos": "中下"
+   }
+  ]
+ },
+ "3387d8601d5b2b93424e64476fd93a388da6ee1f": {
+  "rel": "images/s028_p1_3387d860.png",
+  "ext": "png",
+  "bytes": 6602,
+  "px": [
+   188,
+   200
+  ],
+  "first_label": "Slide 028 图 1",
+  "first_slide": 28,
+  "occurrences": [
+   {
+    "slide": 28,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 29,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "72ee97ea3c3d2170bf578a8fa1d4ab15e37f91f5": {
+  "rel": "images/s028_p2_72ee97ea.png",
+  "ext": "png",
+  "bytes": 15916,
+  "px": [
+   670,
+   123
+  ],
+  "first_label": "Slide 028 图 2",
+  "first_slide": 28,
+  "occurrences": [
+   {
+    "slide": 28,
+    "idx": 2,
+    "pos": "左上"
+   },
+   {
+    "slide": 30,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "a06671f106077451bc5e7aa5e50b0055822c55d9": {
+  "rel": "images/s028_p3_a06671f1.png",
+  "ext": "png",
+  "bytes": 11537,
+  "px": [
+   669,
+   114
+  ],
+  "first_label": "Slide 028 图 3",
+  "first_slide": 28,
+  "occurrences": [
+   {
+    "slide": 28,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "0e4752ee2829213798833333b39c5f1662ff0c86": {
+  "rel": "images/s028_p4_0e4752ee.png",
+  "ext": "png",
+  "bytes": 36493,
+  "px": [
+   734,
+   355
+  ],
+  "first_label": "Slide 028 图 4",
+  "first_slide": 28,
+  "occurrences": [
+   {
+    "slide": 28,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "ec8e9759c17b3b1f85d825dbc25321ccf19b5f57": {
+  "rel": "images/s028_p5_ec8e9759.png",
+  "ext": "png",
+  "bytes": 32660,
+  "px": [
+   729,
+   351
+  ],
+  "first_label": "Slide 028 图 5",
+  "first_slide": 28,
+  "occurrences": [
+   {
+    "slide": 28,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "babb92f85675b722b3012cdba2e90099ef1a08f0": {
+  "rel": "images/s028_p6_babb92f8.png",
+  "ext": "png",
+  "bytes": 2904,
+  "px": [
+   192,
+   37
+  ],
+  "first_label": "Slide 028 图 6",
+  "first_slide": 28,
+  "occurrences": [
+   {
+    "slide": 28,
+    "idx": 6,
+    "pos": "左中"
+   }
+  ]
+ },
+ "e52357da2dbc3d69e05cb4ed5707f1e46ee7f765": {
+  "rel": "images/s028_p7_e52357da.png",
+  "ext": "png",
+  "bytes": 2754,
+  "px": [
+   182,
+   32
+  ],
+  "first_label": "Slide 028 图 7",
+  "first_slide": 28,
+  "occurrences": [
+   {
+    "slide": 28,
+    "idx": 7,
+    "pos": "左中"
+   }
+  ]
+ },
+ "fae9a2b9b289ebe675119f507aa0b79edcaa6143": {
+  "rel": "images/s028_p8_fae9a2b9.png",
+  "ext": "png",
+  "bytes": 16346,
+  "px": [
+   312,
+   225
+  ],
+  "first_label": "Slide 028 图 8",
+  "first_slide": 28,
+  "occurrences": [
+   {
+    "slide": 28,
+    "idx": 8,
+    "pos": "右中"
+   }
+  ]
+ },
+ "0d276ba0d18e7ad2b5e7bcce887eb0783df05987": {
+  "rel": "images/s029_p2_0d276ba0.png",
+  "ext": "png",
+  "bytes": 42614,
+  "px": [
+   729,
+   343
+  ],
+  "first_label": "Slide 029 图 2",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "8d85f397e59e2f6427de585e5b4e9e0fea31732f": {
+  "rel": "images/s029_p3_8d85f397.png",
+  "ext": "png",
+  "bytes": 32275,
+  "px": [
+   730,
+   334
+  ],
+  "first_label": "Slide 029 图 3",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "5274cf1812674856928b1f4459b0d9451943ec02": {
+  "rel": "images/s029_p4_5274cf18.png",
+  "ext": "png",
+  "bytes": 11430,
+  "px": [
+   455,
+   229
+  ],
+  "first_label": "Slide 029 图 4",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "a757b3d0b377310cdb8c9adf53b8d0ce78bfa289": {
+  "rel": "images/s029_p5_a757b3d0.png",
+  "ext": "png",
+  "bytes": 2692,
+  "px": [
+   157,
+   86
+  ],
+  "first_label": "Slide 029 图 5",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 5,
+    "pos": "左中"
+   }
+  ]
+ },
+ "e6c3f8654a3443aadc506b00dbdbb79db6cd401d": {
+  "rel": "images/s029_p6_e6c3f865.png",
+  "ext": "png",
+  "bytes": 7765,
+  "px": [
+   364,
+   195
+  ],
+  "first_label": "Slide 029 图 6",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 6,
+    "pos": "中下"
+   }
+  ]
+ },
+ "3e60d96d44c93ee8758660ee33ffd93962b9b962": {
+  "rel": "images/s029_p7_3e60d96d.png",
+  "ext": "png",
+  "bytes": 10895,
+  "px": [
+   436,
+   223
+  ],
+  "first_label": "Slide 029 图 7",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 7,
+    "pos": "右下"
+   }
+  ]
+ },
+ "0bc263cc6f0cb5719e4661355480e9b9532d787c": {
+  "rel": "images/s029_p8_0bc263cc.png",
+  "ext": "png",
+  "bytes": 2290,
+  "px": [
+   154,
+   89
+  ],
+  "first_label": "Slide 029 图 8",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 8,
+    "pos": "居中"
+   }
+  ]
+ },
+ "c5e73e3e9183e1addefd45b80fef88412adf7332": {
+  "rel": "images/s029_p9_c5e73e3e.png",
+  "ext": "png",
+  "bytes": 2636,
+  "px": [
+   133,
+   87
+  ],
+  "first_label": "Slide 029 图 9",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 9,
+    "pos": "右中"
+   }
+  ]
+ },
+ "67cf859473f9ef2b23c6780844760ef8ded41bf5": {
+  "rel": "images/s029_p10_67cf8594.png",
+  "ext": "png",
+  "bytes": 15438,
+  "px": [
+   769,
+   93
+  ],
+  "first_label": "Slide 029 图 10",
+  "first_slide": 29,
+  "occurrences": [
+   {
+    "slide": 29,
+    "idx": 10,
+    "pos": "左下"
+   }
+  ]
+ },
+ "29684090ebbe2f54438c6a493a2f160f1b1db96c": {
+  "rel": "images/s030_p2_29684090.png",
+  "ext": "png",
+  "bytes": 2956,
+  "px": [
+   261,
+   52
+  ],
+  "first_label": "Slide 030 图 2",
+  "first_slide": 30,
+  "occurrences": [
+   {
+    "slide": 30,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "edd114e275bb352bc4d8dfb0cd499398f1dfe3ff": {
+  "rel": "images/s030_p3_edd114e2.png",
+  "ext": "png",
+  "bytes": 7942,
+  "px": [
+   846,
+   51
+  ],
+  "first_label": "Slide 030 图 3",
+  "first_slide": 30,
+  "occurrences": [
+   {
+    "slide": 30,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "13b1e2b9d3dcc3bced29f9f0adfef7a61ad7fb4e": {
+  "rel": "images/s030_p4_13b1e2b9.png",
+  "ext": "png",
+  "bytes": 44559,
+  "px": [
+   727,
+   349
+  ],
+  "first_label": "Slide 030 图 4",
+  "first_slide": 30,
+  "occurrences": [
+   {
+    "slide": 30,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "2ba5f6f216c3f8f5e0ccf3faf8f36993959b46be": {
+  "rel": "images/s030_p5_2ba5f6f2.png",
+  "ext": "png",
+  "bytes": 31119,
+  "px": [
+   722,
+   358
+  ],
+  "first_label": "Slide 030 图 5",
+  "first_slide": 30,
+  "occurrences": [
+   {
+    "slide": 30,
+    "idx": 5,
+    "pos": "中下"
+   }
+  ]
+ },
+ "d22dc6b25886c1e41d79ea499bf3409b4006fdbb": {
+  "rel": "images/s030_p6_d22dc6b2.png",
+  "ext": "png",
+  "bytes": 7241,
+  "px": [
+   184,
+   197
+  ],
+  "first_label": "Slide 030 图 6",
+  "first_slide": 30,
+  "occurrences": [
+   {
+    "slide": 30,
+    "idx": 6,
+    "pos": "右上"
+   }
+  ]
+ },
+ "d7fdb152052efc9e50195e0500ceaae78f658817": {
+  "rel": "images/s030_p7_d7fdb152.png",
+  "ext": "png",
+  "bytes": 16283,
+  "px": [
+   304,
+   224
+  ],
+  "first_label": "Slide 030 图 7",
+  "first_slide": 30,
+  "occurrences": [
+   {
+    "slide": 30,
+    "idx": 7,
+    "pos": "右中"
+   }
+  ]
+ },
+ "24b57a7b2077d39ec73dead66a9ea8de58b354f6": {
+  "rel": "images/s031_p1_24b57a7b.png",
+  "ext": "png",
+  "bytes": 7595,
+  "px": [
+   184,
+   198
+  ],
+  "first_label": "Slide 031 图 1",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "7636b9d4758b9d5d4d0d0523a3c0383befc0929a": {
+  "rel": "images/s031_p2_7636b9d4.png",
+  "ext": "png",
+  "bytes": 7819,
+  "px": [
+   843,
+   43
+  ],
+  "first_label": "Slide 031 图 2",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 2,
+    "pos": "左上"
+   }
+  ]
+ },
+ "efe3f217d12bef93a7205d6743f89ecb3ed5d3ba": {
+  "rel": "images/s031_p3_efe3f217.png",
+  "ext": "png",
+  "bytes": 2944,
+  "px": [
+   248,
+   54
+  ],
+  "first_label": "Slide 031 图 3",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 3,
+    "pos": "中上"
+   }
+  ]
+ },
+ "15c7dbc00b91d3c0a553510b465c85a185c9ab56": {
+  "rel": "images/s031_p4_15c7dbc0.png",
+  "ext": "png",
+  "bytes": 16319,
+  "px": [
+   311,
+   221
+  ],
+  "first_label": "Slide 031 图 4",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 4,
+    "pos": "左中"
+   }
+  ]
+ },
+ "a6f4756f422ec587302ee4ae21cee1fb64dc96b4": {
+  "rel": "images/s031_p5_a6f4756f.png",
+  "ext": "png",
+  "bytes": 10427,
+  "px": [
+   333,
+   99
+  ],
+  "first_label": "Slide 031 图 5",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 5,
+    "pos": "左中"
+   }
+  ]
+ },
+ "673a23220b787302a9c906ff8c097dae10857d26": {
+  "rel": "images/s031_p6_673a2322.png",
+  "ext": "png",
+  "bytes": 2891,
+  "px": [
+   229,
+   30
+  ],
+  "first_label": "Slide 031 图 6",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 6,
+    "pos": "居中"
+   }
+  ]
+ },
+ "ebf94e4be570950641d574b2c1367401ed07142c": {
+  "rel": "images/s031_p7_ebf94e4b.png",
+  "ext": "png",
+  "bytes": 39157,
+  "px": [
+   718,
+   344
+  ],
+  "first_label": "Slide 031 图 7",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 7,
+    "pos": "左下"
+   }
+  ]
+ },
+ "c441179dcad9703db6224145984969b3445763ac": {
+  "rel": "images/s031_p8_c441179d.png",
+  "ext": "png",
+  "bytes": 31189,
+  "px": [
+   718,
+   352
+  ],
+  "first_label": "Slide 031 图 8",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 8,
+    "pos": "中下"
+   }
+  ]
+ },
+ "85b3935137bf490657112065daaf741589412f73": {
+  "rel": "images/s031_p9_85b39351.png",
+  "ext": "png",
+  "bytes": 38108,
+  "px": [
+   730,
+   331
+  ],
+  "first_label": "Slide 031 图 9",
+  "first_slide": 31,
+  "occurrences": [
+   {
+    "slide": 31,
+    "idx": 9,
+    "pos": "右下"
+   }
+  ]
+ },
+ "43af2052d4bf3d8b2561111ebb93e1e64df7a1b4": {
+  "rel": "images/s032_p1_43af2052.png",
+  "ext": "png",
+  "bytes": 8132,
+  "px": [
+   845,
+   53
+  ],
+  "first_label": "Slide 032 图 1",
+  "first_slide": 32,
+  "occurrences": [
+   {
+    "slide": 32,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "349973e908452455e6dbd24f21247dc23217649b": {
+  "rel": "images/s032_p2_349973e9.png",
+  "ext": "png",
+  "bytes": 4469,
+  "px": [
+   224,
+   108
+  ],
+  "first_label": "Slide 032 图 2",
+  "first_slide": 32,
+  "occurrences": [
+   {
+    "slide": 32,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "b6f66909572cec95570b642d51940885afaa2df3": {
+  "rel": "images/s032_p3_b6f66909.png",
+  "ext": "png",
+  "bytes": 4658,
+  "px": [
+   397,
+   43
+  ],
+  "first_label": "Slide 032 图 3",
+  "first_slide": 32,
+  "occurrences": [
+   {
+    "slide": 32,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "beebc5c92a7d15ceb3f0c54594c5d517b7b24e24": {
+  "rel": "images/s032_p4_beebc5c9.png",
+  "ext": "png",
+  "bytes": 3500,
+  "px": [
+   304,
+   80
+  ],
+  "first_label": "Slide 032 图 4",
+  "first_slide": 32,
+  "occurrences": [
+   {
+    "slide": 32,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "4c080eeaaff4da060571afd053dc3ae024e1c40d": {
+  "rel": "images/s032_p5_4c080eea.gif",
+  "ext": "gif",
+  "bytes": 463588,
+  "px": [
+   944,
+   956
+  ],
+  "first_label": "Slide 032 图 5",
+  "first_slide": 32,
+  "occurrences": [
+   {
+    "slide": 32,
+    "idx": 5,
+    "pos": "右中"
+   }
+  ],
+  "frame_count": 155,
+  "previews": [
+   "images/previews/s032_p5_4c080eea_f1of3_frame1.png",
+   "images/previews/s032_p5_4c080eea_f2of3_frame78.png",
+   "images/previews/s032_p5_4c080eea_f3of3_frame155.png"
+  ],
+  "preview_frames": [
+   0,
+   77,
+   154
+  ]
+ },
+ "85ad6b7c7c76da5a6271b7dc6104eeaa6ec8a9fb": {
+  "rel": "images/s033_p1_85ad6b7c.png",
+  "ext": "png",
+  "bytes": 53681,
+  "px": [
+   889,
+   712
+  ],
+  "first_label": "Slide 033 图 1",
+  "first_slide": 33,
+  "occurrences": [
+   {
+    "slide": 33,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "8dfb19a15a78d952df7880aa4af7382cf5c525bb": {
+  "rel": "images/s033_p2_8dfb19a1.png",
+  "ext": "png",
+  "bytes": 23580,
+  "px": [
+   662,
+   243
+  ],
+  "first_label": "Slide 033 图 2",
+  "first_slide": 33,
+  "occurrences": [
+   {
+    "slide": 33,
+    "idx": 2,
+    "pos": "左上"
+   }
+  ]
+ },
+ "14c0d40b38b3817ea1ea692a0bf5d9e0b31a6d1c": {
+  "rel": "images/s033_p3_14c0d40b.png",
+  "ext": "png",
+  "bytes": 18328,
+  "px": [
+   435,
+   245
+  ],
+  "first_label": "Slide 033 图 3",
+  "first_slide": 33,
+  "occurrences": [
+   {
+    "slide": 33,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "3151f87ac2b8df4855811725ab7ba8effaeb7c83": {
+  "rel": "images/s033_p4_3151f87a.png",
+  "ext": "png",
+  "bytes": 57298,
+  "px": [
+   1262,
+   130
+  ],
+  "first_label": "Slide 033 图 4",
+  "first_slide": 33,
+  "occurrences": [
+   {
+    "slide": 33,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "233e7323048c8b52d49a81b7a2c3268aaa002df3": {
+  "rel": "images/s034_p1_233e7323.png",
+  "ext": "png",
+  "bytes": 7819,
+  "px": [
+   188,
+   201
+  ],
+  "first_label": "Slide 034 图 1",
+  "first_slide": 34,
+  "occurrences": [
+   {
+    "slide": 34,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 35,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "76252cb795234fa1d33cca7577c915da0c6c1133": {
+  "rel": "images/s034_p2_76252cb7.png",
+  "ext": "png",
+  "bytes": 2222,
+  "px": [
+   287,
+   42
+  ],
+  "first_label": "Slide 034 图 2",
+  "first_slide": 34,
+  "occurrences": [
+   {
+    "slide": 34,
+    "idx": 2,
+    "pos": "中上"
+   }
+  ]
+ },
+ "175e4988f2bfa4f25380db916b155bc0db0d7bd3": {
+  "rel": "images/s034_p3_175e4988.png",
+  "ext": "png",
+  "bytes": 2506,
+  "px": [
+   149,
+   62
+  ],
+  "first_label": "Slide 034 图 3",
+  "first_slide": 34,
+  "occurrences": [
+   {
+    "slide": 34,
+    "idx": 3,
+    "pos": "左上"
+   }
+  ]
+ },
+ "0b85f1503fc8df62a8c03bc39e75b4907286d407": {
+  "rel": "images/s034_p4_0b85f150.png",
+  "ext": "png",
+  "bytes": 124806,
+  "px": [
+   878,
+   333
+  ],
+  "first_label": "Slide 034 图 4",
+  "first_slide": 34,
+  "occurrences": [
+   {
+    "slide": 34,
+    "idx": 4,
+    "pos": "左中"
+   }
+  ]
+ },
+ "9ab3e71071b1aafc32e4f34d1acbb21ea463caef": {
+  "rel": "images/s035_p2_9ab3e710.png",
+  "ext": "png",
+  "bytes": 16133,
+  "px": [
+   315,
+   224
+  ],
+  "first_label": "Slide 035 图 2",
+  "first_slide": 35,
+  "occurrences": [
+   {
+    "slide": 35,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "7168dea14016b3716182aba26a7fde5dc17c3c23": {
+  "rel": "images/s035_p3_7168dea1.png",
+  "ext": "png",
+  "bytes": 1769,
+  "px": [
+   81,
+   29
+  ],
+  "first_label": "Slide 035 图 3",
+  "first_slide": 35,
+  "occurrences": [
+   {
+    "slide": 35,
+    "idx": 3,
+    "pos": "左上"
+   }
+  ]
+ },
+ "76b28bbd7961396f21ebadfeddd63328e5dd2f2c": {
+  "rel": "images/s035_p4_76b28bbd.png",
+  "ext": "png",
+  "bytes": 6708,
+  "px": [
+   659,
+   35
+  ],
+  "first_label": "Slide 035 图 4",
+  "first_slide": 35,
+  "occurrences": [
+   {
+    "slide": 35,
+    "idx": 4,
+    "pos": "居中"
+   }
+  ]
+ },
+ "4f24d857a470bc8ed86d50e8a110228d1afb5d64": {
+  "rel": "images/s035_p5_4f24d857.png",
+  "ext": "png",
+  "bytes": 43634,
+  "px": [
+   722,
+   357
+  ],
+  "first_label": "Slide 035 图 5",
+  "first_slide": 35,
+  "occurrences": [
+   {
+    "slide": 35,
+    "idx": 5,
+    "pos": "左下"
+   }
+  ]
+ },
+ "aeee9125dbe19cb4c31c98c5202ce100696afebe": {
+  "rel": "images/s035_p6_aeee9125.png",
+  "ext": "png",
+  "bytes": 35063,
+  "px": [
+   721,
+   351
+  ],
+  "first_label": "Slide 035 图 6",
+  "first_slide": 35,
+  "occurrences": [
+   {
+    "slide": 35,
+    "idx": 6,
+    "pos": "中下"
+   }
+  ]
+ },
+ "3ab39894a4f0a1bf289f8f7b6b764fbe54e0cfd2": {
+  "rel": "images/s035_p7_3ab39894.png",
+  "ext": "png",
+  "bytes": 32740,
+  "px": [
+   581,
+   382
+  ],
+  "first_label": "Slide 035 图 7",
+  "first_slide": 35,
+  "occurrences": [
+   {
+    "slide": 35,
+    "idx": 7,
+    "pos": "右中"
+   }
+  ]
+ },
+ "958ec5199612b4fc7ae1c6c4d9a409ce9a3a0ef1": {
+  "rel": "images/s036_p1_958ec519.png",
+  "ext": "png",
+  "bytes": 51414,
+  "px": [
+   1010,
+   304
+  ],
+  "first_label": "Slide 036 图 1",
+  "first_slide": 36,
+  "occurrences": [
+   {
+    "slide": 36,
+    "idx": 1,
+    "pos": "左上"
+   },
+   {
+    "slide": 83,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "2270a321838dc5739c0749826afb39e316a02bf5": {
+  "rel": "images/s036_p2_2270a321.png",
+  "ext": "png",
+  "bytes": 2473,
+  "px": [
+   137,
+   36
+  ],
+  "first_label": "Slide 036 图 2",
+  "first_slide": 36,
+  "occurrences": [
+   {
+    "slide": 36,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "44301a04662617a1febc93349bba4adcde524926": {
+  "rel": "images/s036_p3_44301a04.png",
+  "ext": "png",
+  "bytes": 94675,
+  "px": [
+   682,
+   367
+  ],
+  "first_label": "Slide 036 图 3",
+  "first_slide": 36,
+  "occurrences": [
+   {
+    "slide": 36,
+    "idx": 3,
+    "pos": "左下"
+   },
+   {
+    "slide": 83,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "21c3232dc214b386dba6e3b97ec27f82fa1b1987": {
+  "rel": "images/s038_p1_21c3232d.png",
+  "ext": "png",
+  "bytes": 574218,
+  "px": [
+   1062,
+   1000
+  ],
+  "first_label": "Slide 038 图 1",
+  "first_slide": 38,
+  "occurrences": [
+   {
+    "slide": 38,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "ec841a804edae2ce82f4064a9306a4e8e2fbcb6c": {
+  "rel": "images/s038_p2_ec841a80.jpg",
+  "ext": "jpg",
+  "bytes": 349196,
+  "px": [
+   1120,
+   1494
+  ],
+  "first_label": "Slide 038 图 2",
+  "first_slide": 38,
+  "occurrences": [
+   {
+    "slide": 38,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "92230a511f4bf6e0fe7d00d45e4beda90bfaf1e8": {
+  "rel": "images/s038_p3_92230a51.jpg",
+  "ext": "jpg",
+  "bytes": 468509,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 038 图 3",
+  "first_slide": 38,
+  "occurrences": [
+   {
+    "slide": 38,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "d01747af925f85437f44053885b6691546e72bd7": {
+  "rel": "images/s038_p4_d01747af.png",
+  "ext": "png",
+  "bytes": 76080,
+  "px": [
+   1056,
+   241
+  ],
+  "first_label": "Slide 038 图 4",
+  "first_slide": 38,
+  "occurrences": [
+   {
+    "slide": 38,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "c808d12f2ab3ef1d88c0e8f5e41954185db6e7d8": {
+  "rel": "images/s039_p1_c808d12f.png",
+  "ext": "png",
+  "bytes": 22865,
+  "px": [
+   763,
+   376
+  ],
+  "first_label": "Slide 039 图 1",
+  "first_slide": 39,
+  "occurrences": [
+   {
+    "slide": 39,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "0e473ceb5207e15663a6196fa9ccf4734ac76d14": {
+  "rel": "images/s039_p2_0e473ceb.jpg",
+  "ext": "jpg",
+  "bytes": 422428,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 039 图 2",
+  "first_slide": 39,
+  "occurrences": [
+   {
+    "slide": 39,
+    "idx": 2,
+    "pos": "左下"
+   },
+   {
+    "slide": 119,
+    "idx": 5,
+    "pos": "右上"
+   }
+  ]
+ },
+ "8cab9f11cbb833a61d81977d8ab4a6a3a7a93fd7": {
+  "rel": "images/s039_p3_8cab9f11.jpg",
+  "ext": "jpg",
+  "bytes": 592650,
+  "px": [
+   1492,
+   1120
+  ],
+  "first_label": "Slide 039 图 3",
+  "first_slide": 39,
+  "occurrences": [
+   {
+    "slide": 39,
+    "idx": 3,
+    "pos": "右下"
+   }
+  ]
+ },
+ "4578522cddf3f040557fa3ba2ab804511a586a4e": {
+  "rel": "images/s040_p1_4578522c.png",
+  "ext": "png",
+  "bytes": 5620,
+  "px": [
+   369,
+   203
+  ],
+  "first_label": "Slide 040 图 1",
+  "first_slide": 40,
+  "occurrences": [
+   {
+    "slide": 40,
+    "idx": 1,
+    "pos": "左下"
+   }
+  ]
+ },
+ "2535799d233f96862f443b65e1daa549938e1aea": {
+  "rel": "images/s040_p2_2535799d.png",
+  "ext": "png",
+  "bytes": 3264,
+  "px": [
+   363,
+   132
+  ],
+  "first_label": "Slide 040 图 2",
+  "first_slide": 40,
+  "occurrences": [
+   {
+    "slide": 40,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "20e5b7e809ee49bcdc81947f06c94c0bcb391322": {
+  "rel": "images/s040_p3_20e5b7e8.png",
+  "ext": "png",
+  "bytes": 5615,
+  "px": [
+   769,
+   263
+  ],
+  "first_label": "Slide 040 图 3",
+  "first_slide": 40,
+  "occurrences": [
+   {
+    "slide": 40,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "0dba942a88f5894b8ab418fe54ef8b6ffc52212f": {
+  "rel": "images/s042_p1_0dba942a.png",
+  "ext": "png",
+  "bytes": 197883,
+  "px": [
+   1802,
+   635
+  ],
+  "first_label": "Slide 042 图 1",
+  "first_slide": 42,
+  "occurrences": [
+   {
+    "slide": 42,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "26c9abc1ea346cfcf9e06e26e8d32422f134e7e5": {
+  "rel": "images/s042_p2_26c9abc1.png",
+  "ext": "png",
+  "bytes": 45989,
+  "px": [
+   302,
+   260
+  ],
+  "first_label": "Slide 042 图 2",
+  "first_slide": 42,
+  "occurrences": [
+   {
+    "slide": 42,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "04846dafca71b5879327e111bc48ab8f9ba59ff7": {
+  "rel": "images/s042_p3_04846daf.png",
+  "ext": "png",
+  "bytes": 275894,
+  "px": [
+   1781,
+   661
+  ],
+  "first_label": "Slide 042 图 3",
+  "first_slide": 42,
+  "occurrences": [
+   {
+    "slide": 42,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "2a5bb80387090842fd4c22e20788e4671e0c797e": {
+  "rel": "images/s043_p1_2a5bb803.png",
+  "ext": "png",
+  "bytes": 16911,
+  "px": [
+   749,
+   192
+  ],
+  "first_label": "Slide 043 图 1",
+  "first_slide": 43,
+  "occurrences": [
+   {
+    "slide": 43,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "b08c40ee95df8471a2d91e3572d106c544094148": {
+  "rel": "images/s043_p2_b08c40ee.png",
+  "ext": "png",
+  "bytes": 7369,
+  "px": [
+   399,
+   44
+  ],
+  "first_label": "Slide 043 图 2",
+  "first_slide": 43,
+  "occurrences": [
+   {
+    "slide": 43,
+    "idx": 2,
+    "pos": "左下"
+   },
+   {
+    "slide": 44,
+    "idx": 8,
+    "pos": "左下"
+   }
+  ]
+ },
+ "06c0f5b97bf7a23a1544f3304aeacf4bd79fb420": {
+  "rel": "images/s043_p3_06c0f5b9.png",
+  "ext": "png",
+  "bytes": 21379,
+  "px": [
+   856,
+   342
+  ],
+  "first_label": "Slide 043 图 3",
+  "first_slide": 43,
+  "occurrences": [
+   {
+    "slide": 43,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "514e04e9554bd93d860f977e76275515e6846621": {
+  "rel": "images/s043_p4_514e04e9.png",
+  "ext": "png",
+  "bytes": 19593,
+  "px": [
+   778,
+   253
+  ],
+  "first_label": "Slide 043 图 4",
+  "first_slide": 43,
+  "occurrences": [
+   {
+    "slide": 43,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "3b58305c1e936c4ae5a14e646ef6b95645846559": {
+  "rel": "images/s044_p1_3b58305c.png",
+  "ext": "png",
+  "bytes": 9295,
+  "px": [
+   652,
+   51
+  ],
+  "first_label": "Slide 044 图 1",
+  "first_slide": 44,
+  "occurrences": [
+   {
+    "slide": 44,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "9867486f54f83950718f4534324d3f0028542bb5": {
+  "rel": "images/s044_p2_9867486f.png",
+  "ext": "png",
+  "bytes": 4891,
+  "px": [
+   215,
+   100
+  ],
+  "first_label": "Slide 044 图 2",
+  "first_slide": 44,
+  "occurrences": [
+   {
+    "slide": 44,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "c5ad03e95a80944b5bafd02ba1a1ed8edec1f999": {
+  "rel": "images/s044_p3_c5ad03e9.png",
+  "ext": "png",
+  "bytes": 3689,
+  "px": [
+   246,
+   54
+  ],
+  "first_label": "Slide 044 图 3",
+  "first_slide": 44,
+  "occurrences": [
+   {
+    "slide": 44,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "5893600a02e1ae632aefed3aa72f9ec229baca13": {
+  "rel": "images/s044_p4_5893600a.png",
+  "ext": "png",
+  "bytes": 8287,
+  "px": [
+   433,
+   61
+  ],
+  "first_label": "Slide 044 图 4",
+  "first_slide": 44,
+  "occurrences": [
+   {
+    "slide": 44,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "d7b1cf81c75c094b6cc8d56afa1725fa5ab6596b": {
+  "rel": "images/s044_p5_d7b1cf81.png",
+  "ext": "png",
+  "bytes": 30173,
+  "px": [
+   941,
+   376
+  ],
+  "first_label": "Slide 044 图 5",
+  "first_slide": 44,
+  "occurrences": [
+   {
+    "slide": 44,
+    "idx": 5,
+    "pos": "左中"
+   }
+  ]
+ },
+ "e8b6d2cd19002b5c23eb985981a2aaef0fbdc459": {
+  "rel": "images/s044_p6_e8b6d2cd.png",
+  "ext": "png",
+  "bytes": 4426,
+  "px": [
+   309,
+   95
+  ],
+  "first_label": "Slide 044 图 6",
+  "first_slide": 44,
+  "occurrences": [
+   {
+    "slide": 44,
+    "idx": 6,
+    "pos": "左下"
+   }
+  ]
+ },
+ "49845567aabb80322718bb6aec24df5f87e1ba86": {
+  "rel": "images/s044_p7_49845567.png",
+  "ext": "png",
+  "bytes": 2315,
+  "px": [
+   166,
+   84
+  ],
+  "first_label": "Slide 044 图 7",
+  "first_slide": 44,
+  "occurrences": [
+   {
+    "slide": 44,
+    "idx": 7,
+    "pos": "中下"
+   }
+  ]
+ },
+ "b2210304d600cdda63e676ba0e29fdfd06093342": {
+  "rel": "images/s045_p1_b2210304.png",
+  "ext": "png",
+  "bytes": 8822,
+  "px": [
+   329,
+   118
+  ],
+  "first_label": "Slide 045 图 1",
+  "first_slide": 45,
+  "occurrences": [
+   {
+    "slide": 45,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "fdbaa1dea04cc098d3ea8f45072e862bba2e68d0": {
+  "rel": "images/s045_p2_fdbaa1de.png",
+  "ext": "png",
+  "bytes": 9830,
+  "px": [
+   401,
+   183
+  ],
+  "first_label": "Slide 045 图 2",
+  "first_slide": 45,
+  "occurrences": [
+   {
+    "slide": 45,
+    "idx": 2,
+    "pos": "左上"
+   }
+  ]
+ },
+ "9d270c9dc511cd95e9ac76dce134ec1aa9bf8919": {
+  "rel": "images/s045_p3_9d270c9d.jpg",
+  "ext": "jpg",
+  "bytes": 231050,
+  "px": [
+   720,
+   649
+  ],
+  "first_label": "Slide 045 图 3",
+  "first_slide": 45,
+  "occurrences": [
+   {
+    "slide": 45,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "bf813b3fb938c195863091aee65b53bc7612abb4": {
+  "rel": "images/s045_p4_bf813b3f.jpg",
+  "ext": "jpg",
+  "bytes": 148656,
+  "px": [
+   720,
+   649
+  ],
+  "first_label": "Slide 045 图 4",
+  "first_slide": 45,
+  "occurrences": [
+   {
+    "slide": 45,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "b67a51940599308352f7fb9b805565ba0949dfc9": {
+  "rel": "images/s045_p5_b67a5194.gif",
+  "ext": "gif",
+  "bytes": 4804322,
+  "px": [
+   812,
+   892
+  ],
+  "first_label": "Slide 045 图 5",
+  "first_slide": 45,
+  "occurrences": [
+   {
+    "slide": 45,
+    "idx": 5,
+    "pos": "右中"
+   }
+  ],
+  "frame_count": 60,
+  "previews": [
+   "images/previews/s045_p5_b67a5194_f1of3_frame1.png",
+   "images/previews/s045_p5_b67a5194_f2of3_frame31.png",
+   "images/previews/s045_p5_b67a5194_f3of3_frame60.png"
+  ],
+  "preview_frames": [
+   0,
+   30,
+   59
+  ]
+ },
+ "205e77ec8f4ae480cd6680b628600e928e5eb3ce": {
+  "rel": "images/s046_p1_205e77ec.jpg",
+  "ext": "jpg",
+  "bytes": 208020,
+  "px": [
+   720,
+   699
+  ],
+  "first_label": "Slide 046 图 1",
+  "first_slide": 46,
+  "occurrences": [
+   {
+    "slide": 46,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "cd7903143bb6b631e9e57b7c0459567f75c4d625": {
+  "rel": "images/s046_p2_cd790314.jpg",
+  "ext": "jpg",
+  "bytes": 178518,
+  "px": [
+   720,
+   655
+  ],
+  "first_label": "Slide 046 图 2",
+  "first_slide": 46,
+  "occurrences": [
+   {
+    "slide": 46,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "92eb1317aa6a2d30e600350a7941ce887d23130e": {
+  "rel": "images/s046_p3_92eb1317.gif",
+  "ext": "gif",
+  "bytes": 1333929,
+  "px": [
+   890,
+   486
+  ],
+  "first_label": "Slide 046 图 3",
+  "first_slide": 46,
+  "occurrences": [
+   {
+    "slide": 46,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ],
+  "frame_count": 60,
+  "previews": [
+   "images/previews/s046_p3_92eb1317_f1of3_frame1.png",
+   "images/previews/s046_p3_92eb1317_f2of3_frame31.png",
+   "images/previews/s046_p3_92eb1317_f3of3_frame60.png"
+  ],
+  "preview_frames": [
+   0,
+   30,
+   59
+  ]
+ },
+ "3139c4925a21cbc70ae7e3f6867a7776b7c6bbef": {
+  "rel": "images/s047_p1_3139c492.png",
+  "ext": "png",
+  "bytes": 13432,
+  "px": [
+   417,
+   191
+  ],
+  "first_label": "Slide 047 图 1",
+  "first_slide": 47,
+  "occurrences": [
+   {
+    "slide": 47,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "4c6fa13b5bc9494e9d5eab9136a8e156e1a0946b": {
+  "rel": "images/s047_p2_4c6fa13b.png",
+  "ext": "png",
+  "bytes": 17660,
+  "px": [
+   566,
+   262
+  ],
+  "first_label": "Slide 047 图 2",
+  "first_slide": 47,
+  "occurrences": [
+   {
+    "slide": 47,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "60a9c819c35bb769d2a75d4c10c02814da0295bf": {
+  "rel": "images/s047_p3_60a9c819.jpg",
+  "ext": "jpg",
+  "bytes": 197584,
+  "px": [
+   720,
+   649
+  ],
+  "first_label": "Slide 047 图 3",
+  "first_slide": 47,
+  "occurrences": [
+   {
+    "slide": 47,
+    "idx": 3,
+    "pos": "左下"
+   },
+   {
+    "slide": 48,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "a1483d6822b80b449d486676e6210598648362e7": {
+  "rel": "images/s047_p4_a1483d68.jpg",
+  "ext": "jpg",
+  "bytes": 125268,
+  "px": [
+   720,
+   649
+  ],
+  "first_label": "Slide 047 图 4",
+  "first_slide": 47,
+  "occurrences": [
+   {
+    "slide": 47,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "b49a647ab9929e16821488b9c76eea8af863a265": {
+  "rel": "images/s047_p5_b49a647a.gif",
+  "ext": "gif",
+  "bytes": 4971949,
+  "px": [
+   812,
+   892
+  ],
+  "first_label": "Slide 047 图 5",
+  "first_slide": 47,
+  "occurrences": [
+   {
+    "slide": 47,
+    "idx": 5,
+    "pos": "右上"
+   }
+  ],
+  "frame_count": 60,
+  "previews": [
+   "images/previews/s047_p5_b49a647a_f1of3_frame1.png",
+   "images/previews/s047_p5_b49a647a_f2of3_frame31.png",
+   "images/previews/s047_p5_b49a647a_f3of3_frame60.png"
+  ],
+  "preview_frames": [
+   0,
+   30,
+   59
+  ]
+ },
+ "0490087003b32be130aca1aaba141d59c7f0de78": {
+  "rel": "images/s047_p6_04900870.gif",
+  "ext": "gif",
+  "bytes": 5284508,
+  "px": [
+   812,
+   892
+  ],
+  "first_label": "Slide 047 图 6",
+  "first_slide": 47,
+  "occurrences": [
+   {
+    "slide": 47,
+    "idx": 6,
+    "pos": "右下"
+   }
+  ],
+  "frame_count": 60,
+  "previews": [
+   "images/previews/s047_p6_04900870_f1of3_frame1.png",
+   "images/previews/s047_p6_04900870_f2of3_frame31.png",
+   "images/previews/s047_p6_04900870_f3of3_frame60.png"
+  ],
+  "preview_frames": [
+   0,
+   30,
+   59
+  ]
+ },
+ "926ae9df265a996c51ffd39e7e9a58f109409ed9": {
+  "rel": "images/s048_p1_926ae9df.png",
+  "ext": "png",
+  "bytes": 39481,
+  "px": [
+   800,
+   719
+  ],
+  "first_label": "Slide 048 图 1",
+  "first_slide": 48,
+  "occurrences": [
+   {
+    "slide": 48,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "a9aba50fcb168e829cf05728cc9fdfece47e8272": {
+  "rel": "images/s048_p2_a9aba50f.png",
+  "ext": "png",
+  "bytes": 36872,
+  "px": [
+   733,
+   356
+  ],
+  "first_label": "Slide 048 图 2",
+  "first_slide": 48,
+  "occurrences": [
+   {
+    "slide": 48,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "c61a26c3f911cd4d342df2dac42ec7e7f43e8eb5": {
+  "rel": "images/s049_p1_c61a26c3.png",
+  "ext": "png",
+  "bytes": 104425,
+  "px": [
+   1003,
+   585
+  ],
+  "first_label": "Slide 049 图 1",
+  "first_slide": 49,
+  "occurrences": [
+   {
+    "slide": 49,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "52ace05385fc709f82ca3c49a10a95d0598f678d": {
+  "rel": "images/s049_p2_52ace053.png",
+  "ext": "png",
+  "bytes": 12576,
+  "px": [
+   508,
+   108
+  ],
+  "first_label": "Slide 049 图 2",
+  "first_slide": 49,
+  "occurrences": [
+   {
+    "slide": 49,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "fcc4d231ae7152dd786474b9d8c9c83ec1bedbff": {
+  "rel": "images/s049_p3_fcc4d231.png",
+  "ext": "png",
+  "bytes": 16555,
+  "px": [
+   976,
+   178
+  ],
+  "first_label": "Slide 049 图 3",
+  "first_slide": 49,
+  "occurrences": [
+   {
+    "slide": 49,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "25ca70bcb742598cc86daa019f14112d2a3cde45": {
+  "rel": "images/s050_p1_25ca70bc.jpg",
+  "ext": "jpg",
+  "bytes": 178790,
+  "px": [
+   720,
+   649
+  ],
+  "first_label": "Slide 050 图 1",
+  "first_slide": 50,
+  "occurrences": [
+   {
+    "slide": 50,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "3f902d7a03ae10f5d9726fc0e66010e88756f9cc": {
+  "rel": "images/s050_p2_3f902d7a.jpg",
+  "ext": "jpg",
+  "bytes": 87551,
+  "px": [
+   720,
+   649
+  ],
+  "first_label": "Slide 050 图 2",
+  "first_slide": 50,
+  "occurrences": [
+   {
+    "slide": 50,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "b96421959276ece64f65de54b4461c73c4548a4a": {
+  "rel": "images/s050_p3_b9642195.gif",
+  "ext": "gif",
+  "bytes": 4724675,
+  "px": [
+   812,
+   892
+  ],
+  "first_label": "Slide 050 图 3",
+  "first_slide": 50,
+  "occurrences": [
+   {
+    "slide": 50,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ],
+  "frame_count": 60,
+  "previews": [
+   "images/previews/s050_p3_b9642195_f1of3_frame1.png",
+   "images/previews/s050_p3_b9642195_f2of3_frame31.png",
+   "images/previews/s050_p3_b9642195_f3of3_frame60.png"
+  ],
+  "preview_frames": [
+   0,
+   30,
+   59
+  ]
+ },
+ "72ea301724fc86e25ec10d4cc54e1b37d8af05bc": {
+  "rel": "images/s050_p4_72ea3017.png",
+  "ext": "png",
+  "bytes": 40859,
+  "px": [
+   785,
+   336
+  ],
+  "first_label": "Slide 050 图 4",
+  "first_slide": 50,
+  "occurrences": [
+   {
+    "slide": 50,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "55e12d469e9ffc6111029fcb22146e15de66ef38": {
+  "rel": "images/s050_p5_55e12d46.png",
+  "ext": "png",
+  "bytes": 17802,
+  "px": [
+   896,
+   111
+  ],
+  "first_label": "Slide 050 图 5",
+  "first_slide": 50,
+  "occurrences": [
+   {
+    "slide": 50,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "b4318850e15394e82d70fbac33c62f2a7ea3176c": {
+  "rel": "images/s050_p6_b4318850.png",
+  "ext": "png",
+  "bytes": 9103,
+  "px": [
+   456,
+   114
+  ],
+  "first_label": "Slide 050 图 6",
+  "first_slide": 50,
+  "occurrences": [
+   {
+    "slide": 50,
+    "idx": 6,
+    "pos": "右下"
+   }
+  ]
+ },
+ "35913d6157c6d7bc99e2b62ec5cb529634fde45e": {
+  "rel": "images/s051_p1_35913d61.png",
+  "ext": "png",
+  "bytes": 62237,
+  "px": [
+   903,
+   149
+  ],
+  "first_label": "Slide 051 图 1",
+  "first_slide": 51,
+  "occurrences": [
+   {
+    "slide": 51,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 53,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "3a0f388c595c26f84026552b197234136affb273": {
+  "rel": "images/s051_p2_3a0f388c.png",
+  "ext": "png",
+  "bytes": 56664,
+  "px": [
+   664,
+   532
+  ],
+  "first_label": "Slide 051 图 2",
+  "first_slide": 51,
+  "occurrences": [
+   {
+    "slide": 51,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "50a783413ab8fd9f05ce94c65e9e403a3d9f4b6f": {
+  "rel": "images/s051_p3_50a78341.png",
+  "ext": "png",
+  "bytes": 35928,
+  "px": [
+   613,
+   520
+  ],
+  "first_label": "Slide 051 图 3",
+  "first_slide": 51,
+  "occurrences": [
+   {
+    "slide": 51,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "00dc3b394ec5009114c4a96349f639dd62908d21": {
+  "rel": "images/s051_p4_00dc3b39.png",
+  "ext": "png",
+  "bytes": 23682,
+  "px": [
+   163,
+   206
+  ],
+  "first_label": "Slide 051 图 4",
+  "first_slide": 51,
+  "occurrences": [
+   {
+    "slide": 51,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "b25b231d83664ad461ac3ceb8e50f3a343766070": {
+  "rel": "images/s052_p2_b25b231d.png",
+  "ext": "png",
+  "bytes": 32773,
+  "px": [
+   755,
+   270
+  ],
+  "first_label": "Slide 052 图 2",
+  "first_slide": 52,
+  "occurrences": [
+   {
+    "slide": 52,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 53,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "fd40901ab9942016c0fc6dcd9caa8517c9dce0cb": {
+  "rel": "images/s053_p3_fd40901a.png",
+  "ext": "png",
+  "bytes": 73743,
+  "px": [
+   1097,
+   106
+  ],
+  "first_label": "Slide 053 图 3",
+  "first_slide": 53,
+  "occurrences": [
+   {
+    "slide": 53,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "ebb97d74ee7da55e5cfaf05a796dd3ff6076308a": {
+  "rel": "images/s054_p1_ebb97d74.png",
+  "ext": "png",
+  "bytes": 11173,
+  "px": [
+   1654,
+   108
+  ],
+  "first_label": "Slide 054 图 1",
+  "first_slide": 54,
+  "occurrences": [
+   {
+    "slide": 54,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "493e227cbd37cfad34984adb2d16d6f628b092a8": {
+  "rel": "images/s054_p2_493e227c.jpg",
+  "ext": "jpg",
+  "bytes": 252699,
+  "px": [
+   1187,
+   1828
+  ],
+  "first_label": "Slide 054 图 2",
+  "first_slide": 54,
+  "occurrences": [
+   {
+    "slide": 54,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "272c3f7558714a2839a0cd80f9d062e6f2e7f079": {
+  "rel": "images/s054_p3_272c3f75.jpg",
+  "ext": "jpg",
+  "bytes": 68051,
+  "px": [
+   750,
+   532
+  ],
+  "first_label": "Slide 054 图 3",
+  "first_slide": 54,
+  "occurrences": [
+   {
+    "slide": 54,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "daee76daae8cf41b580a3c218eacdc3cb95014b4": {
+  "rel": "images/s056_p1_daee76da.png",
+  "ext": "png",
+  "bytes": 40100,
+  "px": [
+   1051,
+   232
+  ],
+  "first_label": "Slide 056 图 1",
+  "first_slide": 56,
+  "occurrences": [
+   {
+    "slide": 56,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 59,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "41aa271a3d21b96a3a7b89c0913c6793d66ce334": {
+  "rel": "images/s057_p1_41aa271a.png",
+  "ext": "png",
+  "bytes": 16070,
+  "px": [
+   1032,
+   79
+  ],
+  "first_label": "Slide 057 图 1",
+  "first_slide": 57,
+  "occurrences": [
+   {
+    "slide": 57,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "fc547f91a304ca54a974950e8bfeaca84193da59": {
+  "rel": "images/s057_p2_fc547f91.png",
+  "ext": "png",
+  "bytes": 17155,
+  "px": [
+   942,
+   162
+  ],
+  "first_label": "Slide 057 图 2",
+  "first_slide": 57,
+  "occurrences": [
+   {
+    "slide": 57,
+    "idx": 2,
+    "pos": "左中"
+   },
+   {
+    "slide": 59,
+    "idx": 1,
+    "pos": "左上"
+   },
+   {
+    "slide": 68,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "e9ef4808ff6e016355ca87cf6965dacc39bc4e7b": {
+  "rel": "images/s057_p3_e9ef4808.png",
+  "ext": "png",
+  "bytes": 3879,
+  "px": [
+   246,
+   75
+  ],
+  "first_label": "Slide 057 图 3",
+  "first_slide": 57,
+  "occurrences": [
+   {
+    "slide": 57,
+    "idx": 3,
+    "pos": "右下"
+   }
+  ]
+ },
+ "951398f53784545e38a919bad0bf78a5e3e0b1ab": {
+  "rel": "images/s057_p4_951398f5.png",
+  "ext": "png",
+  "bytes": 3270,
+  "px": [
+   235,
+   59
+  ],
+  "first_label": "Slide 057 图 4",
+  "first_slide": 57,
+  "occurrences": [
+   {
+    "slide": 57,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "d8ac308daa2ce003d0028a270d253b98ba160613": {
+  "rel": "images/s057_p5_d8ac308d.png",
+  "ext": "png",
+  "bytes": 2161,
+  "px": [
+   172,
+   35
+  ],
+  "first_label": "Slide 057 图 5",
+  "first_slide": 57,
+  "occurrences": [
+   {
+    "slide": 57,
+    "idx": 5,
+    "pos": "右中"
+   }
+  ]
+ },
+ "dc569d710f52c3e5c58658593cc101146dfd420b": {
+  "rel": "images/s057_p6_dc569d71.png",
+  "ext": "png",
+  "bytes": 27396,
+  "px": [
+   395,
+   116
+  ],
+  "first_label": "Slide 057 图 6",
+  "first_slide": 57,
+  "occurrences": [
+   {
+    "slide": 57,
+    "idx": 6,
+    "pos": "左下"
+   }
+  ]
+ },
+ "538eb5a34e6b68e5c4d15b2626050da84241c0f3": {
+  "rel": "images/s057_p7_538eb5a3.png",
+  "ext": "png",
+  "bytes": 1954,
+  "px": [
+   182,
+   34
+  ],
+  "first_label": "Slide 057 图 7",
+  "first_slide": 57,
+  "occurrences": [
+   {
+    "slide": 57,
+    "idx": 7,
+    "pos": "左下"
+   }
+  ]
+ },
+ "e22e0b788d74266305fc353be549dfbb8ffa576c": {
+  "rel": "images/s058_p1_e22e0b78.png",
+  "ext": "png",
+  "bytes": 3504,
+  "px": [
+   641,
+   77
+  ],
+  "first_label": "Slide 058 图 1",
+  "first_slide": 58,
+  "occurrences": [
+   {
+    "slide": 58,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "05b46e9cb17a09c1a48b537e43dcd526e3c1c88e": {
+  "rel": "images/s058_p2_05b46e9c.png",
+  "ext": "png",
+  "bytes": 1668,
+  "px": [
+   158,
+   21
+  ],
+  "first_label": "Slide 058 图 2",
+  "first_slide": 58,
+  "occurrences": [
+   {
+    "slide": 58,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "518402c86af5270805cb75b345fa262ea04a4e09": {
+  "rel": "images/s060_p1_518402c8.png",
+  "ext": "png",
+  "bytes": 60344,
+  "px": [
+   288,
+   817
+  ],
+  "first_label": "Slide 060 图 1",
+  "first_slide": 60,
+  "occurrences": [
+   {
+    "slide": 60,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "cd0f2b0191942f7f1ba2ba72f764f087aee57eae": {
+  "rel": "images/s060_p2_cd0f2b01.jpg",
+  "ext": "jpg",
+  "bytes": 445291,
+  "px": [
+   3648,
+   1175
+  ],
+  "first_label": "Slide 060 图 2",
+  "first_slide": 60,
+  "occurrences": [
+   {
+    "slide": 60,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "8cdb03ba6b3184584f475c8c16275a6fbde47ec3": {
+  "rel": "images/s062_p1_8cdb03ba.png",
+  "ext": "png",
+  "bytes": 35905,
+  "px": [
+   775,
+   600
+  ],
+  "first_label": "Slide 062 图 1",
+  "first_slide": 62,
+  "occurrences": [
+   {
+    "slide": 62,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "4d4bb6d8e5f966dbd3e38bf2cb579288e1ae240e": {
+  "rel": "images/s062_p2_4d4bb6d8.png",
+  "ext": "png",
+  "bytes": 4280,
+  "px": [
+   470,
+   114
+  ],
+  "first_label": "Slide 062 图 2",
+  "first_slide": 62,
+  "occurrences": [
+   {
+    "slide": 62,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "24401962b206864e1c43aa8f5689735926911502": {
+  "rel": "images/s062_p3_24401962.png",
+  "ext": "png",
+  "bytes": 5375,
+  "px": [
+   220,
+   85
+  ],
+  "first_label": "Slide 062 图 3",
+  "first_slide": 62,
+  "occurrences": [
+   {
+    "slide": 62,
+    "idx": 3,
+    "pos": "中上"
+   }
+  ]
+ },
+ "b2f6a72856c3c391484d83454a591083384ef0cd": {
+  "rel": "images/s062_p5_b2f6a728.png",
+  "ext": "png",
+  "bytes": 25511,
+  "px": [
+   715,
+   371
+  ],
+  "first_label": "Slide 062 图 5",
+  "first_slide": 62,
+  "occurrences": [
+   {
+    "slide": 62,
+    "idx": 5,
+    "pos": "中下"
+   }
+  ]
+ },
+ "be36ebf766f77d62b4dee5c4877ce58e0f864062": {
+  "rel": "images/s063_p1_be36ebf7.png",
+  "ext": "png",
+  "bytes": 39606,
+  "px": [
+   709,
+   374
+  ],
+  "first_label": "Slide 063 图 1",
+  "first_slide": 63,
+  "occurrences": [
+   {
+    "slide": 63,
+    "idx": 1,
+    "pos": "左上"
+   },
+   {
+    "slide": 76,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "9d9f05ca95f214ce31b987f35a10b380c77ae395": {
+  "rel": "images/s063_p2_9d9f05ca.png",
+  "ext": "png",
+  "bytes": 40129,
+  "px": [
+   469,
+   194
+  ],
+  "first_label": "Slide 063 图 2",
+  "first_slide": 63,
+  "occurrences": [
+   {
+    "slide": 63,
+    "idx": 2,
+    "pos": "左下"
+   },
+   {
+    "slide": 76,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "34bd754c59736e6d7d88e67ba7545260e9ec0d8c": {
+  "rel": "images/s064_p1_34bd754c.png",
+  "ext": "png",
+  "bytes": 33294,
+  "px": [
+   591,
+   390
+  ],
+  "first_label": "Slide 064 图 1",
+  "first_slide": 64,
+  "occurrences": [
+   {
+    "slide": 64,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "c4fa7e8c1329d7f15ae68c39685ecdc05e6d250c": {
+  "rel": "images/s064_p2_c4fa7e8c.png",
+  "ext": "png",
+  "bytes": 117876,
+  "px": [
+   767,
+   547
+  ],
+  "first_label": "Slide 064 图 2",
+  "first_slide": 64,
+  "occurrences": [
+   {
+    "slide": 64,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "0e0f1b775757555b71b311d48cc791d7074421e1": {
+  "rel": "images/s064_p3_0e0f1b77.png",
+  "ext": "png",
+  "bytes": 65654,
+  "px": [
+   806,
+   604
+  ],
+  "first_label": "Slide 064 图 3",
+  "first_slide": 64,
+  "occurrences": [
+   {
+    "slide": 64,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "039fef8ee162634011600dc0c61a3d84151d1c53": {
+  "rel": "images/s065_p1_039fef8e.png",
+  "ext": "png",
+  "bytes": 77525,
+  "px": [
+   742,
+   471
+  ],
+  "first_label": "Slide 065 图 1",
+  "first_slide": 65,
+  "occurrences": [
+   {
+    "slide": 65,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "bec191fde10c1c58e6ebea0136e65710c85c9d3e": {
+  "rel": "images/s065_p2_bec191fd.png",
+  "ext": "png",
+  "bytes": 12828,
+  "px": [
+   234,
+   303
+  ],
+  "first_label": "Slide 065 图 2",
+  "first_slide": 65,
+  "occurrences": [
+   {
+    "slide": 65,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "5d8d80634c43831d3b8db9eaf9c27437b93ff200": {
+  "rel": "images/s065_p3_5d8d8063.png",
+  "ext": "png",
+  "bytes": 46634,
+  "px": [
+   786,
+   249
+  ],
+  "first_label": "Slide 065 图 3",
+  "first_slide": 65,
+  "occurrences": [
+   {
+    "slide": 65,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "d70fe3f5dcb926d129597baddf3b2c4ddbc5de3d": {
+  "rel": "images/s065_p4_d70fe3f5.png",
+  "ext": "png",
+  "bytes": 27753,
+  "px": [
+   1270,
+   201
+  ],
+  "first_label": "Slide 065 图 4",
+  "first_slide": 65,
+  "occurrences": [
+   {
+    "slide": 65,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "c2ab994e20aaadb75eef34629fab699ffaa46a97": {
+  "rel": "images/s065_p5_c2ab994e.png",
+  "ext": "png",
+  "bytes": 22210,
+  "px": [
+   786,
+   224
+  ],
+  "first_label": "Slide 065 图 5",
+  "first_slide": 65,
+  "occurrences": [
+   {
+    "slide": 65,
+    "idx": 5,
+    "pos": "居中"
+   }
+  ]
+ },
+ "e5c1eab26460780197fa9940dd1698a7102226cd": {
+  "rel": "images/s065_p6_e5c1eab2.png",
+  "ext": "png",
+  "bytes": 22738,
+  "px": [
+   946,
+   129
+  ],
+  "first_label": "Slide 065 图 6",
+  "first_slide": 65,
+  "occurrences": [
+   {
+    "slide": 65,
+    "idx": 6,
+    "pos": "左下"
+   }
+  ]
+ },
+ "2a4a917ed66072cf0b132db67b3f7586586f0304": {
+  "rel": "images/s067_p1_2a4a917e.png",
+  "ext": "png",
+  "bytes": 102983,
+  "px": [
+   626,
+   494
+  ],
+  "first_label": "Slide 067 图 1",
+  "first_slide": 67,
+  "occurrences": [
+   {
+    "slide": 67,
+    "idx": 1,
+    "pos": "中下"
+   }
+  ]
+ },
+ "99566fc54282c1b7b3d233dbfa04c4db42a2b950": {
+  "rel": "images/s067_p2_99566fc5.png",
+  "ext": "png",
+  "bytes": 62089,
+  "px": [
+   775,
+   495
+  ],
+  "first_label": "Slide 067 图 2",
+  "first_slide": 67,
+  "occurrences": [
+   {
+    "slide": 67,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "0d5d197c286459fe763e5527d1c10b8e63b1fac1": {
+  "rel": "images/s067_p3_0d5d197c.png",
+  "ext": "png",
+  "bytes": 80208,
+  "px": [
+   729,
+   581
+  ],
+  "first_label": "Slide 067 图 3",
+  "first_slide": 67,
+  "occurrences": [
+   {
+    "slide": 67,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "54bad6f2a2d18fa1b98905cb8ad071b2fd4b808a": {
+  "rel": "images/s067_p4_54bad6f2.png",
+  "ext": "png",
+  "bytes": 73785,
+  "px": [
+   694,
+   457
+  ],
+  "first_label": "Slide 067 图 4",
+  "first_slide": 67,
+  "occurrences": [
+   {
+    "slide": 67,
+    "idx": 4,
+    "pos": "居中"
+   }
+  ]
+ },
+ "38a23cd06ea6284ecaba7c5093a88ed44c655f15": {
+  "rel": "images/s067_p5_38a23cd0.png",
+  "ext": "png",
+  "bytes": 25750,
+  "px": [
+   453,
+   371
+  ],
+  "first_label": "Slide 067 图 5",
+  "first_slide": 67,
+  "occurrences": [
+   {
+    "slide": 67,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "4d6aee433d65e1e3553224caa4b6237fd573806d": {
+  "rel": "images/s067_p6_4d6aee43.png",
+  "ext": "png",
+  "bytes": 13030,
+  "px": [
+   225,
+   298
+  ],
+  "first_label": "Slide 067 图 6",
+  "first_slide": 67,
+  "occurrences": [
+   {
+    "slide": 67,
+    "idx": 6,
+    "pos": "中下"
+   }
+  ]
+ },
+ "f0fa3d9ee69f809237dc90284a2ea71ac06f3ac7": {
+  "rel": "images/s068_p1_f0fa3d9e.png",
+  "ext": "png",
+  "bytes": 50808,
+  "px": [
+   293,
+   778
+  ],
+  "first_label": "Slide 068 图 1",
+  "first_slide": 68,
+  "occurrences": [
+   {
+    "slide": 68,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "5d58cb412c76411b78a89864b2d847422c3dddd7": {
+  "rel": "images/s068_p2_5d58cb41.png",
+  "ext": "png",
+  "bytes": 11160,
+  "px": [
+   262,
+   172
+  ],
+  "first_label": "Slide 068 图 2",
+  "first_slide": 68,
+  "occurrences": [
+   {
+    "slide": 68,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "7ff88c2e2c5e7461e7f1fc6580888cf736d1875c": {
+  "rel": "images/s070_p1_7ff88c2e.jpg",
+  "ext": "jpg",
+  "bytes": 416342,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 070 图 1",
+  "first_slide": 70,
+  "occurrences": [
+   {
+    "slide": 70,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "47a218b9ed98f199b2d975d78539c7d5a7de1bd5": {
+  "rel": "images/s070_p2_47a218b9.jpg",
+  "ext": "jpg",
+  "bytes": 501646,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 070 图 2",
+  "first_slide": 70,
+  "occurrences": [
+   {
+    "slide": 70,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "bdca5e1d91e4425bb15dacd46ac52320f9fa0fb9": {
+  "rel": "images/s070_p3_bdca5e1d.jpg",
+  "ext": "jpg",
+  "bytes": 684084,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 070 图 3",
+  "first_slide": 70,
+  "occurrences": [
+   {
+    "slide": 70,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "a97afc6038caed861e70ddfcd4bc6492567edf62": {
+  "rel": "images/s070_p4_a97afc60.png",
+  "ext": "png",
+  "bytes": 74294,
+  "px": [
+   424,
+   850
+  ],
+  "first_label": "Slide 070 图 4",
+  "first_slide": 70,
+  "occurrences": [
+   {
+    "slide": 70,
+    "idx": 4,
+    "pos": "居中"
+   }
+  ]
+ },
+ "bb9c39e4d6e4ede6c7bd613c2448ae13a5ccaf46": {
+  "rel": "images/s070_p5_bb9c39e4.png",
+  "ext": "png",
+  "bytes": 57332,
+  "px": [
+   355,
+   780
+  ],
+  "first_label": "Slide 070 图 5",
+  "first_slide": 70,
+  "occurrences": [
+   {
+    "slide": 70,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "c292ca7430740465118c814ddad3976c5bc0346a": {
+  "rel": "images/s071_p1_c292ca74.png",
+  "ext": "png",
+  "bytes": 377661,
+  "px": [
+   672,
+   1018
+  ],
+  "first_label": "Slide 071 图 1",
+  "first_slide": 71,
+  "occurrences": [
+   {
+    "slide": 71,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "b143dbbc7d75bfd6736581fd33a823a888a1586e": {
+  "rel": "images/s071_p2_b143dbbc.png",
+  "ext": "png",
+  "bytes": 156030,
+  "px": [
+   570,
+   912
+  ],
+  "first_label": "Slide 071 图 2",
+  "first_slide": 71,
+  "occurrences": [
+   {
+    "slide": 71,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "d4cf092895c3af2b96bb23ef84bf12b83d0ac6cd": {
+  "rel": "images/s071_p3_d4cf0928.png",
+  "ext": "png",
+  "bytes": 78797,
+  "px": [
+   663,
+   356
+  ],
+  "first_label": "Slide 071 图 3",
+  "first_slide": 71,
+  "occurrences": [
+   {
+    "slide": 71,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "00012c89ade91a5af630c12ceeb4d3d8dc435c20": {
+  "rel": "images/s071_p4_00012c89.png",
+  "ext": "png",
+  "bytes": 21811,
+  "px": [
+   337,
+   414
+  ],
+  "first_label": "Slide 071 图 4",
+  "first_slide": 71,
+  "occurrences": [
+   {
+    "slide": 71,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "6271e81ceb184b26a704108740474e3e338fe14d": {
+  "rel": "images/s072_p1_6271e81c.jpg",
+  "ext": "jpg",
+  "bytes": 568050,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 072 图 1",
+  "first_slide": 72,
+  "occurrences": [
+   {
+    "slide": 72,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "02e2c220322fe7d160304a2ee293fa7ecd49f213": {
+  "rel": "images/s072_p2_02e2c220.png",
+  "ext": "png",
+  "bytes": 47328,
+  "px": [
+   638,
+   573
+  ],
+  "first_label": "Slide 072 图 2",
+  "first_slide": 72,
+  "occurrences": [
+   {
+    "slide": 72,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "a8ad2b321bf682e00ed8e3204389f561976ea8fc": {
+  "rel": "images/s073_p1_a8ad2b32.png",
+  "ext": "png",
+  "bytes": 48862,
+  "px": [
+   2678,
+   1073
+  ],
+  "first_label": "Slide 073 图 1",
+  "first_slide": 73,
+  "occurrences": [
+   {
+    "slide": 73,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "b57ff1edaf9f5ebd5d9e917a04d2355c49e7df57": {
+  "rel": "images/s073_p2_b57ff1ed.png",
+  "ext": "png",
+  "bytes": 23914,
+  "px": [
+   1915,
+   749
+  ],
+  "first_label": "Slide 073 图 2",
+  "first_slide": 73,
+  "occurrences": [
+   {
+    "slide": 73,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "add50f3a15cbc15f06d8b9bcd01a24b855f4ceb4": {
+  "rel": "images/s074_p1_add50f3a.png",
+  "ext": "png",
+  "bytes": 27844,
+  "px": [
+   377,
+   461
+  ],
+  "first_label": "Slide 074 图 1",
+  "first_slide": 74,
+  "occurrences": [
+   {
+    "slide": 74,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 78,
+    "idx": 1,
+    "pos": "中上"
+   },
+   {
+    "slide": 82,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "cb485444188d8fc504bd2c22ffd92d3087f05ef4": {
+  "rel": "images/s076_p3_cb485444.png",
+  "ext": "png",
+  "bytes": 6644,
+  "px": [
+   343,
+   66
+  ],
+  "first_label": "Slide 076 图 3",
+  "first_slide": 76,
+  "occurrences": [
+   {
+    "slide": 76,
+    "idx": 3,
+    "pos": "左下"
+   },
+   {
+    "slide": 77,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "f95fbb27a43266685d2d48873cc7aa3188692d42": {
+  "rel": "images/s076_p4_f95fbb27.png",
+  "ext": "png",
+  "bytes": 12608,
+  "px": [
+   518,
+   93
+  ],
+  "first_label": "Slide 076 图 4",
+  "first_slide": 76,
+  "occurrences": [
+   {
+    "slide": 76,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "3d33873428bcce64371a5abd5889d62470d2b35f": {
+  "rel": "images/s076_p5_3d338734.png",
+  "ext": "png",
+  "bytes": 4018,
+  "px": [
+   268,
+   49
+  ],
+  "first_label": "Slide 076 图 5",
+  "first_slide": 76,
+  "occurrences": [
+   {
+    "slide": 76,
+    "idx": 5,
+    "pos": "中下"
+   }
+  ]
+ },
+ "166e693123761ecebff66deb8eb9810a93e9e233": {
+  "rel": "images/s076_p6_166e6931.png",
+  "ext": "png",
+  "bytes": 4610,
+  "px": [
+   237,
+   242
+  ],
+  "first_label": "Slide 076 图 6",
+  "first_slide": 76,
+  "occurrences": [
+   {
+    "slide": 76,
+    "idx": 6,
+    "pos": "中下"
+   }
+  ]
+ },
+ "b6f2e38638b97fedb21d15eb68f1dfd50e1883c2": {
+  "rel": "images/s077_p2_b6f2e386.png",
+  "ext": "png",
+  "bytes": 1460494,
+  "px": [
+   1920,
+   720
+  ],
+  "first_label": "Slide 077 图 2",
+  "first_slide": 77,
+  "occurrences": [
+   {
+    "slide": 77,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "e6743fbfc7778bbf6976a10af2202a2ea82d3dff": {
+  "rel": "images/s077_p3_e6743fbf.jpg",
+  "ext": "jpg",
+  "bytes": 257190,
+  "px": [
+   1219,
+   1099
+  ],
+  "first_label": "Slide 077 图 3",
+  "first_slide": 77,
+  "occurrences": [
+   {
+    "slide": 77,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "f2a826ccbde98cb91a8ae6956c1bf20c30d4a2bc": {
+  "rel": "images/s077_p4_f2a826cc.jpg",
+  "ext": "jpg",
+  "bytes": 181277,
+  "px": [
+   1219,
+   1099
+  ],
+  "first_label": "Slide 077 图 4",
+  "first_slide": 77,
+  "occurrences": [
+   {
+    "slide": 77,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "c1f16cf678e2eb31c681975e8a656fe78b9fb200": {
+  "rel": "images/s077_p5_c1f16cf6.png",
+  "ext": "png",
+  "bytes": 21555,
+  "px": [
+   493,
+   419
+  ],
+  "first_label": "Slide 077 图 5",
+  "first_slide": 77,
+  "occurrences": [
+   {
+    "slide": 77,
+    "idx": 5,
+    "pos": "居中"
+   }
+  ]
+ },
+ "e204a7a213cb22fd7f7136d4c6345f38c2e133f2": {
+  "rel": "images/s078_p2_e204a7a2.png",
+  "ext": "png",
+  "bytes": 96535,
+  "px": [
+   585,
+   1095
+  ],
+  "first_label": "Slide 078 图 2",
+  "first_slide": 78,
+  "occurrences": [
+   {
+    "slide": 78,
+    "idx": 2,
+    "pos": "右中"
+   },
+   {
+    "slide": 82,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "85c4a16b188795f870c45bd25b509dce1e8800ab": {
+  "rel": "images/s080_p1_85c4a16b.png",
+  "ext": "png",
+  "bytes": 219326,
+  "px": [
+   790,
+   592
+  ],
+  "first_label": "Slide 080 图 1",
+  "first_slide": 80,
+  "occurrences": [
+   {
+    "slide": 80,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "59e277cab0342453a19062674209a3fdf30706d2": {
+  "rel": "images/s080_p2_59e277ca.png",
+  "ext": "png",
+  "bytes": 263445,
+  "px": [
+   1269,
+   755
+  ],
+  "first_label": "Slide 080 图 2",
+  "first_slide": 80,
+  "occurrences": [
+   {
+    "slide": 80,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "2795310f7246b93f335fcd54361b4065230ccbea": {
+  "rel": "images/s081_p1_2795310f.png",
+  "ext": "png",
+  "bytes": 71584,
+  "px": [
+   531,
+   383
+  ],
+  "first_label": "Slide 081 图 1",
+  "first_slide": 81,
+  "occurrences": [
+   {
+    "slide": 81,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "b0b1f50b93f6ed1230db5083bc17c5b5a8625b4e": {
+  "rel": "images/s081_p2_b0b1f50b.png",
+  "ext": "png",
+  "bytes": 76926,
+  "px": [
+   527,
+   379
+  ],
+  "first_label": "Slide 081 图 2",
+  "first_slide": 81,
+  "occurrences": [
+   {
+    "slide": 81,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "e5f5004c6b1856d45a7edd5a59f9e67f1b7e1da9": {
+  "rel": "images/s081_p3_e5f5004c.png",
+  "ext": "png",
+  "bytes": 65350,
+  "px": [
+   529,
+   384
+  ],
+  "first_label": "Slide 081 图 3",
+  "first_slide": 81,
+  "occurrences": [
+   {
+    "slide": 81,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "0073a0d99ba647f9bf7aaa657e21ac1095ba8139": {
+  "rel": "images/s082_p3_0073a0d9.jpg",
+  "ext": "jpg",
+  "bytes": 288042,
+  "px": [
+   800,
+   800
+  ],
+  "first_label": "Slide 082 图 3",
+  "first_slide": 82,
+  "occurrences": [
+   {
+    "slide": 82,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "d33e128b8928097aa8749081d649f89fa1108e8a": {
+  "rel": "images/s083_p3_d33e128b.png",
+  "ext": "png",
+  "bytes": 473332,
+  "px": [
+   1322,
+   790
+  ],
+  "first_label": "Slide 083 图 3",
+  "first_slide": 83,
+  "occurrences": [
+   {
+    "slide": 83,
+    "idx": 3,
+    "pos": "右下"
+   }
+  ]
+ },
+ "7c5911fdd4cd24e9bfe8d08010b8be4a46fb98b9": {
+  "rel": "images/s084_p1_7c5911fd.gif",
+  "ext": "gif",
+  "bytes": 1663131,
+  "px": [
+   1083,
+   1150
+  ],
+  "first_label": "Slide 084 图 1",
+  "first_slide": 84,
+  "occurrences": [
+   {
+    "slide": 84,
+    "idx": 1,
+    "pos": "右下"
+   }
+  ],
+  "frame_count": 60,
+  "previews": [
+   "images/previews/s084_p1_7c5911fd_f1of3_frame1.png",
+   "images/previews/s084_p1_7c5911fd_f2of3_frame31.png",
+   "images/previews/s084_p1_7c5911fd_f3of3_frame60.png"
+  ],
+  "preview_frames": [
+   0,
+   30,
+   59
+  ]
+ },
+ "a8d1ec274c1490c9cbcd16e9874ec06b6cd0693e": {
+  "rel": "images/s084_p2_a8d1ec27.gif",
+  "ext": "gif",
+  "bytes": 2562645,
+  "px": [
+   1083,
+   1150
+  ],
+  "first_label": "Slide 084 图 2",
+  "first_slide": 84,
+  "occurrences": [
+   {
+    "slide": 84,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ],
+  "frame_count": 60,
+  "previews": [
+   "images/previews/s084_p2_a8d1ec27_f1of3_frame1.png",
+   "images/previews/s084_p2_a8d1ec27_f2of3_frame31.png",
+   "images/previews/s084_p2_a8d1ec27_f3of3_frame60.png"
+  ],
+  "preview_frames": [
+   0,
+   30,
+   59
+  ]
+ },
+ "bc00e73fb20099d62bce8dee5af7105cf3676dac": {
+  "rel": "images/s085_p1_bc00e73f.png",
+  "ext": "png",
+  "bytes": 174109,
+  "px": [
+   1330,
+   1270
+  ],
+  "first_label": "Slide 085 图 1",
+  "first_slide": 85,
+  "occurrences": [
+   {
+    "slide": 85,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "002be9dfb22738f213170189b332e7fb56963081": {
+  "rel": "images/s085_p2_002be9df.png",
+  "ext": "png",
+  "bytes": 79169,
+  "px": [
+   658,
+   351
+  ],
+  "first_label": "Slide 085 图 2",
+  "first_slide": 85,
+  "occurrences": [
+   {
+    "slide": 85,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "92d77a7ab1eba2166f19dffa6805da954404b742": {
+  "rel": "images/s087_p1_92d77a7a.png",
+  "ext": "png",
+  "bytes": 231151,
+  "px": [
+   4108,
+   1767
+  ],
+  "first_label": "Slide 087 图 1",
+  "first_slide": 87,
+  "occurrences": [
+   {
+    "slide": 87,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "2d464c51c84310381830d1b2a6cccd2fad4c7ee9": {
+  "rel": "images/s087_p2_2d464c51.png",
+  "ext": "png",
+  "bytes": 607704,
+  "px": [
+   4130,
+   1770
+  ],
+  "first_label": "Slide 087 图 2",
+  "first_slide": 87,
+  "occurrences": [
+   {
+    "slide": 87,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "5697ad098f784d5217fdbeb72f72e94950d5ab84": {
+  "rel": "images/s088_p1_5697ad09.png",
+  "ext": "png",
+  "bytes": 237490,
+  "px": [
+   3729,
+   1765
+  ],
+  "first_label": "Slide 088 图 1",
+  "first_slide": 88,
+  "occurrences": [
+   {
+    "slide": 88,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "6bce8aeed4e3d85854214d6e8d5b6551e1373fda": {
+  "rel": "images/s088_p2_6bce8aee.png",
+  "ext": "png",
+  "bytes": 556716,
+  "px": [
+   3719,
+   1765
+  ],
+  "first_label": "Slide 088 图 2",
+  "first_slide": 88,
+  "occurrences": [
+   {
+    "slide": 88,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "39b3f83a3f0f882d3c3593d46808cf240b34f144": {
+  "rel": "images/s089_p1_39b3f83a.png",
+  "ext": "png",
+  "bytes": 237736,
+  "px": [
+   3729,
+   1765
+  ],
+  "first_label": "Slide 089 图 1",
+  "first_slide": 89,
+  "occurrences": [
+   {
+    "slide": 89,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "02f37b6351009137d0afd10c5e8a5d7b513b5c29": {
+  "rel": "images/s089_p2_02f37b63.png",
+  "ext": "png",
+  "bytes": 596951,
+  "px": [
+   3719,
+   1765
+  ],
+  "first_label": "Slide 089 图 2",
+  "first_slide": 89,
+  "occurrences": [
+   {
+    "slide": 89,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "2a001e32b4de5a9e658bebe2580029a7bd69250b": {
+  "rel": "images/s090_p1_2a001e32.png",
+  "ext": "png",
+  "bytes": 255377,
+  "px": [
+   1922,
+   1342
+  ],
+  "first_label": "Slide 090 图 1",
+  "first_slide": 90,
+  "occurrences": [
+   {
+    "slide": 90,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "43fdc381bbb31d68aa86f36d463a53af38fa314e": {
+  "rel": "images/s090_p2_43fdc381.png",
+  "ext": "png",
+  "bytes": 43112,
+  "px": [
+   1052,
+   545
+  ],
+  "first_label": "Slide 090 图 2",
+  "first_slide": 90,
+  "occurrences": [
+   {
+    "slide": 90,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "1aed08d9bab961e61fdb22e2ab727be1ea59e3e6": {
+  "rel": "images/s092_p1_1aed08d9.png",
+  "ext": "png",
+  "bytes": 5901,
+  "px": [
+   284,
+   125
+  ],
+  "first_label": "Slide 092 图 1",
+  "first_slide": 92,
+  "occurrences": [
+   {
+    "slide": 92,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "45e35ff70f3cd1c3d9d35a7138f3ad735e0df694": {
+  "rel": "images/s092_p2_45e35ff7.png",
+  "ext": "png",
+  "bytes": 191002,
+  "px": [
+   920,
+   549
+  ],
+  "first_label": "Slide 092 图 2",
+  "first_slide": 92,
+  "occurrences": [
+   {
+    "slide": 92,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "0dc3b5713a332957573016515d9ebfc5849d0b5a": {
+  "rel": "images/s092_p3_0dc3b571.png",
+  "ext": "png",
+  "bytes": 27933,
+  "px": [
+   1345,
+   216
+  ],
+  "first_label": "Slide 092 图 3",
+  "first_slide": 92,
+  "occurrences": [
+   {
+    "slide": 92,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "670fdeb5a608f7b3e10877b0ae5711492de75cec": {
+  "rel": "images/s093_p1_670fdeb5.png",
+  "ext": "png",
+  "bytes": 33117,
+  "px": [
+   325,
+   248
+  ],
+  "first_label": "Slide 093 图 1",
+  "first_slide": 93,
+  "occurrences": [
+   {
+    "slide": 93,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 95,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 98,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "11fdcb36b466663994fe07eb664a5665d0e99b13": {
+  "rel": "images/s093_p2_11fdcb36.png",
+  "ext": "png",
+  "bytes": 44617,
+  "px": [
+   910,
+   502
+  ],
+  "first_label": "Slide 093 图 2",
+  "first_slide": 93,
+  "occurrences": [
+   {
+    "slide": 93,
+    "idx": 2,
+    "pos": "左中"
+   },
+   {
+    "slide": 99,
+    "idx": 3,
+    "pos": "右上"
+   },
+   {
+    "slide": 100,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "5f9ede627b6d9469fbd598cd89cb5095a9ab7e87": {
+  "rel": "images/s093_p3_5f9ede62.jpg",
+  "ext": "jpg",
+  "bytes": 637149,
+  "px": [
+   1680,
+   878
+  ],
+  "first_label": "Slide 093 图 3",
+  "first_slide": 93,
+  "occurrences": [
+   {
+    "slide": 93,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "c76d13878f599f647f713ed5b986e4e07961ac77": {
+  "rel": "images/s094_p1_c76d1387.png",
+  "ext": "png",
+  "bytes": 85389,
+  "px": [
+   885,
+   431
+  ],
+  "first_label": "Slide 094 图 1",
+  "first_slide": 94,
+  "occurrences": [
+   {
+    "slide": 94,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "4da9a8b969bc78a3c5020cfdd3a5197546c691e5": {
+  "rel": "images/s094_p2_4da9a8b9.png",
+  "ext": "png",
+  "bytes": 9818,
+  "px": [
+   405,
+   143
+  ],
+  "first_label": "Slide 094 图 2",
+  "first_slide": 94,
+  "occurrences": [
+   {
+    "slide": 94,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "7db257a7aee7f10e433c9cebb09128dc115fc6b8": {
+  "rel": "images/s094_p3_7db257a7.png",
+  "ext": "png",
+  "bytes": 6602,
+  "px": [
+   437,
+   128
+  ],
+  "first_label": "Slide 094 图 3",
+  "first_slide": 94,
+  "occurrences": [
+   {
+    "slide": 94,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "1926a1a92cb116d5ce948dbb8004ec96a24c8007": {
+  "rel": "images/s095_p2_1926a1a9.png",
+  "ext": "png",
+  "bytes": 5422,
+  "px": [
+   194,
+   189
+  ],
+  "first_label": "Slide 095 图 2",
+  "first_slide": 95,
+  "occurrences": [
+   {
+    "slide": 95,
+    "idx": 2,
+    "pos": "左中"
+   },
+   {
+    "slide": 98,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "15d2df028819161a5e816a2292615bdab3dbeac8": {
+  "rel": "images/s096_p1_15d2df02.png",
+  "ext": "png",
+  "bytes": 1059187,
+  "px": [
+   1080,
+   1108
+  ],
+  "first_label": "Slide 096 图 1",
+  "first_slide": 96,
+  "occurrences": [
+   {
+    "slide": 96,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "bfa328c6db22869c0894c63a78405cf090b46cd8": {
+  "rel": "images/s096_p2_bfa328c6.png",
+  "ext": "png",
+  "bytes": 201868,
+  "px": [
+   1413,
+   863
+  ],
+  "first_label": "Slide 096 图 2",
+  "first_slide": 96,
+  "occurrences": [
+   {
+    "slide": 96,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "6b5c80964895b3c184c5211cd4c61bf9b83f237c": {
+  "rel": "images/s099_p1_6b5c8096.png",
+  "ext": "png",
+  "bytes": 59903,
+  "px": [
+   829,
+   1324
+  ],
+  "first_label": "Slide 099 图 1",
+  "first_slide": 99,
+  "occurrences": [
+   {
+    "slide": 99,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "46e5e1e3f24f44eead33676fba88d96802f262b5": {
+  "rel": "images/s099_p2_46e5e1e3.png",
+  "ext": "png",
+  "bytes": 3202,
+  "px": [
+   265,
+   96
+  ],
+  "first_label": "Slide 099 图 2",
+  "first_slide": 99,
+  "occurrences": [
+   {
+    "slide": 99,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "a929cd4c9b2314a76334776ec4f30ad45bd76ad4": {
+  "rel": "images/s099_p4_a929cd4c.png",
+  "ext": "png",
+  "bytes": 40690,
+  "px": [
+   1463,
+   387
+  ],
+  "first_label": "Slide 099 图 4",
+  "first_slide": 99,
+  "occurrences": [
+   {
+    "slide": 99,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "229837e7bb2d002b598ca5999e374fb70cf27fcc": {
+  "rel": "images/s100_p2_229837e7.png",
+  "ext": "png",
+  "bytes": 34768,
+  "px": [
+   1154,
+   409
+  ],
+  "first_label": "Slide 100 图 2",
+  "first_slide": 100,
+  "occurrences": [
+   {
+    "slide": 100,
+    "idx": 2,
+    "pos": "左上"
+   }
+  ]
+ },
+ "78b41ef35bf53bd95e92c65780c9be2335c30ec9": {
+  "rel": "images/s100_p3_78b41ef3.png",
+  "ext": "png",
+  "bytes": 29434,
+  "px": [
+   1203,
+   157
+  ],
+  "first_label": "Slide 100 图 3",
+  "first_slide": 100,
+  "occurrences": [
+   {
+    "slide": 100,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "e45174464c71cbcbe0ff2f478a032a84d7efe090": {
+  "rel": "images/s101_p1_e4517446.png",
+  "ext": "png",
+  "bytes": 245467,
+  "px": [
+   1068,
+   816
+  ],
+  "first_label": "Slide 101 图 1",
+  "first_slide": 101,
+  "occurrences": [
+   {
+    "slide": 101,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "b1ecf49b1c7776e2453f59de20ed347b979067fe": {
+  "rel": "images/s101_p2_b1ecf49b.png",
+  "ext": "png",
+  "bytes": 64117,
+  "px": [
+   1239,
+   303
+  ],
+  "first_label": "Slide 101 图 2",
+  "first_slide": 101,
+  "occurrences": [
+   {
+    "slide": 101,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "42f78714865141e937d2b0533a25dc9ae8615ee5": {
+  "rel": "images/s102_p1_42f78714.png",
+  "ext": "png",
+  "bytes": 277902,
+  "px": [
+   1335,
+   798
+  ],
+  "first_label": "Slide 102 图 1",
+  "first_slide": 102,
+  "occurrences": [
+   {
+    "slide": 102,
+    "idx": 1,
+    "pos": "左下"
+   },
+   {
+    "slide": 103,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "6af4bfbc78a507f741aba4460ef287ccccf9f29b": {
+  "rel": "images/s102_p2_6af4bfbc.png",
+  "ext": "png",
+  "bytes": 81472,
+  "px": [
+   660,
+   302
+  ],
+  "first_label": "Slide 102 图 2",
+  "first_slide": 102,
+  "occurrences": [
+   {
+    "slide": 102,
+    "idx": 2,
+    "pos": "中上"
+   }
+  ]
+ },
+ "3c9e6f09623e9254037cd4a35cb99a6cb541c15c": {
+  "rel": "images/s102_p3_3c9e6f09.png",
+  "ext": "png",
+  "bytes": 320587,
+  "px": [
+   670,
+   829
+  ],
+  "first_label": "Slide 102 图 3",
+  "first_slide": 102,
+  "occurrences": [
+   {
+    "slide": 102,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "29ab7d0538552618319c1d198f36b44c254f175a": {
+  "rel": "images/s103_p2_29ab7d05.jpg",
+  "ext": "jpg",
+  "bytes": 725915,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 103 图 2",
+  "first_slide": 103,
+  "occurrences": [
+   {
+    "slide": 103,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "123bac687d4945bfb0558fdcaf6d303987edc5fc": {
+  "rel": "images/s104_p1_123bac68.png",
+  "ext": "png",
+  "bytes": 568627,
+  "px": [
+   2066,
+   905
+  ],
+  "first_label": "Slide 104 图 1",
+  "first_slide": 104,
+  "occurrences": [
+   {
+    "slide": 104,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "3779bbb0cf7c4e4705c74cb8c2116f816a636878": {
+  "rel": "images/s104_p2_3779bbb0.png",
+  "ext": "png",
+  "bytes": 785944,
+  "px": [
+   2020,
+   759
+  ],
+  "first_label": "Slide 104 图 2",
+  "first_slide": 104,
+  "occurrences": [
+   {
+    "slide": 104,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "f9aa8ecbb3456a62894057459930ea89e893586d": {
+  "rel": "images/s104_p3_f9aa8ecb.png",
+  "ext": "png",
+  "bytes": 67043,
+  "px": [
+   1051,
+   673
+  ],
+  "first_label": "Slide 104 图 3",
+  "first_slide": 104,
+  "occurrences": [
+   {
+    "slide": 104,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "afc15dd15f2e4928ce2aac9abe77703fe54db54b": {
+  "rel": "images/s106_p1_afc15dd1.png",
+  "ext": "png",
+  "bytes": 205802,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 106 图 1",
+  "first_slide": 106,
+  "occurrences": [
+   {
+    "slide": 106,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 112,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "9568aa2faf8f5ed57c4637fc020c12c68b7d9650": {
+  "rel": "images/s107_p1_9568aa2f.png",
+  "ext": "png",
+  "bytes": 202440,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 107 图 1",
+  "first_slide": 107,
+  "occurrences": [
+   {
+    "slide": 107,
+    "idx": 1,
+    "pos": "中下"
+   },
+   {
+    "slide": 112,
+    "idx": 4,
+    "pos": "居中"
+   }
+  ]
+ },
+ "c20fae5a426a3473ac70c0e412eea71901e53cc2": {
+  "rel": "images/s108_p1_c20fae5a.png",
+  "ext": "png",
+  "bytes": 731159,
+  "px": [
+   2100,
+   902
+  ],
+  "first_label": "Slide 108 图 1",
+  "first_slide": 108,
+  "occurrences": [
+   {
+    "slide": 108,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "f753123c0c9141477a2fb4f40311d2dce2f63295": {
+  "rel": "images/s109_p1_f753123c.png",
+  "ext": "png",
+  "bytes": 182128,
+  "px": [
+   2400,
+   1044
+  ],
+  "first_label": "Slide 109 图 1",
+  "first_slide": 109,
+  "occurrences": [
+   {
+    "slide": 109,
+    "idx": 1,
+    "pos": "左下"
+   }
+  ]
+ },
+ "0909aadf15d650c21cd1332c32a6d692f0be58b8": {
+  "rel": "images/s109_p2_0909aadf.png",
+  "ext": "png",
+  "bytes": 794276,
+  "px": [
+   2100,
+   963
+  ],
+  "first_label": "Slide 109 图 2",
+  "first_slide": 109,
+  "occurrences": [
+   {
+    "slide": 109,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "7635b9461c3a7846a16914fd2fd17dfdf407a20e": {
+  "rel": "images/s110_p1_7635b946.png",
+  "ext": "png",
+  "bytes": 189474,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 110 图 1",
+  "first_slide": 110,
+  "occurrences": [
+   {
+    "slide": 110,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 112,
+    "idx": 5,
+    "pos": "右中"
+   }
+  ]
+ },
+ "5f4732633a69d1223fb5dfcb1debff0724e6ea9c": {
+  "rel": "images/s111_p1_5f473263.png",
+  "ext": "png",
+  "bytes": 217239,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 111 图 1",
+  "first_slide": 111,
+  "occurrences": [
+   {
+    "slide": 111,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 112,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "c7d778a51d942169ffcf642acbff60d30c599fc8": {
+  "rel": "images/s112_p1_c7d778a5.png",
+  "ext": "png",
+  "bytes": 204345,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 112 图 1",
+  "first_slide": 112,
+  "occurrences": [
+   {
+    "slide": 112,
+    "idx": 1,
+    "pos": "左下"
+   }
+  ]
+ },
+ "5831403184796f5b8e67dc215fdfc57c9daaa028": {
+  "rel": "images/s112_p6_58314031.png",
+  "ext": "png",
+  "bytes": 202324,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 112 图 6",
+  "first_slide": 112,
+  "occurrences": [
+   {
+    "slide": 112,
+    "idx": 6,
+    "pos": "中下"
+   }
+  ]
+ },
+ "48f58e6e434a5ad0c66baa719a36898452f3ae01": {
+  "rel": "images/s113_p1_48f58e6e.png",
+  "ext": "png",
+  "bytes": 300789,
+  "px": [
+   3572,
+   1766
+  ],
+  "first_label": "Slide 113 图 1",
+  "first_slide": 113,
+  "occurrences": [
+   {
+    "slide": 113,
+    "idx": 1,
+    "pos": "中下"
+   }
+  ]
+ },
+ "b194a965944b590cea7773a71aeb0e0c26a4ae3e": {
+  "rel": "images/s115_p1_b194a965.png",
+  "ext": "png",
+  "bytes": 19337,
+  "px": [
+   1006,
+   104
+  ],
+  "first_label": "Slide 115 图 1",
+  "first_slide": 115,
+  "occurrences": [
+   {
+    "slide": 115,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "968cc783d694f1116fdc4c82e034210b4acd2f2f": {
+  "rel": "images/s115_p2_968cc783.png",
+  "ext": "png",
+  "bytes": 40009,
+  "px": [
+   290,
+   318
+  ],
+  "first_label": "Slide 115 图 2",
+  "first_slide": 115,
+  "occurrences": [
+   {
+    "slide": 115,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "4164b36dbfc5d32b640970e59aa7f6c0dbf73c4f": {
+  "rel": "images/s115_p3_4164b36d.png",
+  "ext": "png",
+  "bytes": 47393,
+  "px": [
+   292,
+   349
+  ],
+  "first_label": "Slide 115 图 3",
+  "first_slide": 115,
+  "occurrences": [
+   {
+    "slide": 115,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "85fb65c7a6077cf50c47339c591c59a32fc288f9": {
+  "rel": "images/s115_p4_85fb65c7.png",
+  "ext": "png",
+  "bytes": 82331,
+  "px": [
+   408,
+   389
+  ],
+  "first_label": "Slide 115 图 4",
+  "first_slide": 115,
+  "occurrences": [
+   {
+    "slide": 115,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "308381168b98d266e1d47edcb58233e0644854e9": {
+  "rel": "images/s115_p5_30838116.png",
+  "ext": "png",
+  "bytes": 3725,
+  "px": [
+   284,
+   53
+  ],
+  "first_label": "Slide 115 图 5",
+  "first_slide": 115,
+  "occurrences": [
+   {
+    "slide": 115,
+    "idx": 5,
+    "pos": "左中"
+   }
+  ]
+ },
+ "6252c9f3e34796f5791bb725fdbb917ad259405c": {
+  "rel": "images/s115_p6_6252c9f3.png",
+  "ext": "png",
+  "bytes": 3757,
+  "px": [
+   219,
+   52
+  ],
+  "first_label": "Slide 115 图 6",
+  "first_slide": 115,
+  "occurrences": [
+   {
+    "slide": 115,
+    "idx": 6,
+    "pos": "居中"
+   }
+  ]
+ },
+ "c2f611b5ec2cf9828f2c7c8da3e9cfba0886c19c": {
+  "rel": "images/s115_p7_c2f611b5.png",
+  "ext": "png",
+  "bytes": 34451,
+  "px": [
+   1141,
+   161
+  ],
+  "first_label": "Slide 115 图 7",
+  "first_slide": 115,
+  "occurrences": [
+   {
+    "slide": 115,
+    "idx": 7,
+    "pos": "右中"
+   }
+  ]
+ },
+ "16730dc606a95cadd6b8fa59ac7829217509230d": {
+  "rel": "images/s115_p8_16730dc6.png",
+  "ext": "png",
+  "bytes": 46211,
+  "px": [
+   428,
+   481
+  ],
+  "first_label": "Slide 115 图 8",
+  "first_slide": 115,
+  "occurrences": [
+   {
+    "slide": 115,
+    "idx": 8,
+    "pos": "左下"
+   }
+  ]
+ },
+ "38b8359a375699598692b00864b27b66b2642e7b": {
+  "rel": "images/s116_p1_38b8359a.png",
+  "ext": "png",
+  "bytes": 168971,
+  "px": [
+   1036,
+   732
+  ],
+  "first_label": "Slide 116 图 1",
+  "first_slide": 116,
+  "occurrences": [
+   {
+    "slide": 116,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "e16750bb0617abe1a913fd00828da8fe95a20b81": {
+  "rel": "images/s116_p2_e16750bb.png",
+  "ext": "png",
+  "bytes": 4927,
+  "px": [
+   370,
+   45
+  ],
+  "first_label": "Slide 116 图 2",
+  "first_slide": 116,
+  "occurrences": [
+   {
+    "slide": 116,
+    "idx": 2,
+    "pos": "左上"
+   }
+  ]
+ },
+ "791600e0738f2fb4f7e26b93703434061a28eb8b": {
+  "rel": "images/s116_p3_791600e0.png",
+  "ext": "png",
+  "bytes": 2459,
+  "px": [
+   149,
+   44
+  ],
+  "first_label": "Slide 116 图 3",
+  "first_slide": 116,
+  "occurrences": [
+   {
+    "slide": 116,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "062f109cb83cb0777e5e5f9e619ed25cd9f2be5c": {
+  "rel": "images/s116_p4_062f109c.png",
+  "ext": "png",
+  "bytes": 4750,
+  "px": [
+   399,
+   61
+  ],
+  "first_label": "Slide 116 图 4",
+  "first_slide": 116,
+  "occurrences": [
+   {
+    "slide": 116,
+    "idx": 4,
+    "pos": "左中"
+   }
+  ]
+ },
+ "2345eadd453564faeed65cb56e6646d8684b5048": {
+  "rel": "images/s117_p1_2345eadd.png",
+  "ext": "png",
+  "bytes": 350453,
+  "px": [
+   3572,
+   1764
+  ],
+  "first_label": "Slide 117 图 1",
+  "first_slide": 117,
+  "occurrences": [
+   {
+    "slide": 117,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "18d066fa061579a5ec4584ff6f03de539157dbab": {
+  "rel": "images/s117_p2_18d066fa.png",
+  "ext": "png",
+  "bytes": 297864,
+  "px": [
+   3572,
+   1764
+  ],
+  "first_label": "Slide 117 图 2",
+  "first_slide": 117,
+  "occurrences": [
+   {
+    "slide": 117,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "389cd7350b020ff816a768f661fe703264ca8597": {
+  "rel": "images/s117_p3_389cd735.jpg",
+  "ext": "jpg",
+  "bytes": 1023366,
+  "px": [
+   1279,
+   1706
+  ],
+  "first_label": "Slide 117 图 3",
+  "first_slide": 117,
+  "occurrences": [
+   {
+    "slide": 117,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "5824ccda026e888200f3e335b49b4ed17618e5c3": {
+  "rel": "images/s119_p1_5824ccda.jpg",
+  "ext": "jpg",
+  "bytes": 633759,
+  "px": [
+   1279,
+   1706
+  ],
+  "first_label": "Slide 119 图 1",
+  "first_slide": 119,
+  "occurrences": [
+   {
+    "slide": 119,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "94940e4904c1603ec6852e31e6589664734bf0d8": {
+  "rel": "images/s119_p2_94940e49.jpg",
+  "ext": "jpg",
+  "bytes": 774199,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 119 图 2",
+  "first_slide": 119,
+  "occurrences": [
+   {
+    "slide": 119,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "5e4cdfae6580e8779b3545999d44f303a52a7c9e": {
+  "rel": "images/s119_p3_5e4cdfae.jpg",
+  "ext": "jpg",
+  "bytes": 538063,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 119 图 3",
+  "first_slide": 119,
+  "occurrences": [
+   {
+    "slide": 119,
+    "idx": 3,
+    "pos": "中上"
+   }
+  ]
+ },
+ "aae982f5e7de258639069b369c71f795df4f9cfd": {
+  "rel": "images/s119_p4_aae982f5.jpg",
+  "ext": "jpg",
+  "bytes": 527939,
+  "px": [
+   1279,
+   1706
+  ],
+  "first_label": "Slide 119 图 4",
+  "first_slide": 119,
+  "occurrences": [
+   {
+    "slide": 119,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "0817011d12e53a407cca23ef0cdb07ff6be0cc8f": {
+  "rel": "images/s120_p1_0817011d.png",
+  "ext": "png",
+  "bytes": 688847,
+  "px": [
+   665,
+   1532
+  ],
+  "first_label": "Slide 120 图 1",
+  "first_slide": 120,
+  "occurrences": [
+   {
+    "slide": 120,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "155094af89ea7e743c0f0fe3567cbf8ff91737de": {
+  "rel": "images/s120_p2_155094af.png",
+  "ext": "png",
+  "bytes": 519026,
+  "px": [
+   601,
+   1534
+  ],
+  "first_label": "Slide 120 图 2",
+  "first_slide": 120,
+  "occurrences": [
+   {
+    "slide": 120,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "30fe2761e49276ece74fc399ad2266d7ef5b2fcb": {
+  "rel": "images/s122_p1_30fe2761.jpg",
+  "ext": "jpg",
+  "bytes": 367752,
+  "px": [
+   1120,
+   1494
+  ],
+  "first_label": "Slide 122 图 1",
+  "first_slide": 122,
+  "occurrences": [
+   {
+    "slide": 122,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "72c01f5d1570c4ba775b1734107cf07b030c941f": {
+  "rel": "images/s122_p2_72c01f5d.jpg",
+  "ext": "jpg",
+  "bytes": 30991,
+  "px": [
+   560,
+   420
+  ],
+  "first_label": "Slide 122 图 2",
+  "first_slide": 122,
+  "occurrences": [
+   {
+    "slide": 122,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "f2c51d754c82bc36238e239922ecedf9494038c0": {
+  "rel": "images/s123_p1_f2c51d75.png",
+  "ext": "png",
+  "bytes": 42886,
+  "px": [
+   465,
+   288
+  ],
+  "first_label": "Slide 123 图 1",
+  "first_slide": 123,
+  "occurrences": [
+   {
+    "slide": 123,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 200,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 200,
+    "idx": 3,
+    "pos": "居中"
+   },
+   {
+    "slide": 213,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 213,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "ee5082da4710e68fc18c720a73e0dddbf487d003": {
+  "rel": "images/s123_p2_ee5082da.png",
+  "ext": "png",
+  "bytes": 183246,
+  "px": [
+   576,
+   480
+  ],
+  "first_label": "Slide 123 图 2",
+  "first_slide": 123,
+  "occurrences": [
+   {
+    "slide": 123,
+    "idx": 2,
+    "pos": "右下"
+   },
+   {
+    "slide": 200,
+    "idx": 2,
+    "pos": "右下"
+   },
+   {
+    "slide": 213,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "bdc998c974b59275d22077ed8987387c083d5ebd": {
+  "rel": "images/s123_p3_bdc998c9.png",
+  "ext": "png",
+  "bytes": 79495,
+  "px": [
+   928,
+   302
+  ],
+  "first_label": "Slide 123 图 3",
+  "first_slide": 123,
+  "occurrences": [
+   {
+    "slide": 123,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "d954707202639f8351fee7000fe472c961a832b6": {
+  "rel": "images/s124_p1_d9547072.png",
+  "ext": "png",
+  "bytes": 75061,
+  "px": [
+   681,
+   783
+  ],
+  "first_label": "Slide 124 图 1",
+  "first_slide": 124,
+  "occurrences": [
+   {
+    "slide": 124,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "3a7f7689e3da5f3b91b3884af0b0f52a6ed24bf5": {
+  "rel": "images/s124_p2_3a7f7689.png",
+  "ext": "png",
+  "bytes": 6976,
+  "px": [
+   273,
+   176
+  ],
+  "first_label": "Slide 124 图 2",
+  "first_slide": 124,
+  "occurrences": [
+   {
+    "slide": 124,
+    "idx": 2,
+    "pos": "中上"
+   }
+  ]
+ },
+ "8ffb88a38d31ce8d2481b3997cce1816c681a7ad": {
+  "rel": "images/s124_p3_8ffb88a3.png",
+  "ext": "png",
+  "bytes": 28365,
+  "px": [
+   839,
+   206
+  ],
+  "first_label": "Slide 124 图 3",
+  "first_slide": 124,
+  "occurrences": [
+   {
+    "slide": 124,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "946bd5db32d74802993c634cbe1c2b53fd30d391": {
+  "rel": "images/s124_p4_946bd5db.png",
+  "ext": "png",
+  "bytes": 51986,
+  "px": [
+   543,
+   455
+  ],
+  "first_label": "Slide 124 图 4",
+  "first_slide": 124,
+  "occurrences": [
+   {
+    "slide": 124,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "81d925ed9275190b5ecc2c598c9559b1d0aaff04": {
+  "rel": "images/s124_p5_81d925ed.jpg",
+  "ext": "jpg",
+  "bytes": 492974,
+  "px": [
+   1120,
+   1494
+  ],
+  "first_label": "Slide 124 图 5",
+  "first_slide": 124,
+  "occurrences": [
+   {
+    "slide": 124,
+    "idx": 5,
+    "pos": "中下"
+   }
+  ]
+ },
+ "5936b639dd770cb2102b9e6dca8d66e6894190ed": {
+  "rel": "images/s126_p1_5936b639.png",
+  "ext": "png",
+  "bytes": 159401,
+  "px": [
+   1372,
+   504
+  ],
+  "first_label": "Slide 126 图 1",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "f8d81306a54eab700246f90d077ccb2d5c707776": {
+  "rel": "images/s126_p2_f8d81306.png",
+  "ext": "png",
+  "bytes": 95130,
+  "px": [
+   638,
+   445
+  ],
+  "first_label": "Slide 126 图 2",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 2,
+    "pos": "右中"
+   },
+   {
+    "slide": 127,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "e9301545eb71b5cba690c5315fc8ad7c18e48ec3": {
+  "rel": "images/s126_p3_e9301545.png",
+  "ext": "png",
+  "bytes": 5314,
+  "px": [
+   201,
+   89
+  ],
+  "first_label": "Slide 126 图 3",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 3,
+    "pos": "左上"
+   }
+  ]
+ },
+ "34db7cb0f163e6064e7c8fa22879eba502344780": {
+  "rel": "images/s126_p4_34db7cb0.png",
+  "ext": "png",
+  "bytes": 1481,
+  "px": [
+   83,
+   40
+  ],
+  "first_label": "Slide 126 图 4",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 4,
+    "pos": "左中"
+   }
+  ]
+ },
+ "d1e7a612adfca1a0e91f6f323d22aca81d112aa8": {
+  "rel": "images/s126_p5_d1e7a612.png",
+  "ext": "png",
+  "bytes": 4141,
+  "px": [
+   226,
+   41
+  ],
+  "first_label": "Slide 126 图 5",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 5,
+    "pos": "左中"
+   }
+  ]
+ },
+ "b56e81e87e61942bbf494878d26c598eb4b340a3": {
+  "rel": "images/s126_p6_b56e81e8.png",
+  "ext": "png",
+  "bytes": 949,
+  "px": [
+   89,
+   28
+  ],
+  "first_label": "Slide 126 图 6",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 6,
+    "pos": "左中"
+   }
+  ]
+ },
+ "16194f77a49785aaa463922327e20eb333c5858e": {
+  "rel": "images/s126_p7_16194f77.png",
+  "ext": "png",
+  "bytes": 2183,
+  "px": [
+   89,
+   44
+  ],
+  "first_label": "Slide 126 图 7",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 7,
+    "pos": "左中"
+   }
+  ]
+ },
+ "9c267ec82b0f11d573a11671874c29eb20a14dce": {
+  "rel": "images/s126_p8_9c267ec8.png",
+  "ext": "png",
+  "bytes": 15162,
+  "px": [
+   841,
+   150
+  ],
+  "first_label": "Slide 126 图 8",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 8,
+    "pos": "左中"
+   },
+   {
+    "slide": 127,
+    "idx": 2,
+    "pos": "左上"
+   }
+  ]
+ },
+ "b392363a596866d81581a8a9d4e380e340a35e2e": {
+  "rel": "images/s126_p9_b392363a.png",
+  "ext": "png",
+  "bytes": 23689,
+  "px": [
+   2041,
+   129
+  ],
+  "first_label": "Slide 126 图 9",
+  "first_slide": 126,
+  "occurrences": [
+   {
+    "slide": 126,
+    "idx": 9,
+    "pos": "中下"
+   }
+  ]
+ },
+ "6b52e5e1b38f18def409b362bb3b1b8c3c8a3bff": {
+  "rel": "images/s127_p3_6b52e5e1.png",
+  "ext": "png",
+  "bytes": 20700,
+  "px": [
+   1549,
+   131
+  ],
+  "first_label": "Slide 127 图 3",
+  "first_slide": 127,
+  "occurrences": [
+   {
+    "slide": 127,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "161cb0a40084689b8c99a8a1b7f717867f6c896a": {
+  "rel": "images/s127_p4_161cb0a4.png",
+  "ext": "png",
+  "bytes": 57138,
+  "px": [
+   718,
+   517
+  ],
+  "first_label": "Slide 127 图 4",
+  "first_slide": 127,
+  "occurrences": [
+   {
+    "slide": 127,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "b0a843cdcdf1d8777ee114020ae6ff4f0201c779": {
+  "rel": "images/s127_p5_b0a843cd.png",
+  "ext": "png",
+  "bytes": 60788,
+  "px": [
+   734,
+   517
+  ],
+  "first_label": "Slide 127 图 5",
+  "first_slide": 127,
+  "occurrences": [
+   {
+    "slide": 127,
+    "idx": 5,
+    "pos": "中下"
+   }
+  ]
+ },
+ "57eeced1ecd27efe426037983c18459f13350eff": {
+  "rel": "images/s127_p6_57eeced1.png",
+  "ext": "png",
+  "bytes": 47248,
+  "px": [
+   719,
+   516
+  ],
+  "first_label": "Slide 127 图 6",
+  "first_slide": 127,
+  "occurrences": [
+   {
+    "slide": 127,
+    "idx": 6,
+    "pos": "右下"
+   }
+  ]
+ },
+ "bd1f41545be95f744c0fc0c14b8aebec56d2b88a": {
+  "rel": "images/s128_p1_bd1f4154.jpg",
+  "ext": "jpg",
+  "bytes": 511618,
+  "px": [
+   1120,
+   1494
+  ],
+  "first_label": "Slide 128 图 1",
+  "first_slide": 128,
+  "occurrences": [
+   {
+    "slide": 128,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "15c3bb3b3edcbbc093667ff2b912760bca93529c": {
+  "rel": "images/s130_p4_15c3bb3b.png",
+  "ext": "png",
+  "bytes": 38339,
+  "px": [
+   799,
+   360
+  ],
+  "first_label": "Slide 130 图 4",
+  "first_slide": 130,
+  "occurrences": [
+   {
+    "slide": 130,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "4e7702578ce5175b6b7283297d2e991987d9bb59": {
+  "rel": "images/s130_p5_4e770257.png",
+  "ext": "png",
+  "bytes": 170451,
+  "px": [
+   1458,
+   693
+  ],
+  "first_label": "Slide 130 图 5",
+  "first_slide": 130,
+  "occurrences": [
+   {
+    "slide": 130,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "08f3b10ed638b9d83d0b2fadecf853d4a0ab709a": {
+  "rel": "images/s131_p1_08f3b10e.png",
+  "ext": "png",
+  "bytes": 53467,
+  "px": [
+   846,
+   299
+  ],
+  "first_label": "Slide 131 图 1",
+  "first_slide": 131,
+  "occurrences": [
+   {
+    "slide": 131,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "015c89c66d803172eb50a3bb8ef618cd2fac25c1": {
+  "rel": "images/s131_p2_015c89c6.png",
+  "ext": "png",
+  "bytes": 90697,
+  "px": [
+   600,
+   279
+  ],
+  "first_label": "Slide 131 图 2",
+  "first_slide": 131,
+  "occurrences": [
+   {
+    "slide": 131,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "5731ea178ab07bd6dedf1c109bcc09bdd6672b74": {
+  "rel": "images/s131_p3_5731ea17.png",
+  "ext": "png",
+  "bytes": 77790,
+  "px": [
+   483,
+   268
+  ],
+  "first_label": "Slide 131 图 3",
+  "first_slide": 131,
+  "occurrences": [
+   {
+    "slide": 131,
+    "idx": 3,
+    "pos": "右下"
+   }
+  ]
+ },
+ "8fef0a1cac871c965ab439890725b33cec502a31": {
+  "rel": "images/s131_p4_8fef0a1c.wmf",
+  "ext": "wmf",
+  "bytes": 1800260,
+  "px": [
+   999,
+   599
+  ],
+  "first_label": "Slide 131 图 4",
+  "first_slide": 131,
+  "occurrences": [
+   {
+    "slide": 131,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ],
+  "previews": [
+   "images/previews/s131_p4_8fef0a1c.png"
+  ],
+  "preview_status": "ok"
+ },
+ "b9bcda8488629c64212861a590c29ba8b40b2e10": {
+  "rel": "images/s131_p5_b9bcda84.png",
+  "ext": "png",
+  "bytes": 60803,
+  "px": [
+   300,
+   393
+  ],
+  "first_label": "Slide 131 图 5",
+  "first_slide": 131,
+  "occurrences": [
+   {
+    "slide": 131,
+    "idx": 5,
+    "pos": "居中"
+   }
+  ]
+ },
+ "91484f14eee563bbb1d9bccca29bb393aafe6291": {
+  "rel": "images/s131_p6_91484f14.gif",
+  "ext": "gif",
+  "bytes": 6885380,
+  "px": [
+   1013,
+   989
+  ],
+  "first_label": "Slide 131 图 6",
+  "first_slide": 131,
+  "occurrences": [
+   {
+    "slide": 131,
+    "idx": 6,
+    "pos": "左中"
+   }
+  ],
+  "frame_count": 95,
+  "previews": [
+   "images/previews/s131_p6_91484f14_f1of3_frame1.png",
+   "images/previews/s131_p6_91484f14_f2of3_frame48.png",
+   "images/previews/s131_p6_91484f14_f3of3_frame95.png"
+  ],
+  "preview_frames": [
+   0,
+   47,
+   94
+  ]
+ },
+ "cc935ffb1f9b901a0f85dffdffac6904c3ed76f6": {
+  "rel": "images/s131_p7_cc935ffb.png",
+  "ext": "png",
+  "bytes": 6244,
+  "px": [
+   333,
+   92
+  ],
+  "first_label": "Slide 131 图 7",
+  "first_slide": 131,
+  "occurrences": [
+   {
+    "slide": 131,
+    "idx": 7,
+    "pos": "中上"
+   }
+  ]
+ },
+ "8ae3d3551c44dc59611caa2513f6452f4ff7b93a": {
+  "rel": "images/s131_p8_8ae3d355.png",
+  "ext": "png",
+  "bytes": 7931,
+  "px": [
+   207,
+   121
+  ],
+  "first_label": "Slide 131 图 8",
+  "first_slide": 131,
+  "occurrences": [
+   {
+    "slide": 131,
+    "idx": 8,
+    "pos": "中上"
+   }
+  ]
+ },
+ "bdbee22a58308a88046c0091a14e58bdf9c6cc40": {
+  "rel": "images/s133_p1_bdbee22a.png",
+  "ext": "png",
+  "bytes": 262979,
+  "px": [
+   2793,
+   2364
+  ],
+  "first_label": "Slide 133 图 1",
+  "first_slide": 133,
+  "occurrences": [
+   {
+    "slide": 133,
+    "idx": 1,
+    "pos": "左下"
+   }
+  ]
+ },
+ "7bb617d8fcbe94aad76c9f6a37c7efa9adf8676b": {
+  "rel": "images/s133_p2_7bb617d8.png",
+  "ext": "png",
+  "bytes": 536150,
+  "px": [
+   2805,
+   2965
+  ],
+  "first_label": "Slide 133 图 2",
+  "first_slide": 133,
+  "occurrences": [
+   {
+    "slide": 133,
+    "idx": 2,
+    "pos": "右中"
+   },
+   {
+    "slide": 137,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "2dc0a69103cd236d54748c167b62dddccf1b01a8": {
+  "rel": "images/s133_p3_2dc0a691.png",
+  "ext": "png",
+  "bytes": 218816,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 133 图 3",
+  "first_slide": 133,
+  "occurrences": [
+   {
+    "slide": 133,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "f7efd185d5abce305d14e9971bedcaa48701dc07": {
+  "rel": "images/s134_p1_f7efd185.png",
+  "ext": "png",
+  "bytes": 368559,
+  "px": [
+   838,
+   692
+  ],
+  "first_label": "Slide 134 图 1",
+  "first_slide": 134,
+  "occurrences": [
+   {
+    "slide": 134,
+    "idx": 1,
+    "pos": "右下"
+   }
+  ]
+ },
+ "a3190932f7642344de14012240b48e9991e3cf41": {
+  "rel": "images/s134_p2_a3190932.png",
+  "ext": "png",
+  "bytes": 45575,
+  "px": [
+   828,
+   304
+  ],
+  "first_label": "Slide 134 图 2",
+  "first_slide": 134,
+  "occurrences": [
+   {
+    "slide": 134,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "c59c379f1afcaf389c771c74a64d255d2b81c8dc": {
+  "rel": "images/s134_p3_c59c379f.png",
+  "ext": "png",
+  "bytes": 38047,
+  "px": [
+   742,
+   468
+  ],
+  "first_label": "Slide 134 图 3",
+  "first_slide": 134,
+  "occurrences": [
+   {
+    "slide": 134,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "be55827c67358488ff93f48f98f03c5730d4b212": {
+  "rel": "images/s134_p4_be55827c.png",
+  "ext": "png",
+  "bytes": 30339,
+  "px": [
+   755,
+   513
+  ],
+  "first_label": "Slide 134 图 4",
+  "first_slide": 134,
+  "occurrences": [
+   {
+    "slide": 134,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "87a984a5d6c916736526e9d7d696ded1d4bbd693": {
+  "rel": "images/s134_p5_87a984a5.png",
+  "ext": "png",
+  "bytes": 42833,
+  "px": [
+   727,
+   434
+  ],
+  "first_label": "Slide 134 图 5",
+  "first_slide": 134,
+  "occurrences": [
+   {
+    "slide": 134,
+    "idx": 5,
+    "pos": "中下"
+   }
+  ]
+ },
+ "694c11b48d51b996c89a0adbbb95efca8cf07a2a": {
+  "rel": "images/s134_p6_694c11b4.png",
+  "ext": "png",
+  "bytes": 55060,
+  "px": [
+   711,
+   350
+  ],
+  "first_label": "Slide 134 图 6",
+  "first_slide": 134,
+  "occurrences": [
+   {
+    "slide": 134,
+    "idx": 6,
+    "pos": "居中"
+   }
+  ]
+ },
+ "6da441674e70ac4c8d4893fc69dfe86c427edd10": {
+  "rel": "images/s136_p1_6da44167.jpg",
+  "ext": "jpg",
+  "bytes": 296756,
+  "px": [
+   1001,
+   1706
+  ],
+  "first_label": "Slide 136 图 1",
+  "first_slide": 136,
+  "occurrences": [
+   {
+    "slide": 136,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "096cc4d1de31f98246ce8e50a81f26a5ec6ff010": {
+  "rel": "images/s136_p2_096cc4d1.jpg",
+  "ext": "jpg",
+  "bytes": 156225,
+  "px": [
+   1598,
+   977
+  ],
+  "first_label": "Slide 136 图 2",
+  "first_slide": 136,
+  "occurrences": [
+   {
+    "slide": 136,
+    "idx": 2,
+    "pos": "中上"
+   }
+  ]
+ },
+ "46e67e7036c686b9f3a636043ea36e1e70fe0e30": {
+  "rel": "images/s136_p3_46e67e70.jpg",
+  "ext": "jpg",
+  "bytes": 632383,
+  "px": [
+   1279,
+   1706
+  ],
+  "first_label": "Slide 136 图 3",
+  "first_slide": 136,
+  "occurrences": [
+   {
+    "slide": 136,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "433919346dd54a14efed1ef57b7bc103a86d2930": {
+  "rel": "images/s137_p2_43391934.png",
+  "ext": "png",
+  "bytes": 558082,
+  "px": [
+   2940,
+   2970
+  ],
+  "first_label": "Slide 137 图 2",
+  "first_slide": 137,
+  "occurrences": [
+   {
+    "slide": 137,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "f40497a59650a27e55d104e7a26cad616f829cd6": {
+  "rel": "images/s137_p3_f40497a5.png",
+  "ext": "png",
+  "bytes": 324110,
+  "px": [
+   3318,
+   2960
+  ],
+  "first_label": "Slide 137 图 3",
+  "first_slide": 137,
+  "occurrences": [
+   {
+    "slide": 137,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "f5a3d87021cdc3219e1f798c4d497ef332c538e4": {
+  "rel": "images/s137_p4_f5a3d870.png",
+  "ext": "png",
+  "bytes": 215005,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 137 图 4",
+  "first_slide": 137,
+  "occurrences": [
+   {
+    "slide": 137,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "a2cbfb7fe53f8c3c565a7a967091a18a45f24a66": {
+  "rel": "images/s138_p1_a2cbfb7f.png",
+  "ext": "png",
+  "bytes": 459632,
+  "px": [
+   2940,
+   2970
+  ],
+  "first_label": "Slide 138 图 1",
+  "first_slide": 138,
+  "occurrences": [
+   {
+    "slide": 138,
+    "idx": 1,
+    "pos": "中下"
+   }
+  ]
+ },
+ "d3782b498a2daa7145d5e04ea8ab3f1717285054": {
+  "rel": "images/s138_p2_d3782b49.png",
+  "ext": "png",
+  "bytes": 453620,
+  "px": [
+   2940,
+   2970
+  ],
+  "first_label": "Slide 138 图 2",
+  "first_slide": 138,
+  "occurrences": [
+   {
+    "slide": 138,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "ea23820ee272ea0c7c996f42e0a41d025f76813e": {
+  "rel": "images/s138_p3_ea23820e.png",
+  "ext": "png",
+  "bytes": 463746,
+  "px": [
+   2940,
+   2970
+  ],
+  "first_label": "Slide 138 图 3",
+  "first_slide": 138,
+  "occurrences": [
+   {
+    "slide": 138,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "6aa7add1b42710f5522eb612eb24cc1ebe4ca04c": {
+  "rel": "images/s138_p4_6aa7add1.png",
+  "ext": "png",
+  "bytes": 332804,
+  "px": [
+   3316,
+   2960
+  ],
+  "first_label": "Slide 138 图 4",
+  "first_slide": 138,
+  "occurrences": [
+   {
+    "slide": 138,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "24676ea27012fc407a62c368b37fef249a356d00": {
+  "rel": "images/s138_p5_24676ea2.png",
+  "ext": "png",
+  "bytes": 13262,
+  "px": [
+   266,
+   260
+  ],
+  "first_label": "Slide 138 图 5",
+  "first_slide": 138,
+  "occurrences": [
+   {
+    "slide": 138,
+    "idx": 5,
+    "pos": "右上"
+   }
+  ]
+ },
+ "63f8785f8ead7375ad20306fbb77d77be958fc33": {
+  "rel": "images/s139_p1_63f8785f.png",
+  "ext": "png",
+  "bytes": 4501,
+  "px": [
+   260,
+   119
+  ],
+  "first_label": "Slide 139 图 1",
+  "first_slide": 139,
+  "occurrences": [
+   {
+    "slide": 139,
+    "idx": 1,
+    "pos": "中上"
+   },
+   {
+    "slide": 229,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "bd96053500e0abaa8b9323d96babad9571fdf155": {
+  "rel": "images/s139_p2_bd960535.png",
+  "ext": "png",
+  "bytes": 7338,
+  "px": [
+   276,
+   143
+  ],
+  "first_label": "Slide 139 图 2",
+  "first_slide": 139,
+  "occurrences": [
+   {
+    "slide": 139,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 229,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 237,
+    "idx": 2,
+    "pos": "左上"
+   },
+   {
+    "slide": 239,
+    "idx": 2,
+    "pos": "左上"
+   },
+   {
+    "slide": 240,
+    "idx": 2,
+    "pos": "左上"
+   }
+  ]
+ },
+ "dd9e72f38a2d0f962e559c12fbb0a5beb6b7fa94": {
+  "rel": "images/s139_p3_dd9e72f3.png",
+  "ext": "png",
+  "bytes": 1043,
+  "px": [
+   36,
+   54
+  ],
+  "first_label": "Slide 139 图 3",
+  "first_slide": 139,
+  "occurrences": [
+   {
+    "slide": 139,
+    "idx": 3,
+    "pos": "右上"
+   },
+   {
+    "slide": 229,
+    "idx": 3,
+    "pos": "右上"
+   },
+   {
+    "slide": 237,
+    "idx": 3,
+    "pos": "左上"
+   },
+   {
+    "slide": 239,
+    "idx": 3,
+    "pos": "左上"
+   },
+   {
+    "slide": 240,
+    "idx": 3,
+    "pos": "左上"
+   }
+  ]
+ },
+ "94095c5840c88879f0266f081e37fc8b3eb40262": {
+  "rel": "images/s139_p4_94095c58.png",
+  "ext": "png",
+  "bytes": 47584,
+  "px": [
+   375,
+   439
+  ],
+  "first_label": "Slide 139 图 4",
+  "first_slide": 139,
+  "occurrences": [
+   {
+    "slide": 139,
+    "idx": 4,
+    "pos": "右中"
+   },
+   {
+    "slide": 229,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "50200f4dcf07bfba7d675e0cf26234cc3dcc0e9e": {
+  "rel": "images/s139_p5_50200f4d.png",
+  "ext": "png",
+  "bytes": 47878,
+  "px": [
+   609,
+   545
+  ],
+  "first_label": "Slide 139 图 5",
+  "first_slide": 139,
+  "occurrences": [
+   {
+    "slide": 139,
+    "idx": 5,
+    "pos": "左中"
+   },
+   {
+    "slide": 229,
+    "idx": 5,
+    "pos": "左中"
+   }
+  ]
+ },
+ "d9a7dd51e712beb6e4b945f79b01cf5caf1e0455": {
+  "rel": "images/s139_p6_d9a7dd51.png",
+  "ext": "png",
+  "bytes": 147073,
+  "px": [
+   1774,
+   1485
+  ],
+  "first_label": "Slide 139 图 6",
+  "first_slide": 139,
+  "occurrences": [
+   {
+    "slide": 139,
+    "idx": 6,
+    "pos": "居中"
+   },
+   {
+    "slide": 229,
+    "idx": 6,
+    "pos": "居中"
+   }
+  ]
+ },
+ "7c6c7151b01a75ef3592a1f36ed2ef87b1927876": {
+  "rel": "images/s140_p1_7c6c7151.png",
+  "ext": "png",
+  "bytes": 23246,
+  "px": [
+   635,
+   199
+  ],
+  "first_label": "Slide 140 图 1",
+  "first_slide": 140,
+  "occurrences": [
+   {
+    "slide": 140,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "c1f5bf1d4b847f4e666bbd659f59cbd006060bc6": {
+  "rel": "images/s140_p2_c1f5bf1d.png",
+  "ext": "png",
+  "bytes": 699977,
+  "px": [
+   1095,
+   970
+  ],
+  "first_label": "Slide 140 图 2",
+  "first_slide": 140,
+  "occurrences": [
+   {
+    "slide": 140,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "a0ced6991ee3a90b95141a65221335e24453698d": {
+  "rel": "images/s140_p3_a0ced699.png",
+  "ext": "png",
+  "bytes": 57721,
+  "px": [
+   1032,
+   466
+  ],
+  "first_label": "Slide 140 图 3",
+  "first_slide": 140,
+  "occurrences": [
+   {
+    "slide": 140,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "04dbe627b59117623d8fa1ad0ae91f419d471aeb": {
+  "rel": "images/s140_p4_04dbe627.png",
+  "ext": "png",
+  "bytes": 322520,
+  "px": [
+   844,
+   425
+  ],
+  "first_label": "Slide 140 图 4",
+  "first_slide": 140,
+  "occurrences": [
+   {
+    "slide": 140,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "65cf66574d16e2aa620886220113981c0fca052b": {
+  "rel": "images/s143_p1_65cf6657.png",
+  "ext": "png",
+  "bytes": 519914,
+  "px": [
+   2940,
+   2970
+  ],
+  "first_label": "Slide 143 图 1",
+  "first_slide": 143,
+  "occurrences": [
+   {
+    "slide": 143,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "49819e2c30a7126674f46a6bbc14178d386d5853": {
+  "rel": "images/s143_p2_49819e2c.jpg",
+  "ext": "jpg",
+  "bytes": 162956,
+  "px": [
+   1082,
+   781
+  ],
+  "first_label": "Slide 143 图 2",
+  "first_slide": 143,
+  "occurrences": [
+   {
+    "slide": 143,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "8c525238da03c96e1491401779f500f23a81deb7": {
+  "rel": "images/s144_p1_8c525238.png",
+  "ext": "png",
+  "bytes": 300175,
+  "px": [
+   693,
+   289
+  ],
+  "first_label": "Slide 144 图 1",
+  "first_slide": 144,
+  "occurrences": [
+   {
+    "slide": 144,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "31c4241cdc67a64c740a7f91cfaa9220f92b1c56": {
+  "rel": "images/s144_p2_31c4241c.png",
+  "ext": "png",
+  "bytes": 402057,
+  "px": [
+   664,
+   467
+  ],
+  "first_label": "Slide 144 图 2",
+  "first_slide": 144,
+  "occurrences": [
+   {
+    "slide": 144,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "d9263cf768869bd32d0591249dcea3312352486c": {
+  "rel": "images/s144_p3_d9263cf7.png",
+  "ext": "png",
+  "bytes": 159599,
+  "px": [
+   474,
+   225
+  ],
+  "first_label": "Slide 144 图 3",
+  "first_slide": 144,
+  "occurrences": [
+   {
+    "slide": 144,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "4a312b3ef77f4ddffe2ce92d2f52f00c48b2bcc7": {
+  "rel": "images/s144_p4_4a312b3e.png",
+  "ext": "png",
+  "bytes": 62577,
+  "px": [
+   853,
+   290
+  ],
+  "first_label": "Slide 144 图 4",
+  "first_slide": 144,
+  "occurrences": [
+   {
+    "slide": 144,
+    "idx": 4,
+    "pos": "右上"
+   }
+  ]
+ },
+ "3d29e4642534a68246c635f70dde0d8f4306108d": {
+  "rel": "images/s144_p5_3d29e464.png",
+  "ext": "png",
+  "bytes": 426674,
+  "px": [
+   1191,
+   597
+  ],
+  "first_label": "Slide 144 图 5",
+  "first_slide": 144,
+  "occurrences": [
+   {
+    "slide": 144,
+    "idx": 5,
+    "pos": "中下"
+   }
+  ]
+ },
+ "4aeb990e52d4749cc04ad370714d79a34119f8e1": {
+  "rel": "images/s144_p6_4aeb990e.png",
+  "ext": "png",
+  "bytes": 38334,
+  "px": [
+   981,
+   292
+  ],
+  "first_label": "Slide 144 图 6",
+  "first_slide": 144,
+  "occurrences": [
+   {
+    "slide": 144,
+    "idx": 6,
+    "pos": "居中"
+   }
+  ]
+ },
+ "6ad95e212c0ab4badd8997b8895d09fdf553151f": {
+  "rel": "images/s144_p7_6ad95e21.png",
+  "ext": "png",
+  "bytes": 133940,
+  "px": [
+   472,
+   499
+  ],
+  "first_label": "Slide 144 图 7",
+  "first_slide": 144,
+  "occurrences": [
+   {
+    "slide": 144,
+    "idx": 7,
+    "pos": "右下"
+   }
+  ]
+ },
+ "3d2bbd56179c96ee0564f2c0c3974f8f420f19f5": {
+  "rel": "images/s144_p8_3d2bbd56.png",
+  "ext": "png",
+  "bytes": 49933,
+  "px": [
+   1027,
+   427
+  ],
+  "first_label": "Slide 144 图 8",
+  "first_slide": 144,
+  "occurrences": [
+   {
+    "slide": 144,
+    "idx": 8,
+    "pos": "右中"
+   }
+  ]
+ },
+ "0292c4411b48636d2478970cdfc90608c286ff2b": {
+  "rel": "images/s146_p1_0292c441.png",
+  "ext": "png",
+  "bytes": 143846,
+  "px": [
+   474,
+   386
+  ],
+  "first_label": "Slide 146 图 1",
+  "first_slide": 146,
+  "occurrences": [
+   {
+    "slide": 146,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 151,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "3da4e1bc75654a409176389d74931a47c316fe42": {
+  "rel": "images/s146_p2_3da4e1bc.png",
+  "ext": "png",
+  "bytes": 63859,
+  "px": [
+   481,
+   326
+  ],
+  "first_label": "Slide 146 图 2",
+  "first_slide": 146,
+  "occurrences": [
+   {
+    "slide": 146,
+    "idx": 2,
+    "pos": "左下"
+   },
+   {
+    "slide": 151,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "09033a14bb32ba87c6dcc8dee2d39d0c63d6659c": {
+  "rel": "images/s146_p3_09033a14.png",
+  "ext": "png",
+  "bytes": 103629,
+  "px": [
+   872,
+   384
+  ],
+  "first_label": "Slide 146 图 3",
+  "first_slide": 146,
+  "occurrences": [
+   {
+    "slide": 146,
+    "idx": 3,
+    "pos": "左中"
+   },
+   {
+    "slide": 151,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "105aa1f0fec46666fae53ccc2cea805e06b4569b": {
+  "rel": "images/s146_p4_105aa1f0.png",
+  "ext": "png",
+  "bytes": 79461,
+  "px": [
+   671,
+   318
+  ],
+  "first_label": "Slide 146 图 4",
+  "first_slide": 146,
+  "occurrences": [
+   {
+    "slide": 146,
+    "idx": 4,
+    "pos": "右上"
+   }
+  ]
+ },
+ "7948d801a55f10367ec6dbd5b3c7309ea25e7e0b": {
+  "rel": "images/s146_p5_7948d801.png",
+  "ext": "png",
+  "bytes": 8413,
+  "px": [
+   573,
+   48
+  ],
+  "first_label": "Slide 146 图 5",
+  "first_slide": 146,
+  "occurrences": [
+   {
+    "slide": 146,
+    "idx": 5,
+    "pos": "居中"
+   }
+  ]
+ },
+ "cd9bb0739bb4350e5ecc4700f11f66e9a70d7361": {
+  "rel": "images/s146_p6_cd9bb073.png",
+  "ext": "png",
+  "bytes": 11952,
+  "px": [
+   658,
+   73
+  ],
+  "first_label": "Slide 146 图 6",
+  "first_slide": 146,
+  "occurrences": [
+   {
+    "slide": 146,
+    "idx": 6,
+    "pos": "右中"
+   }
+  ]
+ },
+ "7b055c0844baf7fa9bf8d8917260e0b1bcd9a326": {
+  "rel": "images/s146_p7_7b055c08.png",
+  "ext": "png",
+  "bytes": 541431,
+  "px": [
+   656,
+   719
+  ],
+  "first_label": "Slide 146 图 7",
+  "first_slide": 146,
+  "occurrences": [
+   {
+    "slide": 146,
+    "idx": 7,
+    "pos": "居中"
+   }
+  ]
+ },
+ "a524c101a1e83c00f1777db6499aba120ad740d7": {
+  "rel": "images/s146_p8_a524c101.png",
+  "ext": "png",
+  "bytes": 166808,
+  "px": [
+   1338,
+   696
+  ],
+  "first_label": "Slide 146 图 8",
+  "first_slide": 146,
+  "occurrences": [
+   {
+    "slide": 146,
+    "idx": 8,
+    "pos": "右下"
+   }
+  ]
+ },
+ "a911752a9f1ea4b51fb13cd4d1f4d09d4b3cb4b3": {
+  "rel": "images/s147_p1_a911752a.png",
+  "ext": "png",
+  "bytes": 45882,
+  "px": [
+   928,
+   335
+  ],
+  "first_label": "Slide 147 图 1",
+  "first_slide": 147,
+  "occurrences": [
+   {
+    "slide": 147,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "d2d6f827a63c7ec935a050b421fc576d33830a38": {
+  "rel": "images/s147_p2_d2d6f827.png",
+  "ext": "png",
+  "bytes": 676805,
+  "px": [
+   659,
+   455
+  ],
+  "first_label": "Slide 147 图 2",
+  "first_slide": 147,
+  "occurrences": [
+   {
+    "slide": 147,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "469c12f98c70b11a6782b167f50b32a267d9554c": {
+  "rel": "images/s147_p3_469c12f9.png",
+  "ext": "png",
+  "bytes": 755199,
+  "px": [
+   913,
+   684
+  ],
+  "first_label": "Slide 147 图 3",
+  "first_slide": 147,
+  "occurrences": [
+   {
+    "slide": 147,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "e4075ec058a3c5fb7fbd76006f8487147eb26e2f": {
+  "rel": "images/s148_p1_e4075ec0.jpg",
+  "ext": "jpg",
+  "bytes": 423293,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 148 图 1",
+  "first_slide": 148,
+  "occurrences": [
+   {
+    "slide": 148,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "52710ffffb528fde07ec32932e9a59dab6a1dbdd": {
+  "rel": "images/s148_p2_52710fff.jpg",
+  "ext": "jpg",
+  "bytes": 246137,
+  "px": [
+   1279,
+   1706
+  ],
+  "first_label": "Slide 148 图 2",
+  "first_slide": 148,
+  "occurrences": [
+   {
+    "slide": 148,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "c14df8f91f520c7df0a27642f1839e61ae505669": {
+  "rel": "images/s151_p4_c14df8f9.jpg",
+  "ext": "jpg",
+  "bytes": 490782,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 151 图 4",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 4,
+    "pos": "右上"
+   }
+  ]
+ },
+ "055a9ea35e0eb5d92165bba0403bfca6bae7dc4d": {
+  "rel": "images/s151_p5_055a9ea3.png",
+  "ext": "png",
+  "bytes": 6039,
+  "px": [
+   526,
+   55
+  ],
+  "first_label": "Slide 151 图 5",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 5,
+    "pos": "居中"
+   }
+  ]
+ },
+ "569b041befdbe85391e83993c839a15c9d15cb37": {
+  "rel": "images/s151_p6_569b041b.png",
+  "ext": "png",
+  "bytes": 2607,
+  "px": [
+   191,
+   41
+  ],
+  "first_label": "Slide 151 图 6",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 6,
+    "pos": "中上"
+   }
+  ]
+ },
+ "8333692ed5692322ddc6f3613db5492f02506338": {
+  "rel": "images/s151_p7_8333692e.png",
+  "ext": "png",
+  "bytes": 3271,
+  "px": [
+   162,
+   45
+  ],
+  "first_label": "Slide 151 图 7",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 7,
+    "pos": "居中"
+   }
+  ]
+ },
+ "7340b8040db25f71cdb0b4da7d278a638ab4a5e7": {
+  "rel": "images/s151_p8_7340b804.png",
+  "ext": "png",
+  "bytes": 2970,
+  "px": [
+   157,
+   45
+  ],
+  "first_label": "Slide 151 图 8",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 8,
+    "pos": "居中"
+   }
+  ]
+ },
+ "1600cbf7ef16fc2c3fd10c10beae71900466287e": {
+  "rel": "images/s151_p9_1600cbf7.png",
+  "ext": "png",
+  "bytes": 2920,
+  "px": [
+   154,
+   43
+  ],
+  "first_label": "Slide 151 图 9",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 9,
+    "pos": "右中"
+   }
+  ]
+ },
+ "7f1c017ab98b4171c167413ef7074966a3c73fad": {
+  "rel": "images/s151_p10_7f1c017a.png",
+  "ext": "png",
+  "bytes": 2142,
+  "px": [
+   145,
+   44
+  ],
+  "first_label": "Slide 151 图 10",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 10,
+    "pos": "中下"
+   }
+  ]
+ },
+ "426a85d37f0819938d2dbac992dfee8cb34a9e67": {
+  "rel": "images/s151_p11_426a85d3.png",
+  "ext": "png",
+  "bytes": 3437,
+  "px": [
+   177,
+   50
+  ],
+  "first_label": "Slide 151 图 11",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 11,
+    "pos": "中下"
+   }
+  ]
+ },
+ "5a183aee964808900b3743dd51819f6addf0f55b": {
+  "rel": "images/s151_p12_5a183aee.png",
+  "ext": "png",
+  "bytes": 6215,
+  "px": [
+   483,
+   62
+  ],
+  "first_label": "Slide 151 图 12",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 12,
+    "pos": "右下"
+   },
+   {
+    "slide": 152,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "bb8e0558bc5c07802c0ecd31f228e5a064eeee06": {
+  "rel": "images/s151_p13_bb8e0558.png",
+  "ext": "png",
+  "bytes": 21597,
+  "px": [
+   769,
+   189
+  ],
+  "first_label": "Slide 151 图 13",
+  "first_slide": 151,
+  "occurrences": [
+   {
+    "slide": 151,
+    "idx": 13,
+    "pos": "中下"
+   }
+  ]
+ },
+ "170fc3913ed4e4b61097342a4934cf8d74520f27": {
+  "rel": "images/s152_p1_170fc391.png",
+  "ext": "png",
+  "bytes": 11011,
+  "px": [
+   762,
+   71
+  ],
+  "first_label": "Slide 152 图 1",
+  "first_slide": 152,
+  "occurrences": [
+   {
+    "slide": 152,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "96aa60399eb020841bd2593ab4c0336c149af484": {
+  "rel": "images/s152_p2_96aa6039.png",
+  "ext": "png",
+  "bytes": 10727,
+  "px": [
+   700,
+   81
+  ],
+  "first_label": "Slide 152 图 2",
+  "first_slide": 152,
+  "occurrences": [
+   {
+    "slide": 152,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "f060f91457e2914226a4a8e1db5e0178daf763b7": {
+  "rel": "images/s152_p4_f060f914.png",
+  "ext": "png",
+  "bytes": 11096,
+  "px": [
+   578,
+   180
+  ],
+  "first_label": "Slide 152 图 4",
+  "first_slide": 152,
+  "occurrences": [
+   {
+    "slide": 152,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "0b69c6323faf01ede371c5929fc39f1e65f89a1c": {
+  "rel": "images/s152_p5_0b69c632.png",
+  "ext": "png",
+  "bytes": 207408,
+  "px": [
+   1119,
+   746
+  ],
+  "first_label": "Slide 152 图 5",
+  "first_slide": 152,
+  "occurrences": [
+   {
+    "slide": 152,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "98755d3601e4f68af18215c27bafc459e245708e": {
+  "rel": "images/s152_p6_98755d36.png",
+  "ext": "png",
+  "bytes": 110182,
+  "px": [
+   1105,
+   644
+  ],
+  "first_label": "Slide 152 图 6",
+  "first_slide": 152,
+  "occurrences": [
+   {
+    "slide": 152,
+    "idx": 6,
+    "pos": "右中"
+   }
+  ]
+ },
+ "a31eb290ee278736fad1bcb86704c9227cb84f3e": {
+  "rel": "images/s152_p7_a31eb290.png",
+  "ext": "png",
+  "bytes": 443218,
+  "px": [
+   1102,
+   430
+  ],
+  "first_label": "Slide 152 图 7",
+  "first_slide": 152,
+  "occurrences": [
+   {
+    "slide": 152,
+    "idx": 7,
+    "pos": "右上"
+   }
+  ]
+ },
+ "61e47fe2d6757517dbfd9b8a23bc9f1e77559ede": {
+  "rel": "images/s153_p1_61e47fe2.jpg",
+  "ext": "jpg",
+  "bytes": 383013,
+  "px": [
+   1492,
+   1120
+  ],
+  "first_label": "Slide 153 图 1",
+  "first_slide": 153,
+  "occurrences": [
+   {
+    "slide": 153,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "bd6e2a69d62616106e97a19e3c4cdafaf15837b2": {
+  "rel": "images/s153_p2_bd6e2a69.jpg",
+  "ext": "jpg",
+  "bytes": 669123,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 153 图 2",
+  "first_slide": 153,
+  "occurrences": [
+   {
+    "slide": 153,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "35c96cdd82e395f51c30fe23c1adfa677f1f5fb1": {
+  "rel": "images/s155_p1_35c96cdd.png",
+  "ext": "png",
+  "bytes": 42648,
+  "px": [
+   942,
+   197
+  ],
+  "first_label": "Slide 155 图 1",
+  "first_slide": 155,
+  "occurrences": [
+   {
+    "slide": 155,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "37727ecd0e34e1b4b104e9c37ec31ea049d57b95": {
+  "rel": "images/s155_p2_37727ecd.png",
+  "ext": "png",
+  "bytes": 127384,
+  "px": [
+   459,
+   594
+  ],
+  "first_label": "Slide 155 图 2",
+  "first_slide": 155,
+  "occurrences": [
+   {
+    "slide": 155,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "40836f34811a138f92a07968f8fc963af07f5ddb": {
+  "rel": "images/s155_p3_40836f34.png",
+  "ext": "png",
+  "bytes": 161695,
+  "px": [
+   455,
+   484
+  ],
+  "first_label": "Slide 155 图 3",
+  "first_slide": 155,
+  "occurrences": [
+   {
+    "slide": 155,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "4f3879c63dc2d804fcc633b40e32b22abeda7c2f": {
+  "rel": "images/s155_p4_4f3879c6.png",
+  "ext": "png",
+  "bytes": 240170,
+  "px": [
+   827,
+   760
+  ],
+  "first_label": "Slide 155 图 4",
+  "first_slide": 155,
+  "occurrences": [
+   {
+    "slide": 155,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "9ac34a0b1f02deaaf38b34a0b5f43a1b961565e3": {
+  "rel": "images/s157_p1_9ac34a0b.png",
+  "ext": "png",
+  "bytes": 1508205,
+  "px": [
+   4178,
+   3560
+  ],
+  "first_label": "Slide 157 图 1",
+  "first_slide": 157,
+  "occurrences": [
+   {
+    "slide": 157,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "9f1863eeef612508b5ace802d3284faf3622e6c5": {
+  "rel": "images/s157_p2_9f1863ee.jpg",
+  "ext": "jpg",
+  "bytes": 681327,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 157 图 2",
+  "first_slide": 157,
+  "occurrences": [
+   {
+    "slide": 157,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "f36e5a228b28b222c5b16524cfb9b127fe9f853f": {
+  "rel": "images/s157_p3_f36e5a22.jpg",
+  "ext": "jpg",
+  "bytes": 796631,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 157 图 3",
+  "first_slide": 157,
+  "occurrences": [
+   {
+    "slide": 157,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "bbd8e59e93fffe7390805e278f23e51408901528": {
+  "rel": "images/s158_p1_bbd8e59e.png",
+  "ext": "png",
+  "bytes": 194005,
+  "px": [
+   825,
+   717
+  ],
+  "first_label": "Slide 158 图 1",
+  "first_slide": 158,
+  "occurrences": [
+   {
+    "slide": 158,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "ca997fd0c160055a6cb13ba8bd7df342fd21882c": {
+  "rel": "images/s160_p1_ca997fd0.png",
+  "ext": "png",
+  "bytes": 281742,
+  "px": [
+   841,
+   888
+  ],
+  "first_label": "Slide 160 图 1",
+  "first_slide": 160,
+  "occurrences": [
+   {
+    "slide": 160,
+    "idx": 1,
+    "pos": "右中"
+   },
+   {
+    "slide": 183,
+    "idx": 3,
+    "pos": "中下"
+   },
+   {
+    "slide": 187,
+    "idx": 2,
+    "pos": "右中"
+   },
+   {
+    "slide": 227,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "979095ce3831bc53ead1a4bd1671ff38a8befaa4": {
+  "rel": "images/s160_p2_979095ce.png",
+  "ext": "png",
+  "bytes": 903113,
+  "px": [
+   3316,
+   2961
+  ],
+  "first_label": "Slide 160 图 2",
+  "first_slide": 160,
+  "occurrences": [
+   {
+    "slide": 160,
+    "idx": 2,
+    "pos": "左中"
+   },
+   {
+    "slide": 161,
+    "idx": 3,
+    "pos": "右下"
+   },
+   {
+    "slide": 179,
+    "idx": 1,
+    "pos": "左下"
+   },
+   {
+    "slide": 187,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 227,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "a207314295cc4e376c2f9d28276226896279de9e": {
+  "rel": "images/s160_p3_a2073142.png",
+  "ext": "png",
+  "bytes": 2046518,
+  "px": [
+   2343,
+   2961
+  ],
+  "first_label": "Slide 160 图 3",
+  "first_slide": 160,
+  "occurrences": [
+   {
+    "slide": 160,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "33320a7001b980e92b31db87ec7756a6ccf8c551": {
+  "rel": "images/s161_p1_33320a70.png",
+  "ext": "png",
+  "bytes": 32506,
+  "px": [
+   565,
+   464
+  ],
+  "first_label": "Slide 161 图 1",
+  "first_slide": 161,
+  "occurrences": [
+   {
+    "slide": 161,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 165,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 167,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "3ccf9970a5c8d915d10b8742ed148056b715f9d5": {
+  "rel": "images/s161_p2_3ccf9970.png",
+  "ext": "png",
+  "bytes": 780181,
+  "px": [
+   3321,
+   2963
+  ],
+  "first_label": "Slide 161 图 2",
+  "first_slide": 161,
+  "occurrences": [
+   {
+    "slide": 161,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "28739c97e662495a3a1f3f3f26c4011ea54a4943": {
+  "rel": "images/s162_p1_28739c97.png",
+  "ext": "png",
+  "bytes": 524393,
+  "px": [
+   2938,
+   2970
+  ],
+  "first_label": "Slide 162 图 1",
+  "first_slide": 162,
+  "occurrences": [
+   {
+    "slide": 162,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "ed0eec0ba3e1beaf81c76725412aa7568da47f19": {
+  "rel": "images/s162_p2_ed0eec0b.png",
+  "ext": "png",
+  "bytes": 320169,
+  "px": [
+   4049,
+   2961
+  ],
+  "first_label": "Slide 162 图 2",
+  "first_slide": 162,
+  "occurrences": [
+   {
+    "slide": 162,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "469f56f5614c559a5915c867dc14eb2f94ddafcb": {
+  "rel": "images/s163_p1_469f56f5.png",
+  "ext": "png",
+  "bytes": 27909,
+  "px": [
+   1025,
+   513
+  ],
+  "first_label": "Slide 163 图 1",
+  "first_slide": 163,
+  "occurrences": [
+   {
+    "slide": 163,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "bf54e3521399167239ed5d40de724119216bbb85": {
+  "rel": "images/s163_p2_bf54e352.png",
+  "ext": "png",
+  "bytes": 36883,
+  "px": [
+   674,
+   596
+  ],
+  "first_label": "Slide 163 图 2",
+  "first_slide": 163,
+  "occurrences": [
+   {
+    "slide": 163,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "543e43ac1c83def6b8d1635a626634cf4bf0036f": {
+  "rel": "images/s163_p3_543e43ac.png",
+  "ext": "png",
+  "bytes": 89219,
+  "px": [
+   1519,
+   472
+  ],
+  "first_label": "Slide 163 图 3",
+  "first_slide": 163,
+  "occurrences": [
+   {
+    "slide": 163,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "c122aa68c12d5db0bbad5e1ba762bd94b4684890": {
+  "rel": "images/s163_p4_c122aa68.png",
+  "ext": "png",
+  "bytes": 17768,
+  "px": [
+   756,
+   361
+  ],
+  "first_label": "Slide 163 图 4",
+  "first_slide": 163,
+  "occurrences": [
+   {
+    "slide": 163,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "133507e045a068da5001ba598e19bc08bfdcb25f": {
+  "rel": "images/s165_p2_133507e0.png",
+  "ext": "png",
+  "bytes": 58501,
+  "px": [
+   1043,
+   708
+  ],
+  "first_label": "Slide 165 图 2",
+  "first_slide": 165,
+  "occurrences": [
+   {
+    "slide": 165,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "8b9c6971e1d9597d4c204097d4d1172d8fac96d3": {
+  "rel": "images/s165_p3_8b9c6971.png",
+  "ext": "png",
+  "bytes": 13876,
+  "px": [
+   1094,
+   203
+  ],
+  "first_label": "Slide 165 图 3",
+  "first_slide": 165,
+  "occurrences": [
+   {
+    "slide": 165,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "ed58e0f6cb894c14ce75e8b34a4405a76539afe0": {
+  "rel": "images/s166_p1_ed58e0f6.png",
+  "ext": "png",
+  "bytes": 6420,
+  "px": [
+   923,
+   161
+  ],
+  "first_label": "Slide 166 图 1",
+  "first_slide": 166,
+  "occurrences": [
+   {
+    "slide": 166,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "12658b477c06ac58b8e724e66a8120c18d4fce64": {
+  "rel": "images/s166_p2_12658b47.png",
+  "ext": "png",
+  "bytes": 26695,
+  "px": [
+   866,
+   349
+  ],
+  "first_label": "Slide 166 图 2",
+  "first_slide": 166,
+  "occurrences": [
+   {
+    "slide": 166,
+    "idx": 2,
+    "pos": "左下"
+   },
+   {
+    "slide": 167,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "cc07be3b2ffc26be39c178519edfc85982b24512": {
+  "rel": "images/s166_p3_cc07be3b.png",
+  "ext": "png",
+  "bytes": 10366,
+  "px": [
+   312,
+   354
+  ],
+  "first_label": "Slide 166 图 3",
+  "first_slide": 166,
+  "occurrences": [
+   {
+    "slide": 166,
+    "idx": 3,
+    "pos": "中下"
+   },
+   {
+    "slide": 167,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "0fdb73d9a911d1414f3313dc9eb4ef7543fff061": {
+  "rel": "images/s166_p4_0fdb73d9.png",
+  "ext": "png",
+  "bytes": 6752,
+  "px": [
+   217,
+   351
+  ],
+  "first_label": "Slide 166 图 4",
+  "first_slide": 166,
+  "occurrences": [
+   {
+    "slide": 166,
+    "idx": 4,
+    "pos": "左中"
+   },
+   {
+    "slide": 167,
+    "idx": 5,
+    "pos": "居中"
+   }
+  ]
+ },
+ "783fc5017714fa710e761ef6e31c5706dbe14195": {
+  "rel": "images/s166_p5_783fc501.png",
+  "ext": "png",
+  "bytes": 6702,
+  "px": [
+   213,
+   352
+  ],
+  "first_label": "Slide 166 图 5",
+  "first_slide": 166,
+  "occurrences": [
+   {
+    "slide": 166,
+    "idx": 5,
+    "pos": "左中"
+   }
+  ]
+ },
+ "b4d432bf47a468c3561874777636af22c7068a9c": {
+  "rel": "images/s167_p3_b4d432bf.png",
+  "ext": "png",
+  "bytes": 12188,
+  "px": [
+   349,
+   358
+  ],
+  "first_label": "Slide 167 图 3",
+  "first_slide": 167,
+  "occurrences": [
+   {
+    "slide": 167,
+    "idx": 3,
+    "pos": "中上"
+   }
+  ]
+ },
+ "875217656fc4783292c4326f9083607f2f990dd0": {
+  "rel": "images/s167_p6_87521765.png",
+  "ext": "png",
+  "bytes": 6901,
+  "px": [
+   544,
+   63
+  ],
+  "first_label": "Slide 167 图 6",
+  "first_slide": 167,
+  "occurrences": [
+   {
+    "slide": 167,
+    "idx": 6,
+    "pos": "左中"
+   }
+  ]
+ },
+ "fba9da0671632fa8c4d2b7e649c9b01abee3b313": {
+  "rel": "images/s167_p7_fba9da06.png",
+  "ext": "png",
+  "bytes": 4470,
+  "px": [
+   351,
+   65
+  ],
+  "first_label": "Slide 167 图 7",
+  "first_slide": 167,
+  "occurrences": [
+   {
+    "slide": 167,
+    "idx": 7,
+    "pos": "左中"
+   }
+  ]
+ },
+ "458855cb4953966b869afad74feb5536c8b2340e": {
+  "rel": "images/s167_p8_458855cb.png",
+  "ext": "png",
+  "bytes": 4824,
+  "px": [
+   476,
+   65
+  ],
+  "first_label": "Slide 167 图 8",
+  "first_slide": 167,
+  "occurrences": [
+   {
+    "slide": 167,
+    "idx": 8,
+    "pos": "居中"
+   }
+  ]
+ },
+ "ff7778eab4572b802462550acdc7d83d9a89d577": {
+  "rel": "images/s167_p9_ff7778ea.png",
+  "ext": "png",
+  "bytes": 5897,
+  "px": [
+   553,
+   68
+  ],
+  "first_label": "Slide 167 图 9",
+  "first_slide": 167,
+  "occurrences": [
+   {
+    "slide": 167,
+    "idx": 9,
+    "pos": "左中"
+   }
+  ]
+ },
+ "e79966218cdc8bb4b081c4d85bc61d39f9aaeece": {
+  "rel": "images/s167_p10_e7996621.png",
+  "ext": "png",
+  "bytes": 11554,
+  "px": [
+   829,
+   122
+  ],
+  "first_label": "Slide 167 图 10",
+  "first_slide": 167,
+  "occurrences": [
+   {
+    "slide": 167,
+    "idx": 10,
+    "pos": "中下"
+   },
+   {
+    "slide": 175,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "fb4b9d6924f474e76b276d60e7ed711d5f116539": {
+  "rel": "images/s168_p1_fb4b9d69.png",
+  "ext": "png",
+  "bytes": 15919,
+  "px": [
+   815,
+   240
+  ],
+  "first_label": "Slide 168 图 1",
+  "first_slide": 168,
+  "occurrences": [
+   {
+    "slide": 168,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "40833b8ccfef2f66282056816d568a1b4bcd7bd6": {
+  "rel": "images/s168_p2_40833b8c.png",
+  "ext": "png",
+  "bytes": 74831,
+  "px": [
+   1646,
+   633
+  ],
+  "first_label": "Slide 168 图 2",
+  "first_slide": 168,
+  "occurrences": [
+   {
+    "slide": 168,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "3a62124bb01ccb37cc4f1c3da6ffedbcbc5307ef": {
+  "rel": "images/s168_p3_3a62124b.png",
+  "ext": "png",
+  "bytes": 6982,
+  "px": [
+   373,
+   133
+  ],
+  "first_label": "Slide 168 图 3",
+  "first_slide": 168,
+  "occurrences": [
+   {
+    "slide": 168,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "7d7354008cfcfb5bdadffb1669b8fc7284c4d917": {
+  "rel": "images/s169_p1_7d735400.png",
+  "ext": "png",
+  "bytes": 64114,
+  "px": [
+   1390,
+   422
+  ],
+  "first_label": "Slide 169 图 1",
+  "first_slide": 169,
+  "occurrences": [
+   {
+    "slide": 169,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "b2557de4551c2f787e56f8ded97b5f822b5dcb4f": {
+  "rel": "images/s170_p1_b2557de4.png",
+  "ext": "png",
+  "bytes": 8924,
+  "px": [
+   578,
+   125
+  ],
+  "first_label": "Slide 170 图 1",
+  "first_slide": 170,
+  "occurrences": [
+   {
+    "slide": 170,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 181,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "8169af2402f0510c5b1ab2a6b26800c32412fd39": {
+  "rel": "images/s170_p2_8169af24.png",
+  "ext": "png",
+  "bytes": 8848,
+  "px": [
+   557,
+   124
+  ],
+  "first_label": "Slide 170 图 2",
+  "first_slide": 170,
+  "occurrences": [
+   {
+    "slide": 170,
+    "idx": 2,
+    "pos": "居中"
+   },
+   {
+    "slide": 181,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "143684b5eba8e435a6de47f8673f91d57ddfeb4e": {
+  "rel": "images/s170_p3_143684b5.png",
+  "ext": "png",
+  "bytes": 6951,
+  "px": [
+   308,
+   175
+  ],
+  "first_label": "Slide 170 图 3",
+  "first_slide": 170,
+  "occurrences": [
+   {
+    "slide": 170,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "cbbe3b2fac1925ab0df47c4313aa594098dec24c": {
+  "rel": "images/s170_p4_cbbe3b2f.png",
+  "ext": "png",
+  "bytes": 9288,
+  "px": [
+   699,
+   116
+  ],
+  "first_label": "Slide 170 图 4",
+  "first_slide": 170,
+  "occurrences": [
+   {
+    "slide": 170,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "7ccabd001e06a29bd58bbb24819c85f46657f5a2": {
+  "rel": "images/s170_p5_7ccabd00.png",
+  "ext": "png",
+  "bytes": 14765,
+  "px": [
+   1391,
+   131
+  ],
+  "first_label": "Slide 170 图 5",
+  "first_slide": 170,
+  "occurrences": [
+   {
+    "slide": 170,
+    "idx": 5,
+    "pos": "中下"
+   },
+   {
+    "slide": 171,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 172,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 181,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "90a6785c895981ba286ca2c2531815515a76db7e": {
+  "rel": "images/s171_p1_90a6785c.png",
+  "ext": "png",
+  "bytes": 3396,
+  "px": [
+   220,
+   89
+  ],
+  "first_label": "Slide 171 图 1",
+  "first_slide": 171,
+  "occurrences": [
+   {
+    "slide": 171,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "3c998899048cd124f963e241cd01580909b11f15": {
+  "rel": "images/s171_p3_3c998899.png",
+  "ext": "png",
+  "bytes": 20611,
+  "px": [
+   689,
+   408
+  ],
+  "first_label": "Slide 171 图 3",
+  "first_slide": 171,
+  "occurrences": [
+   {
+    "slide": 171,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "07d70d138426ba8e5d56d983e38274ff6e07e6e1": {
+  "rel": "images/s171_p4_07d70d13.png",
+  "ext": "png",
+  "bytes": 44388,
+  "px": [
+   494,
+   920
+  ],
+  "first_label": "Slide 171 图 4",
+  "first_slide": 171,
+  "occurrences": [
+   {
+    "slide": 171,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "717485ade1f1f83e1b3a3cb5a91d55926d3f22c8": {
+  "rel": "images/s172_p2_717485ad.png",
+  "ext": "png",
+  "bytes": 26014,
+  "px": [
+   783,
+   359
+  ],
+  "first_label": "Slide 172 图 2",
+  "first_slide": 172,
+  "occurrences": [
+   {
+    "slide": 172,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "c795a1097dd6613cb2a055fbedaff36b6c623df9": {
+  "rel": "images/s174_p1_c795a109.png",
+  "ext": "png",
+  "bytes": 320870,
+  "px": [
+   3331,
+   2962
+  ],
+  "first_label": "Slide 174 图 1",
+  "first_slide": 174,
+  "occurrences": [
+   {
+    "slide": 174,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "73e929ef09a6b3559ddf56c15a4827e27a49f412": {
+  "rel": "images/s174_p2_73e929ef.png",
+  "ext": "png",
+  "bytes": 309424,
+  "px": [
+   3313,
+   2962
+  ],
+  "first_label": "Slide 174 图 2",
+  "first_slide": 174,
+  "occurrences": [
+   {
+    "slide": 174,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "1109b263ee4ad78038e7700253005bf50547367f": {
+  "rel": "images/s174_p3_1109b263.png",
+  "ext": "png",
+  "bytes": 572838,
+  "px": [
+   3321,
+   2962
+  ],
+  "first_label": "Slide 174 图 3",
+  "first_slide": 174,
+  "occurrences": [
+   {
+    "slide": 174,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "96f6f09cc72e6c16933508e50ed092ce232dc401": {
+  "rel": "images/s174_p4_96f6f09c.png",
+  "ext": "png",
+  "bytes": 610188,
+  "px": [
+   3313,
+   2962
+  ],
+  "first_label": "Slide 174 图 4",
+  "first_slide": 174,
+  "occurrences": [
+   {
+    "slide": 174,
+    "idx": 4,
+    "pos": "右上"
+   }
+  ]
+ },
+ "ab5241af8d0d922f1cf9a267ee538f25a1986beb": {
+  "rel": "images/s175_p2_ab5241af.png",
+  "ext": "png",
+  "bytes": 69176,
+  "px": [
+   585,
+   513
+  ],
+  "first_label": "Slide 175 图 2",
+  "first_slide": 175,
+  "occurrences": [
+   {
+    "slide": 175,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "74804a58586ad844e243f887d772e88af202e8d4": {
+  "rel": "images/s175_p3_74804a58.png",
+  "ext": "png",
+  "bytes": 72945,
+  "px": [
+   563,
+   505
+  ],
+  "first_label": "Slide 175 图 3",
+  "first_slide": 175,
+  "occurrences": [
+   {
+    "slide": 175,
+    "idx": 3,
+    "pos": "居中"
+   }
+  ]
+ },
+ "f3593768f8ce29c8ac61f2a75b82365068fd2d78": {
+  "rel": "images/s178_p1_f3593768.png",
+  "ext": "png",
+  "bytes": 160444,
+  "px": [
+   692,
+   1147
+  ],
+  "first_label": "Slide 178 图 1",
+  "first_slide": 178,
+  "occurrences": [
+   {
+    "slide": 178,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "49ef10bc79c827e1ad32d78309d849821ff0391b": {
+  "rel": "images/s178_p2_49ef10bc.png",
+  "ext": "png",
+  "bytes": 113172,
+  "px": [
+   1635,
+   753
+  ],
+  "first_label": "Slide 178 图 2",
+  "first_slide": 178,
+  "occurrences": [
+   {
+    "slide": 178,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "9d1d938e1f17f930df2f0fa13d16e0e1d27a19c6": {
+  "rel": "images/s179_p2_9d1d938e.png",
+  "ext": "png",
+  "bytes": 787387,
+  "px": [
+   2911,
+   2961
+  ],
+  "first_label": "Slide 179 图 2",
+  "first_slide": 179,
+  "occurrences": [
+   {
+    "slide": 179,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "ade53e3739b7c7c29859ecbf965285c18b52061a": {
+  "rel": "images/s179_p3_ade53e37.png",
+  "ext": "png",
+  "bytes": 563744,
+  "px": [
+   3294,
+   2962
+  ],
+  "first_label": "Slide 179 图 3",
+  "first_slide": 179,
+  "occurrences": [
+   {
+    "slide": 179,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "bc0c85d84e309bef674f0eb9772f3b4b12eb30b9": {
+  "rel": "images/s179_p4_bc0c85d8.png",
+  "ext": "png",
+  "bytes": 28857,
+  "px": [
+   528,
+   397
+  ],
+  "first_label": "Slide 179 图 4",
+  "first_slide": 179,
+  "occurrences": [
+   {
+    "slide": 179,
+    "idx": 4,
+    "pos": "居中"
+   }
+  ]
+ },
+ "14d3737d5a56452aee9afc19ca13e512920eb68c": {
+  "rel": "images/s179_p5_14d3737d.png",
+  "ext": "png",
+  "bytes": 27918,
+  "px": [
+   513,
+   397
+  ],
+  "first_label": "Slide 179 图 5",
+  "first_slide": 179,
+  "occurrences": [
+   {
+    "slide": 179,
+    "idx": 5,
+    "pos": "左中"
+   }
+  ]
+ },
+ "c43aa108cf0280eee121411be94bc161dd4f3912": {
+  "rel": "images/s180_p1_c43aa108.png",
+  "ext": "png",
+  "bytes": 74552,
+  "px": [
+   444,
+   283
+  ],
+  "first_label": "Slide 180 图 1",
+  "first_slide": 180,
+  "occurrences": [
+   {
+    "slide": 180,
+    "idx": 1,
+    "pos": "左上"
+   }
+  ]
+ },
+ "6d1b62eafcd7624f5a9b05397713e5687aa4af1a": {
+  "rel": "images/s180_p2_6d1b62ea.png",
+  "ext": "png",
+  "bytes": 69904,
+  "px": [
+   903,
+   320
+  ],
+  "first_label": "Slide 180 图 2",
+  "first_slide": 180,
+  "occurrences": [
+   {
+    "slide": 180,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "93bf551ff19000c6b7a6d013a6c233ecbecf9063": {
+  "rel": "images/s180_p3_93bf551f.png",
+  "ext": "png",
+  "bytes": 12702,
+  "px": [
+   391,
+   111
+  ],
+  "first_label": "Slide 180 图 3",
+  "first_slide": 180,
+  "occurrences": [
+   {
+    "slide": 180,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "0f06ac34c13d688a7b20570295571636629c03a3": {
+  "rel": "images/s180_p4_0f06ac34.png",
+  "ext": "png",
+  "bytes": 5935,
+  "px": [
+   369,
+   138
+  ],
+  "first_label": "Slide 180 图 4",
+  "first_slide": 180,
+  "occurrences": [
+   {
+    "slide": 180,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "5159a1bbe2e939d9465bde5c65682eaffaf7d0fd": {
+  "rel": "images/s180_p5_5159a1bb.png",
+  "ext": "png",
+  "bytes": 15259,
+  "px": [
+   559,
+   54
+  ],
+  "first_label": "Slide 180 图 5",
+  "first_slide": 180,
+  "occurrences": [
+   {
+    "slide": 180,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "8530486d2fd6bfe767fbb95cd7ddd7c466785aa3": {
+  "rel": "images/s180_p6_8530486d.png",
+  "ext": "png",
+  "bytes": 9919,
+  "px": [
+   848,
+   72
+  ],
+  "first_label": "Slide 180 图 6",
+  "first_slide": 180,
+  "occurrences": [
+   {
+    "slide": 180,
+    "idx": 6,
+    "pos": "右中"
+   }
+  ]
+ },
+ "c3b2f0b946361fd4b066edb1a724a93ed5412350": {
+  "rel": "images/s180_p7_c3b2f0b9.png",
+  "ext": "png",
+  "bytes": 25797,
+  "px": [
+   1357,
+   180
+  ],
+  "first_label": "Slide 180 图 7",
+  "first_slide": 180,
+  "occurrences": [
+   {
+    "slide": 180,
+    "idx": 7,
+    "pos": "右下"
+   }
+  ]
+ },
+ "f85b2bb8d866cf9f0ef6f0a0be42321f136d1cb3": {
+  "rel": "images/s180_p8_f85b2bb8.png",
+  "ext": "png",
+  "bytes": 1227878,
+  "px": [
+   1668,
+   1095
+  ],
+  "first_label": "Slide 180 图 8",
+  "first_slide": 180,
+  "occurrences": [
+   {
+    "slide": 180,
+    "idx": 8,
+    "pos": "左中"
+   }
+  ]
+ },
+ "797ee3540b7a07e2e30caf7b1a7b379c10c8f255": {
+  "rel": "images/s181_p4_797ee354.png",
+  "ext": "png",
+  "bytes": 11493,
+  "px": [
+   924,
+   133
+  ],
+  "first_label": "Slide 181 图 4",
+  "first_slide": 181,
+  "occurrences": [
+   {
+    "slide": 181,
+    "idx": 4,
+    "pos": "居中"
+   }
+  ]
+ },
+ "f727b578cc16bae7826fbdc76ab6996edaa51fd0": {
+  "rel": "images/s181_p5_f727b578.png",
+  "ext": "png",
+  "bytes": 8978,
+  "px": [
+   889,
+   125
+  ],
+  "first_label": "Slide 181 图 5",
+  "first_slide": 181,
+  "occurrences": [
+   {
+    "slide": 181,
+    "idx": 5,
+    "pos": "左下"
+   }
+  ]
+ },
+ "8db0b93f98fccccf2a9c43728eb3f8512a0cc56a": {
+  "rel": "images/s183_p1_8db0b93f.png",
+  "ext": "png",
+  "bytes": 456591,
+  "px": [
+   1732,
+   2961
+  ],
+  "first_label": "Slide 183 图 1",
+  "first_slide": 183,
+  "occurrences": [
+   {
+    "slide": 183,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "e02e90061485c7c5b21ef0f6248a145b2999d360": {
+  "rel": "images/s183_p2_e02e9006.png",
+  "ext": "png",
+  "bytes": 486834,
+  "px": [
+   1847,
+   2961
+  ],
+  "first_label": "Slide 183 图 2",
+  "first_slide": 183,
+  "occurrences": [
+   {
+    "slide": 183,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "a49e3de5957fa1d16569233a147425927072951f": {
+  "rel": "images/s184_p1_a49e3de5.png",
+  "ext": "png",
+  "bytes": 340219,
+  "px": [
+   3572,
+   2961
+  ],
+  "first_label": "Slide 184 图 1",
+  "first_slide": 184,
+  "occurrences": [
+   {
+    "slide": 184,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "f1886cf5376e410cfa895d48e773ec52cc7792d2": {
+  "rel": "images/s184_p2_f1886cf5.png",
+  "ext": "png",
+  "bytes": 583131,
+  "px": [
+   3352,
+   2956
+  ],
+  "first_label": "Slide 184 图 2",
+  "first_slide": 184,
+  "occurrences": [
+   {
+    "slide": 184,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "d2a39e56bf8fe0e166746918b411af3eb27d8456": {
+  "rel": "images/s185_p1_d2a39e56.png",
+  "ext": "png",
+  "bytes": 58061,
+  "px": [
+   1207,
+   338
+  ],
+  "first_label": "Slide 185 图 1",
+  "first_slide": 185,
+  "occurrences": [
+   {
+    "slide": 185,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "5ebf52bd148cc4a09d866565dcb5b0d6b63fe5d3": {
+  "rel": "images/s185_p2_5ebf52bd.png",
+  "ext": "png",
+  "bytes": 370848,
+  "px": [
+   968,
+   779
+  ],
+  "first_label": "Slide 185 图 2",
+  "first_slide": 185,
+  "occurrences": [
+   {
+    "slide": 185,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "9b52028b1bcd883cf0ce2354e5c9d37cd3453dca": {
+  "rel": "images/s185_p3_9b52028b.png",
+  "ext": "png",
+  "bytes": 1778721,
+  "px": [
+   1357,
+   1053
+  ],
+  "first_label": "Slide 185 图 3",
+  "first_slide": 185,
+  "occurrences": [
+   {
+    "slide": 185,
+    "idx": 3,
+    "pos": "左下"
+   }
+  ]
+ },
+ "4d9f50ad8cec3ae71ea0386b3ddfcd0b8c1856af": {
+  "rel": "images/s187_p3_4d9f50ad.png",
+  "ext": "png",
+  "bytes": 203525,
+  "px": [
+   618,
+   442
+  ],
+  "first_label": "Slide 187 图 3",
+  "first_slide": 187,
+  "occurrences": [
+   {
+    "slide": 187,
+    "idx": 3,
+    "pos": "左中"
+   },
+   {
+    "slide": 227,
+    "idx": 3,
+    "pos": "左中"
+   }
+  ]
+ },
+ "0df7fb5533fd9bdaab73f8394b2d92b388a8a9d2": {
+  "rel": "images/s188_p1_0df7fb55.png",
+  "ext": "png",
+  "bytes": 251246,
+  "px": [
+   2805,
+   2366
+  ],
+  "first_label": "Slide 188 图 1",
+  "first_slide": 188,
+  "occurrences": [
+   {
+    "slide": 188,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "ce1107d1c7d9b8f34e2d4e564602cb8b40b3c2e4": {
+  "rel": "images/s188_p2_ce1107d1.png",
+  "ext": "png",
+  "bytes": 217437,
+  "px": [
+   2839,
+   2366
+  ],
+  "first_label": "Slide 188 图 2",
+  "first_slide": 188,
+  "occurrences": [
+   {
+    "slide": 188,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "36566c0fc7cd94814750eb2a45256623c9d2c7d2": {
+  "rel": "images/s188_p3_36566c0f.jpg",
+  "ext": "jpg",
+  "bytes": 481474,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 188 图 3",
+  "first_slide": 188,
+  "occurrences": [
+   {
+    "slide": 188,
+    "idx": 3,
+    "pos": "中上"
+   }
+  ]
+ },
+ "c07a675932a5c7b8eea577b1148d56603f9d0bb4": {
+  "rel": "images/s188_p4_c07a6759.png",
+  "ext": "png",
+  "bytes": 173369,
+  "px": [
+   530,
+   400
+  ],
+  "first_label": "Slide 188 图 4",
+  "first_slide": 188,
+  "occurrences": [
+   {
+    "slide": 188,
+    "idx": 4,
+    "pos": "右上"
+   }
+  ]
+ },
+ "00ca94943890e454d70557f75d3920f44ac4ddf6": {
+  "rel": "images/s189_p1_00ca9494.png",
+  "ext": "png",
+  "bytes": 310652,
+  "px": [
+   4104,
+   1801
+  ],
+  "first_label": "Slide 189 图 1",
+  "first_slide": 189,
+  "occurrences": [
+   {
+    "slide": 189,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "011b0f3344d364802b8ae3a5b9c855588e194a0f": {
+  "rel": "images/s190_p1_011b0f33.png",
+  "ext": "png",
+  "bytes": 316756,
+  "px": [
+   1012,
+   2366
+  ],
+  "first_label": "Slide 190 图 1",
+  "first_slide": 190,
+  "occurrences": [
+   {
+    "slide": 190,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "dd6fdd21a3e520938a894c25e54d0b747cc2f600": {
+  "rel": "images/s190_p2_dd6fdd21.png",
+  "ext": "png",
+  "bytes": 370300,
+  "px": [
+   2769,
+   2366
+  ],
+  "first_label": "Slide 190 图 2",
+  "first_slide": 190,
+  "occurrences": [
+   {
+    "slide": 190,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "525b32273c7f4dfc37d5a772bb07b0072fa6e11d": {
+  "rel": "images/s190_p3_525b3227.jpg",
+  "ext": "jpg",
+  "bytes": 980722,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 190 图 3",
+  "first_slide": 190,
+  "occurrences": [
+   {
+    "slide": 190,
+    "idx": 3,
+    "pos": "左中"
+   },
+   {
+    "slide": 192,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "0cff4717b256fff7a26e8c34560043f00aa28c37": {
+  "rel": "images/s192_p1_0cff4717.png",
+  "ext": "png",
+  "bytes": 332230,
+  "px": [
+   2794,
+   2366
+  ],
+  "first_label": "Slide 192 图 1",
+  "first_slide": 192,
+  "occurrences": [
+   {
+    "slide": 192,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "90219f11d24a833f972b4353d9e173f010598895": {
+  "rel": "images/s192_p2_90219f11.png",
+  "ext": "png",
+  "bytes": 730859,
+  "px": [
+   2794,
+   2366
+  ],
+  "first_label": "Slide 192 图 2",
+  "first_slide": 192,
+  "occurrences": [
+   {
+    "slide": 192,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "df11f684369f6adc1194af50c7523109aaaaf82d": {
+  "rel": "images/s192_p3_df11f684.png",
+  "ext": "png",
+  "bytes": 295906,
+  "px": [
+   2769,
+   2366
+  ],
+  "first_label": "Slide 192 图 3",
+  "first_slide": 192,
+  "occurrences": [
+   {
+    "slide": 192,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "f2d7f5660939bef85f173002712d16c44973ba0b": {
+  "rel": "images/s192_p5_f2d7f566.jpg",
+  "ext": "jpg",
+  "bytes": 487688,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 192 图 5",
+  "first_slide": 192,
+  "occurrences": [
+   {
+    "slide": 192,
+    "idx": 5,
+    "pos": "中下"
+   }
+  ]
+ },
+ "d0549b42a10b02116f32739393fa91aab1ff6c7a": {
+  "rel": "images/s192_p6_d0549b42.jpg",
+  "ext": "jpg",
+  "bytes": 341646,
+  "px": [
+   1492,
+   1120
+  ],
+  "first_label": "Slide 192 图 6",
+  "first_slide": 192,
+  "occurrences": [
+   {
+    "slide": 192,
+    "idx": 6,
+    "pos": "右下"
+   }
+  ]
+ },
+ "d37d66fa7f1dacdebbad860bf61f8a6862b88a9e": {
+  "rel": "images/s193_p1_d37d66fa.png",
+  "ext": "png",
+  "bytes": 138384,
+  "px": [
+   1501,
+   445
+  ],
+  "first_label": "Slide 193 图 1",
+  "first_slide": 193,
+  "occurrences": [
+   {
+    "slide": 193,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "c3d75c00c0b766db19afcca6b22e2dc5320b8c70": {
+  "rel": "images/s193_p2_c3d75c00.png",
+  "ext": "png",
+  "bytes": 441992,
+  "px": [
+   2625,
+   2961
+  ],
+  "first_label": "Slide 193 图 2",
+  "first_slide": 193,
+  "occurrences": [
+   {
+    "slide": 193,
+    "idx": 2,
+    "pos": "中上"
+   }
+  ]
+ },
+ "0c6c0748def4dc309f5a6be0f075263a2652d666": {
+  "rel": "images/s193_p3_0c6c0748.png",
+  "ext": "png",
+  "bytes": 466664,
+  "px": [
+   2571,
+   2961
+  ],
+  "first_label": "Slide 193 图 3",
+  "first_slide": 193,
+  "occurrences": [
+   {
+    "slide": 193,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "5014675730e3d07d7db093d7c4ceea6c910bae5c": {
+  "rel": "images/s193_p4_50146757.png",
+  "ext": "png",
+  "bytes": 479927,
+  "px": [
+   3572,
+   2650
+  ],
+  "first_label": "Slide 193 图 4",
+  "first_slide": 193,
+  "occurrences": [
+   {
+    "slide": 193,
+    "idx": 4,
+    "pos": "中下"
+   }
+  ]
+ },
+ "329a4c48f4fcbad8c77c9d9b01b10f9b72ac131a": {
+  "rel": "images/s193_p5_329a4c48.png",
+  "ext": "png",
+  "bytes": 442824,
+  "px": [
+   3572,
+   2919
+  ],
+  "first_label": "Slide 193 图 5",
+  "first_slide": 193,
+  "occurrences": [
+   {
+    "slide": 193,
+    "idx": 5,
+    "pos": "右下"
+   }
+  ]
+ },
+ "1b71da263c8fb31bfbc4b94b70966f18a07fdb63": {
+  "rel": "images/s194_p1_1b71da26.jpg",
+  "ext": "jpg",
+  "bytes": 229181,
+  "px": [
+   1544,
+   770
+  ],
+  "first_label": "Slide 194 图 1",
+  "first_slide": 194,
+  "occurrences": [
+   {
+    "slide": 194,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "5fc4306881a26f0ce7012f7349e489080de563dd": {
+  "rel": "images/s194_p2_5fc43068.png",
+  "ext": "png",
+  "bytes": 82561,
+  "px": [
+   847,
+   462
+  ],
+  "first_label": "Slide 194 图 2",
+  "first_slide": 194,
+  "occurrences": [
+   {
+    "slide": 194,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "a4ada4f013b418201215e6d39dc49ce413fb1e80": {
+  "rel": "images/s196_p1_a4ada4f0.png",
+  "ext": "png",
+  "bytes": 328708,
+  "px": [
+   1082,
+   829
+  ],
+  "first_label": "Slide 196 图 1",
+  "first_slide": 196,
+  "occurrences": [
+   {
+    "slide": 196,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 209,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "37f88a5adcc6d7808644a40441b2a82e5e22248b": {
+  "rel": "images/s196_p2_37f88a5a.png",
+  "ext": "png",
+  "bytes": 305579,
+  "px": [
+   974,
+   758
+  ],
+  "first_label": "Slide 196 图 2",
+  "first_slide": 196,
+  "occurrences": [
+   {
+    "slide": 196,
+    "idx": 2,
+    "pos": "居中"
+   },
+   {
+    "slide": 209,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "5201965755121ab02d88cdb87b45fdcc0ab879d3": {
+  "rel": "images/s196_p3_52019657.png",
+  "ext": "png",
+  "bytes": 45781,
+  "px": [
+   379,
+   434
+  ],
+  "first_label": "Slide 196 图 3",
+  "first_slide": 196,
+  "occurrences": [
+   {
+    "slide": 196,
+    "idx": 3,
+    "pos": "右上"
+   },
+   {
+    "slide": 209,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "b52eb81144e8ac6a1834350a1988effe2d00f0aa": {
+  "rel": "images/s196_p4_b52eb811.png",
+  "ext": "png",
+  "bytes": 25920,
+  "px": [
+   444,
+   286
+  ],
+  "first_label": "Slide 196 图 4",
+  "first_slide": 196,
+  "occurrences": [
+   {
+    "slide": 196,
+    "idx": 4,
+    "pos": "右下"
+   },
+   {
+    "slide": 209,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "8dfe4b94b17ad40b24445ed81ae572977cdb8a24": {
+  "rel": "images/s197_p1_8dfe4b94.png",
+  "ext": "png",
+  "bytes": 157398,
+  "px": [
+   1762,
+   409
+  ],
+  "first_label": "Slide 197 图 1",
+  "first_slide": 197,
+  "occurrences": [
+   {
+    "slide": 197,
+    "idx": 1,
+    "pos": "居中"
+   },
+   {
+    "slide": 210,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "1f6b96cacef98b878e03702fc83b1d9e09d07a3c": {
+  "rel": "images/s197_p2_1f6b96ca.png",
+  "ext": "png",
+  "bytes": 138501,
+  "px": [
+   763,
+   713
+  ],
+  "first_label": "Slide 197 图 2",
+  "first_slide": 197,
+  "occurrences": [
+   {
+    "slide": 197,
+    "idx": 2,
+    "pos": "右下"
+   },
+   {
+    "slide": 210,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "59721c2052d763d9e8dda7c418a980c77864b0a3": {
+  "rel": "images/s197_p3_59721c20.jpg",
+  "ext": "jpg",
+  "bytes": 79186,
+  "px": [
+   805,
+   830
+  ],
+  "first_label": "Slide 197 图 3",
+  "first_slide": 197,
+  "occurrences": [
+   {
+    "slide": 197,
+    "idx": 3,
+    "pos": "右下"
+   },
+   {
+    "slide": 205,
+    "idx": 1,
+    "pos": "左下"
+   },
+   {
+    "slide": 210,
+    "idx": 3,
+    "pos": "右下"
+   },
+   {
+    "slide": 218,
+    "idx": 1,
+    "pos": "左下"
+   }
+  ]
+ },
+ "78f0930b03300dc017106bd80f81469f1b962143": {
+  "rel": "images/s198_p1_78f0930b.png",
+  "ext": "png",
+  "bytes": 523302,
+  "px": [
+   4131,
+   1758
+  ],
+  "first_label": "Slide 198 图 1",
+  "first_slide": 198,
+  "occurrences": [
+   {
+    "slide": 198,
+    "idx": 1,
+    "pos": "中下"
+   },
+   {
+    "slide": 204,
+    "idx": 3,
+    "pos": "右上"
+   },
+   {
+    "slide": 211,
+    "idx": 1,
+    "pos": "中下"
+   },
+   {
+    "slide": 217,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "16125d869f5aff534b0189f9116bd4580651179d": {
+  "rel": "images/s198_p2_16125d86.png",
+  "ext": "png",
+  "bytes": 357611,
+  "px": [
+   2794,
+   2366
+  ],
+  "first_label": "Slide 198 图 2",
+  "first_slide": 198,
+  "occurrences": [
+   {
+    "slide": 198,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 211,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "b37fed6788d246429ce1df201775f7005fee0a5c": {
+  "rel": "images/s199_p1_b37fed67.png",
+  "ext": "png",
+  "bytes": 501532,
+  "px": [
+   4131,
+   1758
+  ],
+  "first_label": "Slide 199 图 1",
+  "first_slide": 199,
+  "occurrences": [
+   {
+    "slide": 199,
+    "idx": 1,
+    "pos": "右下"
+   },
+   {
+    "slide": 212,
+    "idx": 1,
+    "pos": "右下"
+   }
+  ]
+ },
+ "ce3c3f854885f97df78cb05ecc9c497f1205057c": {
+  "rel": "images/s199_p2_ce3c3f85.png",
+  "ext": "png",
+  "bytes": 528117,
+  "px": [
+   4131,
+   1758
+  ],
+  "first_label": "Slide 199 图 2",
+  "first_slide": 199,
+  "occurrences": [
+   {
+    "slide": 199,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 212,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "0b66e683a6db1631085d492ef59045d3ef651d3f": {
+  "rel": "images/s201_p1_0b66e683.png",
+  "ext": "png",
+  "bytes": 129754,
+  "px": [
+   539,
+   478
+  ],
+  "first_label": "Slide 201 图 1",
+  "first_slide": 201,
+  "occurrences": [
+   {
+    "slide": 201,
+    "idx": 1,
+    "pos": "右上"
+   },
+   {
+    "slide": 214,
+    "idx": 1,
+    "pos": "右上"
+   }
+  ]
+ },
+ "4fb224d7669a87771a232e5516791b54bd20de5f": {
+  "rel": "images/s201_p2_4fb224d7.png",
+  "ext": "png",
+  "bytes": 690172,
+  "px": [
+   1036,
+   507
+  ],
+  "first_label": "Slide 201 图 2",
+  "first_slide": 201,
+  "occurrences": [
+   {
+    "slide": 201,
+    "idx": 2,
+    "pos": "右下"
+   },
+   {
+    "slide": 214,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "2d32296339c7e38acc569e54e9440f3ba7df7afa": {
+  "rel": "images/s201_p3_2d322963.png",
+  "ext": "png",
+  "bytes": 480407,
+  "px": [
+   747,
+   792
+  ],
+  "first_label": "Slide 201 图 3",
+  "first_slide": 201,
+  "occurrences": [
+   {
+    "slide": 201,
+    "idx": 3,
+    "pos": "中下"
+   },
+   {
+    "slide": 214,
+    "idx": 3,
+    "pos": "中下"
+   }
+  ]
+ },
+ "4a5c1c319d06ffcf438a15e566a04634d7d4e16f": {
+  "rel": "images/s201_p4_4a5c1c31.png",
+  "ext": "png",
+  "bytes": 454864,
+  "px": [
+   751,
+   697
+  ],
+  "first_label": "Slide 201 图 4",
+  "first_slide": 201,
+  "occurrences": [
+   {
+    "slide": 201,
+    "idx": 4,
+    "pos": "左下"
+   },
+   {
+    "slide": 214,
+    "idx": 4,
+    "pos": "左下"
+   }
+  ]
+ },
+ "41eb05e3b758441ededefc5cea19f912994dadc8": {
+  "rel": "images/s203_p1_41eb05e3.png",
+  "ext": "png",
+  "bytes": 298109,
+  "px": [
+   1185,
+   907
+  ],
+  "first_label": "Slide 203 图 1",
+  "first_slide": 203,
+  "occurrences": [
+   {
+    "slide": 203,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 216,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "a5ae061fd207526da2b2f559c8ee9dc2da4f8a74": {
+  "rel": "images/s203_p2_a5ae061f.jpg",
+  "ext": "jpg",
+  "bytes": 52104,
+  "px": [
+   988,
+   988
+  ],
+  "first_label": "Slide 203 图 2",
+  "first_slide": 203,
+  "occurrences": [
+   {
+    "slide": 203,
+    "idx": 2,
+    "pos": "居中"
+   },
+   {
+    "slide": 216,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "d0021f9454194b7aa2b5b5f240dff0789cab52fc": {
+  "rel": "images/s203_p3_d0021f94.jpg",
+  "ext": "jpg",
+  "bytes": 48930,
+  "px": [
+   938,
+   938
+  ],
+  "first_label": "Slide 203 图 3",
+  "first_slide": 203,
+  "occurrences": [
+   {
+    "slide": 203,
+    "idx": 3,
+    "pos": "右中"
+   },
+   {
+    "slide": 216,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "81c795d4fa1854c3fc14853694c42dafd086f158": {
+  "rel": "images/s204_p1_81c795d4.jpg",
+  "ext": "jpg",
+  "bytes": 706955,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 204 图 1",
+  "first_slide": 204,
+  "occurrences": [
+   {
+    "slide": 204,
+    "idx": 1,
+    "pos": "左中"
+   },
+   {
+    "slide": 217,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "5eaca323695d243536520ce56e29e4722bba17ee": {
+  "rel": "images/s204_p2_5eaca323.png",
+  "ext": "png",
+  "bytes": 438380,
+  "px": [
+   4131,
+   1758
+  ],
+  "first_label": "Slide 204 图 2",
+  "first_slide": 204,
+  "occurrences": [
+   {
+    "slide": 204,
+    "idx": 2,
+    "pos": "右下"
+   },
+   {
+    "slide": 217,
+    "idx": 2,
+    "pos": "右下"
+   }
+  ]
+ },
+ "f57c9cea32723d6d9984bb69c9694f440879a909": {
+  "rel": "images/s205_p2_f57c9cea.jpg",
+  "ext": "jpg",
+  "bytes": 64649,
+  "px": [
+   798,
+   963
+  ],
+  "first_label": "Slide 205 图 2",
+  "first_slide": 205,
+  "occurrences": [
+   {
+    "slide": 205,
+    "idx": 2,
+    "pos": "中下"
+   },
+   {
+    "slide": 218,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "037b733dc1aafe4ef254694c470f4bdf71b3fc25": {
+  "rel": "images/s205_p3_037b733d.png",
+  "ext": "png",
+  "bytes": 486845,
+  "px": [
+   3572,
+   1767
+  ],
+  "first_label": "Slide 205 图 3",
+  "first_slide": 205,
+  "occurrences": [
+   {
+    "slide": 205,
+    "idx": 3,
+    "pos": "右上"
+   },
+   {
+    "slide": 218,
+    "idx": 3,
+    "pos": "右上"
+   }
+  ]
+ },
+ "590c6f205b202ead60dd708d01fc598a5e1ab347": {
+  "rel": "images/s205_p4_590c6f20.png",
+  "ext": "png",
+  "bytes": 470393,
+  "px": [
+   2938,
+   2970
+  ],
+  "first_label": "Slide 205 图 4",
+  "first_slide": 205,
+  "occurrences": [
+   {
+    "slide": 205,
+    "idx": 4,
+    "pos": "右下"
+   },
+   {
+    "slide": 218,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "efc528ff40cbb3414ffab49cf8b46bf9fd77840d": {
+  "rel": "images/s206_p1_efc528ff.jpg",
+  "ext": "jpg",
+  "bytes": 438881,
+  "px": [
+   1279,
+   1706
+  ],
+  "first_label": "Slide 206 图 1",
+  "first_slide": 206,
+  "occurrences": [
+   {
+    "slide": 206,
+    "idx": 1,
+    "pos": "右中"
+   },
+   {
+    "slide": 219,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "7f6f0030e6450678a1546f8eb60e160fb3714e78": {
+  "rel": "images/s206_p2_7f6f0030.jpg",
+  "ext": "jpg",
+  "bytes": 867985,
+  "px": [
+   1706,
+   1279
+  ],
+  "first_label": "Slide 206 图 2",
+  "first_slide": 206,
+  "occurrences": [
+   {
+    "slide": 206,
+    "idx": 2,
+    "pos": "左下"
+   },
+   {
+    "slide": 219,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "6cd89a6faf6c43475c830ad6f986c2cd322f3966": {
+  "rel": "images/s207_p1_6cd89a6f.jpg",
+  "ext": "jpg",
+  "bytes": 413500,
+  "px": [
+   1492,
+   1120
+  ],
+  "first_label": "Slide 207 图 1",
+  "first_slide": 207,
+  "occurrences": [
+   {
+    "slide": 207,
+    "idx": 1,
+    "pos": "左下"
+   },
+   {
+    "slide": 220,
+    "idx": 1,
+    "pos": "左下"
+   }
+  ]
+ },
+ "df4ba5eb60a0000dc3395f7bf4f791ca3f3de5f0": {
+  "rel": "images/s207_p2_df4ba5eb.png",
+  "ext": "png",
+  "bytes": 676313,
+  "px": [
+   4128,
+   1768
+  ],
+  "first_label": "Slide 207 图 2",
+  "first_slide": 207,
+  "occurrences": [
+   {
+    "slide": 207,
+    "idx": 2,
+    "pos": "右上"
+   },
+   {
+    "slide": 220,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "4494e36628a76a96433f1f8c7c3be76e1a8c0c18": {
+  "rel": "images/s207_p3_4494e366.png",
+  "ext": "png",
+  "bytes": 657060,
+  "px": [
+   4128,
+   1768
+  ],
+  "first_label": "Slide 207 图 3",
+  "first_slide": 207,
+  "occurrences": [
+   {
+    "slide": 207,
+    "idx": 3,
+    "pos": "右下"
+   },
+   {
+    "slide": 220,
+    "idx": 3,
+    "pos": "右下"
+   }
+  ]
+ },
+ "2e5a1088393186e0e33eb59bda930226092e4e69": {
+  "rel": "images/s222_p1_2e5a1088.png",
+  "ext": "png",
+  "bytes": 554195,
+  "px": [
+   3572,
+   2961
+  ],
+  "first_label": "Slide 222 图 1",
+  "first_slide": 222,
+  "occurrences": [
+   {
+    "slide": 222,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "873df26be524c44a40e3d4d8b4f7cbc400ae2ffc": {
+  "rel": "images/s222_p2_873df26b.png",
+  "ext": "png",
+  "bytes": 595797,
+  "px": [
+   3352,
+   2956
+  ],
+  "first_label": "Slide 222 图 2",
+  "first_slide": 222,
+  "occurrences": [
+   {
+    "slide": 222,
+    "idx": 2,
+    "pos": "居中"
+   }
+  ]
+ },
+ "c3270a9ee9428d70975ef9102fa8724db0af373d": {
+  "rel": "images/s222_p3_c3270a9e.png",
+  "ext": "png",
+  "bytes": 592767,
+  "px": [
+   3352,
+   2956
+  ],
+  "first_label": "Slide 222 图 3",
+  "first_slide": 222,
+  "occurrences": [
+   {
+    "slide": 222,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "aa02d957c95b8ecdd4f16b3dcb5c7420f5b77b06": {
+  "rel": "images/s222_p4_aa02d957.png",
+  "ext": "png",
+  "bytes": 595095,
+  "px": [
+   3352,
+   2956
+  ],
+  "first_label": "Slide 222 图 4",
+  "first_slide": 222,
+  "occurrences": [
+   {
+    "slide": 222,
+    "idx": 4,
+    "pos": "右中"
+   }
+  ]
+ },
+ "5fc59e346b0380c2b0b3e5bae9c86cbf4d1b8855": {
+  "rel": "images/s222_p5_5fc59e34.png",
+  "ext": "png",
+  "bytes": 593614,
+  "px": [
+   3352,
+   2956
+  ],
+  "first_label": "Slide 222 图 5",
+  "first_slide": 222,
+  "occurrences": [
+   {
+    "slide": 222,
+    "idx": 5,
+    "pos": "右中"
+   }
+  ]
+ },
+ "48eadaefbdb7d7bfc35a8d8626a9eedd2e08ef44": {
+  "rel": "images/s223_p1_48eadaef.png",
+  "ext": "png",
+  "bytes": 383990,
+  "px": [
+   3571,
+   2276
+  ],
+  "first_label": "Slide 223 图 1",
+  "first_slide": 223,
+  "occurrences": [
+   {
+    "slide": 223,
+    "idx": 1,
+    "pos": "左下"
+   }
+  ]
+ },
+ "1a67e3dcba70b3165081074f405592dc08ca120d": {
+  "rel": "images/s223_p2_1a67e3dc.jpg",
+  "ext": "jpg",
+  "bytes": 147369,
+  "px": [
+   691,
+   1706
+  ],
+  "first_label": "Slide 223 图 2",
+  "first_slide": 223,
+  "occurrences": [
+   {
+    "slide": 223,
+    "idx": 2,
+    "pos": "中下"
+   }
+  ]
+ },
+ "73cffec1aac5fc8d09b7a51958eef11544d1f3dd": {
+  "rel": "images/s223_p3_73cffec1.png",
+  "ext": "png",
+  "bytes": 1576332,
+  "px": [
+   4178,
+   3560
+  ],
+  "first_label": "Slide 223 图 3",
+  "first_slide": 223,
+  "occurrences": [
+   {
+    "slide": 223,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "199da6c73f1170a681c615c69196756fb5d5c5b0": {
+  "rel": "images/s223_p4_199da6c7.png",
+  "ext": "png",
+  "bytes": 1418897,
+  "px": [
+   4178,
+   3560
+  ],
+  "first_label": "Slide 223 图 4",
+  "first_slide": 223,
+  "occurrences": [
+   {
+    "slide": 223,
+    "idx": 4,
+    "pos": "右下"
+   }
+  ]
+ },
+ "e1a638b3686537b18d823ab005588a70371e041e": {
+  "rel": "images/s224_p1_e1a638b3.png",
+  "ext": "png",
+  "bytes": 378655,
+  "px": [
+   2795,
+   2364
+  ],
+  "first_label": "Slide 224 图 1",
+  "first_slide": 224,
+  "occurrences": [
+   {
+    "slide": 224,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "2180955898444dd7f6ff799c302db102693c7773": {
+  "rel": "images/s224_p2_21809558.png",
+  "ext": "png",
+  "bytes": 483020,
+  "px": [
+   2795,
+   2364
+  ],
+  "first_label": "Slide 224 图 2",
+  "first_slide": 224,
+  "occurrences": [
+   {
+    "slide": 224,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "c1b10b3cffc59ef028356a9ebc38baaa2a5f3402": {
+  "rel": "images/s226_p1_c1b10b3c.png",
+  "ext": "png",
+  "bytes": 475185,
+  "px": [
+   1706,
+   2960
+  ],
+  "first_label": "Slide 226 图 1",
+  "first_slide": 226,
+  "occurrences": [
+   {
+    "slide": 226,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "68b97d161218cd4c50571649046faa6765a95ea1": {
+  "rel": "images/s226_p2_68b97d16.png",
+  "ext": "png",
+  "bytes": 433785,
+  "px": [
+   3571,
+   2741
+  ],
+  "first_label": "Slide 226 图 2",
+  "first_slide": 226,
+  "occurrences": [
+   {
+    "slide": 226,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "6f98aaf95c4dedd69635e91d8231627a65dfe2ba": {
+  "rel": "images/s232_p1_6f98aaf9.png",
+  "ext": "png",
+  "bytes": 99097,
+  "px": [
+   1167,
+   562
+  ],
+  "first_label": "Slide 232 图 1",
+  "first_slide": 232,
+  "occurrences": [
+   {
+    "slide": 232,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "d2ccf3d2552774de255d3a8fe5af75150fb1c18e": {
+  "rel": "images/s232_p2_d2ccf3d2.png",
+  "ext": "png",
+  "bytes": 276117,
+  "px": [
+   610,
+   505
+  ],
+  "first_label": "Slide 232 图 2",
+  "first_slide": 232,
+  "occurrences": [
+   {
+    "slide": 232,
+    "idx": 2,
+    "pos": "左下"
+   }
+  ]
+ },
+ "d71f355eb570276054a6f6f0c086c368794e876e": {
+  "rel": "images/s233_p1_d71f355e.png",
+  "ext": "png",
+  "bytes": 188548,
+  "px": [
+   1585,
+   1636
+  ],
+  "first_label": "Slide 233 图 1",
+  "first_slide": 233,
+  "occurrences": [
+   {
+    "slide": 233,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "567e027ab9d5160100652e15a0f995173902b10f": {
+  "rel": "images/s233_p2_567e027a.png",
+  "ext": "png",
+  "bytes": 184573,
+  "px": [
+   1597,
+   1636
+  ],
+  "first_label": "Slide 233 图 2",
+  "first_slide": 233,
+  "occurrences": [
+   {
+    "slide": 233,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "fef206c8d4c835a06d84f03822d9ea0bf8eb49af": {
+  "rel": "images/s233_p3_fef206c8.png",
+  "ext": "png",
+  "bytes": 136748,
+  "px": [
+   1200,
+   800
+  ],
+  "first_label": "Slide 233 图 3",
+  "first_slide": 233,
+  "occurrences": [
+   {
+    "slide": 233,
+    "idx": 3,
+    "pos": "左中"
+   },
+   {
+    "slide": 234,
+    "idx": 1,
+    "pos": "中上"
+   }
+  ]
+ },
+ "3ccdb4e58f4c43afe3ce80b376f321d70fd1c26e": {
+  "rel": "images/s235_p1_3ccdb4e5.png",
+  "ext": "png",
+  "bytes": 73062,
+  "px": [
+   1176,
+   996
+  ],
+  "first_label": "Slide 235 图 1",
+  "first_slide": 235,
+  "occurrences": [
+   {
+    "slide": 235,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "1adf4ccf6f397ed4e30843a5df063fff7aef222c": {
+  "rel": "images/s235_p2_1adf4ccf.png",
+  "ext": "png",
+  "bytes": 47952,
+  "px": [
+   1144,
+   1005
+  ],
+  "first_label": "Slide 235 图 2",
+  "first_slide": 235,
+  "occurrences": [
+   {
+    "slide": 235,
+    "idx": 2,
+    "pos": "左中"
+   }
+  ]
+ },
+ "8da29b5e251d7b87a802302c472e6f599200d9b9": {
+  "rel": "images/s235_p3_8da29b5e.png",
+  "ext": "png",
+  "bytes": 71201,
+  "px": [
+   1148,
+   1016
+  ],
+  "first_label": "Slide 235 图 3",
+  "first_slide": 235,
+  "occurrences": [
+   {
+    "slide": 235,
+    "idx": 3,
+    "pos": "右中"
+   }
+  ]
+ },
+ "f8d0c76dc4bdb8df774ef9d643f041f80e26a902": {
+  "rel": "images/s236_p1_f8d0c76d.png",
+  "ext": "png",
+  "bytes": 210989,
+  "px": [
+   1150,
+   1012
+  ],
+  "first_label": "Slide 236 图 1",
+  "first_slide": 236,
+  "occurrences": [
+   {
+    "slide": 236,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "e314965d981e82db36c505d8d8cd360a12229e98": {
+  "rel": "images/s237_p1_e314965d.png",
+  "ext": "png",
+  "bytes": 860852,
+  "px": [
+   5878,
+   3282
+  ],
+  "first_label": "Slide 237 图 1",
+  "first_slide": 237,
+  "occurrences": [
+   {
+    "slide": 237,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "9590ec28e4893e6e3c48ffbe9d3e15628985dd31": {
+  "rel": "images/s239_p1_9590ec28.png",
+  "ext": "png",
+  "bytes": 1084948,
+  "px": [
+   5920,
+   3418
+  ],
+  "first_label": "Slide 239 图 1",
+  "first_slide": 239,
+  "occurrences": [
+   {
+    "slide": 239,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "ec5df24df0617177f2d17ac3a6c73d18cb0e34a4": {
+  "rel": "images/s240_p1_ec5df24d.png",
+  "ext": "png",
+  "bytes": 1007418,
+  "px": [
+   5939,
+   3418
+  ],
+  "first_label": "Slide 240 图 1",
+  "first_slide": 240,
+  "occurrences": [
+   {
+    "slide": 240,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "1afe20414a53767377178b203c0cb1fbb82c06ad": {
+  "rel": "images/s241_p1_1afe2041.png",
+  "ext": "png",
+  "bytes": 153567,
+  "px": [
+   1148,
+   1016
+  ],
+  "first_label": "Slide 241 图 1",
+  "first_slide": 241,
+  "occurrences": [
+   {
+    "slide": 241,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "e9550749b22a8c8a3b5606d0651bdbec9b48376d": {
+  "rel": "images/s243_p1_e9550749.png",
+  "ext": "png",
+  "bytes": 361140,
+  "px": [
+   2797,
+   2357
+  ],
+  "first_label": "Slide 243 图 1",
+  "first_slide": 243,
+  "occurrences": [
+   {
+    "slide": 243,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "71ef9d08ea69e5a651ede95d07fb2984004b0651": {
+  "rel": "images/s243_p2_71ef9d08.png",
+  "ext": "png",
+  "bytes": 305828,
+  "px": [
+   2797,
+   2357
+  ],
+  "first_label": "Slide 243 图 2",
+  "first_slide": 243,
+  "occurrences": [
+   {
+    "slide": 243,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "a02b4d808e8a89da1f670552c52bac6a3b0ae9cb": {
+  "rel": "images/s244_p1_a02b4d80.jpg",
+  "ext": "jpg",
+  "bytes": 178976,
+  "px": [
+   1187,
+   1915
+  ],
+  "first_label": "Slide 244 图 1",
+  "first_slide": 244,
+  "occurrences": [
+   {
+    "slide": 244,
+    "idx": 1,
+    "pos": "右中"
+   }
+  ]
+ },
+ "64c4be61d52e73bd71934aa2f3b9d2c5aac6356e": {
+  "rel": "images/s245_p1_64c4be61.jpg",
+  "ext": "jpg",
+  "bytes": 146855,
+  "px": [
+   1492,
+   1120
+  ],
+  "first_label": "Slide 245 图 1",
+  "first_slide": 245,
+  "occurrences": [
+   {
+    "slide": 245,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "82fa5fe18458d35b02355815248e0c007a6bc27e": {
+  "rel": "images/s247_p1_82fa5fe1.png",
+  "ext": "png",
+  "bytes": 276362,
+  "px": [
+   2797,
+   2357
+  ],
+  "first_label": "Slide 247 图 1",
+  "first_slide": 247,
+  "occurrences": [
+   {
+    "slide": 247,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "27af047b6a2e5deafe8ccea9fad8ab3180208d31": {
+  "rel": "images/s248_p1_27af047b.png",
+  "ext": "png",
+  "bytes": 502124,
+  "px": [
+   2940,
+   2970
+  ],
+  "first_label": "Slide 248 图 1",
+  "first_slide": 248,
+  "occurrences": [
+   {
+    "slide": 248,
+    "idx": 1,
+    "pos": "左中"
+   }
+  ]
+ },
+ "0f7e69861623844345434b53c71cb68c5631d123": {
+  "rel": "images/s248_p2_0f7e6986.png",
+  "ext": "png",
+  "bytes": 579653,
+  "px": [
+   2940,
+   2970
+  ],
+  "first_label": "Slide 248 图 2",
+  "first_slide": 248,
+  "occurrences": [
+   {
+    "slide": 248,
+    "idx": 2,
+    "pos": "右中"
+   }
+  ]
+ },
+ "420cfbbd1fd27662ca22555c818ea1eee5942d39": {
+  "rel": "images/s249_p1_420cfbbd.png",
+  "ext": "png",
+  "bytes": 942660,
+  "px": [
+   5920,
+   3418
+  ],
+  "first_label": "Slide 249 图 1",
+  "first_slide": 249,
+  "occurrences": [
+   {
+    "slide": 249,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "d8d538d6495cb485083b2f73f0ffe4b33850adb2": {
+  "rel": "images/s250_p1_d8d538d6.png",
+  "ext": "png",
+  "bytes": 553547,
+  "px": [
+   1342,
+   1020
+  ],
+  "first_label": "Slide 250 图 1",
+  "first_slide": 250,
+  "occurrences": [
+   {
+    "slide": 250,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ },
+ "0adc92c359147e1575fd148f76c4c72f8b133378": {
+  "rel": "images/s250_p2_0adc92c3.png",
+  "ext": "png",
+  "bytes": 380561,
+  "px": [
+   2749,
+   2357
+  ],
+  "first_label": "Slide 250 图 2",
+  "first_slide": 250,
+  "occurrences": [
+   {
+    "slide": 250,
+    "idx": 2,
+    "pos": "右上"
+   }
+  ]
+ },
+ "68b8aad441888424f8d58794145436ce06d1a258": {
+  "rel": "images/s251_p1_68b8aad4.png",
+  "ext": "png",
+  "bytes": 410719,
+  "px": [
+   1338,
+   1008
+  ],
+  "first_label": "Slide 251 图 1",
+  "first_slide": 251,
+  "occurrences": [
+   {
+    "slide": 251,
+    "idx": 1,
+    "pos": "居中"
+   }
+  ]
+ }
+}

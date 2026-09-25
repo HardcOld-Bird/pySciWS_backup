@@ -1,0 +1,4 @@
+# 可由 `compose slides digest` 从源 pptx 再生，体积大，不入库
+images/
+renders/
+sidecar/
