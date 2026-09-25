@@ -7,7 +7,7 @@ description: Search, read, evaluate, and manage academic physics literature (aco
 
 A single CLI drives the whole literature workflow: **search → read → note → library → index**.
 
-The backend lives in `src/pysci/skills/literature_research/` (8 client modules + a `research` facade).
+The backend lives in `src/pysci/skills/literature_research/` (9 client modules + a `research` facade).
 **You do not need to read the backend code** — treat it as a black box and drive everything
 through the `research` CLI below. Only open the code when maintaining it (see
 [references/maintenance.md](references/maintenance.md)).
@@ -37,6 +37,7 @@ Below, `research …` is shorthand for that full invocation. (`uv run python -m 
 | `add <doi>` | Adding a paper to the library | Zotero item + note skeleton |
 | `library <ping｜list｜search｜get>` | Querying the user's Zotero | Items from the local library |
 | `index` | After adding or editing notes | Rebuilt `INDEX.md` |
+| `ingest` | Bulk-archiving a **local** folder of PDFs (no DOI) | Copied PDFs + extracted Markdown + `ingest/manifest.json` ledger |
 | `cache <stats｜clean｜prune>` | Disk pressure, or checking what's cached | Two-tier cache stats / cleanup / LRU prune |
 
 Run `research <command> -h` for the full option list of any command.
@@ -75,6 +76,26 @@ HTML) are kept permanently; manage disk with `research cache stats｜clean｜pru
 - [ ] 7. (optional) Synthesize a survey in reviews/
 ```
 
+## Bulk-ingesting a local PDF repository
+
+When the user already has a folder of PDFs (no DOIs to resolve), use `ingest` instead of
+`read`/`add`. It is driven by a curated, **git-tracked** ledger `ingest/manifest.json` that records
+each file's `theme / slug / type / priority / pages / source / status`:
+
+```
+research ingest --status                     # progress summary (done / pending / failed, by priority & theme)
+research ingest --priority 1 --dry-run       # preview a batch, no extraction
+research ingest --priority 1                 # run it: copy PDF → MinerU extract → cache/extracted/<theme>/<slug>.md
+research ingest --priority 1 --limit-pages 800   # cap pages this run (respect MinerU daily quota)
+```
+
+Behaviour: PDFs are **copied** (originals untouched) to `cache/pdfs/<theme>/<slug>.pdf`; Markdown is
+extracted to `cache/extracted/<theme>/<slug>.md`. It is **resumable** — the manifest is rewritten
+after every file, `done` entries are skipped on re-run, `failed` entries can be retried. Use
+`priority` to batch by cost (1 = short papers, 2 = reviews/theses, 3 = big textbooks) so you stay
+within MinerU's daily page quota and can continue on a later day. Author/edit `manifest.json` by
+hand to (re)classify; the `source` paths must match the real files.
+
 ## Data sources & expectations
 
 - **OpenAlex** — primary source, no key, rich metadata + citation counts. Always available.
@@ -95,7 +116,8 @@ HTML) are kept permanently; manage disk with `research cache stats｜clean｜pru
 | `data/skills/literature_research/shortlists/` | One search snapshot per query |
 | `data/skills/literature_research/reviews/` | Multi-paper surveys |
 | `data/skills/literature_research/INDEX.md` | Auto-generated library index (`research index`) |
-| `data/skills/literature_research/cache/` | Downloaded PDFs + extracted full text + fetched HTML (git-ignored) |
+| `data/skills/literature_research/ingest/manifest.json` | Ledger for bulk local-PDF ingestion (`research ingest`); git-tracked |
+| `data/skills/literature_research/cache/` | Downloaded/copied PDFs + fetched HTML (git-ignored) **+ extracted full text under `cache/extracted/`, which IS git-tracked** (MinerU-quota-expensive `.md`, worth backing up) |
 
 ## When something breaks
 

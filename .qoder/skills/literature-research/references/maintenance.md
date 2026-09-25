@@ -1,6 +1,6 @@
 # Maintenance guide
 
-The `research` CLI is a thin facade over 8 backend modules in
+The `research` CLI is a thin facade over 9 backend modules in
 `src/pysci/skills/literature_research/tools/`. You rarely need to touch them; this guide is for when a
 source, the PDF extractor, or a publisher page breaks, or when you want to extend the system.
 
@@ -13,7 +13,7 @@ source, the PDF extractor, or a publisher page breaks, or when you want to exten
 ## 1. Architecture
 
 ```
-research.py            ← CLI facade: doctor/search/read/get/add/library/index/cache (orchestration only)
+research.py            ← CLI facade: doctor/search/read/get/add/library/index/ingest/cache (orchestration only)
   ├─ config.py         ← loads project-root .env; exposes `settings` + `http_session()`
   ├─ openalex_client   ← primary search + metadata + work_to_note_frontmatter()
   ├─ arxiv_client      ← preprints + download_pdf() + arxiv_to_note_frontmatter()
@@ -22,6 +22,7 @@ research.py            ← CLI facade: doctor/search/read/get/add/library/index/
   ├─ zotero_bridge     ← ZoteroBridge: ping/list/search/get/create_item_from_metadata/add_note
   ├─ browser_fetch     ← Playwright: fetch_all/fetch_pdf/fetch_html + PublisherAdapter
   ├─ pdf_extract       ← extract_pdf(): MinerU cloud (primary) / pymupdf4llm (fallback)
+  ├─ local_ingest      ← bulk-ingest a LOCAL folder of PDFs (copy → extract → manifest ledger); `research ingest`
   └─ cache_manager     ← two-tier cache governance: stats/clean/prune + bump_mtime (LRU)
 ```
 
@@ -78,7 +79,15 @@ Credentials (all optional except none are strictly required for OpenAlex/arXiv):
   (MinerU cloud first). It caches results in `cache/extracted/` (`use_cache`/`write_cache`).
 - **MinerU cloud** is the primary: a VLM pipeline with OCR that renders equations as LaTeX and
   tables as HTML. It uploads the PDF to the MinerU Open API and polls the job (you'll see
-  `MinerU running: k/N 页`). Typical cost ~3s/page.
+  `MinerU running: k/N 页`). Typical cost ~1–3s/page.
+- **MinerU has a 200-page single-file hard limit** (exceeding it returns "number of pages exceeds
+  limit (200 pages)"). `_extract_with_mineru_cloud()` handles this transparently: it reads the page
+  count via fitz and, if > `MINERU_MAX_PAGES` (200), splits the PDF into ≤ `MINERU_CHUNK_PAGES` (199)
+  page chunks (`_split_pdf_into_chunks`), converts each via `_mineru_extract_one`, then concatenates
+  the parts (each tagged `<!-- MinerU chunk i/N (pages …) -->`) and removes the temp chunk dir. So
+  `read`/`ingest` on a big textbook "just works" — expect `MinerU 分块 i/N` log lines. Quota: MinerU's
+  ~1000-page allowance is a *fast-track* quota, not a daily hard cap — beyond it jobs still run, just
+  slower (normal queue); the daily file cap is 5000.
 - **pymupdf4llm** is the local fallback: fast, CPU-only, but **equations are lost**. Use it only
   when equations don't matter or MinerU is down.
 
@@ -187,8 +196,47 @@ policy lives (`research cache` is a thin facade over it).
   fetch + extraction are skipped entirely.
 
 Cache governance config (`.env`, all optional): `CACHE_B_MAX_AGE_DAYS` (default 7),
-`CACHE_AUTOCLEAN_INTERVAL_DAYS` (default 7), `CACHE_SOFT_LIMIT_MB` (default 2048). The whole
-`cache/` dir (including `.autoclean_state.json` and `.by_url/`) is git-ignored.
+`CACHE_AUTOCLEAN_INTERVAL_DAYS` (default 7), `CACHE_SOFT_LIMIT_MB` (default 2048).
+
+> **`cache/extracted/` is git-TRACKED (deliberate exception).** The literature `.gitignore` uses
+> `cache/*` + `!cache/extracted/` so the whole cache stays ignored **except** the extracted Markdown,
+> which is MinerU-quota-expensive and worth version-controlling. (The project-root `.gitignore` must
+> NOT exclude `.../cache/` as a whole directory, or Git's "parent dir excluded" rule makes the
+> `!cache/extracted/` re-inclusion inert.) Consequence for `prune`: it can delete tracked `.md` under
+> `cache/extracted/` (showing as Git deletions). These files are small, so the 2 GB soft limit is
+> effectively never hit by text; still, prefer `prune --keep-referenced` and think before pruning
+> ingested full text — re-extraction costs quota.
+
+---
+
+## 5b. Bulk local-PDF ingestion (`local_ingest.py` / `research ingest`)
+
+For a **local folder of PDFs** with no DOIs to resolve (e.g. a user's hand-maintained literature
+repo), `read`/`add` don't fit — they are DOI/URL/download-centric. `research ingest` instead drives
+a curated, git-tracked ledger `data/skills/literature_research/ingest/manifest.json`:
+
+- Each entry: `id, theme, slug, type, priority, pages, source, status, pdf_path, md_path, note`.
+  `source` is the real path relative to `source_root` (author it from an actual filesystem walk so
+  special chars like `&`, `‐`, full-width parens match exactly). `priority` batches by cost
+  (1 ≤30 pp, 2 = 31–150 pp, 3 >150 pp / unknown) so expensive jobs can be deferred — MinerU's
+  ~1000-page allowance is a *fast-track* quota (beyond it jobs still run, just slower), not a hard
+  daily cap.
+- `run_ingest()` selects pending entries (skip `done` unless `--force`), sorts by `(priority, pages)`,
+  then per entry: **copies** the PDF (originals untouched) to `cache/pdfs/<theme>/<slug>.pdf`,
+  extracts via `pdf_extract.extract_pdf(..., write_cache=False)` (single canonical copy, same as
+  `read`), writes `cache/extracted/<theme>/<slug>.md`, updates the entry, and **saves the manifest
+  after every file** → fully resumable across sessions/interruptions. A per-entry exception is caught
+  (`status=failed`, `note=<err>`), never aborting the batch.
+- **Windows long paths**: sources deep in nested CJK-named folders can exceed MAX_PATH (260 chars),
+  making plain `exists()`/`open()` fail. `_resolve_source()` retries with the `\\?\` extended-length
+  prefix (absolute + backslashes) so those sources still copy; the copy lands at a short
+  `cache/pdfs/<theme>/<slug>.pdf`, so extraction/caching are unaffected. When the long source blocked
+  measuring `pages` at manifest time, `run_ingest()` backfills it from the copied PDF via fitz.
+- Flags: `--status` (summary only), `--priority N`, `--theme T`, `--backend`, `--limit-pages N`,
+  `--limit-files N`, `--dry-run`, `--force`. `main()` does NOT attach the autoclean hook to `ingest`.
+- The manifest is generated once by a throwaway walk+classify script, then hand-curated; it is the
+  single source of truth (no parallel catalog). Non-PDF assets (`.nb/.wls/.epub/.txt`) are listed
+  under `non_pdf_assets` with `status=skipped` for provenance, never converted.
 
 ---
 
