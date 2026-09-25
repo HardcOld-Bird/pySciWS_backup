@@ -150,10 +150,15 @@ MINERU_MODEL_VERSION = "vlm"  # vlm：公式/表格质量最好（推荐）
 MINERU_IS_OCR = True  # 强制 OCR：确保图片/扫描公式也被识别（数字版可改 False）
 MINERU_POLL_INTERVAL = 8  # 轮询间隔（秒）
 MINERU_POLL_TIMEOUT = 900  # 轮询总超时（秒）
+MINERU_MAX_PAGES = 200  # MinerU 单文件页数硬上限（超出报 "number of pages exceeds limit"）
+MINERU_CHUNK_PAGES = 199  # 自动分页的每块页数（留 1 页余量，确保严格 <200）
 
 
-def _extract_with_mineru_cloud(pdf_path: Path) -> str:
-    """MinerU 云端 Open API 后端（精准解析，公式→LaTeX，无需本地 GPU）。
+def _mineru_extract_one(pdf_path: Path) -> str:
+    """MinerU 云端 Open API：转换**单个** PDF（页数须 ≤MINERU_MAX_PAGES）。
+
+    精准解析，公式→LaTeX，无需本地 GPU。超过页数上限的大文件由外层
+    ``_extract_with_mineru_cloud`` 先分页、再逐块调用本函数、最后拼接。
 
     本地 PDF 无法直接给单文件接口（其只收公网 URL），故走“批量上传”流程：
       1. POST /api/v4/file-urls/batch  申请预签名上传链接
@@ -250,6 +255,80 @@ def _extract_with_mineru_cloud(pdf_path: Path) -> str:
         if target is None:
             raise ExtractionFailed(f"MinerU 结果 zip 内未找到 .md：{names[:10]}")
         return zf.read(target).decode("utf-8", errors="replace")
+
+
+def _pdf_page_count(pdf_path: Path) -> int:
+    """用 fitz 读取 PDF 页数；失败返回 0（视为未知，按单文件直接尝试）。"""
+    try:
+        import fitz  # type: ignore
+    except ImportError:
+        return 0
+    try:
+        with fitz.open(str(pdf_path)) as doc:
+            return int(doc.page_count)
+    except Exception:
+        return 0
+
+
+def _split_pdf_into_chunks(pdf_path: Path, chunk_pages: int) -> list[Path]:
+    """把 PDF 切成每块 ≤chunk_pages 页的临时文件，返回块路径（顺序即页序）。
+
+    临时块写入独立 tmp 目录，调用方用完后负责删除（见 _extract_with_mineru_cloud）。
+    """
+    import tempfile
+
+    import fitz  # type: ignore
+
+    tmpdir = Path(tempfile.mkdtemp(prefix="mineru_chunks_"))
+    chunks: list[Path] = []
+    with fitz.open(str(pdf_path)) as doc:
+        n = doc.page_count
+        for start in range(0, n, chunk_pages):
+            end = min(start + chunk_pages, n)  # 页区间 [start, end)
+            sub = fitz.open()
+            sub.insert_pdf(doc, from_page=start, to_page=end - 1)
+            cp = tmpdir / f"{pdf_path.stem}_p{start + 1:04d}-{end:04d}.pdf"
+            sub.save(str(cp))
+            sub.close()
+            chunks.append(cp)
+    return chunks
+
+
+def _extract_with_mineru_cloud(pdf_path: Path) -> str:
+    """MinerU 云端后端（对外入口）：>MINERU_MAX_PAGES 页时自动分页转换再拼接。
+
+    MinerU 单文件有 200 页硬上限（超出报 "number of pages exceeds limit"）。教材/
+    学位论文等大文件在此按 MINERU_CHUNK_PAGES 页切块，逐块走云端转换，再按页序拼接为
+    一份完整 Markdown（每块前加 HTML 注释标记块号与页范围，便于溯源）。任一块失败则
+    整体抛错（交由上层回退或重试），避免产出残缺全文。
+    """
+    n_pages = _pdf_page_count(pdf_path)
+    if n_pages <= MINERU_MAX_PAGES:
+        return _mineru_extract_one(pdf_path)
+
+    print(
+        f"[pdf_extract] MinerU: {n_pages} 页 > {MINERU_MAX_PAGES} 页上限，"
+        f"自动分页（每块 ≤{MINERU_CHUNK_PAGES} 页）转换 ..."
+    )
+    chunks = _split_pdf_into_chunks(pdf_path, MINERU_CHUNK_PAGES)
+    if not chunks:
+        return _mineru_extract_one(pdf_path)
+    tmpdir = chunks[0].parent
+    parts: list[str] = []
+    try:
+        total = len(chunks)
+        for i, cp in enumerate(chunks, 1):
+            print(f"[pdf_extract] MinerU 分块 {i}/{total}: {cp.name} ...")
+            md = _mineru_extract_one(cp)
+            pages_tag = cp.stem.rsplit("_p", 1)[-1]
+            parts.append(
+                f"\n\n<!-- ===== MinerU chunk {i}/{total} (pages {pages_tag}) ===== -->\n\n{md}"
+            )
+    finally:
+        import shutil
+
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    return "".join(parts).strip() + "\n"
 
 
 def _extract_with_pymupdf4llm(pdf_path: Path) -> str:
