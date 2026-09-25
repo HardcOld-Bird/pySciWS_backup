@@ -1,0 +1,112 @@
+% =====================================================================
+% Beamer slide template (LaTeX slide route, parallel to the pptx route)
+% For: group meetings / conference talks; top-quality math & vector figures.
+% Output: a directly playable PDF.
+% Build: compose tex build <project>  (pdflatex by default)
+%
+% CHINESE / CJK: uncomment `\usepackage{ctex}` below AND set $pdf_mode = 5
+% (xelatex) in latexmkrc. Keep the body ASCII while using pdflatex.
+% =====================================================================
+\documentclass[aspectratio=169,10pt]{beamer}
+
+% CJK support: uncomment the next line and switch latexmkrc to $pdf_mode = 5
+% \usepackage{ctex}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+% ---- Theme & look (core theme => guaranteed to compile; swap as you like) ----
+\usetheme{Madrid}
+\setbeamertemplate{navigation symbols}{}    % drop the bottom-right nav symbols
+\setbeamertemplate{footline}[frame number]  % footline shows only the frame number
+
+% ---- Metadata ----
+\title[Gain-EP Metasurfaces]{Gain-Induced Exceptional Points in Acoustic Metasurfaces}
+\author[First Author]{First Author\inst{1} \and Second Author\inst{1}}
+\institute[Tongji]{\inst{1} School of Physics Science and Engineering, Tongji University}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+% ===================== Body =====================
+\section{Motivation}
+\begin{frame}{Motivation}
+  \begin{itemize}
+    \item Exceptional points (EPs): eigenvalues \emph{and} eigenvectors coalesce
+    \item Gain/loss engineering in acoustic metasurfaces
+    \item Prior art: topological edge states coexisting with EPs \cite{zhu2018simultaneous}
+    \item<2-> Overlay demo: this bullet only appears on the frame's second slide
+  \end{itemize}
+  % Speaker notes (hidden in the PDF by default; kept for the author / pptx export)
+  \note{Stress the disorder robustness -- reviewers and audiences always ask.}
+\end{frame}
+
+\section{Model}
+\begin{frame}{Coupled-mode model}
+  \begin{equation}
+    H = \begin{pmatrix}
+      \omega_0 - i\gamma & \kappa \\
+      \kappa            & \omega_0 - i\gamma
+    \end{pmatrix}
+    \label{eq:H}
+  \end{equation}
+  Eigenvalues coalesce at the EP: $\kappa = \gamma$. See Eq.~\eqref{eq:H}.
+\end{frame}
+
+\begin{frame}{Two-column layout}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{itemize}
+        \item Left column point
+        \item Vector figure goes here
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{itemize}
+        \item Right column point
+        \item Insert from \texttt{figures/}
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\section{Results}
+\begin{frame}{Results}
+  \begin{table}
+    \centering
+    \begin{tabular}{ccc}
+      \toprule
+      $g$ & freq (kHz) & $Q$ \\
+      \midrule
+      0.5 & 12.1 & 820 \\
+      1.0 & 12.4 & 1650 \\
+      \bottomrule
+    \end{tabular}
+    \caption{Parameter scan.}
+  \end{table}
+\end{frame}
+
+\section{Conclusion}
+\begin{frame}{Conclusion}
+  \begin{itemize}
+    \item Take-away message one
+    \item Take-away message two
+  \end{itemize}
+\end{frame}
+
+% ===================== References =====================
+\begin{frame}[allowframebreaks]{References}
+  \bibliographystyle{plain}
+  \bibliography{refs}
+\end{frame}
+
+\end{document}

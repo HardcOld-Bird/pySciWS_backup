@@ -1,0 +1,6 @@
+# latexmk 配置：通用文章用 xelatex（便于中文/系统字体）+ biber
+$pdf_mode = 5;              # 5 = xelatex
+$bibtex_use = 2;            # 自动跑 biber（biblatex 后端）
+$out_dir = 'build';
+$clean_ext = 'synctex.gz run.xml bcf run.tdo';
+@default_files = ('main.tex');

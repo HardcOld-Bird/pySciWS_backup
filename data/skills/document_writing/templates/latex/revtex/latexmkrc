@@ -1,0 +1,6 @@
+# latexmk 配置：revtex4-2 用 pdflatex + bibtex
+$pdf_mode = 1;              # 1 = pdflatex
+$bibtex_use = 2;            # 自动跑 bibtex，并把参考文献纳入编译
+$out_dir = 'build';         # 构建产物写入 build/，保持项目整洁
+$clean_ext = 'synctex.gz run.xml bbl';
+@default_files = ('main.tex');

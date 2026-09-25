@@ -42,13 +42,23 @@ dependencies = [
 ]
 
 # ------------------------------------------------------------
-# 可选依赖组：experiment（gain_ep 实验平台，原 sweeper400）
-# 绑定 NI 数据采集硬件，仅 Windows + 安装 NI-DAQmx 驱动后可用；
-# 默认不装，保持科研/仿真环境精简。需要时：`uv sync --extra experiment`
+# 可选依赖组：默认不装，保持科研/仿真环境精简。
+# 需要时用 `uv sync --extra <name>`（或 `uv sync --all-extras`）安装。
 # ------------------------------------------------------------
 [project.optional-dependencies]
+# experiment：gain_ep 实验平台（原 sweeper400），绑定 NI 数据采集硬件，
+# 仅 Windows + 安装 NI-DAQmx 驱动后可用。
 experiment = [
     "nidaqmx",
+]
+# writing：document-writing skill（LaTeX/PPTX/DOCX 文档写作）。
+# 代码：src/pysci/skills/document_writing/；数据：data/skills/document_writing/。
+# Phase 1 仅需 PPTX 提取；markitdown 会带入 onnxruntime/magika 做文件类型识别。
+# 注意：LaTeX 编译依赖外部 TeX 发行版（TeX Live），非 pip 依赖，须另行安装并加入 PATH。
+writing = [
+    "markitdown[pptx]>=0.1.8",
+    "python-docx>=1.2.0",
+    "python-pptx>=1.0.2",
 ]
 
 # ------------------------------------------------------------

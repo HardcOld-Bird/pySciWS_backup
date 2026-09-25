@@ -10,6 +10,7 @@
 
 from pysci.paths import (
     ASSET_ROOT,
+    DOCWRITING_ROOT,
     LITERATURE_ROOT,
     PROJECT_ROOT,
     research_asset_dir,
@@ -17,6 +18,7 @@ from pysci.paths import (
 
 __all__ = [
     "ASSET_ROOT",
+    "DOCWRITING_ROOT",
     "LITERATURE_ROOT",
     "PROJECT_ROOT",
     "research_asset_dir",

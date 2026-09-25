@@ -50,6 +50,10 @@ ASSET_ROOT: Path = PROJECT_ROOT / "data" / "research"
 #: 与代码树 ``src/pysci/skills/literature_research/`` 镜像：``data/skills/literature_research/``。
 LITERATURE_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "literature_research"
 
+#: 文档写作数据区（templates/projects/assets/cache）。
+#: 与代码树 ``src/pysci/skills/document_writing/`` 镜像：``data/skills/document_writing/``。
+DOCWRITING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "document_writing"
+
 
 def research_asset_dir(name: str) -> Path:
     """解析某条研究线的资产目录。

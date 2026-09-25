@@ -1,0 +1,83 @@
+% !TEX program = pdflatex
+% ============================================================
+%  APS revtex4-2 期刊投稿模板（PRL / PRApplied / PRB 等）
+%  编译：compose tex build <本项目目录>
+%  参考文献：把条目写进 refs.bib，用 \cite{key} 引用
+% ============================================================
+\documentclass[%
+  reprint,                    % 终稿双栏样式；投稿评审可改为 preprint（单栏+行号）
+  amsmath,amssymb,
+  superscriptaddress,
+  longbibliography,
+]{revtex4-2}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\begin{document}
+
+\title{Title of the Paper}
+
+\author{First Author}
+ \email{first.author@example.com}
+ \affiliation{School of Physics Science and Engineering, Tongji University, Shanghai 200092, China}
+\author{Second Author}
+ \affiliation{School of Physics Science and Engineering, Tongji University, Shanghai 200092, China}
+
+\date{\today}
+
+\begin{abstract}
+Write the abstract here. State the problem, the key result, and its significance
+in a few sentences.
+\end{abstract}
+
+\maketitle
+
+\section{Introduction}
+\label{sec:intro}
+
+Introduce the topic and cite prior work, e.g.\ simultaneous observation of
+topological edge states and exceptional points~\cite{zhu2018simultaneous}.
+
+\section{Model and Methods}
+\label{sec:model}
+
+Consider a coupled-mode Hamiltonian
+\begin{equation}
+  H =
+  \begin{pmatrix}
+    \omega_0 - i\gamma & \kappa \\
+    \kappa & \omega_0 - i\gamma
+  \end{pmatrix},
+  \label{eq:hamiltonian}
+\end{equation}
+whose eigenvalues coalesce at the exceptional point. See Eq.~\eqref{eq:hamiltonian}.
+
+\begin{figure}[t]
+  \centering
+  % \includegraphics[width=\linewidth]{figures/spectrum.pdf}
+  \caption{Replace this with a real figure placed under \texttt{figures/}.}
+  \label{fig:spectrum}
+\end{figure}
+
+\section{Results}
+\label{sec:results}
+
+Present the results, referencing Fig.~\ref{fig:spectrum}.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+Summarize the findings.
+
+\begin{acknowledgments}
+We thank \ldots for helpful discussions. This work was supported by \ldots
+\end{acknowledgments}
+
+\bibliography{refs}
+
+\end{document}
