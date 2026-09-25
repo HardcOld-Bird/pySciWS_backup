@@ -44,6 +44,7 @@ from . import (
     arxiv_client,
     browser_fetch,
     cache_manager,
+    local_ingest,
     openalex_client,
     pdf_extract,
     semantic_scholar_client,
@@ -1167,6 +1168,28 @@ def cmd_cache(args: argparse.Namespace) -> int:
 
 
 # ===========================================================================
+# 子命令：ingest（本地 PDF 文献仓库批量入库；实现在 local_ingest）
+# ===========================================================================
+def cmd_ingest(args: argparse.Namespace) -> int:
+    """把本地已有 PDF 仓库入库：复制归档 → MinerU 抽取 → 回写 manifest 状态。"""
+    manifest = args.manifest or str(local_ingest.DEFAULT_MANIFEST)
+    if args.status:
+        data = local_ingest.load_manifest(manifest)
+        print(local_ingest.summarize(data))
+        return 0
+    return local_ingest.run_ingest(
+        manifest,
+        priority=args.priority,
+        theme=args.theme,
+        backend=args.backend,
+        limit_pages=args.limit_pages,
+        limit_files=args.limit_files,
+        dry_run=args.dry_run,
+        force=args.force,
+    )
+
+
+# ===========================================================================
 # 参数解析与入口
 # ===========================================================================
 def build_parser() -> argparse.ArgumentParser:
@@ -1282,6 +1305,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="prune：跳过被 papers/ 笔记引用的文件（默认开）",
     )
     sp.set_defaults(func=cmd_cache)
+
+    sp = sub.add_parser(
+        "ingest",
+        help="本地 PDF 文献仓库批量入库（复制→抽取→登记 manifest，断点续跑）",
+    )
+    sp.add_argument(
+        "--manifest",
+        default=None,
+        help="入库清单 JSON 路径（默认 ingest/manifest.json）",
+    )
+    sp.add_argument(
+        "--status", action="store_true", help="只打印清单进度汇总，不做任何转换"
+    )
+    sp.add_argument(
+        "--priority", type=int, default=None, help="只处理该优先级（1 论文/2 综述长文/3 教材）"
+    )
+    sp.add_argument("--theme", default=None, help="只处理该主题（如 cpa_ep）")
+    sp.add_argument(
+        "--backend",
+        default=None,
+        help="PDF 抽取后端：mineru-cloud / pymupdf4llm / auto（默认 auto=云端优先）",
+    )
+    sp.add_argument(
+        "--limit-pages",
+        type=int,
+        default=None,
+        dest="limit_pages",
+        help="本次最多抽取多少页（页数预算，防超 MinerU 日限额）",
+    )
+    sp.add_argument(
+        "--limit-files",
+        type=int,
+        default=None,
+        dest="limit_files",
+        help="本次最多处理多少篇",
+    )
+    sp.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help="只预演将处理哪些条目，不复制/不抽取/不改状态",
+    )
+    sp.add_argument(
+        "--force", action="store_true", help="已 done 的条目也重新抽取"
+    )
+    sp.set_defaults(func=cmd_ingest)
 
     return p
 
