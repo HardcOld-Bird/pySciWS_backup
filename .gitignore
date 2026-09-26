@@ -4,13 +4,11 @@ __pycache__/
 # dirs
 /.idea/
 /.venv/
-/mphs/
-/storage/
 
 # 研究资产树（data/research/）：.mph 模型体积大、storage 为可再生输出，均不入版本控制
 # （理论笔记 / 参考资料等小文本仍按需跟踪）
-/data/research/**/mphs/
-/data/research/**/storage/
+/data/research/**/simulation/
+/data/research/**/experiment/
 
 # Build artifacts
 *.egg-info/
