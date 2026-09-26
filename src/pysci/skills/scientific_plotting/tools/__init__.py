@@ -14,9 +14,10 @@
 
 设计原则（与 literature_research / document_writing / comsol_simulation 一致）：
 1. 可选路径/默认值从项目根 .env 加载，代码中绝不硬编码。
-2. 技能包只提供约定与工具；具体图内容在各研究资产目录的管线脚本里。
-3. 预览缓存等可再生产物写入 data/skills/scientific_plotting/（git-ignored）；
-   图交付件写入 data/research/<n>_<name>/article/figures/<figN>/out/。
+2. 技能包只提供约定与工具；具体图内容在各研究代码目录的管线脚本里。
+3. 管线代码位于 ``src/pysci/research/<name>/article/figures/<slug>.py``（代码层）；
+   导出产物位于 ``data/research/<n>_<name>/article/figures/<slug>/out/``（数据层）。
+4. 预览缓存等可再生产物写入 data/skills/scientific_plotting/（git-ignored）。
 """
 
 __version__ = "0.1.0"

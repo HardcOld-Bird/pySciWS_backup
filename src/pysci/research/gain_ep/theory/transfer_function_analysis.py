@@ -4,19 +4,22 @@
 - 探针1-8与探针9-16一一对应（第一组输入输出对）
 - 探针17-24与探针25-32一一对应（第二组输入输出对）
 探究输出和输入之间是否存在简单的数量关系（如常数传递函数、恒定幅值比、恒定相位差等）。
+
+迁移自 scripts/research/gain_ep/theory/传递函数分析.py，
+已适配新基础设施（theoretical_computation.tools.visualize 替代旧 common.plotting）。
 """
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from pysci.common.plotting import setup_chinese_fonts
 from pysci.paths import research_asset_dir
+from pysci.skills.theoretical_computation.tools.visualize import setup_style
 
 matplotlib.use("Agg")  # 非交互式后端，避免GUI阻塞
 
-# 导入项目通用的matplotlib配置
-setup_chinese_fonts()
+# 使用新基础设施配置中文字体与风格
+setup_style(chinese_fonts=True)
 
 # %%
 # ============================================================================

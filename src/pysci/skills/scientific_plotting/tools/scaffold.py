@@ -1,8 +1,10 @@
-"""脚手架：从内嵌模板新建一幅图的生产管线目录。
+"""脚手架：从内嵌模板新建一幅图的生产管线。
 
-``scaffold_figure`` 在研究资产目录 ``data/research/<n>_<name>/article/figures/<slug>/`` 下
-生成一份可直接运行的管线（``build_figure``）、一份 ``notes.md`` 迭代日志，并在 figures 根
-放一份 ``STYLE.yaml``（若不存在）绑定默认期刊预设与宽度。生成后即可::
+``scaffold_figure`` 分两处创建文件：
+- 代码（管线模块）：``src/pysci/research/<name>/article/figures/<slug>.py``
+- 数据（产物目录）：``data/research/<n>_<name>/article/figures/<slug>/``（含 out/ 和 notes.md）
+
+生成后即可::
 
     pysci-figures build data/research/1_gain_ep/article/figures/<slug>
 
@@ -19,7 +21,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .runner import figures_root
+from .runner import figures_code_root, figures_root
 
 # ---------------------------------------------------------------------------
 # 模板：管线模块源码
@@ -154,7 +156,10 @@ def scaffold_figure(
     figures_dir: Path | str | None = None,
     overwrite: bool = False,
 ) -> Path:
-    """新建一幅图的生产管线目录。
+    """新建一幅图的生产管线（代码 + 数据目录）。
+
+    代码创建在 ``src/pysci/research/<name>/article/figures/<slug>.py``，
+    数据目录创建在 ``data/research/<n>_<name>/article/figures/<slug>/``（含 out/ 和 notes.md）。
 
     Args:
         research: 研究线名（不含数字前缀），如 ``gain_ep``。
@@ -162,11 +167,11 @@ def scaffold_figure(
         style: 默认期刊预设（写入 STYLE.yaml 与 notes）。
         width: 默认设计宽度（single/double）。
         template: 模板名（见 list_templates）。
-        figures_dir: 显式指定 figures 根目录（默认由 research 解析）。
+        figures_dir: 显式指定数据侧 figures 根目录（默认由 research 解析）。
         overwrite: 目标已存在时是否覆盖管线文件。
 
     Returns:
-        新建的图目录路径。
+        数据侧图目录路径（用于 ``pysci-figures build``）。
 
     Raises:
         KeyError: 模板名未知。
@@ -176,19 +181,38 @@ def scaffold_figure(
         raise KeyError(
             f"未知模板 {template!r}；可选：{', '.join(_TEMPLATES)}"
         )
-    root = Path(figures_dir) if figures_dir else figures_root(research)
-    figdir = root / slug
+
+    # --- 数据侧目录 ---
+    data_root = Path(figures_dir) if figures_dir else figures_root(research)
+    figdir = data_root / slug
     if figdir.exists() and not overwrite:
-        raise FileExistsError(f"图目录已存在：{figdir}（加 overwrite=True 覆盖）")
+        raise FileExistsError(f"图数据目录已存在：{figdir}（加 overwrite=True 覆盖）")
     (figdir / "out").mkdir(parents=True, exist_ok=True)
 
-    # 管线模块（仅替换 __SLUG__ 占位符，模板正文的花括号/反斜杠原样写入）
-    pipeline = figdir / f"{slug}.py"
+    # --- 代码侧管线模块 ---
+    code_root = figures_code_root(research)
+    code_root.mkdir(parents=True, exist_ok=True)
+    # 确保有 __init__.py
+    code_init = code_root / "__init__.py"
+    if not code_init.exists():
+        code_init.write_text(
+            f'"""{research} 论文插图管线包。"""\n', encoding="utf-8"
+        )
+    # 确保父级 article/ 也有 __init__.py
+    article_init = code_root.parent / "__init__.py"
+    if not article_init.exists():
+        article_init.write_text(
+            f'"""{research} 论文产出子包。"""\n', encoding="utf-8"
+        )
+
+    pipeline = code_root / f"{slug}.py"
+    if pipeline.exists() and not overwrite:
+        raise FileExistsError(f"管线代码已存在：{pipeline}（加 overwrite=True 覆盖）")
     pipeline.write_text(
         _TEMPLATES[template].replace("__SLUG__", slug), encoding="utf-8"
     )
 
-    # 迭代日志
+    # --- 迭代日志（数据侧） ---
     notes = figdir / "notes.md"
     if not notes.exists() or overwrite:
         notes.write_text(
@@ -196,10 +220,10 @@ def scaffold_figure(
             encoding="utf-8",
         )
 
-    # figures 根的风格绑定（不覆盖已有）
-    style_yaml = root / "STYLE.yaml"
+    # --- figures 数据根的风格绑定（不覆盖已有） ---
+    style_yaml = data_root / "STYLE.yaml"
     if not style_yaml.exists():
-        root.mkdir(parents=True, exist_ok=True)
+        data_root.mkdir(parents=True, exist_ok=True)
         style_yaml.write_text(
             _TPL_STYLE_YAML.format(style=style, width=width), encoding="utf-8"
         )

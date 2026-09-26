@@ -52,6 +52,9 @@ dependencies = [
     # 出版规范层 + 图生产管线骨架。绘图后端复用已声明的 matplotlib/scienceplots/ultraplot/pyvista；
     # pyyaml 用于读取 figures 目录下的 STYLE.yaml 风格绑定（此前仅作为传递依赖存在，此处显式声明）。
     "pyyaml",
+    # 理论计算 skill（src/pysci/skills/theoretical_computation/；数据：data/skills/theoretical_computation/）：
+    # plotly 提供交互式 HTML 图表（参数空间探索时旋转/缩放/悬停），与 matplotlib 静态 PNG 互补。
+    "plotly",
 ]
 
 # ------------------------------------------------------------
@@ -64,6 +67,7 @@ pysci-research = "pysci.skills.literature_research.tools.research:main"
 pysci-compose = "pysci.skills.document_writing.tools.compose:main"
 pysci-simulation = "pysci.skills.comsol_simulation.tools.simulation:main"
 pysci-figures = "pysci.skills.scientific_plotting.tools.figures:main"
+pysci-theory = "pysci.skills.theoretical_computation.tools.theory:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra

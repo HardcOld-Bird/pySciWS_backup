@@ -76,11 +76,16 @@ wrong (overlapping labels, cramped panels, wrong colors). The preview is your ey
 
 ## The per-figure pipeline
 
-Each figure is a directory under `data/research/<n>_<name>/article/figures/<slug>/`:
+Each figure has its **code** and **data** in separate locations:
 
+Code (Agent-managed, in src/):
 ```
-<slug>/
-├── <slug>.py        # pipeline: build_figure(style=None, research_dir=None, **kw) -> Figure
+src/pysci/research/<name>/article/figures/<slug>.py   # build_figure(style=None, research_dir=None, **kw) -> Figure
+```
+
+Data (outputs/logs, in data/):
+```
+data/research/<n>_<name>/article/figures/<slug>/
 ├── notes.md         # iteration log (date / need / result)
 └── out/             # fig.eps (submit), .pdf, .svg (manual tweak), _preview.png (agent eyes)
 ```
@@ -99,14 +104,17 @@ A `STYLE.yaml` at the figures root (or per-figure) pins the default preset/width
 ## Visual closed loop
 
 `build` / `preview` always emit `out/<stem>_preview.png`. **Read it** to see the figure, then
-edit `<slug>.py` and re-run. This is the same render→Read pattern as the comsol/document skills.
+edit the pipeline script in `src/pysci/research/<name>/article/figures/<slug>.py` and re-run.
+This is the same render→Read pattern as the comsol/document skills.
 Do not ask the user to eyeball intermediate results — use the preview yourself.
 
 ## Output locations
 
 | Path | Contents |
 |---|---|
-| `data/research/<n>_<name>/article/figures/<slug>/` | one figure pipeline + `out/` deliverables |
+| `src/pysci/research/<name>/article/figures/<slug>.py` | figure pipeline code (build_figure) |
+| `data/research/<n>_<name>/article/figures/<slug>/out/` | deliverables (EPS/PDF/SVG/PNG) |
+| `data/research/<n>_<name>/article/figures/<slug>/notes.md` | iteration log |
 | `data/skills/scientific_plotting/templates/` | custom scaffold templates (user-added) |
 | `data/skills/scientific_plotting/recipes/` | reusable cross-research plotting recipes |
 | `data/skills/scientific_plotting/cache/` | transient previews (git-ignored) |

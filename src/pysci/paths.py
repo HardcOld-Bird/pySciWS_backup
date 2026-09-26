@@ -64,6 +64,12 @@ COMSOL_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "comsol_simulation"
 #: 具体论文插图的产物落在各研究资产目录 ``data/research/<n>_<name>/article/figures/``。
 PLOTTING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "scientific_plotting"
 
+#: 理论计算数据区（templates/cache/recipes）。
+#: 与代码树 ``src/pysci/skills/theoretical_computation/`` 镜像：``data/skills/theoretical_computation/``。
+#: 注意：本目录只放技能级资产（脚手架模板、计算缓存、可复用配方）；
+#: 具体研究线的计算产物落在各研究资产目录 ``data/research/<n>_<name>/theory/<slug>/``。
+THEORY_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "theoretical_computation"
+
 
 def research_asset_dir(name: str) -> Path:
     """解析某条研究线的资产目录。

@@ -1,9 +1,14 @@
 """图生产管线的发现与运行。
 
-**管线约定**：每幅论文插图对应研究资产目录下的一个子目录::
+**管线约定**：每幅论文插图的代码与数据分离存放：
+
+代码（Agent 管理）::
+
+    src/pysci/research/<name>/article/figures/<figN_slug>.py   # 管线模块
+
+数据（产物/日志）::
 
     data/research/<n>_<name>/article/figures/<figN_slug>/
-    ├── <figN_slug>.py   # 管线模块（也接受 fig.py / build.py，或目录内唯一的 .py）
     ├── notes.md         # 迭代日志（可选）
     └── out/             # 导出产物（save_figure 自动创建）
 
@@ -17,8 +22,10 @@
 自省 ``build_figure`` 的签名，只传入其接受的关键字参数（如 ``style``、``data`` 等），
 因此管线可按需声明入参，未声明的会被安全忽略。
 
-**风格绑定**：``figures`` 根目录或图目录下的 ``STYLE.yaml`` 可固定默认预设/宽度，
+**风格绑定**：``figures`` 数据根目录下的 ``STYLE.yaml`` 可固定默认预设/宽度，
 命令行 ``--style/--width`` 优先级更高。缺失时用技能默认（config.settings）。
+
+**后向兼容**：若 src/ 下未找到管线，仍会回退到旧模式（在 figdir 内发现 .py）。
 """
 
 from __future__ import annotations
@@ -33,7 +40,7 @@ from typing import Any, Iterator
 
 import matplotlib
 
-from pysci.paths import research_asset_dir
+from pysci.paths import PROJECT_ROOT, research_asset_dir
 
 from . import export as _export
 from .config import settings
@@ -44,19 +51,61 @@ _PIPELINE_NAME_PRIORITY = ("fig.py", "build.py", "main.py")
 
 
 def figures_root(research: str) -> Path:
-    """解析某研究线的插图根目录：``data/research/<n>_<name>/article/figures``。"""
+    """解析某研究线的插图数据根目录：``data/research/<n>_<name>/article/figures``。"""
     return research_asset_dir(research) / "article" / "figures"
 
 
-def discover_pipeline(figdir: Path | str) -> Path:
-    """在图目录中发现管线模块（.py）。
+def figures_code_root(research: str) -> Path:
+    """解析某研究线的插图代码根目录：``src/pysci/research/<name>/article/figures``。"""
+    return PROJECT_ROOT / "src" / "pysci" / "research" / research / "article" / "figures"
 
-    顺序：``<目录名>.py`` → fig.py/build.py/main.py → 目录内唯一的非下划线 .py。
+
+def _research_from_figdir(figdir: Path) -> tuple[str, str] | None:
+    """从 figdir 路径反推 (research_name, slug)。
+
+    figdir 形如 ``data/research/1_gain_ep/article/figures/fig1_ep_band``。
+    返回 ``("gain_ep", "fig1_ep_band")`` 或 None（无法解析时）。
+    """
+    parts = figdir.resolve().parts
+    # 找到 "research" 在路径中的位置
+    try:
+        idx = parts.index("research")
+    except ValueError:
+        return None
+    if idx + 1 >= len(parts):
+        return None
+    research_dir_name = parts[idx + 1]  # e.g. "1_gain_ep"
+    # 去掉数字前缀
+    if "_" in research_dir_name:
+        research_name = research_dir_name.split("_", 1)[1]
+    else:
+        research_name = research_dir_name
+    slug = figdir.name
+    return research_name, slug
+
+
+def discover_pipeline(figdir: Path | str) -> Path:
+    """发现图管线模块（.py）。
+
+    搜索顺序：
+    1. src/ 代码目录：``src/pysci/research/<name>/article/figures/<slug>.py``
+    2. 旧模式回退：figdir 内的 ``<目录名>.py`` → fig.py/build.py/main.py → 唯一 .py
 
     Raises:
-        FileNotFoundError: 目录不存在或找不到管线模块。
+        FileNotFoundError: 找不到管线模块。
     """
     figdir = Path(figdir)
+
+    # --- 新位置：src/ 代码目录 ---
+    parsed = _research_from_figdir(figdir)
+    if parsed:
+        research_name, slug = parsed
+        code_root = figures_code_root(research_name)
+        src_pipeline = code_root / f"{slug}.py"
+        if src_pipeline.is_file():
+            return src_pipeline
+
+    # --- 旧位置回退：figdir 内 ---
     if not figdir.is_dir():
         raise FileNotFoundError(f"图目录不存在：{figdir}")
 
@@ -73,7 +122,10 @@ def discover_pipeline(figdir: Path | str) -> Path:
     if len(pys) == 1:
         return pys[0]
     if not pys:
-        raise FileNotFoundError(f"{figdir} 下没有找到管线 .py 模块")
+        raise FileNotFoundError(
+            f"{figdir} 下没有找到管线 .py 模块，"
+            f"且 src/ 代码目录中也未找到对应脚本"
+        )
     names = ", ".join(p.name for p in pys)
     raise FileNotFoundError(
         f"{figdir} 下有多个 .py（{names}），无法确定入口；"
