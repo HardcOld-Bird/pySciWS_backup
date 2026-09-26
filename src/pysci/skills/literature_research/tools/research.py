@@ -1194,7 +1194,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 # ===========================================================================
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="research",
+        prog="pysci-research",
         description="pySciWS 文献调研统一 CLI（检索 / 阅读 / 元数据 / 入库 / 库查询 / 索引）",
     )
     sub = p.add_subparsers(dest="cmd", required=True)

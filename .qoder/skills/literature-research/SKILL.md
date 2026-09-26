@@ -14,13 +14,14 @@ through the `research` CLI below. Only open the code when maintaining it (see
 
 ## Invocation
 
-Run from the **project root**. Define this once per session:
+Run from the **project root**. The skill installs a console script `pysci-research`:
 
 ```
-.venv\Scripts\python.exe -m pysci.skills.literature_research.tools.research <command> [options]
+uv run pysci-research <command> [options]
 ```
 
-Below, `research …` is shorthand for that full invocation. (`uv run python -m …` also works.)
+Below, `research …` is shorthand for `uv run pysci-research …`. (Fallback if the script
+isn't installed: `uv run python -m pysci.skills.literature_research.tools.research …`.)
 
 > **PowerShell rule (critical):** wrap multi-word arguments in **single quotes**, e.g.
 > `research search 'acoustic exceptional point'`. Double quotes get stripped by the shell and

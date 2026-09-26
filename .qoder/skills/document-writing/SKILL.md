@@ -14,13 +14,14 @@ through the `compose` CLI below. Only open the code when maintaining it (see
 
 ## Invocation
 
-Run from the **project root**. Define this once per session:
+Run from the **project root**. The skill installs a console script `pysci-compose`:
 
 ```
-.venv\Scripts\python.exe -m pysci.skills.document_writing.tools.compose <command> [options]
+uv run pysci-compose <command> [options]
 ```
 
-Below, `compose …` is shorthand for that full invocation. (`uv run python -m …` also works.)
+Below, `compose …` is shorthand for `uv run pysci-compose …`. (Fallback if the script
+isn't installed: `uv run python -m pysci.skills.document_writing.tools.compose …`.)
 
 > **PowerShell rule (critical):** wrap multi-word arguments in **single quotes**, e.g.
 > `compose tex new my_paper --title 'Gain-induced Exceptional Points'`. Double quotes get

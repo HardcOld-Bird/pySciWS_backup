@@ -39,27 +39,26 @@ dependencies = [
     # marker-pdf / magic-pdf 实测本机不可用且云端可替代，已移除。
     "pymupdf4llm",      # 本地兜底后端：纯 CPU，快，但公式会丢失
     "playwright>=1.63.0",  # 付费墙论文抓取：HTML 全文 / 正文 PDF / 补充材料
-]
-
-# ------------------------------------------------------------
-# 可选依赖组：默认不装，保持科研/仿真环境精简。
-# 需要时用 `uv sync --extra <name>`（或 `uv sync --all-extras`）安装。
-# ------------------------------------------------------------
-[project.optional-dependencies]
-# experiment：gain_ep 实验平台（原 sweeper400），绑定 NI 数据采集硬件，
-# 仅 Windows + 安装 NI-DAQmx 驱动后可用。
-experiment = [
-    "nidaqmx",
-]
-# writing：document-writing skill（LaTeX/PPTX/DOCX 文档写作）。
-# 代码：src/pysci/skills/document_writing/；数据：data/skills/document_writing/。
-# Phase 1 仅需 PPTX 提取；markitdown 会带入 onnxruntime/magika 做文件类型识别。
-# 注意：LaTeX 编译依赖外部 TeX 发行版（TeX Live），非 pip 依赖，须另行安装并加入 PATH。
-writing = [
+    # 文档写作 skill（src/pysci/skills/document_writing/；数据：data/skills/document_writing/）：
+    # markitdown 会带入 onnxruntime/magika 做文件类型识别；LaTeX 编译另需外部 TeX 发行版
+    # （TeX Live），非 pip 依赖，须另行安装并加入 PATH。
     "markitdown[pptx]>=0.1.8",
     "python-docx>=1.2.0",
     "python-pptx>=1.0.2",
+    # gain_ep 实验平台（原 sweeper400）：绑定 NI 数据采集硬件，仅 Windows + 装 NI-DAQmx 驱动后可运行；
+    # 包本身跨平台可安装，无驱动时相关用例由 tests/…/conftest.py 守卫自动跳过收集。
+    "nidaqmx",
 ]
+
+# ------------------------------------------------------------
+# 控制台脚本：三个 skill 的统一 CLI 门面（均为 module:main 形态，main(argv=None)->int）。
+# 加前缀 pysci- 避免与全局工具重名；`uv sync` 后在 .venv/Scripts 生成 pysci-*.exe。
+# 等价兜底调用：`uv run python -m <入口模块>`（模块路径见各 SKILL.md 的 Invocation）。
+# ------------------------------------------------------------
+[project.scripts]
+pysci-research = "pysci.skills.literature_research.tools.research:main"
+pysci-compose = "pysci.skills.document_writing.tools.compose:main"
+pysci-simulation = "pysci.skills.comsol_simulation.tools.simulation:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra

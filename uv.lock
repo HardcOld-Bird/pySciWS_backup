@@ -1166,14 +1166,18 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "markdown" },
+    { name = "markitdown", extra = ["pptx"] },
     { name = "matplotlib" },
     { name = "mph" },
+    { name = "nidaqmx" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "playwright" },
     { name = "pydantic" },
     { name = "pymupdf4llm" },
+    { name = "python-docx" },
     { name = "python-dotenv" },
+    { name = "python-pptx" },
     { name = "pyvista" },
     { name = "pyzotero" },
     { name = "requests" },
@@ -1181,16 +1185,6 @@ dependencies = [
     { name = "scipy" },
     { name = "sympy" },
     { name = "ultraplot" },
-]
-
-[package.optional-dependencies]
-experiment = [
-    { name = "nidaqmx" },
-]
-writing = [
-    { name = "markitdown", extra = ["pptx"] },
-    { name = "python-docx" },
-    { name = "python-pptx" },
 ]
 
 [package.dev-dependencies]
@@ -1206,18 +1200,18 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "markdown" },
-    { name = "markitdown", extras = ["pptx"], marker = "extra == 'writing'", specifier = ">=0.1.8" },
+    { name = "markitdown", extras = ["pptx"], specifier = ">=0.1.8" },
     { name = "matplotlib" },
     { name = "mph" },
-    { name = "nidaqmx", marker = "extra == 'experiment'" },
+    { name = "nidaqmx" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "playwright", specifier = ">=1.63.0" },
     { name = "pydantic" },
     { name = "pymupdf4llm" },
-    { name = "python-docx", marker = "extra == 'writing'", specifier = ">=1.2.0" },
+    { name = "python-docx", specifier = ">=1.2.0" },
     { name = "python-dotenv" },
-    { name = "python-pptx", marker = "extra == 'writing'", specifier = ">=1.0.2" },
+    { name = "python-pptx", specifier = ">=1.0.2" },
     { name = "pyvista" },
     { name = "pyzotero" },
     { name = "requests" },
@@ -1226,7 +1220,6 @@ requires-dist = [
     { name = "sympy" },
     { name = "ultraplot" },
 ]
-provides-extras = ["experiment", "writing"]
 
 [package.metadata.requires-dev]
 dev = [

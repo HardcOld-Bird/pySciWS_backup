@@ -602,7 +602,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 # ===========================================================================
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="compose",
+        prog="pysci-compose",
         description="pySciWS 文档写作统一 CLI（LaTeX 论文工作流 + PPTX/文档阅读提取）",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
