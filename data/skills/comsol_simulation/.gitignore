@@ -1,0 +1,25 @@
+# ===== 可再生的知识库产物（默认绝不入库）=====
+# docs/*.md：MinerU 转换的手册全文，单文件最大约 6.6MB，超过 pre-commit
+#   check-added-large-files 的 2MB 上限；且可由 `pysci-simulation docs convert-all` 再生，
+#   故按项目大文件策略忽略（不入库、不抬阈值、不用 LFS）。
+# cache/doc_index.db：可由 `pysci-simulation docs index` 从 docs/*.md 重建（约 24MB）。
+# runs/：求解/导出的临时落地区（含 runs/tmp、MinerU 分块 PDF 等）。
+docs/
+cache/
+runs/
+*.tmp
+*.log
+
+# ===== 源手册 PDF（本机 COMSOL 安装自带，体积大，不入库）=====
+*.pdf
+
+# ===== 凭据 =====
+.env
+*.key
+*.pem
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/

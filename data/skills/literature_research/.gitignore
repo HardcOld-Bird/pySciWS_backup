@@ -4,6 +4,12 @@
 # 重获代价高，故纳入 Git 跟踪做备份（与 skill 的 read 缓存复用、cache 治理完全兼容）。
 cache/*
 !cache/extracted/
+# COMSOL 手册的 MinerU 原始缓存：comsol_simulation 的 docs 转换管线借道本 pdf_extract 产生，
+# 属可再生的大文件（docs 全文亦按大文件策略忽略），此处原始件同样不入库（须置于上面的
+# !cache/extracted/ 之后，才能覆盖该反忽略规则）。
+cache/extracted/COMSOL_*
+cache/extracted/AcousticsModuleUsersGuide_*
+cache/extracted/ApplicationProgrammingGuide_*
 *.tmp
 *.log
 
