@@ -58,6 +58,12 @@ DOCWRITING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "document_writing"
 #: 与代码树 ``src/pysci/skills/comsol_simulation/`` 镜像：``data/skills/comsol_simulation/``。
 COMSOL_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "comsol_simulation"
 
+#: 科研绘图数据区（templates/cache/recipes）。
+#: 与代码树 ``src/pysci/skills/scientific_plotting/`` 镜像：``data/skills/scientific_plotting/``。
+#: 注意：本目录只放技能级资产（脚手架模板、预览缓存、可复用配方画廊）；
+#: 具体论文插图的产物落在各研究资产目录 ``data/research/<n>_<name>/article/figures/``。
+PLOTTING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "scientific_plotting"
+
 
 def research_asset_dir(name: str) -> Path:
     """解析某条研究线的资产目录。

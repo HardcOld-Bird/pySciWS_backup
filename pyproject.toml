@@ -48,6 +48,10 @@ dependencies = [
     # gain_ep 实验平台（原 sweeper400）：绑定 NI 数据采集硬件，仅 Windows + 装 NI-DAQmx 驱动后可运行；
     # 包本身跨平台可安装，无驱动时相关用例由 tests/…/conftest.py 守卫自动跳过收集。
     "nidaqmx",
+    # 科研绘图 skill（src/pysci/skills/scientific_plotting/；数据：data/skills/scientific_plotting/）：
+    # 出版规范层 + 图生产管线骨架。绘图后端复用已声明的 matplotlib/scienceplots/ultraplot/pyvista；
+    # pyyaml 用于读取 figures 目录下的 STYLE.yaml 风格绑定（此前仅作为传递依赖存在，此处显式声明）。
+    "pyyaml",
 ]
 
 # ------------------------------------------------------------
@@ -59,6 +63,7 @@ dependencies = [
 pysci-research = "pysci.skills.literature_research.tools.research:main"
 pysci-compose = "pysci.skills.document_writing.tools.compose:main"
 pysci-simulation = "pysci.skills.comsol_simulation.tools.simulation:main"
+pysci-figures = "pysci.skills.scientific_plotting.tools.figures:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra

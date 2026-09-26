@@ -1,0 +1,10 @@
+# ===== 可再生的导出产物（默认不入库）=====
+# out/：EPS/PDF/SVG/PNG/预览均可由 `pysci-figures build <figdir>` 从管线再生，
+# 故按"管线即源码、产物可再生"的原则忽略；如需把某幅图的交付件入库，用 git add -f。
+out/
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]
+
+# 说明：管线模块 <slug>.py、notes.md、STYLE.yaml 属需版本跟踪的源码/记录，不在此忽略。

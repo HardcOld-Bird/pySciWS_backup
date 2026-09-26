@@ -1,0 +1,6 @@
+# 本 figures 根目录的默认期刊风格绑定。
+# 命令行 --style/--width 优先级高于此文件；单个图目录也可放自己的 STYLE.yaml 覆盖。
+style: aps
+width: double
+aspect: 0.618
+palette: okabe-ito

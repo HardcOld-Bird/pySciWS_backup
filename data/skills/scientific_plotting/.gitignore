@@ -1,0 +1,22 @@
+# ===== 可再生缓存（默认绝不入库）=====
+# cache/：预览栅格、临时导出等可由 `pysci-figures build/preview` 再生。
+cache/
+*.tmp
+*.log
+
+# ===== 预览位图（体积大、可再生）=====
+*_preview.png
+
+# ===== 凭据 =====
+.env
+*.key
+*.pem
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# 说明：templates/（脚手架自定义模板）与 recipes/（可复用绘图配方画廊）
+# 属需版本跟踪的技能资产，不在此忽略；空目录用 .gitkeep 占位以便入库。
