@@ -96,3 +96,60 @@ def research_asset_dir(name: str) -> Path:
         raise ValueError(f"研究资产目录 '{name}' 匹配到多个：{found}")
     # 无匹配：退回无序号命名，交由调用方 mkdir。
     return ASSET_ROOT / name
+
+
+#: 项目数据根：所有技能/研究的非代码产物都应落在此目录内（护栏基准）。
+DATA_ROOT: Path = PROJECT_ROOT / "data"
+
+
+def research_fig_dir(name: str, *, slug: str | None = None) -> Path:
+    """解析某研究线论文插图目录。
+
+    规范位置：``data/research/<n>_<name>/article/figures[/<slug>]``。技能级模板/缓存
+    在 :data:`PLOTTING_ROOT`，具体论文插图产物一律落在本目录。
+
+    Args:
+        name: 研究线名称（不含数字前缀），如 ``"gain_ep"``。
+        slug: 可选的图 slug（如 ``"fig1_ep_band"``）；None → 返回 figures 根。
+    """
+    base = research_asset_dir(name) / "article" / "figures"
+    return base / slug if slug else base
+
+
+def research_theory_dir(name: str, *, slug: str | None = None) -> Path:
+    """解析某研究线理论计算产物目录。
+
+    规范位置：``data/research/<n>_<name>/theory[/<slug>]``。技能级缓存在
+    :data:`THEORY_ROOT`，具体研究线的计算产物一律落在本目录。
+
+    Args:
+        name: 研究线名称（不含数字前缀）。
+        slug: 可选的计算 slug；None → 返回 theory 根。
+    """
+    base = research_asset_dir(name) / "theory"
+    return base / slug if slug else base
+
+
+def assert_within_data(path: str | Path, *, what: str = "产物") -> Path:
+    """断言产物路径落在项目 ``data/`` 根内（防 stray 护栏）。
+
+    在**写入前**调用：静默 stray（如误写到 ``scripts/``、仓库外、临时目录）会在落盘前
+    即抛 :class:`ValueError`，避免产物散落到非规范目录后难以追溯。
+
+    Args:
+        path: 待校验的产物路径（文件或目录）。
+        what: 报错信息里的产物类别描述。
+
+    Returns:
+        解析后的绝对路径（便于链式使用）。
+
+    Raises:
+        ValueError: 当路径不在 ``data/`` 根内时。
+    """
+    p = Path(path).resolve()
+    root = DATA_ROOT.resolve()
+    if p != root and root not in p.parents:
+        raise ValueError(
+            f"{what}路径不在 data/ 根内（防 stray 护栏）：{p}\n  data 根 = {root}"
+        )
+    return p

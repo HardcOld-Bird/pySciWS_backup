@@ -161,8 +161,10 @@ major_version_zero = true
 
 # ------------------------------------------------------------
 # pytest：测试根为 tests/（合并原 sweeper400 的 pytest 配置）
-# experiment 硬件用例用 `-m "not hardware"` 过滤；无 nidaqmx / 无 COMSOL Server 时，
-# 相关目录由各自 conftest.py 守卫自动跳过收集（tests/gain_ep/experiment、.../theory）。
+# addopts 默认 `-m "not hardware"`：无硬件环境（nidaqmx 已装但 PXI/步进电机/COMSOL Server
+# 不可用）下 `uv run pytest tests` 全绿，硬件用例（@pytest.mark.hardware）默认跳过而非报错。
+# 需要跑硬件用例时显式覆盖：`uv run pytest -m hardware`（或 `-m ""` 跑全部）。
+# 无 nidaqmx / 无 COMSOL Server 时，相关目录仍由各自 conftest.py 守卫自动跳过收集。
 # 覆盖率不写入 addopts（保持 `uv run pytest` 轻快），需要时显式 `uv run pytest --cov`。
 # ------------------------------------------------------------
 [tool.pytest.ini_options]
@@ -174,6 +176,8 @@ addopts = [
     "-v",
     "--strict-markers",
     "--tb=short",
+    "-m",
+    "not hardware",
 ]
 markers = [
     "hardware: 需要 NI 数据采集硬件 / 步进电机 / COMSOL Server 等外部设备的用例",
