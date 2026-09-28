@@ -13,7 +13,7 @@ GridSpec / subfigure 已足够表达，本模块只做两件高频且易错的�
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np

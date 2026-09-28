@@ -27,9 +27,9 @@ r"""出版规范层：期刊风格预设、尺寸、字体链与 mathtext 约定
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Iterator
 
 import matplotlib.pyplot as plt
 from matplotlib import font_manager

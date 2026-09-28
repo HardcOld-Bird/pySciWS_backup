@@ -33,14 +33,15 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import matplotlib
 
-from pysci.paths import PROJECT_ROOT, research_asset_dir
+from pysci.paths import PROJECT_ROOT, assert_within_data, research_fig_dir
 
 from . import export as _export
 from .config import settings
@@ -51,8 +52,11 @@ _PIPELINE_NAME_PRIORITY = ("fig.py", "build.py", "main.py")
 
 
 def figures_root(research: str) -> Path:
-    """解析某研究线的插图数据根目录：``data/research/<n>_<name>/article/figures``。"""
-    return research_asset_dir(research) / "article" / "figures"
+    """解析某研究线的插图数据根目录：``data/research/<n>_<name>/article/figures``。
+
+    委托 :func:`pysci.paths.research_fig_dir`（规范解析器）。
+    """
+    return research_fig_dir(research)
 
 
 def figures_code_root(research: str) -> Path:
@@ -262,6 +266,8 @@ def build_figure_dir(
     figdir = Path(figdir)
     result = RunResult(figdir=figdir, pipeline=figdir, stem=stem or figdir.name)
     try:
+        # 产物路径护栏：图目录必须落在 data/ 根内，stray（scripts/、仓库外）在写入前即报错。
+        assert_within_data(figdir, what="图目录")
         pipeline = discover_pipeline(figdir)
         result.pipeline = pipeline
 

@@ -42,9 +42,10 @@ installed / offline: `uv run --no-sync python -m pysci.skills.scientific_plottin
   colorblind distinguishability.
 - Per-figure pipeline scaffolding + discovery + run.
 
-**Not yet (v2):** rasterizing externally-produced SVG (Blender renders, hand-edited SVG) for
-preview; journal-specific presets beyond aps/nature. External media still works as an
-`imshow` panel fed by a file path.
+**Not yet (v2):** rasterizing externally-produced SVG (Blender renders, hand-edited SVG);
+journal-specific presets beyond aps/nature. External **raster** media (COMSOL renders etc.) is
+supported precisely: `raster-panel` crops the axis frame via the comsol export sidecar
+(`crop_box_px` + `extent`) and overlays annotations in **data coordinates** (no eyeball calibration).
 
 ## Commands at a glance
 
@@ -56,6 +57,7 @@ preview; journal-specific presets beyond aps/nature. External media still works 
 | `build <figdir>` | Producing deliverables | EPS/PDF/SVG/PNG + `_preview.png` in `out/` |
 | `preview <figdir>` | Fast visual iteration (no deliverables) | `_preview.png` only |
 | `audit <figdir>` | Checking publication compliance | PASS/FAIL report |
+| `raster-panel --image I --out O [--sidecar S --overlay spec.json]` | Overlaying annotations/placeholder panels on an external render (COMSOL PNG) | single-panel PNG with data-coord overlays |
 | `list <research>` | Seeing existing figure pipelines | pipeline inventory |
 
 Run `figures <command> -h` for the full option list.

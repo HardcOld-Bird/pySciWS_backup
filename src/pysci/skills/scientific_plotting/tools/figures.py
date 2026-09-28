@@ -10,7 +10,7 @@
     ... figures preview <figdir> --style nature
     ... figures audit <figdir> --panels
 
-子命令分组：doctor / styles / new / build / preview / audit / list。
+子命令分组：doctor / styles / new / build / preview / audit / raster-panel / field-panel / compose-grid / list。
 build/preview 会在图目录的 out/ 下产出交付件与 _preview.png，供 Agent Read 视觉校验。
 """
 
@@ -26,7 +26,9 @@ import matplotlib
 matplotlib.use("Agg")
 
 from . import audit as _audit  # noqa: E402
+from . import field as _field  # noqa: E402
 from . import palette as _palette  # noqa: E402
+from . import raster as _raster  # noqa: E402
 from . import runner as _runner  # noqa: E402
 from . import scaffold as _scaffold  # noqa: E402
 from . import style as _style  # noqa: E402
@@ -178,6 +180,79 @@ def cmd_audit(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# raster-panel（外部渲染栅格 + 数据坐标叠加）
+# ---------------------------------------------------------------------------
+def cmd_raster_panel(args: argparse.Namespace) -> int:
+    overlays = _raster.load_overlays(args.overlay) if args.overlay else None
+    try:
+        out = _raster.compose_raster_panel(
+            args.image,
+            args.out,
+            extent=tuple(args.extent) if args.extent else None,
+            sidecar=args.sidecar,
+            crop_box=tuple(args.crop) if args.crop else None,
+            overlays=overlays,
+            figsize=tuple(args.figsize),
+            dpi=args.dpi,
+            axis_off=not args.show_axis,
+        )
+    except ValueError as e:
+        print(f"[figures] raster-panel 失败：{e}", file=sys.stderr)
+        return 1
+    print(f"composed -> {out}")
+    print(f"  ✓ 视觉校验：Read '{out}'")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# compose-grid（spec 驱动的多面板组装）
+# ---------------------------------------------------------------------------
+def cmd_compose_grid(args: argparse.Namespace) -> int:
+    try:
+        spec = _raster.load_grid_spec(args.spec)
+    except (ValueError, OSError) as e:
+        print(f"[figures] compose-grid 读取 spec 失败：{e}", file=sys.stderr)
+        return 1
+    try:
+        out = _raster.compose_grid_to_file(spec, args.out, dpi=args.dpi)
+    except ValueError as e:
+        print(f"[figures] compose-grid 失败：{e}", file=sys.stderr)
+        return 1
+    print(f"composed -> {out}")
+    print(f"  ✓ 视觉校验：Read '{out}'")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# field-panel（数据驱动场渲染，colorbar 与面板严格一致）
+# ---------------------------------------------------------------------------
+def cmd_field_panel(args: argparse.Namespace) -> int:
+    try:
+        out = _field.render_field_panel(
+            args.source,
+            args.out,
+            scalars=args.scalars,
+            cols=tuple(args.cols) if args.cols else (0, 1, 2),
+            cmap=args.cmap,
+            vmin=args.vmin,
+            vmax=args.vmax,
+            shading=args.shading,
+            figsize=tuple(args.figsize),
+            dpi=args.dpi,
+            colorbar=not args.no_colorbar,
+            cbar_label=args.cbar_label,
+            title=args.title,
+            axis_off=args.axis_off,
+        )
+    except ValueError as e:
+        print(f"[figures] field-panel 失败：{e}", file=sys.stderr)
+        return 1
+    print(f"rendered -> {out}")
+    print(f"  ✓ 视觉校验：Read '{out}'")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # list
 # ---------------------------------------------------------------------------
 def cmd_list(args: argparse.Namespace) -> int:
@@ -270,6 +345,51 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("list", help="列出某研究线下已有的图管线")
     s.add_argument("research", help="研究线名（不含数字前缀），如 gain_ep")
     s.set_defaults(func=cmd_list)
+
+    # raster-panel
+    s = sub.add_parser("raster-panel", help="外部渲染栅格（COMSOL PNG）+ 数据坐标叠加原语 → 单面板 PNG")
+    s.add_argument("--image", type=Path, required=True, help="渲染 PNG（如 comsol export image 产物）")
+    s.add_argument("--out", type=Path, required=True)
+    s.add_argument("--sidecar", type=Path, default=None, help="comsol 导出 sidecar json（提供 extent/crop_box）")
+    s.add_argument("--extent", type=float, nargs=4, default=None, help="数据窗口 x0 x1 y0 y1（覆盖 sidecar）")
+    s.add_argument("--crop", type=int, nargs=4, default=None, help="像素裁剪框 x0 y0 x1 y1（覆盖 sidecar）")
+    s.add_argument("--overlay", type=Path, default=None, help="叠加原语清单 .json/.yaml")
+    s.add_argument("--figsize", type=float, nargs=2, default=(7.0, 7.0))
+    s.add_argument("--dpi", type=int, default=150)
+    s.add_argument("--show-axis", action="store_true", dest="show_axis", help="保留面板坐标轴")
+    s.set_defaults(func=cmd_raster_panel)
+
+    # compose-grid
+    s = sub.add_parser(
+        "compose-grid",
+        help="spec 驱动的多面板组装（N×M 混合 raster/图像/轴 + 共享 colorbar/面板字母/行列标题）",
+    )
+    s.add_argument("--spec", type=Path, required=True, help="组装 spec .yaml/.json（rows/cols/panels/colorbar…）")
+    s.add_argument("--out", type=Path, required=True, help="输出 PNG")
+    s.add_argument("--dpi", type=int, default=None, help="覆盖 spec.dpi（默认 150）")
+    s.set_defaults(func=cmd_compose_grid)
+
+    # field-panel
+    s = sub.add_parser(
+        "field-panel",
+        help="数据驱动场渲染（VTK/CSV → tripcolor，colorbar 与面板颜色严格一致）",
+    )
+    s.add_argument("--source", type=Path, required=True, help="场源 .vtk/.vtu/.csv/.txt")
+    s.add_argument("--out", type=Path, required=True)
+    s.add_argument("--scalars", default=None, help="VTK 标量数组名（默认首个 point_data）")
+    s.add_argument("--cols", type=int, nargs=3, default=None, metavar=("XI", "YI", "VI"),
+                   help="CSV 的 x/y/value 列索引（默认 0 1 2）")
+    s.add_argument("--cmap", default="bwr", help="matplotlib colormap（与共享 colorbar 同名即一致）")
+    s.add_argument("--vmin", type=float, default=None)
+    s.add_argument("--vmax", type=float, default=None)
+    s.add_argument("--shading", default="gouraud", choices=["gouraud", "flat"])
+    s.add_argument("--figsize", type=float, nargs=2, default=(6.0, 5.0))
+    s.add_argument("--dpi", type=int, default=150)
+    s.add_argument("--no-colorbar", action="store_true", dest="no_colorbar", help="不画 colorbar")
+    s.add_argument("--cbar-label", default=None, dest="cbar_label")
+    s.add_argument("--title", default=None)
+    s.add_argument("--axis-off", action="store_true", dest="axis_off", help="关闭坐标轴")
+    s.set_defaults(func=cmd_field_panel)
 
     return p
 

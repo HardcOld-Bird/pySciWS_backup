@@ -12,9 +12,10 @@ style_context 下构建图再自检，一条 CLI 命令 ``figures audit <figdir>
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import matplotlib
 import numpy as np
