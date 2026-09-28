@@ -9,6 +9,13 @@ __pycache__/
 # （理论笔记 / 参考资料等小文本仍按需跟踪）
 /data/research/**/simulation/
 /data/research/**/experiment/
+/data/research/**/storage/
+
+# 图管线可再生中间产物与超大矢量交付物（eps/svg 可由 figures 管线重建；pdf/png 仍跟踪）
+/data/research/**/figures/*/raw/
+/data/research/**/figures/*/panels/
+/data/research/**/figures/*/out/*.eps
+/data/research/**/figures/*/out/*.svg
 
 # Build artifacts
 *.egg-info/
