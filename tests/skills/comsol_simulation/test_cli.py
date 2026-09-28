@@ -62,3 +62,108 @@ def test_no_subcommand_exits():
 def test_bad_subcommand_exits():
     with pytest.raises(SystemExit):
         simulation.main(["__nope__"])
+
+
+# ---------------------------------------------------------------------------
+# 新增子命令的 argparse 接线（不启 COMSOL，仅解析）
+# ---------------------------------------------------------------------------
+def test_parser_inspect_node():
+    args = simulation.build_parser().parse_args(
+        ["inspect", "node", "--mph", "m.mph", "--path", "component(comp1)", "--methods"]
+    )
+    assert args.func is simulation.cmd_inspect_node
+    assert args.path == "component(comp1)" and args.methods
+
+
+def test_parser_export_image_extent_clean_sidecar():
+    args = simulation.build_parser().parse_args(
+        ["export", "image", "--mph", "m", "--plotgroup", "pg", "--out", "o.png",
+         "--extent", "0", "1", "-1", "1", "--clean"]
+    )
+    assert args.func is simulation.cmd_export_image
+    assert args.extent == [0.0, 1.0, -1.0, 1.0]
+    assert args.clean and not args.no_sidecar
+
+
+def test_parser_post_framebox():
+    args = simulation.build_parser().parse_args(
+        ["post", "framebox", "--image", "i.png", "--sidecar", "s.json"]
+    )
+    assert args.func is simulation.cmd_post_framebox
+    assert args.sidecar.name == "s.json"
+
+
+def test_parser_node_set():
+    args = simulation.build_parser().parse_args(
+        ["node", "set", "--mph", "m", "--path", "result(pg).feature(surf1)",
+         "--set", "rangecoloractive=on", "--set", "rangecolormin=-160", "--save", "o.mph"]
+    )
+    assert args.func is simulation.cmd_node_set
+    assert args.path == "result(pg).feature(surf1)"
+    assert args.set == ["rangecoloractive=on", "rangecolormin=-160"]
+    assert args.save.name == "o.mph"
+
+
+def test_parser_node_set_requires_set():
+    with pytest.raises(SystemExit):
+        simulation.build_parser().parse_args(["node", "set", "--mph", "m", "--path", "result(pg)"])
+
+
+def test_parser_export_image_scale_flags():
+    args = simulation.build_parser().parse_args(
+        ["export", "image", "--mph", "m", "--plotgroup", "pg", "--out", "o.png",
+         "--color-range", "-160", "160", "--polar-rmax", "60",
+         "--geom-bbox", "-0.4", "0.4", "-0.2", "0.4"]
+    )
+    assert args.func is simulation.cmd_export_image
+    assert args.color_range == [-160.0, 160.0]
+    assert args.polar_rmax == 60.0
+    assert args.geom_bbox == [-0.4, 0.4, -0.2, 0.4]
+
+
+def test_parser_diagnose():
+    args = simulation.build_parser().parse_args(["diagnose", "--mph", "m.mph"])
+    assert args.func is simulation.cmd_diagnose
+    assert args.mph.name == "m.mph"
+
+
+def test_parser_diagnose_requires_mph():
+    with pytest.raises(SystemExit):
+        simulation.build_parser().parse_args(["diagnose"])
+
+
+# ---------------------------------------------------------------------------
+# server 子命令（跨进程常驻会话）——parser + 无状态文件行为（不启 JVM）
+# ---------------------------------------------------------------------------
+def test_parser_server_start_stop_status():
+    args = simulation.build_parser().parse_args(["server", "start", "--port", "2100", "--cores", "2"])
+    assert args.func is simulation.cmd_server_start
+    assert args.port == 2100 and args.cores == 2
+    args = simulation.build_parser().parse_args(["server", "stop"])
+    assert args.func is simulation.cmd_server_stop
+    args = simulation.build_parser().parse_args(["server", "status", "--port", "2100"])
+    assert args.func is simulation.cmd_server_status and args.port == 2100
+
+
+def test_parser_connect_port_global_flag():
+    args = simulation.build_parser().parse_args(
+        ["--connect-port", "2036", "inspect", "tree", "--mph", "m.mph"]
+    )
+    assert args.connect_port == 2036
+    assert args.func is simulation.cmd_inspect_tree
+    # 不传时默认 None
+    args = simulation.build_parser().parse_args(["doctor"])
+    assert args.connect_port is None
+
+
+def test_server_status_no_state_not_running(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(simulation._session, "settings", SimpleNamespace(runs_dir=tmp_path))
+    assert simulation.main(["server", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "running    : False" in out
+
+
+def test_server_stop_no_state_is_noop(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(simulation._session, "settings", SimpleNamespace(runs_dir=tmp_path))
+    assert simulation.main(["server", "stop"]) == 0
+    assert "未运行" in capsys.readouterr().out

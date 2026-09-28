@@ -11,6 +11,8 @@
 - 收敛性：:func:`convergence_order`（h-refinement 观测收敛阶）。
 - 验证器：:func:`compare_to_reference` / :func:`check_conservation` / :func:`validate_field`，
   把"评估"固化为可复用检查。
+- 渲染栅格自检：:func:`read_gray_png` / :func:`detect_frame_box` / :func:`interior_blank_metrics`，
+  检测 COMSOL 渲染 PNG 的轴框像素框（pixel↔data 映射用）与轴框内部是否空白（导出自校验用）。
 - 传递函数：:func:`transfer_function`（复数比，gain_ep 类研究的通用原语）。
 
 pyvista 为**惰性导入**：纯数值函数（CSV 解析、收敛阶、比对）不依赖 pyvista/VTK，
@@ -333,6 +335,111 @@ def validate_field(
     if max_abs is not None and peak > max_abs:
         return CheckResult(name, False, f"峰值 {peak:.3e} 超上界 {max_abs:.3e}")
     return CheckResult(name, True, f"finite ok, peak={peak:.3e}")
+
+
+# ---------------------------------------------------------------------------
+# 渲染栅格自检（轴框检测 + 空白度量，纯 numpy 可单测）
+# ---------------------------------------------------------------------------
+def read_gray_png(path: str | Path) -> np.ndarray | None:
+    """读 PNG 为 0-255 灰度数组（origin 顶左）；读取失败返回 None。"""
+    try:
+        from matplotlib.image import imread  # noqa: PLC0415 - 仅栅格自检需要
+
+        a = np.asarray(imread(str(path)), dtype=float)
+        gray = a[..., :3].mean(axis=-1) if a.ndim == 3 else a
+        if gray.max() <= 1.0:
+            gray = gray * 255.0
+        return gray
+    except Exception:  # noqa: BLE001 - 自检通道绝不抛断主流程
+        return None
+
+
+def _longest_dark_run(row: np.ndarray) -> tuple[int, int, int] | None:
+    """一维布尔数组的最长连续 True 段 → (长度, 起, 止) 含端；全 False 返回 None。"""
+    idx = np.flatnonzero(row)
+    if idx.size == 0:
+        return None
+    breaks = np.flatnonzero(np.diff(idx) > 1)
+    starts = np.concatenate(([idx[0]], idx[breaks + 1]))
+    ends = np.concatenate((idx[breaks], [idx[-1]]))
+    lengths = ends - starts + 1
+    k = int(np.argmax(lengths))
+    return int(lengths[k]), int(starts[k]), int(ends[k])
+
+
+def detect_frame_box_array(gray: np.ndarray, *, dark_thresh: float = 128.0, min_frac: float = 0.5) -> tuple[int, int, int, int] | None:
+    """检测渲染图轴框像素框 → (x0, y0, x1, y1)，origin 顶左；失败返回 None。
+
+    启发式（best-effort）：轴框是图中唯一"水平边暗色连续段 ≥ min_frac×宽"的矩形框
+    （colorbar 顶底边、标题文字均不满足）；左右界取顶边行最长暗段的两端，
+    从而排除 colorbar 的竖直边；再校验左右列在顶底边之间暗占比 ≥ 0.8。
+    """
+    dark = gray < dark_thresh
+    h, w = dark.shape
+    if h < 8 or w < 8:
+        return None
+    runs = [_longest_dark_run(dark[i]) for i in range(h)]
+    rows = [i for i in range(h) if runs[i] is not None and runs[i][0] >= min_frac * w]
+    if len(rows) < 2:
+        return None
+    top, bot = rows[0], rows[-1]
+    run = runs[top]
+    if run is None or run[2] - run[1] < min_frac * w:
+        return None
+    _, xa, xb = run
+    span = bot - top
+    if span < 8:
+        return None
+    for x in (xa, xb):
+        if dark[top : bot + 1, x].sum() < 0.8 * span:
+            return None
+    return (xa, top, xb, bot)
+
+
+def detect_frame_box(path: str | Path, **kw: Any) -> tuple[int, int, int, int] | None:
+    """:func:`detect_frame_box_array` 的文件路径便捷版。"""
+    gray = read_gray_png(path)
+    return None if gray is None else detect_frame_box_array(gray, **kw)
+
+
+def interior_blank_metrics(gray: np.ndarray, box: tuple[int, int, int, int], *, pad: int = 3) -> dict[str, Any] | None:
+    """轴框内部（缩进 pad 像素）的空白度量：量化唯一色数 + 灰度 std。
+
+    ``blank`` 判据：unique_q ≤ 4 且 std < 8（内部近纯色 → 绘图组无数据/未绑数据集）。
+    """
+    x0, y0, x1, y1 = box
+    inner = gray[y0 + pad : y1 - pad, x0 + pad : x1 - pad]
+    if inner.size == 0:
+        return None
+    uniq = int(np.unique((inner // 8).astype(np.int32)).size)
+    std = float(inner.std())
+    return {"unique_q": uniq, "std": round(std, 2), "blank": bool(uniq <= 4 and std < 8.0)}
+
+
+def comsol_auto_window(
+    geom_bbox: tuple[float, float, float, float],
+    crop_box: tuple[int, int, int, int],
+) -> tuple[float, float, float, float]:
+    """COMSOL 2D auto-zoom 数据窗口反演：(几何 bbox, 轴框像素框) → 数据窗口 extent。
+
+    COMSOL Java API 对 2D 绘图组/视图**不暴露**轴限属性（export --extent 对 2D 无效），
+    但其 auto-zoom 规则可精确建模：等纵横比、以几何包围盒为中心、按轴框像素框
+    （:func:`detect_frame_box` / sidecar.crop_box_px）的长宽比在宽/高受限方向展开。
+    几何 bbox 可由建模参数或导出网格/几何的坐标范围精确算出。
+
+    Args:
+        geom_bbox: 几何包围盒 (x0, x1, y0, y1)（数据坐标）。
+        crop_box: 轴框像素框 (x0, y0, x1, y1)（origin 顶左）。
+
+    Returns:
+        数据窗口 (xmin, xmax, ymin, ymax)，可直接作 imshow 的 extent。
+    """
+    gx0, gx1, gy0, gy1 = geom_bbox
+    gw, gh = gx1 - gx0, gy1 - gy0
+    w_px, h_px = crop_box[2] - crop_box[0], crop_box[3] - crop_box[1]
+    s = max(gw / w_px, gh / h_px)  # 数据/像素（受限方向贴几何 bbox）
+    cx, cy = (gx0 + gx1) / 2, (gy0 + gy1) / 2
+    return (cx - w_px * s / 2, cx + w_px * s / 2, cy - h_px * s / 2, cy + h_px * s / 2)
 
 
 # ---------------------------------------------------------------------------

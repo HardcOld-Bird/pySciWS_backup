@@ -9,6 +9,10 @@
 
 会话上下文管理器 :func:`session` 负责异常安全的 teardown。
 
+.. warning::
+   单 license 约束：常驻 server（``mode="server"`` / :func:`start_persistent_server`）
+   会**占用 license**，切勿与交互式 COMSOL GUI 同时运行，否则二者争抢唯一 license。
+
 用法::
 
     from pysci.skills.comsol_simulation.tools.session import session
@@ -20,6 +24,7 @@
 
 from __future__ import annotations
 
+import json
 import socket
 import subprocess
 import sys
@@ -187,6 +192,103 @@ def connect(host: str = "127.0.0.1", port: int = 2036) -> Any:
 def stop_server(handle: ServerHandle) -> None:
     """停止由 :func:`launch_server` 启动的 server。"""
     handle.stop()
+
+
+# ---------------------------------------------------------------------------
+# 跨进程常驻 server（state file）——多步 CLI 复用同一 JVM
+# ---------------------------------------------------------------------------
+_SERVER_STATE_NAME = "comsol_server.json"
+
+
+def _server_state_path() -> Path:
+    return settings.runs_dir / _SERVER_STATE_NAME
+
+
+def _port_alive(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=1.0):
+            return True
+    except OSError:
+        return False
+
+
+def start_persistent_server(port: int = 2036, cores: int | None = None) -> dict[str, Any]:
+    """拉起**跨进程常驻** server 并记录 pid/port 状态文件（供后续 connect / stop）。
+
+    与 ``session(mode="server")`` 的区别：本函数**不**在退出时关闭 server，使多条 CLI
+    命令可复用同一 JVM（省每次 ~30s 冷启动与 license 抖动）。若状态文件显示 server 已在
+    运行则直接复用（幂等）。
+
+    .. warning:: 常驻 server 占用 license，**不要**与交互式 COMSOL GUI 同时运行。
+    """
+    state = _server_state_path()
+    if state.exists():
+        try:
+            info = json.loads(state.read_text(encoding="utf-8"))
+            if _port_alive(str(info.get("host", "127.0.0.1")), int(info.get("port", 0) or 0)):
+                return info
+        except Exception:  # noqa: BLE001
+            pass
+    handle = launch_server(port=port, cores=cores)
+    info = {"pid": handle.proc.pid, "host": handle.host, "port": handle.port}
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps(info), encoding="utf-8")
+    return info
+
+
+def server_status(port: int | None = None) -> dict[str, Any]:
+    """返回常驻 server 状态（state file 内容 + 端口是否存活）。"""
+    state = _server_state_path()
+    info: dict[str, Any] = {
+        "state_file": str(state),
+        "running": False,
+        "pid": None,
+        "host": "127.0.0.1",
+        "port": port,
+    }
+    if state.exists():
+        try:
+            data = json.loads(state.read_text(encoding="utf-8"))
+            info.update(pid=data.get("pid"), port=data.get("port"), host=data.get("host", "127.0.0.1"))
+            info["running"] = _port_alive(info["host"], int(info["port"] or 0))
+        except Exception:  # noqa: BLE001
+            pass
+    elif port:
+        info["running"] = _port_alive("127.0.0.1", port)
+    return info
+
+
+def _kill_pid(pid: int) -> None:
+    """跨平台 best-effort 终止进程（Windows 用 taskkill，POSIX 用 SIGTERM）。"""
+    try:
+        if sys.platform == "win32":
+            subprocess.run(  # noqa: S603
+                ["taskkill", "/PID", str(pid), "/F", "/T"],
+                capture_output=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        else:
+            import os
+            import signal
+
+            os.kill(pid, signal.SIGTERM)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def stop_persistent_server() -> bool:
+    """按 state file 记录的 pid 终止常驻 server 并清理状态文件。无状态文件返回 False。"""
+    state = _server_state_path()
+    if not state.exists():
+        return False
+    try:
+        pid = int(json.loads(state.read_text(encoding="utf-8")).get("pid", 0))
+    except Exception:  # noqa: BLE001
+        pid = 0
+    if pid:
+        _kill_pid(pid)
+    state.unlink(missing_ok=True)
+    return True
 
 
 # ---------------------------------------------------------------------------

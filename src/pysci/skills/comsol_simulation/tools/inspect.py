@@ -3,6 +3,8 @@
 四类能力：
 - :func:`dump_tree` — 紧凑文本化模型树（组件/几何/材料/物理场/网格/研究/求解/结果 + 参数），供 Agent 读结构。
 - :func:`list_parameters` / :func:`inventory` — 参数表与按子系统的节点清单。
+- :func:`resolve_path` / :func:`dump_node` — 按路径定位任意活体节点并 dump 其**状态**
+  （类型/标签/属性当前值/枚举允许值/选择实体数），是建模试错时的第一诊断入口。
 - :func:`introspect` — 对任意活体 Java 节点用反射列出类名与方法签名（**活体 javadoc**，弥补未安装的 javadoc 插件）。
 - :func:`summarize_java` — 把 GUI 导出的 ``.java`` 模型文件解析成结构化摘要（GUI→Java 兜底路径与 knowledge 种子用）。
 
@@ -15,8 +17,10 @@ from __future__ import annotations
 import re
 from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
 
 # ---------------------------------------------------------------------------
 # 通用小工具（防御式 Java 调用）
@@ -57,7 +61,7 @@ def _str_list(raw: Any) -> list[str]:
 # ---------------------------------------------------------------------------
 # 参数
 # ---------------------------------------------------------------------------
-def list_parameters(model: Any) -> "OrderedDict[str, dict[str, str]]":
+def list_parameters(model: Any) -> OrderedDict[str, dict[str, str]]:
     """返回全局参数表 ``name -> {value, descr}``。
 
     优先用 mph 的 ``Model.parameters`` 便捷属性；回退到 Java ``param()`` 序列。
@@ -189,6 +193,197 @@ def inventory(model: Any) -> dict[str, list[str]]:
             if seq is not None:
                 inv[f"{c}.{accessor}"] = _tags(seq)
     return inv
+
+
+# ---------------------------------------------------------------------------
+# 节点级状态 dump（建模试错的第一诊断入口）
+# ---------------------------------------------------------------------------
+#: 路径段语法：``name`` 或 ``name(arg)``；arg 恒以字符串传入（tag/选择名）。
+_PATH_SEG = re.compile(r"^([A-Za-z_]\w*)(?:\(([^)]*)\))?$")
+
+
+def resolve_path(model: Any, path: str) -> Any:
+    """按点分路径从 Java model 定位任意节点。
+
+    路径段语法：``accessor`` 或 ``accessor(tag)``，逐段调用。无参段对可调用对象
+    做无参调用（如 ``selection``），否则取属性值。示例::
+
+        component(comp1).physics(acpr).feature(bpf1)
+        result(pg_field) / component(comp1).selection(sel_arc)
+
+    Raises:
+        ValueError: 路径段语法非法。
+        AttributeError: 某段在上一步对象上不存在。
+    """
+    obj = _jmodel(model)
+    for part in (p.strip() for p in path.split(".")):
+        if not part:
+            continue
+        m = _PATH_SEG.match(part)
+        if m is None:
+            raise ValueError(f"路径段语法非法：{part!r}（应为 name 或 name(arg)）")
+        name, arg = m.group(1), (m.group(2) or "").strip()
+        fn = getattr(obj, name, None)
+        if fn is None:
+            raise AttributeError(f"路径段 {part!r}：对象无属性 '{name}'")
+        if arg:
+            obj = fn(arg)
+        elif callable(fn):
+            obj = fn()
+        else:
+            obj = fn
+    return obj
+
+
+def _longest_allowed(node: Any, prop: str, cap: int = 12) -> list[str] | None:
+    """读枚举属性的允许值列表；非枚举/超长返回 None（避免 dump 爆炸）。"""
+    allowed = _call_if(node, "getAllowedPropertyValues", prop, default=None)
+    if allowed is None:
+        return None
+    vals = [str(a) for a in allowed]
+    return vals if len(vals) <= cap else None
+
+
+def dump_node(node: Any, *, include_methods: bool = False) -> dict[str, Any]:
+    """dump 任意活体节点的状态：类型/标签/属性当前值/枚举允许值/选择实体数。
+
+    与 :func:`introspect`（列方法签名＝活体 javadoc）互补：本函数回答
+    “这个节点**现在**是什么类型、每个属性设成了什么、还能设成什么、选择集里有几个实体”。
+    全部防御式读取，单点失败降级为占位符。
+    """
+    info: dict[str, Any] = {
+        "class": str(_call_if(_call_if(node, "getClass", default=None), "getName", default="") or ""),
+        "type": str(_call_if(node, "getType", default="") or _call_if(node, "type", default="") or ""),
+        "label": str(_call_if(node, "label", default="") or ""),
+    }
+    tags = _tags(node)
+    if tags:
+        info["tags"] = tags
+
+    props: list[dict[str, Any]] = []
+    for p in _str_list(_call_if(node, "properties", default=[])):
+        row: dict[str, Any] = {"name": p, "value": _call_if(node, "getString", p, default=None)}
+        allowed = _longest_allowed(node, p)
+        if allowed:
+            row["allowed"] = allowed
+        props.append(row)
+    info["properties"] = props
+
+    sel = _call_if(node, "selection", default=None)
+    if sel is not None:
+        sinfo: dict[str, Any] = {}
+        for dim in (0, 1, 2, 3):
+            ents = _safe(sel.entities, dim, default=None)
+            if ents is not None:
+                sinfo[f"dim{dim}"] = len(ents)
+        stags = _tags(sel)
+        if stags:
+            sinfo["tags"] = stags
+        if sinfo:
+            info["selection"] = sinfo
+
+    if include_methods:
+        info["methods"] = introspect(node)["methods"]
+    return info
+
+
+def format_node_dump(info: dict[str, Any], *, path: str = "") -> str:
+    """把 :func:`dump_node` 的结果格式化为可读文本。"""
+    head = f"node: {path}" if path else "node"
+    lines = [head, f"  class: {info.get('class') or '?'}"]
+    typ, label = info.get("type") or "", info.get("label") or ""
+    if typ or label:
+        lines.append(f"  type : {typ}" + (f"  [{label}]" if label and label != typ else ""))
+    if info.get("tags"):
+        lines.append(f"  tags : {info['tags']}")
+    props = info.get("properties") or []
+    lines.append(f"  properties: ({len(props)})")
+    for row in props:
+        line = f"    - {row['name']} = {row['value']!r}"
+        if row.get("allowed"):
+            line += f"   allowed: {'|'.join(row['allowed'])}"
+        lines.append(line)
+    if info.get("selection"):
+        sel = info["selection"]
+        dims = " ".join(f"{k}={v}" for k, v in sel.items() if k != "tags")
+        lines.append(f"  selection: {dims or '-'}" + (f"  tags={sel['tags']}" if sel.get("tags") else ""))
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 通用节点属性 setter（与 resolve_path/dump_node 对称的写入端）
+# ---------------------------------------------------------------------------
+def _coerce_value(raw: str) -> Any:
+    """把 CLI 传入的字符串值转成 Java ``set`` 友好的类型。
+
+    整数值用 ``jpype.JInt`` 包裹——COMSOL 的 ``set(String, int)`` 重载在 JPype 下
+    传 Python int 可能因重载歧义失败（如 Box 选择的 ``entitydim``）；其余一律按
+    字符串传入（COMSOL 属性 setter 对 double/枚举/on-off 都接受字符串形态）。
+    """
+    try:
+        iv = int(raw)
+    except ValueError:
+        return raw
+    try:
+        import jpype
+
+        return jpype.JInt(iv)
+    except Exception:  # noqa: BLE001 - 无 JPype（测试桩）时退回原字符串
+        return raw
+
+
+@dataclass
+class SetPropsResult:
+    """:func:`set_node_props` 的结果：逐条成功/失败汇总（失败不中断其余条目）。"""
+
+    path: str
+    node_class: str = ""
+    ok: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
+
+    @property
+    def all_ok(self) -> bool:
+        return not self.failed
+
+    def report(self) -> str:
+        lines = [f"node set: {self.path}" + (f"  ({self.node_class})" if self.node_class else "")]
+        lines += [f"  ok   : {k}" for k in self.ok]
+        lines += [f"  FAIL : {f}" for f in self.failed]
+        lines.append(f"  => {len(self.ok)} ok, {len(self.failed)} failed")
+        return "\n".join(lines)
+
+
+def set_node_props(model: Any, path: str, pairs: list[str]) -> SetPropsResult:
+    """按路径定位节点后逐条 ``set(key, value)``（``pairs`` 形如 ``["k=v", ...]``）。
+
+    与 :func:`resolve_path`/:func:`dump_node` 对称的**写入端**：让"改一个属性"零自定义
+    代码。单条失败记录后继续（汇总返回），绝不因一个坏属性中断整批设置。
+
+    Raises:
+        ValueError: ``pairs`` 为空，或某条缺少 ``=`` 分隔符。
+        AttributeError: 路径无法定位（透传 :func:`resolve_path` 的异常）。
+    """
+    if not pairs:
+        raise ValueError("set_node_props：至少需要一条 key=value")
+    parsed: list[tuple[str, str]] = []
+    for kv in pairs:
+        k, sep, v = kv.partition("=")
+        if not sep or not k.strip():
+            raise ValueError(f"--set 参数应为 key=value 形态：{kv!r}")
+        parsed.append((k.strip(), v.strip()))
+
+    node = resolve_path(model, path)
+    res = SetPropsResult(
+        path=path,
+        node_class=str(_call_if(_call_if(node, "getClass", default=None), "getName", default="") or ""),
+    )
+    for k, v in parsed:
+        try:
+            node.set(k, _coerce_value(v))
+            res.ok.append(f"{k}={v}")
+        except Exception as e:  # noqa: BLE001 - 单条失败汇总，不中断
+            res.failed.append(f"{k}={v} :: {type(e).__name__}: {e}")
+    return res
 
 
 # ---------------------------------------------------------------------------

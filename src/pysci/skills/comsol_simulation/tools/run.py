@@ -167,6 +167,39 @@ def _run_study_java(jm: Any, study: str) -> None:
         raise SolveError(f"无法运行 study/sol '{study}': {e}") from e
 
 
+def _rebind_datasets(model: Any) -> list[str]:
+    """求解成功后把全部结果绘图组重绑到首个 dataset。
+
+    COMSOL 重求解（尤其 clear 后）会使绘图组与数据集解绑，导致导出空白 PNG——
+    这是反复踩过的坑，故改为工具默认行为。防御式：无 result/dataset 节点或单组
+    绑定失败都静默跳过，绝不影响已成功的求解。
+
+    Returns:
+        实际重绑的绘图组 tag 列表。
+    """
+    rebound: list[str] = []
+    jm = _jmodel(model)
+    result = _safe(getattr(jm, "result", None), default=None) if hasattr(jm, "result") else None
+    if result is None:
+        return rebound
+    dsets = _safe(lambda: [str(t) for t in (result.dataset().tags() or [])], default=[])
+    if not dsets:
+        return rebound
+    dset = dsets[0]
+    for pg in _safe(lambda: [str(t) for t in (result.tags() or [])], default=[]):
+        # 取具体绘图组须用 jm.result(pg)：Results 序列节点本身不可按 tag 调用
+        # （result 已是 jm.result() 的返回值，result(pg) 在真实 COMSOL 会抛异常）。
+        node = _safe(jm.result, pg, default=None)
+        if node is None:
+            continue
+        _safe(node.set, "data", dset)
+        # set() 正常返回 None；用 getString 反验是否真绑上
+        bound = _safe(node.getString, "data", default=None)
+        if bound is not None and str(bound) == dset:
+            rebound.append(pg)
+    return rebound
+
+
 def solve(model: Any, study: str | None = None, *, clear: bool = False) -> SolveResult:
     """求解模型（默认 study）。捕获耗时、异常链、日志尾部与 problems。
 
@@ -174,6 +207,9 @@ def solve(model: Any, study: str | None = None, *, clear: bool = False) -> Solve
         model: mph.Model（或裸 Java model）。
         study: study/solver tag（如 "std1"）；None → 用 mph 默认（model.solve() 求解全部）。
         clear: 求解前是否 ``model.clear()``（清旧解，参数扫描重跑时常用）。
+
+    求解成功后自动把全部绘图组重绑到首个 dataset（见 :func:`_rebind_datasets`），
+    从源头消除"重求解后导出空白"。
     """
     t0 = time.time()
     handler, originals = _capture_logs()
@@ -207,6 +243,10 @@ def solve(model: Any, study: str | None = None, *, clear: bool = False) -> Solve
         _restore_logs(handler, originals)
 
     problems = _scan_problems(model) if ok else []
+    if ok:
+        rebound = _rebind_datasets(model)
+        if rebound:
+            log_tail = (log_tail + "\n" if log_tail else "") + f"[rebind] data -> {rebound}"
     return SolveResult(
         ok=ok, elapsed=elapsed, study=study, error=error, problems=problems, log_tail=log_tail
     )

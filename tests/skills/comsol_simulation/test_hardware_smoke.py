@@ -17,8 +17,10 @@ from pysci.skills.comsol_simulation.tools import (  # noqa: E402
     build,
     export,
     inspect,
-    postprocess as pp,
     run,
+)
+from pysci.skills.comsol_simulation.tools import (
+    postprocess as pp,
 )
 
 pytestmark = [pytest.mark.hardware, pytest.mark.slow]

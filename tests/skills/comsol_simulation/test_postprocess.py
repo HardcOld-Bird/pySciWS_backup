@@ -1,4 +1,5 @@
-"""postprocess 纯 Python 单测：COMSOL CSV 解析、收敛阶、参考解比对、守恒、传递函数、解析解、场验证器。
+"""postprocess 纯 Python 单测：COMSOL CSV 解析、收敛阶、参考解比对、守恒、传递函数、解析解、场验证器、
+渲染栅格自检（轴框检测/空白度量）。
 
 不依赖 pyvista/VTK/COMSOL —— 只测数值与解析逻辑（用假 grid 走 _scalar_array 的 getattr 路径）。
 渲染 / 网格质量 / 剖切 / 探针在 test_postprocess_vista.py（需 pyvista）。
@@ -189,6 +190,73 @@ def _fake_grid(point_arrays):
     return SimpleNamespace(
         point_data=point_arrays, cell_data={}, array_names=list(point_arrays)
     )
+
+
+# ---------------------------------------------------------------------------
+# 渲染栅格自检（轴框检测 + 空白度量）
+# ---------------------------------------------------------------------------
+def _synth_render(blank: bool, *, w: int = 260, h: int = 200, box=(40, 30, 219, 179)):
+    """合成仿 COMSOL 渲染灰度图：白底 + 轴框 + 右侧 colorbar 竖条；内部空白或彩色。"""
+    rng = np.random.default_rng(0)
+    g = np.full((h, w), 255.0)
+    x0, y0, x1, y1 = box
+    g[y0, x0 : x1 + 1] = 0.0
+    g[y1, x0 : x1 + 1] = 0.0
+    g[y0 : y1 + 1, x0] = 0.0
+    g[y0 : y1 + 1, x1] = 0.0
+    # colorbar：右侧窄竖条（竖直边暗、水平帽短），干扰帧检测的对照物
+    g[40:170, 235] = 0.0
+    g[40:170, 245] = 0.0
+    g[40, 235:246] = 0.0
+    g[169, 235:246] = 0.0
+    if blank:
+        pass  # 内部纯白
+    else:
+        g[y0 + 1 : y1, x0 + 1 : x1] = rng.uniform(120, 255, (y1 - y0 - 1, x1 - x0 - 1))
+    return g, box
+
+
+def test_detect_frame_box_array_finds_axis_frame():
+    g, box = _synth_render(blank=True)
+    assert pp.detect_frame_box_array(g) == box  # colorbar 竖边不被误认为轴框左右界
+
+
+def test_detect_frame_box_array_no_frame_returns_none():
+    g = np.full((100, 100), 255.0)  # 无轴框
+    assert pp.detect_frame_box_array(g) is None
+
+
+def test_interior_blank_metrics_blank_vs_field():
+    g_blank, box = _synth_render(blank=True)
+    m_blank = pp.interior_blank_metrics(g_blank, box)
+    assert m_blank["blank"] is True and m_blank["unique_q"] <= 4
+    g_field, box2 = _synth_render(blank=False)
+    m_field = pp.interior_blank_metrics(g_field, box2)
+    assert m_field["blank"] is False and m_field["std"] > 8.0
+
+
+def test_read_gray_png_and_detect_frame_box_file(tmp_path):
+    from matplotlib.image import imsave
+
+    g, box = _synth_render(blank=True)
+    p = tmp_path / "render.png"
+    imsave(p, g.astype(np.uint8))
+    gray = pp.read_gray_png(p)
+    assert gray is not None and gray.shape == g.shape
+    assert pp.detect_frame_box(p) == box
+    assert pp.interior_blank_metrics(gray, box)["blank"] is True
+
+
+def test_comsol_auto_window_width_limited():
+    # 几何 bbox 宽>高（半圆），轴框为竖长（portrait）→ 宽受限：x 贴几何 bbox，y 居中展开
+    bbox = (-0.117, 0.683, -0.057, 0.400)   # gw=0.80, gh=0.457
+    crop = (48, 6, 807, 877)                # w_px=759, h_px=871
+    x0, x1, y0, y1 = pp.comsol_auto_window(bbox, crop)
+    assert x0 == pytest.approx(-0.117, abs=1e-9) and x1 == pytest.approx(0.683, abs=1e-9)
+    s = 0.80 / 759
+    cy = (-0.057 + 0.400) / 2
+    assert y0 == pytest.approx(cy - 871 * s / 2) and y1 == pytest.approx(cy + 871 * s / 2)
+    assert (y1 - y0) > (x1 - x0)  # portrait 框 → y 范围被拉大
 
 
 def test_field_stats():
