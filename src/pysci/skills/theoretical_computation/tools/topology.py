@@ -434,15 +434,22 @@ def _numerical_hessian(
 ) -> NDArray:
     """数值计算 Hessian 矩阵（中心差分）。"""
     hessian = np.zeros((ndim, ndim))
-    f0 = float(np.real(func(*point)))
 
     for i in range(ndim):
         for j in range(i, ndim):
             # 四点中心差分
-            p_pp = point.copy(); p_pp[i] += step; p_pp[j] += step
-            p_pm = point.copy(); p_pm[i] += step; p_pm[j] -= step
-            p_mp = point.copy(); p_mp[i] -= step; p_mp[j] += step
-            p_mm = point.copy(); p_mm[i] -= step; p_mm[j] -= step
+            p_pp = point.copy()
+            p_pp[i] += step
+            p_pp[j] += step
+            p_pm = point.copy()
+            p_pm[i] += step
+            p_pm[j] -= step
+            p_mp = point.copy()
+            p_mp[i] -= step
+            p_mp[j] += step
+            p_mm = point.copy()
+            p_mm[i] -= step
+            p_mm[j] -= step
 
             f_pp = float(np.real(func(*p_pp)))
             f_pm = float(np.real(func(*p_pm)))

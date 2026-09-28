@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +43,7 @@ def ensure_session(research: str, slug: str) -> Path:
     if not notes_path.exists():
         notes_path.write_text(
             f"# {research}/{slug} 计算日志\n\n"
-            f"创建时间：{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n\n---\n\n",
+            f"创建时间：{datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}\n\n---\n\n",
             encoding="utf-8",
         )
 
@@ -122,7 +122,7 @@ def write_log(session_dir: Path, entry: str) -> None:
         entry: 日志内容（会自动添加时间戳前缀）。
     """
     notes_path = session_dir / "notes.md"
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     with notes_path.open("a", encoding="utf-8") as f:
         f.write(f"## {timestamp}\n\n{entry}\n\n---\n\n")

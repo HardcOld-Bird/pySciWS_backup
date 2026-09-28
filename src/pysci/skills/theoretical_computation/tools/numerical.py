@@ -297,3 +297,54 @@ def adaptive_sample_1d(
                 x_refine.append(x_extra)
 
     return np.unique(np.concatenate(x_refine))
+
+
+def adaptive_sample(
+    x_range: tuple[float, float],
+    *,
+    singularities: Sequence[float] = (),
+    base_resolution: int = 200,
+    approach_points: int = 10,
+    approach_ratio: float = 1e-3,
+) -> NDArray[np.floating]:
+    """奇点感知的一维自适应采样（viz_pitfalls §2：奇点邻域加密但不过采样）。
+
+    与 :func:`adaptive_sample_1d`（梯度驱动，需调用 func）互补：本函数按**已知奇点位置**
+    在邻域用几何级数加密——最近点距奇点 ``approach_ratio * 区间尺度``，向外几何展开到
+    ``min(半区间, 到边界距离)``，且**不在奇点本身采样**（避免 inf/nan）。其余区域均匀
+    ``base_resolution``。这样既解析奇点附近的快速变化，又不因全局过密把数值噪声放大成假结构。
+
+    Args:
+        x_range: (a, b) 采样区间。
+        singularities: 已知奇点位置（仅区间内部的参与邻域加密）。
+        base_resolution: 基础均匀采样点数。
+        approach_points: 每个奇点每侧的几何加密点数。
+        approach_ratio: 最近采样点到奇点的距离占区间尺度的比例。
+
+    Returns:
+        升序去重的采样点数组（不含奇点本身）。
+    """
+    a, b = float(x_range[0]), float(x_range[1])
+    if b <= a:
+        raise ValueError(f"x_range 须升序且非退化：{x_range}")
+    span = b - a
+    gap = approach_ratio * span
+    pts: list[NDArray] = [np.linspace(a, b, base_resolution)]
+    for s in sorted(float(v) for v in singularities):
+        if not (a < s < b):
+            continue
+        for sign in (-1.0, 1.0):
+            reach = min(span / 2.0, (s - a) if sign < 0 else (b - s))
+            if reach <= gap:
+                continue
+            dists = np.geomspace(gap, reach, approach_points)
+            cand = s + sign * dists
+            pts.append(cand[(cand >= a) & (cand <= b)])
+    out = np.unique(np.concatenate(pts))
+    # 数值安全：剔除恰好落在奇点上的点
+    if singularities:
+        keep = np.ones(out.shape, dtype=bool)
+        for s in singularities:
+            keep &= np.abs(out - float(s)) > gap * 1e-9
+        out = out[keep]
+    return out

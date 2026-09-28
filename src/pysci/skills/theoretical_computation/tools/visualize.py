@@ -164,6 +164,71 @@ def quick_plot_2d(
     return fig
 
 
+# ---------------------------------------------------------------------------
+# 发散安全绘图（viz_pitfalls §1：nan 遮断优于 clip 饱和）
+# ---------------------------------------------------------------------------
+def mask_divergent(y: NDArray, ylim: tuple[float, float]) -> NDArray[np.floating]:
+    """把超出显示窗口或非有限的采样点置 nan（matplotlib 自然断线）。
+
+    奇点邻域发散的曲线不要用 clip 饱和到轴限——饱和段会画成贴轴的假平台，被误读为
+    物理特征。正确做法是超窗置 nan 让线断开（viz_pitfalls §1）。复数输入取实部。
+
+    Args:
+        y: 一维数组（实值；复数取实部）。
+        ylim: (lo, hi) 显示窗口。
+
+    Returns:
+        与 y 同形的数组，超窗/非有限位置为 nan。
+    """
+    arr = np.asarray(y)
+    arr = np.real(arr) if np.iscomplexobj(arr) else arr
+    arr = arr.astype(float)
+    lo, hi = float(ylim[0]), float(ylim[1])
+    return np.where(np.isfinite(arr) & (arr >= lo) & (arr <= hi), arr, np.nan)
+
+
+def quick_plot_divergent(
+    x: NDArray,
+    y: NDArray,
+    *,
+    ylim: tuple[float, float],
+    labels: tuple[str, str] = ("x", "y"),
+    title: str = "",
+    figsize: tuple[float, float] = (10, 6),
+    out_path: Path | None = None,
+    **plot_kw: Any,
+) -> Figure:
+    """发散安全的一维绘图：对 y 自动 nan 遮断（超窗断线）后绘制，并锁定 ylim。
+
+    适用于 EP/BIC/CPA 等奇点邻域发散的物理量。采样点建议配合 numerical.adaptive_sample
+    （奇点邻域加密但不过采样）使用。
+
+    Args:
+        x: 参数数组。
+        y: 值数组（可含发散/inf/nan）。
+        ylim: 显示窗口；超出部分断线。
+        labels: (x_label, y_label)。
+        title: 图标题。
+        figsize: 图像尺寸。
+        out_path: 若指定，自动导出 PNG。
+        **plot_kw: 透传 ax.plot（如 color/linewidth/label）。
+
+    Returns:
+        matplotlib Figure。
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.plot(x, mask_divergent(y, ylim), linewidth=2, **plot_kw)
+    ax.set_ylim(*ylim)
+    ax.set_xlabel(labels[0], fontsize=12)
+    ax.set_ylabel(labels[1], fontsize=12)
+    if title:
+        ax.set_title(title, fontsize=13)
+    fig.tight_layout()
+    if out_path:
+        export_exploration(fig, out_path, close=False)
+    return fig
+
+
 def quick_plot_complex(
     x: NDArray,
     y: NDArray[np.complexfloating] | list[NDArray[np.complexfloating]],

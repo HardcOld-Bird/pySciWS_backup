@@ -16,7 +16,6 @@ run 会执行计算脚本并将产物导出到 session 数据目录；plot 快�
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import subprocess
 import sys
 import textwrap
@@ -181,7 +180,7 @@ def cmd_new(args: argparse.Namespace) -> int:
     print("\n下一步：")
     print(f"  1) 编辑 {script_path}（填入物理模型与计算逻辑）")
     print(f"  2) uv run pysci-theory run '{script_path}' --session {slug}")
-    print(f"  3) Read 产出的 plots/*.png 做视觉校验")
+    print("  3) Read 产出的 plots/*.png 做视觉校验")
     return 0
 
 
