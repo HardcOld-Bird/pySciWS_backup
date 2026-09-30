@@ -1,0 +1,3 @@
+# COMSOL MCP 部署脚本（setup_comsol_mcp.ps1）的运行日志为可再生产物，
+# 记录了社区 MCP 的一次性安装过程，无需入版本控制。
+*.log
