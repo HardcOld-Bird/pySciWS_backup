@@ -11,12 +11,13 @@ COMSOL 导出节点的属性名因版本/类型而异，故本模块对关键 se
 
 from __future__ import annotations
 
-import itertools
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from .config import settings
 from .inspect import _call_if, _jmodel, _safe, _tags
@@ -26,13 +27,6 @@ from .postprocess import (
     interior_blank_metrics,
     read_gray_png,
 )
-
-# 导出节点 tag 计数器（COMSOL tag 须为合法标识符，用前缀 + 递增序号）
-_tag_counter = itertools.count(1)
-
-
-def _new_tag(prefix: str) -> str:
-    return f"{prefix}{next(_tag_counter)}"
 
 
 @dataclass
@@ -76,6 +70,29 @@ def _create_export(model: Any, tag: str, kind: str) -> Any:
     return exp.get(tag) if hasattr(exp, "get") else _safe(exp, tag, default=None)
 
 
+def _existing_export_tags(model: Any) -> set[str]:
+    """模型中已存在的 ``result().export()`` 节点 tag 集合（防御式，失败返空）。"""
+    try:
+        return {str(t) for t in _tags(_result_export(model))}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _free_export_tag(model: Any, prefix: str) -> str:
+    """生成一个在该模型 export 序列中**尚未占用**的 tag（``prefix`` + 最小空闲序号）。
+
+    COMSOL tag 须为合法标识符。不能用模块级递增计数器：加载已含导出节点（如预求解
+    模型自带的 img2/img3）的模型时，裸计数器会与之碰撞并抛
+    ``FlException: 已存在具有给定名称的对象``。这里查询模型现有 tag 并跳过占用者，
+    对「同一会话多次导出」与「模型自带导出节点」两种情况都安全。
+    """
+    used = _existing_export_tags(model)
+    n = 1
+    while f"{prefix}{n}" in used:
+        n += 1
+    return f"{prefix}{n}"
+
+
 def _apply_color_range(pg: Any, color_range: tuple[float, float]) -> list[str]:
     """对绘图组内全部 Surface 类特征统一色标（rangecoloractive/min/max）。
 
@@ -107,6 +124,25 @@ def _apply_polar_rmax(pg: Any, polar_rmax: tuple[float, float]) -> list[str]:
         if _set_first_ok(pg, (prop,), val) is not None:
             applied.append(f"{prop}={val}")
     return applied
+
+
+def _json_default(o: Any) -> Any:
+    """``json.dumps(default=...)`` 兜底：把无法原生序列化的对象降级为纯 Python。
+
+    覆盖三类：
+    - ``np.ndarray`` → ``tolist()``；``np.generic``（``np.int*``/``np.float*``/``np.bool_``）
+      → ``item()``：sidecar 的 ``crop_box_px`` / ``interior`` 度量常含这些类型。
+    - 其余未知类型（如**未经 ``str()`` 归一的 JPype ``java.lang.String`` 代理**——
+      直接取自 ``result().tags()`` 的 ``plotgroup`` 即属此类）→ ``str(o)`` 兜底。
+
+    sidecar 是 best-effort 元数据，绝不因某个值不可序列化而抛 ``TypeError`` 令整份
+    sidecar 丢失；故末档降级为 ``str`` 而非抛错。
+    """
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    if isinstance(o, np.generic):
+        return o.item()
+    return str(o)
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +188,7 @@ def export_image(
     """
     out = Path(out_png)
     out.parent.mkdir(parents=True, exist_ok=True)
-    etag = tag or _new_tag("img")
+    etag = tag or _free_export_tag(model, "img")
     warnings: list[str] = []
     applied_extent: dict[str, str] = {}
     applied_clean: list[str] = []
@@ -234,7 +270,7 @@ def export_image(
         sc = out.with_name(out.stem + ".sidecar.json")
         payload = {
             "png": str(out),
-            "plotgroup": plotgroup,
+            "plotgroup": str(plotgroup),
             "size_px": ([gray.shape[1], gray.shape[0]] if gray is not None else None),
             "extent_requested": list(extent) if extent else None,
             "extent_applied": applied_extent,
@@ -246,9 +282,12 @@ def export_image(
             "interior": metrics,
         }
         try:
-            sc.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+            sc.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default),
+                encoding="utf-8",
+            )
         except Exception as e:  # noqa: BLE001
-            warnings.append(f"sidecar 写入失败：{type(e).__name__}")
+            warnings.append(f"sidecar 写入失败：{type(e).__name__}: {e}")
     return ExportResult(True, "image", out, warnings=warnings)
 
 
@@ -302,7 +341,7 @@ def export_data(
     ds = _resolve_dataset(model, source)
     if ds is None:
         return ExportResult(False, "data", None, f"无法解析数据集（source={source}）")
-    etag = tag or _new_tag("data")
+    etag = tag or _free_export_tag(model, "data")
     try:
         node = _create_export(model, etag, "Data")
         if node is None:

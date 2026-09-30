@@ -3,8 +3,8 @@
 三种使用形态：
 1. **standalone**（默认）：``mph.start()`` 在进程内启动一个独立 COMSOL 会话（经 JPype
    拉起 COMSOL 自带 JRE）。用完即 ``disconnect()`` 释放内存——适配单机 license + 有限空闲内存。
-2. **server**：先拉起常驻 ``comsolmphserver.exe``，再 ``mph.connect()`` 连上。省去每次
-   10–30s 冷启动，适合密集迭代；会话结束显式关闭 server 进程，避免僵尸常驻吃内存。
+2. **server**：先拉起常驻 ``comsolmphserver.exe``，再 ``mph.Client(port=...)`` 连上。省去
+   每次 10–30s 冷启动，适合密集迭代；会话结束显式关闭 server 进程，避免僵尸常驻吃内存。
 3. **connect**：连到一个已由外部启动的 server（不管理其生命周期）。
 
 会话上下文管理器 :func:`session` 负责异常安全的 teardown。
@@ -181,10 +181,19 @@ def launch_server(
 
 
 def connect(host: str = "127.0.0.1", port: int = 2036) -> Any:
-    """连接到一个已运行的 COMSOL server，返回 ``mph.Client``。"""
+    """连接到一个已运行的 COMSOL server，返回 ``mph.Client``。
+
+    mph 1.4.0 无模块级 ``mph.connect``；连接外部 server 的正确入口是
+    ``mph.Client(host=..., port=...)``——当 ``port`` 非空时 ``Client`` 判定为非 standalone
+    并调用实例方法 ``self.connect(port, host)`` 挂到既有 server。
+
+    .. warning:: mph 限制「单 Python 进程仅一个 Client」：若本进程已 ``mph.start()``
+       启过 JVM，再实例化 ``Client`` 会抛 ``NotImplementedError``。故 connect 路径下
+       绝不可先起 standalone。
+    """
     mph = _require_mph()
     try:
-        return mph.connect(host=host, port=port)
+        return mph.Client(host=host, port=port)
     except Exception as e:  # noqa: BLE001
         raise SessionError(f"连接 COMSOL server {host}:{port} 失败：{e!r}") from e
 

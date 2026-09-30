@@ -1,0 +1,33 @@
+{
+  "_README": [
+    "模板参考：把社区 comsol MCP 注册进 Qoder。差异化能力走本项目 pysci-simulation CLI（不再是 MCP）。",
+    "用户级配置文件： C:/Users/antar/.qoder-cn/shared_client/mcp.json （与现有 arxiv 等同处）。",
+    "把下面 mcpServers 里的 comsol 条目复制进去即可（保留现有的其它服务器）。",
+    "占位符 <...> 需替换为真实绝对路径；运行 setup_comsol_mcp.ps1 结尾会打印已解析好的 JSON，直接粘贴更省事。",
+    "JSON 不支持注释：粘贴到 mcp.json 时请删除本 _README 与所有 _note_* 键。",
+    "退役说明：pysci-comsol-extras 伴随 MCP 已废弃（FastMCP 运行时下 mph.Client 引导 COMSOL 会冻结）；",
+    "其全部差异化能力（出版级导出精修 / pyvista 渲染 / 物理校验 / 节点自省 / GUI→Java / 配方 / 常驻会话）",
+    "改由 pysci-simulation CLI 承接（纯脚本主线程路径，实机验证可用）。若 Qoder 里仍注册着 extras，请删除该条目。"
+  ],
+  "mcpServers": {
+    "comsol": {
+      "_note_command": "社区仓库 venv 里的 comsol-mcp 控制台脚本（由 setup 脚本 -e 安装生成）；等价于 cd <repo> && python -m src.server",
+      "command": "<REPO_DIR>\\.venv\\Scripts\\comsol-mcp.exe",
+      "args": [],
+      "env": {
+        "_note_env": "COMSOL_MCP_VERSION 选择后端版本；stdio 下服务器启动即抢占用 license（见 setup 脚本 CRITICAL FINDING）",
+        "COMSOL_MCP_VERSION": "6.4"
+      }
+    },
+    "comsol__shared_session_variant": {
+      "_note": "可选路径 B（单 license 共享常驻 server）：需先 -ApplySharedSessionPatch 打补丁，并由 `pysci-simulation server start`（CLI，起 comsolmphserver 于 port=2036）拉起常驻 server，社区 MCP 再 attach 同一端口。把本块替换上面的 comsol 条目。默认用路径 A（社区 MCP 与 CLI  sequentially 各起各的 standalone，单 license 下切勿同时占用）。",
+      "command": "<REPO_DIR>\\.venv\\Scripts\\comsol-mcp.exe",
+      "args": [],
+      "env": {
+        "COMSOL_MCP_VERSION": "6.4",
+        "COMSOL_MCP_CONNECT_PORT": "2036",
+        "COMSOL_MCP_CONNECT_HOST": "localhost"
+      }
+    }
+  }
+}
