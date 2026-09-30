@@ -1,0 +1,2 @@
+# 占位：workflows/ 存 ComfyUI API 格式工作流配方（{node_id:{class_type,inputs}} 的 JSON）。
+# Phase 2 由 `pysci-imagine run --workflow <name>.json` 注参复用；`workflows` 列出。

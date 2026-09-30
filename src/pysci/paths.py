@@ -70,6 +70,13 @@ PLOTTING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "scientific_plotting"
 #: 具体研究线的计算产物落在各研究资产目录 ``data/research/<n>_<name>/theory/<slug>/``。
 THEORY_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "theoretical_computation"
 
+#: AI 绘图数据区（assets/gallery/workflows/prompts/cache/runs + LEDGER.md）。
+#: 与代码树 ``src/pysci/skills/ai_drawing/`` 镜像：``data/skills/ai_drawing/``。
+#: 注意：本目录只放技能级资产（生成图入库、审美范本画廊、ComfyUI 工作流配方、prompt 配方、
+#: 服务器状态与缓存）；具体研究线的效果图（封面 / graphical abstract / 示意图）落在
+#: 各研究资产目录 ``data/research/<n>_<name>/article/artwork/``。
+AI_DRAWING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "ai_drawing"
+
 
 def research_asset_dir(name: str) -> Path:
     """解析某条研究线的资产目录。
@@ -127,6 +134,21 @@ def research_theory_dir(name: str, *, slug: str | None = None) -> Path:
         slug: 可选的计算 slug；None → 返回 theory 根。
     """
     base = research_asset_dir(name) / "theory"
+    return base / slug if slug else base
+
+
+def research_artwork_dir(name: str, *, slug: str | None = None) -> Path:
+    """解析某研究线效果图（AI 绘图）产物目录。
+
+    规范位置：``data/research/<n>_<name>/article/artwork[/<slug>]``。技能级资产
+    （生成图入库 / 审美范本 / 工作流配方）在 :data:`AI_DRAWING_ROOT`，具体研究线的
+    封面图 / graphical abstract / 示意图等效果图一律落在本目录。
+
+    Args:
+        name: 研究线名称（不含数字前缀），如 ``"gain_ep"``。
+        slug: 可选的效果图 slug；None → 返回 artwork 根。
+    """
+    base = research_asset_dir(name) / "article" / "artwork"
     return base / slug if slug else base
 
 

@@ -1,0 +1,3 @@
+# 占位：gallery/ 存精选审美范本（AI 出图里设计感强、值得复用的）。
+# 由 `pysci-imagine gallery --add <img> --slug S` 精选入库；`gallery --sheet` 生成缩略图总览。
+# 请保持小体积（单文件 < 2MB），大位图放 assets/（已 git-ignore）。

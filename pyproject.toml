@@ -55,10 +55,22 @@ dependencies = [
     # 理论计算 skill（src/pysci/skills/theoretical_computation/；数据：data/skills/theoretical_computation/）：
     # plotly 提供交互式 HTML 图表（参数空间探索时旋转/缩放/悬停），与 matplotlib 静态 PNG 互补。
     "plotly",
+    # AI 绘图 skill（src/pysci/skills/ai_drawing/；数据：data/skills/ai_drawing/）：
+    # pillow 用于生成图的简单后处理（裁剪/缩放/旋转/格式转换/拼合）与主色板抽取。
+    # 实际图像生成经无头 ComfyUI（外部 comfy-cli 安装，不进本依赖）调用云端 API（火山方舟/即梦）。
+    "pillow",
 ]
 
 # ------------------------------------------------------------
-# 控制台脚本：三个 skill 的统一 CLI 门面（均为 module:main 形态，main(argv=None)->int）。
+# 可选 extra：AI 绘图 skill 的 ComfyUI 客户端实时进度（WebSocket）。
+# 未安装时 comfy_client 自动回退到轮询 /history，功能不受影响（仅少了流式进度）。
+# ComfyUI 本体 + torch + 自定义节点由 comfy-cli 装在独立环境，绝不进 pysci 依赖。
+# ------------------------------------------------------------
+[project.optional-dependencies]
+comfy = ["websocket-client"]
+
+# ------------------------------------------------------------
+# 控制台脚本：各 skill 的统一 CLI 门面（均为 module:main 形态，main(argv=None)->int）。
 # 加前缀 pysci- 避免与全局工具重名；`uv sync` 后在 .venv/Scripts 生成 pysci-*.exe。
 # 等价兜底调用：`uv run python -m <入口模块>`（模块路径见各 SKILL.md 的 Invocation）。
 # ------------------------------------------------------------
@@ -68,6 +80,7 @@ pysci-compose = "pysci.skills.document_writing.tools.compose:main"
 pysci-simulation = "pysci.skills.comsol_simulation.tools.simulation:main"
 pysci-figures = "pysci.skills.scientific_plotting.tools.figures:main"
 pysci-theory = "pysci.skills.theoretical_computation.tools.theory:main"
+pysci-imagine = "pysci.skills.ai_drawing.tools.imagine:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra

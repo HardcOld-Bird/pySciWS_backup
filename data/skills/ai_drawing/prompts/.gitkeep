@@ -1,0 +1,2 @@
+# 占位：prompts/ 存科研审美 prompt 配方（封面 / graphical abstract / 示意图等）。
+# 配方以 .md / .txt 沉淀，供 `gen --prompt-file` 或人工复用；详见 references/prompting.md。
