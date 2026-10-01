@@ -43,7 +43,7 @@
     "pinned_commit_note": "等于 2026-10-01 时点的 upstream refs/heads/main（git ls-remote 核实），也正是本项目最初声明的 pin——当初选对了，只是镜像浅克隆够不着。",
     "clone_shape": "shallow / grafted，含 2 个 graft（0f6b2c58 与 99172f8f）；.git 仍 421MB，因定向 --depth 1 fetch 复用了已有 blob。",
     "tool_count": 103,
-    "tool_count_note": "src/ 下 @mcp.tool 计数（93 → 103，新增 electrochemistry 10 个，与 README 的 '100+' 相符）。Qoder 的 SERVER_METADATA.json 中 comsol 的 toolCount 仍是 93，说明它还在跑内存中的旧代码：升级后必须在 Qoder 里重启该 MCP，重启后应变为 103（现成的验证信号）。",
+    "tool_count_note": "src/ 下 @mcp.tool 计数（93 → 103，新增 electrochemistry 10 个，与 README 的 '100+' 相符）。SERVER_METADATA.json 的 toolCount 【确实是】有效的重载判据，但它只在 Qoder 真正换掉进程后才翻转：2026-10-01 实测 11:36:29 那次刷新仍写 93（当时问的是 08:36 启动的旧进程），直到 11:41:29 新进程冷启动后才写成 103——比窗口重载晚约 5 分钟，且期间留下了一个孤儿实例。更快的行为判据：comsol_status 从冷态返回 connected:true + standalone:true（旧 pin 惰性启动，空闲时必为 false）。",
     "pin_history": [
       {
         "commit": "0f6b2c588a08da5ac66915e4f1fce7c07966763e",
@@ -79,31 +79,39 @@
     "shared_session_patch_note": "false = 路径 A（顺序使用，当前默认）。补丁目标行 '        logger.info(f\"COMSOL pre-start: {session_manager.start()}\")' 在当前 pin 上【存在且逐字符匹配】；在 99172f8f 上【不存在】，故当时 -ApplySharedSessionPatch 必然走 else 分支报 'Expected pre-start line not found' 而静默不打补丁。若改为 true（脚本 -ApplySharedSessionPatch），须同时更新下方 registration.env 加入 COMSOL_MCP_CONNECT_PORT=2036，并先由 `pysci-simulation server start` 起 comsolmphserver。",
     "license_behavior": {
       "current_pin_stdio": "0f6b2c58 的 main() 在 transport==stdio 时先 session_manager.start() 再 mcp.run()：Qoder 一拉起该 MCP 就立刻启动一个 standalone COMSOL 并持有唯一 license，与当下是否在算无关。该 JVM 在 MCP 进程内，CLI 无法 attach；两个 COMSOL 客户端需要 2 个 license，我们只有 1 个。",
+      "in_process_jvm": "comsol_status 报 standalone:true → MPh 走 JPype 进程内 JVM，【没有】独立的 comsolmphserver.exe / java.exe 可看。因此『进程列表里看不到 COMSOL』不能推断 license 空闲；要看 comsol-mcp 的 python.exe 是否加载了 jvm.dll / _jpype.pyd（Get-Process -Id N | % { $_.Modules }）。-StatusOnly 已内置这项检查。",
+      "duplicate_instance_risk": "2026-10-01 实测：pre-start 把 MCP 握手拖长整个 COMSOL 冷启动（~30s），而 Qoder 在启动过程中重写了 shared_client\\mcp.json（其 extension\\local\\mcp.json 镜像带 userConfigMD5 变更探测器），触发重载并拉起第二个 comsol-mcp 而不回收第一个：11:41:00 与 11:41:33 各一个，两个都加载了 jvm.dll + _jpype.pyd、54 线程、各 ~320MB。shared_client\\projects 下只有一个项目目录，故不是多项目重复注册。清理靠完全退出 Qoder（窗口重载不够）。路径 C 因握手即时而从根上避开这个问题。",
       "operational_rule": "跑 simulation CLI（或开 COMSOL GUI）前，先在 Qoder 里停用 comsol MCP；CLI 侧用完执行 server stop。",
-      "escape_hatch_http": "路径 C：COMSOL_MCP_TRANSPORT=streamable-http（或 sse；【不是 http】，FastMCP 只认 stdio/sse/streamable-http）+ COMSOL_MCP_HOST/PORT（默认 127.0.0.1:8765），改为按 URL 注册 → 无线程读 stdin → COMSOL 惰性启动 → 空闲不占 license，是单 license 下的最优解。阻塞点：本机 mcp.json 仅有 command/args/env 型条目（arxiv、comsol），Qoder 是否支持 URL 型注册【未确认】，故未改注册方式。",
+      "escape_hatch_http": "路径 C：COMSOL_MCP_TRANSPORT=sse（或 streamable-http；【不是 http】，FastMCP 只认 stdio/sse/streamable-http）+ COMSOL_MCP_HOST/PORT（默认 127.0.0.1:8765），改为按 URL 注册 → 无线程读 stdin → COMSOL 惰性启动 → 空闲不占 license，是单 license 下的最优解。【阻塞点已解除】Qoder 支持 URL 型注册，2026-10-01 查证官方文档：IDE『Model Context Protocol』页（docs.qoder.com/zh/user-guide/chat/model-context-protocol）写明传输类型为 STDIO 或 SSE、URL 用于 SSE 或 Streamable HTTP，并注明 Streamable HTTP 按 SSE 同样方式配 URL、Qoder IDE 会自动识别；CLI MCP 参考页（docs.qoder.com/zh/cli/mcp-reference）列 type = sse / http / streamable-http / ws，字段 url + headers，通用可选字段含 timeout / trust / alwaysAllow / includeTools / disabled。mcp.json 形状：{ \"type\": \"sse\", \"url\": \"http://127.0.0.1:8765/sse\" }（端点须与 transport 对齐：sse→/sse，streamable-http→/mcp）。尚未实测；代价是得自己常驻服务端进程，且首次工具调用要付 ~30s JVM 冷启动（需调大 Request Timeout）。",
       "escape_hatch_shared": "路径 B：-ApplySharedSessionPatch + COMSOL_MCP_CONNECT_PORT=2036，让 MCP 与 CLI 共用同一个 comsolmphserver（一个 license 两个驱动）。代价：须先由 CLI 起常驻 server，否则 pre-connect 失败（非致命，之后手动 comsol_connect(port=2036)）。"
     },
     "rag": {
       "embedding_model": "all-MiniLM-L6-v2",
-      "source_pdf_dir": "D:\\XiGPrograms\\comsol\\6.4\\base\\doc\\pdf（52 个模块、109 个 tracked PDF）",
+      "source_pdf_dir": "D:\\XiGPrograms\\comsol\\6.4\\base\\doc\\pdf（实测 108 个 PDF，覆盖 52 个模块）",
       "db_dir": "<repo_dir>\\knowledge_base（上游默认；服务端按仓库相对路径读取，故不可外置）",
       "builder": "<repo_dir>\\scripts\\build_knowledge_base.py",
       "collection": "comsol_docs",
-      "state": "部分建成：3669 chunks / 4 个模块（ACDC_Module、Acoustics_Module、Battery_Design_Module、CAD_Import_Module）。2026-09-30 由安装脚本第 7/8 步以 -RagLimit 8 建立（只处理前 8 个 PDF），耗时 234.6s；phase0_run.log 记为 'RAG build exit code '（空值、非 0），但数据确实落盘。本项目最需要的 Acoustics_Module 已在其中。",
-      "state_gap": "其余 48 个模块（含 COMSOL_Multiphysics 核心手册 14 个 PDF）未索引，pdf_search 查不到。补全需去掉 -RagLimit 重建；按 8 PDF / 234s 外推约 50 分钟以上且 CPU 密集——按需再做，不要默认它是全的。",
+      "state": "全量建成：35923 chunks / 52 个模块 / 108 个 PDF（COMSOL_Multiphysics 核心手册、Acoustics_Module、RF_Module、Wave_Optics_Module、Structural_Mechanics_Module 等全部在内）。2026-10-01 11:51:17→12:18:46（约 27 分钟）由 build_knowledge_base.py 不带 --limit 重建；脚本自报 Chunks generated = Chunks added = Total in database = 35923，收尾自检 'electrostatic field' 命中 ACDC_Module(0.539)/MEMS_Module(0.537)。重建前已把旧库（3669 chunks / 47MB）备份到 data/skills/comsol_simulation/cache/kb_backup_pre_full_rebuild/（gitignored）。",
+      "state_history": "初版 2026-09-30 由安装脚本第 7/8 步以 -RagLimit 8 建立（3669 chunks / 4 个模块：ACDC、Acoustics、Battery_Design、CAD_Import，耗时 234.6s；phase0_run.log 记为 'RAG build exit code '——空值、非 0，但数据确实落盘）。安装脚本的 -RagLimit 默认为 0，即【默认就是全量】，当初的 8 是显式传入的；但该步会先 clear() 再重建，故重跑安装脚本时若不传 -SkipRag 就要再花 27 分钟（脚本第 7 步现已就此告警）。",
+      "state_gap": "覆盖率已无缺口（52/52 模块）。残留三项运维事实：(1) knowledge_base 从 47MB 涨到 454MB（chroma.sqlite3 388 + 新 HNSW 段 61），且 clear() 的 delete_collection 留下一个 5.2MB 的孤儿段目录 087642e4-…（Chroma 只删 sqlite 行、不删磁盘段）；(2) chroma.sqlite3 即使只被探针以只读方式打开也会改写 mtime（实测 12:30:39），故该文件永久 dirty——即 local_runtime_drift 的第一条；(3) 索引超过 32766 chunks 后上游 get_stats() 的模块枚举会静默失效，见 get_stats_scale_bug。",
+      "rebuild_howto": "全量重建的三条实测教训（均已写进安装脚本第 7 步的注释）：(a)【绝不要加 --rebuild】——rebuild_from_pdfs() 自己会 clear()，但要等 process_all_pdfs() 把全部 PDF 抽进内存之后才清；传 --rebuild 等于在 t=0 就删库，把『无可用索引』窗口从几秒拉长到整个抽取阶段，且抽取失败即全丢。(b)【必须在真正的后台终端里跑】——Start-Process 的子进程仍在终端 job object 内，前台命令返回、shell 退出时整棵树被回收，任务会无 traceback、无 WER 记录地静默死亡（实测踩过一次，第一次重建的 PID 15236 即如此）。(c)【上游不打进度日志】——脚本从不调 logging.basicConfig()，root logger 停在 WARNING，PDFProcessor 的 'Processing: xxx.pdf' INFO 全被丢弃；需自行包一层 runpy 打开 INFO，否则 27 分钟全程无输出。另：实测耗时远小于按 8 PDF/234s 外推的 50+ 分钟——抽取仅 31s，其余全是 360 批嵌入，故旧外推公式不可用。",
+      "get_stats_scale_bug": "上游 retriever.get_stats()（retriever.py 第 236 行）用【无界】collection.get(include=['metadatas']) 枚举模块，而 Chroma 按行绑定 SQL 变量，超过 SQLite 的 32766 上限即抛 InternalError: too many SQL variables（本机 chromadb 1.5.9 实测：page=20000 通过、page=40000 失败）。该异常被裸 except Exception: pass 吞掉，所以 MCP 的 pdf_search_status 【不报错但谎报】——count 仍正确给出 35923，modules 却是 []、module_count 是 0。看到那个 0 要读作『上游枚举不出来』，不是『没索引』。pdf_search（受 n_results 限制）与 pdf_list_modules（走 PDFProcessor 文件系统、根本不碰 Chroma）均不受影响。本项目 probe_kb.py 已改为分页读取（PAGE_SIZE=5000，约 8 次往返），任意规模都能报出真实模块表。",
       "status_command_is_broken": "上游 build_knowledge_base.py --status 恒报 'Initialized: False / Documents: 0'：它构造 VectorRetriever 后直接 get_stats()，从未调 initialize()，而 get_stats() 在 _collection is None 时短路返回 {initialized: False, count: 0}（retriever.py 第 226-229 行）。pin 0f6b2c58 上依然存在。MCP 的 pdf_search 【不受影响】：VectorRetriever.search() 会自行懒初始化（retriever.py 第 186-188 行），坏的只是状态上报。",
-      "true_status_probe": "scripts/comsol_mcp/probe_kb.py（本项目自带，直读 Chroma：不加载嵌入模型、不启 JVM、不占 license，~2s）。setup_comsol_mcp.ps1 -StatusOnly 已改为调用它而不再转述坏掉的 --status。加 --search '<query>' 可额外验证检索质量（会加载 SentenceTransformer，~10s，仍不占 license）。"
+      "true_status_probe": "scripts/comsol_mcp/probe_kb.py（本项目自带，分页直读 Chroma：不加载嵌入模型、不启 JVM、不占 license，~2s）。setup_comsol_mcp.ps1 -StatusOnly 已改为调用它而不再转述坏掉的 --status。加 --search '<query>' 可额外验证检索质量（会加载 SentenceTransformer，~10s，仍不占 license）。"
     }
   },
 
   "registration": {
     "config_file": "C:\\Users\\antar\\.qoder-cn\\shared_client\\mcp.json",
+    "config_file_mirror": "C:\\Users\\antar\\.qoder-cn\\shared_client\\extension\\local\\mcp.json",
+    "config_file_mirror_note": "Qoder 派生的镜像，比源文件多一个 userConfigMD5 键用于变更检测；不要手改。两份都声明了同样的 arxiv 与 comsol，但只有一个项目目录（shared_client\\projects\\D--XXXIIIGGG-projects-pySci-pySciWS），故双实例不是双配置源造成的。",
     "server_name": "comsol",
     "command": "D:\\XXXIIIGGG\\projects\\pySci\\COMSOL_Multiphysics_MCP\\.venv\\Scripts\\comsol-mcp.exe",
     "args": [],
     "env": {
       "COMSOL_MCP_VERSION": "6.4"
     },
+    "url_shape_if_switching_to_path_c": "{ \"type\": \"sse\", \"url\": \"http://127.0.0.1:8765/sse\" }",
     "template": "scripts/comsol_mcp/mcp_servers.template.json"
   },
 
@@ -116,17 +124,21 @@
       "head_matches_pin": "git -C <repo_dir> rev-parse HEAD == 0f6b2c588a08da5ac66915e4f1fce7c07966763e（detached，2026-09-18）",
       "upgrade_markers": "src/server.py 含 'COMSOL pre-start' 与 COMSOL_MCP_TRANSPORT；src/tools/session.py 认 COMSOL_MCP_VERSION；src/tools/electrochemistry.py 与 .gitignore 存在；mph logger 已降到 WARNING",
       "deps_unchanged": "git diff 99172f8f..0f6b2c58 -- pyproject.toml 输出为空 → editable 安装下无需重装依赖",
-      "binaries_unchanged": "同区间对 pdf/ comsol_models/ knowledge_base/ 的 diff --stat 为空 → RAG 知识库完整保留、checkout 无冲突（已由 probe_kb.py 实测证：升级后仍 3669 chunks）",
+      "binaries_unchanged": "同区间对 pdf/ comsol_models/ knowledge_base/ 的 diff --stat 为空 → RAG 知识库完整保留、checkout 无冲突（升级当时由 probe_kb.py 实测证：仍 3669 chunks；该库其后已于 2026-10-01 全量重建为 35923，见 install.rag.state）",
       "real_import_ok": "cwd=<repo_dir> 时 python -c 'import src.server' exit=0（仅建 FastMCP 对象与注册函数，不启 JVM、不占 license）",
       "tool_count": "src/ 下 @mcp.tool 计数 == 103",
+      "qoder_tool_enumeration": "升级已在 Qoder 侧生效：SERVER_METADATA.json 中 comsol 的 toolCount 于 11:41:29 从 93 刷为 103，磁盘上 mcps\\comsol\\tools\\*.json 也恰好 103 个。注意已开启的会话不会中途刷新工具表（仍按旧的 93 个曝光），要用 electrochemistry 等 10 个新工具需开新会话。",
       "console_script_present": "<repo_dir>\\.venv\\Scripts\\comsol-mcp.exe 存在",
       "venv_python": "<repo_dir>\\.venv\\Scripts\\python.exe --version == Python 3.12.14",
       "server_not_patched": "src/server.py 中无 '# [pysci-shared-session-patch]' 标记（与 shared_session_patch_applied=false 一致）",
       "qoder_registration_matches": "mcp.json 中 comsol 条目的 command / env 与上方 registration 段一致",
       "clone_is_shallow": "<repo_dir>\\.git\\shallow 存在，含 2 个 graft",
-      "rag_index_readable": "probe_kb.py 实测 collections=['comsol_docs']、documents=3669、module_count=4、KB_OK（而上游 --status 同时报 Documents: 0，坐实了那个 bug）",
-      "rag_retrieval_quality": "--search 'background pressure field' 命中 AcousticsModuleUsersGuide.pdf p.212 'Background Pressure Field — Add a Background Pressure Field node…'（score 0.608），正是 gain_ep 要用的 BPF 节点；9.7s exit=0",
-      "NOT_yet_verified": "实机 comsol_start / study_solve 全链路（会占 license，且需先在 Qoder 重启该 MCP 才加载新代码）；Qoder 是否支持 URL 型 MCP 注册（路径 C 的前提）"
+      "rag_index_readable": "probe_kb.py 实测 collections=['comsol_docs']、documents=35923、module_count=52、KB_OK、exit=0（而上游 --status 同时报 Documents: 0，坐实了那个 bug；无界 get() 的第二个坑见 install.rag.get_stats_scale_bug）",
+      "rag_retrieval_quality": "--search 'background pressure field' 命中 AcousticsModuleUsersGuide.pdf p.212 'Background Pressure Field — Add a Background Pressure Field node…'（score 0.608），正是 gain_ep 要用的 BPF 节点；9.7s exit=0。全量重建后复验同一条查询仍命中同一页、同一分数，说明 4→52 模块并未稀释相关性",
+      "rag_full_rebuild": "2026-10-01 后台终端实测：108 PDF / 52 模块 → 35923 chunks；11:51:17 开始、11:51:48 抽取完毕（31s）、12:18:28 入库完成、12:18:46 打印 'Knowledge base build complete!'。随后 -StatusOnly 三方核对通过：script -Commit == lock pinned_commit == repo HEAD == 0f6b2c58，RAG 段报 documents=35923 / module_count=52 / KB_OK",
+      "mcp_live_status": "2026-10-01 实测 CallMcpTool comsol_status → {connected: true, version: '6.4', cores: 8, standalone: true, models: [], current_model: null}。这一条同时证明三件事：新 pin 的 pre-start 真的生效、JPype 的 fd-0 死锁确已被上游修掉（旧 pin 在此必挂）、COMSOL 6.4 可用。standalone:true 即 JVM 在 MCP 的 python.exe 进程内。",
+      "qoder_url_registration": "官方文档确认 Qoder 支持按 URL 注册 MCP（IDE 页：STDIO 或 SSE，URL 用于 SSE 或 Streamable HTTP，Streamable HTTP 按 SSE 同样方式配置并由 IDE 自动识别；CLI 参考页：type = sse / http / streamable-http / ws，字段 url + headers）。路径 C 的阻塞点因此解除。",
+      "NOT_yet_verified": "study_solve / results_evaluate 全链路（会长时间占 license，尚未跑）；路径 C 的端到端可用性（文档已确认、本机未实测）；pressure acoustics 的 BPF/EFC 远场能否由通用 physics_add / physics_configure_boundary 建出（关键差异化检查）"
     },
     "code_diff_99172f8_to_pin": "20 文件 +3691/-120：server.py(+24) session.py(22) geometry.py(153) physics.py(63) model.py(28) study.py(55) utils/versioning.py(6) knowledge/embedded.py(+49) tools/electrochemistry.py(+955) tools/electrochemistry_data.py(+949) .gitignore(+21) README/README_CN/knowledge prompts，以及 5 个测试文件合计 +1254 行",
     "local_runtime_drift": [
@@ -142,7 +154,8 @@
     "pdf": 535,
     "dot_git": 421,
     "comsol_models": 122,
-    "knowledge_base": 47,
-    "total_approx": 2205
+    "knowledge_base": 454,
+    "knowledge_base_note": "全量 RAG 重建后实测（chroma.sqlite3 388 + 新 HNSW 段 61 + delete_collection 遗留的孤儿段 5）；部分索引（3669 chunks）时仅 47。",
+    "total_approx": 2612
   }
 }
