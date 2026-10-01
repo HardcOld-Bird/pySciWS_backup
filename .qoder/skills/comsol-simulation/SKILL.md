@@ -82,8 +82,17 @@ Companions: `mcp status` (read-only), `mcp stop`, `license` (machine-wide `jvm.d
 > discriminator is whether `WmiPrvSE.exe` appears in the ancestor chain.
 
 > **The first COMSOL-touching tool call still pays the ~30 s JVM boot** — that is lazy start working as
-> intended. If Qoder reports a request timeout on it, retry; the server is fine. Doc-only tools
-> (`pdf_search`, `pdf_list_modules`, `docs_get`) never start COMSOL, so they stay cheap.
+> intended. If Qoder reports a request timeout on it, retry; the server is fine, and raising that
+> server's Request Timeout to ~60 s means you rarely have to. Doc-only tools (`pdf_search`,
+> `pdf_list_modules`, `docs_get`) never start COMSOL, so they stay cheap.
+>
+> **Nothing starts implicitly — call `comsol_start` yourself.** Under path C the server is *not*
+> pre-started, and `model_create` / `model_load` answer `No active COMSOL session. Start with
+> comsol_start first.` instead of booting one (measured 2026-10-01).
+>
+> **`mcp ensure --restart` invalidates Qoder's session.** Restarting replaces the server process, so the
+> SSE `session_id` Qoder is holding is gone and every tool call fails with
+> `51500 transport error: 404 Could not find session`. Reconnect the `comsol` MCP in Qoder afterwards.
 
 > **403 `Invalid Origin header` — measured *not* to occur here, but know the fallback.** Qoder connected
 > through the URL entry and called `pdf_list_modules` successfully (2026-10-01), so it either sends no
@@ -123,6 +132,7 @@ Reproducibility is pinned by tracked artifacts inside this repo instead:
 | `scripts/comsol_mcp/probe_kb.py` | **true** RAG index status. Upstream's `build_knowledge_base.py --status` always prints `Documents: 0` (it calls `get_stats()` without `initialize()`); run this with the *community* venv's python instead — no model, no JVM, no license. It pages Chroma, so it survives indexes past 32766 chunks |
 | `scripts/comsol_mcp/mcp_servers.template.json` | shape of the Qoder `mcp.json` entry |
 | `scripts/comsol_mcp/probe_mcp_http.py` | path C diagnostics: the FastMCP **Origin** allow-list matrix plus a real MCP handshake over `sse` / `streamable-http`. Deliberately calls only `pdf_list_modules`, so it proves the transport **without** starting COMSOL or touching the license. Run it with the *community* venv's python |
+| `scripts/comsol_mcp/smoke_mcp_chain.py` | end-to-end proof of the modelling chain over path C: phase A builds a 2D pressure-acoustics model from scratch up to a **Background Pressure Field**, phase B loads a real research model and runs `study_solve` → `results_evaluate`. Judges by a *non-zero* field, not by `success: true` (exit 0 = both, 1 = phase A, 2 = phase B). **Takes the license**; run it with the *community* venv's python, then `mcp stop` |
 
 > **`pdf_search` coverage.** The community MCP's RAG index is now **fully built** — 35,923 chunks over all
 > **52** manual modules / 108 PDFs (rebuilt 2026-10-01 in ~27 min; before that it was a 3669-chunk,
@@ -162,6 +172,45 @@ the first COMSOL-touching call.) Prefer a full Qoder quit over a window reload. 
 icon**, so a full quit means ending the `QoderCN` process in Task Manager: that reclaims the stdio
 `comsol-mcp` Qoder spawned (same job object) and frees the license, but it does **not** touch the
 WMI-spawned path C server — measured, the server outlived the `QoderCN` kill.
+
+### Building a model through the MCP — five measured constraints
+
+Every item below was measured end-to-end on 2026-10-01 by `scripts/comsol_mcp/smoke_mcp_chain.py`, and
+each cost a license-holding round trip to learn. Read them before driving the MCP by hand.
+
+1. **`study_create` must precede `mesh_create`.** The physics-controlled mesh derives its maximum element
+   size from the study frequency; with no study in the model yet COMSOL refuses outright — *"the mesh is
+   not used in any study"*.
+2. **A Frequency step's frequency property is `plist`, not `freq`.** Upstream's own `study_create`
+   docstring suggests `{"freq": "…"}` and COMSOL rejects it as an *unknown property*. The tool reports
+   that in `property_errors` while still answering `success: true`, so **check that field**. Units default
+   to Hz, so a bare number is enough.
+3. **Domain features need an explicit `boundary_dimension`.** `physics_configure_acoustic_boundary`
+   defaults to `getSDim() - 1`, i.e. *boundaries*, which is wrong for a domain-level node. A **Background
+   Pressure Field** — the node the gain_ep study needs — is built in 2D with `boundary_dimension: 2` plus
+   an explicit `boundary_selection`: upstream passes the type straight to `physics.create(tag, type, dim)`
+   with no whitelist and echoes it back in `custom_condition_types`. Its knowledge tool
+   `physics_get_acoustic_boundary_conditions` lists only 8 common boundary conditions and never mentions
+   BPF, so a miss there proves nothing — and `simulation inspect node --path
+   component(comp1).physics(acpr).feature(bpf1)` is still how you get the real answer (52 properties,
+   allowed enums such as `PressureFieldType: PlaneWave|CylindricalWave|UserDefined`, selection counts).
+4. **Upstream refuses an empty selection** (`Missing boundary selection or selection name.`) and never
+   calls `selection().all()`. Worth knowing in the good sense: the silent zero-field trap in our own
+   pitfalls notes — a BPF on an empty selection solves cleanly and returns `p == 0` everywhere — cannot
+   happen through this path; it errors out instead.
+5. **`physics_set_material` is an empty shell, so a model built from scratch cannot be meshed.** It only
+   runs `material().create(tag, "Common")` + `label(name)` and never loads COMSOL's built-in library, so
+   it answers `success: true` right next to the warning *"Material node has no physical properties"*, and
+   no other tool can fill in `c` / `rho` afterwards. The physics-controlled mesh needs the sound speed, so
+   `mesh_create` then fails with *"the material property `c` required by Pressure Acoustics 1 is not
+   defined"*. **Let the MCP drive an existing `.mph`** (`model_load` → `param_set` → `study_solve` →
+   `results_evaluate`) and create genuinely new models with a `build` recipe, which runs the Java API
+   directly and can attach a real material — that split is exactly what the smoke test's two phases do.
+
+> **Path C's coexistence promise is measured, not assumed.** With the MCP server running, a CLI
+> `inspect tree` started its own JVM and read a model successfully (2026-10-01): the two really do share
+> the box, because an *idle* server holds no license. Once the server has started COMSOL it holds the one
+> license, so `mcp stop` before a CLI solve or opening the GUI.
 
 ## Invocation
 
@@ -266,6 +315,9 @@ manuals auto-chunks at ≤199 pages (MinerU 200-page cap) — run `convert-all` 
   `session(mode="connect"|"server"|"standalone")` context manager.
 - Solve threads capped by `COMSOL_MAX_CORES` (.env, default 4); disk tempdir under `runs/tmp`.
 - Single license: **do not** run a persistent server AND an interactive COMSOL GUI at the same time.
+- **`comsol_disconnect` does not free the license.** JPype never unloads a started JVM, so `jvm.dll`
+  stays mapped into the MCP server's process after a disconnect; only `simulation mcp stop` releases it.
+  (Same reason the CLI's standalone session releases on process exit, not on disconnect.)
 - For tight edit→solve loops, prefer ONE invocation doing many steps, a persistent server, or
   `run batch` for heavy jobs.
 
@@ -301,3 +353,10 @@ manuals auto-chunks at ≤199 pages (MinerU 200-page cap) — run `convert-all` 
    run `inspect node --path …` for ground truth, and consult
    `data/skills/comsol_simulation/knowledge/java_api_pitfalls.md` (verified type/property names,
    default-value traps, naming collisions, hygiene conventions).
+5. `comsol_start` fails with `Could not locate Comsol <version> installation.` → the version string
+   reaching upstream is a **full** version (`6.4.0`) while mph's discovery does an exact match against its
+   **short backend name** (`6.4`; `6.4a` when patch > 0). This is the most deceptive failure on path C:
+   the HTTP layer looks perfectly healthy — 200 ready, 103 tools listed, doc-only tools answering — while
+   *every* COMSOL-touching tool fails. `mcp_server.mph_version_short_name()` normalises it when
+   regenerating `runs/start_comsol_mcp.cmd`; check that launcher's `set COMSOL_MCP_VERSION=` line holds a
+   short name, then `mcp ensure --restart` (and reconnect in Qoder — see the restart note above).
