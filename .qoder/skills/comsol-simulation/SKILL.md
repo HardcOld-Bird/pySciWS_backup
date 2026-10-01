@@ -1,6 +1,6 @@
 ---
 name: comsol-simulation
-description: Create, edit, debug, and evaluate COMSOL Multiphysics (.mph) simulations headlessly and fully automatically — geometry, materials, physics (pressure acoustics), mesh, studies, solving, parameter sweeps, result export, and offscreen rendering. Routine generic driving (load/param/solve/evaluate) primarily goes through the registered community `comsol` MCP; this skill's unified `simulation` CLI (mph/JPype Java-API bridge) is the differentiated layer — publication-grade export, pyvista rendering, physics validation, node introspection, recipes, persistent server — and the fallback when the MCP is unavailable. It consults MinerU-converted local COMSOL manuals via an FTS5 index and "sees" results through COMSOL PNG export plus pyvista offscreen rendering. Use when the user asks to build or modify a COMSOL model, run or re-run a simulation, sweep parameters, export plots/fields/meshes, render or inspect a result field, check mesh quality or convergence, or look up COMSOL API/physics documentation.
+description: Create, edit, debug, and evaluate COMSOL Multiphysics (.mph) simulations headlessly and fully automatically — geometry, materials, physics (pressure acoustics), mesh, studies, solving, parameter sweeps, result export, and offscreen rendering. Routine generic driving (load/param/solve/evaluate) primarily goes through the registered community `comsol` MCP; this skill's unified `simulation` CLI (mph/JPype Java-API bridge) is the differentiated layer — publication-grade export, pyvista rendering, physics validation, node introspection, recipes, persistent server — and the fallback when the MCP is unavailable. It consults MinerU-converted local COMSOL manuals via an FTS5 index and "sees" results through COMSOL PNG export plus pyvista offscreen rendering. It also supervises the community MCP's HTTP server (`mcp ensure`) so that MCP stays reachable while idle without holding the single COMSOL license. Use when the user asks to build or modify a COMSOL model, run or re-run a simulation, sweep parameters, export plots/fields/meshes, render or inspect a result field, check mesh quality or convergence, or look up COMSOL API/physics documentation.
 ---
 
 # COMSOL Simulation
@@ -25,27 +25,76 @@ See **MCP vs CLI** below. The rest of this doc covers the CLI, which drives the 
 | Publication `export image` (color-range / polar-rmax / geom-bbox + `.sidecar.json` + blank self-check); `render` (pyvista); `post stats/quality/framebox`; physics validation; granular `inspect node` / `node set`; `inspect java`; `diagnose`; `build recipes/apply`; `server` + `--connect-port` | **`pysci-simulation` CLI** — *differentiated; the MCP has none of these* |
 | MCP unavailable, or you want one self-contained script | **CLI** — *fallback; fully self-sufficient (does its own load/solve/export internally)* |
 
-> **Single license — never both at once.** On the pinned community MCP (`0f6b2c58`) `main()` starts
-> COMSOL *before* `mcp.run()` under stdio, so **Qoder merely launching the `comsol` MCP takes the one
-> license immediately** — solving or not. That in-process JVM cannot be attached by another process, and
-> a CLI standalone session (or `server start`) would need a second license we don't have. So: disable the
-> `comsol` MCP in Qoder before running the CLI, never run either alongside the interactive GUI, and end
-> CLI servers with `server stop`. Escape hatches (shared session, HTTP transport) are documented in
-> `scripts/comsol_mcp/setup_comsol_mcp.ps1` → *CRITICAL FINDING*.
+> **Single license — the `comsol` MCP must run on HTTP transport (path C).** On the pinned upstream
+> (`0f6b2c58`) `main()` pre-starts COMSOL *before* `mcp.run()` under **stdio**, so Qoder merely
+> launching the MCP takes the one license immediately, and that in-process JVM cannot be attached by
+> the CLI. Under **sse / streamable-http** COMSOL instead starts *lazily* on the first tool call: the
+> idle server holds **no** license, the handshake is instant, and the duplicate-instance problem below
+> disappears. Measured on this box 2026-10-01: both transports serve all **103** tools, and the idle
+> server's module list has `_jpype.pyd` but **no `jvm.dll`**.
 >
 > **Is the license actually free?** `comsol_status` reports `standalone: true`, i.e. MPh runs an
 > **in-process JPype JVM** — there is *no* `comsolmphserver.exe` to spot, so "I see no COMSOL process"
-> proves nothing. Look for `jvm.dll` / `_jpype.pyd` inside the `comsol-mcp` python process instead;
-> `setup_comsol_mcp.ps1 -StatusOnly` does exactly that.
+> proves nothing. Check for **`jvm.dll` and nothing else**: `_jpype.pyd` is loaded at `import mph` time
+> and sits in *every* comsol-mcp process whether or not COMSOL ever started, so counting it reports an
+> idle, license-free server as busy. `simulation license` and `setup_comsol_mcp.ps1 -StatusOnly` both
+> use the `jvm.dll` criterion.
 >
-> **Duplicate instances.** The eager pre-start delays the MCP handshake by the whole ~30 s COMSOL boot,
-> and Qoder rewrites `mcp.json` during startup — which can spawn a *second* `comsol-mcp` without reaping
-> the first (observed 2026-10-01: two processes, each with its own JVM, ~320 MB apiece). **Fully quit
-> Qoder** to clear them; a window reload is not enough. Path C (HTTP transport → lazy start, instant
-> handshake) is confirmed supported by Qoder and removes both problems.
+> **Duplicate instances (stdio only).** The eager pre-start delays the MCP handshake by the whole ~30 s
+> COMSOL boot, and Qoder rewrites `mcp.json` during startup — which can spawn a *second* `comsol-mcp`
+> without reaping the first (observed 2026-10-01: two processes, each with its own JVM, ~320 MB apiece).
+> **Fully quit Qoder** to clear them; a window reload is not enough. Path C removes the root cause
+> because its handshake is instant.
 
 **Rule of thumb:** routine read/solve/evaluate → community `comsol` MCP; publication figures, rendering,
 validation, node surgery, recipes, or no-MCP → `pysci-simulation` CLI.
+
+### Step 0 — bring the `comsol` MCP server up (every session, before any MCP tool call)
+
+Path C means **Qoder only connects to a URL; it no longer starts the server for you.** The skill owns
+that, and it is one idempotent command — run it first, always, and you never need to know how it works:
+
+```
+uv run pysci-simulation mcp ensure
+```
+
+Already running → it reuses the server. Not running → it spawns one **detached through WMI**, waits for
+the endpoint to answer, and prints the URL. Then read these lines; they decide everything:
+
+| Line | Meaning / what to do |
+|---|---|
+| `running : True` | Go ahead and call `comsol` MCP tools. |
+| `detached : 已脱离终端（派生方式 wmi）` | It outlives this session. If it ever says `⚠ 未脱离`, re-run `mcp ensure --restart`. |
+| `license : 空闲` | CLI standalone solves and the COMSOL GUI are both safe. |
+| `license : 已被占用 -- PID …` | Something holds the only license. Before a CLI solve or opening the GUI: `mcp stop` if it is ours, otherwise stop the listed PID (may be the GUI, or Qoder's own stdio instance). |
+
+Companions: `mcp status` (read-only), `mcp stop`, `license` (machine-wide `jvm.dll` scan), and
+`mcp ensure --json` for scripts. **Never hand-write spawn/kill logic** — that is the point of the command.
+
+> **Why WMI and not `Start-Process`.** A child of the agent terminal lives inside that terminal's job
+> object and is **silently reclaimed** when the shell goes away — no traceback, no Windows Error
+> Reporting entry (a 27-minute RAG build vanished this way). Measured A/B on 2026-10-01, two ~15-minute
+> `ping` markers spawned by the *same* command: the `Start-Process` one was gone by the next command,
+> the WMI one survived — its parent is `WmiPrvSE.exe`, so it never enters the terminal's job.
+> `CREATE_BREAKAWAY_FROM_JOB` does not help (Qoder's job lacks `JOB_OBJECT_LIMIT_BREAKAWAY_OK`) and
+> `schtasks` needs admin (measured: access denied). Note `IsProcessInJob` is **not** the test: both the
+> WMI marker and Qoder's own long-lived stdio instance report `in_job=True` and both survive. The real
+> discriminator is whether `WmiPrvSE.exe` appears in the ancestor chain.
+
+> **The first COMSOL-touching tool call still pays the ~30 s JVM boot** — that is lazy start working as
+> intended. If Qoder reports a request timeout on it, retry; the server is fine. Doc-only tools
+> (`pdf_search`, `pdf_list_modules`, `docs_get`) never start COMSOL, so they stay cheap.
+
+> **If Qoder connects but calls fail with 403 `Invalid Origin header`.** FastMCP auto-enables
+> DNS-rebinding protection whenever the host is `127.0.0.1` / `localhost` / `[::1]`, allowing only
+> `http://127.0.0.1:*`, `http://localhost:*`, `http://[::1]:*` as `Origin`. Measured identically on both
+> transports: **no `Origin` header, or a loopback one → 200; `vscode-file://vscode-app`, `null`, or any
+> external origin → 403.** Diagnose with
+> `scripts/comsol_mcp/probe_mcp_http.py <sse|streamable-http> <port>` — it prints the full matrix, then
+> does a real MCP handshake using a doc-only tool so no license is touched. Upstream exposes **no** env
+> switch for `transport_security`, so the only two fixes are: revert `mcp.json` to the `command` form
+> (path A, and pay the license cost), or patch upstream `server.py` to pass an explicit
+> `TransportSecuritySettings` that also allows Qoder's origin.
 
 ### Where the community MCP lives, and how it is pinned
 
@@ -71,6 +120,7 @@ Reproducibility is pinned by tracked artifacts inside this repo instead:
 | `scripts/comsol_mcp/setup_comsol_mcp.ps1` | idempotent installer; its `-Commit` default must match the lock. `-StatusOnly` is a read-only check that lock / `-Commit` / actual `HEAD` all agree, plus the true RAG index count and whether a COMSOL JVM is holding the license right now (incl. duplicate-instance detection) |
 | `scripts/comsol_mcp/probe_kb.py` | **true** RAG index status. Upstream's `build_knowledge_base.py --status` always prints `Documents: 0` (it calls `get_stats()` without `initialize()`); run this with the *community* venv's python instead — no model, no JVM, no license. It pages Chroma, so it survives indexes past 32766 chunks |
 | `scripts/comsol_mcp/mcp_servers.template.json` | shape of the Qoder `mcp.json` entry |
+| `scripts/comsol_mcp/probe_mcp_http.py` | path C diagnostics: the FastMCP **Origin** allow-list matrix plus a real MCP handshake over `sse` / `streamable-http`. Deliberately calls only `pdf_list_modules`, so it proves the transport **without** starting COMSOL or touching the license. Run it with the *community* venv's python |
 
 > **`pdf_search` coverage.** The community MCP's RAG index is now **fully built** — 35,923 chunks over all
 > **52** manual modules / 108 PDFs (rebuilt 2026-10-01 in ~27 min; before that it was a 3669-chunk,
@@ -127,7 +177,10 @@ isn't installed: `uv run python -m pysci.skills.comsol_simulation.tools.simulati
 
 | Command | Use when | Key output |
 |---|---|---|
-| `doctor` | Session start / anything broken | Config + COMSOL discovery + indexed manuals |
+| `doctor` | Session start / anything broken | Config + COMSOL discovery + indexed manuals + MCP server & license state |
+| `mcp ensure` | **Step 0** — before any `comsol` MCP tool call | Idempotent: reuse or spawn the HTTP server **detached via WMI**; prints URL / detached / license |
+| `mcp status` / `mcp stop` | Inspecting / releasing that server | `running`, `detached`, `holds_license`, machine-wide license holders |
+| `license` | "Is the one license free?" before a CLI solve or opening the GUI | `jvm.dll` scan across the whole machine |
 | `diagnose --mph M` | One-shot health check of a model | doctor + tree + inventory + dataset/plotgroup bindings + pitfalls checklist (single JVM) |
 | `inspect tree --mph M` | Understanding a model's structure | Compact model tree (params/geom/physics/mesh/study/results) |
 | `inspect params --mph M` | Reading/editing global parameters | `name = value # descr` list |
@@ -161,7 +214,8 @@ Run `simulation <command> -h` for full options.
 > validate — see **MCP vs CLI** above.
 
 ```
-- [ ] 1. simulation doctor                          # COMSOL + manuals ready?
+- [ ] 0. simulation mcp ensure                      # Step 0: comsol MCP server up? (only if using the MCP)
+- [ ] 1. simulation doctor                          # COMSOL + manuals + MCP/license state
 - [ ] 2. simulation inspect tree --mph M.mph        # read the model
 - [ ] 3. (edit) simulation build apply / run solve --set-param k=v
 - [ ] 4. simulation run solve --mph M.mph --study std1 --clear
