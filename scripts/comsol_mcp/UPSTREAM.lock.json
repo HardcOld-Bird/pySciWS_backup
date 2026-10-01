@@ -1,0 +1,107 @@
+{
+  "_README": [
+    "社区 COMSOL MCP 的上游来源与安装状态清单（tracked，在本项目版本控制内）。",
+    "",
+    "定位：该 MCP 刻意放在本仓库【之外】（项目根的同级目录），不作为 git submodule 纳入。理由（均为实测）：",
+    "  1) 上游把 ~700MB 二进制纳入版本控制（pdf/ 535MB、comsol_models/ 122MB、knowledge_base/chroma.sqlite3、42 个 .pyc），",
+    "     做成 submodule 会把它们连同 421MB 的 .git 一起拉进本项目树（磁盘合计 ~2.2GB），且 knowledge_base/ 必须留在",
+    "     仓库目录内（服务端按仓库相对路径读取），无法外置。",
+    "  2) 上游【没有 .gitignore】，chroma.sqlite3 每次 RAG 查询改写、.pyc 每次运行重生，submodule 会永久 dirty；",
+    "     唯一消音手段 .gitmodules 的 ignore=all 会同时掩盖真正的上游版本变化，自废 submodule 的核心价值。",
+    "  3) 其 .venv（1GB，Python 3.12）在 Windows 上不可搬迁（Scripts\\*.exe 启动器内嵌绝对路径），移动即需重建 venv + 重建 RAG。",
+    "  4) .gitmodules 的 URL 会写进版本控制共享给未来所有 clone：写镜像 = 钉住不受控的第三方镜像；写 github.com = 无代理时递归克隆失败。",
+    "注：Python 层面两个 venv 完全隔离、不会冲突（本项目代码从不 import 上游包，它由 Qoder 以独立进程拉起）；",
+    "    真正的代价在 IDE/lint 工具层（PyCharm 索引 2.2GB、ruff 扫上游临时脚本），故不入树。",
+    "",
+    "可复现性由本清单 + setup_comsol_mcp.ps1 的 -Commit 默认值共同保证：二者必须一致。",
+    "本文件是唯一事实来源（provenance），脚本是唯一安装入口。",
+    "升级流程：改本文件 pinned_commit → 以同一 SHA 跑 setup_comsol_mcp.ps1 → 核对 verified 段 → 提交。",
+    "浏览上游代码：PyCharm File → Open → Attach 选中 repo_dir（零 git / lint / pytest 副作用）。"
+  ],
+
+  "package": "comsol-mcp",
+  "role": "COMSOL 通用层驱动（load / param / solve / evaluate / pdf_search）；差异化能力走 pysci-simulation CLI，见 .qoder/skills/comsol-simulation/SKILL.md",
+
+  "upstream": {
+    "project": "wjc9011/COMSOL_Multiphysics_MCP",
+    "canonical_url": "https://github.com/wjc9011/COMSOL_Multiphysics_MCP.git",
+    "clone_url_used": "https://gitclone.com/github.com/wjc9011/COMSOL_Multiphysics_MCP",
+    "clone_url_note": "本机 github.com 443 超时，故用 gitclone.com 镜像克隆。镜像不受本项目控制、可能滞后或失效；需要精确对象或完整历史时请开代理改用 canonical_url。",
+    "upstream_version": "0.1.0",
+    "requires_python": ">=3.10",
+    "pinned_commit": "99172f8f43c6753c2442c406cd5c6055ea8c5bef",
+    "pinned_commit_short": "99172f8",
+    "pinned_commit_date": "2026-08-12T21:58:59+08:00",
+    "pinned_commit_subject": "Merge pull request #13 from wjc9011/agent/add-paper-citation",
+    "clone_shape": "shallow / grafted（--depth 1）",
+    "previous_pin": {
+      "commit": "0f6b2c588a08da5ac66915e4f1fce7c07966763e",
+      "problem": "该对象在浅克隆 + 镜像下本地不可达（git rev-parse --verify 无输出），setup 脚本的守卫式 checkout 静默走了 'Shallow clone: pin unreachable; staying on HEAD' 分支，导致清单声明与实际运行版本长期漂移。",
+      "resolution": "2026-10-01 重钉到已验证的磁盘 tip 99172f8f，使清单 == 实际。",
+      "to_recover_original": "开代理后 git -C <repo_dir> fetch --unshallow，再把本文件 pinned_commit 与脚本 $Commit 一并改回该 SHA（注意 checkout 后源码变动可能要求重装依赖 / 重建 RAG）。"
+    }
+  },
+
+  "install": {
+    "installer": "scripts/comsol_mcp/setup_comsol_mcp.ps1",
+    "repo_dir": "D:\\XXXIIIGGG\\projects\\pySci\\COMSOL_Multiphysics_MCP",
+    "repo_dir_note": "setup 脚本 -RepoDir 的默认值；刻意位于本仓库之外的同级目录。",
+    "venv": {
+      "path": "<repo_dir>\\.venv",
+      "python": "3.12.14",
+      "why_isolated": "上游依赖 torch / chromadb 在 Python 3.13 存在 wheel 缺口，故与 pysci@3.13.15 完全隔离。两个 venv 互不感知：本项目根目录的 uv run 只解析根 pyproject.toml + 根 .venv，绝不下探嵌套 venv。",
+      "not_relocatable": "Windows venv 的 Scripts\\*.exe 启动器与 activate 脚本内嵌绝对路径，移动 repo_dir 后该 venv 失效，必须重建。"
+    },
+    "install_steps": [
+      "uv venv --python 3.12 <repo_dir>\\.venv",
+      "uv pip install torch（主 index: https://download.pytorch.org/whl/cpu，取 +cpu 构建，避免 CUDA 版 ~2.5GB）",
+      "uv pip install -e <repo_dir>（extra index: https://pypi.tuna.tsinghua.edu.cn/simple）"
+    ],
+    "shared_session_patch_applied": false,
+    "shared_session_patch_note": "false = 路径 A（顺序使用）：社区 MCP 以 stdio 启动即抢占单 license，切勿与 simulation CLI / COMSOL GUI 同时运行。若改为 true（脚本 -ApplySharedSessionPatch），须同时更新下方 registration.env 加入 COMSOL_MCP_CONNECT_PORT=2036，并先由 `pysci-simulation server start` 起 comsolmphserver。",
+    "rag": {
+      "embedding_model": "all-MiniLM-L6-v2",
+      "source_pdf_dir": "D:\\XiGPrograms\\comsol\\6.4\\base\\doc\\pdf",
+      "db_dir": "<repo_dir>\\knowledge_base（上游默认；服务端按仓库相对路径读取，故不可外置）",
+      "builder": "<repo_dir>\\scripts\\build_knowledge_base.py"
+    }
+  },
+
+  "registration": {
+    "config_file": "C:\\Users\\antar\\.qoder-cn\\shared_client\\mcp.json",
+    "server_name": "comsol",
+    "command": "D:\\XXXIIIGGG\\projects\\pySci\\COMSOL_Multiphysics_MCP\\.venv\\Scripts\\comsol-mcp.exe",
+    "args": [],
+    "env": {
+      "COMSOL_MCP_VERSION": "6.4"
+    },
+    "template": "scripts/comsol_mcp/mcp_servers.template.json"
+  },
+
+  "verified": {
+    "verified_on": "2026-10-01",
+    "checks": {
+      "head_matches_pin": "git -C <repo_dir> rev-parse HEAD == 99172f8f43c6753c2442c406cd5c6055ea8c5bef",
+      "console_script_present": "<repo_dir>\\.venv\\Scripts\\comsol-mcp.exe 存在",
+      "venv_python": "<repo_dir>\\.venv\\Scripts\\python.exe --version == Python 3.12.14",
+      "server_not_patched": "src/server.py 中无 '# [pysci-shared-session-patch]' 标记（与 shared_session_patch_applied=false 一致）",
+      "qoder_registration_matches": "mcp.json 中 comsol 条目的 command / env 与上方 registration 段一致",
+      "clone_is_shallow": "<repo_dir>\\.git\\shallow 存在"
+    },
+    "local_runtime_drift": [
+      "knowledge_base/chroma.sqlite3（tracked，每次 RAG 查询被改写）",
+      "42 个 tracked .pyc（每次运行重生）",
+      "knowledge_base/<uuid>/（Chroma 二进制段，未跟踪）"
+    ],
+    "local_runtime_drift_note": "均为运行时状态，非源码级 patch（上游源码未被本项目修改）。上游无 .gitignore 故不被抑制，这也是不做 submodule 的直接原因之一。"
+  },
+
+  "disk_footprint_mb": {
+    "venv": 1080,
+    "pdf": 535,
+    "dot_git": 421,
+    "comsol_models": 122,
+    "knowledge_base": 47,
+    "total_approx": 2205
+  }
+}

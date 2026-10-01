@@ -46,7 +46,7 @@
    # Quick subset build (first 8 PDFs only, proves the pipeline):
    ... setup_comsol_mcp.ps1 -RagLimit 8
 
-   # Report existing KB status only:
+   # Read-only: verify the pin against UPSTREAM.lock.json, then report KB status:
    ... setup_comsol_mcp.ps1 -StatusOnly
 
    # Enable single-license shared session (applies patch; then `pysci-simulation
@@ -95,6 +95,13 @@
  This script PRINTS the resolved JSON block (real paths) at the end -- copy it in.
  Reference template: scripts\comsol_mcp\mcp_servers.template.json
 
+ Provenance / version-pin SOURCE OF TRUTH: scripts\comsol_mcp\UPSTREAM.lock.json
+ It records the upstream URLs, the pinned commit, venv Python, patch state, resolved command
+ path, and why this repo deliberately lives OUTSIDE the project tree instead of being a git
+ submodule (upstream tracks ~700MB of binaries and has no .gitignore; its 1GB venv is not
+ relocatable on Windows). Keep this script's -Commit default in sync with that file;
+ `-StatusOnly` verifies the agreement.
+
 --------------------------------------------------------------------------------
  Phase 0 Go/No-Go checklist (drive via CallMcpTool after registering)
 --------------------------------------------------------------------------------
@@ -126,7 +133,14 @@ param(
     # default to the gitclone.com mirror. Override with the canonical URL if you use a proxy/VPN:
     #   -RepoUrl https://github.com/wjc9011/COMSOL_Multiphysics_MCP.git
     [string] $RepoUrl       = 'https://gitclone.com/github.com/wjc9011/COMSOL_Multiphysics_MCP',
-    [string] $Commit        = '0f6b2c588a08da5ac66915e4f1fce7c07966763e',
+    # PINNED upstream commit -- must match scripts\comsol_mcp\UPSTREAM.lock.json (that file is the
+    # provenance source of truth; this script is the only installer).
+    # Re-pinned 2026-10-01: the previous pin 0f6b2c58 is NOT reachable in the shallow/grafted mirror
+    # clone, so the guarded checkout below silently fell through to 'staying on HEAD' and the manifest
+    # drifted from what actually runs. Now pinned to the VERIFIED on-disk tip => manifest == reality.
+    # To recover the original pin: enable a proxy, `git -C $RepoDir fetch --unshallow`, then set both
+    # this value and UPSTREAM.lock.json back to 0f6b2c588a08da5ac66915e4f1fce7c07966763e.
+    [string] $Commit        = '99172f8f43c6753c2442c406cd5c6055ea8c5bef',
     [string] $PythonVersion = '3.12',
     [string] $PdfDir        = 'D:\XiGPrograms\comsol\6.4\base\doc\pdf',
     [string] $DbDir         = '',           # empty = repo default (matches the server's read path; safest)
@@ -181,6 +195,37 @@ Write-Info "PdfDir    = $PdfDir"
 # -StatusOnly: report existing KB status and exit
 # ---------------------------------------------------------------------------
 if ($StatusOnly) {
+    Write-Step 'Upstream pin vs. lock manifest (read-only)'
+    $lockPath = Join-Path $PSScriptRoot 'UPSTREAM.lock.json'
+    Write-Info "RepoDir            = $RepoDir"
+    Write-Info "script -Commit     = $Commit"
+    $lockPin = $null
+    if (Test-Path $lockPath) {
+        # ReadAllText with an EXPLICIT UTF-8 encoding. PS 5.1's Get-Content decodes a BOM-less UTF-8
+        # file as the ANSI code page (GBK on zh-CN), which mangles the lock manifest's CJK prose and
+        # swallows the adjacent quotes -> ConvertFrom-Json then dies with a bogus array error.
+        # Same trap this script's header documents for .ps1 files; the fix belongs in the reader.
+        try {
+            $lockJson = [System.IO.File]::ReadAllText($lockPath, [System.Text.Encoding]::UTF8)
+            $lockPin = ($lockJson | ConvertFrom-Json).upstream.pinned_commit
+        }
+        catch { Write-Warn2 "Cannot parse $lockPath -- $($_.Exception.Message)" }
+        if ($lockPin) { Write-Info "lock pinned_commit = $lockPin" }
+        else { Write-Warn2 'lock manifest parsed but upstream.pinned_commit is empty.' }
+    } else { Write-Warn2 "Lock manifest missing: $lockPath" }
+    if (Test-Path (Join-Path $RepoDir '.git')) {
+        $headFull = (& git -C $RepoDir rev-parse HEAD 2>$null)
+        Write-Info "repo HEAD          = $headFull"
+        if ($lockPin -and $headFull -eq $lockPin) { Write-Ok 'HEAD agrees with the lock manifest.' }
+        elseif ($lockPin) { Write-Warn2 'VERSION DRIFT: HEAD != lock pinned_commit -- re-pin one of them.' }
+        if ($headFull -ne $Commit) { Write-Warn2 "VERSION DRIFT: HEAD != script -Commit ($Commit)." }
+        if (Test-Path (Join-Path $RepoDir '.git\shallow')) {
+            Write-Warn2 'Clone is shallow/grafted: older pins are unreachable without fetch --unshallow.'
+        }
+    } else { Write-Warn2 "Repo not cloned yet: $RepoDir" }
+    if (Test-Path $comsolExe) { Write-Ok "console script: $comsolExe" }
+    else { Write-Warn2 "console script missing: $comsolExe (run a full setup)" }
+
     Write-Step 'RAG knowledge base status'
     if (-not (Test-Path $venvPy)) { throw "venv not created yet: $venvPy (run a full setup first)" }
     $sArgs = @($buildPy, '--status', '--pdf-dir', $PdfDir)
@@ -242,8 +287,12 @@ if (-not $DryRun) {
         Write-Ok "Pinned HEAD = $head"
     } else {
         $head = (& git -C $RepoDir rev-parse --short HEAD 2>$null)
-        if ($isShallow) { Write-Warn2 "Shallow clone: pin $Commit unreachable; staying on HEAD = $head (fine for the spike)." }
+        if ($isShallow) { Write-Warn2 "Shallow clone: pin $Commit unreachable; staying on HEAD = $head." }
         else            { Write-Warn2 "Pin $Commit NOT found; staying on HEAD = $head." }
+        Write-Warn2 'VERSION DRIFT: the server you are about to use is NOT the pinned commit.'
+        Write-Warn2 'Do not trust its results until fixed. Either (a) unshallow behind a proxy'
+        Write-Warn2 '(`git -C <RepoDir> fetch --unshallow`) and re-run, or (b) re-pin to the verified'
+        Write-Warn2 'HEAD in BOTH this script and scripts\comsol_mcp\UPSTREAM.lock.json.'
         Write-Warn2 'For the exact pin, re-clone via proxy: -RepoUrl https://github.com/wjc9011/COMSOL_Multiphysics_MCP.git'
     }
 }
