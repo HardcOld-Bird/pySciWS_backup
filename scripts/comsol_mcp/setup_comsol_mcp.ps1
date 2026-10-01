@@ -56,24 +56,38 @@
 --------------------------------------------------------------------------------
  CRITICAL FINDING -- community MCP "eager start" vs. the single license
 --------------------------------------------------------------------------------
- The community src/server.py main() calls session_manager.start() BEFORE
- mcp.run() when transport == "stdio" (an upstream workaround for a Windows +
- JPype stdin deadlock). Consequence: whenever Qoder launches the `comsol` MCP
+ VERSION-SCOPED. This describes the PINNED commit 0f6b2c58 (2026-09-18) and
+ later. Behaviour genuinely differs by upstream version, so before trusting any
+ claim below, read main() in src/server.py OF THE PINNED COMMIT:
+   * 0f6b2c58+ (contains upstream 7a4b704): main() honours COMSOL_MCP_TRANSPORT
+     and, under the default "stdio", calls session_manager.start() BEFORE
+     mcp.run() => COMSOL is started EAGERLY (see the consequence below).
+   * 99172f8f and earlier: no transport handling and no pre-start, so COMSOL
+     started LAZILY on the first tool call -- but comsol_start was a plain sync
+     `def`, and JPype's startJVM hangs forever while another thread is blocked
+     reading stdin (fd 0), which the stdio transport always spawns. Net effect:
+     no idle license, but a stdio solve HANGS. That fd-0 interlock is the exact
+     reason the retired `pysci-comsol-extras` MCP froze, and it is why this pin
+     was upgraded on 2026-10-01. (mph's INFO logging during JVM boot triggers
+     the same deadlock; upstream now pins that logger to WARNING.)
+
+ Consequence on the pinned version: whenever Qoder launches the `comsol` MCP
  over stdio, it IMMEDIATELY starts a standalone COMSOL that grabs the single
  license inside that MCP's own process -- even if you are not running a sim yet.
- Because a standalone JVM is in-process, a separate process (e.g. the pysci
- `simulation` CLI) CANNOT attach to it. Two COMSOL clients at once would need 2
- licenses; we have 1. (The retired `pysci-comsol-extras` MCP is no longer part of
- this picture; differentiated work runs through the plain-script `simulation` CLI.)
+ Because that JVM is in-process, a separate process (e.g. the pysci `simulation`
+ CLI) CANNOT attach to it. Two COMSOL clients at once would need 2 licenses; we
+ have 1. So: disable/stop the `comsol` MCP in Qoder before using the CLI, and
+ never run either alongside the interactive GUI.
 
- Three resolutions (pick one during Phase 0 based on live verification):
-   A) Sequential use (simplest, no patch): only one MCP holds a COMSOL session
-      at a time; comsol_disconnect / stop the server before switching.
-      Recommended for the spike.
+ Three resolutions:
+   A) Sequential use (simplest, no patch -- CURRENT DEFAULT): only one driver
+      holds a COMSOL session at a time; stop the MCP (or `server stop`) before
+      switching.
    B) Shared session (single license, community MCP + CLI on one server):
       - Run with -ApplySharedSessionPatch to add a 5-line patch to server.py:
         when env COMSOL_MCP_CONNECT_PORT is set, pre-start does connect(port)
-        instead of a standalone start().
+        instead of a standalone start(). The target line EXISTS on 0f6b2c58
+        (it did NOT on 99172f8f, where the patch silently declined to apply).
       - `pysci-simulation server start` launches the ONE persistent
         comsolmphserver (records pid/port in runs/comsol_server.json).
       - Register the community MCP with env COMSOL_MCP_CONNECT_PORT=2036 so it
@@ -81,11 +95,19 @@
       - If Qoder launches the community MCP before the persistent server is up,
         the pre-connect fails (non-fatal); just call comsol_connect(port=2036)
         after the CLI has started the server.
-   C) HTTP transport (lazy COMSOL start): set COMSOL_MCP_TRANSPORT=http +
-      COMSOL_MCP_PORT and register by url -- only if Qoder supports HTTP/SSE MCP
-      registration (existing arxiv etc. are stdio; unconfirmed).
+   C) HTTP transport (lazy COMSOL start, NO idle license -- best fit for a
+      single license, but BLOCKED): added by upstream 7a4b704. Set
+      COMSOL_MCP_TRANSPORT=streamable-http (or sse -- NOT "http"; FastMCP only
+      accepts stdio / sse / streamable-http) plus COMSOL_MCP_HOST and
+      COMSOL_MCP_PORT (default 127.0.0.1:8765), then register the MCP BY URL
+      instead of by command. With no thread reading stdin, COMSOL starts lazily
+      on the first tool call and no license is held while idle. BLOCKER: this
+      machine's mcp.json holds only command/args/env entries (arxiv, comsol), so
+      URL-based registration in Qoder is UNCONFIRMED -- do not switch blind.
 
- Recommendation: use A for the spike; adopt B as the steady-state once Go.
+ Recommendation: A today (the verified path); revisit C if Qoder gains URL-based
+ MCP registration, since C is strictly better under one license. Choose B only
+ if you need the MCP and the CLI warm at the same time.
 
 --------------------------------------------------------------------------------
  Registration (add the community comsol MCP in Qoder)
@@ -129,18 +151,28 @@
 [CmdletBinding()]
 param(
     [string] $RepoDir       = 'D:\XXXIIIGGG\projects\pySci\COMSOL_Multiphysics_MCP',
-    # github.com is unreachable from this machine (port 443 timeout / connection reset);
-    # default to the gitclone.com mirror. Override with the canonical URL if you use a proxy/VPN:
+    # github.com is reachable once a global proxy is on (verified 2026-10-01: ls-remote in 0.9s, and
+    # the existing clone's origin was switched to canonical). The default stays the gitclone.com
+    # mirror only because it works with NO proxy -- but it LAGS canonical, and that lag is exactly
+    # what stranded the old pin at 99172f8f for weeks (see UPSTREAM.lock.json -> pin_history).
+    # With a proxy available, prefer canonical:
     #   -RepoUrl https://github.com/wjc9011/COMSOL_Multiphysics_MCP.git
     [string] $RepoUrl       = 'https://gitclone.com/github.com/wjc9011/COMSOL_Multiphysics_MCP',
     # PINNED upstream commit -- must match scripts\comsol_mcp\UPSTREAM.lock.json (that file is the
-    # provenance source of truth; this script is the only installer).
-    # Re-pinned 2026-10-01: the previous pin 0f6b2c58 is NOT reachable in the shallow/grafted mirror
-    # clone, so the guarded checkout below silently fell through to 'staying on HEAD' and the manifest
-    # drifted from what actually runs. Now pinned to the VERIFIED on-disk tip => manifest == reality.
-    # To recover the original pin: enable a proxy, `git -C $RepoDir fetch --unshallow`, then set both
-    # this value and UPSTREAM.lock.json back to 0f6b2c588a08da5ac66915e4f1fce7c07966763e.
-    [string] $Commit        = '99172f8f43c6753c2442c406cd5c6055ea8c5bef',
+    # provenance source of truth; this script is the only installer). `-StatusOnly` checks this value,
+    # the lock manifest, and the clone's real HEAD all agree.
+    # 2026-10-01: restored to the ORIGINAL intended pin, now reachable. It had been stranded because
+    # the mirror lags canonical github.com, so `git rev-parse --verify` failed and the guarded checkout
+    # below silently stayed on HEAD (99172f8f) while the manifest claimed otherwise. Behind a proxy a
+    # TARGETED fetch makes any SHA reachable in seconds -- no --unshallow needed, because the big blobs
+    # (pdf/, comsol_models/) are unchanged across versions and already local (measured: 1.6s):
+    #   git -C $RepoDir fetch --depth 1 https://github.com/wjc9011/COMSOL_Multiphysics_MCP.git $Commit
+    # What 0f6b2c58 buys over 99172f8f: the JPype stdin/fd-0 deadlock fix plus native
+    # COMSOL_MCP_TRANSPORT (7a4b704), four COMSOL 6.x API fixes (this box runs 6.4), COMSOL_MCP_VERSION
+    # finally honoured (c0ec1f8), .gitignore (a9de20e), 103 tools (electrochemistry, 8529877), and
+    # +1254 lines of upstream tests. pyproject.toml is UNCHANGED => no dependency reinstall, and
+    # pdf/ + comsol_models/ + knowledge_base/ are UNCHANGED => the built RAG index survives.
+    [string] $Commit        = '0f6b2c588a08da5ac66915e4f1fce7c07966763e',
     [string] $PythonVersion = '3.12',
     [string] $PdfDir        = 'D:\XiGPrograms\comsol\6.4\base\doc\pdf',
     [string] $DbDir         = '',           # empty = repo default (matches the server's read path; safest)
@@ -220,18 +252,30 @@ if ($StatusOnly) {
         elseif ($lockPin) { Write-Warn2 'VERSION DRIFT: HEAD != lock pinned_commit -- re-pin one of them.' }
         if ($headFull -ne $Commit) { Write-Warn2 "VERSION DRIFT: HEAD != script -Commit ($Commit)." }
         if (Test-Path (Join-Path $RepoDir '.git\shallow')) {
-            Write-Warn2 'Clone is shallow/grafted: older pins are unreachable without fetch --unshallow.'
+            # Informational, not an error: a targeted `git fetch --depth 1 <url> <sha>` keeps the clone
+            # shallow while making the pin reachable -- that is how 0f6b2c58 was obtained (1.6s).
+            $grafts = @(Get-Content (Join-Path $RepoDir '.git\shallow') -ErrorAction SilentlyContinue).Count
+            Write-Warn2 "Clone is shallow ($grafts graft(s)); any other pin needs a targeted fetch first."
         }
     } else { Write-Warn2 "Repo not cloned yet: $RepoDir" }
     if (Test-Path $comsolExe) { Write-Ok "console script: $comsolExe" }
     else { Write-Warn2 "console script missing: $comsolExe (run a full setup)" }
 
-    Write-Step 'RAG knowledge base status'
+    Write-Step 'RAG knowledge base status (true document count)'
     if (-not (Test-Path $venvPy)) { throw "venv not created yet: $venvPy (run a full setup first)" }
-    $sArgs = @($buildPy, '--status', '--pdf-dir', $PdfDir)
+    # Deliberately NOT upstream's `build_knowledge_base.py --status`: that path calls get_stats()
+    # without initialize(), and get_stats() returns {initialized: False, count: 0} whenever
+    # _collection is None -- so it prints 'Documents: 0' even for a populated index (upstream bug,
+    # still present at pin 0f6b2c58; measured 3669 chunks while --status claimed 0). Our own probe
+    # reads Chroma directly: no embedding model, no JVM, no license, ~2s. See probe_kb.py.
+    $probePy = Join-Path $PSScriptRoot 'probe_kb.py'
+    $sArgs = @($probePy, '--repo-dir', $RepoDir, '--pdf-dir', $PdfDir)
     if ($DbDir) { $sArgs += @('--db-dir', $DbDir) }
     if ($DryRun) { Write-Info "[DRY] & `"$venvPy`" $($sArgs -join ' ')" }
-    else { & $venvPy @sArgs }
+    else {
+        & $venvPy @sArgs
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "RAG probe exit code $LASTEXITCODE -- read the messages above." }
+    }
     return
 }
 
@@ -377,16 +421,26 @@ if (-not $ApplySharedSessionPatch) {
 Write-Step '6/8 Lightweight verify (console script + src.server locatable)'
 if ($DryRun) {
     Write-Info "[DRY] Test-Path `"$comsolExe`""
-    Write-Info "[DRY] & `"$venvPy`" -c `"import importlib.util as u; print('SPEC_OK', bool(u.find_spec('src.server')))`"  (cwd=$RepoDir)"
+    Write-Info "[DRY] & `"$venvPy`" -c `"import src.server; print('IMPORT_OK')`"  (cwd=$RepoDir)"
 } else {
     if (Test-Path $comsolExe) { Write-Ok "comsol-mcp console script: $comsolExe" }
     else { Write-Warn2 "Not found: $comsolExe (install may be incomplete)" }
     Push-Location $RepoDir
     try {
-        $spec = & $venvPy -c "import importlib.util as u; print('SPEC_OK', bool(u.find_spec('src.server')))"
-        Write-Info $spec
-        if ($spec -match 'SPEC_OK True') { Write-Ok 'src.server locatable (import chain intact).' }
-        else { Write-Warn2 'src.server not locatable; check the install.' }
+        # A REAL import, not find_spec: find_spec only resolves a path, so it cannot catch a missing
+        # runtime dependency (e.g. `anyio`, which upstream 7a4b704 introduced). Importing src.server
+        # builds the FastMCP app and pulls in every tool module -- but it does NOT start the JVM
+        # (session_manager.start() runs only inside main()), so this stays license-free and takes ~2s.
+        # A half-installed venv or a badly applied patch fails loudly right here.
+        $imp = (& $venvPy -c "import src.server; print('IMPORT_OK')" 2>&1 | Out-String).Trim()
+        if ($imp -match 'IMPORT_OK') { Write-Ok 'src.server imports cleanly (full tool chain + deps intact).' }
+        else { Write-Warn2 'src.server FAILED to import -- tail below:'; Write-Info $imp }
+        # Tool count doubles as a version fingerprint: 93 == pre-0f6b2c58, 103 == this pin.
+        # Qoder caches its own count in SERVER_METADATA.json, so a mismatch there means the MCP
+        # process still has the OLD code loaded and must be restarted in Qoder.
+        $tools = (Get-ChildItem (Join-Path $RepoDir 'src') -Recurse -File -Filter *.py |
+                  Select-String -Pattern '@mcp\.tool' | Measure-Object).Count
+        Write-Info "registered tools (@mcp.tool count) = $tools"
     } finally { Pop-Location }
 }
 

@@ -8,7 +8,9 @@
     "该仓库刻意放在本项目之外（同级目录）而不做 git submodule，完整理由见 UPSTREAM.lock.json 的 _README；",
     "只想在 IDE 里浏览上游代码，用 PyCharm File → Open → Attach 挂上那个目录即可（零 git / lint / pytest 副作用）。",
     "JSON 不支持注释：粘贴到 mcp.json 时请删除本 _README 与所有 _note_* 键。",
-    "退役说明：pysci-comsol-extras 伴随 MCP 已废弃（FastMCP 运行时下 mph.Client 引导 COMSOL 会冻结）；",
+    "退役说明：pysci-comsol-extras 伴随 MCP 已废弃。精确根因（由上游 commit 7a4b704 的提交说明证实）：JPype 的",
+    "startJVM 在另一线程阻塞读 stdin(fd 0) 时会永久挂死，而 stdio transport 必然起这样一个线程；mph 在 JVM 启动期",
+    "的 INFO 日志也会触发同一死锁。并非 asyncio / FastMCP 本身的问题——改用 streamable-http transport 即可绕开（见下方 path C）。",
     "其全部差异化能力（出版级导出精修 / pyvista 渲染 / 物理校验 / 节点自省 / GUI→Java / 配方 / 常驻会话）",
     "改由 pysci-simulation CLI 承接（纯脚本主线程路径，实机验证可用）。若 Qoder 里仍注册着 extras，请删除该条目。"
   ],
@@ -18,12 +20,12 @@
       "command": "<REPO_DIR>\\.venv\\Scripts\\comsol-mcp.exe",
       "args": [],
       "env": {
-        "_note_env": "COMSOL_MCP_VERSION 选择后端版本；stdio 下服务器启动即抢占用 license（见 setup 脚本 CRITICAL FINDING）",
+        "_note_env": "COMSOL_MCP_VERSION 选择后端版本（自上游 c0ec1f8 起才真正生效；当前 pin 0f6b2c58 已含该补丁，旧 pin 99172f8f 上它是 no-op）。【重要】stdio 下服务器启动即抢占唯一 license（main() 先 session_manager.start() 再 mcp.run()），与是否在算无关：跑 pysci-simulation CLI 或开 COMSOL GUI 前，请先在 Qoder 里停用本 MCP。详见 setup 脚本 CRITICAL FINDING。",
         "COMSOL_MCP_VERSION": "6.4"
       }
     },
     "comsol__shared_session_variant": {
-      "_note": "可选路径 B（单 license 共享常驻 server）：需先 -ApplySharedSessionPatch 打补丁，并由 `pysci-simulation server start`（CLI，起 comsolmphserver 于 port=2036）拉起常驻 server，社区 MCP 再 attach 同一端口。把本块替换上面的 comsol 条目。默认用路径 A（社区 MCP 与 CLI  sequentially 各起各的 standalone，单 license 下切勿同时占用）。",
+      "_note": "可选路径 B（单 license 共享常驻 server）：需先 -ApplySharedSessionPatch 打补丁（补丁目标行在当前 pin 0f6b2c58 上存在且逐字符匹配；在旧 pin 99172f8f 上不存在，当时会静默不打并报 'Expected pre-start line not found'），并由 `pysci-simulation server start`（CLI，起 comsolmphserver 于 port=2036）拉起常驻 server，社区 MCP 再 attach 同一端口。把本块替换上面的 comsol 条目。默认用路径 A（社区 MCP 与 CLI 顺序各起各的 standalone，单 license 下切勿同时占用）。",
       "command": "<REPO_DIR>\\.venv\\Scripts\\comsol-mcp.exe",
       "args": [],
       "env": {
@@ -31,6 +33,11 @@
         "COMSOL_MCP_CONNECT_PORT": "2036",
         "COMSOL_MCP_CONNECT_HOST": "localhost"
       }
+    },
+    "comsol__http_transport_variant": {
+      "_note": "可选路径 C（单 license 下的最优解，但【未确认可用】）：上游 7a4b704 起支持 COMSOL_MCP_TRANSPORT。设为 streamable-http（或 sse；【不要写 http】，FastMCP 只认 stdio / sse / streamable-http）后无线程读 stdin，COMSOL 改为首次工具调用时惰性启动 → 空闲不占 license，MCP 与 CLI 可并存，不再需要顺序使用或打共享补丁。",
+      "_blocker": "要生效，Qoder 必须支持按 URL 注册 MCP（即把 command / args / env 换成一个 url 键）。实测本机 mcp.json 仅有 command 型条目（arxiv、comsol），URL 型支持【未确认】，故本块未启用、也不要把它直接粘进 mcp.json。先手动验证服务端：<REPO_DIR>/.venv/Scripts/comsol-mcp.exe，环境变量 COMSOL_MCP_TRANSPORT=streamable-http、COMSOL_MCP_HOST=127.0.0.1、COMSOL_MCP_PORT=8765（端口默认即 8765）。",
+      "url": "http://127.0.0.1:8765/mcp"
     }
   }
 }

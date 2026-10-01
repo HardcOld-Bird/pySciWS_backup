@@ -6,7 +6,9 @@
     "  1) 上游把 ~700MB 二进制纳入版本控制（pdf/ 535MB、comsol_models/ 122MB、knowledge_base/chroma.sqlite3、42 个 .pyc），",
     "     做成 submodule 会把它们连同 421MB 的 .git 一起拉进本项目树（磁盘合计 ~2.2GB），且 knowledge_base/ 必须留在",
     "     仓库目录内（服务端按仓库相对路径读取），无法外置。",
-    "  2) 上游【没有 .gitignore】，chroma.sqlite3 每次 RAG 查询改写、.pyc 每次运行重生，submodule 会永久 dirty；",
+    "  2) chroma.sqlite3 每次 RAG 查询改写、42 个 .pyc 每次运行重生，而它们【都被上游 tracked】，submodule 会永久 dirty；",
+    "     上游虽于 a9de20e（2026-09）补了 .gitignore，但 .gitignore 对已跟踪文件无效、作者也从未 git rm --cached，",
+    "     故该问题在当前 pin 0f6b2c58 上依然存在（实测：42 个 .pyc + chroma.sqlite3 仍 tracked，tracked 总数 269）；",
     "     唯一消音手段 .gitmodules 的 ignore=all 会同时掩盖真正的上游版本变化，自废 submodule 的核心价值。",
     "  3) 其 .venv（1GB，Python 3.12）在 Windows 上不可搬迁（Scripts\\*.exe 启动器内嵌绝对路径），移动即需重建 venv + 重建 RAG。",
     "  4) .gitmodules 的 URL 会写进版本控制共享给未来所有 clone：写镜像 = 钉住不受控的第三方镜像；写 github.com = 无代理时递归克隆失败。",
@@ -15,7 +17,11 @@
     "",
     "可复现性由本清单 + setup_comsol_mcp.ps1 的 -Commit 默认值共同保证：二者必须一致。",
     "本文件是唯一事实来源（provenance），脚本是唯一安装入口。",
-    "升级流程：改本文件 pinned_commit → 以同一 SHA 跑 setup_comsol_mcp.ps1 → 核对 verified 段 → 提交。",
+    "升级流程：改本文件 pinned_commit 与脚本 -Commit（两处必须同 SHA）→ 让该 SHA 在本地可达 →",
+    "          跑 setup_comsol_mcp.ps1（依赖与 RAG 未变时加 -SkipInstall -SkipRag）→ -StatusOnly 三方核对 → 提交。",
+    "让 SHA 可达的最省事做法（2026-10-01 实测 1.6 秒）：开代理后执行",
+    "  git -C <repo_dir> fetch --depth 1 https://github.com/wjc9011/COMSOL_Multiphysics_MCP.git <SHA>",
+    "无需 fetch --unshallow（数百 MB）：大 blob（pdf/、comsol_models/）在版本之间未变、本地已有，几乎零下载。",
     "浏览上游代码：PyCharm File → Open → Attach 选中 repo_dir（零 git / lint / pytest 副作用）。"
   ],
 
@@ -25,21 +31,33 @@
   "upstream": {
     "project": "wjc9011/COMSOL_Multiphysics_MCP",
     "canonical_url": "https://github.com/wjc9011/COMSOL_Multiphysics_MCP.git",
-    "clone_url_used": "https://gitclone.com/github.com/wjc9011/COMSOL_Multiphysics_MCP",
-    "clone_url_note": "本机 github.com 443 超时，故用 gitclone.com 镜像克隆。镜像不受本项目控制、可能滞后或失效；需要精确对象或完整历史时请开代理改用 canonical_url。",
+    "clone_url_used": "https://github.com/wjc9011/COMSOL_Multiphysics_MCP.git",
+    "clone_url_history": "初次克隆（2026-08，无代理）用镜像 https://gitclone.com/github.com/wjc9011/COMSOL_Multiphysics_MCP；2026-10-01 开代理后已 git remote set-url origin 切回 canonical_url。",
+    "clone_url_note": "镜像不受本项目控制且【滞后于 canonical】——正是这一滞后使旧 pin 0f6b2c58 在本地不可达、清单与实际运行版本长期漂移。仅在无代理时退回镜像；有代理一律用 canonical。",
     "upstream_version": "0.1.0",
     "requires_python": ">=3.10",
-    "pinned_commit": "99172f8f43c6753c2442c406cd5c6055ea8c5bef",
-    "pinned_commit_short": "99172f8",
-    "pinned_commit_date": "2026-08-12T21:58:59+08:00",
-    "pinned_commit_subject": "Merge pull request #13 from wjc9011/agent/add-paper-citation",
-    "clone_shape": "shallow / grafted（--depth 1）",
-    "previous_pin": {
-      "commit": "0f6b2c588a08da5ac66915e4f1fce7c07966763e",
-      "problem": "该对象在浅克隆 + 镜像下本地不可达（git rev-parse --verify 无输出），setup 脚本的守卫式 checkout 静默走了 'Shallow clone: pin unreachable; staying on HEAD' 分支，导致清单声明与实际运行版本长期漂移。",
-      "resolution": "2026-10-01 重钉到已验证的磁盘 tip 99172f8f，使清单 == 实际。",
-      "to_recover_original": "开代理后 git -C <repo_dir> fetch --unshallow，再把本文件 pinned_commit 与脚本 $Commit 一并改回该 SHA（注意 checkout 后源码变动可能要求重装依赖 / 重建 RAG）。"
-    }
+    "pinned_commit": "0f6b2c588a08da5ac66915e4f1fce7c07966763e",
+    "pinned_commit_short": "0f6b2c5",
+    "pinned_commit_date": "2026-09-18T06:15:10+08:00",
+    "pinned_commit_subject": "Merge pull request #23 from plaask/feat/session-version-env",
+    "pinned_commit_note": "等于 2026-10-01 时点的 upstream refs/heads/main（git ls-remote 核实），也正是本项目最初声明的 pin——当初选对了，只是镜像浅克隆够不着。",
+    "clone_shape": "shallow / grafted，含 2 个 graft（0f6b2c58 与 99172f8f）；.git 仍 421MB，因定向 --depth 1 fetch 复用了已有 blob。",
+    "tool_count": 103,
+    "tool_count_note": "src/ 下 @mcp.tool 计数（93 → 103，新增 electrochemistry 10 个，与 README 的 '100+' 相符）。Qoder 的 SERVER_METADATA.json 中 comsol 的 toolCount 仍是 93，说明它还在跑内存中的旧代码：升级后必须在 Qoder 里重启该 MCP，重启后应变为 103（现成的验证信号）。",
+    "pin_history": [
+      {
+        "commit": "0f6b2c588a08da5ac66915e4f1fce7c07966763e",
+        "period": "2026-10-01 起（当前）",
+        "note": "原声明 pin。2026-10-01 开代理后定向 fetch 使其可达并 checkout 到位（detached HEAD）。"
+      },
+      {
+        "commit": "99172f8f43c6753c2442c406cd5c6055ea8c5bef",
+        "period": "2026-08 克隆时 ~ 2026-10-01（临时止血 pin）",
+        "problem": "0f6b2c58 在浅克隆 + 镜像下本地不可达（git rev-parse --verify 无输出），setup 脚本的守卫式 checkout 静默走了 'Shallow clone: pin unreachable; staying on HEAD' 分支，实际一直跑 99172f8f 而清单声明 0f6b2c58。",
+        "interim_fix": "2026-10-01 先重钉到已验证的磁盘 tip 99172f8f 使清单 == 实际（止血），同时把静默告警改成显式 VERSION DRIFT。",
+        "why_upgraded_off_it": "99172f8f 缺 upstream 7a4b704：无 COMSOL_MCP_TRANSPORT、无 pre-start，comsol_start 仍是同步 def；而 JPype 的 startJVM 在另一线程阻塞读 stdin(fd 0) 时会永久挂死，stdio transport 必然起这样的线程。故该版本空闲时不占 license，但 stdio 下发起求解会挂住。此外还缺 4 处 COMSOL 6.x API 修复（本机跑 6.4）、让 COMSOL_MCP_VERSION 真正生效的 c0ec1f8、.gitignore(a9de20e)、electrochemistry(8529877) 与 +1254 行上游测试。"
+      }
+    ]
   },
 
   "install": {
@@ -58,12 +76,23 @@
       "uv pip install -e <repo_dir>（extra index: https://pypi.tuna.tsinghua.edu.cn/simple）"
     ],
     "shared_session_patch_applied": false,
-    "shared_session_patch_note": "false = 路径 A（顺序使用）：社区 MCP 以 stdio 启动即抢占单 license，切勿与 simulation CLI / COMSOL GUI 同时运行。若改为 true（脚本 -ApplySharedSessionPatch），须同时更新下方 registration.env 加入 COMSOL_MCP_CONNECT_PORT=2036，并先由 `pysci-simulation server start` 起 comsolmphserver。",
+    "shared_session_patch_note": "false = 路径 A（顺序使用，当前默认）。补丁目标行 '        logger.info(f\"COMSOL pre-start: {session_manager.start()}\")' 在当前 pin 上【存在且逐字符匹配】；在 99172f8f 上【不存在】，故当时 -ApplySharedSessionPatch 必然走 else 分支报 'Expected pre-start line not found' 而静默不打补丁。若改为 true（脚本 -ApplySharedSessionPatch），须同时更新下方 registration.env 加入 COMSOL_MCP_CONNECT_PORT=2036，并先由 `pysci-simulation server start` 起 comsolmphserver。",
+    "license_behavior": {
+      "current_pin_stdio": "0f6b2c58 的 main() 在 transport==stdio 时先 session_manager.start() 再 mcp.run()：Qoder 一拉起该 MCP 就立刻启动一个 standalone COMSOL 并持有唯一 license，与当下是否在算无关。该 JVM 在 MCP 进程内，CLI 无法 attach；两个 COMSOL 客户端需要 2 个 license，我们只有 1 个。",
+      "operational_rule": "跑 simulation CLI（或开 COMSOL GUI）前，先在 Qoder 里停用 comsol MCP；CLI 侧用完执行 server stop。",
+      "escape_hatch_http": "路径 C：COMSOL_MCP_TRANSPORT=streamable-http（或 sse；【不是 http】，FastMCP 只认 stdio/sse/streamable-http）+ COMSOL_MCP_HOST/PORT（默认 127.0.0.1:8765），改为按 URL 注册 → 无线程读 stdin → COMSOL 惰性启动 → 空闲不占 license，是单 license 下的最优解。阻塞点：本机 mcp.json 仅有 command/args/env 型条目（arxiv、comsol），Qoder 是否支持 URL 型注册【未确认】，故未改注册方式。",
+      "escape_hatch_shared": "路径 B：-ApplySharedSessionPatch + COMSOL_MCP_CONNECT_PORT=2036，让 MCP 与 CLI 共用同一个 comsolmphserver（一个 license 两个驱动）。代价：须先由 CLI 起常驻 server，否则 pre-connect 失败（非致命，之后手动 comsol_connect(port=2036)）。"
+    },
     "rag": {
       "embedding_model": "all-MiniLM-L6-v2",
-      "source_pdf_dir": "D:\\XiGPrograms\\comsol\\6.4\\base\\doc\\pdf",
+      "source_pdf_dir": "D:\\XiGPrograms\\comsol\\6.4\\base\\doc\\pdf（52 个模块、109 个 tracked PDF）",
       "db_dir": "<repo_dir>\\knowledge_base（上游默认；服务端按仓库相对路径读取，故不可外置）",
-      "builder": "<repo_dir>\\scripts\\build_knowledge_base.py"
+      "builder": "<repo_dir>\\scripts\\build_knowledge_base.py",
+      "collection": "comsol_docs",
+      "state": "部分建成：3669 chunks / 4 个模块（ACDC_Module、Acoustics_Module、Battery_Design_Module、CAD_Import_Module）。2026-09-30 由安装脚本第 7/8 步以 -RagLimit 8 建立（只处理前 8 个 PDF），耗时 234.6s；phase0_run.log 记为 'RAG build exit code '（空值、非 0），但数据确实落盘。本项目最需要的 Acoustics_Module 已在其中。",
+      "state_gap": "其余 48 个模块（含 COMSOL_Multiphysics 核心手册 14 个 PDF）未索引，pdf_search 查不到。补全需去掉 -RagLimit 重建；按 8 PDF / 234s 外推约 50 分钟以上且 CPU 密集——按需再做，不要默认它是全的。",
+      "status_command_is_broken": "上游 build_knowledge_base.py --status 恒报 'Initialized: False / Documents: 0'：它构造 VectorRetriever 后直接 get_stats()，从未调 initialize()，而 get_stats() 在 _collection is None 时短路返回 {initialized: False, count: 0}（retriever.py 第 226-229 行）。pin 0f6b2c58 上依然存在。MCP 的 pdf_search 【不受影响】：VectorRetriever.search() 会自行懒初始化（retriever.py 第 186-188 行），坏的只是状态上报。",
+      "true_status_probe": "scripts/comsol_mcp/probe_kb.py（本项目自带，直读 Chroma：不加载嵌入模型、不启 JVM、不占 license，~2s）。setup_comsol_mcp.ps1 -StatusOnly 已改为调用它而不再转述坏掉的 --status。加 --search '<query>' 可额外验证检索质量（会加载 SentenceTransformer，~10s，仍不占 license）。"
     }
   },
 
@@ -81,19 +110,31 @@
   "verified": {
     "verified_on": "2026-10-01",
     "checks": {
-      "head_matches_pin": "git -C <repo_dir> rev-parse HEAD == 99172f8f43c6753c2442c406cd5c6055ea8c5bef",
+      "github_reachable": "开全局代理后 git ls-remote canonical_url 于 0.9s 返回 exit=0；shell 内无 proxy 环境变量，代理为透明模式，git 无需额外配置",
+      "upstream_main_is_pin": "ls-remote 显示 refs/heads/main == 0f6b2c588a08da5ac66915e4f1fce7c07966763e",
+      "targeted_fetch": "git fetch --depth 1 <canonical> <SHA> 于 1.6s exit=0 → FETCH_HEAD；随后 rev-parse --verify 通过",
+      "head_matches_pin": "git -C <repo_dir> rev-parse HEAD == 0f6b2c588a08da5ac66915e4f1fce7c07966763e（detached，2026-09-18）",
+      "upgrade_markers": "src/server.py 含 'COMSOL pre-start' 与 COMSOL_MCP_TRANSPORT；src/tools/session.py 认 COMSOL_MCP_VERSION；src/tools/electrochemistry.py 与 .gitignore 存在；mph logger 已降到 WARNING",
+      "deps_unchanged": "git diff 99172f8f..0f6b2c58 -- pyproject.toml 输出为空 → editable 安装下无需重装依赖",
+      "binaries_unchanged": "同区间对 pdf/ comsol_models/ knowledge_base/ 的 diff --stat 为空 → RAG 知识库完整保留、checkout 无冲突（已由 probe_kb.py 实测证：升级后仍 3669 chunks）",
+      "real_import_ok": "cwd=<repo_dir> 时 python -c 'import src.server' exit=0（仅建 FastMCP 对象与注册函数，不启 JVM、不占 license）",
+      "tool_count": "src/ 下 @mcp.tool 计数 == 103",
       "console_script_present": "<repo_dir>\\.venv\\Scripts\\comsol-mcp.exe 存在",
       "venv_python": "<repo_dir>\\.venv\\Scripts\\python.exe --version == Python 3.12.14",
       "server_not_patched": "src/server.py 中无 '# [pysci-shared-session-patch]' 标记（与 shared_session_patch_applied=false 一致）",
       "qoder_registration_matches": "mcp.json 中 comsol 条目的 command / env 与上方 registration 段一致",
-      "clone_is_shallow": "<repo_dir>\\.git\\shallow 存在"
+      "clone_is_shallow": "<repo_dir>\\.git\\shallow 存在，含 2 个 graft",
+      "rag_index_readable": "probe_kb.py 实测 collections=['comsol_docs']、documents=3669、module_count=4、KB_OK（而上游 --status 同时报 Documents: 0，坐实了那个 bug）",
+      "rag_retrieval_quality": "--search 'background pressure field' 命中 AcousticsModuleUsersGuide.pdf p.212 'Background Pressure Field — Add a Background Pressure Field node…'（score 0.608），正是 gain_ep 要用的 BPF 节点；9.7s exit=0",
+      "NOT_yet_verified": "实机 comsol_start / study_solve 全链路（会占 license，且需先在 Qoder 重启该 MCP 才加载新代码）；Qoder 是否支持 URL 型 MCP 注册（路径 C 的前提）"
     },
+    "code_diff_99172f8_to_pin": "20 文件 +3691/-120：server.py(+24) session.py(22) geometry.py(153) physics.py(63) model.py(28) study.py(55) utils/versioning.py(6) knowledge/embedded.py(+49) tools/electrochemistry.py(+955) tools/electrochemistry_data.py(+949) .gitignore(+21) README/README_CN/knowledge prompts，以及 5 个测试文件合计 +1254 行",
     "local_runtime_drift": [
       "knowledge_base/chroma.sqlite3（tracked，每次 RAG 查询被改写）",
-      "42 个 tracked .pyc（每次运行重生）",
+      "42 个 tracked .pyc（每次运行重生；两版之间内容未变，故 checkout 不冲突）",
       "knowledge_base/<uuid>/（Chroma 二进制段，未跟踪）"
     ],
-    "local_runtime_drift_note": "均为运行时状态，非源码级 patch（上游源码未被本项目修改）。上游无 .gitignore 故不被抑制，这也是不做 submodule 的直接原因之一。"
+    "local_runtime_drift_note": "均为运行时状态，非源码级 patch（上游源码未被本项目修改）。a9de20e 虽补了 .gitignore，但对已跟踪文件无效，故这些改写不被抑制——这也是不做 submodule 的直接原因之一。"
   },
 
   "disk_footprint_mb": {
