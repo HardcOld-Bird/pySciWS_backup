@@ -32,6 +32,17 @@ See **MCP vs CLI** below. The rest of this doc covers the CLI, which drives the 
 > `comsol` MCP in Qoder before running the CLI, never run either alongside the interactive GUI, and end
 > CLI servers with `server stop`. Escape hatches (shared session, HTTP transport) are documented in
 > `scripts/comsol_mcp/setup_comsol_mcp.ps1` → *CRITICAL FINDING*.
+>
+> **Is the license actually free?** `comsol_status` reports `standalone: true`, i.e. MPh runs an
+> **in-process JPype JVM** — there is *no* `comsolmphserver.exe` to spot, so "I see no COMSOL process"
+> proves nothing. Look for `jvm.dll` / `_jpype.pyd` inside the `comsol-mcp` python process instead;
+> `setup_comsol_mcp.ps1 -StatusOnly` does exactly that.
+>
+> **Duplicate instances.** The eager pre-start delays the MCP handshake by the whole ~30 s COMSOL boot,
+> and Qoder rewrites `mcp.json` during startup — which can spawn a *second* `comsol-mcp` without reaping
+> the first (observed 2026-10-01: two processes, each with its own JVM, ~320 MB apiece). **Fully quit
+> Qoder** to clear them; a window reload is not enough. Path C (HTTP transport → lazy start, instant
+> handshake) is confirmed supported by Qoder and removes both problems.
 
 **Rule of thumb:** routine read/solve/evaluate → community `comsol` MCP; publication figures, rendering,
 validation, node surgery, recipes, or no-MCP → `pysci-simulation` CLI.
@@ -57,16 +68,23 @@ Reproducibility is pinned by tracked artifacts inside this repo instead:
 | Artifact | Role |
 |---|---|
 | `scripts/comsol_mcp/UPSTREAM.lock.json` | **source of truth** — upstream URLs, pinned commit, venv Python, patch state, resolved `command`, verification checks, and the full no-submodule rationale |
-| `scripts/comsol_mcp/setup_comsol_mcp.ps1` | idempotent installer; its `-Commit` default must match the lock. `-StatusOnly` is a read-only check that lock / `-Commit` / actual `HEAD` all agree, plus the true RAG index count |
-| `scripts/comsol_mcp/probe_kb.py` | **true** RAG index status. Upstream's `build_knowledge_base.py --status` always prints `Documents: 0` (it calls `get_stats()` without `initialize()`); run this with the *community* venv's python instead — no model, no JVM, no license |
+| `scripts/comsol_mcp/setup_comsol_mcp.ps1` | idempotent installer; its `-Commit` default must match the lock. `-StatusOnly` is a read-only check that lock / `-Commit` / actual `HEAD` all agree, plus the true RAG index count and whether a COMSOL JVM is holding the license right now (incl. duplicate-instance detection) |
+| `scripts/comsol_mcp/probe_kb.py` | **true** RAG index status. Upstream's `build_knowledge_base.py --status` always prints `Documents: 0` (it calls `get_stats()` without `initialize()`); run this with the *community* venv's python instead — no model, no JVM, no license. It pages Chroma, so it survives indexes past 32766 chunks |
 | `scripts/comsol_mcp/mcp_servers.template.json` | shape of the Qoder `mcp.json` entry |
 
-> **`pdf_search` coverage caveat.** The community MCP's RAG index holds 3669 chunks from only **4 of 52**
-> manual modules (`Acoustics_Module`, `ACDC_Module`, `Battery_Design_Module`, `CAD_Import_Module`) because
-> the installer's RAG step ran with `-RagLimit 8`. Acoustics — what this project needs — *is* covered, but
-> **a `pdf_search` miss is not evidence the manuals lack the answer**: fall back to this skill's own
-> `simulation docs search` (FTS5 over the MinerU-converted manuals). Re-check real coverage with
-> `probe_kb.py`; rebuild without `-RagLimit` for full coverage (~50 min, CPU-heavy).
+> **`pdf_search` coverage.** The community MCP's RAG index is now **fully built** — 35,923 chunks over all
+> **52** manual modules / 108 PDFs (rebuilt 2026-10-01 in ~27 min; before that it was a 3669-chunk,
+> 4-module subset from the installer's `-RagLimit 8`). A `pdf_search` miss is therefore *meaningful* now.
+> Still prefer this skill's own `simulation docs search` for anything equation-heavy: it reads
+> MinerU-converted Markdown (equations → LaTeX), whereas `pdf_search` chunks are raw PDF text — usable
+> for body prose, but headers come out letter-spaced (`C H A P T E R 2 : P R E S S U R E …`).
+>
+> **Never trust `pdf_search_status`'s module list.** Upstream enumerates modules with an *unbounded*
+> `collection.get()`, and Chroma binds one SQL variable per row — past SQLite's 32766 limit that raises
+> `too many SQL variables`, which a bare `except: pass` swallows. At 35,923 chunks it reports the correct
+> `count` right next to `modules: []` / `module_count: 0`. Read that `0` as *"upstream couldn't
+> enumerate"*, **not** *"nothing is indexed"*. `pdf_search` itself is unaffected (bounded by `n_results`),
+> and so is `pdf_list_modules` (filesystem-based). `probe_kb.py` pages, so it tells the truth.
 
 Browse upstream code in-IDE via PyCharm **File → Open → Attach** on that folder (zero git / lint / pytest
 implications). To upgrade: bump `pinned_commit` in the lock **and** `-Commit` in the installer to the same
@@ -74,8 +92,11 @@ SHA, make that SHA reachable, then re-run the installer and confirm with `-Statu
 targeted `git -C <repo_dir> fetch --depth 1 <canonical_url> <SHA>` takes ~2 s and needs no `--unshallow`
 (the big blobs rarely change, so they're already local); add `-SkipInstall -SkipRag` when `pyproject.toml`
 and `knowledge_base/` are untouched. **Then restart the `comsol` MCP in Qoder** — a running process keeps
-the old code in memory, and its cached `toolCount` (93 → 103 on `0f6b2c58`) is the quickest proof the
-reload took.
+the old code in memory. The cached `toolCount` in `SERVER_METADATA.json` *is* the proof of a reload
+(93 → 103 on `0f6b2c58`), but it only flips once Qoder has actually **replaced** the process: measured
+~5 min behind a window reload here, and that reload also left an orphan behind. The faster behavioural
+check is `comsol_status` returning `connected: true` **and** `standalone: true` from cold — only the
+pre-starting pin does that. Prefer a full Qoder quit over a window reload.
 
 ## Invocation
 
