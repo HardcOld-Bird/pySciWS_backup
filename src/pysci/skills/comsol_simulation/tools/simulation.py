@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from . import build as _build
 from . import docs as _docs
 from . import export as _export
 from . import inspect as _inspect
+from . import mcp_server as _mcp
 from . import postprocess as _post
 from . import run as _run
 from . import session as _session
@@ -72,6 +74,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"indexed manuals                    : {len(docs)}")
     for d in docs:
         print(f"    - {d['doc']} ({d['n_sections']} sections, {d['built_at']})")
+    print("\n=== 社区 comsol MCP 服务端（path C：HTTP transport）===")
+    _print_mcp_status(_mcp.mcp_server_status())
     return 0
 
 
@@ -154,6 +158,119 @@ def cmd_server_status(args: argparse.Namespace) -> int:
     print(f"running    : {info['running']}")
     print(f"pid        : {info['pid']}")
     print(f"host:port  : {info['host']}:{info['port']}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# mcp（社区 comsol MCP 服务端托管：path C / HTTP transport）
+# ---------------------------------------------------------------------------
+def _print_mcp_status(info: dict[str, Any], *, show_json: bool = False) -> None:
+    """把 :func:`mcp_server.mcp_server_status` 的结果渲染成人能快速判断的形式。"""
+    if show_json:
+        print(json.dumps(info, indent=2, ensure_ascii=False, default=str))
+        return
+    pid_note = f"alive={info['pid_alive']}"
+    if info.get("launcher_pid"):
+        pid_note += f", launcher_pid={info['launcher_pid']}"
+    if info.get("externally_started"):
+        pid_note += ", 非本模块派生"
+    detached = info.get("detached")
+    if detached is True:
+        detach_note = f"已脱离终端（派生方式 {info.get('spawn_method') or '外部'}；本会话结束后仍存活）"
+    elif detached is False:
+        # 只在 WMI 不可用而降级到 CreateProcess 时才会出现；这种实例活不过终端拆除。
+        detach_note = (
+            f"⚠ 未脱离（派生方式 {info.get('spawn_method') or '外部'}）——终端拆除时会被静默回收，"
+            "请重跑 `mcp ensure --restart`"
+        )
+    else:
+        detach_note = "无法判定"
+    print(f"transport     : {info['transport']}  (endpoint {info['endpoint_path']})")
+    print(f"url           : {info['url']}")
+    print(f"running       : {info['running']}  -- {info['probe_verdict']}")
+    print(f"pid           : {info['pid']}  ({pid_note})")
+    print(f"detached      : {detach_note}")
+    print(f"holds_license : {info['holds_license']}  -- 该进程是否已加载 jvm.dll（= COMSOL 是否已被惰性启动）")
+    holders = info.get("license_holders") or []
+    if holders:
+        who = ", ".join(f"PID {h['pid']} ({h['exe']})" for h in holders)
+        print(f"license       : 已被占用 -- {who}")
+    else:
+        print("license       : 空闲（本机无任何进程加载 jvm.dll）")
+    print(f"exe           : {info['exe'] or '(未发现)'}")
+    print(f"launcher      : {info.get('launcher') or '(未生成)'}")
+    print(f"log           : {info['log_file']}")
+
+
+def _mcp_license_hint(info: dict[str, Any]) -> None:
+    """给出单 license 下的下一步建议——这是本项目最容易踩的坑，故每次都说清楚。"""
+    if info["holds_license"] or info.get("license_holders"):
+        print(
+            "[mcp] ⚠ 唯一 license 已被占用：跑 CLI standalone 求解或开 COMSOL GUI 之前，"
+            "先 `pysci-simulation mcp stop`（或停掉上面列出的进程）。"
+        )
+    else:
+        print("[mcp] COMSOL 尚未启动，license 空闲：可安全使用 CLI / GUI。")
+
+
+def cmd_mcp_ensure(args: argparse.Namespace) -> int:
+    """幂等地保证社区 comsol MCP 服务端在跑（调用任何 comsol MCP 工具前的第 0 步）。"""
+    try:
+        info = _mcp.ensure_mcp_server(timeout=args.timeout, restart=args.restart)
+    except _mcp.McpServerError as e:
+        print(f"[mcp] 失败：{e}", file=sys.stderr)
+        return 1
+    action = {"started": "已派生新服务端", "reused": "复用已在运行的服务端"}.get(
+        str(info.get("action")), str(info.get("action"))
+    )
+    print(f"[mcp] {action}：{info['url']}")
+    _print_mcp_status(info, show_json=args.json)
+    if args.json:
+        return 0
+    if info.get("action") == "started":
+        print("[mcp] Qoder 的 mcp.json 应把 comsol 注册为 URL 型（否则 Qoder 仍会按 stdio 派生并抢 license）：")
+        print(info["registration_json"])
+    _mcp_license_hint(info)
+    return 0
+
+
+def cmd_mcp_status(args: argparse.Namespace) -> int:
+    info = _mcp.mcp_server_status()
+    _print_mcp_status(info, show_json=args.json)
+    if not args.json:
+        _mcp_license_hint(info)
+    return 0
+
+
+def cmd_mcp_stop(args: argparse.Namespace) -> int:
+    stopped = _mcp.stop_mcp_server()
+    print("[mcp] 已终止服务端并清理状态文件。" if stopped else "[mcp] 没有发现运行中的服务端（端口无监听）。")
+    holders = _mcp.license_holders()
+    if holders:
+        who = ", ".join(f"PID {h['pid']} ({h['exe']})" for h in holders)
+        print(f"[mcp] ⚠ license 仍被占用：{who}（可能是 GUI / comsolmphserver / 其它 MCP 实例）。")
+    else:
+        print("[mcp] license 已空闲。")
+    return 0
+
+
+def cmd_license(args: argparse.Namespace) -> int:
+    """谁在占用唯一 COMSOL license（jvm.dll 判据，不启动任何进程）。"""
+    holders = _mcp.license_holders()
+    if args.json:
+        print(json.dumps(holders, indent=2, ensure_ascii=False))
+        return 0
+    if not holders:
+        print("license 空闲：本机无任何进程加载 jvm.dll。")
+        return 0
+    print(f"license 被 {len(holders)} 个进程占用（单机只有 1 个）：")
+    for h in holders:
+        print(f"  PID {h['pid']:>7}  {h['exe']}")
+        print(f"           {h['jvm']}")
+    print(
+        "判据：只认 jvm.dll。_jpype.pyd 在 import mph 时就加载，与 license 无关；"
+        "MPh standalone 的 JVM 在 python.exe 进程内，所以“看不到 COMSOL 进程”不等于“license 空闲”。"
+    )
     return 0
 
 
@@ -454,6 +571,31 @@ def build_parser() -> argparse.ArgumentParser:
     s = svsub.add_parser("status", help="查询常驻 server 状态（running/pid/port）")
     s.add_argument("--port", type=int, default=None)
     s.set_defaults(func=cmd_server_status)
+
+    # --- mcp（社区 comsol MCP 服务端托管）---
+    mc = sub.add_parser(
+        "mcp",
+        help="社区 comsol MCP 服务端托管（ensure/status/stop）——path C：HTTP transport，COMSOL 惰性启动",
+    )
+    mcsub = mc.add_subparsers(dest="mcp_cmd", required=True)
+    s = mcsub.add_parser(
+        "ensure",
+        help="幂等：不在跑就脱离终端派生一个，在跑就复用（调用任何 comsol MCP 工具前的第 0 步）",
+    )
+    s.add_argument("--timeout", type=float, default=90.0, help="等待就绪的秒数（默认 90）")
+    s.add_argument("--restart", action="store_true", help="先停掉已有实例再派生（改了 transport/port 后用）")
+    s.add_argument("--json", action="store_true", help="输出原始 JSON（供脚本/agent 解析）")
+    s.set_defaults(func=cmd_mcp_ensure)
+    s = mcsub.add_parser("status", help="查询服务端状态 + license 占用（只读，不派生任何进程）")
+    s.add_argument("--json", action="store_true", help="输出原始 JSON")
+    s.set_defaults(func=cmd_mcp_status)
+    s = mcsub.add_parser("stop", help="终止服务端并清理状态文件（同时释放它可能已占的 license）")
+    s.set_defaults(func=cmd_mcp_stop)
+
+    # --- license（只读）---
+    s = sub.add_parser("license", help="谁在占用唯一 COMSOL license（jvm.dll 判据，只读）")
+    s.add_argument("--json", action="store_true", help="输出原始 JSON")
+    s.set_defaults(func=cmd_license)
 
     # --- inspect ---
     ins = sub.add_parser("inspect", help="模型自省（tree/params/inventory/node/java）")

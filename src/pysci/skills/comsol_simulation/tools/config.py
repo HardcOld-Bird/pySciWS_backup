@@ -48,6 +48,14 @@ PRIORITY_MANUALS: tuple[str, ...] = (
 #: Windows 下 COMSOL 可执行文件相对安装根的子路径。
 _BINDIR_RELPATH: str = "bin/win64"
 
+#: 社区 comsol MCP 仓库目录名。该仓库刻意置于项目树之外（上游跟踪 ~700MB 二进制且无
+#: .gitignore，其 1GB venv 在 Windows 上不可重定位），故不做 submodule，只按约定位置推断。
+_MCP_REPO_NAME: str = "COMSOL_Multiphysics_MCP"
+
+#: 上游 FastMCP 只接受这三个 transport，其中 stdio 由 Qoder 自己派生、不归本技能托管。
+#: 注意 ``http`` 是 Qoder 配置里 ``type`` 字段的取值，**不是**服务端能接受的 transport。
+_MCP_HTTP_TRANSPORTS: tuple[str, ...] = ("sse", "streamable-http")
+
 
 # ---------------------------------------------------------------------------
 # .env 加载（与 literature_research.config 同款：dotenv 优先，手写解析兜底）
@@ -220,6 +228,63 @@ def discover_comsol(install_dir: str | None = None) -> ComsolInstall:
 
 
 # ---------------------------------------------------------------------------
+# 社区 comsol MCP 服务端发现（path C：HTTP transport）
+# ---------------------------------------------------------------------------
+def _resolve_mcp_repo() -> Path | None:
+    """定位社区 MCP 仓库根；找不到返回 None（由调用方给出可操作的报错）。
+
+    优先 ``.env`` 的 ``COMSOL_MCP_REPO``；否则取项目根的兄弟目录，即安装脚本
+    ``setup_comsol_mcp.ps1`` 的 ``-RepoDir`` 默认位置。
+    """
+    env = _get_env("COMSOL_MCP_REPO")
+    if env:
+        p = Path(env).expanduser()
+        if p.exists():
+            return p
+        print(
+            f"[comsol.config] WARNING: COMSOL_MCP_REPO={p} 不存在，回退兄弟目录推断",
+            file=sys.stderr,
+        )
+    sibling = PROJECT_ROOT.parent / _MCP_REPO_NAME
+    return sibling if sibling.exists() else None
+
+
+def _resolve_mcp_exe(repo: Path | None) -> Path | None:
+    """定位 ``comsol-mcp`` 控制台脚本（``.env`` 的 ``COMSOL_MCP_EXE`` 可显式覆盖）。"""
+    override = _get_env("COMSOL_MCP_EXE")
+    if override:
+        p = Path(override).expanduser()
+        if p.exists():
+            return p
+        print(
+            f"[comsol.config] WARNING: COMSOL_MCP_EXE={p} 不存在，回退仓库内推断",
+            file=sys.stderr,
+        )
+    if repo is None:
+        return None
+    if sys.platform == "win32":
+        rel = Path(".venv") / "Scripts" / "comsol-mcp.exe"
+    else:
+        rel = Path(".venv") / "bin" / "comsol-mcp"
+    cand = repo / rel
+    return cand if cand.exists() else None
+
+
+def _resolve_mcp_transport() -> str:
+    """校验 HTTP transport 取值：只接受 sse / streamable-http，其余回退 sse 并告警。"""
+    raw = (_get_env("COMSOL_MCP_TRANSPORT", "sse") or "sse").strip().lower()
+    if raw in _MCP_HTTP_TRANSPORTS:
+        return raw
+    print(
+        f"[comsol.config] WARNING: COMSOL_MCP_TRANSPORT={raw!r} 不是 HTTP transport"
+        f"（只接受 {' / '.join(_MCP_HTTP_TRANSPORTS)}），回退 'sse'。注意 'http' 是 Qoder"
+        " mcp.json 里 type 字段的取值，上游 FastMCP 会对它抛 ValueError。",
+        file=sys.stderr,
+    )
+    return "sse"
+
+
+# ---------------------------------------------------------------------------
 # Settings 数据类
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -245,6 +310,18 @@ class Settings:
     # --- 复用的 PDF 抽取设置 ---
     pdf_extract_backend: str
     mineru_token: str | None
+
+    # --- 社区 comsol MCP 服务端（path C：HTTP transport，COMSOL 惰性启动）---
+    #: 仓库根；None 表示未发现（``mcp ensure`` 会给出安装指引）。
+    mcp_repo_dir: Path | None = None
+    #: ``comsol-mcp`` 控制台脚本；None 表示未发现。
+    mcp_exe: Path | None = None
+    #: ``sse``（端点 ``/sse``）或 ``streamable-http``（端点 ``/mcp``）。
+    mcp_transport: str = "sse"
+    mcp_host: str = "127.0.0.1"
+    mcp_port: int = 8765
+    #: 传给服务端的 ``COMSOL_MCP_VERSION``；None → 用自动发现的 COMSOL 版本。
+    mcp_version: str | None = None
 
     _raw_env: dict[str, str] = field(default_factory=dict, repr=False)
 
@@ -292,6 +369,12 @@ class Settings:
             f"pdf_extract_backend : {self.pdf_extract_backend}",
             f"mineru_token        : {mask(self.mineru_token)}",
             f"mineru_ready        : {self.mineru_ready}",
+            "",
+            f"mcp_repo_dir        : {self.mcp_repo_dir or '(none)'}",
+            f"mcp_exe             : {self.mcp_exe or '(none)'}",
+            f"mcp_transport       : {self.mcp_transport}",
+            f"mcp_listen          : {self.mcp_host}:{self.mcp_port}",
+            f"mcp_version         : {self.mcp_version or '(use discovered COMSOL version)'}",
             "===============================================",
         ]
         return "\n".join(lines)
@@ -311,6 +394,8 @@ def build_settings() -> Settings:
     for d in (docs_dir, cache_dir, recipes_dir, templates_dir, knowledge_dir, runs_dir, tempdir):
         d.mkdir(parents=True, exist_ok=True)
 
+    mcp_repo = _resolve_mcp_repo()
+
     return Settings(
         project_root=PROJECT_ROOT,
         module_dir=MODULE_DIR,
@@ -326,6 +411,12 @@ def build_settings() -> Settings:
         comsol_max_cores=_get_env_int("COMSOL_MAX_CORES", 4),
         pdf_extract_backend=(_get_env("PDF_EXTRACT_BACKEND", "auto") or "auto").lower(),
         mineru_token=_get_env("MINERU_TOKEN"),
+        mcp_repo_dir=mcp_repo,
+        mcp_exe=_resolve_mcp_exe(mcp_repo),
+        mcp_transport=_resolve_mcp_transport(),
+        mcp_host=_get_env("COMSOL_MCP_HOST", "127.0.0.1") or "127.0.0.1",
+        mcp_port=_get_env_int("COMSOL_MCP_PORT", 8765),
+        mcp_version=_get_env("COMSOL_MCP_VERSION"),
         _raw_env={
             k: v
             for k, v in os.environ.items()
