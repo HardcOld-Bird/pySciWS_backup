@@ -7,7 +7,8 @@ description: Create, edit, debug, and evaluate COMSOL Multiphysics (.mph) simula
 
 COMSOL work runs on **two drivers**, and picking the right one saves time and license churn:
 
-- the registered community **`comsol` MCP** — *primary* for generic driving (load/param/solve/evaluate);
+- the registered community **`comsol` MCP** — *primary* for generic driving (103 tools: load / params /
+  geometry / physics / mesh / study-solve / results-evaluate / `pdf_search` over the local manuals);
 - this skill's **`simulation` CLI** — the *differentiated* layer the MCP lacks (publication export,
   pyvista render, physics validation, node surgery, recipes, persistent server) **and** the fallback.
 
@@ -24,9 +25,13 @@ See **MCP vs CLI** below. The rest of this doc covers the CLI, which drives the 
 | Publication `export image` (color-range / polar-rmax / geom-bbox + `.sidecar.json` + blank self-check); `render` (pyvista); `post stats/quality/framebox`; physics validation; granular `inspect node` / `node set`; `inspect java`; `diagnose`; `build recipes/apply`; `server` + `--connect-port` | **`pysci-simulation` CLI** — *differentiated; the MCP has none of these* |
 | MCP unavailable, or you want one self-contained script | **CLI** — *fallback; fully self-sufficient (does its own load/solve/export internally)* |
 
-> **Single license — never both at once.** The community MCP's server and a CLI standalone session
-> (or `server start`) each hold the one COMSOL license; don't run them together, or alongside the
-> interactive GUI. End CLI servers with `server stop`.
+> **Single license — never both at once.** On the pinned community MCP (`0f6b2c58`) `main()` starts
+> COMSOL *before* `mcp.run()` under stdio, so **Qoder merely launching the `comsol` MCP takes the one
+> license immediately** — solving or not. That in-process JVM cannot be attached by another process, and
+> a CLI standalone session (or `server start`) would need a second license we don't have. So: disable the
+> `comsol` MCP in Qoder before running the CLI, never run either alongside the interactive GUI, and end
+> CLI servers with `server stop`. Escape hatches (shared session, HTTP transport) are documented in
+> `scripts/comsol_mcp/setup_comsol_mcp.ps1` → *CRITICAL FINDING*.
 
 **Rule of thumb:** routine read/solve/evaluate → community `comsol` MCP; publication figures, rendering,
 validation, node surgery, recipes, or no-MCP → `pysci-simulation` CLI.
@@ -37,24 +42,40 @@ Deliberately **outside this repo**, as a sibling directory:
 `D:\XXXIIIGGG\projects\pySci\COMSOL_Multiphysics_MCP` (override: `setup_comsol_mcp.ps1 -RepoDir`).
 
 **Not a git submodule — on purpose.** Upstream tracks ~700 MB of binaries (`pdf/` 535 MB,
-`comsol_models/` 122 MB, `knowledge_base/chroma.sqlite3`, 42 `.pyc`) and ships **no `.gitignore`**, so
-vendoring would drag ~2.2 GB into this tree *and* leave the submodule permanently dirty (Chroma rewrites
-`chroma.sqlite3` on every query) — silencing that with `ignore = all` would also hide real upstream
-changes. Its 1 GB `.venv` (Python 3.12) is not relocatable on Windows either. Note that Python-level venv
-conflict is *not* the issue: the two venvs are hermetic and this project never imports upstream code
-(Qoder launches it as a separate process). The real cost is IDE/lint bleed, so it stays out of the tree.
+`comsol_models/` 122 MB, `knowledge_base/chroma.sqlite3`, 42 `.pyc` — 269 tracked files in all), so
+vendoring would drag ~2.2 GB into this tree *and* leave the submodule permanently dirty: Chroma rewrites
+`chroma.sqlite3` on every query and the `.pyc` regenerate on every run. Upstream did add a `.gitignore`
+(`a9de20e`), but never `git rm --cached` those paths — and `.gitignore` has no effect on already-tracked
+files — so the dirt is still there on the current pin. Silencing it with `ignore = all` would also hide
+real upstream changes. Its 1 GB `.venv` (Python 3.12) is not relocatable on Windows either. Note that
+Python-level venv conflict is *not* the issue: the two venvs are hermetic and this project never imports
+upstream code (Qoder launches it as a separate process). The real cost is IDE/lint bleed, so it stays out
+of the tree.
 
 Reproducibility is pinned by tracked artifacts inside this repo instead:
 
 | Artifact | Role |
 |---|---|
 | `scripts/comsol_mcp/UPSTREAM.lock.json` | **source of truth** — upstream URLs, pinned commit, venv Python, patch state, resolved `command`, verification checks, and the full no-submodule rationale |
-| `scripts/comsol_mcp/setup_comsol_mcp.ps1` | idempotent installer; its `-Commit` default must match the lock. `-StatusOnly` is a read-only check that lock / `-Commit` / actual `HEAD` all agree |
+| `scripts/comsol_mcp/setup_comsol_mcp.ps1` | idempotent installer; its `-Commit` default must match the lock. `-StatusOnly` is a read-only check that lock / `-Commit` / actual `HEAD` all agree, plus the true RAG index count |
+| `scripts/comsol_mcp/probe_kb.py` | **true** RAG index status. Upstream's `build_knowledge_base.py --status` always prints `Documents: 0` (it calls `get_stats()` without `initialize()`); run this with the *community* venv's python instead — no model, no JVM, no license |
 | `scripts/comsol_mcp/mcp_servers.template.json` | shape of the Qoder `mcp.json` entry |
 
+> **`pdf_search` coverage caveat.** The community MCP's RAG index holds 3669 chunks from only **4 of 52**
+> manual modules (`Acoustics_Module`, `ACDC_Module`, `Battery_Design_Module`, `CAD_Import_Module`) because
+> the installer's RAG step ran with `-RagLimit 8`. Acoustics — what this project needs — *is* covered, but
+> **a `pdf_search` miss is not evidence the manuals lack the answer**: fall back to this skill's own
+> `simulation docs search` (FTS5 over the MinerU-converted manuals). Re-check real coverage with
+> `probe_kb.py`; rebuild without `-RagLimit` for full coverage (~50 min, CPU-heavy).
+
 Browse upstream code in-IDE via PyCharm **File → Open → Attach** on that folder (zero git / lint / pytest
-implications). To upgrade: bump `pinned_commit` in the lock, re-run the installer with the same SHA, then
-re-verify with `-StatusOnly`.
+implications). To upgrade: bump `pinned_commit` in the lock **and** `-Commit` in the installer to the same
+SHA, make that SHA reachable, then re-run the installer and confirm with `-StatusOnly`. Behind a proxy a
+targeted `git -C <repo_dir> fetch --depth 1 <canonical_url> <SHA>` takes ~2 s and needs no `--unshallow`
+(the big blobs rarely change, so they're already local); add `-SkipInstall -SkipRag` when `pyproject.toml`
+and `knowledge_base/` are untouched. **Then restart the `comsol` MCP in Qoder** — a running process keeps
+the old code in memory, and its cached `toolCount` (93 → 103 on `0f6b2c58`) is the quickest proof the
+reload took.
 
 ## Invocation
 
