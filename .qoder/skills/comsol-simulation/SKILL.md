@@ -85,11 +85,13 @@ Companions: `mcp status` (read-only), `mcp stop`, `license` (machine-wide `jvm.d
 > intended. If Qoder reports a request timeout on it, retry; the server is fine. Doc-only tools
 > (`pdf_search`, `pdf_list_modules`, `docs_get`) never start COMSOL, so they stay cheap.
 
-> **If Qoder connects but calls fail with 403 `Invalid Origin header`.** FastMCP auto-enables
-> DNS-rebinding protection whenever the host is `127.0.0.1` / `localhost` / `[::1]`, allowing only
-> `http://127.0.0.1:*`, `http://localhost:*`, `http://[::1]:*` as `Origin`. Measured identically on both
-> transports: **no `Origin` header, or a loopback one → 200; `vscode-file://vscode-app`, `null`, or any
-> external origin → 403.** Diagnose with
+> **403 `Invalid Origin header` — measured *not* to occur here, but know the fallback.** Qoder connected
+> through the URL entry and called `pdf_list_modules` successfully (2026-10-01), so it either sends no
+> `Origin` or a loopback one. Kept in case the host/port or upstream defaults ever change: FastMCP
+> auto-enables DNS-rebinding protection whenever the host is `127.0.0.1` / `localhost` / `[::1]`, allowing
+> only `http://127.0.0.1:*`, `http://localhost:*`, `http://[::1]:*` as `Origin`. Measured identically on
+> both transports: **no `Origin` header, or a loopback one → 200; `vscode-file://vscode-app`, `null`, or
+> any external origin → 403.** Diagnose with
 > `scripts/comsol_mcp/probe_mcp_http.py <sse|streamable-http> <port>` — it prints the full matrix, then
 > does a real MCP handshake using a doc-only tool so no license is touched. Upstream exposes **no** env
 > switch for `transport_security`, so the only two fixes are: revert `mcp.json` to the `command` form
@@ -148,11 +150,18 @@ SHA, make that SHA reachable, then re-run the installer and confirm with `-Statu
 targeted `git -C <repo_dir> fetch --depth 1 <canonical_url> <SHA>` takes ~2 s and needs no `--unshallow`
 (the big blobs rarely change, so they're already local); add `-SkipInstall -SkipRag` when `pyproject.toml`
 and `knowledge_base/` are untouched. **Then restart the `comsol` MCP in Qoder** — a running process keeps
-the old code in memory. The cached `toolCount` in `SERVER_METADATA.json` *is* the proof of a reload
-(93 → 103 on `0f6b2c58`), but it only flips once Qoder has actually **replaced** the process: measured
-~5 min behind a window reload here, and that reload also left an orphan behind. The faster behavioural
-check is `comsol_status` returning `connected: true` **and** `standalone: true` from cold — only the
-pre-starting pin does that. Prefer a full Qoder quit over a window reload.
+the old code in memory. Under **path C the only reliable proof of a reload is calling a tool**: Qoder no
+longer spawns the process, so `SERVER_METADATA.json`'s cached `toolCount` stops tracking reality — after
+the switch to the URL entry it read `93` (a stale pre-upgrade value) while the `tools/*.json` on disk, the
+tool list injected into the session, and a live `pdf_list_modules` call all agreed on **103**. (Under
+path A `toolCount` *is* the proof — 93 → 103 on `0f6b2c58` — but it only flips once Qoder has actually
+**replaced** the process: measured ~5 min behind a window reload here, and that reload also left an orphan
+behind. Path A's faster behavioural check was `comsol_status` returning `connected: true` **and**
+`standalone: true` from cold — only the pre-starting pin does that; under path C both stay `false` until
+the first COMSOL-touching call.) Prefer a full Qoder quit over a window reload. **Qoder CN has no tray
+icon**, so a full quit means ending the `QoderCN` process in Task Manager: that reclaims the stdio
+`comsol-mcp` Qoder spawned (same job object) and frees the license, but it does **not** touch the
+WMI-spawned path C server — measured, the server outlived the `QoderCN` kill.
 
 ## Invocation
 
