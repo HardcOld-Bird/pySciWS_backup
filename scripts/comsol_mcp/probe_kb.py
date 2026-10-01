@@ -14,6 +14,16 @@ fully populated index. Anything that trusts it -- including this project's
 The MCP's ``pdf_search`` tool is NOT affected: ``VectorRetriever.search()`` lazily calls
 ``initialize()`` itself, so retrieval works at runtime. Only the status reporting is wrong.
 
+A second, scale-dependent upstream bug (found 2026-10-01 after the index grew from 3669 to
+35923 chunks): ``get_stats()`` collects its module list with an *unbounded*
+``collection.get(include=["metadatas"])``, and Chroma binds one SQL variable per row, so past
+SQLite's 32766-variable ceiling it raises ``InternalError: too many SQL variables``. Upstream
+swallows it with a bare ``except Exception: pass``, so ``pdf_search_status`` does not fail -- it
+quietly reports ``count: 35923`` alongside ``modules: []`` / ``module_count: 0``. Read that zero
+as "upstream could not enumerate", NOT as "nothing is indexed". ``pdf_search`` (bounded by
+``n_results``) and ``pdf_list_modules`` (filesystem-based, never touches Chroma) are both fine.
+This probe pages instead, so it reports the true module list at any index size.
+
 Usage
 -----
 Run it with the COMMUNITY venv's python (this project's venv has no chromadb)::
@@ -41,6 +51,10 @@ from pathlib import Path
 DEFAULT_REPO_DIR = Path(r"D:\XXXIIIGGG\projects\pySci\COMSOL_Multiphysics_MCP")
 DEFAULT_PDF_DIR = Path(r"D:\XiGPrograms\comsol\6.4\base\doc\pdf")
 COLLECTION = "comsol_docs"
+# Chroma binds one SQL variable per row in an unbounded get(), and SQLite caps that at 32766.
+# Measured on the real index: page=20000 works, page=40000 raises "too many SQL variables".
+# 5000 stays far under the ceiling and still needs only ~8 round trips for 35923 chunks.
+PAGE_SIZE = 5000
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -100,7 +114,24 @@ def read_counts(db_dir: Path) -> tuple[int | None, list[str]]:
     # and offline. Passing one would download/load SentenceTransformer for nothing.
     collection = client.get_collection(COLLECTION)
     count = collection.count()
-    metas = collection.get(include=["metadatas"]).get("metadatas") or []
+
+    # Paged on purpose -- see PAGE_SIZE. An unbounded get() is what makes upstream's
+    # get_stats() lose its module list once the index passes SQLite's variable ceiling.
+    metas: list = []
+    offset = 0
+    while True:
+        batch = collection.get(
+            include=["metadatas"], limit=PAGE_SIZE, offset=offset
+        ).get("metadatas") or []
+        if not batch:
+            break
+        metas.extend(batch)
+        offset += len(batch)
+        if len(batch) < PAGE_SIZE:
+            break
+    if len(metas) != count:
+        print(f"PAGING_NOTE   : read {len(metas)} metadatas but count() says {count}")
+
     modules = sorted({m["module"] for m in metas if m and m.get("module")})
     return count, modules
 

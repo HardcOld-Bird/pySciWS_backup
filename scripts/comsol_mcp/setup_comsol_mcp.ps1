@@ -46,6 +46,9 @@
    # Quick subset build (first 8 PDFs only, proves the pipeline):
    ... setup_comsol_mcp.ps1 -RagLimit 8
 
+   # NOTE: the KB is now FULLY built (35923 chunks / 52 modules). Step 7 rebuilds from
+   # scratch and takes ~27 min, so on any re-run pass -SkipRag unless you truly want it.
+
    # Read-only: verify the pin against UPSTREAM.lock.json, then report KB status:
    ... setup_comsol_mcp.ps1 -StatusOnly
 
@@ -79,6 +82,18 @@
  have 1. So: disable/stop the `comsol` MCP in Qoder before using the CLI, and
  never run either alongside the interactive GUI.
 
+ OBSERVED SIDE EFFECT of the eager start (2026-10-01, live): pre-start delays the
+ MCP handshake by the whole ~30s COMSOL boot, and Qoder rewrote
+ shared_client\mcp.json mid-startup (its extension\local\mcp.json mirror carries
+ a userConfigMD5 change detector). The reload spawned a SECOND comsol-mcp and
+ never reaped the first -- two processes, BOTH with jvm.dll + _jpype.pyd loaded
+ (54 threads, ~320MB each), i.e. two JVMs contending for one license. Note also
+ that comsol_status reports "standalone": true, so the JVM is IN-PROCESS: there
+ is NO comsolmphserver.exe to look for, and "I see no COMSOL process" does NOT
+ mean "the license is free". `-StatusOnly` now checks exactly this (process
+ count + loaded jvm.dll). Clean fix for duplicates: fully QUIT Qoder, a window
+ reload is not enough.
+
  Three resolutions:
    A) Sequential use (simplest, no patch -- CURRENT DEFAULT): only one driver
       holds a COMSOL session at a time; stop the MCP (or `server stop`) before
@@ -96,24 +111,43 @@
         the pre-connect fails (non-fatal); just call comsol_connect(port=2036)
         after the CLI has started the server.
    C) HTTP transport (lazy COMSOL start, NO idle license -- best fit for a
-      single license, but BLOCKED): added by upstream 7a4b704. Set
-      COMSOL_MCP_TRANSPORT=streamable-http (or sse -- NOT "http"; FastMCP only
-      accepts stdio / sse / streamable-http) plus COMSOL_MCP_HOST and
-      COMSOL_MCP_PORT (default 127.0.0.1:8765), then register the MCP BY URL
-      instead of by command. With no thread reading stdin, COMSOL starts lazily
-      on the first tool call and no license is held while idle. BLOCKER: this
-      machine's mcp.json holds only command/args/env entries (arxiv, comsol), so
-      URL-based registration in Qoder is UNCONFIRMED -- do not switch blind.
+      single license): added by upstream 7a4b704. Set COMSOL_MCP_TRANSPORT=sse
+      (or streamable-http -- NOT "http"; FastMCP only accepts stdio / sse /
+      streamable-http) plus COMSOL_MCP_HOST and COMSOL_MCP_PORT (default
+      127.0.0.1:8765), then register the MCP BY URL instead of by command. With
+      no thread reading stdin, COMSOL starts lazily on the first tool call, no
+      license is held while idle, and the handshake is instant -- so the
+      duplicate-spawn problem above disappears too.
+      Qoder DOES support URL registration. Verified 2026-10-01 against the
+      official docs: the IDE "Model Context Protocol" page lists the transport
+      as STDIO or SSE with "URL (for SSE or Streamable HTTP)" and states that
+      for Streamable HTTP you configure the URL the same way as SSE and Qoder
+      auto-detects; the CLI MCP reference lists type = sse / http /
+      streamable-http / ws with fields url + headers. mcp.json shape:
+        { "mcpServers": { "comsol":
+            { "type": "sse", "url": "http://127.0.0.1:8765/sse" } } }
+      (FastMCP serves /sse for transport=sse and /mcp for streamable-http --
+      keep the two in step.) NOT YET RUN HERE, and it costs you a process:
+      nothing spawns the server any more, so you must start it yourself and
+      keep it up, and the first tool call pays the ~30s JVM boot (raise the
+      server's Request Timeout in Qoder accordingly).
 
- Recommendation: A today (the verified path); revisit C if Qoder gains URL-based
- MCP registration, since C is strictly better under one license. Choose B only
- if you need the MCP and the CLI warm at the same time.
+ Recommendation: A today (verified end-to-end 2026-10-01: comsol_status ->
+ connected, 6.4, standalone, 8 cores). C is now unblocked and is strictly better
+ under one license -- switch when the "start the server yourself" chore is worth
+ it, or as soon as the duplicate-JVM problem bites again. Choose B only if you
+ need the MCP and the CLI warm at the same time.
 
 --------------------------------------------------------------------------------
  Registration (add the community comsol MCP in Qoder)
 --------------------------------------------------------------------------------
- User-level config file: C:\Users\antar\.qoder-cn\shared_client\mcp.json
+ User-level config file: C:\Users\antar\.qoder-cn\shared_client\mcp.json   <-- EDIT THIS ONE
+ Qoder mirrors it to ...\shared_client\extension\local\mcp.json and adds a
+ userConfigMD5 key there; that mirror is DERIVED, so do not hand-edit it. Only
+ one project dir exists under shared_client\projects, so a duplicated `comsol`
+ entry is never the cause of two live instances (see OBSERVED SIDE EFFECT above).
  Shape (stdio): { "mcpServers": { "<name>": { "command":..., "args":[...], "env":{...} } } }
+ Shape (URL)  : { "mcpServers": { "<name>": { "type":"sse", "url":"http://host:port/sse" } } }
  This script PRINTS the resolved JSON block (real paths) at the end -- copy it in.
  Reference template: scripts\comsol_mcp\mcp_servers.template.json
 
@@ -187,7 +221,7 @@ param(
     [string] $TorchIndexUrl = 'https://download.pytorch.org/whl/cpu',
     [switch] $SkipInstall,
     [switch] $SkipRag,
-    [switch] $Rebuild,
+    [switch] $Rebuild,                      # almost never what you want -- read the step 7 warning first
     [switch] $NoHfMirror,                   # pass --no-mirror to the build script (outside China / no hf-mirror)
     [switch] $ApplySharedSessionPatch,      # see CRITICAL FINDING path B
     [switch] $Shallow,                      # clone with --depth 1 (this repo is huge; shallow is plenty for the spike)
@@ -275,6 +309,44 @@ if ($StatusOnly) {
     else {
         & $venvPy @sArgs
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "RAG probe exit code $LASTEXITCODE -- read the messages above." }
+    }
+
+    Write-Step 'License occupancy (is a COMSOL JVM holding the single license right now?)'
+    # The pinned server starts COMSOL EAGERLY under stdio and MPh reports "standalone": true, so the JVM
+    # lives IN-PROCESS inside comsol-mcp's python.exe. There is NO comsolmphserver.exe to look for, hence
+    # "I see no COMSOL process" does NOT mean "the license is free". Test for a loaded jvm.dll instead.
+    # Also: a Windows venv makes ONE instance show up as TWO python.exe -- the Scripts\python.exe launcher
+    # shim (a few MB, never loads a JVM) and the base interpreter it re-execs (the real server). So count
+    # instances by "has a JVM", never by "command line mentions comsol-mcp" (that double-counts).
+    $mcpPy = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+               Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -and $_.CommandLine -match 'comsol-mcp' })
+    if ($mcpPy.Count -eq 0) {
+        Write-Ok 'no comsol-mcp python process running -- the license is free for the CLI / GUI.'
+    } else {
+        $holders = @()
+        foreach ($mp in $mcpPy) {
+            $started = ''
+            $hasJvm  = $false
+            try {
+                $proc    = Get-Process -Id $mp.ProcessId -ErrorAction Stop
+                $started = $proc.StartTime.ToString('yyyy-MM-dd HH:mm:ss')
+                $hasJvm  = [bool]@($proc.Modules | Where-Object { $_.ModuleName -match 'jvm|jpype' }).Count
+            } catch { Write-Warn2 "cannot inspect PID $($mp.ProcessId): $($_.Exception.Message)" }
+            if ($hasJvm) {
+                $holders += $mp.ProcessId
+                Write-Warn2 "PID $($mp.ProcessId) (started $started) HAS a JVM => it is HOLDING the license."
+            } else {
+                Write-Info "PID $($mp.ProcessId) (started $started) no JVM => venv launcher shim, or COMSOL not started."
+            }
+        }
+        Write-Info "COMSOL session(s) alive: $($holders.Count) (of a single license)"
+        if ($holders.Count -gt 1) {
+            Write-Warn2 "$($holders.Count) separate JVMs are contending for ONE license. Qoder orphans an instance"
+            Write-Warn2 'when it rewrites mcp.json mid-startup (see OBSERVED SIDE EFFECT in this header).'
+            Write-Warn2 'Fully QUIT Qoder to clear them; a window reload is not enough.'
+        } elseif ($holders.Count -eq 0) {
+            Write-Ok 'server process(es) up but no COMSOL session => the license is free right now.'
+        }
     }
     return
 }
@@ -449,6 +521,19 @@ if ($DryRun) {
 # ---------------------------------------------------------------------------
 if (-not $SkipRag) {
     Write-Step '7/8 Build RAG knowledge base (all-MiniLM-L6-v2, CPU)'
+    # MEASURED 2026-10-01 on the full corpus (108 PDFs / 52 modules -> 35923 chunks): ~27 min wall
+    # clock, and PDF extraction is only ~31s of that -- the rest is 360 embedding batches. Three traps:
+    #  * Do NOT pass -Rebuild. rebuild_from_pdfs() clears the collection ITSELF, but only AFTER it has
+    #    extracted every PDF into memory; -Rebuild clears at t=0 instead, stretching the "no usable
+    #    index" window from seconds to the whole extraction phase and turning any extraction failure
+    #    into total loss of the index you already paid for.
+    #  * Launch it from a REAL background terminal when an agent/shell drives it. A child started with
+    #    Start-Process stays inside the terminal's job object and gets reaped when that shell exits, so
+    #    the build dies silently -- no traceback, no Windows Error Reporting entry (observed live).
+    #  * Upstream never calls logging.basicConfig(), so the root logger stays at WARNING and every
+    #    "Processing: <file>.pdf" INFO line is dropped: a 27-minute build with no visible progress.
+    #    Wrap it (runpy.run_path + logging.basicConfig(level=INFO)) if you want a heartbeat.
+    Write-Warn2 'A full build CLEARS the existing index and takes ~27 min. Pass -SkipRag to keep it.'
     $ragArgs = @($buildPy, '--pdf-dir', $PdfDir)
     if ($DbDir)          { $ragArgs += @('--db-dir', $DbDir) }
     if ($Rebuild)        { $ragArgs += '--rebuild' }
