@@ -85,6 +85,12 @@ Reproducibility is pinned by tracked artifacts inside this repo instead:
 > `count` right next to `modules: []` / `module_count: 0`. Read that `0` as *"upstream couldn't
 > enumerate"*, **not** *"nothing is indexed"*. `pdf_search` itself is unaffected (bounded by `n_results`),
 > and so is `pdf_list_modules` (filesystem-based). `probe_kb.py` pages, so it tells the truth.
+>
+> **The first doc lookup may time out.** Inside a fresh MCP process the first `pdf_search` /
+> `pdf_search_status` loads SentenceTransformer, which can exceed Qoder's default request timeout
+> (observed live: a `40504` timeout while the server kept working — its python working set grew
+> 322 → 526 MB). Warm, the same call returns in seconds. So a timeout on the *first* lookup is **not**
+> a broken index: just retry, or raise that server's Request Timeout.
 
 Browse upstream code in-IDE via PyCharm **File → Open → Attach** on that folder (zero git / lint / pytest
 implications). To upgrade: bump `pinned_commit` in the lock **and** `-Commit` in the installer to the same
