@@ -1,27 +1,37 @@
-"""生成账本：每次出图的可复现记录。
+"""生成账本：每次出图的溯源与成本审计记录。
 
-AI 出图是**非确定性**的（同 prompt 换 seed/模型/后端结果迥异），且云端生成**要花钱**
-（即梦约 0.2 元/张）。故每次生成都必须留痕，才能：
+**先明确账本不能做什么**：云端图像生成是**非确定性**的，方舟官方声明即使固定
+``seed`` 也仅"生成类似结果，不保证完全一致"（且 seed 只有已弃用的 3.0-t2i 认）。
+所以账本**不是复现手段**，而是三件事：
 
-1. **复现**：记下 prompt / seed / model / backend / workflow，日后能原样重跑；
-2. **溯源**：一张入库图（assets/gallery）对应哪次生成、参考了哪张图（i2i）；
-3. **审计成本**：累计出了多少张、花了多少额度。
+1. **溯源**：一张入库图（assets/gallery）是哪次生成、用了什么 prompt/模型/参数、
+   参考了哪张图（i2i）；
+2. **审计成本**：累计出了多少张、消耗多少 token（方舟按成功张数计费）；
+3. **避免重花钱**：好结果一旦生成就归档（``gallery --add``），而不是指望重跑一次能拿回同一张。
 
 双写两份（互为补充）：
 
-- ``manifest.jsonl`` —— 机器可读，一行一条 JSON（追加写，永不重写；供程序过滤/统计）；
-- ``LEDGER.md``      —— 人类可读表格（由 manifest 全量重渲染；供 Agent / 用户 Read 速览）。
+- ``manifest.jsonl`` —— 机器可读，一行一条 JSON（**追加写，永不重写**；供程序过滤/统计）；
+- ``LEDGER.md``      —— 人类可读表格（由 manifest 渲染；供 Agent / 用户 Read 速览）。
 
-字段（``Entry``）：``ts / prompt / seed / model / backend / workflow / ref / out / notes``。
-其中 ``out`` 是产物图路径，``ref`` 是图生图的源图（可空）。
+渲染策略：``record()`` **只追加 JSONL**，不自动重渲染 Markdown（旧行为是每条都全量
+重渲染，O(n) 开销）；渲染由 CLI 在一次操作结束时显式调一次（``imagine ledger`` 也会先渲染，
+保证 Read 到的总是新鲜的）。
+
+另有一条**脱离账本的溯源兜底**：:func:`embed_metadata` 把 prompt/model 等写进产物 PNG 的
+tEXt 块（ComfyUI / A1111 的通行做法）。图片被拷走、账本丢了，它仍自带出处。
+
+字段（``Entry``）：``ts / prompt / seed / model / backend / recipe / ref / out / notes``。
+其中 ``out`` 是产物图路径，``ref`` 是图生图的源图（可空），``recipe`` 是所属流水线配方名。
 
 用法::
 
-    from pysci.skills.ai_drawing.tools.ledger import record, query
+    from pysci.skills.ai_drawing.tools.ledger import record, query, render_markdown
 
-    record(prompt="...", seed=42, model="doubao-seedream-4-0-250828",
-           backend="comfyui", out="data/skills/ai_drawing/assets/x.png")
-    hits = query(backend="comfyui", limit=10)
+    record(prompt="...", model="doubao-seedream-5-0-flash-260915", backend="ark",
+           out="data/skills/ai_drawing/assets/x.png")
+    render_markdown()                      # 批量写完后渲染一次
+    hits = query(backend="ark", limit=10)
 """
 
 from __future__ import annotations
@@ -37,8 +47,11 @@ from .config import settings
 #: 机器可读账本（JSON Lines，追加写）。
 MANIFEST_NAME = "manifest.jsonl"
 
-#: 人类可读账本（Markdown 表格，由 manifest 全量重渲染）。
+#: 人类可读账本（Markdown 表格，由 manifest 渲染）。
 LEDGER_NAME = "LEDGER.md"
+
+#: 内嵌到 PNG tEXt 块的键前缀（与 ComfyUI/A1111 的元数据约定共存不撞名）。
+META_PREFIX = "pysci"
 
 
 def _now_iso() -> str:
@@ -52,22 +65,22 @@ class Entry:
 
     Attributes:
         ts: 生成时间（ISO8601）。
-        prompt: 文生图/图生图用的 prompt（可含正/负向）。
-        seed: 随机种子（None 表示未固定/后端未回报）。
-        model: 图像模型 ID（如 ``doubao-seedream-4-0-250828``）。
-        backend: 出图后端（``comfyui`` | ``imagegen`` | ``manual``）。
-        workflow: ComfyUI API 格式工作流配方名/路径（imagegen/manual 可空）。
+        prompt: 文生图/图生图用的 prompt（图层拆分/交互编辑的意图也写在这里）。
+        seed: 随机种子（None 表示未固定）。**不可作复现依据**，仅存历史参数。
+        model: 图像模型 ID（如 ``doubao-seedream-5-0-flash-260915``）。
+        backend: 出图后端（``ark`` | ``imagegen`` | ``manual``）。
+        recipe: 所属流水线配方名（对应 ``data/skills/ai_drawing/recipes/*.md``，可空）。
         ref: 图生图源图路径（文生图为空）。
         out: 产物图路径。
         notes: 自由备注（迭代意图、评估结论等）。
-        extra: 其它可复现参数（size/strength/negative…），原样存 JSON。
+        extra: 其它参数（size/usage/snapshot/kind…），原样存 JSON。
     """
 
     prompt: str = ""
     seed: int | None = None
     model: str = ""
     backend: str = ""
-    workflow: str = ""
+    recipe: str = ""
     ref: str = ""
     out: str = ""
     notes: str = ""
@@ -80,7 +93,14 @@ class Entry:
 
     @classmethod
     def from_json(cls, d: dict[str, Any]) -> Entry:
-        """从 dict 重建（容忍多余/缺失键，向后兼容账本演进）。"""
+        """从 dict 重建（容忍多余/缺失键，向后兼容账本演进）。
+
+        兼容旧账本：重构前的字段名 ``workflow``（ComfyUI 工作流配方）映射到 ``recipe``，
+        旧 backend 值 ``comfyui`` 保留原样（历史记录不该被改写）。
+        """
+        d = dict(d)
+        if "recipe" not in d and "workflow" in d:
+            d["recipe"] = d.pop("workflow")
         known = {f for f in cls.__dataclass_fields__}  # noqa: SLF001
         kwargs = {k: v for k, v in d.items() if k in known}
         return cls(**kwargs)
@@ -102,16 +122,19 @@ def record(
     seed: int | None = None,
     model: str = "",
     backend: str = "",
-    workflow: str = "",
+    recipe: str = "",
     ref: str | Path = "",
     out: str | Path = "",
     notes: str = "",
     ts: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> Entry:
-    """追加一条生成记录到 manifest.jsonl，并同步重渲染 LEDGER.md。
+    """追加一条生成记录到 manifest.jsonl（**不自动渲染 Markdown**）。
 
-    所有路径参数会被规范化为**相对项目根**的 POSIX 串（账本可跨机器阅读，不写死绝对路径）。
+    所有路径参数会被规范化为**相对项目根**的 POSIX 串（账本可跳机器阅读，不写死绝对路径）。
+
+    批量出图时逐张调本函数，结束后再调一次 :func:`render_markdown` —— 避免旧实现的
+    "每条记录都全量重渲染" O(n) 开销。
 
     Returns:
         写入的 :class:`Entry`。
@@ -121,7 +144,7 @@ def record(
         seed=seed,
         model=model,
         backend=backend,
-        workflow=str(workflow or ""),
+        recipe=str(recipe or ""),
         ref=_rel(ref),
         out=_rel(out),
         notes=notes,
@@ -132,8 +155,57 @@ def record(
     mp.parent.mkdir(parents=True, exist_ok=True)
     with mp.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry.to_json(), ensure_ascii=False) + "\n")
-    render_markdown()
     return entry
+
+
+# ---------------------------------------------------------------------------
+# PNG tEXt 元数据内嵌（脱离账本也能溯源）
+# ---------------------------------------------------------------------------
+def embed_metadata(path: str | Path, meta: dict[str, Any], *, prefix: str = META_PREFIX) -> bool:
+    """把生成参数写进 PNG 的 tEXt 块，使图片**自带出处**。
+
+    仅对 ``.png`` 生效（JPEG 需走 EXIF，且方舟 4.x 直出的 jpeg 重存会二次压缩，不划算）。
+    失败不抛异常，只返回 False——元数据是兜底手段，不应因此让出图流程失败。
+    """
+    p = Path(path).expanduser()
+    if p.suffix.lower() != ".png" or not p.is_file():
+        return False
+    try:
+        from PIL import Image, PngImagePlugin
+
+        with Image.open(p) as im:
+            im.load()
+            mode, size = im.mode, im.size
+            data = im.tobytes()
+            pnginfo = PngImagePlugin.PngInfo()
+            # 保留原有文本块（如方舟可能写入的字段），再追加我们的
+            for k, v in (im.info or {}).items():
+                if isinstance(v, str) and not k.startswith(f"{prefix}:"):
+                    pnginfo.add_text(k, v)
+            for k, v in (meta or {}).items():
+                pnginfo.add_text(f"{prefix}:{k}", str(v))
+        img = Image.frombytes(mode, size, data)
+        img.save(p, format="PNG", pnginfo=pnginfo)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def read_metadata(path: str | Path, *, prefix: str = META_PREFIX) -> dict[str, str]:
+    """读回 :func:`embed_metadata` 写入的元数据（无则返回空 dict）。"""
+    p = Path(path).expanduser()
+    if not p.is_file():
+        return {}
+    try:
+        from PIL import Image
+
+        with Image.open(p) as im:
+            info = dict(im.info or {})
+        head = f"{prefix}:"
+        return {k[len(head):]: str(v) for k, v in info.items()
+                if k.startswith(head) and isinstance(v, str)}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def _rel(p: str | Path) -> str:
@@ -235,7 +307,8 @@ def render_markdown() -> Path:
         "# AI 绘图生成账本（LEDGER）",
         "",
         f"> 共 {st['total']} 条记录；由 `manifest.jsonl` 自动渲染，请勿手改本文件。",
-        "> 追加记录用 `pysci-imagine ledger` 查看、由 `ingest`/`gen`/`i2i` 自动写入。",
+        "> 追加记录由 `gen`/`i2i`/`edit`/`layers`/`ingest` 自动写入；查看用 `pysci-imagine ledger`。",
+        "> **本表不是复现手段**：方舟不保证同 prompt/seed 出同图；满意的结果请用 `gallery --add` 归档。",
         "",
     ]
     if st["by_backend"]:

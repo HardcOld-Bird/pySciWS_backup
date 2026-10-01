@@ -60,7 +60,7 @@ uv run pysci-imagine palette --src <reference.png> --n 6
 ```
 
 Prints dimensions/orientation/brightness and the dominant hex palette. Pure Pillow, offline, no key,
-no ComfyUI — safe to run any time. This is the exact extraction the bridge uses.
+no network — safe to run any time. This is the exact extraction the bridge uses.
 
 **Tuning `--n`:** 4–6 gives a clean base + accents for most figures; 8–12 for richly colored
 references. Median-cut blends adjacent hues, so very high `n` yields near-duplicate shades.
@@ -97,7 +97,10 @@ palette.color(0, "my-ref")          # by index into the registered palette
 
 ```powershell
 # 1. Produce an aesthetic reference (Tier 1 gen, or Tier 0 ImageGen + ingest)
-uv run pysci-imagine gen --prompt 'elegant journal cover: chiral edge states, glowing arcs, deep navy, minimalist, no text' --size '2K (adaptive)' --seed 42 --research gain_ep --slug ref_cover
+#    --size takes 1K/2K/3K/4K or an explicit WxH. No --seed here on purpose: Ark does **not**
+#    guarantee the same image from the same prompt+seed, so a seed is not a reproduction handle —
+#    curating the winner into gallery/ is (see SKILL.md “Cost rule”).
+uv run pysci-imagine gen --prompt 'elegant journal cover: chiral edge states, glowing arcs, deep navy, minimalist, no text' --size 2K --research gain_ep --slug ref_cover
 
 # 2. LOOK at it (visual check) — Read the PNG the command printed
 

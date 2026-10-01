@@ -1,8 +1,9 @@
 # ===== 可再生 / 大位图（默认绝不入库）=====
-# assets/：AI 生成图入库区（ImageGen 产物 / ComfyUI 出图）。位图体积大、可由 prompt+seed
-#   经账本（LEDGER.md / manifest.jsonl）复现，故按项目大文件策略忽略（比照 comsol .mph/storage）。
-# cache/：临时预览、contact sheet、中间产物，可由 `pysci-imagine sheet/gallery --sheet` 再生。
-# runs/：ComfyUI 服务器状态文件（comfy_server.json）与日志，本机运行时产物。
+# assets/：AI 生成图入库区（Qoder ImageGen 产物 / 方舟云端出图）。位图体积大，故按项目
+#   大文件策略忽略（比照 comsol .mph/storage）。**注意**：方舟不保证同 prompt/seed 复现同图，
+#   所以 assets/ 里的产物一旦被清理就无法凭账本重生——真正要留的图请 `gallery --add` 精选。
+# cache/：临时预览、contact sheet、图层拆分中间产物，可由 `pysci-imagine sheet/img` 再生。
+# runs/：云端响应快照（*.json，含请求体与 usage）与日志，本机排障用，可再生。
 assets/
 cache/
 runs/
@@ -10,8 +11,7 @@ runs/
 *.log
 
 # ===== 凭据 =====
-# 火山方舟 ARK_API_KEY 等只存项目根 .env（已被根 .gitignore 忽略）；
-# ComfyUI-Jimeng-API 节点的 api_keys.json 在外部 comfy workspace，不在本目录。
+# 火山方舟 ARK_API_KEY 只存项目根 .env（已被根 .gitignore 忽略），本目录不落任何密钥。
 .env
 *.key
 *.pem
@@ -23,7 +23,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# 说明：gallery/（精选审美范本）、workflows/（ComfyUI API 格式工作流配方）、
+# 说明：gallery/（精选审美范本）、recipes/（流水线配方知识卡片）、
 # prompts/（科研审美 prompt 配方）与 LEDGER.md / manifest.jsonl（生成账本）
 # 属需版本跟踪的技能资产，不在此忽略；空目录用 .gitkeep 占位以便入库。
 # 注意：gallery/ 内的范本图请保持精选、小体积（单文件 < 2MB，避开 pre-commit 大文件钩子）。

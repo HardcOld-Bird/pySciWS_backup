@@ -56,18 +56,23 @@ dependencies = [
     # plotly 提供交互式 HTML 图表（参数空间探索时旋转/缩放/悬停），与 matplotlib 静态 PNG 互补。
     "plotly",
     # AI 绘图 skill（src/pysci/skills/ai_drawing/；数据：data/skills/ai_drawing/）：
-    # pillow 用于生成图的简单后处理（裁剪/缩放/旋转/格式转换/拼合）与主色板抽取。
-    # 实际图像生成经无头 ComfyUI（外部 comfy-cli 安装，不进本依赖）调用云端 API（火山方舟/即梦）。
+    # pillow 用于生成图的后处理（裁剪/缩放/旋转/格式转换/拼合）、主色板抽取、
+    # 以及 `imagine mark` 在图上画编辑标记（框/箭头/点）。
+    # 图像生成本身**直连火山方舟（即梦 Seedream）的 OpenAI 兼容 API**，只用已声明的
+    # requests，零新增核心依赖。（历史上曾绕道无头 ComfyUI 做编排，因本机无 CUDA GPU
+    # 且方舟 API 能力面更宽，已于重构中整层移除。）
     "pillow",
 ]
 
 # ------------------------------------------------------------
-# 可选 extra：AI 绘图 skill 的 ComfyUI 客户端实时进度（WebSocket）。
-# 未安装时 comfy_client 自动回退到轮询 /history，功能不受影响（仅少了流式进度）。
-# ComfyUI 本体 + torch + 自定义节点由 comfy-cli 装在独立环境，绝不进 pysci 依赖。
+# 可选 extra：AI 绘图 skill 的进阶位图算子（`imagine img …`）。
+# scikit-image 提供形态学/连通域测量/相位相关配准，opencv-python-headless 提供
+# 泊松融合（seamlessClone）与算法级 inpaint —— 二者均为**纯 CPU**，无需 GPU。
+# 未安装时 imaging.py 惰性导入失败并给出安装提示，其余子命令不受影响。
+# 安装：uv pip install -e ".[imaging]"
 # ------------------------------------------------------------
 [project.optional-dependencies]
-comfy = ["websocket-client"]
+imaging = ["scikit-image", "opencv-python-headless"]
 
 # ------------------------------------------------------------
 # 控制台脚本：各 skill 的统一 CLI 门面（均为 module:main 形态，main(argv=None)->int）。

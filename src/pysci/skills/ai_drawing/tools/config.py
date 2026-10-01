@@ -1,31 +1,31 @@
-"""统一配置加载 + ComfyUI 发现 + 资源/成本护栏。
+"""统一配置加载 + 云端 provider 设置 + 资源/成本护栏。
 
 从项目根 ``.env`` 读取设置，并暴露：
-- 技能数据区各子目录（assets/gallery/workflows/prompts/cache/runs，自动创建）
-- ComfyUI 编排器发现（root / server_url），**廉价**：只读 env，不启服务、不联网
-- provider（火山方舟 / 即梦）密钥存在性探测与默认模型/尺寸
+- 技能数据区各子目录（assets/gallery/recipes/prompts/cache/runs，自动创建）
+- 云端图像 provider（火山方舟 / 即梦 Seedream）的端点、密钥与默认模型
 - 成本护栏（单次生成默认最大张数）
 
-设计原则（对齐 comsol_simulation.config）：ComfyUI 本体 + torch + 自定义节点由 comfy-cli
-装在**独立环境**，绝不进 pysci 依赖；本技能只经 HTTP 与之通信，故这里发现的只是
-"如何连上/如何拉起"它，而非把它 import 进来。
+设计原则：**import 廉价、离线可用**。构造 :class:`Settings` 时只读环境变量，
+绝不联网、绝不校验密钥有效性；密钥是否可用由 :mod:`ark_client` 在真实调用时
+以 HTTP 状态码反馈（``doctor`` 子命令也只做存在性探测与脱敏展示）。
 
-新增可选 ``.env`` 键（均有默认值，不加也能工作）：
-- ``AI_DRAWING_BACKEND``    — 默认后端（``comfyui`` | ``imagegen``；默认 ``comfyui``）
-- ``COMFY_ROOT``            — 外部 ComfyUI workspace 根（comfy-cli 安装处；供 launch 用）
-- ``COMFY_SERVER_URL``      — ComfyUI 服务器地址（默认 ``http://127.0.0.1:8188``）
-- ``COMFY_CLI``             — ``comfy`` 可执行文件路径（不在 PATH 时供 server start/stop 用）
-- ``COMFY_JIMENG_KEY_NAME`` — gen/i2i 默认 ``JimengAPIClient.key_name``（匹配 api_keys.json 的 customName）
-- ``COMFY_DEFAULT_MODEL``   — 默认图像模型 ID（默认 ``doubao-seedream-4-0-250828``）
-- ``AI_DRAWING_DEFAULT_SIZE`` — 默认出图尺寸（默认 ``2K``；方舟支持 1K/2K/4K 或 WxH）
-- ``ARK_API_KEY``           — 火山方舟 API Key（**仅探测存在性**；实际密钥存节点 api_keys.json）
-- ``AI_DRAWING_MAX_IMAGES`` — 单次生成默认最大张数（成本护栏，默认 4）
+可选 ``.env`` 键（除 ``ARK_API_KEY`` 外均有默认值，不加也能工作）：
+- ``ARK_API_KEY``             — 火山方舟 API Key（**云端出图必需**；仅存本地 .env，不进版本库）
+- ``ARK_BASE_URL``            — 方舟推理端点（默认 ``https://ark.cn-beijing.volces.com/api/v3``）
+- ``AI_DRAWING_BACKEND``      — 默认后端（``ark`` | ``imagegen``；默认 ``ark``）
+- ``AI_DRAWING_MODEL``        — 默认图像模型 ID（默认 ``doubao-seedream-5-0-flash-260915``）
+- ``AI_DRAWING_DEFAULT_SIZE`` — 默认出图尺寸（默认 ``2K``；方舟支持 1K/2K/4K/3K 或 WxH）
+- ``AI_DRAWING_MAX_IMAGES``   — 单次生成默认最大张数（成本护栏，默认 4）
+
+模型 ID 以方舟控制台「模型列表」为唯一真值源——本模块**不维护本地 provider 注册表**，
+``model`` 一律字符串直传，避免注册表随方舟上新而腐烂。
 
 用法::
 
     from pysci.skills.ai_drawing.tools.config import settings
 
-    settings.comfy_server_url
+    settings.ark_api_key         # None 表示未配置
+    settings.default_model
     settings.module_dir          # data/skills/ai_drawing/
     settings.assets_dir
 """
@@ -43,17 +43,21 @@ from pysci.paths import AI_DRAWING_ROOT, PROJECT_ROOT
 # 路径解析
 # ---------------------------------------------------------------------------
 # 路径统一由 pysci.paths 收口（标记法查找项目根）。MODULE_DIR 指向 AI 绘图数据区
-# data/skills/ai_drawing/（assets/gallery/workflows/prompts/cache/runs 的父目录）。
+# data/skills/ai_drawing/（assets/gallery/recipes/prompts/cache/runs 的父目录）。
 MODULE_DIR: Path = AI_DRAWING_ROOT
 
-#: 默认 ComfyUI 服务器地址（comfy-cli / 便携版默认端口 8188）。
-DEFAULT_COMFY_URL: str = "http://127.0.0.1:8188"
+#: 方舟推理端点（OpenAI 兼容协议的 base，图像生成走 ``{base}/images/generations``）。
+DEFAULT_ARK_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
 
-#: 默认图像模型（火山方舟即梦 Seedream 4.0 首推版本）。
-DEFAULT_MODEL: str = "doubao-seedream-4-0-250828"
+#: 默认图像模型（Seedream 5.0-flash：本账号已开通且 2026-10 实测出图；
+#: 4.0 已下架、5.0-lite 关闭订阅即将下架，本账号均不可开通）。
+DEFAULT_MODEL: str = "doubao-seedream-5-0-flash-260915"
 
 #: 默认出图尺寸（方舟 size 字段：1K/2K/4K，或形如 1024x1024）。
 DEFAULT_SIZE: str = "2K"
+
+#: 单次请求默认超时（秒）。云端出图同步返回，2K 图通常 30–60 s。
+DEFAULT_TIMEOUT: float = 180.0
 
 
 # ---------------------------------------------------------------------------
@@ -112,48 +116,6 @@ def _get_env_int(key: str, default: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# ComfyUI 编排器发现（廉价：只读 env，不启服务、不联网）
-# ---------------------------------------------------------------------------
-@dataclass(frozen=True)
-class ComfyInstall:
-    """ComfyUI 编排器的连接/拉起信息。``found=False`` 表示未配置外部安装路径。
-
-    注意：这里的"发现"仅指**本机是否配置了 ComfyUI workspace 路径**（供 launch 用）；
-    服务器**是否真的在运行**由 :mod:`comfy_session` / :mod:`comfy_client` 做实时探活，
-    不在构造 Settings 时联网（保持 import 廉价、离线可用）。
-    """
-
-    found: bool = False          # 是否配置了 COMFY_ROOT（外部 workspace 路径）
-    root: Path | None = None     # ComfyUI workspace 根（comfy-cli 安装处）
-    server_url: str = DEFAULT_COMFY_URL
-    source: str = "none"         # "env" | "default" | "none"
-
-
-def discover_comfy() -> ComfyInstall:
-    """发现本机 ComfyUI 编排器配置（廉价：读 env，不启服务、不联网）。
-
-    优先级：
-    1. ``COMFY_ROOT`` 指向的外部 workspace（存在则 ``found=True``）；
-    2. 仅配置了 ``COMFY_SERVER_URL``（可连远程/云端 ComfyUI，则 root 为 None 但 url 生效）；
-    3. 都没有 → 默认 ``http://127.0.0.1:8188``（``found=False``，待用户安装/配置）。
-    """
-    url = _get_env("COMFY_SERVER_URL", DEFAULT_COMFY_URL) or DEFAULT_COMFY_URL
-    env_root = _get_env("COMFY_ROOT")
-    if env_root:
-        root = Path(env_root).expanduser()
-        if root.exists():
-            return ComfyInstall(found=True, root=root, server_url=url, source="env")
-        print(
-            f"[ai_drawing.config] WARNING: COMFY_ROOT={root} 不存在，忽略（仍可连 COMFY_SERVER_URL）",
-            file=sys.stderr,
-        )
-    # 无 COMFY_ROOT：若显式配了 URL，视为连接远程/云端编排器
-    if _get_env("COMFY_SERVER_URL"):
-        return ComfyInstall(found=False, root=None, server_url=url, source="env")
-    return ComfyInstall(found=False, root=None, server_url=url, source="default")
-
-
-# ---------------------------------------------------------------------------
 # Settings 数据类
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -163,21 +125,22 @@ class Settings:
     # --- 路径 ---
     project_root: Path
     module_dir: Path
-    assets_dir: Path        # 生成图入库（Agent-ImageGen 产物 / ComfyUI 出图）
+    assets_dir: Path        # 生成图入库（云端出图 / Agent-ImageGen 产物）
     gallery_dir: Path       # 精选审美范本
-    workflows_dir: Path     # 保存的 ComfyUI API 格式工作流配方
+    recipes_dir: Path       # 流水线配方知识卡片（Markdown，与其余技能同构）
     prompts_dir: Path       # prompt 配方库
-    cache_dir: Path         # 临时预览/中间产物
-    runs_dir: Path          # 服务器状态文件（comfy_server.json）+ 日志
+    cache_dir: Path         # 临时预览/中间产物（如图层拆分的分层输出）
+    runs_dir: Path          # 云端响应原始 JSON 快照 + 日志（排障用）
 
-    # --- 后端与 ComfyUI 编排器 ---
-    default_backend: str    # "comfyui" | "imagegen"
-    comfy: ComfyInstall
+    # --- 后端 ---
+    default_backend: str    # "ark"（云端出图）| "imagegen"（Qoder 内置，Agent 直接调）
 
-    # --- provider（火山方舟 / 即梦）---
+    # --- provider（火山方舟 / 即梦 Seedream）---
+    ark_base_url: str
+    ark_api_key: str | None  # 云端出图必需；summary() 中脱敏展示
     default_model: str
     default_size: str
-    ark_api_key: str | None  # 仅用于探测存在性/脱敏展示，实际密钥存节点 api_keys.json
+    timeout: float
 
     # --- 成本护栏 ---
     max_images: int
@@ -186,14 +149,14 @@ class Settings:
 
     # ---------- 便捷判断 ----------
     @property
-    def comfy_server_url(self) -> str:
-        """ComfyUI 服务器地址。"""
-        return self.comfy.server_url
+    def ark_ready(self) -> bool:
+        """火山方舟 API Key 是否已配置（存在性，不代表有效）。"""
+        return bool(self.ark_api_key)
 
     @property
-    def ark_ready(self) -> bool:
-        """火山方舟 API Key 是否已配置（存在性）。"""
-        return bool(self.ark_api_key)
+    def images_endpoint(self) -> str:
+        """图片生成端点完整 URL。"""
+        return f"{self.ark_base_url.rstrip('/')}/images/generations"
 
     def summary(self) -> str:
         """人类可读的配置摘要（敏感字段脱敏）。"""
@@ -209,20 +172,19 @@ class Settings:
             f"module_dir       : {self.module_dir}",
             f"assets_dir       : {self.assets_dir}",
             f"gallery_dir      : {self.gallery_dir}",
-            f"workflows_dir    : {self.workflows_dir}",
+            f"recipes_dir      : {self.recipes_dir}",
             f"prompts_dir      : {self.prompts_dir}",
             f"cache_dir        : {self.cache_dir}",
             f"runs_dir         : {self.runs_dir}",
             "",
             f"default_backend  : {self.default_backend}",
-            f"comfy_found      : {self.comfy.found} (source={self.comfy.source})",
-            f"comfy_root       : {self.comfy.root or '(none)'}",
-            f"comfy_server_url : {self.comfy.server_url}",
             "",
-            f"default_model    : {self.default_model}",
-            f"default_size     : {self.default_size}",
+            f"ark_base_url     : {self.ark_base_url}",
             f"ark_api_key      : {mask(self.ark_api_key)}",
             f"ark_ready        : {self.ark_ready}",
+            f"default_model    : {self.default_model}",
+            f"default_size     : {self.default_size}",
+            f"timeout          : {self.timeout}s",
             f"max_images       : {self.max_images}",
             "========================================",
         ]
@@ -230,37 +192,47 @@ class Settings:
 
 
 def build_settings() -> Settings:
-    """加载 .env、发现 ComfyUI、构造 Settings。技能数据目录会自动创建。"""
+    """加载 .env、构造 Settings。技能数据目录会自动创建。"""
     _load_dotenv_if_available()
 
     assets_dir = MODULE_DIR / "assets"
     gallery_dir = MODULE_DIR / "gallery"
-    workflows_dir = MODULE_DIR / "workflows"
+    recipes_dir = MODULE_DIR / "recipes"
     prompts_dir = MODULE_DIR / "prompts"
     cache_dir = MODULE_DIR / "cache"
     runs_dir = MODULE_DIR / "runs"
-    for d in (assets_dir, gallery_dir, workflows_dir, prompts_dir, cache_dir, runs_dir):
+    for d in (assets_dir, gallery_dir, recipes_dir, prompts_dir, cache_dir, runs_dir):
         d.mkdir(parents=True, exist_ok=True)
+
+    timeout_raw = _get_env("AI_DRAWING_TIMEOUT")
+    try:
+        timeout = float(timeout_raw) if timeout_raw else DEFAULT_TIMEOUT
+    except ValueError:
+        print(
+            f"[ai_drawing.config] WARNING: AI_DRAWING_TIMEOUT={timeout_raw!r} 不是数字，"
+            f"回退默认 {DEFAULT_TIMEOUT}",
+            file=sys.stderr,
+        )
+        timeout = DEFAULT_TIMEOUT
 
     return Settings(
         project_root=PROJECT_ROOT,
         module_dir=MODULE_DIR,
         assets_dir=assets_dir,
         gallery_dir=gallery_dir,
-        workflows_dir=workflows_dir,
+        recipes_dir=recipes_dir,
         prompts_dir=prompts_dir,
         cache_dir=cache_dir,
         runs_dir=runs_dir,
-        default_backend=(_get_env("AI_DRAWING_BACKEND", "comfyui") or "comfyui").lower(),
-        comfy=discover_comfy(),
-        default_model=_get_env("COMFY_DEFAULT_MODEL", DEFAULT_MODEL) or DEFAULT_MODEL,
-        default_size=_get_env("AI_DRAWING_DEFAULT_SIZE", DEFAULT_SIZE) or DEFAULT_SIZE,
+        default_backend=(_get_env("AI_DRAWING_BACKEND", "ark") or "ark").lower(),
+        ark_base_url=_get_env("ARK_BASE_URL", DEFAULT_ARK_BASE_URL) or DEFAULT_ARK_BASE_URL,
         ark_api_key=_get_env("ARK_API_KEY"),
+        default_model=_get_env("AI_DRAWING_MODEL", DEFAULT_MODEL) or DEFAULT_MODEL,
+        default_size=_get_env("AI_DRAWING_DEFAULT_SIZE", DEFAULT_SIZE) or DEFAULT_SIZE,
+        timeout=timeout,
         max_images=_get_env_int("AI_DRAWING_MAX_IMAGES", 4),
         _raw_env={
-            k: v
-            for k, v in os.environ.items()
-            if k.startswith(("AI_DRAWING_", "COMFY_", "ARK_"))
+            k: v for k, v in os.environ.items() if k.startswith(("AI_DRAWING_", "ARK_"))
         },
     )
 
