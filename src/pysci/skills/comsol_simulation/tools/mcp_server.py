@@ -45,6 +45,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -175,17 +176,46 @@ def _require_exe() -> Path:
     return Path(exe)
 
 
+def mph_version_short_name(version: str | None) -> str:
+    """把 COMSOL 完整版本号规范化成 mph 的**后端短名**（``6.4.0`` → ``6.4``）。
+
+    为什么必须规范化：上游把 ``COMSOL_MCP_VERSION`` 原样交给 ``mph.Client(version=...)``，而 mph 的
+    ``discovery.backend()`` 对它做的是**精确匹配**，比对对象是 ``discovery.parse()`` 生成的短名
+    ``f'{major}.{minor}'``——patch 为 0 时不带任何后缀，patch>0 时才追加字母（6.4.1 → ``6.4a``）。
+    于是传完整版本号会得到 ``LookupError: Could not locate Comsol 6.4.0 installation.``。在 path C
+    下这会**堵死所有触碰 COMSOL 的 MCP 工具**，而 HTTP 层探测一切正常（200 就绪、工具可列举、
+    纯文档工具照常返回），极难联想到是版本号格式（2026-10-01 实测踩中）。
+
+    认不出来的字符串原样返回：让上游如实报错，好过我们猜一个。
+    """
+    raw = (version or "").strip()
+    if not raw:
+        return ""
+    if re.fullmatch(r"\d+\.\d+[a-z]?", raw):
+        return raw  # 已是短名（含 5.3a 这类带 patch 字母的），不能再拆
+    match = re.match(r"(\d+)\.(\d+)(?:\.(\d+))?", raw)
+    if not match:
+        return raw
+    name = f"{match.group(1)}.{match.group(2)}"
+    patch = int(match.group(3) or 0)
+    if patch > 0:
+        name += chr(ord("a") + patch - 1)
+    return name
+
+
 def _server_env() -> dict[str, str]:
     """派生服务端进程的环境变量。
 
     URL 型注册的 ``mcp.json`` 没有 ``env`` 字段，所以 ``COMSOL_MCP_*`` 只能由这里注入——包括
-    ``COMSOL_MCP_VERSION``（缺了它上游可能挑错 COMSOL 版本）。
+    ``COMSOL_MCP_VERSION``（缺了它上游可能挑错 COMSOL 版本）。注入前必须过
+    :func:`mph_version_short_name`：mph 发现的是 ``6.4.0`` 这种完整版本号，而上游精确匹配的
+    是短名 ``6.4``，直接把前者塞进去会让每一次 ``comsol_start`` 都失败。
     """
     env = dict(os.environ)
     env["COMSOL_MCP_TRANSPORT"] = settings.mcp_transport
     env["COMSOL_MCP_HOST"] = settings.mcp_host
     env["COMSOL_MCP_PORT"] = str(settings.mcp_port)
-    version = settings.mcp_version or (settings.install.version or "")
+    version = mph_version_short_name(settings.mcp_version or settings.install.version)
     if version:
         env["COMSOL_MCP_VERSION"] = version
     return env

@@ -28,8 +28,11 @@ def fake_settings(tmp_path, monkeypatch):
         mcp_transport="sse",
         mcp_host="127.0.0.1",
         mcp_port=8765,
-        mcp_version="6.4",
-        install=SimpleNamespace(version="6.4"),
+        #: 真实形状：.env 未设 COMSOL_MCP_VERSION，mph discovery 返回的是**完整**版本号。
+        #: 这两个值曾经都写成 "6.4"，于是“完整版本号→短名”的规范化从未被测到，
+        #: 而它一旦缺失就会让 path C 下每一次 comsol_start 都失败（见下方两个用例）。
+        mcp_version=None,
+        install=SimpleNamespace(version="6.4.0"),
     )
     monkeypatch.setattr(m, "settings", st)
     # 探测一律返回"端口没开、无人占 license"，让状态机走确定性分支。
@@ -178,15 +181,47 @@ def test_write_launcher_injects_env_and_redirects_log(fake_settings):
     assert launcher.name == m._LAUNCHER_NAME
     text = launcher.read_text(encoding="ascii")
     assert text.startswith("@echo off")
-    assert "set COMSOL_MCP_TRANSPORT=sse" in text
-    assert "set COMSOL_MCP_HOST=127.0.0.1" in text
-    assert "set COMSOL_MCP_PORT=8765" in text
-    # URL 型 mcp.json 没有 env 字段，COMSOL_MCP_VERSION 只能在这里给
-    assert "set COMSOL_MCP_VERSION=6.4" in text
+    # 解析成 dict 后做**整值精确比较**。切勿用 substring 断言（"=6.4" in text）：
+    # 它会被 "=6.4.0" 蒙混过关，而那正是 mph 拒收、导致 comsol_start 必然失败的格式。
+    injected = dict(line[4:].split("=", 1) for line in text.splitlines() if line.startswith("set "))
+    assert injected["COMSOL_MCP_TRANSPORT"] == "sse"
+    assert injected["COMSOL_MCP_HOST"] == "127.0.0.1"
+    assert injected["COMSOL_MCP_PORT"] == "8765"
+    # URL 型 mcp.json 没有 env 字段，COMSOL_MCP_VERSION 只能在这里给；且必须是 mph 短名
+    assert injected["COMSOL_MCP_VERSION"] == "6.4"
     # 追加到日志（日志头由同一函数以 "w" 模式写好，故这里必须是 >>）
     assert f'"{exe}" >> ' in text and "2>&1" in text
     # .cmd 必须纯 ASCII，否则 cmd.exe 按 ANSI 解析会出错
     assert all(ord(ch) < 128 for ch in text)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("6.4.0", "6.4"),  # mph discovery 的实际返回 → 上游要的短名（踩过的坑）
+        ("6.4", "6.4"),  # 已是短名
+        ("6.4.1", "6.4a"),  # patch>0 追加字母，与 mph.discovery.parse 同规则
+        ("6.4.0.213", "6.4"),  # 带 build 号
+        ("5.3a", "5.3a"),  # 带 patch 字母的短名不能被拆坏
+        ("  6.4.0  ", "6.4"),  # 容忍空白
+        ("", ""),
+        (None, ""),
+        ("garbage", "garbage"),  # 认不出来就原样传出，让上游如实报错
+    ],
+)
+def test_mph_version_short_name(raw, expected):
+    assert m.mph_version_short_name(raw) == expected
+
+
+def test_server_env_normalizes_discovered_version(fake_settings):
+    """未显式配置 COMSOL_MCP_VERSION 时，发现的完整版本号必须规范化后再注入。
+
+    这是 path C 的致命点：服务端 HTTP 层一切正常（200 就绪、工具可列举、纯文档工具
+    照常返回），但每一次 comsol_start 都报 ``Could not locate Comsol 6.4.0 installation.``。
+    """
+    assert fake_settings.mcp_version is None
+    assert fake_settings.install.version == "6.4.0"
+    assert m._server_env()["COMSOL_MCP_VERSION"] == "6.4"
 
 
 def test_write_launcher_truncates_log_with_header(fake_settings):
