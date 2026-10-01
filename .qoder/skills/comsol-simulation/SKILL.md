@@ -1,15 +1,60 @@
 ---
 name: comsol-simulation
-description: Create, edit, debug, and evaluate COMSOL Multiphysics (.mph) simulations headlessly and fully automatically — geometry, materials, physics (pressure acoustics), mesh, studies, solving, parameter sweeps, result export, and offscreen rendering. Drives a unified `simulation` CLI over the mph/JPype Java-API bridge, consults MinerU-converted local COMSOL manuals via an FTS5 index, and "sees" results through COMSOL PNG export plus pyvista offscreen rendering. Use when the user asks to build or modify a COMSOL model, run or re-run a simulation, sweep parameters, export plots/fields/meshes, render or inspect a result field, check mesh quality or convergence, or look up COMSOL API/physics documentation.
+description: Create, edit, debug, and evaluate COMSOL Multiphysics (.mph) simulations headlessly and fully automatically — geometry, materials, physics (pressure acoustics), mesh, studies, solving, parameter sweeps, result export, and offscreen rendering. Routine generic driving (load/param/solve/evaluate) primarily goes through the registered community `comsol` MCP; this skill's unified `simulation` CLI (mph/JPype Java-API bridge) is the differentiated layer — publication-grade export, pyvista rendering, physics validation, node introspection, recipes, persistent server — and the fallback when the MCP is unavailable. It consults MinerU-converted local COMSOL manuals via an FTS5 index and "sees" results through COMSOL PNG export plus pyvista offscreen rendering. Use when the user asks to build or modify a COMSOL model, run or re-run a simulation, sweep parameters, export plots/fields/meshes, render or inspect a result field, check mesh quality or convergence, or look up COMSOL API/physics documentation.
 ---
 
 # COMSOL Simulation
 
-A single CLI drives the whole closed loop: **docs → build → run → export → render/post → validate**.
+COMSOL work runs on **two drivers**, and picking the right one saves time and license churn:
 
-The backend lives in `src/pysci/skills/comsol_simulation/` (tools: config/session/inspect/build/run/
-export/postprocess/docs + a `simulation` facade). **Treat it as a black box** and drive everything
-through the `simulation` CLI below. Only open the code when maintaining it.
+- the registered community **`comsol` MCP** — *primary* for generic driving (load/param/solve/evaluate);
+- this skill's **`simulation` CLI** — the *differentiated* layer the MCP lacks (publication export,
+  pyvista render, physics validation, node surgery, recipes, persistent server) **and** the fallback.
+
+See **MCP vs CLI** below. The rest of this doc covers the CLI, which drives the whole closed loop
+**docs → build → run → export → render/post → validate**. Its backend lives in
+`src/pysci/skills/comsol_simulation/` (tools: config/session/inspect/build/run/export/postprocess/docs
++ a `simulation` facade) — **treat it as a black box**; only open the code when maintaining it.
+
+## MCP vs CLI — which to use
+
+| Need | Driver |
+|---|---|
+| Generic: load/create/inspect model, get/set params, geometry/physics/mesh setup, study solve, `results_evaluate` / `export_data` / `export_image`, `pdf_search` | **Community `comsol` MCP** (one warm server → no per-call JVM boot / license churn) — *primary* |
+| Publication `export image` (color-range / polar-rmax / geom-bbox + `.sidecar.json` + blank self-check); `render` (pyvista); `post stats/quality/framebox`; physics validation; granular `inspect node` / `node set`; `inspect java`; `diagnose`; `build recipes/apply`; `server` + `--connect-port` | **`pysci-simulation` CLI** — *differentiated; the MCP has none of these* |
+| MCP unavailable, or you want one self-contained script | **CLI** — *fallback; fully self-sufficient (does its own load/solve/export internally)* |
+
+> **Single license — never both at once.** The community MCP's server and a CLI standalone session
+> (or `server start`) each hold the one COMSOL license; don't run them together, or alongside the
+> interactive GUI. End CLI servers with `server stop`.
+
+**Rule of thumb:** routine read/solve/evaluate → community `comsol` MCP; publication figures, rendering,
+validation, node surgery, recipes, or no-MCP → `pysci-simulation` CLI.
+
+### Where the community MCP lives, and how it is pinned
+
+Deliberately **outside this repo**, as a sibling directory:
+`D:\XXXIIIGGG\projects\pySci\COMSOL_Multiphysics_MCP` (override: `setup_comsol_mcp.ps1 -RepoDir`).
+
+**Not a git submodule — on purpose.** Upstream tracks ~700 MB of binaries (`pdf/` 535 MB,
+`comsol_models/` 122 MB, `knowledge_base/chroma.sqlite3`, 42 `.pyc`) and ships **no `.gitignore`**, so
+vendoring would drag ~2.2 GB into this tree *and* leave the submodule permanently dirty (Chroma rewrites
+`chroma.sqlite3` on every query) — silencing that with `ignore = all` would also hide real upstream
+changes. Its 1 GB `.venv` (Python 3.12) is not relocatable on Windows either. Note that Python-level venv
+conflict is *not* the issue: the two venvs are hermetic and this project never imports upstream code
+(Qoder launches it as a separate process). The real cost is IDE/lint bleed, so it stays out of the tree.
+
+Reproducibility is pinned by tracked artifacts inside this repo instead:
+
+| Artifact | Role |
+|---|---|
+| `scripts/comsol_mcp/UPSTREAM.lock.json` | **source of truth** — upstream URLs, pinned commit, venv Python, patch state, resolved `command`, verification checks, and the full no-submodule rationale |
+| `scripts/comsol_mcp/setup_comsol_mcp.ps1` | idempotent installer; its `-Commit` default must match the lock. `-StatusOnly` is a read-only check that lock / `-Commit` / actual `HEAD` all agree |
+| `scripts/comsol_mcp/mcp_servers.template.json` | shape of the Qoder `mcp.json` entry |
+
+Browse upstream code in-IDE via PyCharm **File → Open → Attach** on that folder (zero git / lint / pytest
+implications). To upgrade: bump `pinned_commit` in the lock, re-run the installer with the same SHA, then
+re-verify with `-StatusOnly`.
 
 ## Invocation
 
@@ -62,6 +107,10 @@ server instead of booting a fresh standalone JVM (see *Sessions, memory, and lic
 Run `simulation <command> -h` for full options.
 
 ## Standard closed-loop workflow
+
+> Written for the **CLI** (self-sufficient). Steps 2/4/6 (inspect / solve / evaluate) can instead go
+> through the community **`comsol` MCP** when you don't need the CLI's differentiated export/render/
+> validate — see **MCP vs CLI** above.
 
 ```
 - [ ] 1. simulation doctor                          # COMSOL + manuals ready?

@@ -11,6 +11,10 @@
     ... simulation docs search "perfectly matched layer"
     ... simulation build recipes
 
+定位（大型重构后）：通用 COMSOL 驱动（load/param/solve/evaluate）主力走已注册的社区 ``comsol`` MCP；
+本 CLI 承载差异化层——出版级导出精修 / pyvista 渲染 / 物理校验 / 节点自省 / 配方 / 常驻会话——
+并在 MCP 不可用时兜底（自身独立完成整条 load→solve→export 管线；单 license 下二者勿同时运行）。
+
 子命令分组：doctor / inspect / run / export / render / post / docs / build。
 需要活体 COMSOL 的子命令会按需起 standalone 会话并在结束自动释放（见 session.session）。
 """
