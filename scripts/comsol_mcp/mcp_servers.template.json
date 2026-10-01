@@ -3,35 +3,54 @@
     "模板参考：把社区 comsol MCP 注册进 Qoder。差异化能力走本项目 pysci-simulation CLI（不再是 MCP）。",
     "用户级配置文件： C:/Users/antar/.qoder-cn/shared_client/mcp.json （与现有 arxiv 等同处）。",
     "把下面 mcpServers 里的 comsol 条目复制进去即可（保留现有的其它服务器）。",
+    "【默认用路径 C】（下方的 comsol 条目，URL 型）：空闲不占 license、握手即时、不会重复拉起。",
+    "切换前请先跑 `uv run pysci-simulation mcp ensure` 把服务端起来——URL 型注册下 Qoder 只连接、不拉起。",
     "占位符 <...> 需替换为真实绝对路径；运行 setup_comsol_mcp.ps1 结尾会打印已解析好的 JSON，直接粘贴更省事。",
     "<REPO_DIR> 的真实值、上游版本 pin 与安装状态见 scripts/comsol_mcp/UPSTREAM.lock.json（唯一事实来源）。",
     "该仓库刻意放在本项目之外（同级目录）而不做 git submodule，完整理由见 UPSTREAM.lock.json 的 _README；",
     "只想在 IDE 里浏览上游代码，用 PyCharm File → Open → Attach 挂上那个目录即可（零 git / lint / pytest 副作用）。",
-    "JSON 不支持注释：粘贴到 mcp.json 时请删除本 _README 与所有 _note_* 键。",
+    "JSON 不支持注释：粘贴到 mcp.json 时请删除本 _README 与所有下划线开头的键。",
     "配置文件有两处：C:/Users/antar/.qoder-cn/shared_client/mcp.json 是【用户可编辑的源】；同目录",
     "extension/local/mcp.json 是 Qoder 派生的镜像（多一个 userConfigMD5 键用于变更检测），不要手改它。",
-    "实测（2026-10-01）：Qoder 在启动过程中重写 mcp.json 会触发一次重载，可能拉起第二个 comsol-mcp 却不回收第一个，",
-    "于是两个 JVM 同时抢那唯一 license。判别方法是看进程是否加载了 jvm.dll —— comsol_status 报 standalone:true，",
-    "说明 JVM 就在 MCP 的 python.exe 进程内，【不存在】独立的 comsolmphserver.exe，故『看不到 COMSOL 进程』",
-    "绝不等于『license 是空的』。清理办法是【完全退出】Qoder，窗口重载不够。setup_comsol_mcp.ps1 -StatusOnly 已内置该检查。",
+    "【license 判据只看 jvm.dll】comsol_status 报 standalone:true，说明 JVM 就在 MCP 的 python.exe 进程内，",
+    "【不存在】独立的 comsolmphserver.exe，故『看不到 COMSOL 进程』绝不等于『license 是空的』。反过来，",
+    "_jpype.pyd 在 import mph 时就加载、存在于每个 comsol-mcp 进程中，与 COMSOL 是否启动无关，【不能】用它判占用。",
+    "实测（2026-10-01）：空闲的路径 C 服务端只有 _jpype.pyd（74MB），已 pre-start 的 stdio 实例两者都有（~330MB）。",
+    "`uv run pysci-simulation license` 与 setup_comsol_mcp.ps1 -StatusOnly 都已改用 jvm.dll 精确匹配。",
+    "【路径 A 才有的重复实例问题】实测（2026-10-01）：Qoder 在启动过程中重写 mcp.json 会触发一次重载，可能拉起",
+    "第二个 comsol-mcp 却不回收第一个，于是两个 JVM 同时抢那唯一 license；根因是 pre-start 把握手拖长了整个 ~30s",
+    "COMSOL 冷启动。清理办法是【完全退出】Qoder，窗口重载不够。路径 C 握手即时，从根上避开这个问题。",
     "退役说明：pysci-comsol-extras 伴随 MCP 已废弃。精确根因（由上游 commit 7a4b704 的提交说明证实）：JPype 的",
     "startJVM 在另一线程阻塞读 stdin(fd 0) 时会永久挂死，而 stdio transport 必然起这样一个线程；mph 在 JVM 启动期",
-    "的 INFO 日志也会触发同一死锁。并非 asyncio / FastMCP 本身的问题——改用 streamable-http transport 即可绕开（见下方 path C）。",
+    "的 INFO 日志也会触发同一死锁。并非 asyncio / FastMCP 本身的问题——改用 streamable-http transport 即可绕开（见下方路径 C）。",
     "其全部差异化能力（出版级导出精修 / pyvista 渲染 / 物理校验 / 节点自省 / GUI→Java / 配方 / 常驻会话）",
     "改由 pysci-simulation CLI 承接（纯脚本主线程路径，实机验证可用）。若 Qoder 里仍注册着 extras，请删除该条目。"
   ],
   "mcpServers": {
     "comsol": {
-      "_note_command": "社区仓库 venv 里的 comsol-mcp 控制台脚本（由 setup 脚本 -e 安装生成）；等价于 cd <repo> && python -m src.server",
+      "_note": "【路径 C，当前默认】URL 型注册。上游 7a4b704 起支持 COMSOL_MCP_TRANSPORT；设为 sse（或 streamable-http；【不要写 http】，FastMCP 只认 stdio / sse / streamable-http）后无线程读 stdin，COMSOL 改为首次工具调用时惰性启动 → 空闲不占 license；握手也变即时。",
+      "_qoder_support": "已查证（2026-10-01）：docs.qoder.com 的 IDE『Model Context Protocol』页写明传输类型为 STDIO 或 SSE、字段含『URL（用于 SSE 或 Streamable HTTP）』，并注明『对于 Streamable HTTP，使用与 SSE 相同的方式配置 URL，Qoder IDE 会自动识别并使用』；CLI 的 MCP 参考页另列 type = sse / http / streamable-http / ws，字段为 url + headers。",
+      "_verified": "本机实测（2026-10-01）：sse(8765, GET /sse → 200 text/event-stream) 与 streamable-http(8766, GET /mcp → 400 缺 session id，这正是正确的就绪信号) 各自完成真实 MCP 握手、暴露全部 103 个工具、并成功调用 pdf_list_modules；期间服务端进程只有 _jpype.pyd 而无 jvm.dll，即 COMSOL 确实没起、license 确实空着。",
+      "_server_lifecycle": "URL 型注册下 Qoder 只负责连接、【不再拉起进程】。这件事已由技能基础设施接管：`uv run pysci-simulation mcp ensure` 幂等地保证服务端在跑，并通过 WMI 派生使其脱离终端（普通 Start-Process 子进程会随 agent 终端拆除被静默回收，无 traceback、无 WER 记录；2026-10-01 A/B 实测：同一条命令派生的两个 ~15 分钟 ping 标记，Start-Process 那个下一条命令就没了，WMI 那个活着）。SKILL.md 已把它固化为调用任何 comsol MCP 工具之前的第 0 步。",
+      "_cost": "首次触碰 COMSOL 的工具调用仍要付 ~30s 的 JVM 冷启动（这正是惰性启动的预期行为）——请把 Qoder 里该服务的 Request Timeout 调大；超时了就重试，服务端没坏。纯文档工具（pdf_search / pdf_list_modules / docs_get）永不启动 COMSOL。",
+      "_origin_risk": "残留风险：host 为 127.0.0.1/localhost/[::1] 时 FastMCP 自动开启 DNS-rebinding 防护，只允许 Origin = http://127.0.0.1:* / http://localhost:* / http://[::1]:*。本机实测两个 transport 规则一致：不发 Origin 或发环回 Origin → 200；vscode-file://vscode-app、null、外域 → 403 Invalid Origin header。上游【没有】暴露 transport_security 的环境变量开关，故若 Qoder 发了 Electron 风格的 Origin，路径 C 即不可用，只能退回下面的 stdio 变体，或给上游 server.py 打补丁显式传 TransportSecuritySettings。诊断：用【社区 venv 的 python】跑 scripts/comsol_mcp/probe_mcp_http.py <sse|streamable-http> <port>。",
+      "_url_path": "端点必须与服务端 transport 对齐：transport=sse → /sse；transport=streamable-http → /mcp。配错会 404。",
+      "_env_note": "URL 型条目【没有 env 字段】，所以 COMSOL_MCP_TRANSPORT / HOST / PORT / VERSION 无处可写——由技能生成的启动器脚本注入（data/skills/comsol_simulation/runs/start_comsol_mcp.cmd，`mcp ensure` 每次重写）。",
+      "type": "sse",
+      "url": "http://127.0.0.1:8765/sse"
+    },
+    "comsol__stdio_variant": {
+      "_note": "【路径 A，兜底】Qoder 自己按 command 拉起 comsol-mcp.exe（等价于 cd <repo> && python -m src.server）。仅在路径 C 被 Origin 403 挡死时才用它。",
+      "_warning": "stdio 下 main() 先 session_manager.start() 再 mcp.run()，故【服务器一启动就抢占唯一 license】，与是否在算无关；且该 JVM 在 MCP 进程内、CLI 无法 attach。跑 pysci-simulation CLI 或开 COMSOL GUI 前，请先在 Qoder 里停用本 MCP。详见 setup 脚本 CRITICAL FINDING。",
+      "_env_version": "COMSOL_MCP_VERSION 选择后端版本（自上游 c0ec1f8 起才真正生效；当前 pin 0f6b2c58 已含该补丁，旧 pin 99172f8f 上它是 no-op）。",
       "command": "<REPO_DIR>\\.venv\\Scripts\\comsol-mcp.exe",
       "args": [],
       "env": {
-        "_note_env": "COMSOL_MCP_VERSION 选择后端版本（自上游 c0ec1f8 起才真正生效；当前 pin 0f6b2c58 已含该补丁，旧 pin 99172f8f 上它是 no-op）。【重要】stdio 下服务器启动即抢占唯一 license（main() 先 session_manager.start() 再 mcp.run()），与是否在算无关：跑 pysci-simulation CLI 或开 COMSOL GUI 前，请先在 Qoder 里停用本 MCP。详见 setup 脚本 CRITICAL FINDING。",
         "COMSOL_MCP_VERSION": "6.4"
       }
     },
     "comsol__shared_session_variant": {
-      "_note": "可选路径 B（单 license 共享常驻 server）：需先 -ApplySharedSessionPatch 打补丁（补丁目标行在当前 pin 0f6b2c58 上存在且逐字符匹配；在旧 pin 99172f8f 上不存在，当时会静默不打并报 'Expected pre-start line not found'），并由 `pysci-simulation server start`（CLI，起 comsolmphserver 于 port=2036）拉起常驻 server，社区 MCP 再 attach 同一端口。把本块替换上面的 comsol 条目。默认用路径 A（社区 MCP 与 CLI 顺序各起各的 standalone，单 license 下切勿同时占用）。",
+      "_note": "【路径 B】单 license 共享常驻 server：需先 -ApplySharedSessionPatch 打补丁（补丁目标行在当前 pin 0f6b2c58 上存在且逐字符匹配；在旧 pin 99172f8f 上不存在，当时会静默不打并报 'Expected pre-start line not found'），并由 `pysci-simulation server start`（CLI，起 comsolmphserver 于 port=2036）拉起常驻 server，社区 MCP 再 attach 同一端口。仅在需要 MCP 与 CLI 同时保持热态时才选它。",
       "command": "<REPO_DIR>\\.venv\\Scripts\\comsol-mcp.exe",
       "args": [],
       "env": {
@@ -39,14 +58,6 @@
         "COMSOL_MCP_CONNECT_PORT": "2036",
         "COMSOL_MCP_CONNECT_HOST": "localhost"
       }
-    },
-    "comsol__http_transport_variant": {
-      "_note": "可选路径 C（单 license 下的最优解）：上游 7a4b704 起支持 COMSOL_MCP_TRANSPORT。设为 sse（或 streamable-http；【不要写 http】，FastMCP 只认 stdio / sse / streamable-http）后无线程读 stdin，COMSOL 改为首次工具调用时惰性启动 → 空闲不占 license；握手也变即时，故不会再出现 path A 那种『pre-start 拖慢握手 → Qoder 重复拉起 → 两个 JVM 抢一个 license』。",
-      "_qoder_support": "已查证（2026-10-01）：docs.qoder.com 的 IDE『Model Context Protocol』页写明传输类型为 STDIO 或 SSE、字段含『URL（用于 SSE 或 Streamable HTTP）』，并注明『对于 Streamable HTTP，使用与 SSE 相同的方式配置 URL，Qoder IDE 会自动识别并使用』；CLI 的 MCP 参考页另列 type = sse / http / streamable-http / ws，字段为 url + headers。所以本块【可以】粘进 mcp.json（记得删掉所有下划线开头的键）。",
-      "_cost": "代价：Qoder 不再负责拉起进程，须自己把服务端常驻起来（$env:COMSOL_MCP_TRANSPORT='sse'; & <REPO_DIR>\\.venv\\Scripts\\comsol-mcp.exe），且首次工具调用要付 ~30s 的 JVM 冷启动——请把 Qoder 里该服务的 Request Timeout 调大。本机【尚未实测】，切换前先确认服务端已在 127.0.0.1:8765 监听。",
-      "_url_path": "端点必须与服务端 transport 对齐：transport=sse → /sse；transport=streamable-http → /mcp。",
-      "type": "sse",
-      "url": "http://127.0.0.1:8765/sse"
     }
   }
 }

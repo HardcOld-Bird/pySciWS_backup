@@ -127,16 +127,42 @@
         { "mcpServers": { "comsol":
             { "type": "sse", "url": "http://127.0.0.1:8765/sse" } } }
       (FastMCP serves /sse for transport=sse and /mcp for streamable-http --
-      keep the two in step.) NOT YET RUN HERE, and it costs you a process:
-      nothing spawns the server any more, so you must start it yourself and
-      keep it up, and the first tool call pays the ~30s JVM boot (raise the
-      server's Request Timeout in Qoder accordingly).
+      keep the two in step.)
+      VERIFIED LIVE 2026-10-01 on this box: sse (8765, GET /sse -> 200
+      text/event-stream) and streamable-http (8766, GET /mcp -> 400 "missing
+      session id", which IS the correct readiness signal) each complete a real
+      MCP handshake, expose all 103 tools and answer pdf_list_modules -- while
+      the server process carries _jpype.pyd but NO jvm.dll, i.e. COMSOL really
+      stayed down and the license really stayed free.
+      The cost of C is that nothing spawns the server for you any more. The
+      skill owns that chore: `uv run pysci-simulation mcp ensure` is idempotent
+      and spawns the server DETACHED THROUGH WMI, so it survives the teardown of
+      whichever shell started it. A plain Start-Process child does NOT: it sits
+      in the agent terminal's job object and is reclaimed silently, with no
+      traceback and no Windows Error Reporting entry (measured A/B 2026-10-01
+      with two ~15-minute ping markers spawned by the same command -- the
+      Start-Process one was gone by the next command, the WMI one lived).
+      CREATE_BREAKAWAY_FROM_JOB does not help (Qoder's job lacks
+      JOB_OBJECT_LIMIT_BREAKAWAY_OK) and schtasks needs admin (access denied).
+      The first COMSOL-touching tool call still pays the ~30s JVM boot, so raise
+      that server's Request Timeout in Qoder.
+      RESIDUAL RISK -- Origin 403. FastMCP auto-enables DNS-rebinding protection
+      for a loopback host, allowing only http://127.0.0.1:*, http://localhost:*
+      and http://[::1]:* as Origin. Measured IDENTICALLY on both transports: no
+      Origin header or a loopback Origin -> 200, while "vscode-file://vscode-app",
+      "null" and any external origin -> 403 "Invalid Origin header". Upstream
+      exposes NO env switch for transport_security, so if Qoder ever sends an
+      Electron-style Origin, path C is dead and the only fixes are reverting to
+      A or patching server.py to pass an explicit TransportSecuritySettings.
+      Diagnose with scripts\comsol_mcp\probe_mcp_http.py <sse|streamable-http>
+      <port>, run with the COMMUNITY venv's python.
 
- Recommendation: A today (verified end-to-end 2026-10-01: comsol_status ->
- connected, 6.4, standalone, 8 cores). C is now unblocked and is strictly better
- under one license -- switch when the "start the server yourself" chore is worth
- it, or as soon as the duplicate-JVM problem bites again. Choose B only if you
- need the MCP and the CLI warm at the same time.
+ Recommendation: C (verified end-to-end 2026-10-01, and strictly better under a
+ single license: idle costs no license, the handshake is instant, and there are
+ no duplicate JVMs). A remains the fallback if the Origin guard turns out to
+ reject Qoder; it was verified working 2026-10-01 (comsol_status -> connected,
+ 6.4, standalone, 8 cores) but holds the license from launch. Choose B only if
+ you need the MCP and the CLI warm at the same time.
 
 --------------------------------------------------------------------------------
  Registration (add the community comsol MCP in Qoder)
@@ -224,6 +250,13 @@ param(
     [switch] $Rebuild,                      # almost never what you want -- read the step 7 warning first
     [switch] $NoHfMirror,                   # pass --no-mirror to the build script (outside China / no hf-mirror)
     [switch] $ApplySharedSessionPatch,      # see CRITICAL FINDING path B
+    # --- path C (HTTP transport) registration; see CRITICAL FINDING ---
+    # FastMCP's run() accepts ONLY stdio / sse / streamable-http. Note that 'http' is a Qoder
+    # mcp.json *type* value, NOT a transport -- it is validated against below.
+    [string] $McpTransport  = 'sse',
+    [int]    $McpPort       = 8765,
+    [switch] $RegisterStdio,                # print the path A (command-style) entry instead of the URL entry
+    [switch] $EnsureServer,                 # after printing, actually run `pysci-simulation mcp ensure`
     [switch] $Shallow,                      # clone with --depth 1 (this repo is huge; shallow is plenty for the spike)
     [switch] $SkipFetch,                    # never run `git fetch` (avoids stalls on a slow mirror when already cloned)
     [switch] $StatusOnly,
@@ -236,6 +269,15 @@ param(
 # aborts the script. We check $LASTEXITCODE and throw explicitly where a failure must stop us.
 $ErrorActionPreference = 'Continue'
 $ProgressPreference    = 'SilentlyContinue'
+
+# Fail loudly on a transport FastMCP would reject at startup. 'http' in particular looks right
+# (it is a valid Qoder mcp.json type) but is NOT a valid transport -- mcp.run() raises ValueError.
+if ($McpTransport -ne 'sse' -and $McpTransport -ne 'streamable-http') {
+    throw "-McpTransport must be 'sse' or 'streamable-http' (got '$McpTransport'). 'http' is a Qoder mcp.json type, not a FastMCP transport."
+}
+# FastMCP serves /sse for transport=sse and /mcp for streamable-http; a mismatched pair 404s.
+$McpEndpoint = if ($McpTransport -eq 'streamable-http') { '/mcp' } else { '/sse' }
+$McpUrl      = "http://127.0.0.1:$McpPort$McpEndpoint"
 
 function Write-Step($msg)  { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Write-Info($msg)  { Write-Host "    $msg" }
@@ -318,6 +360,14 @@ if ($StatusOnly) {
     # Also: a Windows venv makes ONE instance show up as TWO python.exe -- the Scripts\python.exe launcher
     # shim (a few MB, never loads a JVM) and the base interpreter it re-execs (the real server). So count
     # instances by "has a JVM", never by "command line mentions comsol-mcp" (that double-counts).
+    #
+    # Match jvm.dll EXACTLY, never 'jvm|jpype'. _jpype.pyd is loaded at `import mph` time and is present
+    # in EVERY comsol-mcp process whether or not COMSOL ever started; only startJVM() pulls in the COMSOL
+    # JRE's jvm.dll, and only that consumes the license. Measured 2026-10-01: an HTTP-transport server
+    # sitting idle (path C, COMSOL not started) had _jpype.pyd but no jvm.dll at 74MB, while the
+    # stdio instance that HAD pre-started COMSOL carried both at ~330MB. A 'jvm|jpype' match therefore
+    # reports an idle, license-free server as "HOLDING the license" -- exactly the false positive that
+    # would fire on every path C session.
     $mcpPy = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
                Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -and $_.CommandLine -match 'comsol-mcp' })
     if ($mcpPy.Count -eq 0) {
@@ -330,13 +380,13 @@ if ($StatusOnly) {
             try {
                 $proc    = Get-Process -Id $mp.ProcessId -ErrorAction Stop
                 $started = $proc.StartTime.ToString('yyyy-MM-dd HH:mm:ss')
-                $hasJvm  = [bool]@($proc.Modules | Where-Object { $_.ModuleName -match 'jvm|jpype' }).Count
+                $hasJvm  = [bool]@($proc.Modules | Where-Object { $_.ModuleName -eq 'jvm.dll' }).Count
             } catch { Write-Warn2 "cannot inspect PID $($mp.ProcessId): $($_.Exception.Message)" }
             if ($hasJvm) {
                 $holders += $mp.ProcessId
                 Write-Warn2 "PID $($mp.ProcessId) (started $started) HAS a JVM => it is HOLDING the license."
             } else {
-                Write-Info "PID $($mp.ProcessId) (started $started) no JVM => venv launcher shim, or COMSOL not started."
+                Write-Info "PID $($mp.ProcessId) (started $started) no jvm.dll => venv launcher shim, or COMSOL not started (license FREE)."
             }
         }
         Write-Info "COMSOL session(s) alive: $($holders.Count) (of a single license)"
@@ -347,6 +397,23 @@ if ($StatusOnly) {
         } elseif ($holders.Count -eq 0) {
             Write-Ok 'server process(es) up but no COMSOL session => the license is free right now.'
         }
+    }
+
+    # Path C endpoint. Reported separately from the license scan because an IDLE path C server is
+    # exactly the desired state: listening on the port, holding no jvm.dll.
+    Write-Step 'HTTP endpoint (path C)'
+    $listener = $false
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        if ($client.ConnectAsync('127.0.0.1', $McpPort).Wait(1000) -and $client.Connected) { $listener = $true }
+        $client.Close()
+    } catch { $listener = $false }
+    if ($listener) {
+        Write-Ok "port $McpPort is listening => the registered url should be $McpUrl"
+        Write-Info 'Confirm with: uv run pysci-simulation mcp status'
+    } else {
+        Write-Warn2 "nothing listening on port $McpPort. Start it with: uv run pysci-simulation mcp ensure"
+        Write-Warn2 'A URL-registered mcp.json cannot connect until that server is up -- Qoder no longer spawns it.'
     }
     return
 }
@@ -583,22 +650,51 @@ if (-not $SkipRag) {
 # 8. Print registration JSON + Go/No-Go reminder
 # ---------------------------------------------------------------------------
 Write-Step '8/8 mcpServers registration block (copy into C:\Users\antar\.qoder-cn\shared_client\mcp.json)'
-$comsolEnv = [ordered]@{ COMSOL_MCP_VERSION = '6.4' }
-if ($ApplySharedSessionPatch) { $comsolEnv['COMSOL_MCP_CONNECT_PORT'] = '2036'; $comsolEnv['COMSOL_MCP_CONNECT_HOST'] = 'localhost' }
-$reg = [ordered]@{
-    mcpServers = [ordered]@{
-        'comsol' = [ordered]@{ command = $comsolExe; args = @(); env = $comsolEnv }
+# Path C (URL registration) is the DEFAULT: an idle server costs no license and the handshake is
+# instant, so Qoder never orphans a second JVM. -RegisterStdio reproduces the old path A entry, where
+# Qoder spawns comsol-mcp.exe itself -- which pre-starts COMSOL and grabs the single license on launch.
+if ($RegisterStdio) {
+    $comsolEnv = [ordered]@{ COMSOL_MCP_VERSION = '6.4' }
+    if ($ApplySharedSessionPatch) { $comsolEnv['COMSOL_MCP_CONNECT_PORT'] = '2036'; $comsolEnv['COMSOL_MCP_CONNECT_HOST'] = 'localhost' }
+    $entry = [ordered]@{ command = $comsolExe; args = @(); env = $comsolEnv }
+} else {
+    # A URL entry has NO `env` field, so COMSOL_MCP_TRANSPORT / HOST / PORT / VERSION have nowhere to
+    # live in mcp.json. The skill injects them instead, via the launcher script that `mcp ensure`
+    # writes to data/skills/comsol_simulation/runs/start_comsol_mcp.cmd.
+    # `type` stays 'sse' for BOTH transports: per the official docs Qoder auto-detects Streamable HTTP
+    # from the URL, and 'streamable-http' is not a documented IDE type value.
+    $entry = [ordered]@{ type = 'sse'; url = $McpUrl }
+    if ($ApplySharedSessionPatch) {
+        Write-Warn2 '-ApplySharedSessionPatch is a stdio-only (path B) mechanism and has no effect on a URL registration.'
     }
 }
+$reg  = [ordered]@{ mcpServers = [ordered]@{ 'comsol' = $entry } }
 $json = $reg | ConvertTo-Json -Depth 8
 Write-Host ''
 Write-Host '----8<---- paste this entry into mcpServers (alongside arxiv etc.) ----8<----' -ForegroundColor DarkGray
 Write-Host $json
 Write-Host '----8<------------------------------------------------------------------------8<----' -ForegroundColor DarkGray
-if ($ApplySharedSessionPatch) {
-    Write-Warn2 'Shared-session env included: run `pysci-simulation server start` first (comsolmphserver on 2036) so the community MCP can attach.'
+if ($RegisterStdio) {
+    if ($ApplySharedSessionPatch) {
+        Write-Warn2 'Shared-session env included: run `pysci-simulation server start` first (comsolmphserver on 2036) so the community MCP can attach.'
+    } else {
+        Write-Warn2 'No shared-session patch: the community MCP over stdio grabs the license IMMEDIATELY on launch (see CRITICAL FINDING). Do NOT run the community MCP and the simulation CLI (or the COMSOL GUI) at the same time -- single license.'
+    }
 } else {
-    Write-Warn2 'No shared-session patch: the community MCP over stdio grabs the license IMMEDIATELY on launch (see CRITICAL FINDING). Do NOT run the community MCP and the simulation CLI (or the COMSOL GUI) at the same time -- single license.'
+    Write-Info "Path C: transport=$McpTransport endpoint=$McpEndpoint url=$McpUrl"
+    Write-Warn2 'Qoder no longer spawns the server. Bring it up with:  uv run pysci-simulation mcp ensure'
+    Write-Warn2 'That command is idempotent and detaches the server via WMI, so it outlives the shell that started it.'
+    Write-Warn2 'The first COMSOL-touching tool call pays the ~30s JVM boot -- raise this server''s Request Timeout in Qoder.'
+    Write-Warn2 'If every call fails with 403 "Invalid Origin header", confirm with scripts\comsol_mcp\probe_mcp_http.py, then fall back to -RegisterStdio.'
+    if ($EnsureServer -and -not $DryRun) {
+        $projRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+        Write-Step 'Bringing the path C server up (uv run pysci-simulation mcp ensure)'
+        Push-Location $projRoot
+        try { & uv run pysci-simulation mcp ensure }
+        finally { Pop-Location }
+    } elseif ($EnsureServer) {
+        Write-Info '[DRY] would run: uv run pysci-simulation mcp ensure   (cwd = project root)'
+    }
 }
 Write-Host ''
 Write-Ok 'Setup script finished. Next: register the comsol MCP in Qoder, then run the Go/No-Go checklist live.'
