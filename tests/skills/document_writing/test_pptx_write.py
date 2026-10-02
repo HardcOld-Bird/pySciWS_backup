@@ -1,10 +1,13 @@
-"""pptx_io 写入能力测试：build_pptx / add_slide_to / markdown_to_pptx 回读闭环。"""
+"""pptx_io 写入能力测试：build_pptx / add_slide_to 回读闭环。
+
+markdown→pptx 写转换已改由 Pandoc 承担，测试见 test_pandoc_convert.py。
+"""
 
 from __future__ import annotations
 
 import pytest
 
-pptx = pytest.importorskip("pptx", reason="需要 python-pptx：uv sync --extra writing")
+pptx = pytest.importorskip("pptx", reason="需要 python-pptx")
 
 from pysci.skills.document_writing.tools import pptx_io  # noqa: E402
 
@@ -38,43 +41,3 @@ def test_add_slide_to_appends(tmp_path):
     slides = pptx_io.read_pptx(out)
     assert len(slides) == 2
     assert slides[1].title == "Second"
-
-
-def test_markdown_to_pptx_roundtrip(tmp_path):
-    md = """# Deck Title
-> subtitle line
-
-## Slide One
-- bullet one
-  - nested bullet
-> **演讲者备注：** spoken words
-
-## Slide Table
-| g | Q |
-|---|---|
-| 0.5 | 820 |
-"""
-    out = tmp_path / "from_md.pptx"
-    pptx_io.markdown_to_pptx(md, out)
-
-    slides = pptx_io.read_pptx(out)
-    assert slides[0].title == "Deck Title"
-    assert slides[1].title == "Slide One"
-    assert slides[1].notes == "spoken words"
-    assert any("nested bullet" in p for p in slides[1].paragraphs)
-    # 表格页
-    tbl_slide = slides[2]
-    assert tbl_slide.tables, "应提取到表格"
-    assert tbl_slide.tables[0][0][:2] == ["g", "Q"]
-    assert tbl_slide.tables[0][1][:2] == ["0.5", "820"]
-
-
-def test_markdown_to_pptx_strips_bom(tmp_path):
-    """Windows 工具（PowerShell Out-File 等）写入的 BOM 不应破坏首行 `# ` 识别。"""
-    md = "\ufeff# Titled\n\n## Body\n- x\n"
-    out = tmp_path / "bom.pptx"
-    pptx_io.markdown_to_pptx(md, out)
-    slides = pptx_io.read_pptx(out)
-    assert slides[0].title == "Titled"
-    assert slides[0].layout == "Title Slide"
-    assert slides[1].title == "Body"

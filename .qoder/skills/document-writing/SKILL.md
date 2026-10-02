@@ -34,8 +34,8 @@ isn't installed: `uv run python -m pysci.skills.document_writing.tools.compose �
 - Compile with parsed `file:line` errors; chktex lint; PDF→PNG visual proofreading.
 - **Read/extract** `.pptx` (per-slide text, bullets, tables, images, speaker notes), `.docx`
   (headings/paragraphs/bullets/tables), `.pdf`, and other Office formats → Markdown.
-- **Create/edit** `.pptx` (new deck, append slides, Markdown→pptx) and `.docx` (new doc,
-  append blocks, Markdown→docx).
+- **Create/edit** `.pptx` (new deck, append slides) and `.docx` (new doc, append blocks) via
+  python-pptx/python-docx; **Markdown→pptx/docx** via **Pandoc** (`--reference-doc` for house style).
 - Refresh `refs.bib` from the user's Zotero library.
 - `convert` (pptx/docx ↔ pdf/…) via LibreOffice headless — **only when LibreOffice is
   installed**; otherwise it degrades gracefully with install guidance. Custom install path
@@ -56,9 +56,11 @@ If `convert` reports LibreOffice missing, fall back to the always-available rout
 | `tex refs <target>` | Refreshing the bibliography | `refs.bib` regenerated from Zotero |
 | `read <file>` | Quick extract of any doc (pptx/docx/pdf/xlsx/…) | Markdown in `cache/extracted/` |
 | `slides extract <pptx>` | Deep-reading a slide deck | Per-slide Markdown + notes/tables/images |
-| `slides new / add / from-markdown` | Creating or extending a deck | New / updated `.pptx` |
+| `slides new / add` | Incrementally creating / extending a deck (python-pptx) | New / updated `.pptx` |
+| `slides from-markdown` | Markdown outline → deck (Pandoc) | New `.pptx` |
 | `slides digest <pptx>` | Translating a huge, image-heavy deck you must *understand* | Image-text-linked `index.md` + `part_*.md` + deduped `images/` |
-| `docx read / from-markdown / add` | Reading or producing Word docs | Markdown / `.docx` |
+| `docx read / add` | Reading or appending to Word docs (python-docx) | Markdown / `.docx` |
+| `docx from-markdown` | Markdown → Word doc (Pandoc) | New `.docx` |
 | `convert <file> --to pdf` | Delivering a PDF of an Office file | Converted file (needs LibreOffice) |
 | `verify <pdf>` | Proofreading the compiled layout | PNG pages for you to Read |
 
@@ -134,20 +136,24 @@ finish — see [references/digest.md](references/digest.md).
 
 ## Creating & editing slides / Word docs
 
-**Build a deck from a Markdown outline** (the round-trip partner of `slides extract`):
+**Build a deck / doc from a Markdown outline** — driven by **Pandoc** (the community converter
+standard), so headings, nested lists, pipe tables, math and images all map faithfully:
 ```
-compose slides from-markdown 'outline.md' --out 'deck.pptx'
+compose slides from-markdown 'outline.md' --out 'deck.pptx' [--slide-level 2] [--reference-doc master.pptx]
+compose docx   from-markdown 'draft.md'   --out 'report.docx' [--reference-doc style.docx]
 ```
-Or incrementally: `compose slides new 'deck.pptx' --title '…'` then
-`compose slides add 'deck.pptx' --title '…' --bullet '…' --notes '…'`.
+`--slide-level` (default 2) picks which heading starts a new slide; `--reference-doc` applies a
+Word/PPT house style. **Speaker notes** go in a fenced `::: notes` div (not `> `). Full outline
+conventions in [references/read.md](references/read.md).
 
-**Produce a Word doc** the same way:
+**Incremental edits** (append to an *existing* file) stay on python-pptx / python-docx — Pandoc can
+only generate a fresh file, it cannot append to an existing `.pptx`/`.docx`:
 ```
-compose docx from-markdown 'draft.md' --out 'report.docx'
+compose slides new 'deck.pptx' --title '…'
+compose slides add 'deck.pptx' --title '…' --bullet '…' --notes '…'
+compose docx add 'report.docx' --heading '…' --level 2
 compose docx read 'report.docx' --preview     # structured read-back
 ```
-Markdown conventions (`#`/`##` headings, `-` bullets, `>` notes, pipe tables) are in
-[references/read.md](references/read.md).
 
 ## Output locations
 
@@ -161,7 +167,7 @@ Markdown conventions (`#`/`##` headings, `-` bullets, `>` notes, pipe tables) ar
 
 ## When something breaks
 
-1. Run `compose doctor` — it reports TeX, engines, LibreOffice, and every Python lib.
+1. Run `compose doctor` — it reports TeX, engines, LibreOffice, Pandoc, and every Python lib.
 2. Compile errors are already parsed to `file:line`; open that line in `main.tex`.
 3. For backend / template / config issues, see [references/maintenance.md](references/maintenance.md).
 

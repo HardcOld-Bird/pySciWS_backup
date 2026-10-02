@@ -246,6 +246,43 @@ class Settings:
                 return p
         return None
 
+    def find_pandoc(self) -> str | None:
+        """探测 pandoc（Markdown↔Office 写转换后端），返回可执行文件绝对路径或 None。
+
+        探测链：.env 的 DOCWRITING_PANDOC（自定义系统 pandoc 绝对路径）
+        → pypandoc-binary 自带的 pandoc（pypandoc.get_pandoc_path）→ PATH 上的 pandoc。
+        """
+        override = _get_env("DOCWRITING_PANDOC")
+        if override:
+            p = Path(override)
+            if p.is_file():
+                return str(p)
+        try:
+            import pypandoc  # 惰性导入：pypandoc-binary 提供 get_pandoc_path
+
+            path = pypandoc.get_pandoc_path()
+            if path:
+                # pypandoc 在 Windows 上返回的路径可能不带 .exe，归一到磁盘上的真实文件。
+                pp = Path(path)
+                if pp.is_file():
+                    return str(pp)
+                exe = Path(str(path) + ".exe")
+                if exe.is_file():
+                    return str(exe)
+                return str(pp)
+        except (ImportError, OSError, RuntimeError):
+            pass
+        return which("pandoc")
+
+    def pandoc_version(self) -> str:
+        """返回 pandoc 版本号；探测失败返回 '?'。"""
+        try:
+            import pypandoc
+
+            return pypandoc.get_pandoc_version()
+        except (ImportError, OSError, RuntimeError):
+            return "?"
+
     # ---------- 便捷判断 ----------
     @property
     def tex_ready(self) -> bool:
@@ -254,6 +291,11 @@ class Settings:
         return bool(tools.get("latexmk")) and any(
             tools.get(e) for e in ENGINES
         )
+
+    @property
+    def pandoc_ready(self) -> bool:
+        """pandoc 可执行文件可用即为就绪（Markdown↔Office 写转换）。"""
+        return self.find_pandoc() is not None
 
     @property
     def python_libs(self) -> dict[str, bool]:
@@ -270,6 +312,7 @@ class Settings:
         tex = self.find_tex_tools()
         libs = self.python_libs
         lo = self.find_libreoffice()
+        pandoc = self.find_pandoc()
 
         def tool(name: str) -> str:
             return tex.get(name) or "✗ 未找到"
@@ -295,9 +338,12 @@ class Settings:
             "【转换后端 LibreOffice】",
             f"  soffice         : {lo or '✗ 未找到（Phase 2 转换需要）'}",
             "",
+            "【Markdown↔Office 写转换 Pandoc】",
+            f"  pandoc          : {(self.pandoc_version() + ' @ ' + pandoc) if pandoc else '✗ 未找到（from-markdown 需要；uv sync 应已随 pypandoc-binary 装入）'}",
+            "",
             "【Python 库】",
-            f"  markitdown      : {'✓' if libs['markitdown'] else '✗（uv sync --extra writing）'}",
-            f"  python-pptx     : {'✓' if libs['pptx'] else '✗（uv sync --extra writing）'}",
+            f"  markitdown      : {'✓' if libs['markitdown'] else '✗（需 uv sync）'}",
+            f"  python-pptx     : {'✓' if libs['pptx'] else '✗（需 uv sync）'}",
             f"  python-docx     : {'✓' if libs['docx'] else '✗（Phase 2）'}",
             f"  pymupdf         : {'✓' if libs['pymupdf'] else '✗'}",
             "=========================================",

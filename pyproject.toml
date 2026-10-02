@@ -45,6 +45,10 @@ dependencies = [
     "markitdown[pptx]>=0.1.8",
     "python-docx>=1.2.0",
     "python-pptx>=1.0.2",
+    # Pandoc（社区文档转换标准）承担 Markdown↔Office 写转换（from-markdown 命令）；
+    # pypandoc-binary 自带 pandoc 二进制，uv sync 即可用，无需手动装 pandoc。
+    # 如需改用系统 pandoc，在 .env 设 DOCWRITING_PANDOC 指向其绝对路径（见 config.find_pandoc）。
+    "pypandoc-binary>=1.15",
     # gain_ep 实验平台（原 sweeper400）：绑定 NI 数据采集硬件，仅 Windows + 装 NI-DAQmx 驱动后可运行；
     # 包本身跨平台可安装，无驱动时相关用例由 tests/…/conftest.py 守卫自动跳过收集。
     "nidaqmx",

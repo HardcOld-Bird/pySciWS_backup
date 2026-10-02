@@ -112,8 +112,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     libs = settings.python_libs
     print(f"  LaTeX 编译      : {'✓ 就绪' if tex_ok else '✗ 需安装 TeX Live（见上方指引）'}")
     print(f"  PDF 看图校对    : {'✓ 就绪' if libs['pymupdf'] else '✗ 缺 pymupdf'}")
-    print(f"  PPTX 结构化读取 : {'✓ 就绪' if libs['pptx'] else '✗ uv sync --extra writing'}")
-    print(f"  文档→Markdown   : {'✓ 就绪' if libs['markitdown'] else '✗ uv sync --extra writing'}")
+    print(f"  PPTX 结构化读取 : {'✓ 就绪' if libs['pptx'] else '✗ 需 uv sync'}")
+    print(f"  文档→Markdown   : {'✓ 就绪' if libs['markitdown'] else '✗ 需 uv sync'}")
+    print(
+        "  Markdown→Office : "
+        + (f"✓ 就绪（pandoc {settings.pandoc_version()}）" if settings.pandoc_ready else "✗ 未检测到 pandoc")
+    )
     print(f"  Zotero→refs.bib : {'✓ 复用 literature_research' if _module_available('pyzotero') else '△ 需 pyzotero'}")
     print()
     print(f"  LaTeX 模板      : {', '.join(_list_templates()) or '（templates/latex/ 下暂无）'}")
@@ -393,16 +397,25 @@ def cmd_slides_add(args: argparse.Namespace) -> int:
 
 
 def cmd_slides_from_markdown(args: argparse.Namespace) -> int:
-    from . import pptx_io
+    from . import pandoc_convert
 
     md = Path(args.markdown)
     if not md.exists():
         print(f"[slides from-markdown] 文件不存在：{md}", file=sys.stderr)
         return 2
     out = Path(args.out) if args.out else md.with_suffix(".pptx")
-    # utf-8-sig：透明剥离 Windows 工具（如 PowerShell Out-File）写入的 BOM
-    pptx_io.markdown_to_pptx(md.read_text(encoding="utf-8-sig"), out)
-    print(f"[slides from-markdown] {md.name} → {out}")
+    # Pandoc 直接读文件（自行处理 utf-8/BOM）；演讲者备注用 `::: notes` fenced div。
+    try:
+        pandoc_convert.md_to_pptx(
+            md, out, slide_level=args.slide_level, reference_doc=args.reference_doc
+        )
+    except pandoc_convert.PandocNotAvailable as e:
+        print(e, file=sys.stderr)
+        return 3
+    except FileNotFoundError as e:
+        print(f"[slides from-markdown] {e}", file=sys.stderr)
+        return 2
+    print(f"[slides from-markdown] {md.name} → {out}（Pandoc, slide-level={args.slide_level}）")
     print(f"[slides from-markdown] 回读校验：compose slides extract '{out}'")
     return 0
 
@@ -508,15 +521,22 @@ def cmd_docx_read(args: argparse.Namespace) -> int:
 
 
 def cmd_docx_from_markdown(args: argparse.Namespace) -> int:
-    from . import docx_io
+    from . import pandoc_convert
 
     md = Path(args.markdown)
     if not md.exists():
         print(f"[docx from-markdown] 文件不存在：{md}", file=sys.stderr)
         return 2
     out = Path(args.out) if args.out else md.with_suffix(".docx")
-    docx_io.markdown_to_docx(md.read_text(encoding="utf-8-sig"), out)
-    print(f"[docx from-markdown] {md.name} → {out}")
+    try:
+        pandoc_convert.md_to_docx(md, out, reference_doc=args.reference_doc)
+    except pandoc_convert.PandocNotAvailable as e:
+        print(e, file=sys.stderr)
+        return 3
+    except FileNotFoundError as e:
+        print(f"[docx from-markdown] {e}", file=sys.stderr)
+        return 2
+    print(f"[docx from-markdown] {md.name} → {out}（Pandoc）")
     print(f"[docx from-markdown] 回读校验：compose docx read '{out}'")
     return 0
 
@@ -687,9 +707,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--notes", default=None, help="演讲者备注")
     sp.set_defaults(func=cmd_slides_add)
 
-    sp = slidessub.add_parser("from-markdown", help="Markdown 大纲 → .pptx")
+    sp = slidessub.add_parser("from-markdown", help="Markdown 大纲 → .pptx（Pandoc）")
     sp.add_argument("markdown", help=".md 大纲文件")
     sp.add_argument("--out", default=None, help="输出 .pptx（默认同名）")
+    sp.add_argument(
+        "--slide-level", type=int, default=2, dest="slide_level",
+        help="哪级标题开新页（默认 2：# 标题/分节，## 内容页）",
+    )
+    sp.add_argument(
+        "--reference-doc", default=None, dest="reference_doc",
+        help="PowerPoint 母版模板 .pptx（套用样式）",
+    )
     sp.set_defaults(func=cmd_slides_from_markdown)
 
     sp = slidessub.add_parser(
@@ -729,9 +757,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--preview", action="store_true")
     sp.set_defaults(func=cmd_docx_read)
 
-    sp = docxsub.add_parser("from-markdown", help="Markdown → .docx")
+    sp = docxsub.add_parser("from-markdown", help="Markdown → .docx（Pandoc）")
     sp.add_argument("markdown", help=".md 文件")
     sp.add_argument("--out", default=None, help="输出 .docx（默认同名）")
+    sp.add_argument(
+        "--reference-doc", default=None, dest="reference_doc",
+        help="Word 样式模板 .docx（套用样式）",
+    )
     sp.set_defaults(func=cmd_docx_from_markdown)
 
     sp = docxsub.add_parser("add", help="向已有 .docx 追加一个块")

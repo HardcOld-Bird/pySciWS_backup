@@ -10,13 +10,14 @@ Backend package: `src/pysci/skills/document_writing/`. Data root: `data/skills/d
 | `config.py` | `Settings` (all paths), toolchain discovery (`which` + fallback bin-dir scan), `tex_ready`, `python_libs`, `summary()` |
 | `latex_build.py` | latexmk driver, `.log` → `file:line` diagnostics (`parse_log`), chktex `lint`, `TeXNotInstalled` |
 | `pdf_render.py` | PDF → PNG via pymupdf (`render_pdf_pages`, `page_count`) |
-| `pptx_io.py` | Structured PPTX read (`read_pptx`, `slides_to_markdown`) **and write** (`build_pptx`, `add_slide_to`, `markdown_to_pptx`) |
-| `docx_io.py` | Structured DOCX read (`read_docx`, `docx_to_markdown`) and write (`build_docx`, `add_block_to`, `markdown_to_docx`) |
+| `pptx_io.py` | Structured PPTX read (`read_pptx`, `slides_to_markdown`) **and** structured write (`build_pptx`, `add_slide_to`) — python-pptx |
+| `docx_io.py` | Structured DOCX read (`read_docx`, `docx_to_markdown`) and append/build (`build_docx`, `add_block_to`) — python-docx |
+| `pandoc_convert.py` | Markdown → docx/pptx via Pandoc (`md_to_docx`, `md_to_pptx`, optional `docx_to_md`), `PandocNotAvailable` |
 | `office_convert.py` | LibreOffice headless conversion (`convert`, `LibreOfficeNotInstalled`) |
 | `extract.py` | Unified `to_markdown` (markitdown / pymupdf4llm / pptx_io) + cache |
 | `deck_digest.py` | Huge-deck digestion: `.pptx` → image-text-linked Markdown workspace (`digest_pptx`, `verify_links`); sha1 dedup, section/chunk detection, gif-frame & vector previews, resumable `progress.json` |
 | `refs_bridge.py` | Zotero → BibTeX (`export_bib`), reuses `literature_research.tools.zotero_bridge` |
-| `compose.py` | Thin argparse facade; imports heavy modules lazily so `doctor` works without `[writing]` |
+| `compose.py` | Thin argparse facade; imports heavy modules lazily so `doctor` works even when a backend is missing |
 
 `compose.py` must stay thin: orchestration only. Put real logic in the modules above.
 
@@ -31,8 +32,14 @@ Backend package: `src/pysci/skills/document_writing/`. Data root: `data/skills/d
 - `TEX_TOOLS` / `ENGINES` enumerate what `doctor` probes. `tex_ready` = latexmk + one engine.
 - LibreOffice discovery: `find_libreoffice()` respects `DOCWRITING_SOFFICE` in `.env` **first**
   (absolute path to `soffice.exe`, for custom / D-drive installs), then `PATH`, then the bin-dir scan.
-- Optional deps live in the `[writing]` extra (`pyproject.toml`): `markitdown[pptx]`,
-  `python-pptx`. Install with `uv sync --extra writing`. `pymupdf` is a base dep.
+- Pandoc discovery: `find_pandoc()` respects `DOCWRITING_PANDOC` in `.env` **first** (absolute path
+  to a system `pandoc`), then `pypandoc.get_pandoc_path()` (the binary bundled by `pypandoc-binary`;
+  on Windows the returned path may lack `.exe`, so we normalize to the real on-disk file), then
+  `which("pandoc")`. `pandoc_ready` = `find_pandoc() is not None`; `pandoc_version()` for `doctor`.
+  `pandoc_convert._pypandoc()` exports `PYPANDOC_PANDOC` to bind the detected binary before converting.
+- Writing deps are **base** deps now (`pyproject.toml` `dependencies`, no `[writing]` extra):
+  `markitdown[pptx]`, `python-pptx`, `python-docx`, `pypandoc-binary`. `pymupdf` is a base dep too.
+  (The only optional extra left is `[imaging]`, used by the ai_drawing skill.)
 
 ## Log parsing (`latex_build.parse_log`)
 
@@ -79,25 +86,44 @@ Gotchas learned the hard way:
 - `_layout_map` guards `sw/sh <= 0`; `_scan` swallows per-shape errors so one bad shape cannot abort
   a several-hundred-slide run.
 
+## Pandoc writer (`pandoc_convert.py`) — why `from-markdown` only
+
+`compose slides/docx from-markdown` delegate to **Pandoc** (community standard) instead of the old
+hand-rolled Markdown parsers, for faithful headings/lists/tables/math/notes and `--reference-doc`
+styling with zero parser maintenance. Scope is deliberately narrow:
+
+- Pandoc can only **generate a fresh document from markup**. It **cannot append** to an existing
+  `.pptx`/`.docx`, and it **cannot read `.pptx`** at all. So the incremental / structured commands
+  (`slides new`, `slides add`, `docx add`) stay on python-pptx / python-docx (`build_pptx`,
+  `add_slide_to`, `build_docx`, `add_block_to`), and all PPTX reading (`read_pptx`, `deck_digest`)
+  stays on python-pptx.
+- Speaker notes use Pandoc's `::: notes` fenced div (the old `> ` blockquote convention is gone).
+- Missing Pandoc → `PandocNotAvailable` → `compose` prints guidance and returns exit code 3
+  (same degradation contract as LibreOffice).
+
 ## Tests
 
-`uv run pytest tests/skills/document_writing -q` (52 tests; the TeX-degradation test skips when TeX
-**is** installed and the LibreOffice-degradation test skips when LibreOffice is, so the pass/skip
-split shifts with the environment). They build throwaway
+`uv run pytest tests/skills/document_writing -q` (53 tests; the TeX-degradation test skips when TeX
+**is** installed, the LibreOffice-degradation test skips when LibreOffice is, and the
+`test_pandoc_convert` roundtrips skip when Pandoc is missing — so the pass/skip split shifts with the
+environment). They build throwaway
 pptx/docx/pdf in tmp dirs; none require TeX. Keep `parse_log` and the extractors covered by pure
 unit tests so the suite stays runnable on machines without a TeX install.
 
 ## Phase-2 status (built) & open items
 
 Built in Phase 2:
-1. **PPTX create/edit** — `pptx_io` write helpers + `compose slides new/add/from-markdown`.
-2. **DOCX read/create/edit** — `docx_io.py` + `python-docx` in `[writing]` + `compose docx …`.
+1. **PPTX create/edit** — `pptx_io` structured write helpers + `compose slides new/add`;
+   `slides from-markdown` now routes through Pandoc.
+2. **DOCX read/create/edit** — `docx_io.py` + `python-docx` + `compose docx read/add`;
+   `docx from-markdown` now routes through Pandoc.
 3. **Beamer slides** — `templates/latex/beamer/` (second slide route, compiles to playable PDF).
 4. **LibreOffice conversion** — `office_convert.py` + `compose convert`; degrades gracefully
    until LibreOffice is installed (probe covers C:/D: Program Files + registry PATH).
 
 Open items (future):
 - In-place editing of existing pptx shapes / docx runs (current write path appends/builds).
-- Richer docx styling (styles template, images) and pptx themes beyond the default template.
+- House-style `--reference-doc` templates checked into `templates/` for reproducible docx/pptx
+  branding (Pandoc already accepts them; none are bundled yet).
 - A `convert` fallback when LibreOffice is absent (e.g. docx→pdf via LaTeX, pptx→pdf via
   per-slide PNG) — not implemented; prefer installing LibreOffice.

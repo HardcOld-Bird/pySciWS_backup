@@ -7,8 +7,10 @@ Two entry points, both write Markdown you then **Read**:
 | `compose slides extract <pptx>` | Slide decks (structured) | `python-pptx` |
 | `compose slides digest <pptx>` | Huge, image-heavy decks you must *understand* | `python-pptx` + Pillow (+ LibreOffice for renders) |
 | `compose read <file>` | Any Office/PDF/web file (fast) | `markitdown` / `pymupdf4llm` |
-| `compose slides new/add/from-markdown` | Creating / extending decks | `python-pptx` |
-| `compose docx read/from-markdown/add` | Word docs (structured read & write) | `python-docx` |
+| `compose slides new/add` | Incrementally creating / extending decks | `python-pptx` |
+| `compose slides from-markdown` | Markdown outline → deck | Pandoc |
+| `compose docx read/add` | Word docs (structured read & append) | `python-docx` |
+| `compose docx from-markdown` | Markdown → Word doc | Pandoc |
 | `compose convert <file> --to pdf` | Office → PDF delivery | LibreOffice headless |
 
 ## `slides extract` — structured PPTX read (preferred for decks)
@@ -96,22 +98,39 @@ Preserves heading levels (`#`… by Word style), paragraphs, bullet levels, and 
 Markdown tables — better fidelity than `read` (markitdown) when structure matters. Use
 `read` only for a quick flat dump.
 
-## Writing: Markdown → pptx / docx
+## Writing: Markdown → pptx / docx (Pandoc)
 
-Both writers share one outline convention (round-trips with the extractors):
-- `# X` — deck/doc title (first) or section-divider slide; `## X`… — slide title / doc
-  heading (depth = heading level).
-- `- ` / `* ` / `• ` with 2-space indent steps — bullets (indent = level).
-- `> …` — speaker notes (pptx) / italic quote paragraph (docx).
-- Pipe tables — a table on the current slide / doc.
-- Anything else — a plain paragraph/bullet.
+`from-markdown` is powered by **Pandoc** (the community document-converter standard), not a
+hand-rolled parser — headings, nested lists, pipe tables, math, images, and footnotes all map
+faithfully, and you can apply a house style via `--reference-doc`.
 
 ```
-compose slides from-markdown 'outline.md' --out 'deck.pptx'
-compose docx   from-markdown 'outline.md' --out 'report.docx'
+compose slides from-markdown 'outline.md' --out 'deck.pptx' [--slide-level 2] [--reference-doc master.pptx]
+compose docx   from-markdown 'outline.md' --out 'report.docx' [--reference-doc style.docx]
 ```
-Files are read as `utf-8-sig`, so a Windows BOM never corrupts the first `# `.
-Incremental edits: `slides new` / `slides add` and `docx add` (see SKILL.md).
+
+Pandoc outline conventions:
+- **Slides:** `--slide-level N` (default 2) decides which heading starts a new slide. With the
+  default, `#` = title/section slide, `##` = content slide; deeper headings become sub-points.
+- **Speaker notes (pptx):** put them in a fenced `notes` div — **not** a `> ` blockquote:
+
+      ## Slide title
+      - a bullet
+
+      ::: notes
+      These words land in the speaker-notes pane.
+      :::
+
+- **Word styles:** `#`..`######` → Heading 1..6; `-`/`*` → list styles; pipe tables → Word tables;
+  `--reference-doc style.docx` applies your fonts/colors/heading styles.
+- **Encoding:** Pandoc reads the file itself (UTF-8, BOM tolerated) — no preprocessing needed.
+
+`--reference-doc` templates: generate a default with
+`pandoc -o ref.docx --print-default-data-file reference.docx` (or `.pptx`), restyle it, then pass it.
+
+Incremental edits (`slides new` / `slides add` / `docx add`) still go through python-pptx /
+python-docx — Pandoc can only generate a **fresh** file; it cannot append to an existing
+.pptx/.docx, and it cannot read .pptx at all (see references/maintenance.md).
 
 ## Choosing for PDFs
 

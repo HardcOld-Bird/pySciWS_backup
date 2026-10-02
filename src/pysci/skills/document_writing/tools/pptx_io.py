@@ -373,63 +373,6 @@ def add_slide_to(path: str | Path, spec: SlideSpec) -> Path:
     return path
 
 
-def markdown_to_pptx(md_text: str, out_path: str | Path) -> Path:
-    """把约定式 Markdown 大纲转成 .pptx（与 slides_to_markdown 构成读写闭环）。
-
-    约定：`# ` = 标题页（首个）/分节页；`## ` = 内容页标题；`- `/`* `/`• `（可缩进）=
-    项目符号；`> ` = 演讲者备注；管道表 = 表格。
-    """
-    md_text = md_text.lstrip("\ufeff")  # 剥离 BOM（Windows 工具常写入）
-    specs: list[SlideSpec] = []
-    deck_title: str | None = None
-    deck_subtitle = ""
-    cur: SlideSpec | None = None
-    table_buf: list[list[str]] = []
-
-    def flush_table() -> None:
-        nonlocal table_buf
-        if table_buf and cur is not None:
-            cur.table = table_buf
-        table_buf = []
-
-    for raw in md_text.splitlines():
-        s = raw.strip()
-        if not s:
-            continue
-        if s.startswith("|") and s.endswith("|"):
-            cells = [c.strip() for c in s.strip("|").split("|")]
-            if all(c and set(c) <= set("-: ") for c in cells):
-                continue  # 表分隔行
-            table_buf.append(cells)
-            continue
-        flush_table()
-        if s.startswith("# "):
-            if deck_title is None:
-                deck_title = s[2:].strip()
-            else:
-                cur = SlideSpec(title=s[2:].strip())
-                specs.append(cur)
-            continue
-        if s.startswith("## "):
-            cur = SlideSpec(title=s[3:].strip())
-            specs.append(cur)
-            continue
-        if s.startswith(">"):
-            note = s.lstrip("> ").strip()
-            note = note.removeprefix("**演讲者备注：**").strip()
-            if cur is not None:
-                cur.notes = f"{cur.notes} {note}".strip() if cur.notes else note
-            elif deck_title is not None:
-                deck_subtitle = f"{deck_subtitle} {note}".strip() if deck_subtitle else note
-            continue
-        if cur is None:
-            cur = SlideSpec()
-            specs.append(cur)
-        cur.bullets.append(raw.rstrip())
-    flush_table()
-    return build_pptx(specs, out_path, deck_title=deck_title, deck_subtitle=deck_subtitle)
-
-
 # ---------------------------------------------------------------------------
 # CLI 自测
 # ---------------------------------------------------------------------------
