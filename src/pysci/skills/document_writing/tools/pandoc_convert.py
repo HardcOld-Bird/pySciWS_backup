@@ -124,7 +124,5 @@ def docx_to_md(path: str | Path, out_path: str | Path) -> Path:
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     pypandoc = _pypandoc()
-    pypandoc.convert_file(
-        str(src), to="markdown", format="docx", outputfile=str(out)
-    )
+    pypandoc.convert_file(str(src), to="markdown", format="docx", outputfile=str(out))
     return out

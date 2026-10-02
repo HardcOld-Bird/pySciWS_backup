@@ -19,7 +19,9 @@ def temp_recipe():
     """注册一个临时 recipe，测试后从全局注册表移除（避免污染其它用例）。"""
     calls: dict = {}
 
-    @build.recipe(_TMP_NAME, description="temp", params={"a": 1, "b": 2}, tags=("test",))
+    @build.recipe(
+        _TMP_NAME, description="temp", params={"a": 1, "b": 2}, tags=("test",)
+    )
     def _fn(model, p):
         calls["model"] = model
         calls["params"] = dict(p)

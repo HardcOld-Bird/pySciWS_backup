@@ -125,15 +125,15 @@ class Settings:
     # --- 路径 ---
     project_root: Path
     module_dir: Path
-    assets_dir: Path        # 生成图入库（云端出图 / Agent-ImageGen 产物）
-    gallery_dir: Path       # 精选审美范本
-    recipes_dir: Path       # 流水线配方知识卡片（Markdown，与其余技能同构）
-    prompts_dir: Path       # prompt 配方库
-    cache_dir: Path         # 临时预览/中间产物（如图层拆分的分层输出）
-    runs_dir: Path          # 云端响应原始 JSON 快照 + 日志（排障用）
+    assets_dir: Path  # 生成图入库（云端出图 / Agent-ImageGen 产物）
+    gallery_dir: Path  # 精选审美范本
+    recipes_dir: Path  # 流水线配方知识卡片（Markdown，与其余技能同构）
+    prompts_dir: Path  # prompt 配方库
+    cache_dir: Path  # 临时预览/中间产物（如图层拆分的分层输出）
+    runs_dir: Path  # 云端响应原始 JSON 快照 + 日志（排障用）
 
     # --- 后端 ---
-    default_backend: str    # "ark"（云端出图）| "imagegen"（Qoder 内置，Agent 直接调）
+    default_backend: str  # "ark"（云端出图）| "imagegen"（Qoder 内置，Agent 直接调）
 
     # --- provider（火山方舟 / 即梦 Seedream）---
     ark_base_url: str
@@ -225,7 +225,8 @@ def build_settings() -> Settings:
         cache_dir=cache_dir,
         runs_dir=runs_dir,
         default_backend=(_get_env("AI_DRAWING_BACKEND", "ark") or "ark").lower(),
-        ark_base_url=_get_env("ARK_BASE_URL", DEFAULT_ARK_BASE_URL) or DEFAULT_ARK_BASE_URL,
+        ark_base_url=_get_env("ARK_BASE_URL", DEFAULT_ARK_BASE_URL)
+        or DEFAULT_ARK_BASE_URL,
         ark_api_key=_get_env("ARK_API_KEY"),
         default_model=_get_env("AI_DRAWING_MODEL", DEFAULT_MODEL) or DEFAULT_MODEL,
         default_size=_get_env("AI_DRAWING_DEFAULT_SIZE", DEFAULT_SIZE) or DEFAULT_SIZE,

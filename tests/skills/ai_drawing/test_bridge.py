@@ -42,8 +42,13 @@ def test_analyze_reference_fields(tmp_path):
 
 
 def test_analyze_reference_orientation(tmp_path):
-    assert br.analyze_reference(_ref(tmp_path, 30, 50, "p.png"))["orientation"] == "portrait"
-    assert br.analyze_reference(_ref(tmp_path, 40, 40, "s.png"))["orientation"] == "square"
+    assert (
+        br.analyze_reference(_ref(tmp_path, 30, 50, "p.png"))["orientation"]
+        == "portrait"
+    )
+    assert (
+        br.analyze_reference(_ref(tmp_path, 40, 40, "s.png"))["orientation"] == "square"
+    )
 
 
 def test_analyze_reference_missing_raises(tmp_path):
@@ -57,36 +62,59 @@ def test_analyze_reference_missing_raises(tmp_path):
 def test_render_design_spec_content(tmp_path):
     info = {
         "path": str(tmp_path / "ref.png"),
-        "width": 60, "height": 40, "aspect": 1.5, "aspect_hw": 0.667,
-        "orientation": "landscape", "mean_brightness": 90.0,
+        "width": 60,
+        "height": 40,
+        "aspect": 1.5,
+        "aspect_hw": 0.667,
+        "orientation": "landscape",
+        "mean_brightness": 90.0,
         "palette": ["#1b2a4a", "#e0b050", "#cccccc"],
     }
     txt = br._render_design_spec(
-        slug="fig1_cover", research="demo", info=info,
-        figdir=tmp_path / "fig1_cover", pipeline=tmp_path / "code" / "fig1_cover.py",
+        slug="fig1_cover",
+        research="demo",
+        info=info,
+        figdir=tmp_path / "fig1_cover",
+        pipeline=tmp_path / "code" / "fig1_cover.py",
         ref_copy=tmp_path / "fig1_cover" / "_reference.png",
-        style="nature", width="single", template="multi_panel", palette_name=None,
+        style="nature",
+        width="single",
+        template="multi_panel",
+        palette_name=None,
     )
     assert "# fig1_cover" in txt
-    assert "不可信" in txt          # AI 数据不可信警告
-    assert "#1b2a4a" in txt        # 主色 hex
-    assert "![reference]" in txt   # 内嵌范本
-    assert "偏暗背景" in txt        # 亮度提示（90<128）
-    assert "横构图" in txt          # 朝向提示
+    assert "不可信" in txt  # AI 数据不可信警告
+    assert "#1b2a4a" in txt  # 主色 hex
+    assert "![reference]" in txt  # 内嵌范本
+    assert "偏暗背景" in txt  # 亮度提示（90<128）
+    assert "横构图" in txt  # 朝向提示
 
 
 def test_render_design_spec_with_palette_name(tmp_path):
     info = {
-        "path": "x", "width": 10, "height": 10, "aspect": 1.0, "aspect_hw": 1.0,
-        "orientation": "square", "mean_brightness": 200.0, "palette": ["#aabbcc"],
+        "path": "x",
+        "width": 10,
+        "height": 10,
+        "aspect": 1.0,
+        "aspect_hw": 1.0,
+        "orientation": "square",
+        "mean_brightness": 200.0,
+        "palette": ["#aabbcc"],
     }
     txt = br._render_design_spec(
-        slug="s", research="demo", info=info, figdir=tmp_path, pipeline=tmp_path / "s.py",
-        ref_copy=None, style="aps", width="double", template="multi_panel",
+        slug="s",
+        research="demo",
+        info=info,
+        figdir=tmp_path,
+        pipeline=tmp_path / "s.py",
+        ref_copy=None,
+        style="aps",
+        width="double",
+        template="multi_panel",
         palette_name="my-ai-pal",
     )
     assert "my-ai-pal" in txt
-    assert "色盲" in txt           # 色盲安全告警
+    assert "色盲" in txt  # 色盲安全告警
     assert "偏亮背景" in txt
 
 
@@ -172,7 +200,9 @@ def test_bridge_no_copy_ref(tmp_path, isolated_plotting):
     assert res["ref_copy"] is None
 
 
-def test_bridge_with_palette_registers_and_writes_style(tmp_path, isolated_plotting, monkeypatch):
+def test_bridge_with_palette_registers_and_writes_style(
+    tmp_path, isolated_plotting, monkeypatch
+):
     from pysci.skills.scientific_plotting.tools import palette
 
     monkeypatch.setattr(palette, "_PALETTES", dict(palette._PALETTES))

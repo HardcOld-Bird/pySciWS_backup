@@ -136,23 +136,36 @@ def apply_overlays(ax: Any, overlays: list[dict[str, Any]]) -> None:
             )
             if kind == "panel" and ov.get("text"):
                 ax.text(
-                    cx, cy, ov["text"],
-                    ha="center", va="center",
-                    fontsize=ov.get("fontsize", 7), color=ov.get("color", "0.35"),
+                    cx,
+                    cy,
+                    ov["text"],
+                    ha="center",
+                    va="center",
+                    fontsize=ov.get("fontsize", 7),
+                    color=ov.get("color", "0.35"),
                 )
         elif kind == "dashed":
             ax.plot(
-                [ov["x0"], ov["x1"]], [ov["y0"], ov["y1"]],
-                ls=ov.get("ls", "--"), lw=ov.get("lw", 1.0), color=ov.get("color", "k"),
+                [ov["x0"], ov["x1"]],
+                [ov["y0"], ov["y1"]],
+                ls=ov.get("ls", "--"),
+                lw=ov.get("lw", 1.0),
+                color=ov.get("color", "k"),
             )
         elif kind == "text":
             ax.text(
-                ov["x"], ov["y"], ov["s"],
-                fontsize=ov.get("fontsize", 8), ha=ov.get("ha", "left"), va=ov.get("va", "baseline"),
+                ov["x"],
+                ov["y"],
+                ov["s"],
+                fontsize=ov.get("fontsize", 8),
+                ha=ov.get("ha", "left"),
+                va=ov.get("va", "baseline"),
                 color=ov.get("color", "k"),
             )
         else:
-            raise ValueError(f"未知叠加原语 type={kind!r}（支持 rotbox/panel/dashed/text）")
+            raise ValueError(
+                f"未知叠加原语 type={kind!r}（支持 rotbox/panel/dashed/text）"
+            )
 
 
 def compose_raster_panel(
@@ -173,9 +186,13 @@ def compose_raster_panel(
     sc = load_sidecar(sidecar) if sidecar else None
     extent, crop_box = resolve_extent_and_crop(sc, extent=extent, crop_box=crop_box)
     if extent is None:
-        raise ValueError("缺数据窗口：请显式 --extent，或提供含 extent_applied 的 sidecar")
+        raise ValueError(
+            "缺数据窗口：请显式 --extent，或提供含 extent_applied 的 sidecar"
+        )
     fig = plt.figure(figsize=figsize)
-    ax = add_raster_panel(fig, [0, 0, 1, 1], image, extent, crop_box=crop_box, axis_off=axis_off)
+    ax = add_raster_panel(
+        fig, [0, 0, 1, 1], image, extent, crop_box=crop_box, axis_off=axis_off
+    )
     if overlays:
         apply_overlays(ax, overlays)
     out = Path(out)
@@ -210,8 +227,12 @@ class GridResult:
     fig: Any
     axes: list[list[Any]]  # rows×cols，空格为 None
     axes_map: dict[str, Any] = field(default_factory=dict)  # panel name -> Axes
-    raster_axes: list[Any] = field(default_factory=list)  # 栅格场面板轴（COMSOL PNG，colorbar 近似）
-    field_axes: list[Any] = field(default_factory=list)  # 数据驱动场面板轴（colorbar 严格一致）
+    raster_axes: list[Any] = field(
+        default_factory=list
+    )  # 栅格场面板轴（COMSOL PNG，colorbar 近似）
+    field_axes: list[Any] = field(
+        default_factory=list
+    )  # 数据驱动场面板轴（colorbar 严格一致）
 
     def save(self, out: str | Path, *, dpi: int = 150, **kwargs: Any) -> Path:
         out = Path(out)
@@ -272,7 +293,9 @@ def compose_grid(spec: dict[str, Any]) -> GridResult:
     axes_map: dict[str, Any] = {}
     raster_axes: list[Any] = []
     field_axes: list[Any] = []
-    cb = spec.get("colorbar")  # 提前：field 面板默认继承其 cmap/vmin/vmax 以保证严格一致
+    cb = spec.get(
+        "colorbar"
+    )  # 提前：field 面板默认继承其 cmap/vmin/vmax 以保证严格一致
 
     panels = spec.get("panels", []) or []
     occupied: set[tuple[int, int]] = {
@@ -306,7 +329,9 @@ def compose_grid(spec: dict[str, Any]) -> GridResult:
                 )
             ax.imshow(
                 read_raster(panel["image"], crop),
-                extent=list(ext), origin="upper", aspect=panel.get("aspect", "equal"),
+                extent=list(ext),
+                origin="upper",
+                aspect=panel.get("aspect", "equal"),
             )
             if panel.get("overlays"):
                 apply_overlays(ax, panel["overlays"])
@@ -324,11 +349,14 @@ def compose_grid(spec: dict[str, Any]) -> GridResult:
             from . import field as _field  # noqa: PLC0415 - 仅 field 面板需要
 
             xy, vals = _field.load_field_points(
-                panel["source"], scalars=panel.get("scalars"),
+                panel["source"],
+                scalars=panel.get("scalars"),
                 cols=tuple(panel.get("cols", (0, 1, 2))),
             )
             _field.add_field_panel(
-                ax, xy, vals,
+                ax,
+                xy,
+                vals,
                 cmap=panel.get("cmap") or (cb or {}).get("cmap", "bwr"),
                 vmin=panel.get("vmin", (cb or {}).get("vmin")),
                 vmax=panel.get("vmax", (cb or {}).get("vmax")),
@@ -357,8 +385,16 @@ def compose_grid(spec: dict[str, Any]) -> GridResult:
                 ax = axes[r][c]
                 if ax is None:
                     continue
-                ax.text(0.02, 0.98, fmt.format(chr(ord("a") + i)), transform=ax.transAxes,
-                        va="top", ha="left", fontsize=fs, fontweight=fw)
+                ax.text(
+                    0.02,
+                    0.98,
+                    fmt.format(chr(ord("a") + i)),
+                    transform=ax.transAxes,
+                    va="top",
+                    ha="left",
+                    fontsize=fs,
+                    fontweight=fw,
+                )
                 i += 1
 
     for c, t in enumerate(spec.get("col_titles") or []):
@@ -370,23 +406,36 @@ def compose_grid(spec: dict[str, Any]) -> GridResult:
             continue
         anchor = next((a for a in axes[r] if a is not None), None)
         if anchor is not None:
-            anchor.text(spec.get("row_label_offset", -0.08), 0.5, lab, transform=anchor.transAxes,
-                        rotation=90, va="center", ha="center",
-                        fontsize=spec.get("row_label_fontsize", 11))
+            anchor.text(
+                spec.get("row_label_offset", -0.08),
+                0.5,
+                lab,
+                transform=anchor.transAxes,
+                rotation=90,
+                va="center",
+                ha="center",
+                fontsize=spec.get("row_label_fontsize", 11),
+            )
 
     if cb:
         target = cb.get("axes")
         if target:
             cb_axes = [axes_map[n] for n in target if n in axes_map]
         else:
-            cb_axes = field_axes or raster_axes  # field 面板优先（颜色与 colorbar 严格一致）
+            cb_axes = (
+                field_axes or raster_axes
+            )  # field 面板优先（颜色与 colorbar 严格一致）
         if cb_axes:
             mappable = ScalarMappable(
-                norm=Normalize(cb.get("vmin"), cb.get("vmax")), cmap=cb.get("cmap", "viridis")
+                norm=Normalize(cb.get("vmin"), cb.get("vmax")),
+                cmap=cb.get("cmap", "viridis"),
             )
             cbar = fig.colorbar(
-                mappable, ax=cb_axes, location=cb.get("location", "right"),
-                pad=cb.get("pad", 0.02), fraction=cb.get("fraction", 0.03),
+                mappable,
+                ax=cb_axes,
+                location=cb.get("location", "right"),
+                pad=cb.get("pad", 0.02),
+                fraction=cb.get("fraction", 0.03),
             )
             if cb.get("label"):
                 cbar.set_label(cb["label"], fontsize=cb.get("label_fontsize", 10))
@@ -395,7 +444,11 @@ def compose_grid(spec: dict[str, Any]) -> GridResult:
         fig.suptitle(spec["suptitle"], fontsize=spec.get("suptitle_fontsize", 13))
 
     return GridResult(
-        fig=fig, axes=axes, axes_map=axes_map, raster_axes=raster_axes, field_axes=field_axes
+        fig=fig,
+        axes=axes,
+        axes_map=axes_map,
+        raster_axes=raster_axes,
+        field_axes=field_axes,
     )
 
 
@@ -404,7 +457,11 @@ def compose_grid_to_file(
 ) -> Path:
     """:func:`compose_grid` + savefig 一步到位（CLI / 无需二次填充 axes 面板时用）。"""
     res = compose_grid(spec)
-    p = res.save(out, dpi=dpi or int(spec.get("dpi", 150)), pad_inches=spec.get("pad_inches", 0.1))
+    p = res.save(
+        out,
+        dpi=dpi or int(spec.get("dpi", 150)),
+        pad_inches=spec.get("pad_inches", 0.1),
+    )
     if close:
         res.close()
     return p

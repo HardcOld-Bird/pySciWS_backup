@@ -21,9 +21,7 @@ try:
     from pptx.enum.shapes import MSO_SHAPE_TYPE
     from pptx.util import Inches
 except ImportError as e:  # pragma: no cover
-    raise ImportError(
-        "python-pptx 未安装。请运行：uv sync --extra writing"
-    ) from e
+    raise ImportError("python-pptx 未安装。请运行：uv sync --extra writing") from e
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +36,9 @@ class SlideContent:
     title: str = ""
     paragraphs: list[str] = field(default_factory=list)  # 正文段落（保留项目符号前缀）
     tables: list[list[list[str]]] = field(default_factory=list)  # 每个表：行→列→单元格
-    images: list[dict[str, Any]] = field(default_factory=list)  # {name, alt, w, h, path?}
+    images: list[dict[str, Any]] = field(
+        default_factory=list
+    )  # {name, alt, w, h, path?}
     notes: str = ""
 
     @property
@@ -123,7 +123,9 @@ def _extract_picture_blob(shape: Any) -> tuple[str, bytes] | None:
 # ---------------------------------------------------------------------------
 # 主入口：读取整个演示文稿
 # ---------------------------------------------------------------------------
-def read_pptx(path: str | Path, *, export_images_to: str | Path | None = None) -> list[SlideContent]:
+def read_pptx(
+    path: str | Path, *, export_images_to: str | Path | None = None
+) -> list[SlideContent]:
     """读取 .pptx，返回每页的 SlideContent 列表。
 
     Args:
@@ -237,7 +239,9 @@ def slides_to_markdown(
             head += f"  \n_（版式：{sc.layout}）_"
         parts.append(head + "\n")
 
-        body = [p for p in sc.paragraphs if p.strip() and p.lstrip("• ").strip() != sc.title]
+        body = [
+            p for p in sc.paragraphs if p.strip() and p.lstrip("• ").strip() != sc.title
+        ]
         if body:
             parts.append("\n".join(body) + "\n")
 
@@ -253,7 +257,7 @@ def slides_to_markdown(
                 if im.get("content_type"):
                     bits.append(im["content_type"])
                 if im.get("path"):
-                    bits.append(f'→ {Path(im["path"]).name}')
+                    bits.append(f"→ {Path(im['path']).name}")
                 inv.append("  - " + " | ".join(bits))
             parts.append("**图片：**\n" + "\n".join(inv) + "\n")
 
@@ -326,7 +330,9 @@ def add_content_slide(prs: Any, spec: SlideSpec) -> Any:
         slide.shapes.title.text = spec.title
     if spec.bullets:
         if spec.table:
-            box = slide.shapes.add_textbox(Inches(0.8), Inches(1.4), Inches(8.4), Inches(1.2))
+            box = slide.shapes.add_textbox(
+                Inches(0.8), Inches(1.4), Inches(8.4), Inches(1.2)
+            )
             _fill_bullets(box.text_frame, spec.bullets)
         else:
             _fill_bullets(slide.placeholders[1].text_frame, spec.bullets)
@@ -335,7 +341,9 @@ def add_content_slide(prs: Any, spec: SlideSpec) -> Any:
         n_r = len(rows)
         n_c = max(len(r) for r in rows)
         top = Inches(2.8 if spec.bullets else 1.6)
-        gf = slide.shapes.add_table(n_r, n_c, Inches(0.8), top, Inches(8.4), Inches(0.4 * n_r))
+        gf = slide.shapes.add_table(
+            n_r, n_c, Inches(0.8), top, Inches(8.4), Inches(0.4 * n_r)
+        )
         tbl = gf.table
         for r in range(n_r):
             for c in range(n_c):

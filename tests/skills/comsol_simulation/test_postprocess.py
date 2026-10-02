@@ -249,13 +249,17 @@ def test_read_gray_png_and_detect_frame_box_file(tmp_path):
 
 def test_comsol_auto_window_width_limited():
     # 几何 bbox 宽>高（半圆），轴框为竖长（portrait）→ 宽受限：x 贴几何 bbox，y 居中展开
-    bbox = (-0.117, 0.683, -0.057, 0.400)   # gw=0.80, gh=0.457
-    crop = (48, 6, 807, 877)                # w_px=759, h_px=871
+    bbox = (-0.117, 0.683, -0.057, 0.400)  # gw=0.80, gh=0.457
+    crop = (48, 6, 807, 877)  # w_px=759, h_px=871
     x0, x1, y0, y1 = pp.comsol_auto_window(bbox, crop)
-    assert x0 == pytest.approx(-0.117, abs=1e-9) and x1 == pytest.approx(0.683, abs=1e-9)
+    assert x0 == pytest.approx(-0.117, abs=1e-9) and x1 == pytest.approx(
+        0.683, abs=1e-9
+    )
     s = 0.80 / 759
     cy = (-0.057 + 0.400) / 2
-    assert y0 == pytest.approx(cy - 871 * s / 2) and y1 == pytest.approx(cy + 871 * s / 2)
+    assert y0 == pytest.approx(cy - 871 * s / 2) and y1 == pytest.approx(
+        cy + 871 * s / 2
+    )
     assert (y1 - y0) > (x1 - x0)  # portrait 框 → y 范围被拉大
 
 

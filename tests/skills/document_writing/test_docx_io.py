@@ -26,7 +26,12 @@ def test_build_and_read_roundtrip(tmp_path):
     got = docx_io.read_docx(out)
     kinds = [b.kind for b in got]
     assert kinds[0] == "heading" and got[0].text == "Report"
-    assert "heading" in kinds and "paragraph" in kinds and "bullet" in kinds and "table" in kinds
+    assert (
+        "heading" in kinds
+        and "paragraph" in kinds
+        and "bullet" in kinds
+        and "table" in kinds
+    )
     tbl = next(b for b in got if b.kind == "table")
     assert tbl.rows[0][:2] == ["g", "Q"]
     sub = next(b for b in got if b.kind == "bullet" and b.text == "sub point")
@@ -37,7 +42,9 @@ def test_add_block_appends(tmp_path):
     out = tmp_path / "doc.docx"
     docx_io.build_docx([docx_io.DocxBlock(kind="paragraph", text="first")], out)
     assert len(docx_io.read_docx(out)) == 1
-    docx_io.add_block_to(out, docx_io.DocxBlock(kind="heading", text="Appended", level=2))
+    docx_io.add_block_to(
+        out, docx_io.DocxBlock(kind="heading", text="Appended", level=2)
+    )
     got = docx_io.read_docx(out)
     assert len(got) == 2
     assert got[1].kind == "heading" and got[1].text == "Appended"

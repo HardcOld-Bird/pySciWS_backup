@@ -80,9 +80,14 @@ def cmd_styles(args: argparse.Namespace) -> int:
         print(f"\n[{p.name}] {p.label}")
         print(f"  font chain : {' -> '.join(p.font_chain)}")
         print(f"  font sizes : base {p.base_fontsize}pt / tick {p.tick_fontsize}pt")
-        print(f"  widths     : single {p.single_width_mm:g}mm / double {p.double_width_mm:g}mm")
+        print(
+            f"  widths     : single {p.single_width_mm:g}mm / double {p.double_width_mm:g}mm"
+        )
         resolved, missing = _style.resolve_font(p.font_chain)
-        print(f"  resolved   : {resolved}" + (f"  (missing: {missing})" if missing else ""))
+        print(
+            f"  resolved   : {resolved}"
+            + (f"  (missing: {missing})" if missing else "")
+        )
     print("\n=== colorblind-safe palettes ===")
     for name in _palette.list_palettes():
         cols = _palette.get_palette(name)
@@ -109,7 +114,9 @@ def cmd_new(args: argparse.Namespace) -> int:
         return 1
     print(f"已脚手架图管线目录：{figdir}")
     print(f"  管线模块 : {figdir / (args.slug + '.py')}")
-    print(f"  模板     : {args.template}  (可选: {', '.join(_scaffold.list_templates())})")
+    print(
+        f"  模板     : {args.template}  (可选: {', '.join(_scaffold.list_templates())})"
+    )
     print("\n下一步：")
     print(f"  1) 编辑 {args.slug}.py 里的 build_figure()（替换示例数据为真实数据）")
     print(f"  2) uv run pysci-figures build '{figdir}'")
@@ -298,7 +305,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("new", help="脚手架一幅图的生产管线目录")
     s.add_argument("research", help="研究线名（不含数字前缀），如 gain_ep")
     s.add_argument("slug", help="图目录名，如 fig1_ep_band")
-    s.add_argument("--style", default=settings.default_style, help="期刊预设（aps/nature）")
+    s.add_argument(
+        "--style", default=settings.default_style, help="期刊预设（aps/nature）"
+    )
     s.add_argument("--width", default="double", help="设计宽度 single/double 或毫米数")
     s.add_argument(
         "--template",
@@ -311,7 +320,9 @@ def build_parser() -> argparse.ArgumentParser:
     # build
     s = sub.add_parser("build", help="运行图管线并导出全部格式 + PNG 预览")
     s.add_argument("figdir", type=Path, help="图生产管线目录")
-    s.add_argument("--style", default=None, help="覆盖预设（默认取 STYLE.yaml / config）")
+    s.add_argument(
+        "--style", default=None, help="覆盖预设（默认取 STYLE.yaml / config）"
+    )
     s.add_argument("--width", default=None, help="覆盖设计宽度")
     s.add_argument("--aspect", type=float, default=None, help="高/宽比（默认 0.618）")
     s.add_argument("--palette", default=None, help="调色板名（见 styles）")
@@ -347,16 +358,44 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_list)
 
     # raster-panel
-    s = sub.add_parser("raster-panel", help="外部渲染栅格（COMSOL PNG）+ 数据坐标叠加原语 → 单面板 PNG")
-    s.add_argument("--image", type=Path, required=True, help="渲染 PNG（如 comsol export image 产物）")
+    s = sub.add_parser(
+        "raster-panel", help="外部渲染栅格（COMSOL PNG）+ 数据坐标叠加原语 → 单面板 PNG"
+    )
+    s.add_argument(
+        "--image",
+        type=Path,
+        required=True,
+        help="渲染 PNG（如 comsol export image 产物）",
+    )
     s.add_argument("--out", type=Path, required=True)
-    s.add_argument("--sidecar", type=Path, default=None, help="comsol 导出 sidecar json（提供 extent/crop_box）")
-    s.add_argument("--extent", type=float, nargs=4, default=None, help="数据窗口 x0 x1 y0 y1（覆盖 sidecar）")
-    s.add_argument("--crop", type=int, nargs=4, default=None, help="像素裁剪框 x0 y0 x1 y1（覆盖 sidecar）")
-    s.add_argument("--overlay", type=Path, default=None, help="叠加原语清单 .json/.yaml")
+    s.add_argument(
+        "--sidecar",
+        type=Path,
+        default=None,
+        help="comsol 导出 sidecar json（提供 extent/crop_box）",
+    )
+    s.add_argument(
+        "--extent",
+        type=float,
+        nargs=4,
+        default=None,
+        help="数据窗口 x0 x1 y0 y1（覆盖 sidecar）",
+    )
+    s.add_argument(
+        "--crop",
+        type=int,
+        nargs=4,
+        default=None,
+        help="像素裁剪框 x0 y0 x1 y1（覆盖 sidecar）",
+    )
+    s.add_argument(
+        "--overlay", type=Path, default=None, help="叠加原语清单 .json/.yaml"
+    )
     s.add_argument("--figsize", type=float, nargs=2, default=(7.0, 7.0))
     s.add_argument("--dpi", type=int, default=150)
-    s.add_argument("--show-axis", action="store_true", dest="show_axis", help="保留面板坐标轴")
+    s.add_argument(
+        "--show-axis", action="store_true", dest="show_axis", help="保留面板坐标轴"
+    )
     s.set_defaults(func=cmd_raster_panel)
 
     # compose-grid
@@ -364,7 +403,12 @@ def build_parser() -> argparse.ArgumentParser:
         "compose-grid",
         help="spec 驱动的多面板组装（N×M 混合 raster/图像/轴 + 共享 colorbar/面板字母/行列标题）",
     )
-    s.add_argument("--spec", type=Path, required=True, help="组装 spec .yaml/.json（rows/cols/panels/colorbar…）")
+    s.add_argument(
+        "--spec",
+        type=Path,
+        required=True,
+        help="组装 spec .yaml/.json（rows/cols/panels/colorbar…）",
+    )
     s.add_argument("--out", type=Path, required=True, help="输出 PNG")
     s.add_argument("--dpi", type=int, default=None, help="覆盖 spec.dpi（默认 150）")
     s.set_defaults(func=cmd_compose_grid)
@@ -374,21 +418,39 @@ def build_parser() -> argparse.ArgumentParser:
         "field-panel",
         help="数据驱动场渲染（VTK/CSV → tripcolor，colorbar 与面板颜色严格一致）",
     )
-    s.add_argument("--source", type=Path, required=True, help="场源 .vtk/.vtu/.csv/.txt")
+    s.add_argument(
+        "--source", type=Path, required=True, help="场源 .vtk/.vtu/.csv/.txt"
+    )
     s.add_argument("--out", type=Path, required=True)
-    s.add_argument("--scalars", default=None, help="VTK 标量数组名（默认首个 point_data）")
-    s.add_argument("--cols", type=int, nargs=3, default=None, metavar=("XI", "YI", "VI"),
-                   help="CSV 的 x/y/value 列索引（默认 0 1 2）")
-    s.add_argument("--cmap", default="bwr", help="matplotlib colormap（与共享 colorbar 同名即一致）")
+    s.add_argument(
+        "--scalars", default=None, help="VTK 标量数组名（默认首个 point_data）"
+    )
+    s.add_argument(
+        "--cols",
+        type=int,
+        nargs=3,
+        default=None,
+        metavar=("XI", "YI", "VI"),
+        help="CSV 的 x/y/value 列索引（默认 0 1 2）",
+    )
+    s.add_argument(
+        "--cmap",
+        default="bwr",
+        help="matplotlib colormap（与共享 colorbar 同名即一致）",
+    )
     s.add_argument("--vmin", type=float, default=None)
     s.add_argument("--vmax", type=float, default=None)
     s.add_argument("--shading", default="gouraud", choices=["gouraud", "flat"])
     s.add_argument("--figsize", type=float, nargs=2, default=(6.0, 5.0))
     s.add_argument("--dpi", type=int, default=150)
-    s.add_argument("--no-colorbar", action="store_true", dest="no_colorbar", help="不画 colorbar")
+    s.add_argument(
+        "--no-colorbar", action="store_true", dest="no_colorbar", help="不画 colorbar"
+    )
     s.add_argument("--cbar-label", default=None, dest="cbar_label")
     s.add_argument("--title", default=None)
-    s.add_argument("--axis-off", action="store_true", dest="axis_off", help="关闭坐标轴")
+    s.add_argument(
+        "--axis-off", action="store_true", dest="axis_off", help="关闭坐标轴"
+    )
     s.set_defaults(func=cmd_field_panel)
 
     return p

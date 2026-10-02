@@ -221,7 +221,9 @@ def _port_alive(host: str, port: int) -> bool:
         return False
 
 
-def start_persistent_server(port: int = 2036, cores: int | None = None) -> dict[str, Any]:
+def start_persistent_server(
+    port: int = 2036, cores: int | None = None
+) -> dict[str, Any]:
     """拉起**跨进程常驻** server 并记录 pid/port 状态文件（供后续 connect / stop）。
 
     与 ``session(mode="server")`` 的区别：本函数**不**在退出时关闭 server，使多条 CLI
@@ -234,7 +236,9 @@ def start_persistent_server(port: int = 2036, cores: int | None = None) -> dict[
     if state.exists():
         try:
             info = json.loads(state.read_text(encoding="utf-8"))
-            if _port_alive(str(info.get("host", "127.0.0.1")), int(info.get("port", 0) or 0)):
+            if _port_alive(
+                str(info.get("host", "127.0.0.1")), int(info.get("port", 0) or 0)
+            ):
                 return info
         except Exception:  # noqa: BLE001
             pass
@@ -258,7 +262,11 @@ def server_status(port: int | None = None) -> dict[str, Any]:
     if state.exists():
         try:
             data = json.loads(state.read_text(encoding="utf-8"))
-            info.update(pid=data.get("pid"), port=data.get("port"), host=data.get("host", "127.0.0.1"))
+            info.update(
+                pid=data.get("pid"),
+                port=data.get("port"),
+                host=data.get("host", "127.0.0.1"),
+            )
             info["running"] = _port_alive(info["host"], int(info["port"] or 0))
         except Exception:  # noqa: BLE001
             pass

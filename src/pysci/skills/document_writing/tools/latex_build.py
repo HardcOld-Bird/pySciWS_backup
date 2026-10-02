@@ -282,7 +282,9 @@ def build(
     errors: list[TexIssue] = []
     warnings: list[TexIssue] = []
     if log_path.exists():
-        errors, warnings = parse_log(log_path.read_text(encoding="utf-8", errors="replace"))
+        errors, warnings = parse_log(
+            log_path.read_text(encoding="utf-8", errors="replace")
+        )
         errors, warnings = _dedupe(errors), _dedupe(warnings)
 
     pdf_path = out_dir / f"{main_tex.stem}.pdf"

@@ -288,9 +288,7 @@ class Settings:
     def tex_ready(self) -> bool:
         """latexmk + 至少一个引擎可用即为就绪。"""
         tools = self.find_tex_tools()
-        return bool(tools.get("latexmk")) and any(
-            tools.get(e) for e in ENGINES
-        )
+        return bool(tools.get("latexmk")) and any(tools.get(e) for e in ENGINES)
 
     @property
     def pandoc_ready(self) -> bool:
@@ -380,10 +378,10 @@ def build_settings() -> Settings:
         cache_dir=cache_dir,
         cache_extracted=cache_extracted,
         cache_renders=cache_renders,
-        default_latex_engine=(_get_env("DOCWRITING_LATEX_ENGINE", "auto") or "auto").lower(),
-        _raw_env={
-            k: v for k, v in os.environ.items() if k.startswith("DOCWRITING_")
-        },
+        default_latex_engine=(
+            _get_env("DOCWRITING_LATEX_ENGINE", "auto") or "auto"
+        ).lower(),
+        _raw_env={k: v for k, v in os.environ.items() if k.startswith("DOCWRITING_")},
     )
 
 

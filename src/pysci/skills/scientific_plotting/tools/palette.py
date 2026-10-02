@@ -82,7 +82,7 @@ def list_palettes() -> list[str]:
     _load_user_palettes()
     seen: list[str] = []
     for k, v in _PALETTES.items():
-        if v not in [ _PALETTES[s] for s in seen ]:
+        if v not in [_PALETTES[s] for s in seen]:
             seen.append(k)
     return seen
 
@@ -140,12 +140,16 @@ def _load_user_palettes() -> None:
     for k, v in data.items():
         if isinstance(v, list) and v:
             try:
-                _PALETTES.setdefault(str(k).lower(), tuple(_normalize_hex(x) for x in v))
+                _PALETTES.setdefault(
+                    str(k).lower(), tuple(_normalize_hex(x) for x in v)
+                )
             except ValueError:
                 continue
 
 
-def register_palette(name: str, colors: list[str] | tuple[str, ...], *, persist: bool = True) -> tuple[str, ...]:
+def register_palette(
+    name: str, colors: list[str] | tuple[str, ...], *, persist: bool = True
+) -> tuple[str, ...]:
     """注册一个自定义调色板（如 AI 抽取的配色），并（默认）持久化到 ``palettes.json``。
 
     注册后即可用 ``get_palette(name)`` / ``color(i, name)`` 取色，或把 ``palette: <name>`` 写进

@@ -34,7 +34,7 @@ W_NOM = np.array([0.227, 0.115, 0.153]) * A_PER
 
 # 环路尺度：(cr,ci) 用绝对半宽；(h1,w1) 用名义值的相对偏差
 SCALE_CRCI = (0.02, 0.025)
-SCALE_HW = (0.10, 0.10)      # 最大 ±10% × frac
+SCALE_HW = (0.10, 0.10)  # 最大 ±10% × frac
 FRACS = (0.25, 0.5, 1.0, 2.0, 3.0, 4.0)
 
 
@@ -51,6 +51,7 @@ def refine_loss_ep():
     def F(x):
         S = _s_at(x[0], x[1])
         return [S[1, 0].real, S[1, 0].imag]
+
     r = root(F, [CR0, CI0], method="hybr")
     return float(r.x[0]), float(r.x[1])
 
@@ -59,6 +60,7 @@ def refine_gain_pole():
     def G(x):
         inv = 1.0 / _s_at(x[0], x[1])[1, 0]
         return [inv.real, inv.imag]
+
     r = root(G, [CR0, -0.0740], method="hybr")
     return float(r.x[0]), float(r.x[1])
 
@@ -70,8 +72,9 @@ def _winding(v):
 
 def _loop_vals(getter, frac):
     th = np.linspace(0.0, 2 * np.pi, N_LOOP + 1)
-    out = {k: np.empty(th.size, dtype=complex)
-           for k in ("s11", "s12", "s21", "s22", "det")}
+    out = {
+        k: np.empty(th.size, dtype=complex) for k in ("s11", "s12", "s21", "s22", "det")
+    }
     for i, t in enumerate(th):
         S = getter(frac, np.cos(t), np.sin(t))
         out["s11"][i], out["s12"][i] = S[0, 0], S[0, 1]
@@ -92,8 +95,8 @@ def main():
     for cname, (crc, cic) in centers:
         # --- 空间 A: (cr, ci) 解析坐标 ---
         def getter_crci(frac, c, s, crc=crc, cic=cic):
-            return _s_at(crc + frac * SCALE_CRCI[0] * c,
-                         cic + frac * SCALE_CRCI[1] * s)
+            return _s_at(crc + frac * SCALE_CRCI[0] * c, cic + frac * SCALE_CRCI[1] * s)
+
         # --- 空间 B: (h1, w1) 几何坐标（(cr,ci) 固定在中心值）---
         def getter_hw(frac, c, s, crc=crc, cic=cic):
             h = H_NOM.copy()

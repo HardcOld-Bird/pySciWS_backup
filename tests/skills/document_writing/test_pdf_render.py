@@ -53,9 +53,7 @@ def test_render_selected_pages(sample_pdf: Path, tmp_path: Path):
 
 
 def test_render_max_pages(sample_pdf: Path, tmp_path: Path):
-    pngs = pdf_render.render_pdf_pages(
-        sample_pdf, out_dir=tmp_path / "r3", max_pages=2
-    )
+    pngs = pdf_render.render_pdf_pages(sample_pdf, out_dir=tmp_path / "r3", max_pages=2)
     assert len(pngs) == 2
 
 

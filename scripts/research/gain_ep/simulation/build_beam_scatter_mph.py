@@ -28,7 +28,15 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 SIM_DIR = ROOT / "data" / "research" / "1_gain_ep" / "simulation"
 OUT_MPH = SIM_DIR / "6 半圆波束散射对照.mph"
-FIG_DIR = ROOT / "data" / "research" / "1_gain_ep" / "article" / "figures" / "_beam_scatter_proto"
+FIG_DIR = (
+    ROOT
+    / "data"
+    / "research"
+    / "1_gain_ep"
+    / "article"
+    / "figures"
+    / "_beam_scatter_proto"
+)
 
 PARAMS = {
     "c0": "343[m/s]",
@@ -40,11 +48,17 @@ PARAMS = {
     "Nper": "8",
     "x0": "Nper*D/2",
     # 管槽几何（单周期内偏移/宽/深，与 CMT make_ep_params / 参考模型一致）
-    "w1": "0.227*D", "h1": "0.569*lambda",
-    "w2": "0.115*D", "h2": "0.195*lambda", "o2": "0.503*D",
-    "w3": "0.153*D", "h3": "0.232*lambda", "o3": "0.688*D",
+    "w1": "0.227*D",
+    "h1": "0.569*lambda",
+    "w2": "0.115*D",
+    "h2": "0.195*lambda",
+    "o2": "0.503*D",
+    "w3": "0.153*D",
+    "h3": "0.232*lambda",
+    "o3": "0.688*D",
     # 管槽 1/3 有效深度（对照③置为薄片 = 整根移除）
-    "h1e": "h1", "h3e": "h3",
+    "h1e": "h1",
+    "h3e": "h3",
     # 物理开关
     "cr": "1.0037965",
     "ci": "-0.0730324",
@@ -68,7 +82,11 @@ def _set(node, props: dict) -> None:
 def _create(seq, tag: str, ntype: str, *extra):
     """在特征序列上 create，失败返回 None 并打印（类型名/上下文错误可诊断）。"""
     try:
-        return seq.feature().create(tag, ntype, *extra) if hasattr(seq, "feature") else seq.create(tag, ntype, *extra)
+        return (
+            seq.feature().create(tag, ntype, *extra)
+            if hasattr(seq, "feature")
+            else seq.create(tag, ntype, *extra)
+        )
     except Exception as exc:  # noqa: BLE001
         print(f"  [warn] create {tag}::{ntype} failed: {type(exc).__name__}: {exc}")
         return None
@@ -100,7 +118,14 @@ def build(*, solve: bool = True, export: bool = True) -> None:
     c1 = _create(g, "c1", "Circle")
     _set(c1, {"r": "R", "pos": ["x0", "0"], "base": "center"})
     rbot = _create(g, "rbot", "Rectangle")
-    _set(rbot, {"size": ["2*R+2[mm]", "R+1[mm]"], "pos": ["x0-R-1[mm]", "-R-1[mm]"], "base": "corner"})
+    _set(
+        rbot,
+        {
+            "size": ["2*R+2[mm]", "R+1[mm]"],
+            "pos": ["x0-R-1[mm]", "-R-1[mm]"],
+            "base": "corner",
+        },
+    )
     dif1 = _create(g, "dif1", "Difference")
     if dif1 is not None:
         try:
@@ -126,7 +151,9 @@ def build(*, solve: bool = True, export: bool = True) -> None:
             arr.selection("input").set([src])
         except Exception as exc:  # noqa: BLE001
             print(f"  [warn] {tag} input: {type(exc).__name__}: {exc}")
-        _set(arr, {"type": "rectangular", "fullsize": ["Nper", "1"], "displ": ["D", "0"]})
+        _set(
+            arr, {"type": "rectangular", "fullsize": ["Nper", "1"], "displ": ["D", "0"]}
+        )
         if tag == "arr2":
             _set(arr, {"selresult": "on", "selresultshow": "dom"})
 
@@ -139,12 +166,23 @@ def build(*, solve: bool = True, export: bool = True) -> None:
     # 结构自检：域数 + 命名选择
     ndom = _safe(g.getNDomains, default="?")
     print(f"  geom domains = {ndom}")
-    for lvl, seq in (("comp", comp.selection()), ("geom", _safe(comp.geom("geom1").selection, default=None))):
-        tags = [str(t) for t in (_safe(seq.tags, default=[]) or [])] if seq is not None else []
+    for lvl, seq in (
+        ("comp", comp.selection()),
+        ("geom", _safe(comp.geom("geom1").selection, default=None)),
+    ):
+        tags = (
+            [str(t) for t in (_safe(seq.tags, default=[]) or [])]
+            if seq is not None
+            else []
+        )
         print(f"  {lvl} selections = {tags}")
         for t in tags:
             sn = _safe(seq.get, t, default=None)
-            doms = _safe(lambda: list(sn.domains()), default="?") if sn is not None else "?"
+            doms = (
+                _safe(lambda: list(sn.domains()), default="?")
+                if sn is not None
+                else "?"
+            )
             lbl = _safe(sn.label, default="") if sn is not None else ""
             print(f"      {t} [{lbl}] domains={doms}")
 
@@ -155,13 +193,22 @@ def build(*, solve: bool = True, export: bool = True) -> None:
 
     # 弧边选择（y>0 的边界）：辐射条件 + 远场积分
     sel_arc = _safe(comp.selection().create, "sel_arc", "Box", default=None)
-    _set(sel_arc, {
-        "entitydim": jpype.JInt(1),
-        "condition": "intersects",
-        "xmin": "x0-R-1[mm]", "xmax": "x0+R+1[mm]",
-        "ymin": "1[um]", "ymax": "R+1[mm]",
-    })
-    arc_bnds = _safe(lambda: list(sel_arc.boundaries()), default="?") if sel_arc is not None else "?"
+    _set(
+        sel_arc,
+        {
+            "entitydim": jpype.JInt(1),
+            "condition": "intersects",
+            "xmin": "x0-R-1[mm]",
+            "xmax": "x0+R+1[mm]",
+            "ymin": "1[um]",
+            "ymax": "R+1[mm]",
+        },
+    )
+    arc_bnds = (
+        _safe(lambda: list(sel_arc.boundaries()), default="?")
+        if sel_arc is not None
+        else "?"
+    )
     print(f"  sel_arc boundaries = {arc_bnds}")
 
     print("== materials ==")
@@ -173,13 +220,18 @@ def build(*, solve: bool = True, export: bool = True) -> None:
     mat2 = _safe(comp.material().create, "mat2", "Common", default=None)
     if mat2 is not None:
         mat2.label("GainAir groove2")
-        _set(mat2.propertyGroup("def"), {"density": "1.2[kg/m^3]", "soundspeed": "c0*(cr+ci*i)"})
+        _set(
+            mat2.propertyGroup("def"),
+            {"density": "1.2[kg/m^3]", "soundspeed": "c0*(cr+ci*i)"},
+        )
         try:
             mat2.selection().named(g2_tag)
             print(f"  mat2 -> named({g2_tag}) ok")
         except Exception as exc:  # noqa: BLE001
             print(f"  [warn] mat2 named({g2_tag}): {type(exc).__name__}: {exc}")
-        print(f"  mat2 domains = {_safe(lambda: list(mat2.selection().domains()), default='?')}")
+        print(
+            f"  mat2 domains = {_safe(lambda: list(mat2.selection().domains()), default='?')}"
+        )
 
     print("== physics ==")
     try:
@@ -192,35 +244,62 @@ def build(*, solve: bool = True, export: bool = True) -> None:
     bpf1 = _create(ph, "bpf1", "BackgroundPressureField")
     if bpf1 is not None:
         bpf1.label("Background L (+45)")
-        _set(bpf1, {"PressureFieldType": "PlaneWave", "pamp": "pampL", "phi": "0",
-                    "dir": ["sin(theta)", "-cos(theta)", "0"], "c_mat": "from_mat"})
+        _set(
+            bpf1,
+            {
+                "PressureFieldType": "PlaneWave",
+                "pamp": "pampL",
+                "phi": "0",
+                "dir": ["sin(theta)", "-cos(theta)", "0"],
+                "c_mat": "from_mat",
+            },
+        )
         _safe(bpf1.selection().all)
     bpf2 = _create(ph, "bpf2", "BackgroundPressureField")
     if bpf2 is not None:
         bpf2.label("Background R (-45)")
-        _set(bpf2, {"PressureFieldType": "PlaneWave", "pamp": "pampR", "phi": "0",
-                    "dir": ["-sin(theta)", "-cos(theta)", "0"], "c_mat": "from_mat"})
+        _set(
+            bpf2,
+            {
+                "PressureFieldType": "PlaneWave",
+                "pamp": "pampR",
+                "phi": "0",
+                "dir": ["-sin(theta)", "-cos(theta)", "0"],
+                "c_mat": "from_mat",
+            },
+        )
         _safe(bpf2.selection().all)
 
     pwrad = _create(ph, "pwrad1", "PlaneWaveRadiation")
     if pwrad is not None:
         _safe(pwrad.selection().named, "sel_arc")
-        print(f"  pwrad1 sel bnds = {len(_safe(lambda: list(pwrad.selection().entities(1)), default=[]) or [])}")
-        print(f"  pwrad1 props = {_safe(lambda: list(pwrad.properties()), default='?')}")
+        print(
+            f"  pwrad1 sel bnds = {len(_safe(lambda: list(pwrad.selection().entities(1)), default=[]) or [])}"
+        )
+        print(
+            f"  pwrad1 props = {_safe(lambda: list(pwrad.properties()), default='?')}"
+        )
 
     efc = _create(ph, "efc1", "ExteriorFieldCalculation")
     if efc is not None:
         _safe(efc.selection().named, "sel_arc")
-        print(f"  efc1 sel bnds = {len(_safe(lambda: list(efc.selection().entities(1)), default=[]) or [])}")
+        print(
+            f"  efc1 sel bnds = {len(_safe(lambda: list(efc.selection().entities(1)), default=[]) or [])}"
+        )
         props = _safe(lambda: list(efc.properties()), default=[]) or []
         print(f"  efc1 props = {props}")
         # 发现对称面相关属性名（供 y=0 无限硬墙设置）
         for p in props:
             lp = str(p).lower()
-            if any(kw in lp for kw in ("sym", "plane", "baffle", "integral", "pext", "name")):
+            if any(
+                kw in lp
+                for kw in ("sym", "plane", "baffle", "integral", "pext", "name")
+            ):
                 allowed = _safe(efc.getAllowedPropertyValues, p, default=None)
                 cur = _safe(efc.getString, p, default=None)
-                print(f"      efc.{p} = {cur!r}  allowed={list(allowed) if allowed else allowed}")
+                print(
+                    f"      efc.{p} = {cur!r}  allowed={list(allowed) if allowed else allowed}"
+                )
 
     print("== mesh ==")
     _safe(comp.mesh().create, "mesh1")
@@ -260,10 +339,20 @@ def build(*, solve: bool = True, export: bool = True) -> None:
             if pgp is not None:
                 print(f"  pg_far created via type {alt}")
                 break
-    print(f"  result tags = {[str(t) for t in (_safe(jm.result().tags, default=[]) or [])]}")
+    print(
+        f"  result tags = {[str(t) for t in (_safe(jm.result().tags, default=[]) or [])]}"
+    )
     rad = _create(pgp, "rad1", "RadiationPattern") if pgp is not None else None
-    _set(rad, {"expr": "abs(acpr.efc1.pext)", "refdir": ["1", "0"],
-               "anglerestr": "on", "phimin": "0", "phirange": "180"})
+    _set(
+        rad,
+        {
+            "expr": "abs(acpr.efc1.pext)",
+            "refdir": ["1", "0"],
+            "anglerestr": "on",
+            "phimin": "0",
+            "phirange": "180",
+        },
+    )
     if rad is not None:
         print(f"  rad1 props = {_safe(lambda: list(rad.properties()), default='?')}")
 
@@ -300,6 +389,7 @@ def build(*, solve: bool = True, export: bool = True) -> None:
 def _diag_field_stats(jm, ds: str) -> None:
     """导出 p_t/p/p_b 到临时 CSV 并打印 min/max，诊断哪个场非零。"""
     import numpy as np
+
     tmp = Path(__import__("tempfile").gettempdir()) / "beamsc_diag.csv"
     try:
         explist = jm.result().export()
@@ -316,18 +406,29 @@ def _diag_field_stats(jm, ds: str) -> None:
             try:
                 ex.set("expr", [expr])
                 ex.run()
-                lines = [ln for ln in tmp.read_text().splitlines() if ln and not ln.startswith("%")]
+                lines = [
+                    ln
+                    for ln in tmp.read_text().splitlines()
+                    if ln and not ln.startswith("%")
+                ]
                 vals = [float(r.split(",")[-1]) for r in lines[1:]]
                 import numpy as np
+
                 a = np.array(vals)
-                print(f"  [diag] {expr}: min={a.min():.4g} max={a.max():.4g} mean={a.mean():.4g}")
+                print(
+                    f"  [diag] {expr}: min={a.min():.4g} max={a.max():.4g} mean={a.mean():.4g}"
+                )
             except Exception as exc2:  # noqa: BLE001
                 print(f"  [diag] {expr}: FAILED {type(exc2).__name__}: {exc2}")
         # BPF 实际幅值/激活状态
         try:
             b1 = jm.component("comp1").physics("acpr").feature("bpf1")
-            print(f"  [diag] bpf1 pamp={b1.getString('pamp')} active={b1.isActive()} type={b1.getString('PressureFieldType')}")
-            print(f"  [diag] bpf1 dir={list(b1.getStringArray('dir'))} phi={b1.getString('phi')} k_src={b1.getString('k_src')}")
+            print(
+                f"  [diag] bpf1 pamp={b1.getString('pamp')} active={b1.isActive()} type={b1.getString('PressureFieldType')}"
+            )
+            print(
+                f"  [diag] bpf1 dir={list(b1.getStringArray('dir'))} phi={b1.getString('phi')} k_src={b1.getString('k_src')}"
+            )
             for pn in ("pampL", "pampR", "theta", "k", "lambda", "c0"):
                 print(f"  [diag] param {pn} = {jm.param().get(pn)}")
         except Exception as exc3:  # noqa: BLE001
@@ -350,7 +451,16 @@ def _export_png(jm, pgtag: str, out: Path) -> None:
             return
         e.set("plotgroup", pgtag)
         e.set("pngfilename", str(out))
-        _set(e, {"size": "manualweb", "unit": "px", "height": "900", "width": "900", "resolution": "96"})
+        _set(
+            e,
+            {
+                "size": "manualweb",
+                "unit": "px",
+                "height": "900",
+                "width": "900",
+                "resolution": "96",
+            },
+        )
         _safe(jm.result(pgtag).run)
         e.run()
         print(f"  exported {pgtag} -> {out}")
@@ -360,6 +470,7 @@ def _export_png(jm, pgtag: str, out: Path) -> None:
 
 if __name__ == "__main__":
     import sys
+
     if "--nosolve" in sys.argv:
         build(solve=False, export=False)
     else:

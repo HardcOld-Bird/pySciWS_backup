@@ -71,7 +71,9 @@ def convert(
     t0 = time.time()
     md = extract_pdf(pdf, backend=backend)
     out.write_text(md, encoding="utf-8")
-    print(f"[comsol.docs] converted {pdf.name} -> {out} ({len(md)} chars, {time.time()-t0:.1f}s)")
+    print(
+        f"[comsol.docs] converted {pdf.name} -> {out} ({len(md)} chars, {time.time() - t0:.1f}s)"
+    )
     return out
 
 
@@ -138,7 +140,9 @@ def split_sections(md_text: str, doc: str) -> list[Section]:
         h = _HEADING_RE.match(line)
         if h:
             flush()
-            cur = Section(doc=doc, heading=h.group(2), level=len(h.group(1)), pages=pages, body="")
+            cur = Section(
+                doc=doc, heading=h.group(2), level=len(h.group(1)), pages=pages, body=""
+            )
         elif cur is not None:
             buf.append(line)
     flush()
@@ -185,7 +189,9 @@ def build_index(docs: list[str] | None = None, *, rebuild: bool = True) -> int:
     try:
         for p in targets:
             doc = p.stem
-            sections = split_sections(p.read_text(encoding="utf-8", errors="replace"), doc)
+            sections = split_sections(
+                p.read_text(encoding="utf-8", errors="replace"), doc
+            )
             if rebuild:
                 conn.execute("DELETE FROM sections WHERE doc = ?", (doc,))
                 conn.execute("DELETE FROM docmeta WHERE doc = ?", (doc,))

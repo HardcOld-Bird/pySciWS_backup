@@ -32,27 +32,87 @@ def _feat_lines(seq, indent="    ") -> list[str]:
         typ = str(_safe(get_type, t, default="") or "") if callable(get_type) else ""
         node = _safe(fseq.get, t, default=None)
         label = str(_safe(node.label, default="") or "") if node is not None else ""
-        head = f"{indent}- {t}  ::  {typ}" + (f" [{label}]" if label and label != t else "")
+        head = f"{indent}- {t}  ::  {typ}" + (
+            f" [{label}]" if label and label != t else ""
+        )
         lines.append(head)
         if node is None:
             continue
-        for prop in ("size", "pos", "r", "base", "rot", "expr", "pamp", "kx", "ky",
-                     "c", "rho", "hmax", "hmin", "selection", "domain", "boundary",
-                     "k", "alpha", "phi", "pb", "type",
-                     "k1", "k2", "k0", "wavevector", "kvec", "backgroundtype",
-                     "dx", "dy", "x", "y",
-                     # BPF plane-wave direction candidates
-                     "e_k", "ek", "ekx", "eky", "ekz", "kz", "beta", "gamma",
-                     "angle", "q0", "p0", "T0", "level", "outofplane",
-                     # Array / finalize candidates
-                     "selresult", "selresultshow", "linearsize", "fullsize",
-                     "displ", "input", "propagatesel"):
+        for prop in (
+            "size",
+            "pos",
+            "r",
+            "base",
+            "rot",
+            "expr",
+            "pamp",
+            "kx",
+            "ky",
+            "c",
+            "rho",
+            "hmax",
+            "hmin",
+            "selection",
+            "domain",
+            "boundary",
+            "k",
+            "alpha",
+            "phi",
+            "pb",
+            "type",
+            "k1",
+            "k2",
+            "k0",
+            "wavevector",
+            "kvec",
+            "backgroundtype",
+            "dx",
+            "dy",
+            "x",
+            "y",
+            # BPF plane-wave direction candidates
+            "e_k",
+            "ek",
+            "ekx",
+            "eky",
+            "ekz",
+            "kz",
+            "beta",
+            "gamma",
+            "angle",
+            "q0",
+            "p0",
+            "T0",
+            "level",
+            "outofplane",
+            # Array / finalize candidates
+            "selresult",
+            "selresultshow",
+            "linearsize",
+            "fullsize",
+            "displ",
+            "input",
+            "propagatesel",
+        ):
             val = _safe(node.getString, prop, default=None)
             if val not in (None, ""):
                 lines.append(f"{indent}    {prop} = {val}")
         # 向量属性（getString 返回空）：用 getStringArray 再探一次
-        for prop in ("k", "ek", "e_k", "kx", "ky", "kz", "direction", "wavevec",
-                     "q", "pos", "displ", "size", "fullsize"):
+        for prop in (
+            "k",
+            "ek",
+            "e_k",
+            "kx",
+            "ky",
+            "kz",
+            "direction",
+            "wavevec",
+            "q",
+            "pos",
+            "displ",
+            "size",
+            "fullsize",
+        ):
             arr = _safe(node.getStringArray, prop, default=None)
             if arr is not None and len(list(arr)) > 0:
                 lines.append(f"{indent}    {prop}[] = {list(arr)}")
@@ -68,7 +128,13 @@ def _resolve(arg: str) -> str:
     p = Path(arg)
     if p.exists():
         return str(p)
-    root = Path(__file__).resolve().parents[4] / "data" / "research" / "1_gain_ep" / "simulation"
+    root = (
+        Path(__file__).resolve().parents[4]
+        / "data"
+        / "research"
+        / "1_gain_ep"
+        / "simulation"
+    )
     # 支持 'refs2' -> 子目录 refs 下以 '2' 开头的 mph；也支持直接文件名前缀
     frag = arg.replace("\\", "/")
     candidates: list[Path] = []
@@ -89,8 +155,21 @@ def _deep_props(node, indent="      ") -> list[str]:
     if cls is not None:
         methods = _safe(cls.getMethods, default=[]) or []
         names = sorted({str(m).split("(")[0].split()[-1] for m in methods})
-        interesting = [n for n in names if any(
-            kw in n.lower() for kw in ("propert", "vector", "array", "getstring", "getdouble", "names"))]
+        interesting = [
+            n
+            for n in names
+            if any(
+                kw in n.lower()
+                for kw in (
+                    "propert",
+                    "vector",
+                    "array",
+                    "getstring",
+                    "getdouble",
+                    "names",
+                )
+            )
+        ]
         lines.append(f"{indent}methods~ {interesting}")
     # 2) properties() / getPropertyNames()（仅在需要时打开，输出较长）
     # for mname in ("properties", "getPropertyNames"):
@@ -100,18 +179,49 @@ def _deep_props(node, indent="      ") -> list[str]:
     #         if val is not None:
     #             lines.append(f"{indent}{mname}() = {list(val)}")
     # 3) 候选方向属性的多种取值方式
-    cand = ("dir", "PressureFieldType", "pamp", "phi", "k_src",
-            "ek", "e_k", "ekx", "eky", "kx", "ky", "k", "direction", "wavevec",
-            "backgroundtype", "type", "cs", "alpha", "beta", "theta", "q", "n")
+    cand = (
+        "dir",
+        "PressureFieldType",
+        "pamp",
+        "phi",
+        "k_src",
+        "ek",
+        "e_k",
+        "ekx",
+        "eky",
+        "kx",
+        "ky",
+        "k",
+        "direction",
+        "wavevec",
+        "backgroundtype",
+        "type",
+        "cs",
+        "alpha",
+        "beta",
+        "theta",
+        "q",
+        "n",
+    )
     for prop in cand:
-        for acc in ("getString", "getVector", "getDoubleArray", "getStringArray", "get"):
+        for acc in (
+            "getString",
+            "getVector",
+            "getDoubleArray",
+            "getStringArray",
+            "get",
+        ):
             fn = getattr(node, acc, None)
             if not callable(fn):
                 continue
             val = _safe(fn, prop, default=None)
             if val is None:
                 continue
-            sval = str(list(val)) if hasattr(val, "__len__") and not isinstance(val, str) else str(val)
+            sval = (
+                str(list(val))
+                if hasattr(val, "__len__") and not isinstance(val, str)
+                else str(val)
+            )
             if sval not in ("", "0", "0.0", "[]", "None"):
                 lines.append(f"{indent}{acc}({prop!r}) = {sval}")
     return lines
@@ -152,7 +262,9 @@ def main(mph_path: str) -> None:
         print("\n".join(_feat_lines(comp.physics(ptag), indent="    ")) or "    (none)")
         # 对 bpf 节点做深度自省
         fseq = _safe(comp.physics(ptag).feature, default=None)
-        for ft in [str(t) for t in (_safe(fseq.tags, default=[]) or [])] if fseq else []:
+        for ft in (
+            [str(t) for t in (_safe(fseq.tags, default=[]) or [])] if fseq else []
+        ):
             if ft.startswith("bpf"):
                 node = _safe(fseq.get, ft, default=None)
                 if node is not None:
@@ -173,7 +285,9 @@ def main(mph_path: str) -> None:
                     print(f"      sel.{m}() = {_safe(fn, default='?')}")
             gs = getattr(sel, "getString", None)
             if callable(gs):
-                print(f"      sel.getString('named') = {_safe(gs, 'named', default='?')}")
+                print(
+                    f"      sel.getString('named') = {_safe(gs, 'named', default='?')}"
+                )
             print(f"      sel.toString() = {_safe(sel.toString, default='?')}")
         pg = _safe(mat.propertyGroup, "def", default=None)
         if pg is not None:
@@ -188,7 +302,11 @@ def main(mph_path: str) -> None:
     for stag in [str(t) for t in (_safe(sseq.tags, default=[]) or [])]:
         std = jm.study(stag)
         fseq = _safe(std.feature, default=None)
-        ftags = [str(t) for t in (_safe(fseq.tags, default=[]) or [])] if fseq is not None else []
+        ftags = (
+            [str(t) for t in (_safe(fseq.tags, default=[]) or [])]
+            if fseq is not None
+            else []
+        )
         print(f"  study {stag} [{_safe(std.label, default='')}] features={ftags}")
 
     print("== results ==")

@@ -74,7 +74,8 @@ no registration — just paste from `design_spec.md`:
 
 ```python
 from pysci.skills.scientific_plotting.tools import palette
-ax.plot(x, y_real, color=palette.color("#121A2E"))   # dominant / background tone
+
+ax.plot(x, y_real, color=palette.color("#121A2E"))  # dominant / background tone
 ax.plot(x, y2_real, color=palette.color("#BDA869"))  # accent 1
 ```
 
@@ -82,7 +83,7 @@ Or, if you passed `--palette-name`, reference the registered palette by name (wo
 separate `figures build` process because it's persisted, and is bound via the figure's `STYLE.yaml`):
 
 ```python
-palette.color(0, "my-ref")          # by index into the registered palette
+palette.color(0, "my-ref")  # by index into the registered palette
 # or let the whole color cycle come from it: STYLE.yaml → palette: my-ref
 ```
 

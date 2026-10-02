@@ -102,9 +102,9 @@ class Settings:
     # --- 路径 ---
     project_root: Path
     module_dir: Path
-    templates_dir: Path     # 脚手架模板（新建图管线时复制）
-    cache_dir: Path         # 预览/临时栅格缓存
-    recipes_dir: Path       # 固化下来的可复用绘图配方画廊
+    templates_dir: Path  # 脚手架模板（新建图管线时复制）
+    cache_dir: Path  # 预览/临时栅格缓存
+    recipes_dir: Path  # 固化下来的可复用绘图配方画廊
 
     # --- 默认绘图参数 ---
     default_style: str
@@ -160,9 +160,7 @@ def build_settings() -> Settings:
         default_formats=_parse_formats(_get_env("SCIPLOT_DEFAULT_FORMATS")),
         preview_dpi=_get_env_int("SCIPLOT_PREVIEW_DPI", 200),
         save_dpi=_get_env_int("SCIPLOT_SAVE_DPI", 600),
-        _raw_env={
-            k: v for k, v in os.environ.items() if k.startswith("SCIPLOT_")
-        },
+        _raw_env={k: v for k, v in os.environ.items() if k.startswith("SCIPLOT_")},
     )
 
 

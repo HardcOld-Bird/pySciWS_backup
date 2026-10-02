@@ -11,7 +11,9 @@ from pysci import paths
 
 
 def test_ai_drawing_root_anchor():
-    assert paths.AI_DRAWING_ROOT == paths.PROJECT_ROOT / "data" / "skills" / "ai_drawing"
+    assert (
+        paths.AI_DRAWING_ROOT == paths.PROJECT_ROOT / "data" / "skills" / "ai_drawing"
+    )
     # 与其它技能数据区同构（同在 data/skills/ 下）
     assert paths.AI_DRAWING_ROOT.parent == paths.PLOTTING_ROOT.parent
 
@@ -23,7 +25,9 @@ def test_research_artwork_dir_mirrors_fig_dir():
     assert art == fig.parent / "artwork"
     assert art.name == "artwork"
     # 带 slug → 追加一级
-    assert paths.research_artwork_dir("gain_ep", slug="fig1_cover") == art / "fig1_cover"
+    assert (
+        paths.research_artwork_dir("gain_ep", slug="fig1_cover") == art / "fig1_cover"
+    )
 
 
 def test_research_artwork_dir_resolves_numbered_asset(tmp_path, monkeypatch):

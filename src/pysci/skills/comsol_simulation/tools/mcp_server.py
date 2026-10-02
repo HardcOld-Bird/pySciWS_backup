@@ -71,17 +71,19 @@ _ENDPOINT_PATHS = {"sse": "/sse", "streamable-http": "/mcp"}
 MANAGED_TRANSPORTS = ("sse", "streamable-http")
 
 #: 可能持有 COMSOL license 的进程映像名（小写）。
-_LICENSE_CANDIDATE_EXES = frozenset({
-    "python.exe",
-    "pythonw.exe",
-    "comsol-mcp.exe",
-    "comsol.exe",
-    "comsolmphserver.exe",
-    "comsolbatch.exe",
-    "comsolparallel.exe",
-    "java.exe",
-    "javaw.exe",
-})
+_LICENSE_CANDIDATE_EXES = frozenset(
+    {
+        "python.exe",
+        "pythonw.exe",
+        "comsol-mcp.exe",
+        "comsol.exe",
+        "comsolmphserver.exe",
+        "comsolbatch.exe",
+        "comsolparallel.exe",
+        "java.exe",
+        "javaw.exe",
+    }
+)
 
 # Windows 进程/模块枚举常量
 _TH32CS_SNAPPROCESS = 0x00000002
@@ -141,7 +143,9 @@ def endpoint_path(transport: str) -> str:
         ) from None
 
 
-def mcp_url(transport: str | None = None, host: str | None = None, port: int | None = None) -> str:
+def mcp_url(
+    transport: str | None = None, host: str | None = None, port: int | None = None
+) -> str:
     """拼出应写进 Qoder ``mcp.json`` 的 ``url`` 字段。"""
     t = transport or settings.mcp_transport
     h = host or settings.mcp_host
@@ -149,7 +153,9 @@ def mcp_url(transport: str | None = None, host: str | None = None, port: int | N
     return f"http://{h}:{p}{endpoint_path(t)}"
 
 
-def mcp_registration_json(transport: str | None = None, host: str | None = None, port: int | None = None) -> str:
+def mcp_registration_json(
+    transport: str | None = None, host: str | None = None, port: int | None = None
+) -> str:
     """生成可直接粘贴进 ``mcp.json`` 的 comsol 条目（URL 型注册）。"""
     url = mcp_url(transport, host, port)
     block = {"mcpServers": {"comsol": {"type": "sse", "url": url}}}
@@ -276,7 +282,12 @@ if sys.platform == "win32":
         _DWORD,
     ]
     _psapi.EnumProcessModulesEx.restype = _BOOL
-    _psapi.GetModuleFileNameExW.argtypes = [_HANDLE, ctypes.c_void_p, ctypes.c_wchar_p, _DWORD]
+    _psapi.GetModuleFileNameExW.argtypes = [
+        _HANDLE,
+        ctypes.c_void_p,
+        ctypes.c_wchar_p,
+        _DWORD,
+    ]
     _psapi.GetModuleFileNameExW.restype = _DWORD
     _iphlpapi.GetExtendedTcpTable.argtypes = [
         ctypes.c_void_p,
@@ -307,7 +318,13 @@ def _snapshot_full() -> list[tuple[int, int, str]]:
         if not _k32.Process32FirstW(snap, ctypes.byref(entry)):
             return []
         while True:
-            out.append((int(entry.th32ProcessID), int(entry.th32ParentProcessID), entry.szExeFile or ""))
+            out.append(
+                (
+                    int(entry.th32ProcessID),
+                    int(entry.th32ParentProcessID),
+                    entry.szExeFile or "",
+                )
+            )
             if not _k32.Process32NextW(snap, ctypes.byref(entry)):
                 break
     finally:
@@ -362,14 +379,20 @@ def _pid_modules(pid: int) -> list[str]:
     """列出某进程已加载模块的完整路径（打不开或无权限时返回空表）。"""
     if _k32 is None or _psapi is None:
         return []
-    handle = _k32.OpenProcess(_PROCESS_QUERY_INFORMATION | _PROCESS_VM_READ, False, int(pid))
+    handle = _k32.OpenProcess(
+        _PROCESS_QUERY_INFORMATION | _PROCESS_VM_READ, False, int(pid)
+    )
     if not handle:
         return []
     try:
         needed = _DWORD(0)
         arr = (ctypes.c_void_p * 2048)()
         if not _psapi.EnumProcessModulesEx(
-            handle, arr, _DWORD(ctypes.sizeof(arr)), ctypes.byref(needed), _DWORD(_LIST_MODULES_ALL)
+            handle,
+            arr,
+            _DWORD(ctypes.sizeof(arr)),
+            ctypes.byref(needed),
+            _DWORD(_LIST_MODULES_ALL),
         ):
             return []
         count = min(needed.value // ctypes.sizeof(ctypes.c_void_p), len(arr))
@@ -475,7 +498,12 @@ def _listener_pid_in_family(port: int, family: int) -> int | None:
     size = _DWORD(0)
     # 第一次调用只为拿到所需缓冲区大小（必然返回 ERROR_INSUFFICIENT_BUFFER）。
     _iphlpapi.GetExtendedTcpTable(
-        None, ctypes.byref(size), False, _DWORD(family), _DWORD(_TCP_TABLE_OWNER_PID_LISTENER), _DWORD(0)
+        None,
+        ctypes.byref(size),
+        False,
+        _DWORD(family),
+        _DWORD(_TCP_TABLE_OWNER_PID_LISTENER),
+        _DWORD(0),
     )
     if size.value == 0:
         return None
@@ -496,9 +524,14 @@ def _listener_pid_in_family(port: int, family: int) -> int | None:
         return None
     # 结构体里的数组只能声明为 `* 1`（长度运行时才知道），所以按 dwNumEntries 重建一份：
     # 直接索引 table.table[i] 在 i>0 时会抛 IndexError。
-    rows = (_MIB_TCPROW_OWNER_PID * n).from_buffer_copy(buf, _MIB_TCPTABLE_OWNER_PID.table.offset)
+    rows = (_MIB_TCPROW_OWNER_PID * n).from_buffer_copy(
+        buf, _MIB_TCPTABLE_OWNER_PID.table.offset
+    )
     for row in rows:
-        if row.dwState == _MIB_TCP_STATE_LISTEN and socket.ntohs(row.dwLocalPort) == port:
+        if (
+            row.dwState == _MIB_TCP_STATE_LISTEN
+            and socket.ntohs(row.dwLocalPort) == port
+        ):
             return int(row.dwOwningPid)
     return None
 
@@ -519,7 +552,9 @@ def probe_http(url: str, timeout: float = 3.0) -> dict[str, Any]:
 
     不读响应体：SSE 端点的 body 是永不结束的事件流，读了就会阻塞到超时。
     """
-    req = urllib.request.Request(url, method="GET", headers={"Accept": "text/event-stream"})  # noqa: S310
+    req = urllib.request.Request(
+        url, method="GET", headers={"Accept": "text/event-stream"}
+    )  # noqa: S310
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             return {"reached": True, "status": int(resp.status), "note": ""}
@@ -592,7 +627,12 @@ def _clear_state() -> None:
 _LAUNCHER_NAME = "start_comsol_mcp.cmd"
 
 #: 需要注入服务端的 ``COMSOL_MCP_*`` 变量。URL 型 ``mcp.json`` 没有 ``env`` 字段，只能写在这里。
-_LAUNCHER_ENV_KEYS = ("COMSOL_MCP_TRANSPORT", "COMSOL_MCP_HOST", "COMSOL_MCP_PORT", "COMSOL_MCP_VERSION")
+_LAUNCHER_ENV_KEYS = (
+    "COMSOL_MCP_TRANSPORT",
+    "COMSOL_MCP_HOST",
+    "COMSOL_MCP_PORT",
+    "COMSOL_MCP_VERSION",
+)
 
 
 def _launcher_path() -> Path:
@@ -686,7 +726,10 @@ def _spawn_detached(exe: Path) -> tuple[int, str, Path]:
     env = _server_env()
     base_flags = _DETACHED_PROCESS | _CREATE_NEW_PROCESS_GROUP
     variants: list[tuple[int, str]] = (
-        [(base_flags | _CREATE_BREAKAWAY_FROM_JOB, "popen-breakaway"), (base_flags, "popen")]
+        [
+            (base_flags | _CREATE_BREAKAWAY_FROM_JOB, "popen-breakaway"),
+            (base_flags, "popen"),
+        ]
         if sys.platform == "win32"
         else [(0, "posix")]
     )
@@ -708,7 +751,9 @@ def _spawn_detached(exe: Path) -> tuple[int, str, Path]:
             return proc.pid, method, log
         except OSError as e:
             last_err = e
-    raise McpServerError(f"派生 comsol-mcp 失败（WMI 与 CreateProcess 均不可用）：{last_err!r}") from last_err
+    raise McpServerError(
+        f"派生 comsol-mcp 失败（WMI 与 CreateProcess 均不可用）：{last_err!r}"
+    ) from last_err
 
 
 def _wait_ready(url: str, timeout: float) -> dict[str, Any]:
@@ -724,7 +769,11 @@ def _wait_ready(url: str, timeout: float) -> dict[str, Any]:
             # 端口已有 HTTP 服务但语义不对（404/403）：再等也没用，立刻返回。
             return {"ready": False, "why": why, **last}
         time.sleep(0.5)
-    return {"ready": False, "why": interpret_probe(last["status"], settings.mcp_transport)[1], **last}
+    return {
+        "ready": False,
+        "why": interpret_probe(last["status"], settings.mcp_transport)[1],
+        **last,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -747,7 +796,11 @@ def mcp_server_status() -> dict[str, Any]:
     url = mcp_url()
     recorded_pid = state.get("pid")
     port_open = _port_open(settings.mcp_host, settings.mcp_port)
-    probe = probe_http(url) if port_open else {"reached": False, "status": None, "note": "端口未监听"}
+    probe = (
+        probe_http(url)
+        if port_open
+        else {"reached": False, "status": None, "note": "端口未监听"}
+    )
     ready, why = interpret_probe(probe.get("status"), transport)
 
     # 端口归属者优先：它才是承载 uvicorn（以及将来 jvm.dll）的真实进程；状态文件里的
@@ -789,7 +842,9 @@ def mcp_server_status() -> dict[str, Any]:
     return info
 
 
-def ensure_mcp_server(*, timeout: float = 90.0, restart: bool = False) -> dict[str, Any]:
+def ensure_mcp_server(
+    *, timeout: float = 90.0, restart: bool = False
+) -> dict[str, Any]:
     """幂等地保证 MCP 服务端在跑，返回 :func:`mcp_server_status` 的结果。
 
     流程：已就绪 → 直接复用；端口被外部进程占着 → 认领并复用；否则脱离终端派生一个并等到
@@ -805,7 +860,11 @@ def ensure_mcp_server(*, timeout: float = 90.0, restart: bool = False) -> dict[s
 
     url = mcp_url()
     if not restart:
-        probe = probe_http(url, timeout=2.0) if _port_open(settings.mcp_host, settings.mcp_port) else None
+        probe = (
+            probe_http(url, timeout=2.0)
+            if _port_open(settings.mcp_host, settings.mcp_port)
+            else None
+        )
         if probe is not None:
             ready, why = interpret_probe(probe["status"], settings.mcp_transport)
             if ready:
@@ -814,7 +873,9 @@ def ensure_mcp_server(*, timeout: float = 90.0, restart: bool = False) -> dict[s
                 info["probe_verdict"] = why
                 return info
             if probe["reached"]:
-                raise McpServerError(f"端口 {settings.mcp_port} 上有服务但不是预期的 MCP 端点：{why}")
+                raise McpServerError(
+                    f"端口 {settings.mcp_port} 上有服务但不是预期的 MCP 端点：{why}"
+                )
         # 端口不通但状态文件说在跑 → 记录已失效，清掉再派生。
         if read_state():
             _clear_state()
@@ -829,18 +890,20 @@ def ensure_mcp_server(*, timeout: float = 90.0, restart: bool = False) -> dict[s
             f"错误信息：{waited.get('note', '')}"
         )
 
-    _write_state({
-        "pid": pid,
-        "spawn_method": method,
-        "host": settings.mcp_host,
-        "port": settings.mcp_port,
-        "transport": settings.mcp_transport,
-        "url": url,
-        "exe": str(exe),
-        "launcher": str(_launcher_path()),
-        "log_file": str(log),
-        "started_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
-    })
+    _write_state(
+        {
+            "pid": pid,
+            "spawn_method": method,
+            "host": settings.mcp_host,
+            "port": settings.mcp_port,
+            "transport": settings.mcp_transport,
+            "url": url,
+            "exe": str(exe),
+            "launcher": str(_launcher_path()),
+            "log_file": str(log),
+            "started_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        }
+    )
     info = mcp_server_status()
     info["action"] = "started"
     # 派生出来的是 cmd.exe 壳（WMI 路径）或 comsol-mcp.exe 启动器壳（降级路径）；真正承载
@@ -858,7 +921,11 @@ def stop_mcp_server() -> bool:
     state = read_state()
     pid = state.get("pid")
     if not pid_alive(pid):
-        pid = _pid_listening_on(settings.mcp_port) if _port_open(settings.mcp_host, settings.mcp_port) else None
+        pid = (
+            _pid_listening_on(settings.mcp_port)
+            if _port_open(settings.mcp_host, settings.mcp_port)
+            else None
+        )
     _clear_state()
     if not pid:
         return False

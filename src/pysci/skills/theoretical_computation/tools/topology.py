@@ -267,12 +267,14 @@ def find_multiple_isosurfaces(
     results = []
     for level in levels:
         surface = grid.contour(isosurfaces=[level], scalars=scalar_name)
-        results.append(IsosurfaceResult(
-            surface=surface,
-            grid=grid,
-            level=level,
-            n_points=surface.n_points if hasattr(surface, "n_points") else 0,
-        ))
+        results.append(
+            IsosurfaceResult(
+                surface=surface,
+                grid=grid,
+                level=level,
+                n_points=surface.n_points if hasattr(surface, "n_points") else 0,
+            )
+        )
 
     return results
 

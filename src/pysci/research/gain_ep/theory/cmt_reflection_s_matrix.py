@@ -152,7 +152,9 @@ class MetagratingParams:
         """光栅周期 a = λ/|sin θ_r - sin θ_i|。"""
         lam = self.wavelength
         theta_r = -self.theta_i
-        return abs(lam / (np.sin(np.radians(theta_r)) - np.sin(np.radians(self.theta_i))))
+        return abs(
+            lam / (np.sin(np.radians(theta_r)) - np.sin(np.radians(self.theta_i)))
+        )
 
     @property
     def N(self) -> int:
@@ -190,9 +192,9 @@ def solve_reflection_cmt(params: MetagratingParams, incidence: str = "left") -> 
         rn: 反射振幅向量 A^-，形状 (N,)，索引 n_orders 对应 n=0。
     """
     k0 = params.k0
-    D = params.period          # 光栅周期（论文记号 D）
+    D = params.period  # 光栅周期（论文记号 D）
     G = 2 * np.pi / D
-    J = params.J               # 凹槽数（论文记号 S）
+    J = params.J  # 凹槽数（论文记号 S）
     N = params.N
     K = params.K
     n_orders = params.n_orders
@@ -204,16 +206,18 @@ def solve_reflection_cmt(params: MetagratingParams, incidence: str = "left") -> 
     n = np.arange(-n_orders, n_orders + 1)
 
     # 自由空间横向/纵向波数 (Eq. A1)
-    k_x = k0 * np.sin(theta) + n * G                    # (N,)
-    k_y = np.sqrt(k0**2 - k_x.astype(complex) ** 2)     # (N,)
-    k_y = np.where(k_y.imag > 0, -k_y, k_y)             # Im(k_y) ≤ 0：e^{-j k_y y}(y>0) 衰减
+    k_x = k0 * np.sin(theta) + n * G  # (N,)
+    k_y = np.sqrt(k0**2 - k_x.astype(complex) ** 2)  # (N,)
+    k_y = np.where(k_y.imag > 0, -k_y, k_y)  # Im(k_y) ≤ 0：e^{-j k_y y}(y>0) 衰减
 
     # 凹槽内等效复波数 (Eq. A2)：k' = 2πf/c_s（复声速 → 复波数）
-    kc = 2 * np.pi * params.f0 / params.c_complex       # (J,)
+    kc = 2 * np.pi * params.f0 / params.c_complex  # (J,)
     k_idx = np.arange(K)
-    alpha = (k_idx * np.pi)[np.newaxis, :] / params.w[:, np.newaxis]  # α_ks = kπ/t_s (J,K)
-    beta = np.sqrt(kc[:, np.newaxis] ** 2 - alpha**2)                 # β_ks (J,K)
-    beta = np.where(beta.imag > 0, -beta, beta)         # Im(β) ≤ 0：凹槽内衰减、|U|≤1
+    alpha = (k_idx * np.pi)[np.newaxis, :] / params.w[
+        :, np.newaxis
+    ]  # α_ks = kπ/t_s (J,K)
+    beta = np.sqrt(kc[:, np.newaxis] ** 2 - alpha**2)  # β_ks (J,K)
+    beta = np.where(beta.imag > 0, -beta, beta)  # Im(β) ≤ 0：凹槽内衰减、|U|≤1
 
     # 凹槽起始位置 x_s
     xj = np.zeros(J)
@@ -222,7 +226,7 @@ def solve_reflection_cmt(params: MetagratingParams, incidence: str = "left") -> 
         xj[j] = xj[j - 1] + params.w[j - 1] + params.d[j]
 
     # 往返相位因子 U[s,k] = exp(-2j·β_ks·l_s)  (Eq. A2/A8/A11)
-    U_diag = np.exp(-2j * beta * params.h[:, np.newaxis])   # (J,K)
+    U_diag = np.exp(-2j * beta * params.h[:, np.newaxis])  # (J,K)
 
     # --- P_1 (Eq. A6): (J*K,) 入射压力投影 ---
     P1 = np.zeros(J * K, dtype=complex)
@@ -281,9 +285,7 @@ def solve_reflection_cmt(params: MetagratingParams, incidence: str = "left") -> 
                     xj[j],
                     xj[j] + params.w[j],
                 )
-                V3[mm, j * K + k] = (
-                    -(beta[j, k] / D) * (1.0 - U_diag[j, k]) * integral
-                )
+                V3[mm, j * K + k] = -(beta[j, k] / D) * (1.0 - U_diag[j, k]) * integral
 
     # --- 组装并求解 (Eq. A5) ---
     M = np.block([[-P2, P3], [-V2, V3]])
@@ -388,9 +390,7 @@ def make_dp_params(
         h=np.array([0.211, 0.491, 0.210]) * lam,
         w=np.array([0.137, 0.187, 0.145]) * a,
         d=np.array([0.0, 0.096, 0.081]) * a,
-        c_complex=np.array(
-            [343.0 * (cr1 + ci1 * 1j), 343.0, 343.0 * (cr3 + ci3 * 1j)]
-        ),
+        c_complex=np.array([343.0 * (cr1 + ci1 * 1j), 343.0, 343.0 * (cr3 + ci3 * 1j)]),
         n_orders=n_orders,
         k_modes=k_modes,
     )
@@ -446,8 +446,10 @@ def main(session_dir: Path | None = None) -> None:
     eigenvalues, eigenvectors = np.linalg.eig(S_ep)
     print(f"  本征值: λ₁={eigenvalues[0]:+.6f}, λ₂={eigenvalues[1]:+.6f}")
     print(f"  |λ₁-λ₂| = {abs(eigenvalues[0] - eigenvalues[1]):.4e}（EP 处应→0）")
-    print(f"  Jordan 判据: S11≈S22? {np.isclose(S_ep[0, 0], S_ep[1, 1], atol=1e-3)}, "
-          f"|S21|≈0? {s21_ep < 0.05}, |S12|≠0? {abs(S_ep[0, 1]) > 0.3}")
+    print(
+        f"  Jordan 判据: S11≈S22? {np.isclose(S_ep[0, 0], S_ep[1, 1], atol=1e-3)}, "
+        f"|S21|≈0? {s21_ep < 0.05}, |S12|≠0? {abs(S_ep[0, 1]) > 0.3}"
+    )
 
     # === 2. 参数空间扫描（黎曼面），以定位到的 EP 为中心 ===
     print("\n" + "=" * 60)
@@ -477,7 +479,9 @@ def main(session_dir: Path | None = None) -> None:
             count += 1
             if count % 100 == 0:
                 print(f"  进度: {count}/{total}")
-            p = make_ep_params(cr=cr, ci=ci, n_orders=n_scan_orders, k_modes=k_scan_modes)
+            p = make_ep_params(
+                cr=cr, ci=ci, n_orders=n_scan_orders, k_modes=k_scan_modes
+            )
             S = compute_s_matrix(p)
             eigs = np.linalg.eigvals(S)
             eigs = eigs[np.argsort(eigs.real)]
@@ -515,12 +519,24 @@ def main(session_dir: Path | None = None) -> None:
     ax1.set_title("黎曼面: 本征值实部")
 
     ax2 = fig.add_subplot(122, projection="3d")
-    ax2.plot_surface(CI, CR, eig1_real, facecolors=plt.cm.viridis(
-        (eig1_imag - eig1_imag.min()) / (eig1_imag.max() - eig1_imag.min() + 1e-15)
-    ), alpha=0.9)
-    ax2.plot_surface(CI, CR, eig2_real, facecolors=plt.cm.viridis(
-        (eig2_imag - eig2_imag.min()) / (eig2_imag.max() - eig2_imag.min() + 1e-15)
-    ), alpha=0.9)
+    ax2.plot_surface(
+        CI,
+        CR,
+        eig1_real,
+        facecolors=plt.cm.viridis(
+            (eig1_imag - eig1_imag.min()) / (eig1_imag.max() - eig1_imag.min() + 1e-15)
+        ),
+        alpha=0.9,
+    )
+    ax2.plot_surface(
+        CI,
+        CR,
+        eig2_real,
+        facecolors=plt.cm.viridis(
+            (eig2_imag - eig2_imag.min()) / (eig2_imag.max() - eig2_imag.min() + 1e-15)
+        ),
+        alpha=0.9,
+    )
     ax2.set_xlabel(r"Im($c_2$)/$c_0$")
     ax2.set_ylabel(r"Re($c_2$)/$c_0$")
     ax2.set_zlabel(r"Re($\lambda$)")
@@ -537,13 +553,17 @@ def main(session_dir: Path | None = None) -> None:
         fontweight="bold",
     )
 
-    im = axes[0, 0].pcolormesh(CI, CR, np.abs(eig1_real - eig2_real), cmap="hot_r", shading="auto")
+    im = axes[0, 0].pcolormesh(
+        CI, CR, np.abs(eig1_real - eig2_real), cmap="hot_r", shading="auto"
+    )
     axes[0, 0].set_xlabel(r"Im($c_2$)/$c_0$")
     axes[0, 0].set_ylabel(r"Re($c_2$)/$c_0$")
     axes[0, 0].set_title(r"|Re($\lambda_1$) - Re($\lambda_2$)|")
     plt.colorbar(im, ax=axes[0, 0])
 
-    im = axes[0, 1].pcolormesh(CI, CR, np.abs(eig1_imag - eig2_imag), cmap="hot_r", shading="auto")
+    im = axes[0, 1].pcolormesh(
+        CI, CR, np.abs(eig1_imag - eig2_imag), cmap="hot_r", shading="auto"
+    )
     axes[0, 1].set_xlabel(r"Im($c_2$)/$c_0$")
     axes[0, 1].set_ylabel(r"Re($c_2$)/$c_0$")
     axes[0, 1].set_title(r"|Im($\lambda_1$) - Im($\lambda_2$)|")
@@ -582,16 +602,24 @@ def main(session_dir: Path | None = None) -> None:
     fig3.suptitle(f"穿过 EP 点的 1D 切片 (cr = {cr_ep:.4f})", fontsize=13)
 
     cr_idx = np.argmin(np.abs(cr_range - cr_ep))
-    ax_a.plot(ci_range, eig1_real[cr_idx, :], "b-o", markersize=3, label=r"Re($\lambda_1$)")
-    ax_a.plot(ci_range, eig2_real[cr_idx, :], "r-s", markersize=3, label=r"Re($\lambda_2$)")
+    ax_a.plot(
+        ci_range, eig1_real[cr_idx, :], "b-o", markersize=3, label=r"Re($\lambda_1$)"
+    )
+    ax_a.plot(
+        ci_range, eig2_real[cr_idx, :], "r-s", markersize=3, label=r"Re($\lambda_2$)"
+    )
     ax_a.set_xlabel(r"Im($c_2$)/$c_0$")
     ax_a.set_ylabel(r"Re($\lambda$)")
     ax_a.set_title("本征值实部")
     ax_a.legend()
     ax_a.axvline(ci_ep, color="gray", linestyle="--", alpha=0.5, label="EP")
 
-    ax_b.plot(ci_range, eig1_imag[cr_idx, :], "b-o", markersize=3, label=r"Im($\lambda_1$)")
-    ax_b.plot(ci_range, eig2_imag[cr_idx, :], "r-s", markersize=3, label=r"Im($\lambda_2$)")
+    ax_b.plot(
+        ci_range, eig1_imag[cr_idx, :], "b-o", markersize=3, label=r"Im($\lambda_1$)"
+    )
+    ax_b.plot(
+        ci_range, eig2_imag[cr_idx, :], "r-s", markersize=3, label=r"Im($\lambda_2$)"
+    )
     ax_b.set_xlabel(r"Im($c_2$)/$c_0$")
     ax_b.set_ylabel(r"Im($\lambda$)")
     ax_b.set_title("本征值虚部")

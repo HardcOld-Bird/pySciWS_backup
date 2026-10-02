@@ -81,10 +81,14 @@ def read_docx(path: str | Path) -> list[DocxBlock]:
     blocks: list[DocxBlock] = []
 
     # iter_inner_content 保持段落/表格交错顺序（python-docx >= 1.1）
-    items = list(doc.iter_inner_content()) if hasattr(doc, "iter_inner_content") else [
-        *doc.paragraphs,
-        *doc.tables,
-    ]
+    items = (
+        list(doc.iter_inner_content())
+        if hasattr(doc, "iter_inner_content")
+        else [
+            *doc.paragraphs,
+            *doc.tables,
+        ]
+    )
     for item in items:
         if item.__class__.__name__ == "Table":
             rows = _table_to_rows(item)
@@ -99,7 +103,11 @@ def read_docx(path: str | Path) -> list[DocxBlock]:
         if lvl is not None:
             blocks.append(DocxBlock(kind="heading", text=text, level=lvl))
         elif _is_bullet(style):
-            blocks.append(DocxBlock(kind="bullet", text=text, level=_bullet_level_from_style(style)))
+            blocks.append(
+                DocxBlock(
+                    kind="bullet", text=text, level=_bullet_level_from_style(style)
+                )
+            )
         else:
             blocks.append(DocxBlock(kind="paragraph", text=text))
     return blocks
@@ -146,14 +154,22 @@ def docx_to_markdown(path: str | Path) -> str:
 # ---------------------------------------------------------------------------
 # 写入
 # ---------------------------------------------------------------------------
-_BULLET_STYLES = ("List Bullet", "List Bullet 2", "List Bullet 3", "List Bullet 4", "List Bullet 5")
+_BULLET_STYLES = (
+    "List Bullet",
+    "List Bullet 2",
+    "List Bullet 3",
+    "List Bullet 4",
+    "List Bullet 5",
+)
 
 
 def _add_block(doc: Any, b: DocxBlock) -> None:
     if b.kind == "heading":
         doc.add_heading(b.text, level=max(1, min(b.level, 9)))
     elif b.kind == "bullet":
-        doc.add_paragraph(b.text, style=_BULLET_STYLES[min(b.level, len(_BULLET_STYLES) - 1)])
+        doc.add_paragraph(
+            b.text, style=_BULLET_STYLES[min(b.level, len(_BULLET_STYLES) - 1)]
+        )
     elif b.kind == "table":
         rows = b.rows or []
         if not rows:
@@ -171,7 +187,9 @@ def _add_block(doc: Any, b: DocxBlock) -> None:
         doc.add_paragraph(b.text)
 
 
-def build_docx(blocks: list[DocxBlock], out_path: str | Path, *, title: str | None = None) -> Path:
+def build_docx(
+    blocks: list[DocxBlock], out_path: str | Path, *, title: str | None = None
+) -> Path:
     """从 Block 列表新建 .docx；title 给定时加一个 Title 级标题。"""
     doc = Document()
     if title:

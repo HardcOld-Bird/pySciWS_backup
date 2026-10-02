@@ -55,15 +55,21 @@ def deck(tmp_path: Path) -> Path:
 
     s = prs.slides.add_slide(lay[5])  # Title Only + 两张图 + 图注 + 备注
     s.shapes.title.text = "COMSOL 声压场"
-    s.shapes.add_picture(io.BytesIO(RED), Inches(0.5), Inches(1.6), Inches(4), Inches(3))
-    s.shapes.add_picture(io.BytesIO(BLUE), Inches(5.0), Inches(1.6), Inches(4), Inches(3))
+    s.shapes.add_picture(
+        io.BytesIO(RED), Inches(0.5), Inches(1.6), Inches(4), Inches(3)
+    )
+    s.shapes.add_picture(
+        io.BytesIO(BLUE), Inches(5.0), Inches(1.6), Inches(4), Inches(3)
+    )
     cap = s.shapes.add_textbox(Inches(0.5), Inches(5.0), Inches(9), Inches(0.8))
     cap.text_frame.text = "Fig. 1 声压幅值分布（左：增益前；右：增益后）"
     s.notes_slide.notes_text_frame.text = "这页展示 EP 附近的场分布"
 
     s = prs.slides.add_slide(lay[1])  # 重复使用 RED → 去重
     s.shapes.title.text = "装置示意（重复图）"
-    s.shapes.add_picture(io.BytesIO(RED), Inches(1.0), Inches(2.0), Inches(3), Inches(2))
+    s.shapes.add_picture(
+        io.BytesIO(RED), Inches(1.0), Inches(2.0), Inches(3), Inches(2)
+    )
 
     s = prs.slides.add_slide(lay[1])  # 纯文本页
     s.shapes.title.text = "小结"
@@ -276,7 +282,9 @@ def test_gif_preview_frames_extracted(tmp_path: Path):
     gif5 = _gif(
         [(10, 10, 10), (60, 20, 20), (120, 40, 40), (200, 80, 80), (250, 250, 250)]
     )
-    s.shapes.add_picture(io.BytesIO(gif5), Inches(1.0), Inches(1.6), Inches(4), Inches(3))
+    s.shapes.add_picture(
+        io.BytesIO(gif5), Inches(1.0), Inches(1.6), Inches(4), Inches(3)
+    )
     cap = s.shapes.add_textbox(Inches(1.0), Inches(5.0), Inches(6), Inches(0.6))
     cap.text_frame.text = "动画：增益随时间演化"
     deck_gif = tmp_path / "gifdeck.pptx"

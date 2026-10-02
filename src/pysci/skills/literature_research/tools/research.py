@@ -1319,7 +1319,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--status", action="store_true", help="只打印清单进度汇总，不做任何转换"
     )
     sp.add_argument(
-        "--priority", type=int, default=None, help="只处理该优先级（1 论文/2 综述长文/3 教材）"
+        "--priority",
+        type=int,
+        default=None,
+        help="只处理该优先级（1 论文/2 综述长文/3 教材）",
     )
     sp.add_argument("--theme", default=None, help="只处理该主题（如 cpa_ep）")
     sp.add_argument(
@@ -1347,9 +1350,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="dry_run",
         help="只预演将处理哪些条目，不复制/不抽取/不改状态",
     )
-    sp.add_argument(
-        "--force", action="store_true", help="已 done 的条目也重新抽取"
-    )
+    sp.add_argument("--force", action="store_true", help="已 done 的条目也重新抽取")
     sp.set_defaults(func=cmd_ingest)
 
     return p

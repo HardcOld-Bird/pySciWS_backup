@@ -92,7 +92,9 @@ def _main_in_dir(d: Path) -> Path:
         return cands[0].resolve()
     if len(cands) > 1:
         names = ", ".join(c.name for c in cands)
-        raise ValueError(f"{d} 下有多个含 \\documentclass 的 .tex：{names}，请直接指定其一")
+        raise ValueError(
+            f"{d} 下有多个含 \\documentclass 的 .tex：{names}，请直接指定其一"
+        )
     raise FileNotFoundError(f"{d} 下未找到 main.tex 或含 \\documentclass 的 .tex")
 
 
@@ -110,17 +112,27 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print("【Phase 1 能力清单】")
     tex_ok = settings.tex_ready
     libs = settings.python_libs
-    print(f"  LaTeX 编译      : {'✓ 就绪' if tex_ok else '✗ 需安装 TeX Live（见上方指引）'}")
+    print(
+        f"  LaTeX 编译      : {'✓ 就绪' if tex_ok else '✗ 需安装 TeX Live（见上方指引）'}"
+    )
     print(f"  PDF 看图校对    : {'✓ 就绪' if libs['pymupdf'] else '✗ 缺 pymupdf'}")
     print(f"  PPTX 结构化读取 : {'✓ 就绪' if libs['pptx'] else '✗ 需 uv sync'}")
     print(f"  文档→Markdown   : {'✓ 就绪' if libs['markitdown'] else '✗ 需 uv sync'}")
     print(
         "  Markdown→Office : "
-        + (f"✓ 就绪（pandoc {settings.pandoc_version()}）" if settings.pandoc_ready else "✗ 未检测到 pandoc")
+        + (
+            f"✓ 就绪（pandoc {settings.pandoc_version()}）"
+            if settings.pandoc_ready
+            else "✗ 未检测到 pandoc"
+        )
     )
-    print(f"  Zotero→refs.bib : {'✓ 复用 literature_research' if _module_available('pyzotero') else '△ 需 pyzotero'}")
+    print(
+        f"  Zotero→refs.bib : {'✓ 复用 literature_research' if _module_available('pyzotero') else '△ 需 pyzotero'}"
+    )
     print()
-    print(f"  LaTeX 模板      : {', '.join(_list_templates()) or '（templates/latex/ 下暂无）'}")
+    print(
+        f"  LaTeX 模板      : {', '.join(_list_templates()) or '（templates/latex/ 下暂无）'}"
+    )
     print(f"  写作项目目录    : {PROJECTS_DIR}")
     if not tex_ok:
         print(
@@ -180,7 +192,9 @@ def cmd_tex_new(args: argparse.Namespace) -> int:
     print(f"[tex new] 模板 '{args.template}' → 复制文件：{', '.join(copied)}")
     print("[tex new] 下一步：")
     print(f"    1. 编辑 {main}")
-    print(f"    2. compose tex refs {args.slug} --query '<主题>'   # 从 Zotero 刷新 refs.bib")
+    print(
+        f"    2. compose tex refs {args.slug} --query '<主题>'   # 从 Zotero 刷新 refs.bib"
+    )
     print(f"    3. compose tex build {args.slug}                  # 编译")
     print(f"    4. compose verify {proj / 'build' / 'main.pdf'}    # 渲染 PNG 看图校对")
     return 0
@@ -351,14 +365,20 @@ def cmd_slides_extract(args: argparse.Namespace) -> int:
     md = pptx_io.slides_to_markdown(
         slides, source_name=src.name, include_notes=not args.no_notes
     )
-    out = Path(args.out) if args.out else settings.cache_extracted / f"{src.stem}__slides.md"
+    out = (
+        Path(args.out)
+        if args.out
+        else settings.cache_extracted / f"{src.stem}__slides.md"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
 
     n_notes = sum(1 for s in slides if s.notes)
     n_imgs = sum(len(s.images) for s in slides)
     n_tables = sum(len(s.tables) for s in slides)
-    print(f"[slides] {src.name}：{len(slides)} 页，{n_tables} 表，{n_imgs} 图，{n_notes} 页含备注")
+    print(
+        f"[slides] {src.name}：{len(slides)} 页，{n_tables} 表，{n_imgs} 图，{n_notes} 页含备注"
+    )
     print(f"[slides] Markdown：{out}（用 Read 查看全文）")
     if export_dir:
         print(f"[slides] 图片已导出到：{export_dir}（可用 Read 查看）")
@@ -375,9 +395,13 @@ def cmd_slides_new(args: argparse.Namespace) -> int:
     from . import pptx_io
 
     out = Path(args.out)
-    pptx_io.build_pptx([], out, deck_title=args.title, deck_subtitle=args.subtitle or "")
+    pptx_io.build_pptx(
+        [], out, deck_title=args.title, deck_subtitle=args.subtitle or ""
+    )
     print(f"[slides new] 已创建：{out}")
-    print(f"[slides new] 追加页面：compose slides add '{out}' --title '...' --bullet '...'")
+    print(
+        f"[slides new] 追加页面：compose slides add '{out}' --title '...' --bullet '...'"
+    )
     return 0
 
 
@@ -415,7 +439,9 @@ def cmd_slides_from_markdown(args: argparse.Namespace) -> int:
     except FileNotFoundError as e:
         print(f"[slides from-markdown] {e}", file=sys.stderr)
         return 2
-    print(f"[slides from-markdown] {md.name} → {out}（Pandoc, slide-level={args.slide_level}）")
+    print(
+        f"[slides from-markdown] {md.name} → {out}（Pandoc, slide-level={args.slide_level}）"
+    )
     print(f"[slides from-markdown] 回读校验：compose slides extract '{out}'")
     return 0
 
@@ -441,7 +467,9 @@ def cmd_slides_digest(args: argparse.Namespace) -> int:
         for b in rep["broken"][:20]:
             print(f"    ✗ {b}")
         if rep["pending_renders"]:
-            print(f"    … 待渲染（跑 --render 后生成）：{len(rep['pending_renders'])} 个")
+            print(
+                f"    … 待渲染（跑 --render 后生成）：{len(rep['pending_renders'])} 个"
+            )
         return 1 if rep["broken"] else 0
 
     try:
@@ -487,7 +515,9 @@ def cmd_slides_digest(args: argparse.Namespace) -> int:
             f"--out '{out}' --render"
         )
     print(f"    2. 阅读 {res.index_md}（导航 + Phase B 约定）")
-    print(f"    3. 逐批翻译（每批 {args.batch_figure} 图页 / {args.batch_text} 文本页），填写每图「解读」")
+    print(
+        f"    3. 逐批翻译（每批 {args.batch_figure} 图页 / {args.batch_text} 文本页），填写每图「解读」"
+    )
     print(f"    4. 批末体检：compose slides digest '{src}' --out '{out}' --lint")
     return 0
 
@@ -510,7 +540,11 @@ def cmd_docx_read(args: argparse.Namespace) -> int:
     except ImportError as e:
         print(f"[docx read] {e}", file=sys.stderr)
         return 3
-    out = Path(args.out) if args.out else settings.cache_extracted / f"{src.stem}__docx.md"
+    out = (
+        Path(args.out)
+        if args.out
+        else settings.cache_extracted / f"{src.stem}__docx.md"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print(f"[docx read] {src.name} → {out}（用 Read 查看全文）")
@@ -610,7 +644,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
         print(f"[verify] 渲染失败：{type(e).__name__}: {e}", file=sys.stderr)
         return 1
     total = pdf_render.page_count(pdf)
-    print(f"[verify] {pdf.name}：共 {total} 页，已渲染 {len(pngs)} 页 PNG（dpi={args.dpi}）")
+    print(
+        f"[verify] {pdf.name}：共 {total} 页，已渲染 {len(pngs)} 页 PNG（dpi={args.dpi}）"
+    )
     print("[verify] 用 Read 工具逐一查看下列 PNG，即可核对真实版式：")
     for p in pngs:
         print(f"    {p}")
@@ -637,7 +673,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = texsub.add_parser("new", help="从模板脚手架写作项目")
     sp.add_argument("slug", help="项目名（在 projects/ 下建同名目录）")
     sp.add_argument(
-        "--template", default="revtex", help="模板名（见 templates/latex/，默认 revtex）"
+        "--template",
+        default="revtex",
+        help="模板名（见 templates/latex/，默认 revtex）",
     )
     sp.add_argument("--title", default=None, help="替换 \\title{}")
     sp.add_argument("--force", action="store_true", help="覆盖已存在的模板文件")
@@ -648,10 +686,22 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--engine", default=None, help="auto / pdflatex / xelatex / lualatex"
     )
-    sp.add_argument("--out-dir", default=None, dest="out_dir", help="构建产物目录（默认 <项目>/build）")
-    sp.add_argument("--no-bib", action="store_true", dest="no_bib", help="不跑 bibtex/biber")
+    sp.add_argument(
+        "--out-dir",
+        default=None,
+        dest="out_dir",
+        help="构建产物目录（默认 <项目>/build）",
+    )
+    sp.add_argument(
+        "--no-bib", action="store_true", dest="no_bib", help="不跑 bibtex/biber"
+    )
     sp.add_argument("--timeout", type=int, default=600)
-    sp.add_argument("--shell-escape", action="store_true", dest="shell_escape", help="启用 -shell-escape")
+    sp.add_argument(
+        "--shell-escape",
+        action="store_true",
+        dest="shell_escape",
+        help="启用 -shell-escape",
+    )
     sp.add_argument("--render", action="store_true", help="编译成功后渲染全部页 PNG")
     sp.add_argument("--dpi", type=int, default=140)
     sp.set_defaults(func=cmd_tex_build)
@@ -674,7 +724,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("read", help="统一提取（markitdown）→ Markdown")
     sp.add_argument("file", help="pptx/docx/pdf/xlsx/html/...")
     sp.add_argument("--force", action="store_true", help="忽略缓存重新提取")
-    sp.add_argument("--backend", default="auto", help="auto/markitdown/pymupdf4llm/pptx_io")
+    sp.add_argument(
+        "--backend", default="auto", help="auto/markitdown/pymupdf4llm/pptx_io"
+    )
     sp.add_argument("--preview", action="store_true", help="打印前 1500 字符预览")
     sp.set_defaults(func=cmd_read)
 
@@ -684,10 +736,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = slidessub.add_parser("extract", help="结构化提取 .pptx")
     sp.add_argument("pptx", help=".pptx 文件")
-    sp.add_argument("--no-notes", action="store_true", dest="no_notes", help="不含演讲者备注")
-    sp.add_argument("--with-images", action="store_true", dest="with_images", help="导出图片到缓存目录")
-    sp.add_argument("--export-images", default=None, dest="export_images", help="导出图片到指定目录")
-    sp.add_argument("--out", default=None, help="输出 .md（默认 cache/extracted/<名>__slides.md）")
+    sp.add_argument(
+        "--no-notes", action="store_true", dest="no_notes", help="不含演讲者备注"
+    )
+    sp.add_argument(
+        "--with-images",
+        action="store_true",
+        dest="with_images",
+        help="导出图片到缓存目录",
+    )
+    sp.add_argument(
+        "--export-images", default=None, dest="export_images", help="导出图片到指定目录"
+    )
+    sp.add_argument(
+        "--out", default=None, help="输出 .md（默认 cache/extracted/<名>__slides.md）"
+    )
     sp.add_argument("--preview", action="store_true")
     sp.set_defaults(func=cmd_slides_extract)
 
@@ -701,7 +764,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("pptx", help=".pptx 文件")
     sp.add_argument("--title", default=None, help="该页标题")
     sp.add_argument(
-        "--bullet", action="append", default=None, dest="bullet",
+        "--bullet",
+        action="append",
+        default=None,
+        dest="bullet",
         help="项目符号，可重复；前缀 2 空格表示下一级",
     )
     sp.add_argument("--notes", default=None, help="演讲者备注")
@@ -711,11 +777,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("markdown", help=".md 大纲文件")
     sp.add_argument("--out", default=None, help="输出 .pptx（默认同名）")
     sp.add_argument(
-        "--slide-level", type=int, default=2, dest="slide_level",
+        "--slide-level",
+        type=int,
+        default=2,
+        dest="slide_level",
         help="哪级标题开新页（默认 2：# 标题/分节，## 内容页）",
     )
     sp.add_argument(
-        "--reference-doc", default=None, dest="reference_doc",
+        "--reference-doc",
+        default=None,
+        dest="reference_doc",
         help="PowerPoint 母版模板 .pptx（套用样式）",
     )
     sp.set_defaults(func=cmd_slides_from_markdown)
@@ -725,24 +796,58 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("pptx", help=".pptx 文件")
     sp.add_argument("--out", default=None, help="输出目录（默认 cache/digests/<名>/）")
-    sp.add_argument("--render", action="store_true", help="同时渲染整页合成 PNG（需 LibreOffice）")
-    sp.add_argument("--dpi", type=int, default=140)
-    sp.add_argument("--gif-frames", type=int, default=3, dest="gif_frames",
-                    help="gif 动图抽帧预览的帧数（含首末帧；LLM 不能直读 gif）")
     sp.add_argument(
-        "--chunk-by", default="section", choices=["section", "fixed"], dest="chunk_by",
+        "--render", action="store_true", help="同时渲染整页合成 PNG（需 LibreOffice）"
+    )
+    sp.add_argument("--dpi", type=int, default=140)
+    sp.add_argument(
+        "--gif-frames",
+        type=int,
+        default=3,
+        dest="gif_frames",
+        help="gif 动图抽帧预览的帧数（含首末帧；LLM 不能直读 gif）",
+    )
+    sp.add_argument(
+        "--chunk-by",
+        default="section",
+        choices=["section", "fixed"],
+        dest="chunk_by",
         help="分块策略：section=按检测到的分节（推荐），fixed=固定页数",
     )
-    sp.add_argument("--max-chunk-slides", type=int, default=40, dest="max_chunk_slides",
-                    help="单个 md 块最大页数（连续小节合并至此上限）")
-    sp.add_argument("--section-at", default=None, dest="section_at",
-                    help="逗号分隔的分节起始页（人工定界，跳过自动检测）")
-    sp.add_argument("--chunk-size", type=int, default=50, dest="chunk_size",
-                    help="chunk-by=fixed 时每块页数")
-    sp.add_argument("--batch-figure", type=int, default=5, dest="batch_figure",
-                    help="Phase B 每批含图页数（写入 progress.json）")
-    sp.add_argument("--batch-text", type=int, default=15, dest="batch_text",
-                    help="Phase B 每批纯文本页数（写入 progress.json）")
+    sp.add_argument(
+        "--max-chunk-slides",
+        type=int,
+        default=40,
+        dest="max_chunk_slides",
+        help="单个 md 块最大页数（连续小节合并至此上限）",
+    )
+    sp.add_argument(
+        "--section-at",
+        default=None,
+        dest="section_at",
+        help="逗号分隔的分节起始页（人工定界，跳过自动检测）",
+    )
+    sp.add_argument(
+        "--chunk-size",
+        type=int,
+        default=50,
+        dest="chunk_size",
+        help="chunk-by=fixed 时每块页数",
+    )
+    sp.add_argument(
+        "--batch-figure",
+        type=int,
+        default=5,
+        dest="batch_figure",
+        help="Phase B 每批含图页数（写入 progress.json）",
+    )
+    sp.add_argument(
+        "--batch-text",
+        type=int,
+        default=15,
+        dest="batch_text",
+        help="Phase B 每批纯文本页数（写入 progress.json）",
+    )
     sp.add_argument("--force", action="store_true", help="全量重建（会覆盖已填解读）")
     sp.add_argument("--lint", action="store_true", help="只对既有输出做图片链接体检")
     sp.set_defaults(func=cmd_slides_digest)
@@ -753,7 +858,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = docxsub.add_parser("read", help="结构化读取 .docx → Markdown")
     sp.add_argument("file", help=".docx 文件")
-    sp.add_argument("--out", default=None, help="输出 .md（默认 cache/extracted/<名>__docx.md）")
+    sp.add_argument(
+        "--out", default=None, help="输出 .md（默认 cache/extracted/<名>__docx.md）"
+    )
     sp.add_argument("--preview", action="store_true")
     sp.set_defaults(func=cmd_docx_read)
 
@@ -761,7 +868,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("markdown", help=".md 文件")
     sp.add_argument("--out", default=None, help="输出 .docx（默认同名）")
     sp.add_argument(
-        "--reference-doc", default=None, dest="reference_doc",
+        "--reference-doc",
+        default=None,
+        dest="reference_doc",
         help="Word 样式模板 .docx（套用样式）",
     )
     sp.set_defaults(func=cmd_docx_from_markdown)
@@ -775,10 +884,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_docx_add)
 
     # --- convert ---
-    sp = sub.add_parser("convert", help="LibreOffice headless 转换（pptx/docx → pdf 等）")
+    sp = sub.add_parser(
+        "convert", help="LibreOffice headless 转换（pptx/docx → pdf 等）"
+    )
     sp.add_argument("file", help="输入文件（pptx/docx/odt/xlsx/...）")
     sp.add_argument("--to", default="pdf", help="目标格式（pdf/docx/pptx/html/...）")
-    sp.add_argument("--out-dir", default=None, dest="out_dir", help="输出目录（默认同 src）")
+    sp.add_argument(
+        "--out-dir", default=None, dest="out_dir", help="输出目录（默认同 src）"
+    )
     sp.add_argument("--verify", action="store_true", help="转 pdf 后渲染 PNG 看图")
     sp.add_argument("--dpi", type=int, default=140)
     sp.set_defaults(func=cmd_convert)

@@ -146,9 +146,7 @@ def cmd_new(args: argparse.Namespace) -> int:
         # 确保有 __init__.py
         init_file = code_dir / "__init__.py"
         if not init_file.exists():
-            init_file.write_text(
-                f'"""{research} 理论计算子包。"""\n', encoding="utf-8"
-            )
+            init_file.write_text(f'"""{research} 理论计算子包。"""\n', encoding="utf-8")
 
     script_path = code_dir / f"{slug}.py"
     if script_path.exists() and not args.force:
@@ -202,7 +200,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         if session_path.is_absolute():
             session_dir = session_path
         elif args.research:
-            session_dir = settings.research_theory_data_dir(args.research) / args.session
+            session_dir = (
+                settings.research_theory_data_dir(args.research) / args.session
+            )
         else:
             # 尝试从脚本路径推断 research
             session_dir = Path(args.session)

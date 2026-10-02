@@ -102,8 +102,18 @@ def main(session_dir: Path | None = None) -> None:
 When writing computation scripts, import from the tools package:
 
 ```python
-from pysci.skills.theoretical_computation.tools import cas, numerical, eigen, topology, visualize
-from pysci.skills.theoretical_computation.tools.session import ensure_session, save_results, save_plot
+from pysci.skills.theoretical_computation.tools import (
+    cas,
+    numerical,
+    eigen,
+    topology,
+    visualize,
+)
+from pysci.skills.theoretical_computation.tools.session import (
+    ensure_session,
+    save_results,
+    save_plot,
+)
 from pysci.skills.theoretical_computation.tools.config import settings
 ```
 

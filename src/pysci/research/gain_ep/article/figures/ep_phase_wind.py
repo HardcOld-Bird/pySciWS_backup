@@ -24,17 +24,17 @@ from scipy.optimize import root
 from pysci.research.gain_ep.theory import cmt_reflection_s_matrix as cmt
 
 # --- 物理/数值常量 -------------------------------------------------------
-CR = 1.0081            # 第二管槽归一化复声速实部（参考）
-CI_LOSS_EP = 0.0745    # 损耗 EP 位置（参考）
-CI_GAIN_SS = -0.0740   # 增益谱奇点（极点）位置（参考）
-W_CR, W_CI = 0.02, 0.025          # (cr, ci) 窗口半宽
-N_UNIFORM = 60                    # 损耗区均匀网格边长
-N_FAR, N_NEAR = 30, 20            # 极点区：远场/近心加密每侧点数
-D_MIN = 1e-4           # 距极点最近采样距离
-N_LOOP = 720           # 环路采样点数（环路积分用）
-LOOP_FRAC = 0.6        # 环路半径 = 窗口半宽 × LOOP_FRAC
-N_ORDERS, K_MODES = 8, 25         # CMT 截断（形状图够用；精算见理论脚本）
-CMAP = "hsv"           # 循环 colormap（相角专用）
+CR = 1.0081  # 第二管槽归一化复声速实部（参考）
+CI_LOSS_EP = 0.0745  # 损耗 EP 位置（参考）
+CI_GAIN_SS = -0.0740  # 增益谱奇点（极点）位置（参考）
+W_CR, W_CI = 0.02, 0.025  # (cr, ci) 窗口半宽
+N_UNIFORM = 60  # 损耗区均匀网格边长
+N_FAR, N_NEAR = 30, 20  # 极点区：远场/近心加密每侧点数
+D_MIN = 1e-4  # 距极点最近采样距离
+N_LOOP = 720  # 环路采样点数（环路积分用）
+LOOP_FRAC = 0.6  # 环路半径 = 窗口半宽 × LOOP_FRAC
+N_ORDERS, K_MODES = 8, 25  # CMT 截断（形状图够用；精算见理论脚本）
+CMAP = "hsv"  # 循环 colormap（相角专用）
 
 SLUG = "ep_phase_wind"
 ELEMS = ("11", "12", "21", "22")
@@ -48,18 +48,22 @@ def _s_matrix(cr: float, ci: float):
 
 def _refine_loss_ep(cr0, ci0):
     """2D 精定位损耗 EP：S21(cr,ci)=0。"""
+
     def F(x):
         S = _s_matrix(x[0], x[1])
         return [S[1, 0].real, S[1, 0].imag]
+
     r = root(F, [cr0, ci0], method="hybr")
     return float(r.x[0]), float(r.x[1])
 
 
 def _refine_gain_pole(cr0, ci0):
     """2D 精定位增益极点：1/S21(cr,ci)=0。"""
+
     def G(x):
         inv = 1.0 / _s_matrix(x[0], x[1])[1, 0]
         return [inv.real, inv.imag]
+
     r = root(G, [cr0, ci0], method="hybr")
     return float(r.x[0]), float(r.x[1])
 
@@ -118,8 +122,7 @@ def _compute_all():
     cr_l, ci_l = _refine_loss_ep(CR, CI_LOSS_EP)
     cr_g, ci_g = _refine_gain_pole(CR, CI_GAIN_SS)
     d = {}
-    for tag, (cr0, ci0, ref) in (("l", (cr_l, ci_l, False)),
-                                 ("g", (cr_g, ci_g, True))):
+    for tag, (cr0, ci0, ref) in (("l", (cr_l, ci_l, False)), ("g", (cr_g, ci_g, True))):
         g = _grid_elements(cr0, ci0, ref)
         lp = _loop_elements(cr0, ci0)
         for k, v in g.items():
@@ -170,8 +173,7 @@ def _wind_label(n):
 def build_figure(style=None, research_dir=None, **kwargs):
     """构建 3×4 相角色图 + 环路绕数标注并返回 Figure。"""
     d = _load(research_dir)
-    dom_g = np.where(np.abs(d["s12_g"]) >= np.abs(d["s21_g"]),
-                     d["s12_g"], d["s21_g"])
+    dom_g = np.where(np.abs(d["s12_g"]) >= np.abs(d["s21_g"]), d["s12_g"], d["s21_g"])
     n12_g, n21_g = d["s12_g"] / dom_g, d["s21_g"] / dom_g
 
     fig = plt.figure()
@@ -184,50 +186,89 @@ def build_figure(style=None, research_dir=None, **kwargs):
     mappable = plt.cm.ScalarMappable(norm=norm, cmap=CMAP)
 
     row_specs = [
-        ("l", "(a) Loss EP: arg($S$)",
-         [d[f"s{e}_l"] for e in ELEMS],
-         [int(d[f"wind_s{e}_l"][0]) for e in ELEMS]),
-        ("g", "(b) Gain EP: arg($S$)",
-         [d[f"s{e}_g"] for e in ELEMS],
-         [int(d[f"wind_s{e}_g"][0]) for e in ELEMS]),
-        ("c", "(c) Gain EP: arg($S'$)",
-         [None, n12_g, n21_g, None],
-         [None, int(d["wind_n12_g"][0]), int(d["wind_n21_g"][0]), None]),
+        (
+            "l",
+            "(a) Loss EP: arg($S$)",
+            [d[f"s{e}_l"] for e in ELEMS],
+            [int(d[f"wind_s{e}_l"][0]) for e in ELEMS],
+        ),
+        (
+            "g",
+            "(b) Gain EP: arg($S$)",
+            [d[f"s{e}_g"] for e in ELEMS],
+            [int(d[f"wind_s{e}_g"][0]) for e in ELEMS],
+        ),
+        (
+            "c",
+            "(c) Gain EP: arg($S'$)",
+            [None, n12_g, n21_g, None],
+            [None, int(d["wind_n12_g"][0]), int(d["wind_n21_g"][0]), None],
+        ),
     ]
     for r, (tag, rowlabel, fields, winds) in enumerate(row_specs):
-        fig.text(0.012, rows_y[r] + ax_h / 2, rowlabel,
-                 rotation=90, va="center", ha="center", fontsize=7)
+        fig.text(
+            0.012,
+            rows_y[r] + ax_h / 2,
+            rowlabel,
+            rotation=90,
+            va="center",
+            ha="center",
+            fontsize=7,
+        )
         for c in range(4):
             ax = fig.add_axes([cols_x[c], rows_y[r], ax_w, ax_h])
             if fields[c] is None:
                 # 归一化对角元恒 0：相角无定义
                 ax.set_facecolor("0.92")
-                ax.text(0.5, 0.5, r"$\equiv 0$", transform=ax.transAxes,
-                        ha="center", va="center", fontsize=8, color="0.4")
+                ax.text(
+                    0.5,
+                    0.5,
+                    r"$\equiv 0$",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="0.4",
+                )
                 ax.set_xticks([])
                 ax.set_yticks([])
             else:
                 Z = np.angle(fields[c])
-                ax.pcolormesh(d[f"cr_{tag if tag != 'c' else 'g'}"],
-                              d[f"ci_{tag if tag != 'c' else 'g'}"], Z,
-                              cmap=CMAP, norm=norm, shading="auto")
-                lc, ls = (d[f"loopcr_{tag if tag != 'c' else 'g'}"],
-                          d[f"loopci_{tag if tag != 'c' else 'g'}"])
+                ax.pcolormesh(
+                    d[f"cr_{tag if tag != 'c' else 'g'}"],
+                    d[f"ci_{tag if tag != 'c' else 'g'}"],
+                    Z,
+                    cmap=CMAP,
+                    norm=norm,
+                    shading="auto",
+                )
+                lc, ls = (
+                    d[f"loopcr_{tag if tag != 'c' else 'g'}"],
+                    d[f"loopci_{tag if tag != 'c' else 'g'}"],
+                )
                 ax.plot(lc, ls, "w--", lw=0.8)
                 ep = d["ep_l"] if tag == "l" else d["ep_g"]
                 ax.plot(ep[0], ep[1], "w.", ms=2.5)
-                ax.text(0.97, 0.96, _wind_label(winds[c]),
-                        transform=ax.transAxes, ha="right", va="top",
-                        fontsize=6,
-                        bbox=dict(fc="w", ec="none", alpha=0.75, pad=1.0))
+                ax.text(
+                    0.97,
+                    0.96,
+                    _wind_label(winds[c]),
+                    transform=ax.transAxes,
+                    ha="right",
+                    va="top",
+                    fontsize=6,
+                    bbox=dict(fc="w", ec="none", alpha=0.75, pad=1.0),
+                )
                 ax.tick_params(labelsize=6, pad=0)
                 if c > 0:
                     ax.tick_params(labelleft=False)
                 if r < 2:
                     ax.tick_params(labelbottom=False)
             if r == 0:
-                ax.set_title(f"$S_{{{ELEMS[c]}}}$" if tag != "c"
-                             else f"$N_{{{ELEMS[c]}}}$", fontsize=8)
+                ax.set_title(
+                    f"$S_{{{ELEMS[c]}}}$" if tag != "c" else f"$N_{{{ELEMS[c]}}}$",
+                    fontsize=8,
+                )
             if r == 2:
                 ax.set_xlabel(r"$c_r$", fontsize=7)
             if c == 0:

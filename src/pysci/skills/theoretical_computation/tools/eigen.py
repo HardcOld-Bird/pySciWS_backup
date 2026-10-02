@@ -252,13 +252,15 @@ def detect_ep(
                 coalescence = abs(np.vdot(v_a_norm, v_b_norm))
 
                 if coalescence > tol_eigenvector:
-                    detections.append(EPDetection(
-                        found=True,
-                        param_location=params[i],
-                        eigenvalue=complex(eigvals[i, a]),
-                        eigenvector=v_a_norm,
-                        coalescence_measure=float(coalescence),
-                    ))
+                    detections.append(
+                        EPDetection(
+                            found=True,
+                            param_location=params[i],
+                            eigenvalue=complex(eigvals[i, a]),
+                            eigenvector=v_a_norm,
+                            coalescence_measure=float(coalescence),
+                        )
+                    )
 
     return detections
 

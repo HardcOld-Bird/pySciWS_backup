@@ -105,7 +105,11 @@ def _apply_color_range(pg: Any, color_range: tuple[float, float]) -> list[str]:
         feat = _safe(pg.feature, ftag, default=None)
         if feat is None:
             continue
-        ftype = str(_call_if(feat, "getType", default="") or _call_if(feat, "type", default="") or "")
+        ftype = str(
+            _call_if(feat, "getType", default="")
+            or _call_if(feat, "type", default="")
+            or ""
+        )
         if "Surface" not in ftype:
             continue
         if _set_first_ok(feat, ("rangecoloractive",), "on") is None:
@@ -200,7 +204,9 @@ def export_image(
         # Image 节点用 sourcetype/sourceobject 指定来源（不是 plotgroup 属性）
         _safe(node.set, "sourcetype", "plotgroup")
         if _set_first_ok(node, ("sourceobject",), plotgroup) is None:
-            return ExportResult(False, "image", None, f"无法设置 Image 源对象 sourceobject={plotgroup}")
+            return ExportResult(
+                False, "image", None, f"无法设置 Image 源对象 sourceobject={plotgroup}"
+            )
         if _set_first_ok(node, ("pngfilename", "filename"), str(out)) is None:
             return ExportResult(False, "image", None, "无法设置 PNG 输出文件名属性")
         if size:
@@ -213,13 +219,22 @@ def export_image(
             if pg is None:
                 warnings.append(f"绘图组 {plotgroup} 不存在，--extent 未生效")
             else:
-                for prop, val in zip(("xmin", "xmax", "ymin", "ymax"), extent, strict=True):
+                for prop, val in zip(
+                    ("xmin", "xmax", "ymin", "ymax"), extent, strict=True
+                ):
                     if _set_first_ok(pg, (prop,), str(val)) is not None:
-                        applied_extent[prop] = str(_call_if(pg, "getString", prop, default=""))
+                        applied_extent[prop] = str(
+                            _call_if(pg, "getString", prop, default="")
+                        )
                 if len(applied_extent) < 4:
-                    warnings.append(f"extent 仅部分生效：{applied_extent or '无'}（该绘图组类型可能不支持手动轴限）")
+                    warnings.append(
+                        f"extent 仅部分生效：{applied_extent or '无'}（该绘图组类型可能不支持手动轴限）"
+                    )
         if clean and pg is not None:
-            for props, val in ((("colorlegend", "legend", "showcolorbar"), "off"), (("titletype",), "none")):
+            for props, val in (
+                (("colorlegend", "legend", "showcolorbar"), "off"),
+                (("titletype",), "none"),
+            ):
                 hit = _set_first_ok(pg, props, val)
                 if hit:
                     applied_clean.append(f"{hit}={val}")
@@ -229,7 +244,9 @@ def export_image(
             else:
                 applied_scale += _apply_color_range(pg, color_range)
                 if not applied_scale:
-                    warnings.append("color_range 未生效：绘图组内无 Surface 类特征或属性名不匹配")
+                    warnings.append(
+                        "color_range 未生效：绘图组内无 Surface 类特征或属性名不匹配"
+                    )
         if polar_rmax is not None:
             if pg is None:
                 warnings.append(f"绘图组 {plotgroup} 不存在，--polar-rmax 未生效")
@@ -240,11 +257,15 @@ def export_image(
                     warnings.append("polar_rmax 未生效：该绘图组可能不是 PolarGroup")
         node.run()
     except Exception as e:  # noqa: BLE001
-        return ExportResult(False, "image", None, f"{type(e).__name__}: {e}", warnings=warnings)
+        return ExportResult(
+            False, "image", None, f"{type(e).__name__}: {e}", warnings=warnings
+        )
 
     if not out.exists():
         return ExportResult(
-            False, "image", None,
+            False,
+            "image",
+            None,
             f"run() 后未生成文件：{out}（headless 图形栈可能不可用，改用 pyvista 渲染）",
             warnings=warnings,
         )
@@ -252,7 +273,11 @@ def export_image(
     # --- 导出后自检：轴框 + 内部空白度量 + sidecar ---
     gray = read_gray_png(out)
     box = detect_frame_box_array(gray) if gray is not None else None
-    metrics = interior_blank_metrics(gray, box) if (gray is not None and box is not None) else None
+    metrics = (
+        interior_blank_metrics(gray, box)
+        if (gray is not None and box is not None)
+        else None
+    )
     if metrics and metrics["blank"]:
         warnings.append(
             f"PNG 轴框内部近空白（unique_q={metrics['unique_q']}, std={metrics['std']}）："
@@ -263,9 +288,13 @@ def export_image(
     extent_recovered: list[float] | None = None
     if geom_bbox is not None:
         if box is not None:
-            extent_recovered = [float(v) for v in comsol_auto_window(tuple(geom_bbox), tuple(box))]
+            extent_recovered = [
+                float(v) for v in comsol_auto_window(tuple(geom_bbox), tuple(box))
+            ]
         else:
-            warnings.append("提供了 geom_bbox 但未检测到轴框，extent_recovered 无法反演")
+            warnings.append(
+                "提供了 geom_bbox 但未检测到轴框，extent_recovered 无法反演"
+            )
     if sidecar:
         sc = out.with_name(out.stem + ".sidecar.json")
         payload = {
@@ -283,7 +312,9 @@ def export_image(
         }
         try:
             sc.write_text(
-                json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default),
+                json.dumps(
+                    payload, indent=2, ensure_ascii=False, default=_json_default
+                ),
                 encoding="utf-8",
             )
         except Exception as e:  # noqa: BLE001
@@ -348,7 +379,9 @@ def export_data(
             return ExportResult(False, "data", None, "无法创建 Data 导出节点")
         node.set("data", ds)
         if expr:
-            node.set("expr", list(expr) if isinstance(expr, (list, tuple)) else str(expr))
+            node.set(
+                "expr", list(expr) if isinstance(expr, (list, tuple)) else str(expr)
+            )
         if fmt in ("vtk", "vtu"):
             _safe(node.set, "exporttype", "vtk")
         if _set_first_ok(node, ("filename",), str(out)) is None:
@@ -415,7 +448,12 @@ def export_mesh(
         mesh = comp.mesh(mesh_tag)
         exp = mesh.export() if hasattr(mesh, "export") else None
         if exp is None:
-            return ExportResult(False, "mesh", None, "mesh 节点无 export()（改用 result Data 的 VTK 导出）")
+            return ExportResult(
+                False,
+                "mesh",
+                None,
+                "mesh 节点无 export()（改用 result Data 的 VTK 导出）",
+            )
         # 网格导出 API 形态因版本而异，尽力尝试
         if _safe(getattr(exp, "create", None), default=None) is not None:
             pass

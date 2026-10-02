@@ -29,7 +29,9 @@ def test_build_pptx_roundtrip(tmp_path):
     assert "Report 2026" in slides[0].paragraphs  # 副标题经 read 归入 paragraphs
     assert slides[1].title == "Key Results"
     # 层级保留：第二项为 level-1（带缩进前缀）
-    assert any("Gain contrast" in p and p.startswith("  ") for p in slides[1].paragraphs)
+    assert any(
+        "Gain contrast" in p and p.startswith("  ") for p in slides[1].paragraphs
+    )
     assert slides[1].notes == "Stress robustness."
 
 

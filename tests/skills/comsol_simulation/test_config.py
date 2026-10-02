@@ -64,11 +64,18 @@ def test_discover_comsol_nonexistent_dir_falls_back(tmp_path: Path, capsys):
 def test_manual_path_and_priority(tmp_path: Path):
     root = _fake_comsol_root(tmp_path)
     prog = (
-        root / "doc" / "pdf" / "COMSOL_Multiphysics" / "COMSOL_ProgrammingReferenceManual.pdf"
+        root
+        / "doc"
+        / "pdf"
+        / "COMSOL_Multiphysics"
+        / "COMSOL_ProgrammingReferenceManual.pdf"
     )
     prog.write_bytes(b"%PDF-1.4 fake")
     inst = config._derive_from_root(root, source="test")
-    assert inst.manual_path("COMSOL_Multiphysics/COMSOL_ProgrammingReferenceManual.pdf") == prog
+    assert (
+        inst.manual_path("COMSOL_Multiphysics/COMSOL_ProgrammingReferenceManual.pdf")
+        == prog
+    )
     assert inst.manual_path("COMSOL_Multiphysics/DoesNotExist.pdf") is None
     prios = inst.priority_manuals()
     assert prog in prios

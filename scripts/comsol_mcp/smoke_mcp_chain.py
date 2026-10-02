@@ -60,14 +60,20 @@ from pathlib import Path
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
 URL = f"http://127.0.0.1:{PORT}/sse"
 MODEL = "smoke_bpf"
-DOMAIN = 0.1  # m; with c0 = 343 m/s and f = 3430 Hz the wavelength equals the domain size
+DOMAIN = (
+    0.1  # m; with c0 = 343 m/s and f = 3430 Hz the wavelength equals the domain size
+)
 FREQ = "3430"
 
 #: Phase B loads a real model instead of building one; override with argv[2]. The default is the
 #: smallest and most recent of the gain_ep set -- a 2D half-circle beam-scattering control case that
 #: already carries materials, mesh, a Frequency study, a BPF and a far-field PolarGroup.
 _DEFAULT_MPH = Path("data/research/1_gain_ep/simulation/6 半圆波束散射对照.mph")
-REAL_MPH = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(__file__).resolve().parents[2] / _DEFAULT_MPH
+REAL_MPH = (
+    Path(sys.argv[2])
+    if len(sys.argv) > 2
+    else Path(__file__).resolve().parents[2] / _DEFAULT_MPH
+)
 
 #: The step under test. Everything else exists only to give it a solvable model.
 BPF_ARGS = {
@@ -97,7 +103,10 @@ BUILD_STEPS: list[tuple[str, dict]] = [
     ("model_create_component", {"component_name": "comp1", "space_dimension": 2}),
     ("geometry_add_rectangle", {"component_name": "comp1", "size": [DOMAIN, DOMAIN]}),
     ("geometry_build", {"component_name": "comp1"}),
-    ("physics_add_pressure_acoustics", {"component_name": "comp1", "physics_tag": "acpr"}),
+    (
+        "physics_add_pressure_acoustics",
+        {"component_name": "comp1", "physics_tag": "acpr"},
+    ),
     ("physics_set_material", {"physics_name": "acpr", "material_name": "Air"}),
     ("physics_configure_acoustic_boundary", BPF_ARGS),
     # ``study_create`` must precede ``mesh_create``: the physics-controlled mesh derives its maximum
@@ -146,7 +155,10 @@ def _peak(payload) -> float:
     question here is "is the field identically zero or not". ``true``/``false`` are not numbers in
     JSON, so they cannot leak in.
     """
-    found = [float(x) for x in re.findall(r"-?\d+\.?\d*(?:[eE][-+]?\d+)?", json.dumps(payload))]
+    found = [
+        float(x)
+        for x in re.findall(r"-?\d+\.?\d*(?:[eE][-+]?\d+)?", json.dumps(payload))
+    ]
     return max((abs(v) for v in found), default=0.0)
 
 
@@ -185,17 +197,27 @@ async def run() -> int:
     async with sse_client(URL, timeout=30, sse_read_timeout=1800) as (read, write):
         async with mcp.ClientSession(read, write) as session:
             info = await session.initialize()
-            print(f"INIT_OK       : server={info.serverInfo.name!r} version={info.serverInfo.version!r}")
+            print(
+                f"INIT_OK       : server={info.serverInfo.name!r} version={info.serverInfo.version!r}"
+            )
 
-            print("--- Phase A: build from scratch up to the Background Pressure Field ---")
+            print(
+                "--- Phase A: build from scratch up to the Background Pressure Field ---"
+            )
             built = await _chain(session, BUILD_STEPS)
             bpf = built.get("physics_configure_acoustic_boundary", {})
             # Upstream echoes unknown types back; their presence proves there is no whitelist.
-            print(f"       custom_condition_types = {bpf.get('custom_condition_types')}")
+            print(
+                f"       custom_condition_types = {bpf.get('custom_condition_types')}"
+            )
             a_ok = len(built) == len(BUILD_STEPS) and "BackgroundPressureField" in (
                 bpf.get("custom_condition_types") or []
             )
-            verdict = "BPF built through the generic boundary tool" if a_ok else "BPF NOT built"
+            verdict = (
+                "BPF built through the generic boundary tool"
+                if a_ok
+                else "BPF NOT built"
+            )
             print(f"PHASE A       : {'PASS' if a_ok else 'FAIL'} -- {verdict}")
             if not a_ok:
                 await session.call_tool("comsol_disconnect", {})
@@ -206,11 +228,17 @@ async def run() -> int:
             peak = _peak(solved.get("results_evaluate", {}))
             print(f"PEAK |acpr.p_t| : {peak:.6g}")
             b_ok = len(solved) == len(SOLVE_STEPS) and peak > 0.0
-            verdict = "solve + evaluate produced a non-zero field" if b_ok else "no usable field"
+            verdict = (
+                "solve + evaluate produced a non-zero field"
+                if b_ok
+                else "no usable field"
+            )
             print(f"PHASE B       : {'PASS' if b_ok else 'FAIL'} -- {verdict}")
             await session.call_tool("comsol_disconnect", {})
 
-    print("NOTE          : jvm.dll stays mapped -- run `pysci-simulation mcp stop` to free the license")
+    print(
+        "NOTE          : jvm.dll stays mapped -- run `pysci-simulation mcp stop` to free the license"
+    )
     return 0 if b_ok else 2
 
 

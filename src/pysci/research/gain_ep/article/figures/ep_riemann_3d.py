@@ -28,16 +28,16 @@ from scipy.optimize import root
 from pysci.research.gain_ep.theory import cmt_reflection_s_matrix as cmt
 
 # --- 物理/数值常量 -------------------------------------------------------
-CR = 1.0081            # 第二管槽归一化复声速实部（参考）
-CI_LOSS_EP = 0.0745    # 损耗 EP 位置（参考）
-CI_GAIN_SS = -0.0740   # 增益谱奇点（极点）位置（参考）
-W_CR, W_CI = 0.02, 0.025          # (cr, ci) 窗口半宽
-N_UNIFORM = 60                    # 光滑区域（损耗）均匀网格边长
-N_FAR, N_NEAR = 30, 20            # 极点区域：远场/近心加密每侧点数
-D_MIN = 1e-4           # 距极点最近采样距离（尖峰 |λ|~几十，落在框内）
-N_ORDERS, K_MODES = 8, 25         # CMT 截断（形状图够用；精算见理论脚本）
-ZLIM_B = 60.0          # (b) 竖轴限：越界置 nan 隐藏（不饱和裁剪）
-CMAP = "viridis"       # 色盲安全 colormap（曲面颜色 = Im λ）
+CR = 1.0081  # 第二管槽归一化复声速实部（参考）
+CI_LOSS_EP = 0.0745  # 损耗 EP 位置（参考）
+CI_GAIN_SS = -0.0740  # 增益谱奇点（极点）位置（参考）
+W_CR, W_CI = 0.02, 0.025  # (cr, ci) 窗口半宽
+N_UNIFORM = 60  # 光滑区域（损耗）均匀网格边长
+N_FAR, N_NEAR = 30, 20  # 极点区域：远场/近心加密每侧点数
+D_MIN = 1e-4  # 距极点最近采样距离（尖峰 |λ|~几十，落在框内）
+N_ORDERS, K_MODES = 8, 25  # CMT 截断（形状图够用；精算见理论脚本）
+ZLIM_B = 60.0  # (b) 竖轴限：越界置 nan 隐藏（不饱和裁剪）
+CMAP = "viridis"  # 色盲安全 colormap（曲面颜色 = Im λ）
 
 SLUG = "ep_riemann_3d"
 
@@ -58,18 +58,22 @@ def _t_s_mu(S):
 
 def _refine_loss_ep(cr0, ci0):
     """2D 精定位损耗 EP：S21(cr,ci)=0。"""
+
     def F(x):
         S = _s_matrix(x[0], x[1])
         return [S[1, 0].real, S[1, 0].imag]
+
     r = root(F, [cr0, ci0], method="hybr")
     return float(r.x[0]), float(r.x[1])
 
 
 def _refine_gain_pole(cr0, ci0):
     """2D 精定位增益极点：1/S21(cr,ci)=0。"""
+
     def G(x):
         inv = 1.0 / _s_matrix(x[0], x[1])[1, 0]
         return [inv.real, inv.imag]
+
     r = root(G, [cr0, ci0], method="hybr")
     return float(r.x[0]), float(r.x[1])
 
@@ -87,7 +91,7 @@ def _region(cr0, ci0, refined):
     """在 (cr, ci) 网格上算双叶本征值与归一化本征值（2D 复数组）。"""
     crs = _axis(cr0, W_CR, refined)
     cis = _axis(ci0, W_CI, refined)
-    CR2, CI2 = np.meshgrid(crs, cis)          # (ni, nj)
+    CR2, CI2 = np.meshgrid(crs, cis)  # (ni, nj)
     LP = np.empty(CR2.shape, dtype=complex)
     LM = np.empty_like(LP)
     MP = np.empty_like(LP)
@@ -148,7 +152,7 @@ def _cut_mask(s2):
         prev = np.roll(s2, shift=(di, dj), axis=(0, 1))
         f = (np.real(np.conj(prev) * s2) < 0) & big
         if di:
-            f[0, :] = False      # 排除 roll 环绕边界
+            f[0, :] = False  # 排除 roll 环绕边界
         if dj:
             f[:, 0] = False
         flip |= f
@@ -174,13 +178,16 @@ def _panel(ax, d, tag, use_mu, zlim=None):
     cut = _cut_mask(d[f"lp_{tag}"] - d[f"lm_{tag}"])
     for A in (Zp, Zm, Cp, Cm):
         A[cut] = np.nan
-    vmax = np.nanmax(np.abs(np.concatenate([
-        Cp[np.isfinite(Zp)].ravel(), Cm[np.isfinite(Zm)].ravel()])))
-    mappable = plt.cm.ScalarMappable(
-        norm=Normalize(vmin=-vmax, vmax=vmax), cmap=CMAP)
+    vmax = np.nanmax(
+        np.abs(
+            np.concatenate([Cp[np.isfinite(Zp)].ravel(), Cm[np.isfinite(Zm)].ravel()])
+        )
+    )
+    mappable = plt.cm.ScalarMappable(norm=Normalize(vmin=-vmax, vmax=vmax), cmap=CMAP)
     for Z, C in ((Zp, Cp), (Zm, Cm)):
-        ax.plot_surface(X, Y, Z, facecolors=mappable.to_rgba(C),
-                        shade=False, rstride=1, cstride=1)
+        ax.plot_surface(
+            X, Y, Z, facecolors=mappable.to_rgba(C), shade=False, rstride=1, cstride=1
+        )
     if zlim is not None:
         ax.set_zlim(-zlim, zlim)
     ax.set_box_aspect((1, 1, 1))
@@ -195,17 +202,23 @@ def build_figure(style=None, research_dir=None, **kwargs):
 
     fig = plt.figure()
     fig.set_size_inches(6.693, 6.0)
-    rects = [(0.00, 0.08, 0.27, 0.84), (0.335, 0.08, 0.27, 0.84),
-             (0.67, 0.08, 0.27, 0.84)]
-    cbrects = [(0.275, 0.15, 0.012, 0.60), (0.610, 0.15, 0.012, 0.60),
-               (0.945, 0.15, 0.012, 0.60)]
+    rects = [
+        (0.00, 0.08, 0.27, 0.84),
+        (0.335, 0.08, 0.27, 0.84),
+        (0.67, 0.08, 0.27, 0.84),
+    ]
+    cbrects = [
+        (0.275, 0.15, 0.012, 0.60),
+        (0.610, 0.15, 0.012, 0.60),
+        (0.945, 0.15, 0.012, 0.60),
+    ]
 
     specs = [
         ("l", False, None, "(a) Loss EP: original $S$", r"Re($\lambda$)"),
         ("g", False, ZLIM_B, "(b) Gain EP: original $S$", r"Re($\lambda$)"),
         ("g", True, None, r"(c) Gain EP: normalized $S'$", r"Re($\lambda'$)"),
     ]
-    for (rect, cbrect, (tag, use_mu, zlim, title, zlab)) in zip(rects, cbrects, specs):
+    for rect, cbrect, (tag, use_mu, zlim, title, zlab) in zip(rects, cbrects, specs):
         ax = fig.add_axes(rect, projection="3d")
         mappable = _panel(ax, d, tag, use_mu, zlim=zlim)
         ax.set_title(title, fontsize=8)

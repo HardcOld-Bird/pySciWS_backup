@@ -43,7 +43,9 @@ def tmp_env(tmp_path, monkeypatch):
         d.mkdir(parents=True, exist_ok=True)
     for mod in (imagine, _ledger):
         monkeypatch.setattr(
-            mod, "settings", dataclasses.replace(mod.settings, module_dir=tmp_path, **dirs)
+            mod,
+            "settings",
+            dataclasses.replace(mod.settings, module_dir=tmp_path, **dirs),
         )
     monkeypatch.setattr(imagine, "assert_within_data", lambda p, **kw: Path(p))
     return tmp_path
@@ -60,7 +62,9 @@ def _png_bytes(color=(200, 30, 30), size=(4, 4)) -> bytes:
 GROUP_CAPABLE_MODEL = "doubao-seedream-4-5-251128"
 
 
-def _fake_response(n: int = 1, *, model: str = "doubao-seedream-4-0-250828") -> _ark.ArkResponse:
+def _fake_response(
+    n: int = 1, *, model: str = "doubao-seedream-4-0-250828"
+) -> _ark.ArkResponse:
     """造一个 n 张 PNG（b64_json）的响应，顶替真实云端返回。"""
     b64 = base64.b64encode(_png_bytes()).decode("ascii")
     data = [{"b64_json": b64, "size": "4x4"} for _ in range(n)]
@@ -70,8 +74,12 @@ def _fake_response(n: int = 1, *, model: str = "doubao-seedream-4-0-250828") -> 
         images=[_ark.ArkImage(index=i, b64_json=b64, size="4x4") for i in range(n)],
         usage={"generated_images": n, "output_tokens": 10 * n, "total_tokens": 10 * n},
         request={"model": model, "prompt": "p", "watermark": False},
-        raw={"model": model, "created": 1700000000, "data": data,
-             "usage": {"generated_images": n}},
+        raw={
+            "model": model,
+            "created": 1700000000,
+            "data": data,
+            "usage": {"generated_images": n},
+        },
     )
 
 
@@ -130,8 +138,17 @@ def test_comfy_subcommands_are_gone():
 
 def test_img_nested_subcommands():
     parser = imagine.build_parser()
-    for op in ("split", "composite", "fuse", "inpaint", "mask",
-               "morph", "warp", "measure", "align"):
+    for op in (
+        "split",
+        "composite",
+        "fuse",
+        "inpaint",
+        "mask",
+        "morph",
+        "warp",
+        "measure",
+        "align",
+    ):
         argv = ["img", op]
         if op == "composite":
             argv += ["--base", "b.png", "--layer", "l.png"]
@@ -151,7 +168,7 @@ def test_img_nested_subcommands():
 def test_gen_dest_defaults():
     """默认值即护栏：不出组图、不加水印、不要 png、走 b64_json。"""
     args = imagine.build_parser().parse_args(["gen", "--prompt", "p"])
-    assert args.seed is None            # 不伪造"可复现"假象
+    assert args.seed is None  # 不伪造"可复现"假象
     assert args.n == 1
     assert args.max_images is None
     assert args.group is False
@@ -179,8 +196,18 @@ def test_ingest_uses_recipe_not_workflow():
 
 def test_bridge_dest_names():
     args = imagine.build_parser().parse_args(
-        ["bridge", "--ref", "r.png", "--research", "demo", "--slug", "fig1",
-         "--palette-name", "my-pal", "--no-copy-ref"]
+        [
+            "bridge",
+            "--ref",
+            "r.png",
+            "--research",
+            "demo",
+            "--slug",
+            "fig1",
+            "--palette-name",
+            "my-pal",
+            "--no-copy-ref",
+        ]
     )
     assert args.palette_name == "my-pal"
     assert args.no_copy_ref is True
@@ -211,8 +238,8 @@ def test_main_models_prints_matrix(capsys):
     out = capsys.readouterr().out
     assert "doubao-seedream-4-0-250828" in out
     assert imagine.PRO_MODEL_HINT in out
-    assert "不保证完全一致" in out   # 诚实标注 seed 的弱语义
-    assert "models --live" in out    # 矩阵顶部必须指一条核对真值的路
+    assert "不保证完全一致" in out  # 诚实标注 seed 的弱语义
+    assert "models --live" in out  # 矩阵顶部必须指一条核对真值的路
 
 
 def test_main_models_live_reads_ark(monkeypatch, capsys):
@@ -227,6 +254,7 @@ def test_main_models_live_reads_ark(monkeypatch, capsys):
 def test_main_models_live_error_returns_1(monkeypatch, capsys):
     def boom(**kw):
         raise imagine._ark.ArkError("未配置 ARK_API_KEY", status_code=401)
+
     monkeypatch.setattr(imagine._ark, "list_models", boom)
     assert imagine.main(["models", "--live"]) == 1
     assert "models --live 失败" in capsys.readouterr().err
@@ -269,7 +297,7 @@ def test_main_gen_dry_run_omits_unset_seed(capsys):
     """seed 未给就不进请求体（给了反而制造"可复现"的错觉）。"""
     imagine.main(["gen", "--prompt", "p", "--dry-run"])
     out = capsys.readouterr().out
-    assert '"seed"' not in out          # 不能直接查 "seed"：模型名 seedream 也包含它
+    assert '"seed"' not in out  # 不能直接查 "seed"：模型名 seedream 也包含它
 
 
 def test_main_i2i_dry_run_redacts_data_uri(tmp_path, capsys):
@@ -281,7 +309,7 @@ def test_main_i2i_dry_run_redacts_data_uri(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "data:image/png;base64," in out
     assert "…<data-uri " in out
-    assert len(out) < 4000   # 未把整段 base64 打出来
+    assert len(out) < 4000  # 未把整段 base64 打出来
 
 
 def test_main_i2i_dry_run_passes_url_through(capsys):
@@ -290,8 +318,19 @@ def test_main_i2i_dry_run_passes_url_through(capsys):
 
 
 def test_main_gen_dry_run_group(capsys):
-    imagine.main(["gen", "--prompt", "p", "--model", GROUP_CAPABLE_MODEL,
-                  "--group", "--max-images", "4", "--dry-run"])
+    imagine.main(
+        [
+            "gen",
+            "--prompt",
+            "p",
+            "--model",
+            GROUP_CAPABLE_MODEL,
+            "--group",
+            "--max-images",
+            "4",
+            "--dry-run",
+        ]
+    )
     out = capsys.readouterr().out
     assert '"sequential_image_generation": "auto"' in out
     assert '"max_images": 4' in out
@@ -336,27 +375,46 @@ def test_main_gen_png_on_main_50_dry_run_ok(capsys):
 
     回归防护：早前用昵称 "5-0-lite" 做子串匹配，把合法 ID 误拒在本地护栏上。
     """
-    rc = imagine.main([
-        "gen", "--prompt", "p", "--model", "doubao-seedream-5-0-260128",
-        "--output-format", "png", "--dry-run",
-    ])
+    rc = imagine.main(
+        [
+            "gen",
+            "--prompt",
+            "p",
+            "--model",
+            "doubao-seedream-5-0-260128",
+            "--output-format",
+            "png",
+            "--dry-run",
+        ]
+    )
     assert rc == 0
     assert '"output_format": "png"' in capsys.readouterr().out
 
 
 def test_main_gen_group_on_main_50_dry_run_ok(capsys):
     """组图同理：真实 5.0 主档 ID 不得被本地护栏误拒。"""
-    rc = imagine.main([
-        "gen", "--prompt", "p", "--model", "doubao-seedream-5-0-260128",
-        "--group", "--max-images", "2", "--dry-run",
-    ])
+    rc = imagine.main(
+        [
+            "gen",
+            "--prompt",
+            "p",
+            "--model",
+            "doubao-seedream-5-0-260128",
+            "--group",
+            "--max-images",
+            "2",
+            "--dry-run",
+        ]
+    )
     assert rc == 0
     assert '"sequential_image_generation": "auto"' in capsys.readouterr().out
 
 
 def test_main_gen_group_on_flash_returns_1(capsys):
     """默认档 flash 按契约不支持组图：本地拦下（rc=1），不把请求发给方舟。"""
-    rc = imagine.main(["gen", "--prompt", "p", "--group", "--max-images", "2", "--dry-run"])
+    rc = imagine.main(
+        ["gen", "--prompt", "p", "--group", "--max-images", "2", "--dry-run"]
+    )
     assert rc == 1
     assert "不支持组图" in capsys.readouterr().err
 
@@ -375,14 +433,16 @@ def test_main_gen_extra_must_be_object(capsys):
 
 def test_main_i2i_missing_ref_returns_1(capsys):
     """dry-run 也要读本地参考图（要转 base64）→ 文件不存在给一句人话。"""
-    rc = imagine.main(["i2i", "--image", "definitely_missing.png", "--prompt", "p", "--dry-run"])
+    rc = imagine.main(
+        ["i2i", "--image", "definitely_missing.png", "--prompt", "p", "--dry-run"]
+    )
     assert rc == 1
     assert "参数校验失败" in capsys.readouterr().err
 
 
 def test_main_gen_empty_prompt_rejected_by_parser():
     with pytest.raises(SystemExit):
-        imagine.main(["gen", "--dry-run"])   # --prompt 是 required
+        imagine.main(["gen", "--dry-run"])  # --prompt 是 required
 
 
 # ---------------------------------------------------------------------------
@@ -392,13 +452,22 @@ def test_main_mark_rect_and_arrow(tmp_env, capsys):
     src = tmp_env / "base.png"
     Image.new("RGB", (200, 160), (250, 250, 250)).save(src)
     out = tmp_env / "marked.png"
-    rc = imagine.main([
-        "mark", "--src", str(src), "--out", str(out),
-        "--rect", "20,20,80,60", "--arrow", "180,10,120,140",
-    ])
+    rc = imagine.main(
+        [
+            "mark",
+            "--src",
+            str(src),
+            "--out",
+            str(out),
+            "--rect",
+            "20,20,80,60",
+            "--arrow",
+            "180,10,120,140",
+        ]
+    )
     assert rc == 0
     assert out.is_file()
-    assert out.stat().st_size > src.stat().st_size   # 确实画了东西
+    assert out.stat().st_size > src.stat().st_size  # 确实画了东西
     txt = capsys.readouterr().out
     # 标签按 rect → arrow 顺序自动编号，与 prompt 写法对应
     assert "A: 框选区域" in txt
@@ -437,10 +506,21 @@ def test_main_mark_missing_src_returns_1(capsys):
 def test_main_ingest_records_ledger(tmp_env, capsys):
     src = tmp_env / "from_imagegen.png"
     src.write_bytes(_png_bytes())
-    rc = imagine.main([
-        "ingest", "--src", str(src), "--slug", "hero",
-        "--prompt", "a hero image", "--backend", "imagegen", "--recipe", "cover_v1",
-    ])
+    rc = imagine.main(
+        [
+            "ingest",
+            "--src",
+            str(src),
+            "--slug",
+            "hero",
+            "--prompt",
+            "a hero image",
+            "--backend",
+            "imagegen",
+            "--recipe",
+            "cover_v1",
+        ]
+    )
     assert rc == 0
     dest = tmp_env / "assets" / "hero.png"
     assert dest.is_file()
@@ -491,9 +571,12 @@ def test_main_adjust_resize(tmp_env, capsys):
     src = tmp_env / "a.png"
     Image.new("RGB", (80, 60), "navy").save(src)
     out = tmp_env / "small.png"
-    assert imagine.main(["adjust", str(src), "--out", str(out), "--resize", "40", "0"]) == 0
+    assert (
+        imagine.main(["adjust", str(src), "--out", str(out), "--resize", "40", "0"])
+        == 0
+    )
     with Image.open(out) as im:
-        assert im.size == (40, 30)   # 0 → 按长宽比自动
+        assert im.size == (40, 30)  # 0 → 按长宽比自动
     assert "视觉校验" in capsys.readouterr().out
 
 
@@ -520,15 +603,26 @@ def test_main_sheet(tmp_env, capsys):
 def test_gen_end_to_end_offline(tmp_env, monkeypatch, capsys):
     """出图 → 落盘（后缀按真实字节判定）→ 内嵌元数据 → 记账 → 渲染账本 → 存快照。"""
     monkeypatch.setattr(imagine._ark, "generate", lambda *a, **kw: _fake_response())
-    rc = imagine.main(["gen", "--prompt", "a red square", "--slug", "unit",
-                       "--recipe", "cover_v1", "--notes", "unit test"])
+    rc = imagine.main(
+        [
+            "gen",
+            "--prompt",
+            "a red square",
+            "--slug",
+            "unit",
+            "--recipe",
+            "cover_v1",
+            "--notes",
+            "unit test",
+        ]
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "已出图 1 张" in out
-    assert "gallery --add" in out          # 结尾必提示归档（方舟不保证复现）
+    assert "gallery --add" in out  # 结尾必提示归档（方舟不保证复现）
 
     files = sorted((tmp_env / "assets").glob("unit*"))
-    assert [f.suffix for f in files] == [".png"]   # 不是按 output_format 猜的 .jpg
+    assert [f.suffix for f in files] == [".png"]  # 不是按 output_format 猜的 .jpg
 
     entries = _ledger.query()
     assert len(entries) == 1
@@ -552,7 +646,7 @@ def test_gen_passes_watermark_false_and_single_image(tmp_env, monkeypatch):
 
     monkeypatch.setattr(imagine._ark, "generate", fake)
     imagine.main(["gen", "--prompt", "p"])
-    assert seen["watermark"] is False      # 方舟默认 true，必须显式关
+    assert seen["watermark"] is False  # 方舟默认 true，必须显式关
     assert seen["max_images"] == 1
     assert "sequential" not in seen
 
@@ -560,11 +654,22 @@ def test_gen_passes_watermark_false_and_single_image(tmp_env, monkeypatch):
 def test_gen_group_passes_sequential(tmp_env, monkeypatch):
     seen: dict = {}
     monkeypatch.setattr(
-        imagine._ark, "generate",
+        imagine._ark,
+        "generate",
         lambda prompt, **kw: (seen.update(kw), _fake_response(2))[1],
     )
-    imagine.main(["gen", "--prompt", "p", "--model", GROUP_CAPABLE_MODEL,
-                  "--group", "--max-images", "3"])
+    imagine.main(
+        [
+            "gen",
+            "--prompt",
+            "p",
+            "--model",
+            GROUP_CAPABLE_MODEL,
+            "--group",
+            "--max-images",
+            "3",
+        ]
+    )
     assert seen["sequential"] is True
     assert seen["max_images"] == 3
 
@@ -574,7 +679,8 @@ def test_i2i_passes_reference_paths(tmp_env, monkeypatch):
     src.write_bytes(_png_bytes())
     seen: dict = {}
     monkeypatch.setattr(
-        imagine._ark, "generate",
+        imagine._ark,
+        "generate",
         lambda prompt, **kw: (seen.update(kw), _fake_response())[1],
     )
     assert imagine.main(["i2i", "--image", str(src), "--prompt", "p"]) == 0
@@ -584,9 +690,23 @@ def test_i2i_passes_reference_paths(tmp_env, monkeypatch):
 def test_gen_records_every_image_of_a_group(tmp_env, monkeypatch):
     """组图 3 张 → 3 条账本记录（逐张可溯源），但只渲染一次 Markdown。"""
     monkeypatch.setattr(imagine._ark, "generate", lambda *a, **kw: _fake_response(3))
-    assert imagine.main(["gen", "--prompt", "p", "--model", GROUP_CAPABLE_MODEL,
-                         "--group", "--max-images", "3",
-                         "--slug", "grp"]) == 0
+    assert (
+        imagine.main(
+            [
+                "gen",
+                "--prompt",
+                "p",
+                "--model",
+                GROUP_CAPABLE_MODEL,
+                "--group",
+                "--max-images",
+                "3",
+                "--slug",
+                "grp",
+            ]
+        )
+        == 0
+    )
     assert len(_ledger.query()) == 3
     assert len(sorted((tmp_env / "assets").glob("grp*"))) == 3
 
@@ -616,7 +736,8 @@ def test_gen_n_clamped_by_cost_guard(tmp_env, monkeypatch, capsys):
     )
     hits: list[dict] = []
     monkeypatch.setattr(
-        imagine._ark, "generate",
+        imagine._ark,
+        "generate",
         lambda prompt, **kw: (hits.append(kw), _fake_response())[1],
     )
     assert imagine.main(["gen", "--prompt", "p", "--n", "99", "--dry-run"]) == 0
@@ -645,7 +766,9 @@ def test_gen_later_call_failure_keeps_earlier_output(tmp_env, monkeypatch, capsy
 def test_gen_all_failed_returns_1(tmp_env, monkeypatch, capsys):
     """整批产出都失败（单张级 error）→ 返回 1，且不写账本。"""
     resp = _fake_response(1)
-    resp.images = [_ark.ArkImage(index=0, error={"code": "InternalError", "message": "boom"})]
+    resp.images = [
+        _ark.ArkImage(index=0, error={"code": "InternalError", "message": "boom"})
+    ]
     resp.usage = {"generated_images": 0}
     monkeypatch.setattr(imagine._ark, "generate", lambda *a, **kw: resp)
     assert imagine.main(["gen", "--prompt", "p"]) == 1
@@ -660,15 +783,19 @@ def test_gen_ark_error_returns_1(tmp_env, monkeypatch, capsys):
     ``test_ark_client.py`` 覆盖）；这里照它的**产物形态**造错，验证 CLI 原样透出
     而不吞掉排障提示。
     """
+
     def boom(*a, **kw):
-        raise _ark.ArkError("InvalidApiKey | 提示：检查 .env 里的 ARK_API_KEY",
-                            status_code=401, code="InvalidApiKey")
+        raise _ark.ArkError(
+            "InvalidApiKey | 提示：检查 .env 里的 ARK_API_KEY",
+            status_code=401,
+            code="InvalidApiKey",
+        )
 
     monkeypatch.setattr(imagine._ark, "generate", boom)
     assert imagine.main(["gen", "--prompt", "p"]) == 1
     err = capsys.readouterr().err
     assert "gen 失败" in err
-    assert "ARK_API_KEY" in err            # 提示被原样透出
+    assert "ARK_API_KEY" in err  # 提示被原样透出
 
 
 def test_gen_partial_failure_still_saves_ok_ones(tmp_env, monkeypatch, capsys):

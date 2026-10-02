@@ -83,7 +83,9 @@ def list_parameters(model: Any) -> OrderedDict[str, dict[str, str]]:
     names = _str_list(_call_if(p, "varnames", default=[]))
     for n in names:
         val = _call_if(p, "get", n, default="")
-        descr = _call_if(p, "descr", n, default="") or _call_if(p, "getdescr", n, default="")
+        descr = _call_if(p, "descr", n, default="") or _call_if(
+            p, "getdescr", n, default=""
+        )
         out[n] = {"value": str(val), "descr": str(descr or "")}
     return out
 
@@ -252,8 +254,15 @@ def dump_node(node: Any, *, include_methods: bool = False) -> dict[str, Any]:
     全部防御式读取，单点失败降级为占位符。
     """
     info: dict[str, Any] = {
-        "class": str(_call_if(_call_if(node, "getClass", default=None), "getName", default="") or ""),
-        "type": str(_call_if(node, "getType", default="") or _call_if(node, "type", default="") or ""),
+        "class": str(
+            _call_if(_call_if(node, "getClass", default=None), "getName", default="")
+            or ""
+        ),
+        "type": str(
+            _call_if(node, "getType", default="")
+            or _call_if(node, "type", default="")
+            or ""
+        ),
         "label": str(_call_if(node, "label", default="") or ""),
     }
     tags = _tags(node)
@@ -262,7 +271,10 @@ def dump_node(node: Any, *, include_methods: bool = False) -> dict[str, Any]:
 
     props: list[dict[str, Any]] = []
     for p in _str_list(_call_if(node, "properties", default=[])):
-        row: dict[str, Any] = {"name": p, "value": _call_if(node, "getString", p, default=None)}
+        row: dict[str, Any] = {
+            "name": p,
+            "value": _call_if(node, "getString", p, default=None),
+        }
         allowed = _longest_allowed(node, p)
         if allowed:
             row["allowed"] = allowed
@@ -293,7 +305,9 @@ def format_node_dump(info: dict[str, Any], *, path: str = "") -> str:
     lines = [head, f"  class: {info.get('class') or '?'}"]
     typ, label = info.get("type") or "", info.get("label") or ""
     if typ or label:
-        lines.append(f"  type : {typ}" + (f"  [{label}]" if label and label != typ else ""))
+        lines.append(
+            f"  type : {typ}" + (f"  [{label}]" if label and label != typ else "")
+        )
     if info.get("tags"):
         lines.append(f"  tags : {info['tags']}")
     props = info.get("properties") or []
@@ -306,7 +320,10 @@ def format_node_dump(info: dict[str, Any], *, path: str = "") -> str:
     if info.get("selection"):
         sel = info["selection"]
         dims = " ".join(f"{k}={v}" for k, v in sel.items() if k != "tags")
-        lines.append(f"  selection: {dims or '-'}" + (f"  tags={sel['tags']}" if sel.get("tags") else ""))
+        lines.append(
+            f"  selection: {dims or '-'}"
+            + (f"  tags={sel['tags']}" if sel.get("tags") else "")
+        )
     return "\n".join(lines)
 
 
@@ -346,7 +363,10 @@ class SetPropsResult:
         return not self.failed
 
     def report(self) -> str:
-        lines = [f"node set: {self.path}" + (f"  ({self.node_class})" if self.node_class else "")]
+        lines = [
+            f"node set: {self.path}"
+            + (f"  ({self.node_class})" if self.node_class else "")
+        ]
         lines += [f"  ok   : {k}" for k in self.ok]
         lines += [f"  FAIL : {f}" for f in self.failed]
         lines.append(f"  => {len(self.ok)} ok, {len(self.failed)} failed")
@@ -375,7 +395,10 @@ def set_node_props(model: Any, path: str, pairs: list[str]) -> SetPropsResult:
     node = resolve_path(model, path)
     res = SetPropsResult(
         path=path,
-        node_class=str(_call_if(_call_if(node, "getClass", default=None), "getName", default="") or ""),
+        node_class=str(
+            _call_if(_call_if(node, "getClass", default=None), "getName", default="")
+            or ""
+        ),
     )
     for k, v in parsed:
         try:
@@ -411,9 +434,7 @@ def introspect(node: Any, *, limit: int | None = None) -> dict[str, Any]:
         sigs = sorted({str(m) for m in methods})
         result["methods"] = sigs[:limit] if limit else sigs
 
-    result["python_attrs"] = sorted(
-        a for a in dir(node) if not a.startswith("_")
-    )
+    result["python_attrs"] = sorted(a for a in dir(node) if not a.startswith("_"))
     return result
 
 

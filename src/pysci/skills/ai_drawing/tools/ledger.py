@@ -161,7 +161,9 @@ def record(
 # ---------------------------------------------------------------------------
 # PNG tEXt 元数据内嵌（脱离账本也能溯源）
 # ---------------------------------------------------------------------------
-def embed_metadata(path: str | Path, meta: dict[str, Any], *, prefix: str = META_PREFIX) -> bool:
+def embed_metadata(
+    path: str | Path, meta: dict[str, Any], *, prefix: str = META_PREFIX
+) -> bool:
     """把生成参数写进 PNG 的 tEXt 块，使图片**自带出处**。
 
     仅对 ``.png`` 生效（JPEG 需走 EXIF，且方舟 4.x 直出的 jpeg 重存会二次压缩，不划算）。
@@ -202,8 +204,11 @@ def read_metadata(path: str | Path, *, prefix: str = META_PREFIX) -> dict[str, s
         with Image.open(p) as im:
             info = dict(im.info or {})
         head = f"{prefix}:"
-        return {k[len(head):]: str(v) for k, v in info.items()
-                if k.startswith(head) and isinstance(v, str)}
+        return {
+            k[len(head) :]: str(v)
+            for k, v in info.items()
+            if k.startswith(head) and isinstance(v, str)
+        }
     except Exception:  # noqa: BLE001
         return {}
 
@@ -280,7 +285,9 @@ def stats() -> dict[str, Any]:
     by_backend: dict[str, int] = {}
     by_model: dict[str, int] = {}
     for e in entries:
-        by_backend[e.backend or "(unknown)"] = by_backend.get(e.backend or "(unknown)", 0) + 1
+        by_backend[e.backend or "(unknown)"] = (
+            by_backend.get(e.backend or "(unknown)", 0) + 1
+        )
         by_model[e.model or "(unknown)"] = by_model.get(e.model or "(unknown)", 0) + 1
     return {
         "total": len(entries),
@@ -317,8 +324,11 @@ def render_markdown() -> Path:
     if st["by_model"]:
         model_str = ", ".join(f"{k}={v}" for k, v in sorted(st["by_model"].items()))
         lines.append(f"- **按模型**：{model_str}")
-    lines += ["", "| # | 时间 | 后端 | 模型 | seed | 产物 | prompt / 备注 |",
-              "|---|------|------|------|------|------|----------------|"]
+    lines += [
+        "",
+        "| # | 时间 | 后端 | 模型 | seed | 产物 | prompt / 备注 |",
+        "|---|------|------|------|------|------|----------------|",
+    ]
     for i, e in enumerate(entries, 1):
         seed = "" if e.seed is None else str(e.seed)
         note = _md_escape(e.prompt)

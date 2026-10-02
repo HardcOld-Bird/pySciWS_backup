@@ -82,7 +82,9 @@ class SlideRec:
     texts: list[str] = field(default_factory=list)  # 正文要点（含层级前缀）
     notes: str = ""
     pictures: list[ShapeRec] = field(default_factory=list)
-    shapes: list[ShapeRec] = field(default_factory=list)  # 全部形状（供布局图/邻近文字）
+    shapes: list[ShapeRec] = field(
+        default_factory=list
+    )  # 全部形状（供布局图/邻近文字）
     layout_map: str = ""  # ASCII 版面布局图
     is_section: bool = False
     render_rel: str = ""  # 整页合成渲染相对路径（含图页才有）
@@ -126,7 +128,9 @@ class DigestResult:
             f"输出根目录    : {self.root}",
         ]
         if self.reused:
-            lines.insert(0, "[复用] 检测到既有 digest，未重新提取（加 --force 可全量重建）")
+            lines.insert(
+                0, "[复用] 检测到既有 digest，未重新提取（加 --force 可全量重建）"
+            )
         return "\n".join(lines)
 
 
@@ -155,7 +159,9 @@ def _clamp(v: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, v))
 
 
-def _layout_map(shapes: list[ShapeRec], sw: float, sh: float, cols: int = 64, rows: int = 14) -> str:
+def _layout_map(
+    shapes: list[ShapeRec], sw: float, sh: float, cols: int = 64, rows: int = 14
+) -> str:
     """把一页的形状画成 ASCII 版面图：数字/字母=图片序号，`.`=文本。
 
     即使没有整页渲染，也能让 LLM 知道「哪张图在左、哪段字在右下」的空间关系。
@@ -249,7 +255,9 @@ def _even_indices(n: int, k: int) -> list[int]:
     return sorted({round(i * (n - 1) / (k - 1)) for i in range(k)})
 
 
-def _make_previews(img_path: Path, root: Path, ext: str, gif_frames: int) -> dict[str, Any]:
+def _make_previews(
+    img_path: Path, root: Path, ext: str, gif_frames: int
+) -> dict[str, Any]:
     """为 LLM 不可直读的图生成 PNG 预览（写入 images/previews/）。
 
     - **gif**（汇报里多为仿真动画）：用 Pillow 抽均匀分布的若干帧（含首末帧）。
@@ -269,7 +277,10 @@ def _make_previews(img_path: Path, root: Path, ext: str, gif_frames: int) -> dic
                 idxs = _even_indices(n, gif_frames)
                 rels: list[str] = []
                 for j, fi in enumerate(idxs, 1):
-                    out = prev_dir / f"{img_path.stem}_f{j}of{len(idxs)}_frame{fi + 1}.png"
+                    out = (
+                        prev_dir
+                        / f"{img_path.stem}_f{j}of{len(idxs)}_frame{fi + 1}.png"
+                    )
                     if not out.exists():
                         im.seek(fi)
                         im.convert("RGB").save(out)
@@ -400,7 +411,9 @@ def _scan(
                             }
                             # LLM 不可直读的格式（gif 动图 / wmf 矢量）→ 生成 PNG 预览
                             if ext not in VIEWABLE_EXTS:
-                                entry.update(_make_previews(fpath, root, ext, gif_frames))
+                                entry.update(
+                                    _make_previews(fpath, root, ext, gif_frames)
+                                )
                                 sr.previews = list(entry.get("previews", []))
                                 sr.frame_count = entry.get("frame_count", 0)
                                 sr.preview_status = entry.get("preview_status", "")
@@ -695,7 +708,9 @@ def _slide_block(rec: SlideRec) -> str:
     return "\n".join(lines)
 
 
-def _write_chunk(root: Path, n: int, chunk: dict[str, Any], recs: list[SlideRec]) -> Path:
+def _write_chunk(
+    root: Path, n: int, chunk: dict[str, Any], recs: list[SlideRec]
+) -> Path:
     name = f"part_{n:02d}_s{chunk['start']:03d}-{chunk['end']:03d}_{_slug(chunk['title'])}.md"
     path = root / name
     secs = chunk.get("sections") or []
@@ -704,9 +719,7 @@ def _write_chunk(root: Path, n: int, chunk: dict[str, Any], recs: list[SlideRec]
         "",
     ]
     if len(secs) > 1:
-        head.append(
-            f"本块含 {len(secs)} 节：" + "、".join(s["title"] for s in secs)
-        )
+        head.append(f"本块含 {len(secs)} 节：" + "、".join(s["title"] for s in secs))
         head.append("")
     head += [
         "> 本文件由 `compose slides digest` 生成**骨架**；每张图的「解读：_(待填)_」需在 Phase B 填写。",
@@ -723,9 +736,7 @@ def _write_chunk(root: Path, n: int, chunk: dict[str, Any], recs: list[SlideRec]
             continue
         s = sec_at.get(r.index)
         if s:
-            body.append(
-                f"## ▸ {s['title']}（Slide {s['start']:03d}–{s['end']:03d}）\n"
-            )
+            body.append(f"## ▸ {s['title']}（Slide {s['start']:03d}–{s['end']:03d}）\n")
         body.append(_slide_block(r))
     path.write_text("\n".join(head) + "\n".join(body), encoding="utf-8")
     return path
@@ -837,9 +848,7 @@ def _write_sidecar(root: Path, slides: list[SlideRec]) -> Path:
 
 def _write_manifest(root: Path, manifest: dict[str, dict]) -> Path:
     p = root / "images_manifest.json"
-    p.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8"
-    )
+    p.write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
     return p
 
 
@@ -877,8 +886,10 @@ def _write_progress(
         "n_duplicates": res.n_duplicates,
         "figure_slides": [s.index for s in slides if s.pictures],
         "text_slides": [s.index for s in slides if not s.pictures],
-        "batch_policy": {"figure_slides_per_batch": batch_figure,
-                         "text_slides_per_batch": batch_text},
+        "batch_policy": {
+            "figure_slides_per_batch": batch_figure,
+            "text_slides_per_batch": batch_text,
+        },
         "render": {
             "rendered": res.rendered,
             "vector_previews": res.vector_previews,
@@ -1110,9 +1121,7 @@ def digest_pptx(
     for stale in root.glob("part_*.md"):
         stale.unlink(missing_ok=True)
 
-    chunk_files = [
-        _write_chunk(root, n, c, slides) for n, c in enumerate(chunks, 1)
-    ]
+    chunk_files = [_write_chunk(root, n, c, slides) for n, c in enumerate(chunks, 1)]
     res.chunks = chunk_files
     res.sidecar = _write_sidecar(root, slides)
     res.manifest = _write_manifest(root, manifest)
@@ -1139,8 +1148,12 @@ if __name__ == "__main__":
     ap.add_argument("--dpi", type=int, default=140)
     ap.add_argument("--gif-frames", type=int, default=3, dest="gif_frames")
     ap.add_argument("--chunk-by", default="section", dest="chunk_by")
-    ap.add_argument("--section-at", default=None, dest="section_at",
-                    help="逗号分隔的分节起始页（人工定界）")
+    ap.add_argument(
+        "--section-at",
+        default=None,
+        dest="section_at",
+        help="逗号分隔的分节起始页（人工定界）",
+    )
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--lint", action="store_true")
     a = ap.parse_args()
@@ -1153,7 +1166,13 @@ if __name__ == "__main__":
             else None
         )
         r = digest_pptx(
-            a.pptx, a.out, render=a.render, dpi=a.dpi, gif_frames=a.gif_frames,
-            chunk_by=a.chunk_by, section_starts=starts, force=a.force,
+            a.pptx,
+            a.out,
+            render=a.render,
+            dpi=a.dpi,
+            gif_frames=a.gif_frames,
+            chunk_by=a.chunk_by,
+            section_starts=starts,
+            force=a.force,
         )
         print(r.summary())

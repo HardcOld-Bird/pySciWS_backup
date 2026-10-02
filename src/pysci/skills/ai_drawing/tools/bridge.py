@@ -115,15 +115,21 @@ def _render_design_spec(
     L: list[str] = []
     L.append(f"# {slug} — 设计规格（AI 审美范本 → 数据复现）")
     L.append("")
-    L.append("> 由 `imagine bridge` 自动抽取。**范本是 AI 生成的：视觉可借鉴，但其中的数据、坐标、")
-    L.append("> 文字一律不可信**。请只借用其**配色 / 构图 / 长宽比**，在管线里用**真实数据**复现。")
+    L.append(
+        "> 由 `imagine bridge` 自动抽取。**范本是 AI 生成的：视觉可借鉴，但其中的数据、坐标、"
+    )
+    L.append(
+        "> 文字一律不可信**。请只借用其**配色 / 构图 / 长宽比**，在管线里用**真实数据**复现。"
+    )
     L.append("")
     L.append("## 审美范本")
     if ref_copy is not None:
         L.append(f"![reference]({ref_copy.name})")
         L.append("")
     L.append(f"- 源文件：`{info['path']}`")
-    L.append(f"- 尺寸：{info['width']}×{info['height']} px（朝向：{info['orientation']}）")
+    L.append(
+        f"- 尺寸：{info['width']}×{info['height']} px（朝向：{info['orientation']}）"
+    )
     L.append(f"- 长宽比 w/h：{info['aspect']}（h/w：{info['aspect_hw']}）")
     L.append(f"- 平均亮度：{info['mean_brightness']}/255")
     L.append("")
@@ -163,16 +169,22 @@ def _render_design_spec(
     L.append("")
     L.append("## 布局提示")
     L.append("")
-    L.append(f"- 风格预设：`{style}` / 宽度 `{width}`（已写入脚手架；期刊规范优先于范本比例）。")
+    L.append(
+        f"- 风格预设：`{style}` / 宽度 `{width}`（已写入脚手架；期刊规范优先于范本比例）。"
+    )
     L.append(f"- 构图：{orient_hint}")
     L.append(f"- 明暗：{bright_hint}")
-    L.append(f"- 脚手架模板：`{template}`（换布局：编辑管线，或 `pysci-figures new --template ...`）。")
+    L.append(
+        f"- 脚手架模板：`{template}`（换布局：编辑管线，或 `pysci-figures new --template ...`）。"
+    )
     L.append("")
     L.append("## 下一步（视觉闭环）")
     L.append("")
     L.append(f"1. 编辑管线 `{_rel(pipeline)}`，把模板示例**替换为真实数据**。")
     L.append(f"2. `uv run pysci-figures build {_rel(figdir)}`")
-    L.append(f"3. `Read` 预览 `{_rel(figdir)}/out/{slug}_preview.png`，对照本范本迭代（配色/构图逼近，数据用真的）。")
+    L.append(
+        f"3. `Read` 预览 `{_rel(figdir)}/out/{slug}_preview.png`，对照本范本迭代（配色/构图逼近，数据用真的）。"
+    )
     L.append("")
     return "\n".join(L) + "\n"
 
@@ -181,7 +193,12 @@ def _render_design_spec(
 # bridge：脚手架 + design_spec.md（+ 可选调色板注册）
 # ---------------------------------------------------------------------------
 def _write_figdir_style(
-    figdir: Path, *, style: str, width: str, palette_name: str, aspect: float = _DEFAULT_ASPECT
+    figdir: Path,
+    *,
+    style: str,
+    width: str,
+    palette_name: str,
+    aspect: float = _DEFAULT_ASPECT,
 ) -> Path:
     """在图目录写一份 STYLE.yaml，绑定注册好的调色板（figdir 级优先于 figures 根级）。"""
     p = figdir / "STYLE.yaml"

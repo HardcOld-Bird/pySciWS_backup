@@ -42,7 +42,9 @@ def test_adaptive_sample_refines_near_singularity_without_touching():
 
 
 def test_adaptive_sample_ignores_out_of_range_singularities():
-    x = numerical.adaptive_sample((0.0, 1.0), singularities=[-5.0, 5.0], base_resolution=30)
+    x = numerical.adaptive_sample(
+        (0.0, 1.0), singularities=[-5.0, 5.0], base_resolution=30
+    )
     assert np.allclose(x, np.linspace(0.0, 1.0, 30))
 
 

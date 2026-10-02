@@ -81,13 +81,13 @@ def resolve_font(chain: list[str]) -> tuple[str | None, list[str]]:
 class Preset:
     """一套期刊排版规范。"""
 
-    name: str                     # 预设键（aps / nature）
-    label: str                    # 人类可读描述
-    font_chain: list[str]         # 字体回退链（首个可用者生效）
-    base_fontsize: float          # 正文字号（pt）
-    tick_fontsize: float          # 刻度字号（pt）
-    single_width_mm: float        # 单栏设计宽度
-    double_width_mm: float        # 双栏设计宽度
+    name: str  # 预设键（aps / nature）
+    label: str  # 人类可读描述
+    font_chain: list[str]  # 字体回退链（首个可用者生效）
+    base_fontsize: float  # 正文字号（pt）
+    tick_fontsize: float  # 刻度字号（pt）
+    single_width_mm: float  # 单栏设计宽度
+    double_width_mm: float  # 双栏设计宽度
     #: 与首选字体度量兼容、可接受的替代字体（解析到它们不算"降级"，audit 不告警）。
     accepted_substitutes: tuple[str, ...] = ()
     extra_rc: dict[str, object] = field(default_factory=dict)  # 预设专属 rcParams 覆盖

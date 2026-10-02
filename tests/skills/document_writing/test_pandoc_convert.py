@@ -59,9 +59,7 @@ def test_md_to_pptx_notes_and_content(tmp_path):
 
     slides = pptx_io.read_pptx(out)
     assert len(slides) >= 2
-    content = " ".join(
-        (s.title or "") + " " + " ".join(s.paragraphs) for s in slides
-    )
+    content = " ".join((s.title or "") + " " + " ".join(s.paragraphs) for s in slides)
     assert "Slide One" in content
     notes = " ".join((s.notes or "") for s in slides)
     assert "spoken words" in notes, "`::: notes` 应落入演讲者备注"

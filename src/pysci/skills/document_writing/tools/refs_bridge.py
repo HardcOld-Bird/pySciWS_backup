@@ -31,8 +31,24 @@ _TYPE_MAP = {
 }
 
 _STOPWORDS = {
-    "the", "a", "an", "on", "of", "in", "for", "and", "to", "with", "via",
-    "from", "by", "at", "toward", "towards", "non", "nonhermitian",
+    "the",
+    "a",
+    "an",
+    "on",
+    "of",
+    "in",
+    "for",
+    "and",
+    "to",
+    "with",
+    "via",
+    "from",
+    "by",
+    "at",
+    "toward",
+    "towards",
+    "non",
+    "nonhermitian",
 }
 
 
@@ -214,9 +230,7 @@ def export_bib(
     elif query:
         items = bridge.search_items(query, limit=limit)
     else:
-        items = bridge.list_items(
-            limit=limit, tag=tag, collection=collection
-        )
+        items = bridge.list_items(limit=limit, tag=tag, collection=collection)
 
     seen: set[str] = set()
     entries: list[str] = []

@@ -120,9 +120,12 @@ def read_counts(db_dir: Path) -> tuple[int | None, list[str]]:
     metas: list = []
     offset = 0
     while True:
-        batch = collection.get(
-            include=["metadatas"], limit=PAGE_SIZE, offset=offset
-        ).get("metadatas") or []
+        batch = (
+            collection.get(include=["metadatas"], limit=PAGE_SIZE, offset=offset).get(
+                "metadatas"
+            )
+            or []
+        )
         if not batch:
             break
         metas.extend(batch)

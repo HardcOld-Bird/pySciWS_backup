@@ -189,8 +189,14 @@ def lambdify_expr(
         result = raw_func(*args)
         # 如果结果是标量，广播到输入形状
         if np.isscalar(result) or (isinstance(result, np.ndarray) and result.ndim == 0):
-            broadcast_shape = np.broadcast_shapes(*(a.shape for a in args if hasattr(a, "shape")))
-            return np.full(broadcast_shape, result, dtype=complex if np.iscomplexobj(result) else float)
+            broadcast_shape = np.broadcast_shapes(
+                *(a.shape for a in args if hasattr(a, "shape"))
+            )
+            return np.full(
+                broadcast_shape,
+                result,
+                dtype=complex if np.iscomplexobj(result) else float,
+            )
         return np.asarray(result)
 
     return wrapped_func

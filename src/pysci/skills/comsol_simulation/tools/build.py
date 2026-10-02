@@ -65,7 +65,9 @@ def set_parameters(model: Any, mapping: Mapping[str, str]) -> None:
 # 几何
 # ---------------------------------------------------------------------------
 def geom_seq(model: Any, component: str = "comp1", geom: str = "geom1") -> Any:
-    return _safe(_call_if(_comp(model, component), "geom", default=None), geom, default=None)
+    return _safe(
+        _call_if(_comp(model, component), "geom", default=None), geom, default=None
+    )
 
 
 def geom_feature(
@@ -87,7 +89,13 @@ def geom_feature(
     return node
 
 
-def add_block(model: Any, tag: str, size: tuple[float, ...], pos: tuple[float, ...] = (), **kw: Any) -> Any:
+def add_block(
+    model: Any,
+    tag: str,
+    size: tuple[float, ...],
+    pos: tuple[float, ...] = (),
+    **kw: Any,
+) -> Any:
     props: dict[str, Any] = {"size": list(size)}
     if pos:
         props["pos"] = list(pos)
@@ -95,19 +103,29 @@ def add_block(model: Any, tag: str, size: tuple[float, ...], pos: tuple[float, .
     return geom_feature(model, tag, "Block", props)
 
 
-def add_rectangle(model: Any, tag: str, size: tuple[float, float], pos: tuple[float, float] = (0, 0), **kw: Any) -> Any:
+def add_rectangle(
+    model: Any,
+    tag: str,
+    size: tuple[float, float],
+    pos: tuple[float, float] = (0, 0),
+    **kw: Any,
+) -> Any:
     props: dict[str, Any] = {"size": list(size), "pos": list(pos)}
     props.update(kw)
     return geom_feature(model, tag, "Rectangle", props)
 
 
-def add_circle(model: Any, tag: str, r: float, pos: tuple[float, float] = (0, 0), **kw: Any) -> Any:
+def add_circle(
+    model: Any, tag: str, r: float, pos: tuple[float, float] = (0, 0), **kw: Any
+) -> Any:
     props: dict[str, Any] = {"r": r, "pos": list(pos)}
     props.update(kw)
     return geom_feature(model, tag, "Circle", props)
 
 
-def add_polygon(model: Any, tag: str, coords: list[tuple[float, float]], **kw: Any) -> Any:
+def add_polygon(
+    model: Any, tag: str, coords: list[tuple[float, float]], **kw: Any
+) -> Any:
     xs = [c[0] for c in coords]
     ys = [c[1] for c in coords]
     props: dict[str, Any] = {"source": "table", "tablex": xs, "tabley": ys}
@@ -115,7 +133,14 @@ def add_polygon(model: Any, tag: str, coords: list[tuple[float, float]], **kw: A
     return geom_feature(model, tag, "Polygon", props)
 
 
-def add_array(model: Any, tag: str, input_tags: list[str], counts: list[int], displ: list[list[float]], **kw: Any) -> Any:
+def add_array(
+    model: Any,
+    tag: str,
+    input_tags: list[str],
+    counts: list[int],
+    displ: list[list[float]],
+    **kw: Any,
+) -> Any:
     props: dict[str, Any] = {"input": input_tags, "xsize": counts[0] if counts else 1}
     if len(counts) > 1:
         props["ysize"] = counts[1]
@@ -170,7 +195,9 @@ def add_physics(
 ) -> Any:
     """添加物理场接口（如 ``("acpr","PressureAcousticsFrequency","geom1")``）。"""
     seq = _call_if(_comp(model, component), "physics", default=None)
-    node = _safe(seq.create, tag, ptype, geom, default=None) or _create_node(seq, tag, ptype)
+    node = _safe(seq.create, tag, ptype, geom, default=None) or _create_node(
+        seq, tag, ptype
+    )
     _set_props(node, props)
     return node
 
@@ -186,7 +213,11 @@ def add_physics_feature(
     selection: Mapping[str, list[int]] | None = None,
 ) -> Any:
     """在物理场下加边界/域条件特征（如 PML、BackgroundPressureField、NormalDisplacement）。"""
-    ph = _safe(_call_if(_comp(model, component), "physics", default=None), physics, default=None)
+    ph = _safe(
+        _call_if(_comp(model, component), "physics", default=None),
+        physics,
+        default=None,
+    )
     node = _create_node(ph, tag, ftype)
     _set_props(node, props)
     if node is not None and selection:
@@ -199,7 +230,9 @@ def add_physics_feature(
 # 网格
 # ---------------------------------------------------------------------------
 def mesh_seq(model: Any, component: str = "comp1", mesh: str = "mesh1") -> Any:
-    return _safe(_call_if(_comp(model, component), "mesh", default=None), mesh, default=None)
+    return _safe(
+        _call_if(_comp(model, component), "mesh", default=None), mesh, default=None
+    )
 
 
 def add_mesh(model: Any, tag: str = "mesh1", *, component: str = "comp1") -> Any:
@@ -223,7 +256,15 @@ def mesh_feature(
     return node
 
 
-def set_mesh_size(model: Any, hmax: float, hmin: float | None = None, *, component: str = "comp1", mesh: str = "mesh1", tag: str = "size") -> Any:
+def set_mesh_size(
+    model: Any,
+    hmax: float,
+    hmin: float | None = None,
+    *,
+    component: str = "comp1",
+    mesh: str = "mesh1",
+    tag: str = "size",
+) -> Any:
     props: dict[str, Any] = {"hmax": hmax, "custom": True}
     if hmin is not None:
         props["hmin"] = hmin
@@ -237,7 +278,9 @@ def run_mesh(model: Any, component: str = "comp1", mesh: str = "mesh1") -> None:
 # ---------------------------------------------------------------------------
 # 研究
 # ---------------------------------------------------------------------------
-def add_study(model: Any, tag: str = "std1", steps: list[tuple[str, str]] | None = None) -> Any:
+def add_study(
+    model: Any, tag: str = "std1", steps: list[tuple[str, str]] | None = None
+) -> Any:
     """创建研究；steps = [(stepTag, stepType), ...] 如 [("freq","Frequency")]。"""
     jm = _jmodel(model)
     study = _safe(jm.study().create, tag, default=None)
@@ -246,7 +289,9 @@ def add_study(model: Any, tag: str = "std1", steps: list[tuple[str, str]] | None
     return study
 
 
-def add_parametric(model: Any, study: str, param: str, values: list[str], tag: str = "param") -> Any:
+def add_parametric(
+    model: Any, study: str, param: str, values: list[str], tag: str = "param"
+) -> Any:
     """给研究加参数扫描步：``param`` 取 ``values``（COMSOL 表达式字符串列表）。"""
     jm = _jmodel(model)
     std = _safe(jm.study, study, default=None)
@@ -320,12 +365,18 @@ def recipe(
     description: str = "",
     params: Mapping[str, Any] | None = None,
     tags: tuple[str, ...] = (),
-) -> Callable[[Callable[[Any, Mapping[str, Any]], None]], Callable[[Any, Mapping[str, Any]], None]]:
+) -> Callable[
+    [Callable[[Any, Mapping[str, Any]], None]], Callable[[Any, Mapping[str, Any]], None]
+]:
     """装饰器：把 ``build(model, params)`` 纯函数注册为命名 recipe。"""
 
     def deco(fn: Callable[[Any, Mapping[str, Any]], None]):
         _REGISTRY[name] = Recipe(
-            name=name, fn=fn, description=description, params=dict(params or {}), tags=tags
+            name=name,
+            fn=fn,
+            description=description,
+            params=dict(params or {}),
+            tags=tags,
         )
         return fn
 

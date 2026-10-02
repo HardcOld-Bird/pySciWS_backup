@@ -30,10 +30,14 @@ def test_parse_log_errors():
     errors, warnings = latex_build.parse_log(SAMPLE_LOG)
     msgs = " ".join(e.message for e in errors)
     # file-line-error 风格
-    assert any(e.line == 42 and "Undefined control sequence" in e.message for e in errors)
+    assert any(
+        e.line == 42 and "Undefined control sequence" in e.message for e in errors
+    )
     assert any(e.file.endswith("intro.tex") and e.line == 17 for e in errors)
     # 经典 ! 风格 + 向下找 l.N 行号
-    assert any("Environment foobar undefined" in e.message and e.line == 57 for e in errors)
+    assert any(
+        "Environment foobar undefined" in e.message and e.line == 57 for e in errors
+    )
     assert len(errors) >= 3
     assert msgs  # 非空
 

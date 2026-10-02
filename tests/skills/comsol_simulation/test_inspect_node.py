@@ -81,7 +81,11 @@ def test_dump_node_state():
     assert info["label"].startswith("Background L")
     by_name = {row["name"]: row for row in info["properties"]}
     assert by_name["pamp"]["value"] == "pampL"
-    assert by_name["PressureFieldType"]["allowed"] == ["PlaneWave", "SphericalWave", "UserDefined"]
+    assert by_name["PressureFieldType"]["allowed"] == [
+        "PlaneWave",
+        "SphericalWave",
+        "UserDefined",
+    ]
     assert "allowed" not in by_name["pamp"]  # 非枚举属性不附 allowed
     assert info["selection"] == {"dim1": 2}
 

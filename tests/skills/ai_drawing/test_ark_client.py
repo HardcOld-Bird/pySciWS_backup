@@ -61,14 +61,14 @@ def test_normalize_images_none_is_empty():
 def test_normalize_images_accepts_single_string(tmp_path):
     p = tmp_path / "a.png"
     p.write_bytes(_bytes())
-    out = ark.normalize_images(str(p), model=V40)   # 单值自动包成列表
+    out = ark.normalize_images(str(p), model=V40)  # 单值自动包成列表
     assert len(out) == 1 and out[0].startswith("data:image/png")
 
 
 def test_normalize_images_passes_url_and_data_uri_through():
     src = ["https://x/a.png", "data:image/png;base64,AAAA", "  "]
     out = ark.normalize_images(src, model=V40)
-    assert out == ["https://x/a.png", "data:image/png;base64,AAAA"]   # 空串被丢弃
+    assert out == ["https://x/a.png", "data:image/png;base64,AAAA"]  # 空串被丢弃
 
 
 def test_normalize_images_enforces_pro_limit():
@@ -155,8 +155,17 @@ def test_build_payload_minimal():
     assert p["watermark"] is False
     assert p["response_format"] == "b64_json"
     # 未给的可选字段不该出现（避免把 None 发给云端）
-    for k in ("seed", "size", "width", "height", "image", "output_format",
-              "sequential_image_generation", "max_images", "tools"):
+    for k in (
+        "seed",
+        "size",
+        "width",
+        "height",
+        "image",
+        "output_format",
+        "sequential_image_generation",
+        "max_images",
+        "tools",
+    ):
         assert k not in p, k
 
 
@@ -234,7 +243,7 @@ def test_parse_response_mixed_ok_and_failed():
             {"b64_json": _b64(), "size": "4x4"},
             {"error": {"code": "InternalError", "message": "boom"}},
             {"url": "https://x/c.png", "size": "4x4"},
-            "not-a-dict",                       # 异常元素应被跳过而非崩掉
+            "not-a-dict",  # 异常元素应被跳过而非崩掉
         ],
         "usage": {"generated_images": 2, "output_tokens": 20, "total_tokens": 20},
     }
@@ -247,7 +256,7 @@ def test_parse_response_mixed_ok_and_failed():
 
 
 def test_generated_images_falls_back_to_ok_count():
-    body = {"data": [{"b64_json": _b64()}]}     # usage 缺失
+    body = {"data": [{"b64_json": _b64()}]}  # usage 缺失
     r = ark._parse_response(body, request={})
     assert r.generated_images == 1
 
@@ -319,7 +328,9 @@ class _FakeSession:
         self.calls: list[dict] = []
 
     def post(self, url, headers=None, json=None, timeout=None):
-        self.calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        self.calls.append(
+            {"url": url, "headers": headers, "json": json, "timeout": timeout}
+        )
         if self.exc is not None:
             raise self.exc
         return self.resp
@@ -338,8 +349,13 @@ def test_generate_without_key_raises():
 
 def test_generate_posts_to_images_endpoint():
     sess = _FakeSession(_FakeResp(body={"data": [{"b64_json": _b64()}]}))
-    ark.generate("p", api_key="sk-test", base_url="https://ark.example.com/api/v3/",
-                 session=sess, model=V40)
+    ark.generate(
+        "p",
+        api_key="sk-test",
+        base_url="https://ark.example.com/api/v3/",
+        session=sess,
+        model=V40,
+    )
     call = sess.calls[0]
     assert call["url"] == "https://ark.example.com/api/v3/images/generations"
     assert call["headers"]["Authorization"] == "Bearer sk-test"
@@ -349,27 +365,38 @@ def test_generate_posts_to_images_endpoint():
 
 
 def test_generate_parses_ok_response():
-    body = {"model": V40, "created": 1700000000,
-            "data": [{"b64_json": _b64(), "size": "4x4"}],
-            "usage": {"generated_images": 1, "total_tokens": 10}}
-    r = ark.generate("p", api_key="k", session=_FakeSession(_FakeResp(body=body)), model=V40)
+    body = {
+        "model": V40,
+        "created": 1700000000,
+        "data": [{"b64_json": _b64(), "size": "4x4"}],
+        "usage": {"generated_images": 1, "total_tokens": 10},
+    }
+    r = ark.generate(
+        "p", api_key="k", session=_FakeSession(_FakeResp(body=body)), model=V40
+    )
     assert r.model == V40 and r.created == 1700000000
     assert len(r.ok_images) == 1 and r.generated_images == 1
     assert r.request["prompt"] == "p"
 
 
 def test_generate_http_error_carries_hint():
-    sess = _FakeSession(_FakeResp(status_code=401,
-                                  body={"error": {"code": "InvalidApiKey", "message": "bad key"}}))
+    sess = _FakeSession(
+        _FakeResp(
+            status_code=401,
+            body={"error": {"code": "InvalidApiKey", "message": "bad key"}},
+        )
+    )
     with pytest.raises(ark.ArkError) as ei:
         ark.generate("p", api_key="k", session=sess, model=V40)
     err = ei.value
     assert err.status_code == 401 and err.code == "InvalidApiKey"
-    assert "ARK_API_KEY" in str(err)          # hint 已拼进 args，打印时直接可见
+    assert "ARK_API_KEY" in str(err)  # hint 已拼进 args，打印时直接可见
 
 
 def test_generate_http_error_without_json_body():
-    sess = _FakeSession(_FakeResp(status_code=502, body=None, text="<html>bad gateway</html>"))
+    sess = _FakeSession(
+        _FakeResp(status_code=502, body=None, text="<html>bad gateway</html>")
+    )
     with pytest.raises(ark.ArkError) as ei:
         ark.generate("p", api_key="k", session=sess, model=V40)
     assert "bad gateway" in str(ei.value)
@@ -377,7 +404,9 @@ def test_generate_http_error_without_json_body():
 
 def test_generate_body_level_error_raises():
     """HTTP 200 但 body 里带 error（方舟的一种失败形态）。"""
-    sess = _FakeSession(_FakeResp(body={"error": {"code": "QuotaExceeded", "message": "no quota"}}))
+    sess = _FakeSession(
+        _FakeResp(body={"error": {"code": "QuotaExceeded", "message": "no quota"}})
+    )
     with pytest.raises(ark.ArkError) as ei:
         ark.generate("p", api_key="k", session=sess, model=V40)
     assert "额度" in str(ei.value)
@@ -423,8 +452,9 @@ def test_list_models_without_key_raises():
 
 def test_list_models_gets_models_endpoint():
     sess = _FakeSession(_FakeResp(body={"data": [{"id": V50}, {"id": PRO}]}))
-    rows = ark.list_models(api_key="sk-test", base_url="https://ark.example.com/api/v3",
-                           session=sess)
+    rows = ark.list_models(
+        api_key="sk-test", base_url="https://ark.example.com/api/v3", session=sess
+    )
     assert sess.calls[0]["url"] == "https://ark.example.com/api/v3/models"
     assert sess.calls[0]["headers"]["Authorization"] == "Bearer sk-test"
     assert [r["id"] for r in rows] == [V50, PRO]
@@ -442,8 +472,12 @@ def test_list_models_bad_shape_raises():
 
 
 def test_list_models_http_error_carries_message():
-    sess = _FakeSession(_FakeResp(status_code=401,
-                                  body={"error": {"code": "InvalidApiKey", "message": "bad key"}}))
+    sess = _FakeSession(
+        _FakeResp(
+            status_code=401,
+            body={"error": {"code": "InvalidApiKey", "message": "bad key"}},
+        )
+    )
     with pytest.raises(ark.ArkError, match="bad key"):
         ark.list_models(api_key="k", session=sess)
 
@@ -454,7 +488,8 @@ def test_list_models_http_error_carries_message():
 def _resp(n=1, *, fmt="PNG", created=1700000000):
     b64 = _b64(fmt)
     return ark.ArkResponse(
-        model=V40, created=created,
+        model=V40,
+        created=created,
         images=[ark.ArkImage(index=i, b64_json=b64, size="4x4") for i in range(n)],
         usage={"generated_images": n},
         request={"model": V40, "prompt": "p"},
@@ -464,7 +499,7 @@ def _resp(n=1, *, fmt="PNG", created=1700000000):
 
 def test_save_images_single_uses_plain_stem(tmp_path):
     out = ark.save_images(_resp(1), tmp_path, stem="hero")
-    assert [p.name for p in out] == ["hero.png"]      # 后缀由真实字节判定
+    assert [p.name for p in out] == ["hero.png"]  # 后缀由真实字节判定
     assert out[0].read_bytes() == _bytes("PNG")
 
 
@@ -500,7 +535,9 @@ def test_save_images_creates_dest_dir(tmp_path):
 
 def test_save_snapshot_strips_b64_and_records_failures(tmp_path):
     r = _resp(1)
-    r.images.append(ark.ArkImage(index=1, error={"code": "InternalError", "message": "boom"}))
+    r.images.append(
+        ark.ArkImage(index=1, error={"code": "InternalError", "message": "boom"})
+    )
     p = ark.save_snapshot(r, tmp_path, stem="snap")
     assert p.name == "snap.json"
     import json
@@ -508,18 +545,22 @@ def test_save_snapshot_strips_b64_and_records_failures(tmp_path):
     doc = json.loads(p.read_text(encoding="utf-8"))
     assert set(doc) == {"request", "response", "usage", "failed", "saved_at"}
     assert "stripped" in doc["response"]["data"][0]["b64_json"]
-    assert doc["failed"] == [{"index": 1, "error": {"code": "InternalError", "message": "boom"}}]
+    assert doc["failed"] == [
+        {"index": 1, "error": {"code": "InternalError", "message": "boom"}}
+    ]
     assert doc["request"]["prompt"] == "p"
 
 
 def test_redact_payload_keeps_urls():
-    payload = {"image": ["https://x/a.png", "data:image/png;base64," + "A" * 500],
-               "prompt": "p"}
+    payload = {
+        "image": ["https://x/a.png", "data:image/png;base64," + "A" * 500],
+        "prompt": "p",
+    }
     out = ark._redact_payload(payload, keep=16)
     assert out["image"][0] == "https://x/a.png"
     assert out["image"][1].startswith("data:image/png;b")
     assert "chars>" in out["image"][1]
-    assert payload["image"][1] not in out["image"][1]   # 原对象未被就地改动
+    assert payload["image"][1] not in out["image"][1]  # 原对象未被就地改动
 
 
 def test_redact_payload_without_images():

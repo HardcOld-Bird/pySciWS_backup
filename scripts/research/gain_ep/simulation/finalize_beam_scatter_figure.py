@@ -24,6 +24,7 @@
   python finalize_beam_scatter_figure.py --export        # 全 6 case COMSOL 导出
   python finalize_beam_scatter_figure.py --export --only=nostruct   # 仅重导某对照
 """
+
 from __future__ import annotations
 
 import math
@@ -47,7 +48,15 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from build_beam_scatter_mph import OUT_MPH  # noqa: E402
 
-FIG_BASE = HERE.parents[3] / "data" / "research" / "1_gain_ep" / "article" / "figures" / "beam_scatter"
+FIG_BASE = (
+    HERE.parents[3]
+    / "data"
+    / "research"
+    / "1_gain_ep"
+    / "article"
+    / "figures"
+    / "beam_scatter"
+)
 RAW_DIR = FIG_BASE / "raw"
 
 # --- 几何常量（与 build 一致，单位 m）---
@@ -61,11 +70,15 @@ W1, H1 = 0.227 * D, 0.569 * LAMBDA
 W2, H2, O2 = 0.115 * D, 0.195 * LAMBDA, 0.503 * D
 W3, H3, O3 = 0.153 * D, 0.232 * LAMBDA, 0.688 * D
 
-POLAR_RMAX_ROW = {"full": 50.0, "nogain": 5.0, "nostruct": 10.0}  # 各行远场极径上界（Pa，实测取整）
-CMAP = "bwr"            # 发散色标（signed Re p_t）
+POLAR_RMAX_ROW = {
+    "full": 50.0,
+    "nogain": 5.0,
+    "nostruct": 10.0,
+}  # 各行远场极径上界（Pa，实测取整）
+CMAP = "bwr"  # 发散色标（signed Re p_t）
 
 CI_EP = "-0.0730324"
-SLIVER = "lambda/200"   # 管槽 1/3 薄片深度 = 等效整根移除（对照③）
+SLIVER = "lambda/200"  # 管槽 1/3 薄片深度 = 等效整根移除（对照③）
 # (对照名, 参数覆盖)；h1e/h3e 缺省 = h1/h3（结构存在）
 CASES: list[tuple[str, dict[str, str]]] = [
     ("full", {"ci": CI_EP}),
@@ -73,15 +86,19 @@ CASES: list[tuple[str, dict[str, str]]] = [
     ("nostruct", {"ci": CI_EP, "h1e": SLIVER, "h3e": SLIVER}),
 ]
 INCS = [("L", "1", "0"), ("R", "0", "1")]
-GROUP_LABEL = {"full": "(i) groove + gain", "nogain": "(ii) groove, no gain", "nostruct": "(iii) gain, no groove"}
+GROUP_LABEL = {
+    "full": "(i) groove + gain",
+    "nogain": "(ii) groove, no gain",
+    "nostruct": "(iii) gain, no groove",
+}
 
 # --- 菱形通道版式（数据坐标，米）---
-CH_ANG = (135.0, 45.0)     # 左/右输出通道方位角（内菱形中心）
-CH_R = 0.26                # 内菱形中心半径
-S_IN = 0.12                # 内菱形（尖角向上正方形）边长
+CH_ANG = (135.0, 45.0)  # 左/右输出通道方位角（内菱形中心）
+CH_R = 0.26  # 内菱形中心半径
+S_IN = 0.12  # 内菱形（尖角向上正方形）边长
 INSET_ANG = (125.0, 55.0)  # 左/右实验插图方位角（外菱形中心，偏外侧以免遮挡半圆）
-INSET_R = 0.55             # 外菱形中心半径（半圆外顶部角落）
-S_OUT = 0.17               # 外菱形边长（> S_IN → 放大插图）
+INSET_R = 0.55  # 外菱形中心半径（半圆外顶部角落）
+S_OUT = 0.17  # 外菱形边长（> S_IN → 放大插图）
 _LBL = dict(fontsize=7, va="center", bbox=dict(fc="w", alpha=0.6, ec="none", pad=0.5))
 
 
@@ -90,11 +107,15 @@ def polar(phi_deg: float, r: float) -> tuple[float, float]:
     return (X0 + r * math.cos(a), r * math.sin(a))
 
 
-def _rect_anchor(cx: float, cy: float, w: float, h: float, angle: float) -> tuple[float, float]:
+def _rect_anchor(
+    cx: float, cy: float, w: float, h: float, angle: float
+) -> tuple[float, float]:
     """Rectangle 绕未旋转左下角旋转；反解锚点使 (cx,cy) 为旋转后真中心（同 raster.apply_overlays）。"""
     a = math.radians(angle)
-    return (cx - (w / 2 * math.cos(a) - h / 2 * math.sin(a)),
-            cy - (w / 2 * math.sin(a) + h / 2 * math.cos(a)))
+    return (
+        cx - (w / 2 * math.cos(a) - h / 2 * math.sin(a)),
+        cy - (w / 2 * math.sin(a) + h / 2 * math.cos(a)),
+    )
 
 
 def _nice_ceil(x: float) -> float:
@@ -138,13 +159,26 @@ def export_cases(cases: list[tuple[str, dict[str, str]]]) -> None:
                 for pg in ("pg_field", "pg_far"):
                     jm.result(pg).set("data", ds)
             print(f"== export field csv {tag} ==")
-            print(_export.export_data(model, ds or "dset1", RAW_DIR / f"field_{tag}.csv",
-                                      expr="real(acpr.p_t)").report())
+            print(
+                _export.export_data(
+                    model,
+                    ds or "dset1",
+                    RAW_DIR / f"field_{tag}.csv",
+                    expr="real(acpr.p_t)",
+                ).report()
+            )
             # 远场以该行独立极径重导（弱组不被强组压没）
             print(f"== export far png {tag} (rmax={POLAR_RMAX_ROW[cfg]}) ==")
-            print(_export.export_image(model, "pg_far", RAW_DIR / f"far_{tag}.png",
-                                       polar_rmax=(0.0, POLAR_RMAX_ROW[cfg]), clean=True,
-                                       sidecar=False).report())
+            print(
+                _export.export_image(
+                    model,
+                    "pg_far",
+                    RAW_DIR / f"far_{tag}.png",
+                    polar_rmax=(0.0, POLAR_RMAX_ROW[cfg]),
+                    clean=True,
+                    sidecar=False,
+                ).report()
+            )
     client.disconnect()
 
 
@@ -167,7 +201,7 @@ def _grooves(cfg: str) -> list[tuple[float, float, float]]:
 def _in_fluid(xy2d: np.ndarray, cfg: str) -> np.ndarray:
     """物理流体域判据（半圆 y>=0 ∪ 各管槽矩形）；用于遮罩 Delaunay 在固体壁内的架桥伪影。"""
     x, y = xy2d[:, 0], xy2d[:, 1]
-    inside = (y >= 0) & ((x - X0) ** 2 + y ** 2 <= R ** 2)
+    inside = (y >= 0) & ((x - X0) ** 2 + y**2 <= R**2)
     for gx, gw, gd in _grooves(cfg):
         inside |= (x >= gx) & (x <= gx + gw) & (y >= -gd) & (y < 0)
     return inside
@@ -197,22 +231,43 @@ def add_channel_insets(ax, xy: np.ndarray, vals: np.ndarray, vmax: float) -> Non
     for k in range(2):
         icx, icy = polar(CH_ANG[k], CH_R)
         ox, oy = polar(INSET_ANG[k], INSET_R)
-        side = -1 if k == 0 else 1          # 左通道标注放左侧，右通道放右侧
+        side = -1 if k == 0 else 1  # 左通道标注放左侧，右通道放右侧
         ha = "right" if side < 0 else "left"
         # 内菱形（尖角向上正方形）= 仿真通道框
-        ax.add_patch(Rectangle(_rect_anchor(icx, icy, S_IN, S_IN, 45.0), S_IN, S_IN,
-                               angle=45.0, fill=False, ec="k", lw=1.2))
+        ax.add_patch(
+            Rectangle(
+                _rect_anchor(icx, icy, S_IN, S_IN, 45.0),
+                S_IN,
+                S_IN,
+                angle=45.0,
+                fill=False,
+                ec="k",
+                lw=1.2,
+            )
+        )
         # 裁剪内菱形自身方域（45° 坐标系下的正方形）→ 放大 → 平移到外菱形
         local = (xy - np.array([icx, icy])) @ rotm45.T
         m = (np.abs(local[:, 0]) <= S_IN / 2) & (np.abs(local[:, 1]) <= S_IN / 2)
         if m.sum() >= 3:
             zoom = S_OUT / S_IN
             w = (local[m] * zoom) @ rot45.T + np.array([ox, oy])
-            diamond = Rectangle(_rect_anchor(ox, oy, S_OUT, S_OUT, 45.0), S_OUT, S_OUT,
-                                angle=45.0, fill=False, ec="k", lw=1.2)
+            diamond = Rectangle(
+                _rect_anchor(ox, oy, S_OUT, S_OUT, 45.0),
+                S_OUT,
+                S_OUT,
+                angle=45.0,
+                fill=False,
+                ec="k",
+                lw=1.2,
+            )
             ax.add_patch(diamond)
-            coll = ax.tripcolor(Triangulation(w[:, 0], w[:, 1]), vals[m],
-                                cmap=CMAP, norm=norm, shading="gouraud")
+            coll = ax.tripcolor(
+                Triangulation(w[:, 0], w[:, 1]),
+                vals[m],
+                cmap=CMAP,
+                norm=norm,
+                shading="gouraud",
+            )
             coll.set_clip_path(diamond)
         # 两条虚线：自内菱形左/右两顶点 → 外菱形左/右两顶点
         ax.plot([icx - h_in, ox - h_out], [icy, oy], ls="--", lw=0.8, color="k")
@@ -234,13 +289,18 @@ def compose_combined() -> Path:
 
     # 每行独立场色标上界（99 分位，稳健）
     vmax_row = {
-        cfg: _nice_ceil(np.percentile(
-            np.concatenate([np.abs(data[f"{cfg}_{i}"][1]) for i in ("L", "R")]), 99))
+        cfg: _nice_ceil(
+            np.percentile(
+                np.concatenate([np.abs(data[f"{cfg}_{i}"][1]) for i in ("L", "R")]), 99
+            )
+        )
         for cfg, _ov in CASES
     }
 
     fig = plt.figure(figsize=(17, 11.5))
-    gs = fig.add_gridspec(3, 5, width_ratios=[1, 1, 1, 1, 0.055], wspace=0.10, hspace=0.22)
+    gs = fig.add_gridspec(
+        3, 5, width_ratios=[1, 1, 1, 1, 0.055], wspace=0.10, hspace=0.22
+    )
 
     letter = ord("a")
     for ri, (cfg, _ov) in enumerate(CASES):
@@ -253,8 +313,15 @@ def compose_combined() -> Path:
             ax_f = fig.add_subplot(gs[ri, 2 * ci])
             if row_first_ax is None:
                 row_first_ax = ax_f
-            _field.add_field_panel(ax_f, xy, vals, cmap=CMAP, vmin=-vmax, vmax=vmax,
-                                   keep_triangle=lambda c: _in_fluid(c, cfg))
+            _field.add_field_panel(
+                ax_f,
+                xy,
+                vals,
+                cmap=CMAP,
+                vmin=-vmax,
+                vmax=vmax,
+                keep_triangle=lambda c: _in_fluid(c, cfg),
+            )
             ax_f.set_aspect("equal")
             ax_f.set_axis_off()
             draw_metasurface(ax_f, cfg)
@@ -264,20 +331,40 @@ def compose_combined() -> Path:
             ax_p.imshow(raster.read_raster(RAW_DIR / f"far_{tag}.png"), aspect="equal")
             ax_p.set_axis_off()
             for ax in (ax_f, ax_p):
-                ax.text(0.02, 0.98, f"({chr(letter)})", transform=ax.transAxes,
-                        va="top", ha="left", fontsize=11, fontweight="bold")
+                ax.text(
+                    0.02,
+                    0.98,
+                    f"({chr(letter)})",
+                    transform=ax.transAxes,
+                    va="top",
+                    ha="left",
+                    fontsize=11,
+                    fontweight="bold",
+                )
                 letter += 1
             if ri == 0:
                 ax_f.set_title(f"{inc}-incidence  field  $|p_t|$", fontsize=11)
-                ax_p.set_title(f"{inc}-incidence  far-field  $|p_{{ext}}|$", fontsize=11)
+                ax_p.set_title(
+                    f"{inc}-incidence  far-field  $|p_{{ext}}|$", fontsize=11
+                )
         # 该行 colorbar（最右列，与行对齐）
         cax = fig.add_subplot(gs[ri, 4])
-        cbar = fig.colorbar(ScalarMappable(norm=Normalize(-vmax, vmax), cmap=CMAP), cax=cax)
+        cbar = fig.colorbar(
+            ScalarMappable(norm=Normalize(-vmax, vmax), cmap=CMAP), cax=cax
+        )
         cbar.set_label(r"Re $p_t$ (Pa)", fontsize=9)
         cax.set_title(f"±{vmax:.0f}", fontsize=8)
         # 行标签置于该行第一个场图左侧
-        row_first_ax.text(-0.06, 0.5, GROUP_LABEL[cfg], transform=row_first_ax.transAxes,
-                          rotation=90, va="center", ha="center", fontsize=11)
+        row_first_ax.text(
+            -0.06,
+            0.5,
+            GROUP_LABEL[cfg],
+            transform=row_first_ax.transAxes,
+            rotation=90,
+            va="center",
+            ha="center",
+            fontsize=11,
+        )
 
     fig.suptitle(
         "Beam scattering at the gain EP: 3 controls × L/R incidence\n"

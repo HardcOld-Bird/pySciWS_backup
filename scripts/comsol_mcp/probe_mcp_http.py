@@ -91,7 +91,11 @@ def probe_origin(origin: str | None) -> tuple[str, str, str]:
                 except httpx.ReadTimeout:
                     first = "<no body within 6s>"
                 body = " ".join(first.split())[:100]
-                return str(resp.status_code), str(resp.headers.get("content-type", ""))[:40], body
+                return (
+                    str(resp.status_code),
+                    str(resp.headers.get("content-type", ""))[:40],
+                    body,
+                )
     except Exception as exc:  # noqa: BLE001 - a probe must report, never raise
         return "ERR", type(exc).__name__, " ".join(str(exc).split())[:100]
 
@@ -115,7 +119,9 @@ async def handshake() -> None:
 
 async def report(session) -> None:  # noqa: ANN001 - the session class is imported dynamically above
     info = await session.initialize()
-    print(f"INIT_OK       : server={info.serverInfo.name!r} version={info.serverInfo.version!r}")
+    print(
+        f"INIT_OK       : server={info.serverInfo.name!r} version={info.serverInfo.version!r}"
+    )
     tools = await session.list_tools()
     names = [t.name for t in tools.tools]
     print(f"TOOLS         : {len(names)}")
@@ -135,7 +141,9 @@ def main() -> int:
     try:
         asyncio.run(handshake())
     except Exception as exc:  # noqa: BLE001 - report, don't traceback
-        print(f"HANDSHAKE_ERR : {type(exc).__name__}: {' '.join(str(exc).split())[:300]}")
+        print(
+            f"HANDSHAKE_ERR : {type(exc).__name__}: {' '.join(str(exc).split())[:300]}"
+        )
         return 2
     return 0
 

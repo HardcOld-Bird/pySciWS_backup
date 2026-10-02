@@ -49,7 +49,9 @@ def fake_settings(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # transport ↔ 端点映射
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("transport,path", [("sse", "/sse"), ("streamable-http", "/mcp")])
+@pytest.mark.parametrize(
+    "transport,path", [("sse", "/sse"), ("streamable-http", "/mcp")]
+)
 def test_endpoint_path_mapping(transport, path):
     assert m.endpoint_path(transport) == path
 
@@ -66,7 +68,9 @@ def test_endpoint_path_rejects_non_managed_transport(bad):
 
 def test_mcp_url_and_registration_json(fake_settings):
     assert m.mcp_url() == "http://127.0.0.1:8765/sse"
-    assert m.mcp_url("streamable-http", "localhost", 8766) == "http://localhost:8766/mcp"
+    assert (
+        m.mcp_url("streamable-http", "localhost", 8766) == "http://localhost:8766/mcp"
+    )
     block = json.loads(m.mcp_registration_json())
     entry = block["mcpServers"]["comsol"]
     # type 恒为 'sse'：官方文档说 Qoder 会从 URL 自动识别 Streamable HTTP。
@@ -183,7 +187,9 @@ def test_write_launcher_injects_env_and_redirects_log(fake_settings):
     assert text.startswith("@echo off")
     # 解析成 dict 后做**整值精确比较**。切勿用 substring 断言（"=6.4" in text）：
     # 它会被 "=6.4.0" 蒙混过关，而那正是 mph 拒收、导致 comsol_start 必然失败的格式。
-    injected = dict(line[4:].split("=", 1) for line in text.splitlines() if line.startswith("set "))
+    injected = dict(
+        line[4:].split("=", 1) for line in text.splitlines() if line.startswith("set ")
+    )
     assert injected["COMSOL_MCP_TRANSPORT"] == "sse"
     assert injected["COMSOL_MCP_HOST"] == "127.0.0.1"
     assert injected["COMSOL_MCP_PORT"] == "8765"
@@ -257,7 +263,9 @@ def test_cmd_license_reports_free(monkeypatch, capsys):
 
 
 def test_cmd_license_lists_holders(monkeypatch, capsys):
-    holders = [{"pid": 24928, "exe": "python.exe", "jvm": r"D:\comsol\jre\bin\server\jvm.dll"}]
+    holders = [
+        {"pid": 24928, "exe": "python.exe", "jvm": r"D:\comsol\jre\bin\server\jvm.dll"}
+    ]
     monkeypatch.setattr(simulation._mcp, "license_holders", lambda: holders)
     assert simulation.main(["license"]) == 0
     out = capsys.readouterr().out

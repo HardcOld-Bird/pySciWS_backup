@@ -150,7 +150,9 @@ MINERU_MODEL_VERSION = "vlm"  # vlm：公式/表格质量最好（推荐）
 MINERU_IS_OCR = True  # 强制 OCR：确保图片/扫描公式也被识别（数字版可改 False）
 MINERU_POLL_INTERVAL = 8  # 轮询间隔（秒）
 MINERU_POLL_TIMEOUT = 900  # 轮询总超时（秒）
-MINERU_MAX_PAGES = 200  # MinerU 单文件页数硬上限（超出报 "number of pages exceeds limit"）
+MINERU_MAX_PAGES = (
+    200  # MinerU 单文件页数硬上限（超出报 "number of pages exceeds limit"）
+)
 MINERU_CHUNK_PAGES = 199  # 自动分页的每块页数（留 1 页余量，确保严格 <200）
 
 

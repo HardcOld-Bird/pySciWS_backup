@@ -43,7 +43,9 @@ def _read_vtk_xyv(path: Path, scalars: str | None) -> tuple[np.ndarray, np.ndarr
     return pts[:, :2], vals
 
 
-def _read_csv_xyv(path: Path, cols: tuple[int, int, int]) -> tuple[np.ndarray, np.ndarray]:
+def _read_csv_xyv(
+    path: Path, cols: tuple[int, int, int]
+) -> tuple[np.ndarray, np.ndarray]:
     """读 COMSOL/通用 CSV/TXT → (xy Nx2, values N)。
 
     稳健处理 COMSOL 导出格式：跳过 ``%`` 注释行、跳过非数值的列名行，数据行按逗号或
@@ -64,7 +66,9 @@ def _read_csv_xyv(path: Path, cols: tuple[int, int, int]) -> tuple[np.ndarray, n
     arr = np.asarray(rows, dtype=float)
     xi, yi, vi = cols
     if arr.shape[1] <= max(xi, yi, vi):
-        raise ValueError(f"CSV 列数不足（需列索引 {cols}，实有 {arr.shape[1]} 列）：{path}")
+        raise ValueError(
+            f"CSV 列数不足（需列索引 {cols}，实有 {arr.shape[1]} 列）：{path}"
+        )
     return arr[:, [xi, yi]], arr[:, vi]
 
 
@@ -121,7 +125,9 @@ def add_field_panel(
 
     xy = np.asarray(xy, dtype=float)
     vals = np.asarray(values, dtype=float).ravel()
-    triang = Triangulation(xy[:, 0], xy[:, 1], None if triangles is None else np.asarray(triangles))
+    triang = Triangulation(
+        xy[:, 0], xy[:, 1], None if triangles is None else np.asarray(triangles)
+    )
     if keep_triangle is not None:
         cent = xy[triang.triangles].mean(axis=1)
         keep = np.asarray(keep_triangle(cent), dtype=bool)
@@ -158,7 +164,14 @@ def render_field_panel(
     xy, vals = load_field_points(source, scalars=scalars, cols=cols)
     fig, ax = plt.subplots(figsize=figsize)
     mappable = add_field_panel(
-        ax, xy, vals, cmap=cmap, vmin=vmin, vmax=vmax, triangles=triangles, shading=shading
+        ax,
+        xy,
+        vals,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        triangles=triangles,
+        shading=shading,
     )
     ax.set_aspect("equal")
     if axis_off:

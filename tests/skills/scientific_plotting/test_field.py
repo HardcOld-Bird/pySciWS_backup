@@ -56,8 +56,12 @@ def test_add_field_panel_returns_mappable(tmp_path):
 
 def test_render_field_panel_to_png(tmp_path):
     out = field.render_field_panel(
-        _synth_field_csv(tmp_path / "f.csv"), tmp_path / "panel.png",
-        cmap="bwr", vmin=0, vmax=1, dpi=80,
+        _synth_field_csv(tmp_path / "f.csv"),
+        tmp_path / "panel.png",
+        cmap="bwr",
+        vmin=0,
+        vmax=1,
+        dpi=80,
     )
     assert out.exists() and out.stat().st_size > 0
 
@@ -74,9 +78,13 @@ def test_read_vtk(tmp_path):
 
 def test_compose_grid_field_panel_strict_colorbar(tmp_path):
     spec = {
-        "rows": 1, "cols": 1, "figsize": (5, 4),
+        "rows": 1,
+        "cols": 1,
+        "figsize": (5, 4),
         "colorbar": {"cmap": "bwr", "vmin": 0, "vmax": 1, "label": "p"},
-        "panels": [{"kind": "field", "source": str(_synth_field_csv(tmp_path / "f.csv"))}],
+        "panels": [
+            {"kind": "field", "source": str(_synth_field_csv(tmp_path / "f.csv"))}
+        ],
     }
     res = raster.compose_grid(spec)
     assert res.field_axes and res.field_axes[0] is res.axes[0][0]

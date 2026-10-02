@@ -25,16 +25,16 @@ from pysci.research.gain_ep.theory import cmt_reflection_s_matrix as cmt
 from pysci.skills.scientific_plotting.tools import palette
 
 # --- 物理/数值常量 -------------------------------------------------------
-CR = 1.0081            # 第二管槽归一化复声速实部
-CI_LOSS_EP = 0.0745    # 损耗 EP 位置（参考）
-CI_GAIN_SS = -0.0740   # 增益谱奇点（极点）位置（参考）
-HALF = 0.025           # EP/极点两侧的 |ci| 半扫描宽度
-N_PTS = 200            # 远场 linspace 采样点数（验证正确性优先，取轻量）
-N_NEAR = 100           # 中心附近 geomspace 加密点数（每侧）
-D_MIN = 1e-4           # 距中心最近采样距离：使发散回转点 |λ|~几十落在框内，
-                       # 复现参考图闭合双曲钩形；过密会冲穿轴框留下断臂
-N_ORDERS, K_MODES = 8, 25         # CMT 截断（形状图够用；精算见理论脚本）
-Z_STRETCH = 1.8        # 3D box 竖向拉伸（竖轴显示 = 水平 × Z_STRETCH）
+CR = 1.0081  # 第二管槽归一化复声速实部
+CI_LOSS_EP = 0.0745  # 损耗 EP 位置（参考）
+CI_GAIN_SS = -0.0740  # 增益谱奇点（极点）位置（参考）
+HALF = 0.025  # EP/极点两侧的 |ci| 半扫描宽度
+N_PTS = 200  # 远场 linspace 采样点数（验证正确性优先，取轻量）
+N_NEAR = 100  # 中心附近 geomspace 加密点数（每侧）
+D_MIN = 1e-4  # 距中心最近采样距离：使发散回转点 |λ|~几十落在框内，
+# 复现参考图闭合双曲钩形；过密会冲穿轴框留下断臂
+N_ORDERS, K_MODES = 8, 25  # CMT 截断（形状图够用；精算见理论脚本）
+Z_STRETCH = 1.8  # 3D box 竖向拉伸（竖轴显示 = 水平 × Z_STRETCH）
 
 SLUG = "ep_eigval_3d"
 
@@ -48,7 +48,7 @@ def _s_matrix(cr: float, ci: float):
 def _s_eigs_from_S(S):
     """由 S 得原始本征值 (λ+, λ-) 与归一化 N 本征值 (μ+, μ-)。"""
     t = 0.5 * (S[0, 0] + S[1, 1])
-    s = np.sqrt(S[0, 1] * S[1, 0])          # 主支 sqrt，保证分支连续
+    s = np.sqrt(S[0, 1] * S[1, 0])  # 主支 sqrt，保证分支连续
     dom = S[0, 1] if abs(S[0, 1]) >= abs(S[1, 0]) else S[1, 0]
     mu = s / dom
     return t + s, t - s, mu, -mu
@@ -56,18 +56,22 @@ def _s_eigs_from_S(S):
 
 def _refine_loss_ep(cr0, ci0):
     """2D 精定位损耗 EP：S21(cr,ci)=0（复方程 → 2 实方程）。"""
+
     def F(x):
         S = _s_matrix(x[0], x[1])
         return [S[1, 0].real, S[1, 0].imag]
+
     r = root(F, [cr0, ci0], method="hybr")
     return float(r.x[0]), float(r.x[1])
 
 
 def _refine_gain_pole(cr0, ci0):
     """2D 精定位增益极点：1/S21(cr,ci)=0。"""
+
     def G(x):
         inv = 1.0 / _s_matrix(x[0], x[1])[1, 0]
         return [inv.real, inv.imag]
+
     r = root(G, [cr0, ci0], method="hybr")
     return float(r.x[0]), float(r.x[1])
 
@@ -87,7 +91,7 @@ def _compute_curves():
     cr_l, ci_l_ep = _refine_loss_ep(CR, CI_LOSS_EP)
     cr_g, ci_g_ep = _refine_gain_pole(CR, CI_GAIN_SS)
 
-    ci_loss = _sweep(ci_l_ep, include_center=True)   # 精确命中 EP
+    ci_loss = _sweep(ci_l_ep, include_center=True)  # 精确命中 EP
     ci_gain = _sweep(ci_g_ep, include_center=False)  # 极点奇异，不取精确点
 
     def _track(prev, p, m):
@@ -121,12 +125,18 @@ def _compute_curves():
         lp_g[i], lm_g[i], mp_g[i], mm_g[i] = p, m, mp, mm
 
     return {
-        "ci_loss": ci_loss, "ci_gain": ci_gain,
-        "lam_p_loss": lp_l, "lam_m_loss": lm_l,
-        "lam_p_gain": lp_g, "lam_m_gain": lm_g,
-        "mu_p_gain": mp_g, "mu_m_gain": mm_g,
-        "cr_l": np.array([cr_l]), "ci_l_ep": np.array([ci_l_ep]),
-        "cr_g": np.array([cr_g]), "ci_g_ep": np.array([ci_g_ep]),
+        "ci_loss": ci_loss,
+        "ci_gain": ci_gain,
+        "lam_p_loss": lp_l,
+        "lam_m_loss": lm_l,
+        "lam_p_gain": lp_g,
+        "lam_m_gain": lm_g,
+        "mu_p_gain": mp_g,
+        "mu_m_gain": mm_g,
+        "cr_l": np.array([cr_l]),
+        "ci_l_ep": np.array([ci_l_ep]),
+        "cr_g": np.array([cr_g]),
+        "ci_g_ep": np.array([ci_g_ep]),
     }
 
 
@@ -178,7 +188,7 @@ def _panel(ax, xp, yp, zp, xm, ym, zm, xlim=None, ylim=None, invert_z=False):
         ax.set_ylim(*ylim)
     if invert_z:
         ax.invert_zaxis()
-    ax.set_box_aspect((1, 1, Z_STRETCH))   # 竖向拉伸，便于观察简并/劈裂
+    ax.set_box_aspect((1, 1, Z_STRETCH))  # 竖向拉伸，便于观察简并/劈裂
     ax.view_init(elev=20, azim=-60)
     ax.tick_params(labelsize=6, pad=0)
 
@@ -191,14 +201,24 @@ def build_figure(style=None, research_dir=None, **kwargs):
     fig = plt.figure()
     fig.set_size_inches(6.693, 6.0)  # 三幅 3D 面板需更高画幅
     # 显式轴位（导出为 bbox 紧裁，tight_layout 对 3D 不可靠）
-    rects = [(0.01, 0.10, 0.30, 0.80), (0.35, 0.10, 0.30, 0.80), (0.69, 0.10, 0.30, 0.80)]
+    rects = [
+        (0.01, 0.10, 0.30, 0.80),
+        (0.35, 0.10, 0.30, 0.80),
+        (0.69, 0.10, 0.30, 0.80),
+    ]
 
     # (a) 镜像损耗 EP：原始 S，本征值合并；竖轴反向以便与 (c) 比较
     ax1 = fig.add_axes(rects[0], projection="3d")
-    _panel(ax1,
-           d["lam_p_loss"].real, d["lam_p_loss"].imag, ci_l,
-           d["lam_m_loss"].real, d["lam_m_loss"].imag, ci_l,
-           invert_z=True)
+    _panel(
+        ax1,
+        d["lam_p_loss"].real,
+        d["lam_p_loss"].imag,
+        ci_l,
+        d["lam_m_loss"].real,
+        d["lam_m_loss"].imag,
+        ci_l,
+        invert_z=True,
+    )
     ax1.set_title("(a) Loss EP: original $S$", fontsize=8)
     ax1.set_xlabel(r"Re($\lambda$)", fontsize=7)
     ax1.set_ylabel(r"Im($\lambda$)", fontsize=7)
@@ -214,10 +234,17 @@ def build_figure(style=None, research_dir=None, **kwargs):
         return np.insert(np.asarray(a, dtype=float), k, np.nan)
 
     ci_gb = np.insert(ci_g, k, np.nan)
-    _panel(ax2,
-           _brk(d["lam_p_gain"].real), _brk(d["lam_p_gain"].imag), ci_gb,
-           _brk(d["lam_m_gain"].real), _brk(d["lam_m_gain"].imag), ci_gb,
-           xlim=(-60, 60), ylim=(-60, 60))
+    _panel(
+        ax2,
+        _brk(d["lam_p_gain"].real),
+        _brk(d["lam_p_gain"].imag),
+        ci_gb,
+        _brk(d["lam_m_gain"].real),
+        _brk(d["lam_m_gain"].imag),
+        ci_gb,
+        xlim=(-60, 60),
+        ylim=(-60, 60),
+    )
     ax2.set_title("(b) Gain EP: original $S$", fontsize=8)
     ax2.set_xlabel(r"Re($\lambda$)", fontsize=7)
     ax2.set_ylabel(r"Im($\lambda$)", fontsize=7)
@@ -225,9 +252,15 @@ def build_figure(style=None, research_dir=None, **kwargs):
 
     # (c) gain EP 归一化 S'：伪损耗 EP，本征值合并于 0
     ax3 = fig.add_axes(rects[2], projection="3d")
-    _panel(ax3,
-           d["mu_p_gain"].real, d["mu_p_gain"].imag, ci_g,
-           d["mu_m_gain"].real, d["mu_m_gain"].imag, ci_g)
+    _panel(
+        ax3,
+        d["mu_p_gain"].real,
+        d["mu_p_gain"].imag,
+        ci_g,
+        d["mu_m_gain"].real,
+        d["mu_m_gain"].imag,
+        ci_g,
+    )
     ax3.set_title(r"(c) Gain EP: normalized $S'$ (pseudo-loss)", fontsize=8)
     ax3.set_xlabel(r"Re($\lambda'$)", fontsize=7)
     ax3.set_ylabel(r"Im($\lambda'$)", fontsize=7)

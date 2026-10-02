@@ -113,7 +113,11 @@ def cmd_diagnose(args: argparse.Namespace) -> int:
         binds: dict[str, Any] = {}
         for pg in _inspect._tags(rn):
             node = _inspect._safe(jm.result, pg, default=None)
-            binds[pg] = _inspect._safe(node.getString, "data", default=None) if node is not None else None
+            binds[pg] = (
+                _inspect._safe(node.getString, "data", default=None)
+                if node is not None
+                else None
+            )
         return _inspect.dump_tree(m), _inspect.inventory(m), dsets, binds
 
     tree, inv, dsets, binds = _with_model(args.mph, args.cores, fn)
@@ -141,14 +145,24 @@ def cmd_server_start(args: argparse.Namespace) -> int:
     print(
         f"[server] 常驻 COMSOL server 已就绪：host={info['host']} port={info['port']} pid={info['pid']}"
     )
-    print("[server] 后续命令加 --connect-port " + str(info["port"]) + " 即可复用此 JVM（免冷启动）。")
-    print("[server] ⚠ 单 license：勿与交互式 COMSOL GUI 同时运行；用完执行 `simulation server stop`。")
+    print(
+        "[server] 后续命令加 --connect-port "
+        + str(info["port"])
+        + " 即可复用此 JVM（免冷启动）。"
+    )
+    print(
+        "[server] ⚠ 单 license：勿与交互式 COMSOL GUI 同时运行；用完执行 `simulation server stop`。"
+    )
     return 0
 
 
 def cmd_server_stop(args: argparse.Namespace) -> int:
     stopped = _session.stop_persistent_server()
-    print("[server] 已终止常驻 server 并清理状态文件。" if stopped else "[server] 无常驻 server 状态文件（未运行）。")
+    print(
+        "[server] 已终止常驻 server 并清理状态文件。"
+        if stopped
+        else "[server] 无常驻 server 状态文件（未运行）。"
+    )
     return 0
 
 
@@ -190,7 +204,9 @@ def _print_mcp_status(info: dict[str, Any], *, show_json: bool = False) -> None:
     print(f"running       : {info['running']}  -- {info['probe_verdict']}")
     print(f"pid           : {info['pid']}  ({pid_note})")
     print(f"detached      : {detach_note}")
-    print(f"holds_license : {info['holds_license']}  -- 该进程是否已加载 jvm.dll（= COMSOL 是否已被惰性启动）")
+    print(
+        f"holds_license : {info['holds_license']}  -- 该进程是否已加载 jvm.dll（= COMSOL 是否已被惰性启动）"
+    )
     holders = info.get("license_holders") or []
     if holders:
         who = ", ".join(f"PID {h['pid']} ({h['exe']})" for h in holders)
@@ -228,7 +244,9 @@ def cmd_mcp_ensure(args: argparse.Namespace) -> int:
     if args.json:
         return 0
     if info.get("action") == "started":
-        print("[mcp] Qoder 的 mcp.json 应把 comsol 注册为 URL 型（否则 Qoder 仍会按 stdio 派生并抢 license）：")
+        print(
+            "[mcp] Qoder 的 mcp.json 应把 comsol 注册为 URL 型（否则 Qoder 仍会按 stdio 派生并抢 license）："
+        )
         print(info["registration_json"])
     _mcp_license_hint(info)
     return 0
@@ -244,11 +262,17 @@ def cmd_mcp_status(args: argparse.Namespace) -> int:
 
 def cmd_mcp_stop(args: argparse.Namespace) -> int:
     stopped = _mcp.stop_mcp_server()
-    print("[mcp] 已终止服务端并清理状态文件。" if stopped else "[mcp] 没有发现运行中的服务端（端口无监听）。")
+    print(
+        "[mcp] 已终止服务端并清理状态文件。"
+        if stopped
+        else "[mcp] 没有发现运行中的服务端（端口无监听）。"
+    )
     holders = _mcp.license_holders()
     if holders:
         who = ", ".join(f"PID {h['pid']} ({h['exe']})" for h in holders)
-        print(f"[mcp] ⚠ license 仍被占用：{who}（可能是 GUI / comsolmphserver / 其它 MCP 实例）。")
+        print(
+            f"[mcp] ⚠ license 仍被占用：{who}（可能是 GUI / comsolmphserver / 其它 MCP 实例）。"
+        )
     else:
         print("[mcp] license 已空闲。")
     return 0
@@ -285,7 +309,9 @@ def cmd_inspect_tree(args: argparse.Namespace) -> int:
 def cmd_inspect_params(args: argparse.Namespace) -> int:
     def fn(m):
         params = _inspect.list_parameters(m)
-        return "\n".join(f"{k} = {v['value']}  # {v['descr']}" for k, v in params.items())
+        return "\n".join(
+            f"{k} = {v['value']}  # {v['descr']}" for k, v in params.items()
+        )
 
     print(_with_model(args.mph, args.cores, fn))
     return 0
@@ -357,7 +383,9 @@ def cmd_run_batch(args: argparse.Namespace) -> int:
         tempdir=args.tempdir,
         timeout=args.timeout,
     )
-    print(f"batch ok={br.ok} rc={br.returncode} elapsed={br.elapsed:.1f}s out={br.output_file}")
+    print(
+        f"batch ok={br.ok} rc={br.returncode} elapsed={br.elapsed:.1f}s out={br.output_file}"
+    )
     if br.stdout:
         print("--- stdout ---")
         print(br.stdout[-4000:])
@@ -475,7 +503,9 @@ def cmd_docs_convert(args: argparse.Namespace) -> int:
 def cmd_docs_convert_all(args: argparse.Namespace) -> int:
     res = _docs.convert_all(force=args.force)
     bad = {k: str(v) for k, v in res.items() if isinstance(v, Exception)}
-    print(f"ok={[k for k, v in res.items() if not isinstance(v, Exception)]} failed={bad}")
+    print(
+        f"ok={[k for k, v in res.items() if not isinstance(v, Exception)]} failed={bad}"
+    )
     return 0 if not bad else 1
 
 
@@ -554,15 +584,22 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("doctor", help="环境与能力自检")
     sp.set_defaults(func=cmd_doctor)
 
-    sp = sub.add_parser("diagnose", help="一键聚合诊断（doctor+tree+inventory+绑定状态+pitfalls）")
+    sp = sub.add_parser(
+        "diagnose", help="一键聚合诊断（doctor+tree+inventory+绑定状态+pitfalls）"
+    )
     sp.add_argument("--mph", **p_model, required=True)
     sp.add_argument("--cores", type=int, default=None)
     sp.set_defaults(func=cmd_diagnose)
 
     # --- server（跨进程常驻会话）---
-    sv = sub.add_parser("server", help="常驻 server 生命周期（start/stop/status）——多步 CLI 复用同一 JVM")
+    sv = sub.add_parser(
+        "server",
+        help="常驻 server 生命周期（start/stop/status）——多步 CLI 复用同一 JVM",
+    )
     svsub = sv.add_subparsers(dest="server_cmd", required=True)
-    s = svsub.add_parser("start", help="拉起常驻 server 并记录 pid/port（勿与 GUI 同跑）")
+    s = svsub.add_parser(
+        "start", help="拉起常驻 server 并记录 pid/port（勿与 GUI 同跑）"
+    )
     s.add_argument("--port", type=int, default=2036)
     s.add_argument("--cores", type=int, default=None)
     s.set_defaults(func=cmd_server_start)
@@ -582,18 +619,32 @@ def build_parser() -> argparse.ArgumentParser:
         "ensure",
         help="幂等：不在跑就脱离终端派生一个，在跑就复用（调用任何 comsol MCP 工具前的第 0 步）",
     )
-    s.add_argument("--timeout", type=float, default=90.0, help="等待就绪的秒数（默认 90）")
-    s.add_argument("--restart", action="store_true", help="先停掉已有实例再派生（改了 transport/port 后用）")
-    s.add_argument("--json", action="store_true", help="输出原始 JSON（供脚本/agent 解析）")
+    s.add_argument(
+        "--timeout", type=float, default=90.0, help="等待就绪的秒数（默认 90）"
+    )
+    s.add_argument(
+        "--restart",
+        action="store_true",
+        help="先停掉已有实例再派生（改了 transport/port 后用）",
+    )
+    s.add_argument(
+        "--json", action="store_true", help="输出原始 JSON（供脚本/agent 解析）"
+    )
     s.set_defaults(func=cmd_mcp_ensure)
-    s = mcsub.add_parser("status", help="查询服务端状态 + license 占用（只读，不派生任何进程）")
+    s = mcsub.add_parser(
+        "status", help="查询服务端状态 + license 占用（只读，不派生任何进程）"
+    )
     s.add_argument("--json", action="store_true", help="输出原始 JSON")
     s.set_defaults(func=cmd_mcp_status)
-    s = mcsub.add_parser("stop", help="终止服务端并清理状态文件（同时释放它可能已占的 license）")
+    s = mcsub.add_parser(
+        "stop", help="终止服务端并清理状态文件（同时释放它可能已占的 license）"
+    )
     s.set_defaults(func=cmd_mcp_stop)
 
     # --- license（只读）---
-    s = sub.add_parser("license", help="谁在占用唯一 COMSOL license（jvm.dll 判据，只读）")
+    s = sub.add_parser(
+        "license", help="谁在占用唯一 COMSOL license（jvm.dll 判据，只读）"
+    )
     s.add_argument("--json", action="store_true", help="输出原始 JSON")
     s.set_defaults(func=cmd_license)
 
@@ -613,14 +664,18 @@ def build_parser() -> argparse.ArgumentParser:
     s = inssub.add_parser("java", help="解析 GUI 导出的 .java 摘要（不加载模型）")
     s.add_argument("file", type=Path)
     s.set_defaults(func=cmd_inspect_java)
-    s = inssub.add_parser("node", help="按路径 dump 节点状态（类型/属性值/枚举允许值/选择实体数）")
+    s = inssub.add_parser(
+        "node", help="按路径 dump 节点状态（类型/属性值/枚举允许值/选择实体数）"
+    )
     s.add_argument("--mph", **p_model, required=True)
     s.add_argument(
         "--path",
         required=True,
         help="点分路径，段语法 name 或 name(tag)，如 component(comp1).physics(acpr).feature(bpf1)",
     )
-    s.add_argument("--methods", action="store_true", help="附带反射方法签名（活体 javadoc）")
+    s.add_argument(
+        "--methods", action="store_true", help="附带反射方法签名（活体 javadoc）"
+    )
     s.add_argument("--cores", type=int, default=None)
     s.set_defaults(func=cmd_inspect_node)
 
@@ -642,7 +697,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="K=V",
         help="属性 key=value，可重复；整数值自动用 JInt 包裹",
     )
-    s.add_argument("--save", type=Path, default=None, help="设置后另存到此 .mph（不传则不落盘）")
+    s.add_argument(
+        "--save", type=Path, default=None, help="设置后另存到此 .mph（不传则不落盘）"
+    )
     s.add_argument("--cores", type=int, default=None)
     s.set_defaults(func=cmd_node_set)
 
@@ -653,7 +710,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--mph", **p_model, required=True)
     s.add_argument("--study", default=None, help="study/sol tag；默认求解全部")
     s.add_argument("--clear", action="store_true", help="求解前 model.clear()")
-    s.add_argument("--set-param", action="append", dest="set_param", help="name=value，可重复")
+    s.add_argument(
+        "--set-param", action="append", dest="set_param", help="name=value，可重复"
+    )
     s.add_argument("--cores", type=int, default=None)
     s.set_defaults(func=cmd_run_solve)
     s = runsub.add_parser("batch", help="comsolbatch.exe 批处理")
@@ -673,12 +732,46 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--plotgroup", required=True)
     s.add_argument("--out", type=Path, required=True)
     s.add_argument("--size", type=int, nargs=2, default=None, help="宽 高（像素）")
-    s.add_argument("--extent", type=float, nargs=4, default=None, help="显式轴限 x0 x1 y0 y1（数据坐标；对 2D 绘图组无效，改用 --geom-bbox）")
-    s.add_argument("--color-range", type=float, nargs=2, default=None, dest="color_range", metavar="MIN MAX", help="统一 Surface 色标（多 case 共享 colorbar 标度）")
-    s.add_argument("--polar-rmax", type=float, default=None, dest="polar_rmax", metavar="R", help="统一极坐标绘图组极径上限（rmin=0）")
-    s.add_argument("--geom-bbox", type=float, nargs=4, default=None, dest="geom_bbox", metavar="X0 X1 Y0 Y1", help="几何包围盒；反演 auto-zoom 窗口写入 sidecar 的 extent_recovered")
+    s.add_argument(
+        "--extent",
+        type=float,
+        nargs=4,
+        default=None,
+        help="显式轴限 x0 x1 y0 y1（数据坐标；对 2D 绘图组无效，改用 --geom-bbox）",
+    )
+    s.add_argument(
+        "--color-range",
+        type=float,
+        nargs=2,
+        default=None,
+        dest="color_range",
+        metavar="MIN MAX",
+        help="统一 Surface 色标（多 case 共享 colorbar 标度）",
+    )
+    s.add_argument(
+        "--polar-rmax",
+        type=float,
+        default=None,
+        dest="polar_rmax",
+        metavar="R",
+        help="统一极坐标绘图组极径上限（rmin=0）",
+    )
+    s.add_argument(
+        "--geom-bbox",
+        type=float,
+        nargs=4,
+        default=None,
+        dest="geom_bbox",
+        metavar="X0 X1 Y0 Y1",
+        help="几何包围盒；反演 auto-zoom 窗口写入 sidecar 的 extent_recovered",
+    )
     s.add_argument("--clean", action="store_true", help="隐藏 colorbar/图例/标题")
-    s.add_argument("--no-sidecar", action="store_true", dest="no_sidecar", help="不写 .sidecar.json")
+    s.add_argument(
+        "--no-sidecar",
+        action="store_true",
+        dest="no_sidecar",
+        help="不写 .sidecar.json",
+    )
     s.add_argument("--cores", type=int, default=None)
     s.set_defaults(func=cmd_export_image)
     s = exsub.add_parser("data", help="数据集/绘图组 → CSV/VTK")
@@ -703,7 +796,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--scalars", default=None)
     s.add_argument("--cmap", default="coolwarm")
     s.add_argument("--edges", action="store_true", help="画网格边")
-    s.add_argument("--clip-normal", type=float, nargs=3, default=None, dest="clip_normal")
+    s.add_argument(
+        "--clip-normal", type=float, nargs=3, default=None, dest="clip_normal"
+    )
     s.add_argument("--title", default=None)
     s.set_defaults(func=cmd_render)
 
@@ -718,13 +813,22 @@ def build_parser() -> argparse.ArgumentParser:
     s = posub.add_parser("quality", help="网格质量统计")
     s.add_argument("file", type=Path)
     s.set_defaults(func=cmd_post_quality)
-    s = posub.add_parser("framebox", help="检测渲染 PNG 轴框像素框（pixel↔data 映射/裁剪用）")
+    s = posub.add_parser(
+        "framebox", help="检测渲染 PNG 轴框像素框（pixel↔data 映射/裁剪用）"
+    )
     s.add_argument("--image", type=Path, required=True)
-    s.add_argument("--sidecar", type=Path, default=None, help="可选：把 crop_box_px 合并进该 sidecar json")
+    s.add_argument(
+        "--sidecar",
+        type=Path,
+        default=None,
+        help="可选：把 crop_box_px 合并进该 sidecar json",
+    )
     s.set_defaults(func=cmd_post_framebox)
 
     # --- docs ---
-    do = sub.add_parser("docs", help="手册知识管线（convert/convert-all/index/search/read/list）")
+    do = sub.add_parser(
+        "docs", help="手册知识管线（convert/convert-all/index/search/read/list）"
+    )
     dosub = do.add_subparsers(dest="docs_cmd", required=True)
     s = dosub.add_parser("convert", help="转换单本手册")
     s.add_argument("manual", help="PRIORITY_MANUALS 相对路径或绝对 PDF 路径")

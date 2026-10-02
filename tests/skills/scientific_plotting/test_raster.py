@@ -17,7 +17,15 @@ from pysci.skills.scientific_plotting.tools import raster  # noqa: E402
 
 OVERLAYS = [
     {"type": "rotbox", "cx": 0.3, "cy": 0.5, "w": 0.2, "h": 0.08, "angle": 135},
-    {"type": "panel", "cx": 0.1, "cy": 0.85, "w": 0.12, "h": 0.12, "angle": 135, "text": "Exp.\n(TBD)"},
+    {
+        "type": "panel",
+        "cx": 0.1,
+        "cy": 0.85,
+        "w": 0.12,
+        "h": 0.12,
+        "angle": 135,
+        "text": "Exp.\n(TBD)",
+    },
     {"type": "dashed", "x0": 0.2, "y0": 0.6, "x1": 0.12, "y1": 0.8},
     {"type": "text", "x": 0.5, "y": 0.1, "s": "Sim."},
 ]
@@ -47,8 +55,14 @@ def test_resolve_extent_untrusted_when_partially_applied():
 
 
 def test_resolve_extent_explicit_wins():
-    sc = {"extent_requested": [0.0, 1.0, 0.0, 0.5], "extent_applied": dict.fromkeys(("xmin", "xmax", "ymin", "ymax")), "crop_box_px": [1, 2, 3, 4]}
-    extent, crop = raster.resolve_extent_and_crop(sc, extent=(9.0, 9.0, 9.0, 9.0), crop_box=(0, 0, 5, 5))
+    sc = {
+        "extent_requested": [0.0, 1.0, 0.0, 0.5],
+        "extent_applied": dict.fromkeys(("xmin", "xmax", "ymin", "ymax")),
+        "crop_box_px": [1, 2, 3, 4],
+    }
+    extent, crop = raster.resolve_extent_and_crop(
+        sc, extent=(9.0, 9.0, 9.0, 9.0), crop_box=(0, 0, 5, 5)
+    )
     assert extent == (9.0, 9.0, 9.0, 9.0) and crop == (0, 0, 5, 5)
 
 
@@ -66,7 +80,10 @@ def test_compose_raster_panel(tmp_path):
     spec = tmp_path / "ov.json"
     spec.write_text(json.dumps(OVERLAYS), encoding="utf-8")
     out = raster.compose_raster_panel(
-        img, tmp_path / "out.png", extent=(0.0, 1.0, 0.0, 0.5), overlays=raster.load_overlays(spec)
+        img,
+        tmp_path / "out.png",
+        extent=(0.0, 1.0, 0.0, 0.5),
+        overlays=raster.load_overlays(spec),
     )
     assert out.exists() and out.stat().st_size > 0
 
@@ -79,8 +96,12 @@ def test_compose_raster_panel_requires_extent(tmp_path):
 
 def test_load_overlays_yaml(tmp_path):
     p = tmp_path / "ov.yaml"
-    p.write_text("- type: dashed\n  x0: 0\n  y0: 0\n  x1: 1\n  y1: 1\n", encoding="utf-8")
-    assert raster.load_overlays(p) == [{"type": "dashed", "x0": 0, "y0": 0, "x1": 1, "y1": 1}]
+    p.write_text(
+        "- type: dashed\n  x0: 0\n  y0: 0\n  x1: 1\n  y1: 1\n", encoding="utf-8"
+    )
+    assert raster.load_overlays(p) == [
+        {"type": "dashed", "x0": 0, "y0": 0, "x1": 1, "y1": 1}
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +119,9 @@ def test_resolve_extent_recovered_fallback():
 def test_compose_grid_image_blank_and_axes(tmp_path):
     img = _synth_png(tmp_path / "a.png")
     spec = {
-        "rows": 2, "cols": 2, "figsize": (6, 6),
+        "rows": 2,
+        "cols": 2,
+        "figsize": (6, 6),
         "panels": [
             {"kind": "image", "image": str(img)},
             {"kind": "blank"},
@@ -123,9 +146,15 @@ def test_compose_grid_raster_needs_extent(tmp_path):
 def test_compose_grid_raster_from_sidecar_recovered(tmp_path):
     img = _synth_png(tmp_path / "r.png")
     sc = tmp_path / "r.sidecar.json"
-    sc.write_text(json.dumps({"extent_recovered": [0, 1, 0, 1], "crop_box_px": [0, 0, 100, 80]}), encoding="utf-8")
-    spec = {"rows": 1, "cols": 1,
-            "panels": [{"kind": "raster", "image": str(img), "sidecar": str(sc)}]}
+    sc.write_text(
+        json.dumps({"extent_recovered": [0, 1, 0, 1], "crop_box_px": [0, 0, 100, 80]}),
+        encoding="utf-8",
+    )
+    spec = {
+        "rows": 1,
+        "cols": 1,
+        "panels": [{"kind": "raster", "image": str(img), "sidecar": str(sc)}],
+    }
     res = raster.compose_grid(spec)
     assert res.raster_axes and res.raster_axes[0] is res.axes[0][0]
     res.close()
@@ -135,15 +164,19 @@ def test_compose_grid_labels_colorbar_to_file(tmp_path):
     img = _synth_png(tmp_path / "f.png")
     sc = tmp_path / "f.sidecar.json"
     sc.write_text(
-        json.dumps({
-            "extent_requested": [0, 1, 0, 1],
-            "extent_applied": dict.fromkeys(("xmin", "xmax", "ymin", "ymax")),
-            "crop_box_px": [0, 0, 100, 80],
-        }),
+        json.dumps(
+            {
+                "extent_requested": [0, 1, 0, 1],
+                "extent_applied": dict.fromkeys(("xmin", "xmax", "ymin", "ymax")),
+                "crop_box_px": [0, 0, 100, 80],
+            }
+        ),
         encoding="utf-8",
     )
     spec = {
-        "rows": 1, "cols": 2, "figsize": (8, 4),
+        "rows": 1,
+        "cols": 2,
+        "figsize": (8, 4),
         "panel_labels": True,
         "col_titles": ["field", "far"],
         "colorbar": {"cmap": "bwr", "vmin": -160, "vmax": 160, "label": "|p|"},

@@ -95,7 +95,7 @@ def _save(arr: np.ndarray, dest: str | Path, *, quality: int = 95) -> Path:
     if d.suffix.lower() in (".jpg", ".jpeg"):
         kwargs["quality"] = int(quality)
         if img.mode == "RGBA":
-            img = img.convert("RGB")   # JPEG 无 alpha 通道
+            img = img.convert("RGB")  # JPEG 无 alpha 通道
     img.save(d, **kwargs)
     return d
 
@@ -126,7 +126,9 @@ def _parse_points(spec: str | Sequence[Any] | None) -> np.ndarray | None:
 # ---------------------------------------------------------------------------
 # 图层：alpha 合成 / 通道分离（消费方舟「图层拆分」的 ≤16 层输出）
 # ---------------------------------------------------------------------------
-def split_alpha(src: str | Path, dest_dir: str | Path, *, stem: str | None = None) -> dict[str, Path]:
+def split_alpha(
+    src: str | Path, dest_dir: str | Path, *, stem: str | None = None
+) -> dict[str, Path]:
     """把带 alpha 的图拆成 ``_rgb.png`` + ``_alpha.png``（灰度）。
 
     方舟图层拆分返回的每层都带透明通道；分离后 alpha 可直接当 mask 用于
@@ -239,7 +241,11 @@ def fuse(
     flag = cv2.MIXED_CLONE if str(mode).lower() == "mixed" else cv2.NORMAL_CLONE
     try:
         out_bgr = cv2.seamlessClone(
-            _to_bgr(src_rgba[:, :, :3]), _to_bgr(base_rgb), mask_arr, (int(cx), int(cy)), flag
+            _to_bgr(src_rgba[:, :, :3]),
+            _to_bgr(base_rgb),
+            mask_arr,
+            (int(cx), int(cy)),
+            flag,
         )
     except cv2.error as e:
         raise ImagingError(f"seamlessClone 失败：{e}") from e
@@ -270,7 +276,9 @@ def inpaint(
     mask_arr = (m > 127).astype(np.uint8)
     if mask_arr.max() == 0:
         raise ImagingError("mask 全黑，无待修补区域")
-    flag = cv2.INPAINT_NS if str(method).lower() in ("ns", "navier") else cv2.INPAINT_TELEA
+    flag = (
+        cv2.INPAINT_NS if str(method).lower() in ("ns", "navier") else cv2.INPAINT_TELEA
+    )
     out_bgr = cv2.inpaint(_to_bgr(rgb), mask_arr, float(radius), flag)
     return _save(_from_bgr(out_bgr), dest)
 
@@ -323,13 +331,21 @@ def make_mask(
         bgr = _to_bgr(_load_rgb(src, mode="RGB"))
         gcmask = np.zeros(gray.shape[:2], np.uint8)
         cv2.grabCut(
-            bgr, gcmask, (x, y, rw, rh), None, None, max(1, int(iterations)), cv2.GC_INIT_WITH_RECT
+            bgr,
+            gcmask,
+            (x, y, rw, rh),
+            None,
+            None,
+            max(1, int(iterations)),
+            cv2.GC_INIT_WITH_RECT,
         )
-        binary = np.where((gcmask == cv2.GC_FGD) | (gcmask == cv2.GC_PR_FGD), 255, 0).astype(
-            np.uint8
-        )
+        binary = np.where(
+            (gcmask == cv2.GC_FGD) | (gcmask == cv2.GC_PR_FGD), 255, 0
+        ).astype(np.uint8)
     else:
-        raise ImagingError(f"未知 method={method!r}；支持 otsu / manual / canny / grabcut")
+        raise ImagingError(
+            f"未知 method={method!r}；支持 otsu / manual / canny / grabcut"
+        )
 
     if invert:
         binary = cv2.bitwise_not(binary)
@@ -395,7 +411,11 @@ def perspective(
         center = (w / 2.0, h / 2.0)
         m = cv2.getRotationMatrix2D(center, float(rotate), 1.0)
         out = cv2.warpAffine(
-            _to_bgr(rgb), m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+            _to_bgr(rgb),
+            m,
+            (w, h),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
         )
         return _save(_from_bgr(out), dest)
 
@@ -405,10 +425,16 @@ def perspective(
     dp = _parse_points(dst_pts)
     if dp is None:
         ow, oh = size if size else (w, h)
-        dp = np.array([[0, 0], [ow - 1, 0], [ow - 1, oh - 1], [0, oh - 1]], dtype=np.float32)
+        dp = np.array(
+            [[0, 0], [ow - 1, 0], [ow - 1, oh - 1], [0, oh - 1]], dtype=np.float32
+        )
     if dp.shape[0] != 4:
         raise ImagingError("透视变换需要恰好 4 个 dst 点")
-    ow, oh = size if size else (int(round(dp[:, 0].max())) + 1, int(round(dp[:, 1].max())) + 1)
+    ow, oh = (
+        size
+        if size
+        else (int(round(dp[:, 0].max())) + 1, int(round(dp[:, 1].max())) + 1)
+    )
     m = cv2.getPerspectiveTransform(sp, dp)
     out = cv2.warpPerspective(_to_bgr(rgb), m, (ow, oh), flags=cv2.INTER_CUBIC)
     return _save(_from_bgr(out), dest)
@@ -445,7 +471,7 @@ def measure_regions(
 
                 binary = gray > threshold_otsu(gray)
             except ValueError:
-                binary = gray > 127   # 常量图无法 Otsu，退回中值
+                binary = gray > 127  # 常量图无法 Otsu，退回中值
 
     labeled = skmeasure.label(binary, connectivity=2)
     out: list[dict[str, Any]] = []
@@ -504,6 +530,8 @@ def align(
         from scipy import ndimage as ndi  # type: ignore
 
         rgb = _load_rgb(src, mode="RGB").astype(np.float64)
-        moved = ndi.shift(rgb, (shift[0], shift[1], 0), order=1, mode="constant", cval=0.0)
+        moved = ndi.shift(
+            rgb, (shift[0], shift[1], 0), order=1, mode="constant", cval=0.0
+        )
         result["out"] = str(_save(np.clip(moved, 0, 255).astype(np.uint8), dest))
     return result

@@ -49,8 +49,9 @@ def refine_ep(center=(1.0081, 0.0745), half=0.003, step=0.001) -> tuple[float, f
     for cr in np.arange(cr0 - half, cr0 + half + 1e-12, step):
         for ci in np.arange(ci0 - half, ci0 + half + 1e-12, step):
             S = cmt.compute_s_matrix(
-                cmt.make_ep_params(cr=float(cr), ci=float(ci),
-                                   n_orders=N_ORDERS, k_modes=K_MODES)
+                cmt.make_ep_params(
+                    cr=float(cr), ci=float(ci), n_orders=N_ORDERS, k_modes=K_MODES
+                )
             )
             s21 = abs(S[1, 0])
             if s21 < best[2]:
@@ -68,8 +69,8 @@ def cmt_S(cr: float, ci: float) -> np.ndarray:
 def build_points() -> list[tuple[str, float, float, str]]:
     cr_ep, ci_ep = refine_ep()
     return [
-        ("lossless", 1.0, 0.0, "LR"),          # 锚点：映射 + 能量守恒
-        ("EP", cr_ep, ci_ep, "LR"),            # 关键：单向隐身（非互易反射）
+        ("lossless", 1.0, 0.0, "LR"),  # 锚点：映射 + 能量守恒
+        ("EP", cr_ep, ci_ep, "LR"),  # 关键：单向隐身（非互易反射）
         ("offEP_dci", cr_ep, ci_ep + 0.02, "LR"),  # 偏离 EP：改变损耗
         ("offEP_dcr", cr_ep + 0.02, ci_ep, "LR"),  # 偏离 EP：改变实部
     ]
@@ -106,7 +107,9 @@ def print_row(name, cr, ci, side, comsol: dict, ref: dict) -> None:
         else:
             tot_c = abs(comsol["S22"]) ** 2 + abs(comsol["S12"]) ** 2
             tot_r = abs(ref["S22"]) ** 2 + abs(ref["S12"]) ** 2
-        print(f"  能量守恒 |r₀|²+|r₋₁|²:  COMSOL={tot_c:.4f}  CMT={tot_r:.4f}  (无损应≈1)")
+        print(
+            f"  能量守恒 |r₀|²+|r₋₁|²:  COMSOL={tot_c:.4f}  CMT={tot_r:.4f}  (无损应≈1)"
+        )
 
 
 def plan() -> None:
@@ -118,11 +121,15 @@ def plan() -> None:
         S = cmt_S(cr, ci)
         eigs = np.linalg.eigvals(S)
         print(f"\n[{name}] cr={cr:.4f} ci={ci:.4f}")
-        print(f"  S = [[{S[0,0]:+.5f}, {S[0,1]:+.5f}],")
-        print(f"       [{S[1,0]:+.5f}, {S[1,1]:+.5f}]]")
-        print(f"  |S11|={abs(S[0,0]):.4f} |S12|={abs(S[0,1]):.4f} "
-              f"|S21|={abs(S[1,0]):.4f} |S22|={abs(S[1,1]):.4f}")
-        print(f"  本征值 λ={eigs[0]:+.5f},{eigs[1]:+.5f}  |λ1-λ2|={abs(eigs[0]-eigs[1]):.2e}")
+        print(f"  S = [[{S[0, 0]:+.5f}, {S[0, 1]:+.5f}],")
+        print(f"       [{S[1, 0]:+.5f}, {S[1, 1]:+.5f}]]")
+        print(
+            f"  |S11|={abs(S[0, 0]):.4f} |S12|={abs(S[0, 1]):.4f} "
+            f"|S21|={abs(S[1, 0]):.4f} |S22|={abs(S[1, 1]):.4f}"
+        )
+        print(
+            f"  本征值 λ={eigs[0]:+.5f},{eigs[1]:+.5f}  |λ1-λ2|={abs(eigs[0] - eigs[1]):.2e}"
+        )
         for side in inc:
             print_row(name, cr, ci, side, map_cmt(side, S), map_cmt(side, S))
 
@@ -132,8 +139,9 @@ def full_run() -> None:
 
     pts = build_points()
     # 预计算 CMT（纯 Python，快）
-    cmt_cache = {(n, s): map_cmt(s, cmt_S(cr, ci))
-                 for n, cr, ci, inc in pts for s in inc}
+    cmt_cache = {
+        (n, s): map_cmt(s, cmt_S(cr, ci)) for n, cr, ci, inc in pts for s in inc
+    }
 
     print("=" * 78)
     print("COMSOL vs CMT 单点验证（损耗 EP：ci 同号, pamp 单侧入射, 单会话）")

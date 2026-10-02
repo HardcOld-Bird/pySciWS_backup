@@ -198,7 +198,9 @@ def _scalar_array(grid: Any, scalars: str) -> np.ndarray:
         return np.asarray(grid.point_data[scalars])
     if scalars in getattr(grid, "cell_data", {}):
         return np.asarray(grid.cell_data[scalars])
-    raise KeyError(f"数据集无标量 '{scalars}'；可用：{list(getattr(grid, 'array_names', []))}")
+    raise KeyError(
+        f"数据集无标量 '{scalars}'；可用：{list(getattr(grid, 'array_names', []))}"
+    )
 
 
 def slice_grid(
@@ -223,10 +225,16 @@ def integrate_scalar(grid: Any, scalars: str) -> float:
     areas = grid.cell_data.get("Area", None) if grid.cell_data else None
     if grid.point_data and scalars in grid.point_data:
         # 点标量 → 用胞体积/面积加权（若可得），否则直接求和近似
-        vols = grid.compute_cell_sizes().cell_data.get("Volume", grid.compute_cell_sizes().cell_data.get("Area", None))
+        vols = grid.compute_cell_sizes().cell_data.get(
+            "Volume", grid.compute_cell_sizes().cell_data.get("Area", None)
+        )
         if vols is not None:
             cell_avg = grid.point_data_to_cell_data().cell_data[scalars]
-            return float(np.sum(np.asarray(cell_avg, dtype=float) * np.asarray(vols, dtype=float)))
+            return float(
+                np.sum(
+                    np.asarray(cell_avg, dtype=float) * np.asarray(vols, dtype=float)
+                )
+            )
         return float(np.sum(arr))
     if areas is not None:
         return float(np.sum(arr * np.asarray(areas, dtype=float)))
@@ -314,7 +322,9 @@ def check_conservation(
 ) -> CheckResult:
     """守恒检查：|in-out|/|in| <= rtol（能量/通量守恒）。"""
     if abs(inflow) < 1e-300:
-        return CheckResult(name, abs(outflow) < 1e-300, f"inflow≈0, outflow={outflow:.3e}")
+        return CheckResult(
+            name, abs(outflow) < 1e-300, f"inflow≈0, outflow={outflow:.3e}"
+        )
     dev = abs(inflow - outflow) / abs(inflow)
     return CheckResult(name, dev <= rtol, f"rel_dev={dev:.3e} (rtol={rtol})")
 
@@ -367,7 +377,9 @@ def _longest_dark_run(row: np.ndarray) -> tuple[int, int, int] | None:
     return int(lengths[k]), int(starts[k]), int(ends[k])
 
 
-def detect_frame_box_array(gray: np.ndarray, *, dark_thresh: float = 128.0, min_frac: float = 0.5) -> tuple[int, int, int, int] | None:
+def detect_frame_box_array(
+    gray: np.ndarray, *, dark_thresh: float = 128.0, min_frac: float = 0.5
+) -> tuple[int, int, int, int] | None:
     """检测渲染图轴框像素框 → (x0, y0, x1, y1)，origin 顶左；失败返回 None。
 
     启发式（best-effort）：轴框是图中唯一"水平边暗色连续段 ≥ min_frac×宽"的矩形框
@@ -402,7 +414,9 @@ def detect_frame_box(path: str | Path, **kw: Any) -> tuple[int, int, int, int] |
     return None if gray is None else detect_frame_box_array(gray, **kw)
 
 
-def interior_blank_metrics(gray: np.ndarray, box: tuple[int, int, int, int], *, pad: int = 3) -> dict[str, Any] | None:
+def interior_blank_metrics(
+    gray: np.ndarray, box: tuple[int, int, int, int], *, pad: int = 3
+) -> dict[str, Any] | None:
     """轴框内部（缩进 pad 像素）的空白度量：量化唯一色数 + 灰度 std。
 
     ``blank`` 判据：unique_q ≤ 4 且 std < 8（内部近纯色 → 绘图组无数据/未绑数据集）。
@@ -413,7 +427,11 @@ def interior_blank_metrics(gray: np.ndarray, box: tuple[int, int, int, int], *, 
         return None
     uniq = int(np.unique((inner // 8).astype(np.int32)).size)
     std = float(inner.std())
-    return {"unique_q": uniq, "std": round(std, 2), "blank": bool(uniq <= 4 and std < 8.0)}
+    return {
+        "unique_q": uniq,
+        "std": round(std, 2),
+        "blank": bool(uniq <= 4 and std < 8.0),
+    }
 
 
 def comsol_auto_window(

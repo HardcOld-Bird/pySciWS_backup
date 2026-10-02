@@ -54,7 +54,9 @@ class _LogCapture(logging.Handler):
         return "\n".join(self.records[-n:])
 
 
-def _capture_logs(logger_names: Sequence[str] = ("mph",)) -> tuple[_LogCapture, list[tuple[logging.Logger, int]]]:
+def _capture_logs(
+    logger_names: Sequence[str] = ("mph",),
+) -> tuple[_LogCapture, list[tuple[logging.Logger, int]]]:
     """在给定 logger 上挂一个捕获 handler，返回 (handler, 原级别列表)。"""
     handler = _LogCapture()
     handler.setLevel(logging.DEBUG)
@@ -69,7 +71,9 @@ def _capture_logs(logger_names: Sequence[str] = ("mph",)) -> tuple[_LogCapture, 
     return handler, originals
 
 
-def _restore_logs(handler: _LogCapture, originals: list[tuple[logging.Logger, int]]) -> None:
+def _restore_logs(
+    handler: _LogCapture, originals: list[tuple[logging.Logger, int]]
+) -> None:
     for lg, lvl in originals:
         try:
             lg.removeHandler(handler)
@@ -98,7 +102,11 @@ def _scan_problems(model: Any) -> list[str]:
     """求解后扫描模型的 problems 节点（警告/错误），返回可读文本列表。"""
     jm = _jmodel(model)
     out: list[str] = []
-    problems = _safe(getattr(jm, "problems", None), default=None) if hasattr(jm, "problems") else None
+    problems = (
+        _safe(getattr(jm, "problems", None), default=None)
+        if hasattr(jm, "problems")
+        else None
+    )
     # model.java.problems() 可能返回一个 Problem 序列
     try:
         if problems is not None and callable(problems):
@@ -179,7 +187,11 @@ def _rebind_datasets(model: Any) -> list[str]:
     """
     rebound: list[str] = []
     jm = _jmodel(model)
-    result = _safe(getattr(jm, "result", None), default=None) if hasattr(jm, "result") else None
+    result = (
+        _safe(getattr(jm, "result", None), default=None)
+        if hasattr(jm, "result")
+        else None
+    )
     if result is None:
         return rebound
     dsets = _safe(lambda: [str(t) for t in (result.dataset().tags() or [])], default=[])
@@ -246,9 +258,16 @@ def solve(model: Any, study: str | None = None, *, clear: bool = False) -> Solve
     if ok:
         rebound = _rebind_datasets(model)
         if rebound:
-            log_tail = (log_tail + "\n" if log_tail else "") + f"[rebind] data -> {rebound}"
+            log_tail = (
+                log_tail + "\n" if log_tail else ""
+            ) + f"[rebind] data -> {rebound}"
     return SolveResult(
-        ok=ok, elapsed=elapsed, study=study, error=error, problems=problems, log_tail=log_tail
+        ok=ok,
+        elapsed=elapsed,
+        study=study,
+        error=error,
+        problems=problems,
+        log_tail=log_tail,
     )
 
 
@@ -278,9 +297,7 @@ def solve_param_scan(
         sr = solve(model, study=study, clear=clear)
         if not sr.ok:
             if on_error == "raise":
-                raise SolveError(
-                    f"扫描 {param_name}={v} 求解失败：\n{sr.error}"
-                )
+                raise SolveError(f"扫描 {param_name}={v} 求解失败：\n{sr.error}")
             results.append((v, None, sr))
             continue
         collected = collect(model, v)
@@ -328,7 +345,11 @@ def run_batch(
     in_path = Path(input_mph)
     if not in_path.exists():
         raise SolveError(f"输入模型不存在：{in_path}")
-    out_path = Path(output_mph) if output_mph else (settings.runs_dir / f"{in_path.stem}_out.mph")
+    out_path = (
+        Path(output_mph)
+        if output_mph
+        else (settings.runs_dir / f"{in_path.stem}_out.mph")
+    )
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     n = cores if cores is not None else settings.comsol_max_cores
@@ -338,10 +359,14 @@ def run_batch(
 
     args = [
         str(exe),
-        "-inputfile", str(in_path),
-        "-outputfile", str(out_path),
-        "-np", str(n),
-        "-tmpdir", str(tmp),
+        "-inputfile",
+        str(in_path),
+        "-outputfile",
+        str(out_path),
+        "-np",
+        str(n),
+        "-tmpdir",
+        str(tmp),
     ]
     if study:
         args += ["-study", study]

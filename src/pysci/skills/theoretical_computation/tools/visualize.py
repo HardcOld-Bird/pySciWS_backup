@@ -316,13 +316,23 @@ def quick_plot_complex_plane(
         vals = eigenvalues[:, j] if eigenvalues.ndim > 1 else eigenvalues
         if param_values is not None:
             sc = ax.scatter(
-                np.real(vals), np.imag(vals),
-                c=param_values, cmap="viridis", s=8, zorder=3,
+                np.real(vals),
+                np.imag(vals),
+                c=param_values,
+                cmap="viridis",
+                s=8,
+                zorder=3,
             )
             plt.colorbar(sc, ax=ax, label="参数值")
         else:
-            ax.plot(np.real(vals), np.imag(vals), "-", color=colors[j],
-                    linewidth=1.5, label=f"λ_{j+1}")
+            ax.plot(
+                np.real(vals),
+                np.imag(vals),
+                "-",
+                color=colors[j],
+                linewidth=1.5,
+                label=f"λ_{j + 1}",
+            )
             ax.scatter(np.real(vals), np.imag(vals), s=3, color=colors[j])
 
     # 标记 EP（本征值最接近的点）
@@ -331,8 +341,12 @@ def quick_plot_complex_plane(
         ep_idx = int(np.argmin(dists))
         ep_val = eigenvalues[ep_idx, 0]
         ax.scatter(
-            [np.real(ep_val)], [np.imag(ep_val)],
-            color="red", s=200, marker="*", zorder=5,
+            [np.real(ep_val)],
+            [np.imag(ep_val)],
+            color="red",
+            s=200,
+            marker="*",
+            zorder=5,
             label=f"EP (d={dists[ep_idx]:.2e})",
         )
 
@@ -377,7 +391,8 @@ def quick_plot_npz(
     """
     # 筛选可绘制的数组
     plottable = {
-        k: v for k, v in data.items()
+        k: v
+        for k, v in data.items()
         if isinstance(v, np.ndarray) and v.ndim in (1, 2) and v.size > 1
     }
     keys = list(plottable.keys())[:max_plots]
@@ -490,7 +505,9 @@ def quick_plot_3d_surface(
         Xm, Ym = np.meshgrid(X, Y, indexing="ij")
         grid = pv.StructuredGrid(Xm, Ym, Z)
 
-    plotter = pv.Plotter(off_screen=settings.pyvista_off_screen, window_size=window_size)
+    plotter = pv.Plotter(
+        off_screen=settings.pyvista_off_screen, window_size=window_size
+    )
     plotter.add_mesh(grid, cmap=cmap, show_scalar_bar=True, smooth_shading=True)
     plotter.background_color = "white"
 
@@ -530,7 +547,9 @@ def quick_plot_zero_set_3d(
 
     pv.OFF_SCREEN = settings.pyvista_off_screen
 
-    plotter = pv.Plotter(off_screen=settings.pyvista_off_screen, window_size=window_size)
+    plotter = pv.Plotter(
+        off_screen=settings.pyvista_off_screen, window_size=window_size
+    )
 
     # 添加等值面（半透明）
     if real_face is not None:
@@ -545,9 +564,14 @@ def quick_plot_zero_set_3d(
     plotter.background_color = "white"
     plotter.add_legend(face="triangle", size=(0.2, 0.1))
     plotter.show_bounds(
-        grid="back", location="outer", ticks="both",
-        xtitle=param_labels[0], ytitle=param_labels[1], ztitle=param_labels[2],
-        font_size=10, color="black",
+        grid="back",
+        location="outer",
+        ticks="both",
+        xtitle=param_labels[0],
+        ytitle=param_labels[1],
+        ztitle=param_labels[2],
+        font_size=10,
+        color="black",
     )
 
     if title:
@@ -593,9 +617,11 @@ def quick_plot_band_structure_3d(
     if colors is None:
         colors = ["blue", "cyan", "red", "orange", "green", "magenta"]
     if labels is None:
-        labels = [f"λ_{i+1}" for i in range(len(eigenvalue_meshes))]
+        labels = [f"λ_{i + 1}" for i in range(len(eigenvalue_meshes))]
 
-    plotter = pv.Plotter(off_screen=settings.pyvista_off_screen, window_size=window_size)
+    plotter = pv.Plotter(
+        off_screen=settings.pyvista_off_screen, window_size=window_size
+    )
 
     for i, Z in enumerate(eigenvalue_meshes):
         grid = pv.StructuredGrid(K_mesh, C_mesh, np.real(Z))
@@ -610,9 +636,14 @@ def quick_plot_band_structure_3d(
     plotter.background_color = "white"
     plotter.add_legend(size=(0.2, 0.12), face="rectangle", loc="upper right")
     plotter.show_bounds(
-        grid="back", location="outer", ticks="both",
-        xtitle=axis_titles[0], ytitle=axis_titles[1], ztitle=axis_titles[2],
-        font_size=10, color="black",
+        grid="back",
+        location="outer",
+        ticks="both",
+        xtitle=axis_titles[0],
+        ytitle=axis_titles[1],
+        ztitle=axis_titles[2],
+        font_size=10,
+        color="black",
     )
     plotter.camera_position = "iso"
 

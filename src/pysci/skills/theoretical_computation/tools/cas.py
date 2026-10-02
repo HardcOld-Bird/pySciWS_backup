@@ -24,7 +24,9 @@ from sympy import Expr, Matrix, Symbol
 # ---------------------------------------------------------------------------
 # 矩阵构建
 # ---------------------------------------------------------------------------
-def symbolic_matrix(elements: Sequence[Sequence[Expr]], hermitian: bool = False) -> Matrix:
+def symbolic_matrix(
+    elements: Sequence[Sequence[Expr]], hermitian: bool = False
+) -> Matrix:
     """构建 sympy Matrix，可选强制厄米对称。
 
     Args:
@@ -274,10 +276,7 @@ def solve_system(
     solutions = sp.solve(exprs, list(variables), dict=dict_result)
 
     if simplify and dict_result:
-        solutions = [
-            {k: sp.simplify(v) for k, v in sol.items()}
-            for sol in solutions
-        ]
+        solutions = [{k: sp.simplify(v) for k, v in sol.items()} for sol in solutions]
 
     return solutions
 

@@ -13,6 +13,7 @@
 
 用法：python compose_beam_scatter_proto.py [tag ...]（默认全部 6 case）
 """
+
 from __future__ import annotations
 
 import math
@@ -31,16 +32,18 @@ from pysci.skills.scientific_plotting.tools import raster  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-FIG_BASE = ROOT / "data" / "research" / "1_gain_ep" / "article" / "figures" / "beam_scatter"
-FIG_DIR = FIG_BASE / "raw"      # 输入：COMSOL 原生渲染 + sidecar
-OUT_DIR = FIG_BASE / "panels"   # 输出：逐 case 半圆合成图（含实验占位框）
+FIG_BASE = (
+    ROOT / "data" / "research" / "1_gain_ep" / "article" / "figures" / "beam_scatter"
+)
+FIG_DIR = FIG_BASE / "raw"  # 输入：COMSOL 原生渲染 + sidecar
+OUT_DIR = FIG_BASE / "panels"  # 输出：逐 case 半圆合成图（含实验占位框）
 
 # --- 与 build_beam_scatter_mph.PARAMS 一致的几何常量（单位 m）---
-LAMBDA = 343.0 / 3430.0            # c0/f = 0.1
-D = LAMBDA / math.sqrt(2.0)        # 周期
-X0 = 8 * D / 2.0                   # 半圆中心 x
-R = 4 * LAMBDA                     # 半圆半径
-H1 = 0.569 * LAMBDA                # 管槽1 深（几何下探）
+LAMBDA = 343.0 / 3430.0  # c0/f = 0.1
+D = LAMBDA / math.sqrt(2.0)  # 周期
+X0 = 8 * D / 2.0  # 半圆中心 x
+R = 4 * LAMBDA  # 半圆半径
+H1 = 0.569 * LAMBDA  # 管槽1 深（几何下探）
 G13 = {"full": 0.0, "nogain": 0.0, "nostruct": 0.05 * LAMBDA}  # 各 cfg 的抹平间隙
 
 TAGS = [f"{c}_{i}" for c in ("full", "nogain", "nostruct") for i in ("L", "R")]
@@ -59,15 +62,57 @@ def polar(phi_deg: float, r: float) -> tuple[float, float]:
 
 def overlays_for(tag: str) -> list[dict]:
     """数据坐标叠加版式：两通道框 + 两 Exp 空面板 + 虚线连接。"""
-    box_l, box_r = polar(135, 0.26), polar(45, 0.26)   # 半圆内 ±45° 通道框中心
-    exp_l, exp_r = polar(115, 0.55), polar(65, 0.55)   # 半圆外顶部角落 Exp 面板中心
+    box_l, box_r = polar(135, 0.26), polar(45, 0.26)  # 半圆内 ±45° 通道框中心
+    exp_l, exp_r = polar(115, 0.55), polar(65, 0.55)  # 半圆外顶部角落 Exp 面板中心
     return [
-        {"type": "rotbox", "cx": box_l[0], "cy": box_l[1], "w": 0.18, "h": 0.07, "angle": 135},
-        {"type": "rotbox", "cx": box_r[0], "cy": box_r[1], "w": 0.18, "h": 0.07, "angle": 45},
-        {"type": "panel", "cx": exp_l[0], "cy": exp_l[1], "w": 0.13, "h": 0.13, "angle": 45, "text": "Exp.\n(TBD)"},
-        {"type": "panel", "cx": exp_r[0], "cy": exp_r[1], "w": 0.13, "h": 0.13, "angle": 45, "text": "Exp.\n(TBD)"},
-        {"type": "dashed", "x0": box_l[0], "y0": box_l[1], "x1": exp_l[0], "y1": exp_l[1]},
-        {"type": "dashed", "x0": box_r[0], "y0": box_r[1], "x1": exp_r[0], "y1": exp_r[1]},
+        {
+            "type": "rotbox",
+            "cx": box_l[0],
+            "cy": box_l[1],
+            "w": 0.18,
+            "h": 0.07,
+            "angle": 135,
+        },
+        {
+            "type": "rotbox",
+            "cx": box_r[0],
+            "cy": box_r[1],
+            "w": 0.18,
+            "h": 0.07,
+            "angle": 45,
+        },
+        {
+            "type": "panel",
+            "cx": exp_l[0],
+            "cy": exp_l[1],
+            "w": 0.13,
+            "h": 0.13,
+            "angle": 45,
+            "text": "Exp.\n(TBD)",
+        },
+        {
+            "type": "panel",
+            "cx": exp_r[0],
+            "cy": exp_r[1],
+            "w": 0.13,
+            "h": 0.13,
+            "angle": 45,
+            "text": "Exp.\n(TBD)",
+        },
+        {
+            "type": "dashed",
+            "x0": box_l[0],
+            "y0": box_l[1],
+            "x1": exp_l[0],
+            "y1": exp_l[1],
+        },
+        {
+            "type": "dashed",
+            "x0": box_r[0],
+            "y0": box_r[1],
+            "x1": exp_r[0],
+            "y1": exp_r[1],
+        },
     ]
 
 
@@ -93,7 +138,7 @@ def compose(tag: str) -> Path:
 
 
 def main() -> None:
-    for tag in (sys.argv[1:] or TAGS):
+    for tag in sys.argv[1:] or TAGS:
         print(f"composed {tag} -> {compose(tag)}")
 
 

@@ -49,9 +49,7 @@ def _build_sample_deck(path: Path, img: Path) -> None:
     p2.text = "拓扑保护边界态"
     p2.level = 1
 
-    tbl_shape = s2.shapes.add_table(
-        3, 2, Inches(0.5), Inches(2), Inches(4), Inches(1)
-    )
+    tbl_shape = s2.shapes.add_table(3, 2, Inches(0.5), Inches(2), Inches(4), Inches(1))
     tbl = tbl_shape.table
     tbl.cell(0, 0).text = "参数"
     tbl.cell(0, 1).text = "值"

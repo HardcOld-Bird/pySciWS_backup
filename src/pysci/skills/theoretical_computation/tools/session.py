@@ -50,7 +50,9 @@ def ensure_session(research: str, slug: str) -> Path:
     return session_dir
 
 
-def save_results(session_dir: Path, data_dict: dict[str, Any], name: str = "results") -> Path:
+def save_results(
+    session_dir: Path, data_dict: dict[str, Any], name: str = "results"
+) -> Path:
     """持久化数值结果到 session 的 results/ 目录。
 
     Args:
@@ -147,11 +149,17 @@ def list_sessions(research: str) -> list[dict[str, Any]]:
             continue
         results_dir = d / "results"
         plots_dir = d / "plots"
-        sessions.append({
-            "name": d.name,
-            "path": d,
-            "n_results": len(list(results_dir.glob("*"))) if results_dir.is_dir() else 0,
-            "n_plots": len(list(plots_dir.glob("*.png"))) if plots_dir.is_dir() else 0,
-        })
+        sessions.append(
+            {
+                "name": d.name,
+                "path": d,
+                "n_results": len(list(results_dir.glob("*")))
+                if results_dir.is_dir()
+                else 0,
+                "n_plots": len(list(plots_dir.glob("*.png")))
+                if plots_dir.is_dir()
+                else 0,
+            }
+        )
 
     return sessions

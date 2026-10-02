@@ -8,6 +8,7 @@
 
 每个 case 输出 field_<cfg>_<inc>.png 与 far_<cfg>_<inc>.png。
 """
+
 from __future__ import annotations
 
 import sys
@@ -70,18 +71,28 @@ def main() -> None:
                         print(f"   [warn] bind {pg}: {type(exc).__name__}")
             # 场图：固定 extent + clean（隐 colorbar/标题）+ sidecar（供下游 raster-panel 精确叠图）
             r_field = export_image(
-                model, "pg_field", FIG_DIR / f"field_{tag}.png",
-                size=FIELD_SIZE, extent=FIELD_EXTENT, clean=True, sidecar=True,
+                model,
+                "pg_field",
+                FIG_DIR / f"field_{tag}.png",
+                size=FIELD_SIZE,
+                extent=FIELD_EXTENT,
+                clean=True,
+                sidecar=True,
             )
             print(r_field.report())
             # 远场极坐标图：PolarGroup 轴系不同，不设 extent；仍写 sidecar 记录空白自检
             r_far = export_image(
-                model, "pg_far", FIG_DIR / f"far_{tag}.png", sidecar=True,
+                model,
+                "pg_far",
+                FIG_DIR / f"far_{tag}.png",
+                sidecar=True,
             )
             print(r_far.report())
             for pg in ("field", "far"):
                 p = FIG_DIR / f"{pg}_{tag}.png"
-                print(f"   {p.name} = {p.stat().st_size if p.exists() else 'MISSING'} bytes")
+                print(
+                    f"   {p.name} = {p.stat().st_size if p.exists() else 'MISSING'} bytes"
+                )
 
     client.disconnect()
     print("done ->", FIG_DIR)

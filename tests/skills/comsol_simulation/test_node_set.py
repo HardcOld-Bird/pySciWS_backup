@@ -56,7 +56,9 @@ def test_coerce_value_int_wrapped():
 
 def test_set_node_props_all_ok():
     node = _FakeNode()
-    res = ins.set_node_props(_FakeModel(node), PATH, ["rangecoloractive=on", "rangecolormin=-160"])
+    res = ins.set_node_props(
+        _FakeModel(node), PATH, ["rangecoloractive=on", "rangecolormin=-160"]
+    )
     assert res.all_ok
     assert res.ok == ["rangecoloractive=on", "rangecolormin=-160"]
     assert node.store["rangecoloractive"] == "on"
@@ -64,7 +66,9 @@ def test_set_node_props_all_ok():
 
 def test_set_node_props_partial_failure_summarized():
     node = _FakeNode(fail_on=("bogus",))
-    res = ins.set_node_props(_FakeModel(node), PATH, ["good=1", "bogus=2", "also_good=3"])
+    res = ins.set_node_props(
+        _FakeModel(node), PATH, ["good=1", "bogus=2", "also_good=3"]
+    )
     assert not res.all_ok
     assert res.ok == ["good=1", "also_good=3"]  # 坏属性不中断其余
     assert len(res.failed) == 1 and res.failed[0].startswith("bogus=2")
@@ -77,7 +81,9 @@ def test_set_node_props_records_class():
 
 
 def test_set_node_props_report_readable():
-    res = ins.set_node_props(_FakeModel(_FakeNode(fail_on=("x",))), PATH, ["a=1", "x=2"])
+    res = ins.set_node_props(
+        _FakeModel(_FakeNode(fail_on=("x",))), PATH, ["a=1", "x=2"]
+    )
     text = res.report()
     assert PATH in text and "ok   : a=1" in text and "FAIL : x=2" in text
 

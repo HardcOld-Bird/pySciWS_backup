@@ -206,7 +206,11 @@ def discover_comsol(install_dir: str | None = None) -> ComsolInstall:
     root = Path(root_raw)
     inst = _derive_from_root(root, source="mph-discovery")
     # 用 mph 报告的精确版本/jvm/server 覆盖推导值（更权威）
-    major, minor, patch = backend.get("major"), backend.get("minor"), backend.get("patch")
+    major, minor, patch = (
+        backend.get("major"),
+        backend.get("minor"),
+        backend.get("patch"),
+    )
     version = (
         f"{major}.{minor}.{patch}"
         if None not in (major, minor, patch)
@@ -214,7 +218,11 @@ def discover_comsol(install_dir: str | None = None) -> ComsolInstall:
     )
     jvm_raw = backend.get("jvm")
     server_raw = backend.get("server")
-    server_exe = Path(server_raw[0]) if isinstance(server_raw, (list, tuple)) and server_raw else inst.server_exe
+    server_exe = (
+        Path(server_raw[0])
+        if isinstance(server_raw, (list, tuple)) and server_raw
+        else inst.server_exe
+    )
     return ComsolInstall(
         found=True,
         version=version,
@@ -294,14 +302,14 @@ class Settings:
     # --- 路径 ---
     project_root: Path
     module_dir: Path
-    docs_dir: Path          # MinerU 转换后的手册 Markdown
-    cache_dir: Path         # 缓存根
-    doc_index_db: Path      # SQLite FTS5 索引 cache/doc_index.db
-    recipes_dir: Path       # 固化的建模配方
-    templates_dir: Path     # 种子 .mph 模板
-    knowledge_dir: Path     # Java→Python 对照、踩坑笔记
-    runs_dir: Path          # 运行日志/导出默认落盘
-    tempdir: Path           # COMSOL 求解磁盘临时目录
+    docs_dir: Path  # MinerU 转换后的手册 Markdown
+    cache_dir: Path  # 缓存根
+    doc_index_db: Path  # SQLite FTS5 索引 cache/doc_index.db
+    recipes_dir: Path  # 固化的建模配方
+    templates_dir: Path  # 种子 .mph 模板
+    knowledge_dir: Path  # Java→Python 对照、踩坑笔记
+    runs_dir: Path  # 运行日志/导出默认落盘
+    tempdir: Path  # COMSOL 求解磁盘临时目录
 
     # --- COMSOL 安装与资源护栏 ---
     install: ComsolInstall
@@ -391,7 +399,15 @@ def build_settings() -> Settings:
     knowledge_dir = MODULE_DIR / "knowledge"
     runs_dir = MODULE_DIR / "runs"
     tempdir = runs_dir / "tmp"
-    for d in (docs_dir, cache_dir, recipes_dir, templates_dir, knowledge_dir, runs_dir, tempdir):
+    for d in (
+        docs_dir,
+        cache_dir,
+        recipes_dir,
+        templates_dir,
+        knowledge_dir,
+        runs_dir,
+        tempdir,
+    ):
         d.mkdir(parents=True, exist_ok=True)
 
     mcp_repo = _resolve_mcp_repo()

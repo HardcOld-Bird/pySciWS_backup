@@ -178,9 +178,7 @@ def scaffold_figure(
         FileExistsError: 目录已存在且未指定 overwrite。
     """
     if template not in _TEMPLATES:
-        raise KeyError(
-            f"未知模板 {template!r}；可选：{', '.join(_TEMPLATES)}"
-        )
+        raise KeyError(f"未知模板 {template!r}；可选：{', '.join(_TEMPLATES)}")
 
     # --- 数据侧目录 ---
     data_root = Path(figures_dir) if figures_dir else figures_root(research)
@@ -195,15 +193,11 @@ def scaffold_figure(
     # 确保有 __init__.py
     code_init = code_root / "__init__.py"
     if not code_init.exists():
-        code_init.write_text(
-            f'"""{research} 论文插图管线包。"""\n', encoding="utf-8"
-        )
+        code_init.write_text(f'"""{research} 论文插图管线包。"""\n', encoding="utf-8")
     # 确保父级 article/ 也有 __init__.py
     article_init = code_root.parent / "__init__.py"
     if not article_init.exists():
-        article_init.write_text(
-            f'"""{research} 论文产出子包。"""\n', encoding="utf-8"
-        )
+        article_init.write_text(f'"""{research} 论文产出子包。"""\n', encoding="utf-8")
 
     pipeline = code_root / f"{slug}.py"
     if pipeline.exists() and not overwrite:

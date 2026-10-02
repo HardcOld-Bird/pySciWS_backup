@@ -20,7 +20,9 @@ from PIL import Image
 from pysci.skills.ai_drawing.tools import imaging
 
 _AVAIL = imaging.available()
-needs_cv2 = pytest.mark.skipif(_AVAIL.get("opencv") is None, reason=imaging.INSTALL_HINT)
+needs_cv2 = pytest.mark.skipif(
+    _AVAIL.get("opencv") is None, reason=imaging.INSTALL_HINT
+)
 needs_skimage = pytest.mark.skipif(
     _AVAIL.get("scikit-image") is None, reason=imaging.INSTALL_HINT
 )
@@ -37,7 +39,7 @@ def _square_on_black(path, size=(60, 80), box=(10, 5, 30, 25), value=255):
     """黑底上一块白矩形（rows box[0]:box[2], cols box[1]:box[3]）。"""
     h, w = size
     arr = np.zeros((h, w), dtype=np.uint8)
-    arr[box[0]:box[2], box[1]:box[3]] = value
+    arr[box[0] : box[2], box[1] : box[3]] = value
     _save_rgb(path, arr)
     return path
 
@@ -81,7 +83,9 @@ def test_save_jpeg_drops_alpha(tmp_path):
 
 
 def test_save_creates_parent_dirs(tmp_path):
-    out = imaging._save(np.zeros((4, 4, 3), dtype=np.uint8), tmp_path / "a" / "b" / "x.png")
+    out = imaging._save(
+        np.zeros((4, 4, 3), dtype=np.uint8), tmp_path / "a" / "b" / "x.png"
+    )
     assert out.is_file()
 
 
@@ -89,7 +93,7 @@ def test_bgr_roundtrip():
     arr = np.arange(12, dtype=np.uint8).reshape(2, 2, 3)
     assert np.array_equal(imaging._from_bgr(imaging._to_bgr(arr)), arr)
     gray = np.arange(4, dtype=np.uint8).reshape(2, 2)
-    assert np.array_equal(imaging._to_bgr(gray), gray)   # 2D 不翻通道
+    assert np.array_equal(imaging._to_bgr(gray), gray)  # 2D 不翻通道
 
 
 def test_parse_points_string_and_sequence():
@@ -111,8 +115,8 @@ def test_parse_points_bad_shape_raises():
 def test_split_alpha(tmp_path):
     src = tmp_path / "layer.png"
     arr = np.zeros((10, 12, 4), dtype=np.uint8)
-    arr[:, :, 0] = 200                       # 全红
-    arr[:, :6, 3] = 255                      # 左半不透明
+    arr[:, :, 0] = 200  # 全红
+    arr[:, :6, 3] = 255  # 左半不透明
     Image.fromarray(arr).save(src)
 
     res = imaging.split_alpha(src, tmp_path / "out", stem="L")
@@ -122,8 +126,8 @@ def test_split_alpha(tmp_path):
         assert im.getpixel((0, 0)) == (200, 0, 0)
     with Image.open(res["alpha"]) as im:
         assert im.mode == "L"
-        assert im.getpixel((0, 0)) == 255      # 左半
-        assert im.getpixel((11, 0)) == 0       # 右半
+        assert im.getpixel((0, 0)) == 255  # 左半
+        assert im.getpixel((11, 0)) == 0  # 右半
 
 
 def test_split_alpha_default_stem(tmp_path):
@@ -141,8 +145,8 @@ def test_composite_places_layer(tmp_path):
 
     out = imaging.composite(base, [layer], tmp_path / "c.png", positions=[(5, 5)])
     with Image.open(out) as im:
-        assert im.getpixel((0, 0))[:3] == (255, 255, 255)     # 底图未被覆盖处
-        assert im.getpixel((8, 8))[:3] == (255, 0, 0)         # 图层落点
+        assert im.getpixel((0, 0))[:3] == (255, 255, 255)  # 底图未被覆盖处
+        assert im.getpixel((8, 8))[:3] == (255, 0, 0)  # 图层落点
 
 
 def test_composite_opacity_blends(tmp_path):
@@ -155,7 +159,7 @@ def test_composite_opacity_blends(tmp_path):
     with Image.open(out) as im:
         r, g, b = im.convert("RGB").getpixel((5, 5))
     assert r == 255
-    assert 100 < g < 160 and 100 < b < 160      # 半透明红叠白 → 粉
+    assert 100 < g < 160 and 100 < b < 160  # 半透明红叠白 → 粉
 
 
 def test_composite_stacks_in_order(tmp_path):
@@ -168,7 +172,7 @@ def test_composite_stacks_in_order(tmp_path):
 
     out = imaging.composite(base, [lo, hi], tmp_path / "c.png")
     with Image.open(out) as im:
-        assert im.convert("RGB").getpixel((5, 5)) == (0, 0, 255)   # 后者在上
+        assert im.convert("RGB").getpixel((5, 5)) == (0, 0, 255)  # 后者在上
 
 
 def test_composite_validation(tmp_path):
@@ -235,7 +239,7 @@ def test_fuse_flat_patch_on_flat_base_vanishes(tmp_path):
     out = imaging.fuse(src, base, tmp_path / "f.png")
     with Image.open(out) as im:
         got = np.asarray(im.convert("RGB"), dtype=int)[30, 30]
-    assert np.abs(got - 120).max() <= 2          # 仍是底图色，没有变绿
+    assert np.abs(got - 120).max() <= 2  # 仍是底图色，没有变绿
 
 
 @needs_cv2
@@ -244,7 +248,7 @@ def test_fuse_transfers_src_gradient(tmp_path):
     src = tmp_path / "grad.png"
     arr = np.zeros((20, 20, 4), dtype=np.uint8)
     for c in range(20):
-        arr[:, c, :] = (40 + c * 9, 40 + c * 9, 40 + c * 9, 255)   # 水平渐变
+        arr[:, c, :] = (40 + c * 9, 40 + c * 9, 40 + c * 9, 255)  # 水平渐变
     Image.fromarray(arr).save(src)
     base = tmp_path / "base.png"
     Image.new("RGB", (60, 60), (120, 120, 120)).save(base)
@@ -252,7 +256,7 @@ def test_fuse_transfers_src_gradient(tmp_path):
     out = imaging.fuse(src, base, tmp_path / "f.png")
     with Image.open(out) as im:
         reg = np.asarray(im.convert("L"), dtype=int)[25:36, 25:36]
-    assert reg.max() - reg.min() > 10            # 均匀底图上长出了明暗变化
+    assert reg.max() - reg.min() > 10  # 均匀底图上长出了明暗变化
 
 
 @needs_cv2
@@ -281,14 +285,14 @@ def test_fuse_uses_alpha_as_mask(tmp_path):
     src = tmp_path / "patch.png"
     arr = np.zeros((20, 20, 4), dtype=np.uint8)
     arr[:, :, 2] = 255
-    arr[5:15, 5:15, 3] = 255                  # 只有中心方块参与融合
+    arr[5:15, 5:15, 3] = 255  # 只有中心方块参与融合
     Image.fromarray(arr).save(src)
     base = tmp_path / "base.png"
     Image.new("RGB", (60, 60), (200, 200, 200)).save(base)
     out = imaging.fuse(src, base, tmp_path / "f.png")
     with Image.open(out) as im:
         corner = np.asarray(im.convert("RGB"), dtype=int)[2, 2]
-    assert np.allclose(corner, [200, 200, 200], atol=2)   # mask 外原样保留
+    assert np.allclose(corner, [200, 200, 200], atol=2)  # mask 外原样保留
 
 
 @needs_cv2
@@ -329,7 +333,7 @@ def test_fuse_empty_mask_raises(tmp_path):
 def test_inpaint_removes_defect(tmp_path):
     src = tmp_path / "s.png"
     arr = np.full((40, 40, 3), 180, dtype=np.uint8)
-    arr[18:22, 18:22] = 0                     # 一块黑瑕疵
+    arr[18:22, 18:22] = 0  # 一块黑瑕疵
     _save_rgb(src, arr)
     mask = tmp_path / "m.png"
     marr = np.zeros((40, 40), dtype=np.uint8)
@@ -339,7 +343,7 @@ def test_inpaint_removes_defect(tmp_path):
     out = imaging.inpaint(src, tmp_path / "o.png", mask=mask)
     with Image.open(out) as im:
         got = np.asarray(im.convert("RGB"), dtype=int)
-    assert got[20, 20].min() > 100              # 瑕疵被周围色填充
+    assert got[20, 20].min() > 100  # 瑕疵被周围色填充
 
 
 @needs_cv2
@@ -378,7 +382,7 @@ def test_make_mask_otsu(tmp_path):
     with Image.open(out) as im:
         got = np.asarray(im.convert("L"))
     assert got.max() == 255 and got.min() == 0
-    assert int((got > 127).sum()) == 400        # 20x20 白块
+    assert int((got > 127).sum()) == 400  # 20x20 白块
 
 
 @needs_cv2
@@ -406,14 +410,15 @@ def test_make_mask_canny_and_blur(tmp_path):
     with Image.open(out) as im:
         got = np.asarray(im.convert("L"))
     assert got.max() == 255
-    assert 0 < int((got > 127).sum()) < 40 * 40   # 只有边缘，不是整块
+    assert 0 < int((got > 127).sum()) < 40 * 40  # 只有边缘，不是整块
 
 
 @needs_cv2
 def test_make_mask_grabcut(tmp_path):
     src = _square_on_black(tmp_path / "s.png", size=(60, 60), box=(15, 15, 45, 45))
-    out = imaging.make_mask(src, tmp_path / "m.png", method="grabcut",
-                            rect=[10, 10, 40, 40], iterations=3)
+    out = imaging.make_mask(
+        src, tmp_path / "m.png", method="grabcut", rect=[10, 10, 40, 40], iterations=3
+    )
     with Image.open(out) as im:
         got = np.asarray(im.convert("L"))
     assert int((got > 127).sum()) > 100
@@ -430,7 +435,9 @@ def test_make_mask_grabcut_needs_rect(tmp_path):
 def test_make_mask_grabcut_rect_out_of_bounds(tmp_path):
     src = _square_on_black(tmp_path / "s.png", size=(40, 40))
     with pytest.raises(imaging.ImagingError, match="超出图像范围"):
-        imaging.make_mask(src, tmp_path / "m.png", method="grabcut", rect=[30, 30, 20, 20])
+        imaging.make_mask(
+            src, tmp_path / "m.png", method="grabcut", rect=[30, 30, 20, 20]
+        )
 
 
 @needs_cv2
@@ -446,8 +453,10 @@ def test_perspective_rectifies(tmp_path):
     src = tmp_path / "s.png"
     _save_rgb(src, np.full((60, 60, 3), 200, dtype=np.uint8))
     out = imaging.perspective(
-        src, tmp_path / "w.png",
-        src_pts="5,5;55,10;50,55;8,50", size=(40, 40),
+        src,
+        tmp_path / "w.png",
+        src_pts="5,5;55,10;50,55;8,50",
+        size=(40, 40),
     )
     with Image.open(out) as im:
         assert im.size == (40, 40)
@@ -458,9 +467,11 @@ def test_perspective_rotate_only(tmp_path):
     """rotate 只做旋转（忽略点列），且不改画布尺寸。"""
     src = tmp_path / "s.png"
     arr = np.zeros((40, 40, 3), dtype=np.uint8)
-    arr[:20, :, 0] = 255                       # 上半红
+    arr[:20, :, 0] = 255  # 上半红
     _save_rgb(src, arr)
-    out = imaging.perspective(src, tmp_path / "r.png", src_pts="0,0;1,0;1,1;0,1", rotate=90)
+    out = imaging.perspective(
+        src, tmp_path / "r.png", src_pts="0,0;1,0;1,1;0,1", rotate=90
+    )
     with Image.open(out) as im:
         assert im.size == (40, 40)
         got = np.asarray(im.convert("RGB"))
@@ -484,14 +495,14 @@ def test_perspective_needs_four_points(tmp_path):
 def test_morphology_open_removes_specks(tmp_path):
     src = tmp_path / "s.png"
     arr = np.zeros((40, 40), dtype=np.uint8)
-    arr[10:30, 10:30] = 255                    # 主体
-    arr[2, 2] = 255                            # 单像素噪点
+    arr[10:30, 10:30] = 255  # 主体
+    arr[2, 2] = 255  # 单像素噪点
     _save_rgb(src, arr)
     out = imaging.morphology(src, tmp_path / "m.png", op="open", radius=2)
     with Image.open(out) as im:
         got = np.asarray(im.convert("L"))
-    assert got[2, 2] == 0                      # 噪点被开运算抹掉
-    assert got[20, 20] == 255                  # 主体保留
+    assert got[2, 2] == 0  # 噪点被开运算抹掉
+    assert got[20, 20] == 255  # 主体保留
 
 
 @needs_skimage
@@ -512,15 +523,15 @@ def test_morphology_unknown_op(tmp_path):
 def test_measure_regions_reports_geometry(tmp_path):
     src = tmp_path / "s.png"
     arr = np.zeros((60, 80), dtype=np.uint8)
-    arr[10:30, 5:25] = 255                     # 400 px 方块
-    arr[40:45, 50:55] = 255                    # 25 px 小方块
+    arr[10:30, 5:25] = 255  # 400 px 方块
+    arr[40:45, 50:55] = 255  # 25 px 小方块
     _save_rgb(src, arr)
 
     regions = imaging.measure_regions(src, min_area=10)
     assert len(regions) == 2
-    big = regions[0]                           # 按面积降序
+    big = regions[0]  # 按面积降序
     assert big["area_px"] == 400
-    assert big["bbox_xyxy"] == (5, 10, 25, 30)     # x0,y0,x1,y1（不是 row/col）
+    assert big["bbox_xyxy"] == (5, 10, 25, 30)  # x0,y0,x1,y1（不是 row/col）
     assert big["centroid"] == pytest.approx((14.5, 19.5), abs=0.05)
     assert big["solidity"] == pytest.approx(1.0, abs=0.01)
     assert regions[1]["area_px"] == 25
@@ -539,7 +550,7 @@ def test_measure_regions_min_area_filter(tmp_path):
 @needs_skimage
 def test_measure_regions_from_mask(tmp_path):
     src = tmp_path / "s.png"
-    _save_rgb(src, np.full((30, 30, 3), 128, dtype=np.uint8))    # 均匀图，阈值化无意义
+    _save_rgb(src, np.full((30, 30, 3), 128, dtype=np.uint8))  # 均匀图，阈值化无意义
     mask = tmp_path / "m.png"
     marr = np.zeros((30, 30), dtype=np.uint8)
     marr[5:15, 5:15] = 255
@@ -567,7 +578,7 @@ def test_align_recovers_known_shift(tmp_path):
     ref = (rng.random((64, 64)) * 255).astype(np.uint8)
     ref_p = tmp_path / "ref.png"
     _save_rgb(ref_p, ref)
-    moved = np.roll(ref, shift=(3, 5), axis=(0, 1))     # dy=3, dx=5
+    moved = np.roll(ref, shift=(3, 5), axis=(0, 1))  # dy=3, dx=5
     src_p = tmp_path / "src.png"
     _save_rgb(src_p, moved)
 
@@ -576,7 +587,7 @@ def test_align_recovers_known_shift(tmp_path):
     # (x,y) 形式必须是 (y,x) 的反转，不能把两个分量写反
     assert res["shift_xy"] == pytest.approx(list(reversed(res["shift_yx"])), abs=1e-9)
     assert res["rms_error"] is not None
-    assert "out" not in res                            # 未给 dest 就不写图
+    assert "out" not in res  # 未给 dest 就不写图
 
 
 @needs_skimage
@@ -618,9 +629,17 @@ def test_cli_reports_missing_extra(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(imaging, "_cv2", boom)
     src = tmp_path / "a.png"
     Image.new("RGB", (10, 10), "white").save(src)
-    rc = imagine.main([
-        "img", "fuse", str(src), "--base", str(src), "--out", str(tmp_path / "o.png"),
-    ])
+    rc = imagine.main(
+        [
+            "img",
+            "fuse",
+            str(src),
+            "--base",
+            str(src),
+            "--out",
+            str(tmp_path / "o.png"),
+        ]
+    )
     assert rc == 1
     err = capsys.readouterr().err
     assert "img fuse 失败" in err

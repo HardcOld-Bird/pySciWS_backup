@@ -57,9 +57,7 @@ def _via_markitdown(path: Path) -> str:
     try:
         from markitdown import MarkItDown
     except ImportError as e:  # pragma: no cover
-        raise ImportError(
-            "markitdown 未安装。请运行：uv sync --extra writing"
-        ) from e
+        raise ImportError("markitdown 未安装。请运行：uv sync --extra writing") from e
     md = MarkItDown()
     # convert_local 是面向本地文件的推荐入口（0.1.x）
     convert = getattr(md, "convert_local", None) or md.convert
@@ -151,7 +149,9 @@ def to_markdown(
                     md_text = src.read_text(encoding="utf-8", errors="replace")
                     used = "plaintext"
                 except Exception as e:
-                    raise RuntimeError(f"无法提取 {src.name}：{type(e).__name__}: {e}") from e
+                    raise RuntimeError(
+                        f"无法提取 {src.name}：{type(e).__name__}: {e}"
+                    ) from e
 
     if not md_text.strip():
         md_text = f"（{src.name} 提取结果为空）"
@@ -180,6 +180,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     res = to_markdown(args.file, force=args.force, backend=args.backend)
-    print(f"[extract] backend={res.backend}  from_cache={res.from_cache}  "
-          f"chars={res.char_count}\n[extract] cache={res.cache_path}\n")
+    print(
+        f"[extract] backend={res.backend}  from_cache={res.from_cache}  "
+        f"chars={res.char_count}\n[extract] cache={res.cache_path}\n"
+    )
     print(res.markdown)

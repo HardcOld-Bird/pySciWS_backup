@@ -76,7 +76,9 @@ def test_free_export_tag_skips_existing_nodes(monkeypatch):
 
     （原模块级裸计数器从 1 递增，第二次导出会生成 img2 与模型自带节点碰撞。）
     """
-    monkeypatch.setattr(_export, "_existing_export_tags", lambda model: {"img1", "img2", "img3"})
+    monkeypatch.setattr(
+        _export, "_existing_export_tags", lambda model: {"img1", "img2", "img3"}
+    )
     assert _export._free_export_tag(object(), "img") == "img4"
 
 
@@ -89,7 +91,11 @@ def test_json_default_serializes_numpy_scalars_and_arrays():
     """回归：sidecar payload 含 numpy 标量/数组时 json.dumps 不再抛 TypeError。"""
     payload = {
         "crop_box_px": [np.int64(3), np.int64(4), np.int64(200), np.int64(300)],
-        "interior": {"std": np.float64(12.5), "blank": np.bool_(False), "unique_q": np.int64(7)},
+        "interior": {
+            "std": np.float64(12.5),
+            "blank": np.bool_(False),
+            "unique_q": np.int64(7),
+        },
         "arr": np.array([1.0, 2.0]),
     }
     round_tripped = json.loads(json.dumps(payload, default=_export._json_default))
@@ -125,7 +131,11 @@ def test_sidecar_payload_with_jstring_like_plotgroup_serializes():
     payload = {
         "plotgroup": _JStringLike("pg1"),
         "crop_box_px": [np.int64(1), 2, 3, 4],
-        "interior": {"std": np.float64(9.0), "blank": np.bool_(False), "unique_q": np.int64(5)},
+        "interior": {
+            "std": np.float64(9.0),
+            "blank": np.bool_(False),
+            "unique_q": np.int64(5),
+        },
     }
     out = json.loads(json.dumps(payload, default=_export._json_default))
     assert out["plotgroup"] == "pg1"

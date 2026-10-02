@@ -101,8 +101,9 @@ def adjust_image(
         img = img.resize((w, h), Image.LANCZOS)
     if pad is not None:
         pw, ph = int(pad[0]), int(pad[1])
-        canvas = Image.new(img.mode if img.mode in ("RGB", "RGBA") else "RGB",
-                           (pw, ph), pad_color)
+        canvas = Image.new(
+            img.mode if img.mode in ("RGB", "RGBA") else "RGB", (pw, ph), pad_color
+        )
         ox = max(0, (pw - img.width) // 2)
         oy = max(0, (ph - img.height) // 2)
         canvas.paste(img, (ox, oy))

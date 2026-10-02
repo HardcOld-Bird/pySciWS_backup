@@ -143,7 +143,7 @@ def diag_beta(ci, cr=1.0081):
             evan = np.abs(beta0.imag) > np.abs(beta0.real)
             b = np.where(evan & (beta0.imag > 0), -beta0, beta0)
         U = np.exp(-2j * b[1, 0] * p.h[1])
-        print(f"    [{branch:7s}] beta[1,0]={b[1,0]:+.4f}  |U|={abs(U):.4f}")
+        print(f"    [{branch:7s}] beta[1,0]={b[1, 0]:+.4f}  |U|={abs(U):.4f}")
 
 
 # ===========================================================================
@@ -184,7 +184,7 @@ def phase0_invariance(cr=1.0081):
         S = compute_s_branch(
             cmt.make_ep_params(cr=cr, ci=0.0745, n_orders=N_ORDERS, k_modes=K_MODES), br
         )
-        print(f"  [{br:7s}] |S21|={abs(S[1,0]):.6f}  |detS|={abs(_det(S)):.6f}")
+        print(f"  [{br:7s}] |S21|={abs(S[1, 0]):.6f}  |detS|={abs(_det(S)):.6f}")
     print("  增益侧 ci=-0.075 的 groove-2 k=0（β/U 不同 ⇒ 规范自由度）：")
     diag_beta(-0.0750)
 
@@ -201,8 +201,10 @@ def phase1_pole_scan(cr=1.0081):
             continue
         s21 = abs(S[1, 0])
         e1, e2 = eigs_of(S)
-        print(f"  ci={ci:+.4f}  |S21|={s21:11.3f}  |detS|={abs(_det(S)):11.3f}  "
-              f"|λ|={abs(e1):8.3f},{abs(e2):8.3f}  |Δλ|={abs(e1-e2):.3e}")
+        print(
+            f"  ci={ci:+.4f}  |S21|={s21:11.3f}  |detS|={abs(_det(S)):11.3f}  "
+            f"|λ|={abs(e1):8.3f},{abs(e2):8.3f}  |Δλ|={abs(e1 - e2):.3e}"
+        )
         if s21 > best[1]:
             best = (float(ci), s21)
     print(f"  → 极点 ci*={best[0]:+.4f}  (|S21|max={best[1]:.1f})")
@@ -219,10 +221,14 @@ def phase2_mirror(ci_pole, cr=1.0081):
             print(f"  [{tag}] ci={ci:+.4f} <singular>")
             continue
         e1, e2 = eigs_of(S)
-        print(f"  [{tag}] ci={ci:+.4f}  S=[[{S[0,0]:+.5f},{S[0,1]:+.5f}],"
-              f"[{S[1,0]:+.5f},{S[1,1]:+.5f}]]")
-        print(f"      |S21|={abs(S[1,0]):.4e}  |detS|={abs(_det(S)):.4e}  "
-              f"λ={e1:+.5f},{e2:+.5f}  |Δλ|={abs(e1-e2):.4e}")
+        print(
+            f"  [{tag}] ci={ci:+.4f}  S=[[{S[0, 0]:+.5f},{S[0, 1]:+.5f}],"
+            f"[{S[1, 0]:+.5f},{S[1, 1]:+.5f}]]"
+        )
+        print(
+            f"      |S21|={abs(S[1, 0]):.4e}  |detS|={abs(_det(S)):.4e}  "
+            f"λ={e1:+.5f},{e2:+.5f}  |Δλ|={abs(e1 - e2):.4e}"
+        )
 
 
 def phase3_map(ci_pole, cr=1.0081, session_dir=None):
@@ -271,7 +277,9 @@ def phase3_map(ci_pole, cr=1.0081, session_dir=None):
     for ax in (axA, axB):
         ax.axvline(0, color="gray", lw=0.8, ls="--")
         ax.axvline(0.0745, color="tab:blue", lw=1.0, ls=":", label="loss EP (+0.0745)")
-        ax.axvline(ci_pole, color="tab:red", lw=1.0, ls=":", label=f"gain SS ({ci_pole:+.4f})")
+        ax.axvline(
+            ci_pole, color="tab:red", lw=1.0, ls=":", label=f"gain SS ({ci_pole:+.4f})"
+        )
     axA.semilogy(cis1, s21v, "-", color="k", lw=1.6)
     axA.axhline(1, color="gray", lw=0.6)
     axA.set_ylabel(r"$|S_{21}|$ (log)")
@@ -284,7 +292,9 @@ def phase3_map(ci_pole, cr=1.0081, session_dir=None):
     axB.legend(fontsize=8, loc="center left")
     axA.set_xlabel(r"Im($c_2$)/$c_0$ (ci>0 loss, ci<0 gain)")
     axB.set_xlabel(r"Im($c_2$)/$c_0$")
-    fig.suptitle(rf"CMT mirror duality at cr={cr}: loss EP (zero) $\leftrightarrow$ gain SS (pole/lasing)")
+    fig.suptitle(
+        rf"CMT mirror duality at cr={cr}: loss EP (zero) $\leftrightarrow$ gain SS (pole/lasing)"
+    )
     fig.tight_layout()
     out = (session_dir / "plots" / "gain_ep_ss_mirror.png") if session_dir else None
     if out:
@@ -310,9 +320,16 @@ def phase4_projective(cr=1.0081):
     并验证本征矢在两极点均并线（cosθ→1），补全 EP 定义的本征矢合并一半。
     """
     print("\n" + "=" * 100)
-    print("Phase 4: 射影观点 — gain SS 是『无穷远处的 EP』（CP1 本征值合并 + 本征矢并线 + blow-up Jordan 块）")
+    print(
+        "Phase 4: 射影观点 — gain SS 是『无穷远处的 EP』（CP1 本征值合并 + 本征矢并线 + blow-up Jordan 块）"
+    )
     print("=" * 100)
-    for tag, ci in (("LOSS EP", 0.0745), ("GAIN SS", -0.0740), ("off-EP ", 0.060), ("off-SS ", -0.060)):
+    for tag, ci in (
+        ("LOSS EP", 0.0745),
+        ("GAIN SS", -0.0740),
+        ("off-EP ", 0.060),
+        ("off-SS ", -0.060),
+    ):
         S = S_at(cr, ci)
         if S is None:
             print(f"  [{tag}] ci={ci:+.4f} <singular>")
@@ -325,9 +342,13 @@ def phase4_projective(cr=1.0081):
             np.linalg.norm(v[:, 0]) * np.linalg.norm(v[:, 1])
         )
         print(f"  [{tag}] ci={ci:+.4f}")
-        print(f"      仿射|λ1-λ2|={abs(w[0]-w[1]):9.3e}  CP1弦距={_chordal(w[0], w[1]):9.3e}  "
-              f"本征矢并线 cosθ={cosang:.5f}")
-        print(f"      (S-tI)/dom = [[{N[0,0]:+.4f},{N[0,1]:+.4f}],[{N[1,0]:+.4f},{N[1,1]:+.4f}]]  → 幂零 Jordan 块")
+        print(
+            f"      仿射|λ1-λ2|={abs(w[0] - w[1]):9.3e}  CP1弦距={_chordal(w[0], w[1]):9.3e}  "
+            f"本征矢并线 cosθ={cosang:.5f}"
+        )
+        print(
+            f"      (S-tI)/dom = [[{N[0, 0]:+.4f},{N[0, 1]:+.4f}],[{N[1, 0]:+.4f},{N[1, 1]:+.4f}]]  → 幂零 Jordan 块"
+        )
 
 
 def main():

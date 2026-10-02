@@ -61,7 +61,9 @@ def figures_root(research: str) -> Path:
 
 def figures_code_root(research: str) -> Path:
     """解析某研究线的插图代码根目录：``src/pysci/research/<name>/article/figures``。"""
-    return PROJECT_ROOT / "src" / "pysci" / "research" / research / "article" / "figures"
+    return (
+        PROJECT_ROOT / "src" / "pysci" / "research" / research / "article" / "figures"
+    )
 
 
 def _research_from_figdir(figdir: Path) -> tuple[str, str] | None:
@@ -120,15 +122,12 @@ def discover_pipeline(figdir: Path | str) -> Path:
         p = figdir / cand
         if p.is_file():
             return p
-    pys = sorted(
-        p for p in figdir.glob("*.py") if not p.name.startswith("_")
-    )
+    pys = sorted(p for p in figdir.glob("*.py") if not p.name.startswith("_"))
     if len(pys) == 1:
         return pys[0]
     if not pys:
         raise FileNotFoundError(
-            f"{figdir} 下没有找到管线 .py 模块，"
-            f"且 src/ 代码目录中也未找到对应脚本"
+            f"{figdir} 下没有找到管线 .py 模块，且 src/ 代码目录中也未找到对应脚本"
         )
     names = ", ".join(p.name for p in pys)
     raise FileNotFoundError(
@@ -167,7 +166,9 @@ def _import_pipeline(module_path: Path) -> Any:
     parent = str(module_path.parent)
     if parent not in sys.path:
         sys.path.insert(0, parent)
-    mod_name = f"_sciplot_pipeline_{module_path.stem}_{abs(hash(str(module_path)))%10**8}"
+    mod_name = (
+        f"_sciplot_pipeline_{module_path.stem}_{abs(hash(str(module_path))) % 10**8}"
+    )
     spec = importlib.util.spec_from_file_location(mod_name, module_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"无法为 {module_path} 创建 import spec")
@@ -177,7 +178,9 @@ def _import_pipeline(module_path: Path) -> Any:
     return module
 
 
-def _call_build_figure(module: Any, extra_kwargs: dict[str, Any]) -> matplotlib.figure.Figure:
+def _call_build_figure(
+    module: Any, extra_kwargs: dict[str, Any]
+) -> matplotlib.figure.Figure:
     """调用管线的 ``build_figure``，只传它签名里接受的关键字参数。"""
     fn = getattr(module, "build_figure", None)
     if fn is None or not callable(fn):

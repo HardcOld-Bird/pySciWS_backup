@@ -38,7 +38,7 @@ def test_record_does_not_render_markdown(tmp_ledger):
     ledger.record(prompt="p1")
     ledger.record(prompt="p2")
     assert not ledger.ledger_path().exists()
-    ledger.render_markdown()               # 渲染由调用方在批量结束时显式做一次
+    ledger.render_markdown()  # 渲染由调用方在批量结束时显式做一次
     assert ledger.ledger_path().is_file()
 
 
@@ -55,14 +55,23 @@ def test_record_stores_recipe(tmp_ledger):
 
 def test_entry_maps_legacy_workflow_to_recipe():
     """旧账本（重构前）写的是 ``workflow`` 字段 → 读时映射到 ``recipe``，不丢历史。"""
-    e = ledger.Entry.from_json({"prompt": "x", "workflow": "txt2img_seedream", "backend": "comfyui"})
+    e = ledger.Entry.from_json(
+        {"prompt": "x", "workflow": "txt2img_seedream", "backend": "comfyui"}
+    )
     assert e.recipe == "txt2img_seedream"
-    assert e.backend == "comfyui"          # 历史值原样保留，不改写
+    assert e.backend == "comfyui"  # 历史值原样保留，不改写
 
 
 def test_rel_makes_paths_relative(tmp_ledger):
     """out/ref 路径规范化为相对项目根的 POSIX 串。"""
-    abs_out = ledger.settings.project_root / "data" / "skills" / "ai_drawing" / "assets" / "z.png"
+    abs_out = (
+        ledger.settings.project_root
+        / "data"
+        / "skills"
+        / "ai_drawing"
+        / "assets"
+        / "z.png"
+    )
     e = ledger.record(prompt="p", out=abs_out)
     assert e.out == "data/skills/ai_drawing/assets/z.png"
     assert "\\" not in e.out  # POSIX 分隔
@@ -168,7 +177,11 @@ def test_format_table_renders(tmp_ledger):
 def test_embed_and_read_metadata_roundtrip(tmp_path):
     p = tmp_path / "x.png"
     Image.new("RGB", (8, 8), (10, 20, 30)).save(p)
-    meta = {"prompt": "a red square", "model": "doubao-seedream-4-0-250828", "kind": "gen"}
+    meta = {
+        "prompt": "a red square",
+        "model": "doubao-seedream-4-0-250828",
+        "kind": "gen",
+    }
     assert ledger.embed_metadata(p, meta) is True
     got = ledger.read_metadata(p)
     assert got == meta
@@ -223,5 +236,5 @@ def test_read_metadata_ignores_foreign_keys(tmp_path):
     assert ledger.read_metadata(p) == {}
     ledger.embed_metadata(p, {"prompt": "hi"})
     with Image.open(p) as im:
-        assert im.info.get("Software") == "ark"    # 原有文本块被保留
+        assert im.info.get("Software") == "ark"  # 原有文本块被保留
     assert ledger.read_metadata(p) == {"prompt": "hi"}

@@ -77,8 +77,22 @@ def test_parser_inspect_node():
 
 def test_parser_export_image_extent_clean_sidecar():
     args = simulation.build_parser().parse_args(
-        ["export", "image", "--mph", "m", "--plotgroup", "pg", "--out", "o.png",
-         "--extent", "0", "1", "-1", "1", "--clean"]
+        [
+            "export",
+            "image",
+            "--mph",
+            "m",
+            "--plotgroup",
+            "pg",
+            "--out",
+            "o.png",
+            "--extent",
+            "0",
+            "1",
+            "-1",
+            "1",
+            "--clean",
+        ]
     )
     assert args.func is simulation.cmd_export_image
     assert args.extent == [0.0, 1.0, -1.0, 1.0]
@@ -95,8 +109,20 @@ def test_parser_post_framebox():
 
 def test_parser_node_set():
     args = simulation.build_parser().parse_args(
-        ["node", "set", "--mph", "m", "--path", "result(pg).feature(surf1)",
-         "--set", "rangecoloractive=on", "--set", "rangecolormin=-160", "--save", "o.mph"]
+        [
+            "node",
+            "set",
+            "--mph",
+            "m",
+            "--path",
+            "result(pg).feature(surf1)",
+            "--set",
+            "rangecoloractive=on",
+            "--set",
+            "rangecolormin=-160",
+            "--save",
+            "o.mph",
+        ]
     )
     assert args.func is simulation.cmd_node_set
     assert args.path == "result(pg).feature(surf1)"
@@ -106,14 +132,33 @@ def test_parser_node_set():
 
 def test_parser_node_set_requires_set():
     with pytest.raises(SystemExit):
-        simulation.build_parser().parse_args(["node", "set", "--mph", "m", "--path", "result(pg)"])
+        simulation.build_parser().parse_args(
+            ["node", "set", "--mph", "m", "--path", "result(pg)"]
+        )
 
 
 def test_parser_export_image_scale_flags():
     args = simulation.build_parser().parse_args(
-        ["export", "image", "--mph", "m", "--plotgroup", "pg", "--out", "o.png",
-         "--color-range", "-160", "160", "--polar-rmax", "60",
-         "--geom-bbox", "-0.4", "0.4", "-0.2", "0.4"]
+        [
+            "export",
+            "image",
+            "--mph",
+            "m",
+            "--plotgroup",
+            "pg",
+            "--out",
+            "o.png",
+            "--color-range",
+            "-160",
+            "160",
+            "--polar-rmax",
+            "60",
+            "--geom-bbox",
+            "-0.4",
+            "0.4",
+            "-0.2",
+            "0.4",
+        ]
     )
     assert args.func is simulation.cmd_export_image
     assert args.color_range == [-160.0, 160.0]
@@ -136,7 +181,9 @@ def test_parser_diagnose_requires_mph():
 # server 子命令（跨进程常驻会话）——parser + 无状态文件行为（不启 JVM）
 # ---------------------------------------------------------------------------
 def test_parser_server_start_stop_status():
-    args = simulation.build_parser().parse_args(["server", "start", "--port", "2100", "--cores", "2"])
+    args = simulation.build_parser().parse_args(
+        ["server", "start", "--port", "2100", "--cores", "2"]
+    )
     assert args.func is simulation.cmd_server_start
     assert args.port == 2100 and args.cores == 2
     args = simulation.build_parser().parse_args(["server", "stop"])
@@ -157,13 +204,17 @@ def test_parser_connect_port_global_flag():
 
 
 def test_server_status_no_state_not_running(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(simulation._session, "settings", SimpleNamespace(runs_dir=tmp_path))
+    monkeypatch.setattr(
+        simulation._session, "settings", SimpleNamespace(runs_dir=tmp_path)
+    )
     assert simulation.main(["server", "status"]) == 0
     out = capsys.readouterr().out
     assert "running    : False" in out
 
 
 def test_server_stop_no_state_is_noop(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(simulation._session, "settings", SimpleNamespace(runs_dir=tmp_path))
+    monkeypatch.setattr(
+        simulation._session, "settings", SimpleNamespace(runs_dir=tmp_path)
+    )
     assert simulation.main(["server", "stop"]) == 0
     assert "未运行" in capsys.readouterr().out

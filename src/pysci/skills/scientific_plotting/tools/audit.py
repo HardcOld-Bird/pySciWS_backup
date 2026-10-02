@@ -73,24 +73,30 @@ class AuditReport:
         else:
             lines.extend("  " + i.line() for i in self.issues)
         verdict = "PASS" if self.ok else "FAIL"
-        lines.append(f"verdict: {verdict} ({len(self.errors)} error, "
-                     f"{len([i for i in self.issues if i.level == WARN])} warn)")
+        lines.append(
+            f"verdict: {verdict} ({len(self.errors)} error, "
+            f"{len([i for i in self.issues if i.level == WARN])} warn)"
+        )
         return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
 # 色盲模拟（Viénot–Brettel–Mollon 1999，线性 RGB 近似）
 # ---------------------------------------------------------------------------
-_DEUTAN = np.array([
-    [0.29275, 0.70725, 0.0],
-    [0.29275, 0.70725, 0.0],
-    [-0.02234, 0.02234, 1.0],
-])
-_PROTAN = np.array([
-    [0.11238, 0.88762, 0.0],
-    [0.11238, 0.88762, 0.0],
-    [-0.00401, 0.00401, 1.0],
-])
+_DEUTAN = np.array(
+    [
+        [0.29275, 0.70725, 0.0],
+        [0.29275, 0.70725, 0.0],
+        [-0.02234, 0.02234, 1.0],
+    ]
+)
+_PROTAN = np.array(
+    [
+        [0.11238, 0.88762, 0.0],
+        [0.11238, 0.88762, 0.0],
+        [-0.00401, 0.00401, 1.0],
+    ]
+)
 
 
 def _srgb_to_linear(c: np.ndarray) -> np.ndarray:
@@ -114,7 +120,7 @@ def _hex_to_rgb01(h: str) -> tuple[float, float, float]:
     h = h.lstrip("#")
     if len(h) == 3:
         h = "".join(ch * 2 for ch in h)
-    return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))  # type: ignore[return-value]
+    return tuple(int(h[i : i + 2], 16) / 255.0 for i in (0, 2, 4))  # type: ignore[return-value]
 
 
 def _collect_colors(fig: Figure) -> list[tuple[float, float, float]]:
@@ -138,7 +144,8 @@ def _check_colorblind(fig: Figure, rep: AuditReport, *, thresh: float = 0.12) ->
     cols = _collect_colors(fig)
     # 剔除接近黑/白/灰的颜色（它们靠明度区分，色盲下通常仍可辨）
     data_cols = [
-        c for c in cols
+        c
+        for c in cols
         if not (max(c) - min(c) < 0.08)  # 非灰
     ]
     if len(data_cols) < 2:
@@ -283,7 +290,9 @@ def audit_figure(
     rep.metrics["n_axes"] = len(axes)
     if expect_panel_labels and len(axes) > 1:
         labels = [
-            t.get_text().strip() for t in _iter_texts(fig) if _PANEL_LABEL_RE.match(t.get_text().strip())
+            t.get_text().strip()
+            for t in _iter_texts(fig)
+            if _PANEL_LABEL_RE.match(t.get_text().strip())
         ]
         rep.metrics["panel_labels_found"] = len(labels)
         if len(labels) < len(axes):

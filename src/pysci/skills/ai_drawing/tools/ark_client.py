@@ -101,7 +101,11 @@ class ArkError(RuntimeError):
     def hint(self) -> str:
         """把常见错误码翻译成可执行的下一步（省掉一轮盲目排查）。"""
         text = f"{self.code or ''} {self}".lower()
-        if self.status_code in (401, 403) or "unauthorized" in text or "invalidapikey" in text:
+        if (
+            self.status_code in (401, 403)
+            or "unauthorized" in text
+            or "invalidapikey" in text
+        ):
             return (
                 "ARK_API_KEY 无效或未配置：确认 .env 中 ARK_API_KEY 已粘贴完整"
                 "（前后无空格），且创建 Key 时的项目空间与当前一致。"
@@ -128,7 +132,7 @@ class ArkImage:
     index: int
     url: str | None = None
     b64_json: str | None = None
-    size: str | None = None          # "<宽>x<高>"
+    size: str | None = None  # "<宽>x<高>"
     error: dict[str, Any] | None = None
 
     @property
@@ -157,7 +161,9 @@ class ArkResponse:
     created: int = 0
     images: list[ArkImage] = field(default_factory=list)
     usage: dict[str, Any] = field(default_factory=dict)
-    request: dict[str, Any] = field(default_factory=dict)   # 发出时的请求体（脱敏，不含 key）
+    request: dict[str, Any] = field(
+        default_factory=dict
+    )  # 发出时的请求体（脱敏，不含 key）
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -267,7 +273,7 @@ def check_output_format(fmt: str | None, *, model: str) -> None:
             "如 doubao-seedream-5-0-260128）；其余模型恒输出 jpeg。要 PNG 请：① 换 5.0 主档，"
             "或 ② 出图后 `imagine adjust <jpg> --format png` 本地转（仅换容器）。"
             "能力表可能滞后：先 `imagine models --live` 核对真值，确已支持则用 "
-            "`--extra '{\"output_format\":\"png\"}'` 绕过本检查。"
+            '`--extra \'{"output_format":"png"}\'` 绕过本检查。'
         )
 
 
@@ -364,8 +370,15 @@ def build_payload(
 
     # 组图张数：显式 max_images > n > 成本护栏 clamp 后的 1
     group_count = max_images if max_images is not None else max(1, int(n or 1))
-    group_count = max(1, min(int(group_count), settings.max_images if not sequential else ABS_MAX_IMAGES))
-    check_group(model=mdl, sequential=sequential, max_images=group_count, n_refs=len(refs))
+    group_count = max(
+        1,
+        min(
+            int(group_count), settings.max_images if not sequential else ABS_MAX_IMAGES
+        ),
+    )
+    check_group(
+        model=mdl, sequential=sequential, max_images=group_count, n_refs=len(refs)
+    )
 
     payload: dict[str, Any] = {
         "model": mdl,
@@ -509,7 +522,9 @@ def list_models(
     try:
         body = resp.json()
     except ValueError as e:
-        raise ArkError(f"方舟模型列表返回非 JSON（HTTP {resp.status_code}）：{e}") from e
+        raise ArkError(
+            f"方舟模型列表返回非 JSON（HTTP {resp.status_code}）：{e}"
+        ) from e
     data = body.get("data") if isinstance(body, dict) else None
     if not isinstance(data, list):
         raise ArkError(f"方舟模型列表形状异常（缺 data 数组）：{str(body)[:200]}")
@@ -601,7 +616,9 @@ def save_images(
     return written
 
 
-def save_snapshot(resp: ArkResponse, runs_dir: str | Path, *, stem: str | None = None) -> Path:
+def save_snapshot(
+    resp: ArkResponse, runs_dir: str | Path, *, stem: str | None = None
+) -> Path:
     """把请求体 + 响应元信息（不含图像字节）存成 JSON，便于排障与复算参数。"""
     d = Path(runs_dir).expanduser()
     d.mkdir(parents=True, exist_ok=True)
@@ -615,9 +632,7 @@ def save_snapshot(resp: ArkResponse, runs_dir: str | Path, *, stem: str | None =
         "request": resp.request,
         "response": raw,
         "usage": resp.usage,
-        "failed": [
-            {"index": im.index, "error": im.error} for im in resp.failed_images
-        ],
+        "failed": [{"index": im.index, "error": im.error} for im in resp.failed_images],
         "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     p = _unique(d / f"{base}.json")

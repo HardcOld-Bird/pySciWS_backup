@@ -18,9 +18,7 @@ except ImportError:  # pragma: no cover
     try:
         import fitz as _mupdf  # type: ignore
     except ImportError as e:
-        raise ImportError(
-            "pymupdf 未安装（应随核心依赖 pymupdf4llm 提供）。"
-        ) from e
+        raise ImportError("pymupdf 未安装（应随核心依赖 pymupdf4llm 提供）。") from e
 
 
 def render_pdf_pages(

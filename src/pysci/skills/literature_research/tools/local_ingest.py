@@ -124,7 +124,9 @@ def summarize(data: dict[str, Any]) -> str:
     lines.append("【按状态】")
     for st in (ST_DONE, ST_PENDING, ST_FAILED, ST_SKIPPED):
         if st in by_status:
-            lines.append(f"  {st:<8}: {by_status[st]:>3} 篇  {pages_by_status[st]:>5} 页")
+            lines.append(
+                f"  {st:<8}: {by_status[st]:>3} 篇  {pages_by_status[st]:>5} 页"
+            )
     # 分优先级的待办
     lines.append("")
     lines.append("【待办 (pending) 按优先级】")

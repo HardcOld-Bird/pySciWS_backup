@@ -104,9 +104,9 @@ class Settings:
     # --- 路径 ---
     project_root: Path
     module_dir: Path
-    templates_dir: Path     # 脚手架模板（new 命令使用）
-    cache_dir: Path         # 符号计算缓存
-    recipes_dir: Path       # 可复用的计算配方
+    templates_dir: Path  # 脚手架模板（new 命令使用）
+    cache_dir: Path  # 符号计算缓存
+    recipes_dir: Path  # 可复用的计算配方
 
     # --- 默认计算参数 ---
     default_grid_resolution: int
@@ -179,9 +179,7 @@ def build_settings() -> Settings:
         default_plot_dpi=_get_env_int("THEORY_DEFAULT_PLOT_DPI", 150),
         plot_backend=_get_env("THEORY_PLOT_BACKEND", "Agg") or "Agg",
         pyvista_off_screen=_get_env_bool("THEORY_PYVISTA_OFF_SCREEN", True),
-        _raw_env={
-            k: v for k, v in os.environ.items() if k.startswith("THEORY_")
-        },
+        _raw_env={k: v for k, v in os.environ.items() if k.startswith("THEORY_")},
     )
 
 

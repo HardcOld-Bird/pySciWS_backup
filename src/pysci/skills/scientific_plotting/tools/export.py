@@ -34,7 +34,7 @@ class ExportResult:
     out_dir: Path
     deliverables: dict[str, Path] = field(default_factory=dict)  # fmt -> path
     preview: Path | None = None
-    errors: dict[str, str] = field(default_factory=dict)        # fmt -> 错误信息
+    errors: dict[str, str] = field(default_factory=dict)  # fmt -> 错误信息
 
     @property
     def ok(self) -> bool:
@@ -45,7 +45,7 @@ class ExportResult:
         lines = [f"export stem : {self.stem}", f"out dir     : {self.out_dir}"]
         for fmt, p in self.deliverables.items():
             size = p.stat().st_size if p.exists() else -1
-            lines.append(f"  [{fmt:>4}] {p.name}  ({size/1024:.1f} KB)")
+            lines.append(f"  [{fmt:>4}] {p.name}  ({size / 1024:.1f} KB)")
         if self.preview is not None:
             lines.append(f"  [prev] {self.preview.name}  <- Read this to inspect")
         for fmt, err in self.errors.items():
@@ -117,7 +117,9 @@ def save_figure(
 
     # 预览件：始终产出（这是视觉闭环的必需品）
     try:
-        result.preview = save_preview(fig, out_dir / f"{stem}_preview.png", dpi=preview_dpi)
+        result.preview = save_preview(
+            fig, out_dir / f"{stem}_preview.png", dpi=preview_dpi
+        )
     except Exception as e:  # noqa: BLE001
         result.errors["preview"] = repr(e)
 
