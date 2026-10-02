@@ -32,7 +32,6 @@ from numpy.typing import NDArray
 from pysci.skills.theoretical_computation.tools import visualize
 from pysci.skills.theoretical_computation.tools.session import ensure_session
 
-
 # ===========================================================================
 # 积分核函数（对应 MATLAB 的 N1jifen / fenbujifen / M22jifen）
 # ===========================================================================

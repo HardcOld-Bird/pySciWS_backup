@@ -163,11 +163,16 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "src/pysci/research/gain_ep/theory/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
 "src/pysci/research/gain_ep/experiment/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
+# article/figures 下是与 theory/、experiment/ 同类的迁移研究可视化脚本（大写物理量命名
+# S/F/G/Zp/Cm、Yoda/zip/dict() 等既有写法），此前漏配豁免；补上以杜绝重复的纯风格误报。
+# 注意：import 排序（I）与正确性规则（F401/F811/E9）不在此列，仍全树严格。
+"src/pysci/research/gain_ep/article/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
 "src/pysci/skills/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
 "scripts/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
 "tests/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731", "F841"]
-# 既有硬件脚本 exp/ 下含未定义名（历史遗留 bug，待后续单独修复）
-"scripts/gain_ep/experiment/exp/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731", "F821"]
+# 既有硬件脚本 exp/ 下含未定义名（历史遗留 bug，待后续单独修复）；
+# 注意 glob 须含 research/ 段方能命中 scripts/research/gain_ep/experiment/exp/。
+"scripts/research/gain_ep/experiment/exp/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731", "F821"]
 
 [tool.ruff.lint.isort]
 # Configure import sorting

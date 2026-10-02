@@ -14,10 +14,11 @@
 数据由 CMT（cmt_reflection_s_matrix）沿 ci 扫描计算，缓存为 npz 以加速迭代。
 """
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (注册 '3d' 投影)
-from pathlib import Path
 from scipy.optimize import root
 
 from pysci.research.gain_ep.theory import cmt_reflection_s_matrix as cmt

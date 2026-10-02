@@ -112,7 +112,7 @@ def print_row(name, cr, ci, side, comsol: dict, ref: dict) -> None:
 def plan() -> None:
     pts = build_points()
     print("=" * 78)
-    print("PLAN: 纯 CMT 预测（无 COMSOL）  n_orders=%d k_modes=%d" % (N_ORDERS, K_MODES))
+    print(f"PLAN: 纯 CMT 预测（无 COMSOL）  n_orders={N_ORDERS} k_modes={K_MODES}")
     print("=" * 78)
     for name, cr, ci, inc in pts:
         S = cmt_S(cr, ci)

@@ -256,11 +256,16 @@ def phase3_map(ci_pole, cr=1.0081, session_dir=None):
     for ci in cis1:
         S = S_at(cr, float(ci))
         if S is None:
-            s21v.append(np.nan); detv.append(np.nan); l1v.append(np.nan); l2v.append(np.nan)
+            s21v.append(np.nan)
+            detv.append(np.nan)
+            l1v.append(np.nan)
+            l2v.append(np.nan)
             continue
         e1, e2 = eigs_of(S)
-        s21v.append(abs(S[1, 0])); detv.append(abs(_det(S)))
-        l1v.append(abs(e1)); l2v.append(abs(e2))
+        s21v.append(abs(S[1, 0]))
+        detv.append(abs(_det(S)))
+        l1v.append(abs(e1))
+        l2v.append(abs(e2))
 
     fig, (axA, axB) = plt.subplots(1, 2, figsize=(12.5, 5), sharex=True)
     for ax in (axA, axB):

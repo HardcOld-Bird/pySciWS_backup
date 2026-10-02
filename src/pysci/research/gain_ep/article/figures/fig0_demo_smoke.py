@@ -1,6 +1,5 @@
 """fig0_demo_smoke — 2×2 多子图管线（pysci-figures 脚手架生成，按需修改）。"""
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 from pysci.skills.scientific_plotting.tools import layout, palette

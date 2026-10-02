@@ -17,11 +17,12 @@
 属黎曼面可视化的固有特征而非伪影。
 """
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Normalize
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (注册 '3d' 投影)
-from pathlib import Path
 from scipy.optimize import root
 
 from pysci.research.gain_ep.theory import cmt_reflection_s_matrix as cmt
