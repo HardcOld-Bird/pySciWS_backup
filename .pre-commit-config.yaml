@@ -33,7 +33,24 @@ repos:
         args: ["--maxkb=2000"]
 
   # ========================================================================
-  # 2. Commitizen
+  # 2. Ruff（lint + format）
+  # ========================================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # rev 须与项目锁定的 ruff 版本一致（uv.lock: 0.16.7），避免钩子与本地 uv run ruff 行为漂移。
+    rev: v0.16.7
+    hooks:
+      # ruff check：极速 lint；--fix 自动修复可修项（如 I001 import 排序、F401 未用 import）。
+      # hook entry 默认带 --force-exclude，遵循 pyproject.toml 的 exclude（data/、.venv/ 等）。
+      # 注：ruff-pre-commit 钩子 types_or=[python,pyi,jupyter]，只作用于 Python 文件，
+      #     不会像 CLI `ruff format` 那样重排 .md 内代码块（文档提交不被自动改写）。
+      - id: ruff-check
+        args: [--fix]
+
+      # ruff format：统一代码格式，等价本地 uv run ruff format。
+      - id: ruff-format
+
+  # ========================================================================
+  # 3. Commitizen
   # ========================================================================
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.10.0
