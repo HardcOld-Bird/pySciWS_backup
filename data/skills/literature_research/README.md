@@ -6,7 +6,7 @@
 | 位置 | 角色 | 内容 |
 |---|---|---|
 | `data/skills/literature_research/`（本目录） | **数据** | `papers/` 笔记、`shortlists/` 检索快照、`reviews/` 综述、`templates/` 模板、`INDEX.md` 索引、`cache/` 缓存 |
-| `src/pysci/skills/literature_research/` | **代码** | `tools/` 工具链（`research` CLI + 8 个 client 模块），随 `pysci` 包 editable 安装 |
+| `src/pysci/skills/literature_research/` | **代码** | `tools/` 工具链（`research` CLI + 11 个后端模块），随 `pysci` 包 editable 安装 |
 | `.qoder/skills/literature-research/` | **Skill（说明书）** | `SKILL.md` + `references/`，教 AI 何时、如何调用 `research` CLI |
 
 > **命名对应**：代码包 `literature_research`（下划线，合法 Python 包名）↔ skill `literature-research`（连字符，skill 命名规范）。一一对应，见名知意。
@@ -40,20 +40,23 @@ data/skills/literature_research/     # 本目录（数据区）
     ├── pdfs/                # Tier A：下载的 PDF
     ├── extracted/           # Tier A：抽取的全文 markdown（{slug}_fulltext.md）
     ├── html_fulltext/       # Tier A：浏览器抓取的 HTML 全文（+ .by_url/ URL→bundle 命中清单）
+    ├── rag/                 # 本地 PaperQA2 embedding 索引（index.pkl + index_meta.json；research rag，可重建）
     └── .autoclean_state.json  # 上次自动清理时间戳
 
 src/pysci/skills/literature_research/   # 代码区（随 pysci 包 editable 安装）
 ├── __init__.py              # 使本目录成为 Python 包（供 -m 调用）
 └── tools/                   # 本地 Python 工具链
-    ├── research.py          # ★ 统一 CLI 门面：doctor/search/read/get/add/library/index/cache
+    ├── research.py          # ★ 统一 CLI 门面：doctor/search/read/get/add/citecheck/library/index/ingest/rag/cache
     ├── config.py            # 统一配置加载（读项目根 .env，暴露 settings；路径经 pysci.paths 锚定）
     ├── openalex_client.py   # OpenAlex 检索（主源）+ 元数据规范化
     ├── arxiv_client.py      # arXiv 检索 + PDF 下载
-    ├── wos_client.py        # Web of Science：官方 JIF/JCR/ESI 增强
-    ├── semantic_scholar_client.py  # Semantic Scholar：TLDR 增强（可选，常不可达）
-    ├── zotero_bridge.py     # Zotero 桥接（本地 API 优先，回退 Web API）
+    ├── wos_client.py        # Web of Science（Starter API）：Times Cited + wos_id + JCR 链接增强
+    ├── citation_verify.py   # 引用完整性门：OpenAlex + Crossref + arXiv 三源交叉核验（citecheck / add 写入前 gate）
+    ├── zotero_cli.py        # Zotero 桥接：委托社区 zotero-mcp 的 `zotero-cli --json`（未安装即优雅降级）
     ├── browser_fetch.py     # Playwright 抓取付费墙全文 / PDF / 补充材料（URL 命中即复用）
     ├── pdf_extract.py       # PDF → Markdown（MinerU 云端主力 / pymupdf4llm 兜底）
+    ├── local_ingest.py      # 批量归档本地 PDF 文件夹（复制 → 抽取 → manifest 台账）；research ingest
+    ├── rag.py               # 本地语义检索（PaperQA2 + 硅基流动 bge-m3）：research rag index/search/ask（embedding 免费检索为主，ask 可选免费→付费→降级）
     └── cache_manager.py     # 两层缓存治理：stats/clean/prune + LRU（bump_mtime）
 ```
 
@@ -117,7 +120,7 @@ src/pysci/skills/literature_research/   # 代码区（随 pysci 包 editable 安
 - 本目录的 markdown 是**在 Zotero 之上的增值层**：AI 生成的摘要、评价、跨文献链接、研究关联笔记
 - 双向：
   - Zotero → 本目录：`research library` 查询用户库；`research add` 拉取元数据建笔记
-  - 本目录 → Zotero：`research add` 通过 API 在 Zotero 建条目，并把返回的 `zotero_key` 回写笔记
+  - 本目录 → Zotero：`research add` 把 frontmatter 规范化为 BibTeX，委托社区 `zotero-cli`（zotero-mcp）建条目，并把返回的 `zotero_key` 回写笔记
 
 ---
 
@@ -137,19 +140,23 @@ src/pysci/skills/literature_research/   # 代码区（随 pysci 包 editable 安
 1. **体检** `research doctor` — 确认路径、各数据源、PDF 后端、Playwright、Zotero 是否就绪
 2. **检索** `research search '<query>' [--year 2020-2026] [--sort citations] [--save --purpose '<goal>']`
    — 默认融合 OpenAlex + arXiv 并去重；`--save` 生成 `shortlists/` 快照
-3. **看单篇元数据** `research get <doi｜arxiv-id｜openalex-id>` — 打印完整 frontmatter（含官方 JIF/JCR）
-4. **入库** `research add <id> [--tags …]` — 在 Zotero 建条目 + 写 `papers/` 笔记骨架（不抓全文）
+3. **看单篇元数据** `research get <doi｜arxiv-id｜openalex-id>` — 打印完整 frontmatter（含被引、JIF 估算与 WoS 收录号）
+4. **入库** `research add <id> [--tags …]` — **写入前默认三源引用核验**（OpenAlex+Crossref+arXiv，FAIL 阻止入库；`--force` 越过 / `--no-verify` 跳过）→ 在 Zotero 建条目 + 写 `papers/` 笔记骨架（不抓全文）
 5. **精读** `research read <doi｜url｜arxiv-id>` — 抓全文（MinerU 云端抽取）+ 建笔记骨架；随后 AI
    读 `cache/extracted/*_fulltext.md`，在 `papers/*.md` 填 TLDR / Key Claims / Novelty / Rigor /
    Journal-tier / Relevance 各章节
 6. **更新索引** `research index` — 扫描 `papers/` 重建 `INDEX.md`（**勿手动编辑 INDEX.md**）
 7. **（可选）综述** — 多篇读完后可生成 `reviews/{YYYY-MM}_{topic}_survey.md`
 
-**增强策略**：`get`/`read`/`add` 单篇默认做 WoS/S2 增强；`search` 的逐条增强需显式 `--enrich`
-（默认关，避免 N 次慢调用）。Semantic Scholar 为**可选末位源**——无 key 静默跳过、失败视作预期、不告警。
+**增强策略**：`get`/`read`/`add` 单篇默认做 WoS 增强；`search` 的逐条增强需显式 `--enrich`
+（默认关，避免 N 次慢调用）。WoS Starter API 为**主力增强源**——提供权威 Times Cited、WoS 收录号（`wos_id`）与 JCR 链接；但它**不含**官方 JIF/JCR 分区/ESI（Starter API 无此数据），JIF 仍由 OpenAlex 估算填充。未配置或调用失败时静默降级。
+
+**引用完整性门**：`add` 写入前自动用 **OpenAlex + Crossref + arXiv 三源**交叉核验每条引用（标题/DOI/年份/期刊/首作者），实质冲突（FAIL）阻止入库（`--force` 越过 / `--no-verify` 跳过）；也可独立跑 `research citecheck <doi｜标题>` 或 `citecheck --all`（审计 `papers/` 全部笔记，有 FAIL 退出码 1，可作 CI 门）。仅硬冲突（标题/DOI 不符、年份差≥2）判 FAIL；作者姓 / 年份差 1 / 期刊名差异只 WARN；某源不可达只降级、绝不误判。
 
 **缓存维护**：昂贵产物（PDF / 抽取全文 / 抓取 HTML）默认永久保留、命中即复用；用
 `research cache stats｜clean｜prune` 治理磁盘（分层模型见 §3）。
+
+**本地语义检索（RAG）**：`read`/`ingest` 抽取到 `cache/extracted/` 的全文可用 `research rag index` 建本地 embedding 索引（硅基流动 bge-m3，免费），随后 `research rag search '<query>'` 做纯 embedding 语义检索（返回 top-k 相关段落 + 出处引文 + 文件路径，无 LLM、零成本、不阻塞，是跨本地文献综合的主力）；`research rag ask '<query>'` 为可选的一句话综述（免费 Qwen2.5-7B → 不可用丝滑回退付费 Qwen2.5-32B → 全失败静默降级为 search，永不阻塞）。需 `SILICONFLOW_API_KEY`；`research rag status` 查看后端就绪与索引状态。
 
 ---
 
@@ -169,18 +176,31 @@ src/pysci/skills/literature_research/   # 代码区（随 pysci 包 editable 安
 工具链依赖以下 Python 包，均在项目 uv 虚拟环境（`.venv`）中、已声明于根 `pyproject.toml`：
 
 **核心**：
-- `requests` — HTTP 客户端（OpenAlex / arXiv / WoS / Zotero / MinerU 云端）
+- `requests` — HTTP 客户端（OpenAlex / arXiv / WoS / Crossref 引用核验）
 - `python-dotenv` — 加载项目根 `.env`
-- `pyzotero` — Zotero API 官方 Python 封装
-- `markdown` — markdown → HTML（写入 Zotero 笔记时需要）
+
+> **引用完整性门无新增 pip 依赖**：`citation_verify.py`（`research citecheck` 与 `add` 写入前 gate）
+> 走 **Crossref 免费 REST**（无需 key，`OPENALEX_EMAIL` 兼作 `mailto` polite-pool 标识）+ 复用既有
+> `openalex_client` / `arxiv_client`，仅用标准库 `difflib` / `unicodedata` 做归一化比对。
+
+**Zotero 文献库层**（不再是本项目 pip 依赖）：
+- 委托社区 **`zotero-mcp`** 的 `zotero-cli`，经 `uv tool install "zotero-mcp-server[pdf,scite]"`
+  独立安装于隔离工具环境（见 `scripts/zotero_mcp/`）；本项目 `research add/library` 与
+  `document_writing` 的 refs 导出仅 subprocess 调用它。原 `pyzotero` / `markdown`（旧
+  `zotero_bridge.py` 手写 API 回退与 md→html 所需）已随该模块删除而移除。
 
 **PDF 抽取与全文抓取**：
-- **MinerU 云端 Open API** — 公式精读**主力**（VLM + OCR，公式→LaTeX、表格→HTML）；仅需 `requests`
-  + `MINERU_TOKEN`，无本地重型依赖
+- **`mineru-open-sdk`** — 公式精读**主力**：封装 MinerU 云端 Open API（VLM + OCR，公式→LaTeX、
+  表格→HTML）的鉴权/上传/轮询，仅依赖 `httpx` + `MINERU_TOKEN`，无本地重型依赖
 - `pymupdf4llm` — 本地**兜底**后端：纯 CPU、快，但**公式会丢失**
 - `playwright>=1.63.0` — 付费墙论文的 HTML 全文 / 正文 PDF / 补充材料抓取
+- `trafilatura` — 从 Playwright 抓取的 HTML 提取结构化 markdown 正文（替代手写 innerText）
 
 > 旧的 `marker-pdf` / `magic-pdf`（本地 MinerU）实测本机不可用，且云端 MinerU 可完全替代，已从依赖中**移除**。
+
+**本地语义检索（RAG）**：
+- **`paper-qa`**（PaperQA2，**核心依赖**，无 torch）— 本地文献库语义索引/检索引擎；embedding 走硅基流动
+- **硅基流动 SiliconFlow**（OpenAI 兼容，经 `litellm`）— `bge-m3` embedding（免费）建索引 + 检索；`ask` 综述可选用 Qwen 免费档 → 付费回退。需 `SILICONFLOW_API_KEY`
 
 **安装 / 更新**：
 ```
@@ -201,13 +221,16 @@ playwright install chromium   # 仅当系统无 Chrome/Edge 时，browser_fetch 
 所有 API key、token、Zotero userID 等敏感信息都放在**项目根目录**的 `.env`
 （已被根 `.gitignore` 与本目录 `.gitignore` 忽略）。常用键：
 
-`OPENALEX_EMAIL`、`WOS_API_KEY`、`SEMANTIC_SCHOLAR_API_KEY`（可选）、`ZOTERO_USER_ID`、
-`ZOTERO_API_KEY`、`MINERU_TOKEN`、`PDF_EXTRACT_BACKEND`、`CACHE_DIR`、`HTTP_TIMEOUT_SECONDS`、
-`HTTP_MAX_RETRIES`。缓存治理（均可选）：`CACHE_B_MAX_AGE_DAYS`（默认 7）、
-`CACHE_AUTOCLEAN_INTERVAL_DAYS`（默认 7）、`CACHE_SOFT_LIMIT_MB`（默认 2048）。
+`OPENALEX_EMAIL`、`OPENALEX_API_KEY`、`WOS_API_KEY`、`ZOTERO_USER_ID`、
+`ZOTERO_API_KEY`、`MINERU_TOKEN`、`PDF_EXTRACT_BACKEND`、`SILICONFLOW_API_KEY`、`CACHE_DIR`、
+`HTTP_TIMEOUT_SECONDS`、`HTTP_MAX_RETRIES`。缓存治理（均可选）：`CACHE_B_MAX_AGE_DAYS`（默认 7）、
+`CACHE_AUTOCLEAN_INTERVAL_DAYS`（默认 7）、`CACHE_SOFT_LIMIT_MB`（默认 2048）。本地 RAG（均可选，
+有内置默认值）：`SILICONFLOW_BASE_URL`、`PQA_EMBEDDING`（默认 `openai/BAAI/bge-m3`）、`PQA_LLM`（免费档
+`openai/Qwen/Qwen2.5-7B-Instruct`）、`PQA_LLM_FALLBACK`（付费回退 `openai/Qwen/Qwen2.5-32B-Instruct`）、
+`PQA_HOME`（默认 `cache/rag`）。
 
-除 OpenAlex / arXiv 外全部可选；缺失时对应功能静默降级。用 `research doctor` 一览当前凭据与可达性。
+除 arXiv 外全部可选；缺失时对应功能静默降级（OpenAlex 无 key 时限 100 credits/天测试配额）。**Crossref 引用核验无需任何 key**（`OPENALEX_EMAIL` 兼作 polite-pool `mailto`）。用 `research doctor` 一览当前凭据与可达性（含 Crossref 就绪行）。
 
 ---
 
-_Last updated: 2026-09-21 · Maintained by: AI Agent (Qoder) · 配对 skill：`.qoder/skills/literature-research/`_
+_Last updated: 2026-10-02 · Maintained by: AI Agent (Qoder) · 配对 skill：`.qoder/skills/literature-research/`_

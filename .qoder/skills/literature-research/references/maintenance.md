@@ -1,6 +1,6 @@
 # Maintenance guide
 
-The `research` CLI is a thin facade over 9 backend modules in
+The `research` CLI is a thin facade over 11 backend modules in
 `src/pysci/skills/literature_research/tools/`. You rarely need to touch them; this guide is for when a
 source, the PDF extractor, or a publisher page breaks, or when you want to extend the system.
 
@@ -13,16 +13,17 @@ source, the PDF extractor, or a publisher page breaks, or when you want to exten
 ## 1. Architecture
 
 ```
-research.py            ← CLI facade: doctor/search/read/get/add/library/index/ingest/cache (orchestration only)
+research.py            ← CLI facade: doctor/search/read/get/add/citecheck/library/index/ingest/rag/cache (orchestration only)
   ├─ config.py         ← loads project-root .env; exposes `settings` + `http_session()`
   ├─ openalex_client   ← primary search + metadata + work_to_note_frontmatter()
   ├─ arxiv_client      ← preprints + download_pdf() + arxiv_to_note_frontmatter()
-  ├─ wos_client        ← enrich_openalex_work(): official JIF/JCR/ESI (silent-fail)
-  ├─ semantic_scholar_client ← enrich_from_s2(): TLDR (silent-fail; usually unavailable)
-  ├─ zotero_bridge     ← ZoteroBridge: ping/list/search/get/create_item_from_metadata/add_note
+  ├─ wos_client        ← enrich_openalex_work(): WoS accession no. (wos_id) + Times Cited (silent-fail)
+  ├─ citation_verify   ← citation integrity gate: OpenAlex + Crossref + arXiv 3-source cross-check; verify_citation/verify_frontmatter + render (`research citecheck` + `add` gate)
+  ├─ zotero_cli        ← ZoteroCli: delegates to community `zotero-cli --json` (zotero-mcp): ping/list/search/get/create_item_from_metadata/add_note + frontmatter_to_bibtex
   ├─ browser_fetch     ← Playwright: fetch_all/fetch_pdf/fetch_html + PublisherAdapter
-  ├─ pdf_extract       ← extract_pdf(): MinerU cloud (primary) / pymupdf4llm (fallback)
+  ├─ pdf_extract       ← extract_pdf(): MinerU cloud via mineru-open-sdk (primary) / pymupdf4llm (fallback)
   ├─ local_ingest      ← bulk-ingest a LOCAL folder of PDFs (copy → extract → manifest ledger); `research ingest`
+  ├─ rag               ← PaperQA2 semantic RAG over cache/extracted/: build_index/search (embedding-only, free) + optional ask (free→paid→degrade); `research rag`
   └─ cache_manager     ← two-tier cache governance: stats/clean/prune + bump_mtime (LRU)
 ```
 
@@ -66,8 +67,11 @@ CACHE_DIR_ENV_DEFAULT = "data/skills/literature_research/cache"
   `INDEX.md`; `settings.cache_dir` for `pdfs/`, `extracted/`, `api_responses/`, `html_fulltext/`.
 
 Credentials (all optional except none are strictly required for OpenAlex/arXiv):
-`OPENALEX_EMAIL`, `WOS_API_KEY`, `SEMANTIC_SCHOLAR_API_KEY`, `ZOTERO_USER_ID`, `ZOTERO_API_KEY`,
-`MINERU_TOKEN`, `PDF_EXTRACT_BACKEND`, `HTTP_TIMEOUT_SECONDS`, `HTTP_MAX_RETRIES`.
+`OPENALEX_EMAIL`, `OPENALEX_API_KEY`, `WOS_API_KEY`, `ZOTERO_USER_ID`, `ZOTERO_API_KEY`,
+`MINERU_TOKEN`, `PDF_EXTRACT_BACKEND`, `SILICONFLOW_API_KEY`, `SILICONFLOW_BASE_URL`,
+`HTTP_TIMEOUT_SECONDS`, `HTTP_MAX_RETRIES`. The RAG layer (§5d) gates on `SILICONFLOW_API_KEY`
+(`settings.pqa_ready`) and reads the optional `PQA_EMBEDDING`/`PQA_LLM`/`PQA_LLM_FALLBACK`/`PQA_HOME`
+overrides (all have built-in defaults).
 
 ---
 
@@ -78,16 +82,19 @@ Credentials (all optional except none are strictly required for OpenAlex/arXiv):
 - `extract_pdf(path, backend=None)` with `backend=None`/`auto` picks the best available
   (MinerU cloud first). It caches results in `cache/extracted/` (`use_cache`/`write_cache`).
 - **MinerU cloud** is the primary: a VLM pipeline with OCR that renders equations as LaTeX and
-  tables as HTML. It uploads the PDF to the MinerU Open API and polls the job (you'll see
-  `MinerU running: k/N 页`). Typical cost ~1–3s/page.
-- **MinerU has a 200-page single-file hard limit** (exceeding it returns "number of pages exceeds
-  limit (200 pages)"). `_extract_with_mineru_cloud()` handles this transparently: it reads the page
-  count via fitz and, if > `MINERU_MAX_PAGES` (200), splits the PDF into ≤ `MINERU_CHUNK_PAGES` (199)
-  page chunks (`_split_pdf_into_chunks`), converts each via `_mineru_extract_one`, then concatenates
-  the parts (each tagged `<!-- MinerU chunk i/N (pages …) -->`) and removes the temp chunk dir. So
-  `read`/`ingest` on a big textbook "just works" — expect `MinerU 分块 i/N` log lines. Quota: MinerU's
-  ~1000-page allowance is a *fast-track* quota, not a daily hard cap — beyond it jobs still run, just
-  slower (normal queue); the daily file cap is 5000.
+  tables as HTML. It goes through the community **`mineru-open-sdk`** (`from mineru import MinerU`),
+  which owns auth / upload / polling / result unpacking (only needs `httpx` + `MINERU_TOKEN`);
+  `_mineru_extract_pages()` just calls `client.extract(path, model="vlm", ocr=True, formula=True,
+  table=True, language="en", extra_formats=["latex"], timeout=…)` and reads `result.markdown`.
+  Typical cost ~1–3s/page.
+- **MinerU Precision Extract has a 600-page single-file limit** (exceeding it raises the SDK's
+  `PageLimitError`). `_extract_with_mineru_cloud()` handles this transparently: it reads the page
+  count via fitz and, if > `MINERU_MAX_PAGES` (600), converts in `MINERU_CHUNK_PAGES` (600) page
+  segments via the SDK's `pages="a-b"` range (no more fitz temp-file splitting), then concatenates
+  the parts (each tagged `<!-- MinerU pages a-b (i/N) -->`). So `read`/`ingest` on a big textbook
+  "just works" — expect `MinerU 分段 i/N: 页 a-b` log lines. Quota: MinerU's ~1000-page allowance
+  is a *fast-track* quota, not a daily hard cap — beyond it jobs still run, just slower (normal
+  queue); the daily file cap is 5000.
 - **pymupdf4llm** is the local fallback: fast, CPU-only, but **equations are lost**. Use it only
   when equations don't matter or MinerU is down.
 
@@ -128,8 +135,13 @@ ADAPTERS: tuple[PublisherAdapter, ...] = (APS_ADAPTER,)   # ← the registry
 def detect_adapter(url):  # hostname match, else GENERIC_ADAPTER
 ```
 
-An in-page JS routine (`_JS_EXTRACT`) pulls text from the first matching selector and collects
-same-host PDF links.
+Body extraction runs through **`trafilatura`**: an in-page JS routine (`_JS_EXTRACT_HTML`) pulls the
+`outerHTML` of the first matching selector, `_wrap_document()` re-roots it as a full `<html>` doc,
+and `_trafilatura_body()` converts it to structured Markdown (`favor_precision`; tables/images/links
+kept). `_extract_body()` falls back to trafilatura-on-full-page, then to the old innerText routine
+(`_JS_EXTRACT`) if trafilatura is unavailable or yields <200 chars — so the adapter's
+`fulltext_selectors` still drive scoping. Same-host PDF / supplement links are collected by separate
+JS routines (`_JS_PDF_LINK` / `_JS_SUPP_LINKS`).
 
 ### Add support for a new publisher
 
@@ -240,6 +252,86 @@ a curated, git-tracked ledger `data/skills/literature_research/ingest/manifest.j
 
 ---
 
+## 5c. Citation integrity gate (`citation_verify.py` / `research citecheck` + `add`)
+
+Catches fabricated / mis-paired references before they enter the library. **Three independent open
+sources** — OpenAlex, **Crossref** (free REST, no key), arXiv — are queried for the same citation,
+normalized to a common `SourceRecord`, then compared field-by-field. Semantic Scholar is deliberately
+not used (removed in stage 1).
+
+- **Crossref** is the only new HTTP source added here (`api.crossref.org/works/{doi}`, or
+  `?query.bibliographic=<title>&rows=1` for a title-only fallback). It reuses `openalex_client`'s
+  two-tier cache (`crossref_`-prefixed keys) and puts `settings.openalex_email` in the `mailto`
+  polite-pool param. A **404 = “not found”** (`_crossref_message` returns `None`, i.e. reachable but
+  absent) — distinct from a network error, which sets `reachable=False`.
+- **Severity, not equality.** Each field comparator returns `hard` / `soft` / `None` (`_FIELD_SPECS`):
+  title (`_cmp_title`, sim < 0.82 → hard), DOI (`_cmp_exact` → hard), year (`_cmp_year`, ±1 → soft,
+  ≥2 → hard), first author (`_cmp_name` → **soft**), journal (`_cmp_journal` → soft, containment
+  tolerated). Any hard → **FAIL**; only soft → **WARN**; else **PASS**; all sources absent →
+  **NOT_FOUND**. Only FAIL blocks (`CitationVerdict.passed()` = `status != FAIL`).
+- **Graceful degradation is the core invariant.** An unreachable source is recorded (`reachable=False`)
+  and **never counted as a conflict** — a network blip must not fail a real citation. A FAIL requires
+  ≥2 reachable sources to hard-conflict.
+- **Transliteration pitfall (fixed in stage 6).** `openalex_client._guess_last_name` *deletes*
+  diacritics (`Büttner` → `bttner`) while `normalize_last_name` *transliterates* them (`→ buttner`).
+  Comparing those two directly caused a false FAIL. Fix: every source derives the first-author surname
+  from the **full author name** (`authors[0]`) through the same `normalize_last_name`, never trusting an
+  upstream pre-processed `first_author_last_name`; and first-author is only a **soft** signal anyway.
+  `test_openalex_and_crossref_transliterate_author_consistently` guards this.
+- **The `claim` pseudo-source.** The note's own asserted values are folded in as `source="claim"` and
+  compared against the real sources — this is what detects a DOI that doesn't match the title claimed.
+- Entry points: `verify_citation(cite)` (a dict), `verify_frontmatter(fm)`, `verify_note_file(path)`
+  (parses frontmatter scalars without PyYAML / without importing `research`, avoiding a cycle).
+  `research.py` wraps these: `_citation_gate` (the `add` pre-write check, degrades to allow on error)
+  and `cmd_citecheck` (standalone; exit 1 on any FAIL). Render via `render_verdict` / `render_report`
+  (`✓ △ ✗ ?`, ANSI red on FAIL when a TTY).
+
+---
+
+## 5d. Semantic RAG layer (`rag.py` / `research rag`)
+
+A local, **embedding-first** retrieval layer over the MinerU-extracted corpus (`cache/extracted/**/*.md`),
+built on **PaperQA2** (`paper-qa`, a core dependency — no torch) + **SiliconFlow** (OpenAI-compatible).
+Design intent: the Agent's own infrastructure for reading *across* the local library — `search` is the
+primary path (pure embedding, free, no LLM); `ask` is an optional convenience that must never block.
+
+- **Backend import is lazy + guarded.** `_import_backend(models=…)` first checks `settings.pqa_ready`
+  (= `bool(SILICONFLOW_API_KEY)`) and raises a clear `RuntimeError` naming the missing key if not; it sets
+  `LITELLM_LOCAL_MODEL_COST_MAP=True` **before** importing litellm (avoids a remote cost-map fetch that can
+  hang), silences litellm's debug banner + a known harmless `async_success_handler` RuntimeWarning, then
+  `_register_litellm_models()` declares each model (with **and** without the `openai/` prefix) incl.
+  `max_input_tokens` — omitting it makes embedding calls `KeyError`. `paperqa`/`litellm` are imported only
+  here, so `import rag` / `rag status` / `index_status()` never pull the heavy stack or touch the network.
+- **S2-free by construction.** `_build_pqa_settings()` sets `parsing={"use_doc_details": False,
+  "multimodal": False}`, so PaperQA2 does **not** call Semantic Scholar / Crossref for per-doc metadata.
+  Citation/title/year/DOI/first-author are derived **offline** from the `.md` head by `_derive_meta_from_md`
+  (first `#` H1 → title; a four-digit year only next to `published`/`accepted`/`received`/`©`; the first
+  `DOI:`; the first plausible author line — skipping URL/affiliation lines and requiring ≥2 name tokens).
+  A journal paper yields `Xia et al. (2025)`; a manual/no-author doc degrades to its title. `_map_mailto_env`
+  still forwards `OPENALEX_EMAIL` → `CROSSREF_MAILTO`/`OPENALEX_MAILTO` for politeness if any source is hit.
+- **Persistence + incremental index.** `build_index(paths=None, rebuild=False)` embeds each candidate `.md`
+  (docname = `__`-joined path-relative-to-`cache/extracted` stem) via `Docs.aadd(citation=…, title=…, doi=…)`,
+  then pickles the `Docs` to `cache/rag/index.pkl` + writes `index_meta.json` (`files{docname:{path,mtime,
+  title,year,doi,first_author,citation}}`, `n_docs`, `n_chunks`, `embedding_model`, `paperqa_version`,
+  `built_at`). Re-running is incremental: same mtime → **skip**, changed mtime → **stale** (not silently
+  overwritten), new → **add**; `--rebuild` starts fresh. `_load_docs` returns `None` on a version mismatch or
+  corrupt pickle (→ treated as "no index"). `PQA_HOME` overrides the index dir (default `cache/rag/`).
+- **`search` (primary).** `Docs.retrieve_texts(query, k)` → `list[Text]` (MMR-ranked, embedding-only, no LLM).
+  Each `Text` maps to a `RagChunk(rank, text, docname, citation, source_path, chunk_name)`; the source
+  attribution chain is `chunk.text` + `chunk.doc.docname` + `chunk.doc.citation`, with `source_path` recovered
+  from `index_meta.json`'s docname→path map. No index → a clear "run `research rag index`" error.
+- **`ask` (optional, never blocks).** Tries the free `PQA_LLM` (`Qwen2.5-7B`, cost 0) → on any failure the paid
+  `PQA_LLM_FALLBACK` (`Qwen2.5-32B`) → if both fail (or the backend/index is unavailable), `_degrade` sets
+  `backend="none"`, `degraded=True`, and fills `result.search` with plain `search()` output instead of raising.
+  `render_ask` labels the degraded case. This "free → paid → degrade, no noise" ladder is a hard product
+  requirement (the Agent is itself a strong LLM; `ask` is a convenience, never a dependency).
+- **Data structures** `RagChunk` / `RagSearchResult` / `IndexReport` / `RagAskResult` are dataclasses with
+  `to_dict()` (JSON-serializable, nested dataclasses folded) for `--json`. `research.py`'s `cmd_rag` dispatches
+  `index/search/ask/status`; `main()` does **not** attach the Tier-B autoclean hook to `rag` (it writes no
+  `api_responses`). Config: `settings.pqa_embedding`/`pqa_llm`/`pqa_llm_fallback`/`pqa_home` (+ `pqa_ready`).
+
+---
+
 ## 6. Common failures → fixes
 
 | Symptom | Likely cause | Fix |
@@ -249,14 +341,20 @@ a curated, git-tracked ledger `data/skills/literature_research/ingest/manifest.j
 | `institutional_access=false`, paywalled | No subscription via this network | Use a campus VPN, or `read` the arXiv id / OA copy instead. |
 | MinerU 401 / job fails | Bad/expired `MINERU_TOKEN` or quota | Check `.env`; temporarily `--backend pymupdf4llm`. |
 | Equations missing in output | Fell back to pymupdf4llm | Ensure `MINERU_TOKEN` is set; check `research doctor` lists `mineru-cloud`. |
-| `[wos] enrichment skipped` / no JIF | WoS key pending approval or endpoint changed | Expected — degrades to OpenAlex estimate. No action unless you have a working key. |
-| Anything Semantic Scholar | Campus network blocks S2 | **By design: ignore.** Do not troubleshoot or warn. |
-| Zotero `不可达` | Desktop app closed / local API off | Start Zotero; Settings → Advanced → *Allow other applications*; or set Web API creds. |
+| `[wos] enrichment skipped` | `WOS_API_KEY` unset or endpoint changed | Expected — enrichment only adds `wos_id`; degrades silently. The Starter API never returns JIF / quartile / ESI (those come from OpenAlex's estimate), so their absence is normal, not an error. |
+| Zotero `不可达` / `zotero-cli 未安装` | Desktop app closed / local API off / CLI not on PATH | Start Zotero; Settings → Advanced → *Allow other applications*; run `zotero-mcp authorize-local` (choose *Always Allow*); or set Web API creds (`ZOTERO_API_KEY`+`ZOTERO_LIBRARY_ID`). If `zotero-cli` is missing, run `scripts\zotero_mcp\setup_zotero_mcp.ps1` then `uv tool update-shell` and restart the shell. |
 | Paths wrong / `.env` not loaded | Project-root markers moved; `pysci.paths` can't find root | Check `_ROOT_MARKERS` in `src/pysci/paths.py` (§2); confirm with `research doctor`. |
 | PowerShell mangles the command | Double quotes stripped / `&&` used | Single-quote multi-word args; chain with `;`. |
-| `add` created a duplicate Zotero item | Ran `add` twice for one DOI | Check `library search` before adding; delete the dup in Zotero. |
+| `add` created a duplicate Zotero item | Ran `add` twice for one DOI | Check `library search` before adding; merge the dup via the `zotero` MCP (`duplicates find`) or delete it in Zotero. |
 | Cache growing / disk pressure | Tier A artifacts kept forever by design | `research cache stats`; then `prune --max-mb N` (Tier A) or `clean` (Tier B). |
 | `read` shows `命中缓存全文` but you want a fresh fetch | Cached `{stem}_fulltext.md` was reused | Re-run with `--force` (alias `--refresh`) to re-fetch + re-extract. |
+| `add` blocked with `✗ 引用核验未通过` | Citation gate FAIL (≥2 sources hard-conflict on title/DOI/year) | Inspect with `research citecheck <doi> --json`; fix the mismatched field, or `--force` to override / `--no-verify` to skip. |
+| `citecheck` reports `?NOT_FOUND` for a real paper | All three sources missed it (typo'd DOI, very new, or offline) | Check the DOI/id; a lone `openalex=不可达`/`crossref=不可达` is a network blip (downgraded, not a FAIL) — re-run. |
+| `citecheck` first-author `△WARN` on an accented name | Cross-source transliteration/abbreviation noise | Expected — author surname is a soft signal and never blocks; title/DOI/year are the hard signals. |
+| `rag search`/`ask` errors "未配置 SILICONFLOW_API_KEY" | `pqa_ready` false (no key in `.env`) | Set `SILICONFLOW_API_KEY` (+ `SILICONFLOW_BASE_URL`); confirm with `research rag status`. |
+| `rag search` says "no index" / `先运行 research rag index` | Index never built, or paperqa version changed / pickle corrupt | Run `research rag index` (add `--rebuild` to force). `cache/rag/` is rebuildable + git-ignored. |
+| `rag ask` prints a degrade notice + returns search results | Free **and** paid LLM both failed (quota / 503 / network) | By design — `ask` never blocks; use the returned `search` chunks or retry later. Check the `SILICONFLOW_API_KEY` quota. |
+| `rag` embedding `KeyError` on max_input_tokens | A model was registered without `max_input_tokens` | Ensure `_register_litellm_models` declares it for both the bare and `openai/`-prefixed name (§5d). |
 
 ---
 
@@ -276,5 +374,7 @@ a curated, git-tracked ledger `data/skills/literature_research/ingest/manifest.j
 .venv\Scripts\python.exe -m py_compile src/pysci/skills/literature_research/tools/<file>.py
 .venv\Scripts\python.exe -m pysci.skills.literature_research.tools.research doctor
 ```
-Then smoke-test the affected command (`search`/`read`/`get`/`add`/`library`/`index`). `doctor`
-is the fastest way to confirm config, sources, backends, Playwright, and Zotero are all wired up.
+Then smoke-test the affected command (`search`/`read`/`get`/`add`/`citecheck`/`library`/`index`/`rag`). `doctor`
+is the fastest way to confirm config, sources, backends, Playwright, Zotero, and the RAG layer are all wired
+up. For `rag` specifically: `research rag status` (offline) then a small `research rag index --path <one .md>`
++ `research rag search '<q>' -k 3` is the cheapest end-to-end check (uses real SiliconFlow embedding).

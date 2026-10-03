@@ -64,7 +64,7 @@ text runs into the margin. Iterate edit → build → verify until the pages loo
 
 `compose tex refs <target> --query '<topic>' | --collection <key> | --tag <t> | --keys a,b`
 rebuilds `<project>/refs.bib` from the user's Zotero library (reuses the
-`literature_research` Zotero bridge). Citekeys follow Better-BibTeX style
+`literature_research` Zotero layer, which delegates to the community `zotero-cli`). Citekeys follow Better-BibTeX style
 (`zhu2018simultaneous`). Duplicate keys get `a/b/c` suffixes. `--out` overrides the target path.
 
 While drafting you may also hand-edit `refs.bib`; `tex refs` overwrites it, so re-run only when

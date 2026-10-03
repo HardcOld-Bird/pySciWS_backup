@@ -16,7 +16,7 @@ Backend package: `src/pysci/skills/document_writing/`. Data root: `data/skills/d
 | `office_convert.py` | LibreOffice headless conversion (`convert`, `LibreOfficeNotInstalled`) |
 | `extract.py` | Unified `to_markdown` (markitdown / pymupdf4llm / pptx_io) + cache |
 | `deck_digest.py` | Huge-deck digestion: `.pptx` → image-text-linked Markdown workspace (`digest_pptx`, `verify_links`); sha1 dedup, section/chunk detection, gif-frame & vector previews, resumable `progress.json` |
-| `refs_bridge.py` | Zotero → BibTeX (`export_bib`), reuses `literature_research.tools.zotero_bridge` |
+| `refs_bridge.py` | Zotero → BibTeX (`export_bib`), reuses `literature_research.tools.zotero_cli` (delegates to community `zotero-cli --json`) |
 | `compose.py` | Thin argparse facade; imports heavy modules lazily so `doctor` works even when a backend is missing |
 
 `compose.py` must stay thin: orchestration only. Put real logic in the modules above.

@@ -1,4 +1,4 @@
-# read / add / index — detailed reference + evaluation rubric
+# read / add / citecheck / index — detailed reference + evaluation rubric
 
 All commands are invoked as `research <cmd> …` (see SKILL.md for the full invocation and the
 PowerShell single-quote rule).
@@ -18,7 +18,7 @@ What it does, in order:
 1. **Classify the input** — a DOI (`10.xxxx/…`), a URL, an arXiv id (`2301.12345`), or an
    OpenAlex id (`W…`). A DOI is resolved through `https://doi.org/<doi>` (follows the redirect to
    the publisher); an arXiv id downloads the PDF directly (most reliable).
-2. **Fetch metadata** (unless a bare URL) and enrich it (WoS JIF/JCR; S2 TLDR if a key exists).
+2. **Fetch metadata** (unless a bare URL) and enrich it (WoS JIF/JCR).
 3. **Fetch the full text** — arXiv: direct PDF download; otherwise a headless browser grabs the
    publisher page, the article PDF, and any supplementary material.
 4. **Extract to Markdown** — MinerU cloud by default (equations → LaTeX, tables → HTML);
@@ -63,11 +63,55 @@ note's evaluation sections (rubric below).
 
 ```
 research add <doi｜arxiv-id｜openalex-id> [--tags t1,t2] [--overwrite]
+             [--verify｜--no-verify] [--force]
 ```
-Resolves + enriches metadata, **creates a Zotero item** (if `ZOTERO_USER_ID`/`ZOTERO_API_KEY` are
-set), writes the returned `zotero_key` + `zotero_uri` into a new `papers/` note skeleton, and does
-**not** fetch full text. Use `add` to build the library quickly; use `read` when you intend to
+Resolves + enriches metadata, **creates a Zotero item** when `zotero-cli` (community zotero-mcp) is
+installed — it normalizes the frontmatter to BibTeX and delegates the write to `zotero-cli add
+bibtex` — then writes the returned `zotero_key` + `zotero_uri` into a new `papers/` note skeleton,
+and does **not** fetch full text. If `zotero-cli` is unavailable, `add` degrades to a skeleton-only
+note (no library write). Use `add` to build the library quickly; use `read` when you intend to
 read the paper. Check `library search` first to avoid duplicating an existing Zotero entry.
+
+Before writing, `add` runs the **citation integrity gate** (`citecheck` below): a three-source
+**FAIL** blocks the Zotero write + note. `--no-verify` skips the check entirely; `--force` writes
+even on FAIL.
+
+---
+
+## `citecheck` — the citation integrity gate
+
+```
+research citecheck [<doi｜arxiv-id｜openalex-id｜title> …]
+                   [--note <path>] [--all] [--json] [--no-color]
+```
+
+Cross-checks a citation against **three independent open sources — OpenAlex + Crossref + arXiv**
+(bypassing Semantic Scholar) to catch fabricated or mis-paired references: a DOI that doesn't match
+its title, a wrong year, a venue that never published it. Feed it two ways:
+
+- **Bare identifiers / titles** as positional `targets` (any number), e.g.
+  `citecheck 10.1103/PhysRevLett.121.124501` or `citecheck 'some paper title'`. Each is classified
+  (DOI → arXiv id → OpenAlex id → free-text title) then verified.
+- **Notes** — `--note <file-or-dir>` (repeatable) verifies the frontmatter of specific `papers/*.md`;
+  `--all` sweeps every note in `papers/`.
+
+**Verdict** per citation: `✓PASS` (sources agree) / `△WARN` (only soft differences) / `✗FAIL` (a hard
+conflict) / `?NOT_FOUND` (no source has it). Severity model:
+
+| Signal | Severity | Verdict | Blocks `add`? |
+|---|---|---|---|
+| Title mismatch / DOI mismatch / year off by ≥2 | hard | **FAIL** | **yes** |
+| Author-surname mismatch / year off by 1 / journal-name-only diff | soft | WARN | no |
+| All three sources miss the record | — | NOT_FOUND | no (flagged for review) |
+| A source is unreachable (network) | — | downgraded | no (never a false FAIL) |
+
+**Exit code:** `1` if any citation is FAIL, else `0` — usable as a CI / pre-write gate. `--json`
+emits a machine-readable verdict array (label / kind / status / passed / reasons / per-source records
+/ conflicts). `add` calls this same engine internally before writing.
+
+> The gate is deliberately **conservative**: it hard-blocks only on signals that are unambiguous
+> across independent sources, so author-name transliteration noise (e.g. `Büttner` → `buttner` vs a
+> lossy upstream `bttner`) or an online-first-vs-issue-year off-by-one never fails a real citation.
 
 ---
 
