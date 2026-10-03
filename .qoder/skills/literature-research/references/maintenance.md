@@ -1,6 +1,6 @@
 # Maintenance guide
 
-The `research` CLI is a thin facade over 11 backend modules in
+The `research` CLI is a thin facade over 13 backend modules in
 `src/pysci/skills/literature_research/tools/`. You rarely need to touch them; this guide is for when a
 source, the PDF extractor, or a publisher page breaks, or when you want to extend the system.
 
@@ -13,34 +13,58 @@ source, the PDF extractor, or a publisher page breaks, or when you want to exten
 ## 1. Architecture
 
 ```
-research.py            ← CLI facade: doctor/search/read/get/add/citecheck/library/index/ingest/rag/cache (orchestration only)
+research.py            ← CLI facade, 14 subcommands: doctor/search/read/get/add/citecheck/citegraph/
+                          library/journal/review/rag/index/cache/ingest (orchestration only)
   ├─ config.py         ← loads project-root .env; exposes `settings` + `http_session()`
+  ├─ notes.py          ← LEAF: paper-note frontmatter read/write/normalize/merge + slugify +
+  │                       normalize_last_name + derive_journal_tier (stdlib + PyYAML + config only)
+  ├─ journal_metrics   ← free journal-quality layer: SCImago SJR local index (exact-ISSN match); `research journal`
   ├─ openalex_client   ← primary search + metadata + work_to_note_frontmatter()
   ├─ arxiv_client      ← preprints + download_pdf() + arxiv_to_note_frontmatter()
   ├─ wos_client        ← enrich_openalex_work(): WoS accession no. (wos_id) + Times Cited (silent-fail)
   ├─ citation_verify   ← citation integrity gate: OpenAlex + Crossref + arXiv 3-source cross-check; verify_citation/verify_frontmatter + render (`research citecheck` + `add` gate)
   ├─ zotero_cli        ← ZoteroCli: delegates to community `zotero-cli --json` (zotero-mcp): ping/list/search/get/create_item_from_metadata/add_note + frontmatter_to_bibtex
   ├─ browser_fetch     ← Playwright: fetch_all/fetch_pdf/fetch_html + PublisherAdapter
-  ├─ pdf_extract       ← extract_pdf(): MinerU cloud via mineru-open-sdk (primary) / pymupdf4llm (fallback)
+  ├─ pdf_extract       ← extract_pdf(): arXiv LaTeX source first (equation-faithful) / MinerU cloud via
+  │                       mineru-open-sdk / pymupdf4llm (fallback)
   ├─ local_ingest      ← bulk-ingest a LOCAL folder of PDFs (copy → extract → manifest ledger); `research ingest`
   ├─ rag               ← PaperQA2 semantic RAG over cache/extracted/: build_index/search (embedding-only, free) + optional ask (free→paid→degrade); `research rag`
   └─ cache_manager     ← two-tier cache governance: stats/clean/prune + bump_mtime (LRU)
 ```
 
-Dependency direction is one-way: `research` → clients → `config`. Every client uses **relative
-imports** (`from .config import settings`), so moving the whole `literature_research/` package does
-not break imports; `config.py` in turn resolves all paths via `pysci.paths` (marker-based, see §2),
-so relocating the package does not break path resolution either. `cache_manager` depends
-only on `config` + stdlib; the clients import `bump_mtime` from it, which does **not** create a
-cycle (cache_manager never imports the clients).
+Dependency direction is one-way: `research` → clients → {`notes`, `cache_manager`,
+`journal_metrics`} → `config`. Every client uses **relative imports** (`from .config import
+settings`), so moving the whole `literature_research/` package does not break imports; `config.py` in
+turn resolves all paths via `pysci.paths` (marker-based, see §2), so relocating the package does not
+break path resolution either. Two modules are deliberately **leaves**:
+
+- `notes` depends only on stdlib + PyYAML + `config`. It must never import a sibling client, or the
+  frontmatter helpers would turn into a cycle hub — every client needs them.
+- `cache_manager` depends only on `config` + stdlib + `notes.load_frontmatter`. Clients import
+  `bump_mtime` **and the Tier B trio** (`cache_key` / `read_cache` / `write_cache`) from it; still
+  acyclic, because `cache_manager` never imports the clients. Before that trio was promoted,
+  `arxiv_client` and `citation_verify` reached into `openalex_client._cache_key` / `._read_cache` /
+  `._write_cache` by **private name** across module lines — a hidden coupling that also made the
+  cache filenames lie (arXiv responses were written as `openalex_arxiv_search_*.json`).
+  `cache_key(..., prefix=)` now names the real source. `openalex_client` keeps thin delegating shims
+  under the old private names so its own tests stay put.
 
 **The unified work-dict contract.** `openalex_client._extract_work_summary()` defines the canonical
 shape that all sources aim for:
-`openalex_id, doi, arxiv_id, title, publication_year, publication_date, cited_by_count,
-cited_by_percentile_year, oa_status, oa_url, journal, publisher, volume, issue, first_page,
-last_page, authors[{name, is_corresponding, institutions, …}], first_author_last_name, abstract,
-concepts[{name, id, score}]`. Each source has a `*_to_note_frontmatter()` converter mapping its raw
-record to the shared `paper_note` frontmatter. Keep new sources compatible with this contract.
+`openalex_id, doi, arxiv_id, title, publication_year, publication_date, type, cited_by_count,
+cited_by_percentile_year, is_oa, oa_status, oa_url, journal, journal_issn_l, journal_issn[],
+journal_openalex_id, listed_in[], journal_tier, journal_tier_basis[], publisher, volume, issue,
+first_page, last_page, authors[{name, is_corresponding, institutions, …}], first_author_last_name,
+abstract, concepts[{name, id, score}], topics[{name, id, score}], referenced_works_count,
+referenced_works[], related_works[], counts_by_year[], _raw`. Each source has a
+`*_to_note_frontmatter()` converter mapping its raw record to the shared `paper_note` frontmatter.
+Keep new sources compatible with this contract.
+
+`referenced_works` is truncated to `max_refs` (default **100**; `referenced_works_count` always keeps
+the true total) — `research citegraph` snowballs through it, then `works_by_ids()` re-fetches those
+ids in batches of `MAX_IDS_PER_REQUEST` (50, OpenAlex's per-filter `|` limit). Forward citations come
+from `works_citing()` (`filter=cites:W…`), which needs a real OpenAlex id — an arXiv-only paper must
+be resolved through DOI/title first.
 
 ---
 
@@ -187,21 +211,33 @@ policy lives (`research cache` is a thin facade over it).
   Tier A by LRU until total ≤ target (default `CACHE_SOFT_LIMIT_MB`); `html_fulltext/<slug>/` is
   evicted as a whole bundle directory.
 - **LRU via mtime**: Windows atime is unreliable, so every cache *hit* calls `bump_mtime(path)`
-  (`os.utime`) to make mtime ≈ last access. Hits are bumped in `openalex_client._read_cache`,
-  `pdf_extract._read_cache`, `arxiv_client.download_pdf`, and the browser-fetch reuse path.
-- **Auto-clean hook**: `research.main()` calls `cache_manager.maybe_autoclean()` for the
-  network-producing commands (`search`/`read`/`get`/`add`) only. It reads
+  (`os.utime`) to make mtime ≈ last access. Tier B hits are bumped **centrally** inside
+  `cache_manager.read_cache`, so OpenAlex / arXiv / Crossref all get it for free. The remaining call
+  sites are `pdf_extract._read_cache` (its own *text* cache — same function names, different
+  semantics and return type, deliberately **not** merged with the Tier B trio),
+  `arxiv_client.download_pdf`, the browser-fetch bundle-reuse path, and `research.py`'s
+  `{stem}_fulltext.md` hit.
+- **Auto-clean hook**: `research.main()` calls `cache_manager.maybe_autoclean()` for the six
+  network-producing commands (`search`/`read`/`get`/`add`/`citecheck`/`citegraph`) only. It reads
   `cache/.autoclean_state.json` (`last_autoclean`); if older than `CACHE_AUTOCLEAN_INTERVAL_DAYS`
   it runs `clean_tier_b()` and rewrites the state. Fully `try/except` — never fatal, prints one line
   only when it actually deletes something.
-- **`keep_referenced`**: `prune` protects files referenced by any `papers/*.md` frontmatter
-  (`local_pdf_path` + `extracted_md_path`). `referenced_paths()` parses frontmatter with a built-in
-  regex (no PyYAML) to avoid importing `research` (which would create a cycle).
+- **`keep_referenced`**: `prune` protects files referenced by any `papers/*.md` frontmatter —
+  `REFERENCED_FIELDS` = (`local_pdf_path`, `extracted_md_path`, `extracted_html_path`). The third
+  one must stay in that tuple: when `read` cannot get a PDF it records *only*
+  `extracted_html_path` (see *When no PDF can be had: the HTML fallback* in `read.md`), so dropping
+  it would leave those notes'
+  `cache/html_fulltext/` bundles unprotected. `referenced_paths()` parses that frontmatter via
+  `notes.load_frontmatter` (`yaml.safe_load`) — importing the `notes` **leaf** keeps this module
+  cycle-free without hand-rolling a parser. It used to be a line-based regex that skipped every
+  `-`-prefixed line and returned quoted values *quotes included*; on block-style and flow-style notes
+  alike it therefore yielded an empty set, and `--keep-referenced` protected **nothing**. Do not
+  revert it (regression pinned by `test_referenced_paths.py`).
 - **HTML bundle reuse (`.by_url`)**: a bundle's slug is only known after the page title is fetched,
   so hits can't be predicted by slug up front. `browser_fetch` therefore keeps a URL index at
   `cache/html_fulltext/.by_url/<sha1(url)>.json` recording `{url, slug, out_dir, ts, ok, ...}`.
   On `fetch_bundle(use_cache=True)`, a fresh entry whose files still exist rebuilds the
-  `BundleResult` **without launching a browser**; `research read` passes `use_cache=not --force`.
+  `BundleResult` **without launching a browser**; `research read` passes `use_cache=not --refresh`.
 - **No double copy (G4)**: `research read` extracts with `write_cache=False`, so the canonical
   `cache/extracted/{stem}_fulltext.md` is the only extracted artifact (pdf_extract's own CLI still
   caches by default and is unaffected). On a later `read` of the same paper, that file is a hit and
@@ -233,7 +269,7 @@ a curated, git-tracked ledger `data/skills/literature_research/ingest/manifest.j
   (1 ≤30 pp, 2 = 31–150 pp, 3 >150 pp / unknown) so expensive jobs can be deferred — MinerU's
   ~1000-page allowance is a *fast-track* quota (beyond it jobs still run, just slower), not a hard
   daily cap.
-- `run_ingest()` selects pending entries (skip `done` unless `--force`), sorts by `(priority, pages)`,
+- `run_ingest()` selects pending entries (skip `done` unless `--refresh`), sorts by `(priority, pages)`,
   then per entry: **copies** the PDF (originals untouched) to `cache/pdfs/<theme>/<slug>.pdf`,
   extracts via `pdf_extract.extract_pdf(..., write_cache=False)` (single canonical copy, same as
   `read`), writes `cache/extracted/<theme>/<slug>.md`, updates the entry, and **saves the manifest
@@ -244,8 +280,12 @@ a curated, git-tracked ledger `data/skills/literature_research/ingest/manifest.j
   prefix (absolute + backslashes) so those sources still copy; the copy lands at a short
   `cache/pdfs/<theme>/<slug>.pdf`, so extraction/caching are unaffected. When the long source blocked
   measuring `pages` at manifest time, `run_ingest()` backfills it from the copied PDF via fitz.
-- Flags: `--status` (summary only), `--priority N`, `--theme T`, `--backend`, `--limit-pages N`,
-  `--limit-files N`, `--dry-run`, `--force`. `main()` does NOT attach the autoclean hook to `ingest`.
+- Shape: `ingest [action] [flags]`, where `action` is an **optional positional** with
+  `choices=[run, status]` defaulting to `run` — so `ingest`, `ingest run` and `ingest --status` all
+  work. The `--status` boolean predates the positional and is kept (H3 converged the CLI onto two
+  shapes without breaking either spelling).
+- Flags: `--manifest`, `--status`, `--priority N`, `--theme T`, `--backend`, `--limit-pages N`,
+  `--limit-files N`, `--dry-run`, `--refresh`. `main()` does NOT attach the autoclean hook to `ingest`.
 - The manifest is generated once by a throwaway walk+classify script, then hand-curated; it is the
   single source of truth (no parallel catalog). Non-PDF assets (`.nb/.wls/.epub/.txt`) are listed
   under `non_pdf_assets` with `status=skipped` for provenance, never converted.
@@ -272,16 +312,24 @@ not used (removed in stage 1).
 - **Graceful degradation is the core invariant.** An unreachable source is recorded (`reachable=False`)
   and **never counted as a conflict** — a network blip must not fail a real citation. A FAIL requires
   ≥2 reachable sources to hard-conflict.
-- **Transliteration pitfall (fixed in stage 6).** `openalex_client._guess_last_name` *deletes*
+- **Transliteration pitfall (fixed in stage 6).** The per-client surname guessers *deleted*
   diacritics (`Büttner` → `bttner`) while `normalize_last_name` *transliterates* them (`→ buttner`).
   Comparing those two directly caused a false FAIL. Fix: every source derives the first-author surname
   from the **full author name** (`authors[0]`) through the same `normalize_last_name`, never trusting an
   upstream pre-processed `first_author_last_name`; and first-author is only a **soft** signal anyway.
   `test_openalex_and_crossref_transliterate_author_consistently` guards this.
+  **There is now only one implementation**: the duplicate `_guess_last_name` helpers in
+  `openalex_client` / `arxiv_client` were deleted in favour of `notes.normalize_last_name`, so the two
+  cannot drift apart again. Be aware the fix *changes note filenames* for accented surnames
+  (`bttner` → `buttner`): `research index --fix` therefore **reports** existing files whose name no
+  longer matches `notes.note_filename(fm)` but never renames them — renaming would break
+  `papers_reviewed` wiki links and any external citation of those paths.
 - **The `claim` pseudo-source.** The note's own asserted values are folded in as `source="claim"` and
   compared against the real sources — this is what detects a DOI that doesn't match the title claimed.
 - Entry points: `verify_citation(cite)` (a dict), `verify_frontmatter(fm)`, `verify_note_file(path)`
-  (parses frontmatter scalars without PyYAML / without importing `research`, avoiding a cycle).
+  (reads the note's frontmatter through `notes.load_frontmatter`; the `notes` **leaf** keeps this
+  cycle-free without importing `research`. `_parse_frontmatter_scalars` survives only as an alias of
+  that function).
   `research.py` wraps these: `_citation_gate` (the `add` pre-write check, degrades to allow on error)
   and `cmd_citecheck` (standalone; exit 1 on any FAIL). Render via `render_verdict` / `render_report`
   (`✓ △ ✗ ?`, ANSI red on FAIL when a TTY).
@@ -332,7 +380,171 @@ primary path (pure embedding, free, no LLM); `ask` is an optional convenience th
 
 ---
 
+## 5e. Note frontmatter & merging (`notes.py`)
+
+A **leaf** module (stdlib + PyYAML + `config` only) holding every helper that touches a note's
+frontmatter. It exists because these helpers had been copied into five modules
+(`research.py` / `cache_manager.py` / `citation_verify.py` / `browser_fetch.py` /
+`{arxiv,openalex}_client.py`) and drifted apart; all copies are deleted in favour of this one. It
+must never import a sibling client (§1) — every client needs it, so one wrong import makes it a
+cycle hub.
+
+- **`split_note(text)` → `(fm, body)`** and **`load_frontmatter(text)` → `fm`** parse with
+  `yaml.safe_load`, so block-style *and* flow-style lists both round-trip. Never hand-roll this
+  again: the previous line-based parser skipped every `-`-prefixed line (losing `authors` /
+  `topics` wholesale) and returned values *quotes included* — three modules carried that same bug
+  independently. Both return `({}, original_text)` on a missing or unparseable frontmatter instead
+  of raising, so `index --fix` and `referenced_paths()` skip a corrupt or handwritten file
+  gracefully.
+- **The body-fidelity invariant is enforced inside `_FM_BLOCK_RE`.** Its delimiter allows `[ \t]*`,
+  not `\s*` — `\s` contains `\n`, and a greedy match would eat the blank line following the closing
+  `---` (real notes have one). Only *one* newline after that `---` is consumed, and `render_note`
+  puts exactly one back. That is what makes `split_note → render_note` byte-identical, and so what
+  makes "the body never changes" a checkable property rather than an aspiration.
+- **`dump_frontmatter` is deterministic and deliberately unwrapped.** `_order_fields` emits known
+  keys in `FIELD_ORDER` (mirroring `templates/paper_note.md`) and unknown keys after them in
+  insertion order; `sort_keys=False`, `allow_unicode=True`, `default_flow_style=False`. The
+  `_DUMP_WIDTH = 4096` is not a style preference: PyYAML's default (or the `width=100` this design
+  originally proposed) folds a long title across lines, so the value survives but the file's shape
+  changes — which would drown the "the diff must contain only value changes" check that validates
+  `index --fix`. `_NoteDumper.increase_indent` indents block sequences two spaces under their
+  parent key to match existing notes; PyYAML's default puts them in the parent's column and would
+  add pure-indentation noise to every note touched.
+- **`merge_frontmatter(existing, incoming)` → `(merged, changed_keys)`** fills *blank* keys only
+  and never overwrites a non-blank value. `_is_blank` counts `None`/`""`/`[]`/`{}` as blank but
+  **not** `0` or `False` — those are real values, and overwriting one is data loss. Blank
+  *incoming* values are skipped too (writing `None` into a missing key is just noise; presence is
+  `normalize_frontmatter`'s job). An empty `changed_keys` means the caller must not touch the file
+  at all, so mtime survives. Worth remembering: **merging cannot correct a wrong value.** A note
+  written before a field's semantics were fixed keeps the old value — fix such a value by hand.
+- **`normalize_frontmatter(fm, template=…)` → `(normalized, added_keys)`** is *not* interchangeable
+  with `merge_frontmatter`: it adds key **presence** from `template_defaults()` even when the
+  template default is itself empty, because the template is the field contract. A note missing a
+  key makes `fm["x"]` raise and makes every downstream consumer (`INDEX.md` columns,
+  `cache_manager.REFERENCED_FIELDS`, §5f) silently get nothing. This is what `index --fix` runs.
+  It only ever adds — existing keys, blank ones included, are preserved verbatim, so a hand-filled
+  `my_rating` / `status` / `related_to_my_work` is never clobbered.
+- **`append_changelog(body, line)`** is the *only* body edit any automatic write path performs. It
+  appends at the end of the `## Changelog` section (creating one at EOF if absent) and never
+  rewrites an existing line. `_CHANGELOG_HEAD_RE` accepts an optional numeric prefix — without it,
+  `review_note.md`'s `## 8. Changelog` would be missed and every `review sync` would pile up a
+  duplicate section at EOF while §8 stayed empty forever. Trailing newlines are preserved verbatim:
+  when Changelog isn't the last section, they carry the blank-line separator to the next heading.
+- **`normalize_last_name`** *transliterates* diacritics (`Büttner` → `buttner`) rather than
+  deleting them (`bttner`), and handles `Last, First` / `First M. Last` / `Last`. Single
+  authoritative implementation — see §5c for the false FAIL the two divergent copies caused and for
+  the filename consequence (`index --fix` reports a mismatch, never renames).
+- **`derive_journal_tier(listed_in)` → `(tier, basis)`** maps OpenAlex's expert-panel lists
+  (`TIER_LISTS`: JUFO / Norway / KI-JL) onto `top` / `leading` / `basic`, taking the highest tier
+  reached and listing every entry that reached it, so a bare `top` is auditable back to *which*
+  panel said so. `""` means **undeterminable** (none of the three covers the venue) and is
+  deliberately not folded into `basic`. Binary membership marks (`cwts-core`, `erih-plus`,
+  `medline`, `doaj`, `doyens`) carry no level and are ignored. Fully fault-tolerant: a
+  non-iterable, a non-string element, an unknown list name or an out-of-range level is skipped,
+  never raised. Pinned by `test_notes.py`.
+
+---
+
+## 5f. Journal quality metrics (`journal_metrics.py`)
+
+The free substitute layer for official JIF / JCR quartile / JCI / ESI, which only the **WoS
+Journals API** can supply (application still pending — `wos_client.py`'s module docstring records
+the upgrade path so it needn't be researched again). Three fields coexist and mean different
+things:
+
+| Field | Source | Cost |
+|---|---|---|
+| `journal_tier` (+ `journal_tier_basis`, `listed_in`) | OpenAlex `listed_in` → `notes.derive_journal_tier` (§5e) | zero extra requests |
+| `scimago_quartile` | local SCImago SJR index, exact-ISSN match | one manual CSV download per year |
+| `jcr_quartile`, `esi_highly_cited`, `esi_hot_paper` | WoS Journals API | not wired — stays `""` / `null` |
+
+**The module never touches the network.** It answers from a compact JSON index at
+`settings.scimago_index_path` = `data/skills/literature_research/data/scimago_index.json`
+(git-tracked; `settings.scimago_ready` is just `.exists()`). It is a *data asset*, not a cache
+artifact, which is why it lives under `data/` rather than `cache/` and so escapes the `cache/*`
+ignore rule.
+
+- **`build_scimago_index(csv_path, *, year=None, out_path=None)`** turns the official CSV
+  (scimagojr.com → *Journal rank*, ~15 MB) into `{"_meta": {…}, "by_issn": {"00319007":
+  ["Q1", 2.845, 982], …}}` — only four columns survive (`Issn`, `SJR`, `SJR Best Quartile`,
+  `H index`), written with `separators=(",", ":")` and no indent, ≈1.4 MB. Each detail below
+  covers a real failure mode:
+  - `_detect_delimiter` picks `;` or `,` by whichever appears more often in the header. The
+    official export is semicolon-delimited (European style) but comma mirrors exist; hardcoding
+    `;` turns every row into a single column and **silently produces an empty index**.
+  - `_to_float` accepts the European decimal comma (`2,845` → `2.845`).
+  - `_extract_issns` splits multi-value cells, and its separator set deliberately **excludes** `-`
+    (else `0031-9007` splits in half). Since `;` is *also* the field delimiter, an unquoted
+    multi-value Issn cell arrives split across fields; the builder compensates for the resulting
+    column shift and rejoins them.
+  - `_at()` reads columns out-of-bounds-safely — SCImago rows occasionally lack trailing columns,
+    which must not cost the whole row.
+  - `_infer_year` looks for a parenthesised year in the header (`Total Docs. (2024)`), else in the
+    filename, else returns `None`. It never invents one; pass `--year` when it can't tell.
+  - Raises `FileNotFoundError` / `ValueError` (empty CSV, missing required column, not one ISSN
+    parsed). **This is the one path in the module that must not degrade silently**: a failed build
+    that quietly wrote an empty index would blank `scimago_quartile` in every note with no visible
+    cause — far harder to diagnose than an error. `cmd_journal` maps it to exit 1 with the reason
+    on stderr, and a missing `--csv` to exit 2.
+- **Query paths degrade silently**, per the module-wide invariant. `lookup(issn)` accepts a single
+  ISSN *or* a candidate list (OpenAlex's `issn` array) and returns the first hit as
+  `{issn, quartile, sjr, h_index, sjr_year}`, else `None` — index missing, unreadable, corrupt, or
+  no match. A corrupt index is treated as no index: that is safer than half-working.
+  `quartile_for(issn)` returns `""` rather than `None` because `scimago_quartile` is a string
+  field, and only `""` reads as blank to `merge_frontmatter` (§5e). `_load_index` caches a single
+  entry keyed on `(path, mtime, size)`, so a rebuilt index is picked up without a restart and tests
+  can redirect the path freely.
+- **Matching is exact-ISSN only, by design.** No fuzzy title matching: a title map would add
+  ~1.5 MB and introduce mis-matches, while an ISSN is always available from OpenAlex / Crossref /
+  WoS metadata. `research journal lookup <issn>` distinguishes "index not built" from "this ISSN
+  isn't in the index" — the fixes are completely different, and collapsing them into one empty
+  result is exactly what makes venue metrics look broken when they aren't.
+
+### Refreshing the SCImago index (yearly)
+
+1. Download the CSV **by hand** from `journal_metrics.DOWNLOAD_URL`
+   (<https://www.scimagojr.com/journalrank.php>). The site returns 403 to programmatic fetches and
+   needs form/JS interaction, so no auto-download is implemented or planned. `*.csv` is git-ignored
+   under `data/skills/literature_research/` to keep the 15 MB original out of the repo.
+2. `research journal build-scimago --csv <path> [--year 2024]`, then check the reported entry count
+   is in the tens of thousands. A count near zero means delimiter or column detection missed; the
+   command refuses to write that (exit 1), but verify the number anyway.
+3. Update `data/skills/literature_research/data/SOURCE.md` — download URL, SJR year, download date,
+   attribution (`SCImago Journal & Country Rank, data based on Scopus (Elsevier B.V.)`). The index
+   JSON *is* tracked; the CSV is not.
+4. Confirm with `research journal status` and the 【期刊质量指标】 section of `research doctor` that
+   `sjr_year` moved.
+
+Existing notes are **not** rewritten by a refresh. A note whose `scimago_quartile` is blank gets it
+filled on the next `read` / `add` / `get`; a note that already has a value keeps the old quartile,
+because `merge_frontmatter` never overwrites (§5e). Re-running `read <id>` therefore only helps
+while the field is still blank — after that, update it by hand.
+
+---
+
 ## 6. Common failures → fixes
+
+### Renamed flags (the old spellings still work)
+
+`--force` used to carry four unrelated meanings across four subcommands. It was split by semantics;
+the old name survives everywhere as a **hidden** deprecated alias (`argparse.SUPPRESS`, so `-h`
+doesn't advertise it) that sets the same `dest` and prints a one-line migration hint on stderr via
+`_migrate_force_alias`. `_FORCE_RENAMED` is the authoritative table:
+
+| Subcommand | Now | Was | Why it moved |
+|---|---|---|---|
+| `read` | `--refresh` | `--force` | It bypasses the *cache*, not a safety gate. |
+| `ingest` | `--refresh` | `--force` | Same — re-extract entries already marked `done`. |
+| `add` | `--allow-fail` | `--force` | It opens the **citation-integrity gate**. Sharing a name with an ordinary cache-refresh switch is precisely how an agent ends up bypassing verification without meaning to. |
+| `index` | `--force` (unchanged) | — | Here the word literally means "write even when `papers/` is empty" — closest to its plain sense, so it stayed. |
+
+Aliases are kept **indefinitely, with no removal date**: this project has no CI and one user, so a
+breaking rename buys less than it risks. `_migrate_force_alias` runs only from `main()`; code that
+builds a `Namespace` and calls `cmd_*` directly (including the existing tests) bypasses it, so
+every read of the flag goes through `getattr` and tolerates a missing `force_deprecated` key.
+
+`ingest` also gained an optional `action` positional (`run` | `status`, default `run`) in the same
+pass — see §5b.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
@@ -341,14 +553,14 @@ primary path (pure embedding, free, no LLM); `ask` is an optional convenience th
 | `institutional_access=false`, paywalled | No subscription via this network | Use a campus VPN, or `read` the arXiv id / OA copy instead. |
 | MinerU 401 / job fails | Bad/expired `MINERU_TOKEN` or quota | Check `.env`; temporarily `--backend pymupdf4llm`. |
 | Equations missing in output | Fell back to pymupdf4llm | Ensure `MINERU_TOKEN` is set; check `research doctor` lists `mineru-cloud`. |
-| `[wos] enrichment skipped` | `WOS_API_KEY` unset or endpoint changed | Expected — enrichment only adds `wos_id`; degrades silently. The Starter API never returns JIF / quartile / ESI (those come from OpenAlex's estimate), so their absence is normal, not an error. |
+| `[wos] enrichment skipped` | `WOS_API_KEY` unset or endpoint changed | Expected — enrichment only adds `wos_id` + Times Cited; degrades silently. The Starter API never returns JIF / quartile / ESI, so where those fields actually come from: `jif` = OpenAlex `2yr_mean_citedness` **estimate**; `scimago_quartile` = the local SCImago SJR index (`journal_metrics`); `journal_tier` = OpenAlex `listed_in` (JUFO/Norway/KI-JL expert panels); `jcr_quartile` stays **empty** and `esi_*` stays **`null` (unknown)** until the WoS Journals API lands. Their absence is normal, not an error. |
 | Zotero `不可达` / `zotero-cli 未安装` | Desktop app closed / local API off / CLI not on PATH | Start Zotero; Settings → Advanced → *Allow other applications*; run `zotero-mcp authorize-local` (choose *Always Allow*); or set Web API creds (`ZOTERO_API_KEY`+`ZOTERO_LIBRARY_ID`). If `zotero-cli` is missing, run `scripts\zotero_mcp\setup_zotero_mcp.ps1` then `uv tool update-shell` and restart the shell. |
 | Paths wrong / `.env` not loaded | Project-root markers moved; `pysci.paths` can't find root | Check `_ROOT_MARKERS` in `src/pysci/paths.py` (§2); confirm with `research doctor`. |
 | PowerShell mangles the command | Double quotes stripped / `&&` used | Single-quote multi-word args; chain with `;`. |
 | `add` created a duplicate Zotero item | Ran `add` twice for one DOI | Check `library search` before adding; merge the dup via the `zotero` MCP (`duplicates find`) or delete it in Zotero. |
 | Cache growing / disk pressure | Tier A artifacts kept forever by design | `research cache stats`; then `prune --max-mb N` (Tier A) or `clean` (Tier B). |
-| `read` shows `命中缓存全文` but you want a fresh fetch | Cached `{stem}_fulltext.md` was reused | Re-run with `--force` (alias `--refresh`) to re-fetch + re-extract. |
-| `add` blocked with `✗ 引用核验未通过` | Citation gate FAIL (≥2 sources hard-conflict on title/DOI/year) | Inspect with `research citecheck <doi> --json`; fix the mismatched field, or `--force` to override / `--no-verify` to skip. |
+| `read` shows `命中缓存全文` but you want a fresh fetch | Cached `{stem}_fulltext.md` was reused | Re-run with `--refresh` (`--force` is a deprecated alias) to re-fetch + re-extract. |
+| `add` blocked with `✗ 引用核验未通过` | Citation gate FAIL (≥2 sources hard-conflict on title/DOI/year) | Inspect with `research citecheck <doi> --json`; fix the mismatched field, or `--allow-fail` to override / `--no-verify` to skip. |
 | `citecheck` reports `?NOT_FOUND` for a real paper | All three sources missed it (typo'd DOI, very new, or offline) | Check the DOI/id; a lone `openalex=不可达`/`crossref=不可达` is a network blip (downgraded, not a FAIL) — re-run. |
 | `citecheck` first-author `△WARN` on an accented name | Cross-source transliteration/abbreviation noise | Expected — author surname is a soft signal and never blocks; title/DOI/year are the hard signals. |
 | `rag search`/`ask` errors "未配置 SILICONFLOW_API_KEY" | `pqa_ready` false (no key in `.env`) | Set `SILICONFLOW_API_KEY` (+ `SILICONFLOW_BASE_URL`); confirm with `research rag status`. |
@@ -364,8 +576,12 @@ primary path (pure embedding, free, no LLM); `ask` is an optional convenience th
   return records convertible to the unified work-dict contract, plus a
   `<source>_to_note_frontmatter()`. Wire it into `cmd_search` (and optionally an enricher like
   `enrich_openalex_work`). Keep failures non-fatal.
-- **New output type**: add a template under `templates/` and a `cmd_*` in `research.py` that fills
-  it via the existing `_dump_yaml` / `_fill_placeholders` helpers.
+- **New output type**: add a template under `templates/` and a `cmd_*` in `research.py` that fills it
+  via `notes.render_note` / `notes.dump_frontmatter` + `_fill_placeholders`. The hand-rolled
+  `_dump_yaml` / `_yaml_scalar` / `_slugify` / `_note_filename` / `_fmt_bytes` helpers are **gone** —
+  all YAML and filename logic now lives in the `notes` leaf, so a new writer must go through it too
+  (otherwise the byte-identical frontmatter rendering that `index --fix` and the merge path rely on
+  stops being idempotent).
 - **New PDF backend**: extend `pdf_extract.available_backends()` + `_pick_backend()` + `extract_pdf()`.
 
 ## 8. Verifying changes
@@ -374,7 +590,8 @@ primary path (pure embedding, free, no LLM); `ask` is an optional convenience th
 .venv\Scripts\python.exe -m py_compile src/pysci/skills/literature_research/tools/<file>.py
 .venv\Scripts\python.exe -m pysci.skills.literature_research.tools.research doctor
 ```
-Then smoke-test the affected command (`search`/`read`/`get`/`add`/`citecheck`/`library`/`index`/`rag`). `doctor`
+Then smoke-test the affected command (`search`/`read`/`get`/`add`/`citecheck`/`citegraph`/`library`/
+`journal`/`review`/`index`/`rag`/`cache`/`ingest`). `doctor`
 is the fastest way to confirm config, sources, backends, Playwright, Zotero, and the RAG layer are all wired
 up. For `rag` specifically: `research rag status` (offline) then a small `research rag index --path <one .md>`
 + `research rag search '<q>' -k 3` is the cheapest end-to-end check (uses real SiliconFlow embedding).
