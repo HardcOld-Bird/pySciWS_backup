@@ -223,8 +223,10 @@ uv run pysci-simulation <command> [options]
 Below, `simulation …` is shorthand for `uv run pysci-simulation …`. (Fallback if the script
 isn't installed: `uv run python -m pysci.skills.comsol_simulation.tools.simulation …`.)
 
-> **PowerShell rule (critical):** wrap multi-word arguments in **single quotes**; use `;` (never
-> `&&`) to chain commands.
+> **PowerShell rules (critical):** first set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
+> in the same shell — this CLI prints Chinese, and piping its stdout decodes those UTF-8 bytes with
+> the GBK/936 console codepage (mojibake). Then: wrap multi-word arguments in **single quotes**; use
+> `;` (never `&&`) to chain commands. See `.qoder/rules/basic.md` §2.
 
 > **Cost rule:** every command that touches a live model (`inspect tree/params/inventory`,
 > `run solve`, `export …`, `build apply`) boots a JVM (~30s) and takes a license slot. Batch your

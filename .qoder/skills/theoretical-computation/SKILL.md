@@ -27,8 +27,10 @@ uv run pysci-theory <command> [options]
 Below, `theory …` is shorthand for `uv run pysci-theory …`. (Fallback if the script isn't
 installed: `uv run --no-sync python -m pysci.skills.theoretical_computation.tools.theory …`.)
 
-> **PowerShell rule (critical):** wrap multi-word arguments in **single quotes**; use `;`
-> (never `&&`) to chain commands.
+> **PowerShell rules (critical):** first set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
+> in the same shell — this CLI prints Chinese, and piping its stdout decodes those UTF-8 bytes with
+> the GBK/936 console codepage (mojibake). Then: wrap multi-word arguments in **single quotes**; use
+> `;` (never `&&`) to chain commands. See `.qoder/rules/basic.md` §2.
 
 ## Capability boundary (read this first)
 

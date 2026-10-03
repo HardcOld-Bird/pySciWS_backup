@@ -23,9 +23,11 @@ uv run pysci-compose <command> [options]
 Below, `compose …` is shorthand for `uv run pysci-compose …`. (Fallback if the script
 isn't installed: `uv run python -m pysci.skills.document_writing.tools.compose …`.)
 
-> **PowerShell rule (critical):** wrap multi-word arguments in **single quotes**, e.g.
-> `compose tex new my_paper --title 'Gain-induced Exceptional Points'`. Double quotes get
-> split by the shell and break the command. Use `;` (never `&&`) to chain commands.
+> **PowerShell rules (critical):** first set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
+> in the same shell — this CLI prints Chinese, and piping its stdout decodes those UTF-8 bytes with
+> the GBK/936 console codepage (mojibake). Then: wrap multi-word arguments in **single quotes**, e.g.
+> `compose tex new my_paper --title 'Gain-induced Exceptional Points'`. Double quotes get split by the
+> shell and break the command. Use `;` (never `&&`) to chain commands. See `.qoder/rules/basic.md` §2.
 
 ## Capability boundary (read this first)
 

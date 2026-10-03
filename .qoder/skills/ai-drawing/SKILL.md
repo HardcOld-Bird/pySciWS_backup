@@ -32,8 +32,10 @@ uv run pysci-imagine <command> [options]
 Below, `imagine …` is shorthand for `uv run pysci-imagine …`. (Fallback if the script isn't
 installed / offline: `uv run --no-sync python -m pysci.skills.ai_drawing.tools.imagine …`.)
 
-> **PowerShell rule (critical):** wrap multi-word arguments (prompts!) in **single quotes**; use `;`
-> (never `&&`) to chain commands.
+> **PowerShell rules (critical):** first set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
+> in the same shell — this CLI prints Chinese, and piping its stdout decodes those UTF-8 bytes with
+> the GBK/936 console codepage (mojibake). Then: wrap multi-word arguments (prompts!) in **single
+> quotes**; use `;` (never `&&`) to chain commands. See `.qoder/rules/basic.md` §2.
 
 > **Cost rule:** every Tier 1 `gen` / `i2i` / `edit` / `layers` call spends real money (~¥0.2 per
 > image on Ark). Default to **one** image; `--n` is explicit and clamped by the cost guard. Preview
