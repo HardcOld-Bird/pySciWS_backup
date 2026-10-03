@@ -144,7 +144,15 @@ overrides (all have built-in defaults).
   717-line file, i.e. ~80 % of it and pure noise to `rag`'s embedder; in-text citations stay as
   BibTeX *keys* (`systems[EP2]`), key → number mapping not being implemented; `\ref` becomes
   `§label`; accents are not converted (`Aubry-Andr{\'e}-Harper`). Pinned by
-  `test_tex_to_markdown.py`.
+  `test_tex_to_markdown.py`. One further limit is *not* pinned, because it is not recoverable from
+  syntax at all: a heading the authors set by hand as `\emph{Introduction.--}` (common in PRL, where
+  `\section` is skipped to save space) stays *italic prose* instead of becoming `##`, so such a file
+  can end up with **zero** Markdown headings. Verified on 1803.04110 — all eight sections do survive,
+  but as `*X.--*` / `*X. --*` lines, and `^#` matches only the H1. Nothing in the source marks an
+  italic phrase as a heading, so no amount of regex fixes this; the consequence is that heading-based
+  chunking in `rag` sees the whole paper as one block. A workable heuristic, if it is ever wanted:
+  promote a line that is *only* an italic phrase ending in `.--` or `. --`, which is the APS run-in
+  heading convention.
 
 ---
 
