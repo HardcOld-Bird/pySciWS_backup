@@ -105,13 +105,13 @@ class Settings:
 
     # --- OpenAlex ---
     openalex_email: str | None
+    openalex_api_key: str | None
 
     # --- arXiv ---
     arxiv_user_agent: str | None
 
-    # --- Web of Science ---
+    # --- Web of Science (Starter API：仅 X-ApiKey，无需 secret) ---
     wos_api_key: str | None
-    wos_api_secret: str | None
     wos_api_base_url: str
 
     # --- Zotero ---
@@ -121,12 +121,21 @@ class Settings:
     zotero_web_api_base: str
 
     # --- 其他数据源 ---
-    semantic_scholar_api_key: str | None
     elsevier_api_key: str | None
 
     # --- PDF 抽取 ---
     pdf_extract_backend: str
     mineru_token: str | None
+
+    # --- SiliconFlow（硅基流动：PaperQA2 的 OpenAI 兼容 embedding/LLM 后端）---
+    siliconflow_api_key: str | None
+    siliconflow_base_url: str
+
+    # --- PaperQA2 RAG（检索为主：embedding 语义索引；LLM 仅用于可选的 ask 综述）---
+    pqa_embedding: str  # embedding 模型（免费档），如 openai/BAAI/bge-m3
+    pqa_llm: str  # ask 综述用 LLM（免费档优先）
+    pqa_llm_fallback: str | None  # 免费 LLM 不可用时的付费回退（None=不回退）
+    pqa_home: Path  # 索引/答案持久化目录
 
     # --- HTTP ---
     http_timeout: int
@@ -146,8 +155,7 @@ class Settings:
     def wos_ready(self) -> bool:
         """WoS Starter API 是否已配置完毕。
 
-        Starter API 只需 API Key（无需 Secret）。
-        若未来升级到完整版 API，再额外要求 Secret。
+        Starter API 用 X-ApiKey 头鉴权，只需 API Key（无 client secret / OAuth2）。
         """
         return bool(self.wos_api_key)
 
@@ -155,6 +163,15 @@ class Settings:
     def zotero_web_ready(self) -> bool:
         """Zotero Web API 是否可用（需要 user_id + api_key）。"""
         return bool(self.zotero_user_id and self.zotero_api_key)
+
+    @property
+    def pqa_ready(self) -> bool:
+        """PaperQA2 RAG 是否可用：核心的 embedding 索引/检索需要硅基流动 key。
+
+        检索（index/search）只依赖 embedding，故有 key 即就绪；ask 综述另需 LLM，
+        但同走硅基流动，无需额外凭据。
+        """
+        return bool(self.siliconflow_api_key)
 
     def summary(self) -> str:
         """人类可读的配置摘要，用于日志。敏感字段做脱敏。"""
@@ -173,17 +190,16 @@ class Settings:
             f"zotero_data_dir     : {self.zotero_data_dir or '(unset)'}",
             "",
             f"openalex_email      : {self.openalex_email or '(unset)'}",
+            f"openalex_api_key    : {mask(self.openalex_api_key)}",
             f"arxiv_user_agent    : {self.arxiv_user_agent or '(unset)'}",
             "",
             f"wos_api_key         : {mask(self.wos_api_key)}",
-            f"wos_api_secret      : {mask(self.wos_api_secret)}",
             f"wos_ready           : {self.wos_ready}",
             "",
             f"zotero_user_id      : {self.zotero_user_id or '(unset)'}",
             f"zotero_api_key      : {mask(self.zotero_api_key)}",
             f"zotero_web_ready    : {self.zotero_web_ready}",
             "",
-            f"semantic_scholar    : {mask(self.semantic_scholar_api_key)}",
             f"elsevier            : {mask(self.elsevier_api_key)}",
             "",
             f"pdf_extract_backend : {self.pdf_extract_backend}",
@@ -194,6 +210,14 @@ class Settings:
             f"cache_b_max_age     : {self.cache_b_max_age_days}d",
             f"cache_autoclean     : {self.cache_autoclean_interval_days}d",
             f"cache_soft_limit    : {self.cache_soft_limit_mb} MB",
+            "",
+            f"siliconflow_key     : {mask(self.siliconflow_api_key)}",
+            f"siliconflow_base    : {self.siliconflow_base_url}",
+            f"pqa_ready           : {self.pqa_ready}",
+            f"pqa_embedding       : {self.pqa_embedding}",
+            f"pqa_llm             : {self.pqa_llm}",
+            f"pqa_llm_fallback    : {self.pqa_llm_fallback or '(none)'}",
+            f"pqa_home            : {self.pqa_home}",
             "=========================================",
         ]
         return "\n".join(lines)
@@ -237,6 +261,13 @@ def build_settings() -> Settings:
     zotero_data_raw = _get_env("ZOTERO_DATA_DIR")
     zotero_data_dir = Path(zotero_data_raw).expanduser() if zotero_data_raw else None
 
+    # PaperQA2 RAG 索引/答案持久化目录：默认落在数据区 cache 下（可用 PQA_HOME 覆盖）
+    pqa_home_raw = _get_env("PQA_HOME")
+    pqa_home = Path(pqa_home_raw).expanduser() if pqa_home_raw else cache_dir / "rag"
+    if not pqa_home.is_absolute():
+        pqa_home = PROJECT_ROOT / pqa_home
+    pqa_home.mkdir(parents=True, exist_ok=True)
+
     return Settings(
         project_root=PROJECT_ROOT,
         module_dir=MODULE_DIR,
@@ -247,9 +278,9 @@ def build_settings() -> Settings:
         cache_html_fulltext=cache_html,
         zotero_data_dir=zotero_data_dir,
         openalex_email=_get_env("OPENALEX_EMAIL"),
+        openalex_api_key=_get_env("OPENALEX_API_KEY"),
         arxiv_user_agent=_get_env("ARXIV_USER_AGENT"),
         wos_api_key=_get_env("WOS_API_KEY"),
-        wos_api_secret=_get_env("WOS_API_SECRET"),
         wos_api_base_url=_get_env(
             "WOS_API_BASE_URL", "https://api.clarivate.com/apis/wos-starter/v1"
         )
@@ -262,10 +293,22 @@ def build_settings() -> Settings:
         or "",
         zotero_web_api_base=_get_env("ZOTERO_WEB_API_BASE", "https://api.zotero.org")
         or "",
-        semantic_scholar_api_key=_get_env("SEMANTIC_SCHOLAR_API_KEY"),
         elsevier_api_key=_get_env("ELSEVIER_API_KEY"),
         pdf_extract_backend=(_get_env("PDF_EXTRACT_BACKEND", "auto") or "auto").lower(),
         mineru_token=_get_env("MINERU_TOKEN"),
+        siliconflow_api_key=_get_env("SILICONFLOW_API_KEY"),
+        siliconflow_base_url=_get_env(
+            "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"
+        )
+        or "",
+        pqa_embedding=_get_env("PQA_EMBEDDING", "openai/BAAI/bge-m3")
+        or "openai/BAAI/bge-m3",
+        pqa_llm=_get_env("PQA_LLM", "openai/Qwen/Qwen2.5-7B-Instruct")
+        or "openai/Qwen/Qwen2.5-7B-Instruct",
+        pqa_llm_fallback=_get_env(
+            "PQA_LLM_FALLBACK", "openai/Qwen/Qwen2.5-32B-Instruct"
+        ),
+        pqa_home=pqa_home,
         http_timeout=_get_env_int("HTTP_TIMEOUT_SECONDS", 30),
         http_max_retries=_get_env_int("HTTP_MAX_RETRIES", 3),
         http_user_agent=_get_env(
@@ -285,12 +328,13 @@ def build_settings() -> Settings:
                     "ZOTERO_",
                     "OPENALEX_",
                     "ARXIV_",
-                    "SEMANTIC_",
                     "ELSEVIER_",
                     "PDF_",
                     "HTTP_",
                     "CACHE_",
                     "MINERU_",
+                    "SILICONFLOW_",
+                    "PQA_",
                 )
             )
         },
@@ -320,7 +364,7 @@ def http_session(retries: int | None = None, *, retry_on_status: bool = True) ->
         retry_on_status: 是否将 429/5xx 作为传输层重试状态。
             - True（默认）：urllib3 自动退避重试；重试耗尽后会抛异常。
             - False：status_forcelist 置空，429/5xx 作为普通响应返回（不抛异常），
-              由调用方自行读取 status_code / Retry-After 并控制退避（如 S2 客户端）。
+              由调用方自行读取 status_code / Retry-After 并控制退避。
 
     若未安装 requests，将抛出 ImportError 提示。
     """

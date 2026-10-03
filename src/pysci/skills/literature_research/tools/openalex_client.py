@@ -142,10 +142,20 @@ def reconstruct_abstract(inv_index: dict[str, list[int]] | None) -> str:
 def _get(
     url: str, params: dict[str, Any] | None = None, use_cache: bool = True
 ) -> dict[str, Any]:
-    """底层 GET，自动附加 polite pool 邮箱、自动缓存。"""
+    """底层 GET，自动附加 API key（若配置）与 polite pool 邮箱、自动缓存。
+
+    OpenAlex 自 2026-02-13 起强制要求 API key：``mailto`` 已被忽略，无 key 时仅
+    100 credits/天（testing/demos only）。若 .env 配置了 ``OPENALEX_API_KEY``，以
+    ``Authorization: Bearer <key>`` 头注入——放在 header 而非 query，避免 key 进入
+    缓存文件名与 URL（_cache_key 只对 url+params 取哈希）。
+    """
     params = dict(params or {})
     if settings.openalex_email and "mailto" not in params:
         params["mailto"] = settings.openalex_email
+
+    headers: dict[str, str] = {}
+    if settings.openalex_api_key:
+        headers["Authorization"] = f"Bearer {settings.openalex_api_key}"
 
     cache_path = _cache_key(url, params)
     if use_cache:
@@ -154,7 +164,9 @@ def _get(
             return cached
 
     with http_session() as s:
-        r = s.get(url, params=params, timeout=settings.http_timeout)
+        r = s.get(
+            url, params=params, headers=headers or None, timeout=settings.http_timeout
+        )
         r.raise_for_status()
         data = r.json()
 

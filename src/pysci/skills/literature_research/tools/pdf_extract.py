@@ -23,18 +23,16 @@
 云端 MinerU 需在项目根 ``.env`` 配置 ``MINERU_TOKEN=``（在 https://mineru.net/apiManage/token
 免费申请，Token 有效期约 90 天）。未配置时 auto 会回退 pymupdf4llm 并告警。
 
-依赖：仅需 ``pymupdf4llm``（本地兜底）+ ``requests``（云端调用）。已移除 marker /
-本地 magic-pdf（实测本机不可用，云端可完全替代）。
+依赖：``mineru-open-sdk``（云端调用，仅依赖 httpx）+ ``pymupdf4llm``（本地兜底）。
+已移除 marker / 本地 magic-pdf（实测本机不可用，云端可完全替代）。
 """
 
 from __future__ import annotations
 
 import hashlib
-import io
 import re
 import sys
 import time
-import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -69,8 +67,8 @@ PREFERRED_ORDER: tuple[str, ...] = ("mineru-cloud", "pymupdf4llm")
 
 
 def _mineru_cloud_ready() -> bool:
-    """云端 MinerU 是否可用：需配置 MINERU_TOKEN 且 requests 可导入。"""
-    return bool(settings.mineru_token) and _has_module("requests")
+    """云端 MinerU 是否可用：需配置 MINERU_TOKEN 且 mineru SDK 可导入。"""
+    return bool(settings.mineru_token) and _has_module("mineru")
 
 
 def available_backends() -> list[str]:
@@ -144,119 +142,47 @@ def _write_cache(path: Path, text: str) -> None:
 # ---------------------------------------------------------------------------
 # 后端实现
 # ---------------------------------------------------------------------------
-# MinerU 云端 Open API 配置（本地 PDF 走“批量上传”流程）
-MINERU_API_BASE = "https://mineru.net"
-MINERU_MODEL_VERSION = "vlm"  # vlm：公式/表格质量最好（推荐）
-MINERU_IS_OCR = True  # 强制 OCR：确保图片/扫描公式也被识别（数字版可改 False）
-MINERU_POLL_INTERVAL = 8  # 轮询间隔（秒）
-MINERU_POLL_TIMEOUT = 900  # 轮询总超时（秒）
-MINERU_MAX_PAGES = (
-    200  # MinerU 单文件页数硬上限（超出报 "number of pages exceeds limit"）
-)
-MINERU_CHUNK_PAGES = 199  # 自动分页的每块页数（留 1 页余量，确保严格 <200）
+# MinerU 云端（mineru-open-sdk 封装鉴权/上传/轮询/取结果，仅依赖 httpx，无本地 GPU）。
+# Precision Extract（需 token）单文件上限 200MB / 600 页；超限的大文件用 SDK 的 pages=
+# 参数按页区间分段转换再拼接（不再用 fitz 物理切分临时文件）。
+MINERU_MODEL = "vlm"  # vlm：公式→LaTeX、表格质量最好（推荐）
+MINERU_LANGUAGE = "en"  # 物理文献以英文为主（SDK 默认 "ch"）
+MINERU_MAX_PAGES = 600  # SDK Precision Extract 单文件页数上限（超出抛 PageLimitError）
+MINERU_CHUNK_PAGES = 600  # 超限时每段页数（= 上限，逐段调 SDK 的 pages=）
+MINERU_TIMEOUT = 900  # 单段轮询总超时（秒）；SDK 默认仅 300s，大文件放宽
 
 
-def _mineru_extract_one(pdf_path: Path) -> str:
-    """MinerU 云端 Open API：转换**单个** PDF（页数须 ≤MINERU_MAX_PAGES）。
+def _mineru_extract_pages(pdf_path: Path, pages: str | None = None) -> str:
+    """用 mineru-open-sdk 精准解析一段（或整份）PDF，返回 markdown 文本。
 
-    精准解析，公式→LaTeX，无需本地 GPU。超过页数上限的大文件由外层
-    ``_extract_with_mineru_cloud`` 先分页、再逐块调用本函数、最后拼接。
-
-    本地 PDF 无法直接给单文件接口（其只收公网 URL），故走“批量上传”流程：
-      1. POST /api/v4/file-urls/batch  申请预签名上传链接
-      2. PUT  上传 PDF 字节（官方要求：不带 Content-Type）
-      3. 轮询 GET /api/v4/extract-results/batch/{batch_id} 直到 state=done
-      4. 下载 full_zip_url，解压取 full.md
+    ``pages=None`` 表示整份；``pages="a-b"``（1-based 闭区间）表示页区间，用于超上限
+    大文件的分段转换。SDK 内部完成鉴权、上传、轮询与结果打包，本函数只取 markdown。
     """
-    token = settings.mineru_token
-    if not token:
-        raise ExtractionFailed("MinerU 云端未配置：请在项目根 .env 设置 MINERU_TOKEN")
+    from mineru import MinerU
+
+    client = MinerU(settings.mineru_token or None)
     try:
-        import requests
-    except ImportError as e:  # pragma: no cover
-        raise ExtractionFailed(f"requests 不可用（云端 MinerU 需要）：{e}") from e
-
-    base = MINERU_API_BASE.rstrip("/")
-    auth = {"Authorization": f"Bearer {token}"}
-    name = pdf_path.name or "document.pdf"
-
-    # 1. 申请上传链接
-    payload = {
-        "files": [{"name": name, "is_ocr": MINERU_IS_OCR}],
-        "model_version": MINERU_MODEL_VERSION,
-        "enable_formula": True,
-        "enable_table": True,
-        "language": "en",
-        "extra_formats": ["latex"],  # 额外产出 LaTeX，便于精读公式
-    }
-    r = requests.post(
-        f"{base}/api/v4/file-urls/batch",
-        headers={**auth, "Content-Type": "application/json"},
-        json=payload,
-        timeout=60,
-    )
-    r.raise_for_status()
-    j = r.json()
-    if j.get("code") != 0:
-        raise ExtractionFailed(f"MinerU 申请上传链接失败: {j.get('msg')}")
-    data = j.get("data") or {}
-    batch_id = data.get("batch_id")
-    file_urls = data.get("file_urls") or []
-    if not batch_id or not file_urls:
-        raise ExtractionFailed(f"MinerU 未返回 batch_id/file_urls: {j}")
-
-    # 2. 上传 PDF 字节（官方要求不带 Content-Type）
-    with pdf_path.open("rb") as f:
-        up = requests.put(file_urls[0], data=f, timeout=600)
-    if up.status_code not in (200, 201):
-        raise ExtractionFailed(
-            f"MinerU 上传失败: HTTP {up.status_code} {up.text[:200]}"
+        result = client.extract(
+            str(pdf_path),
+            model=MINERU_MODEL,
+            ocr=True,  # 强制 OCR：扫描件/图片公式也识别
+            formula=True,  # 公式→LaTeX
+            table=True,  # 表格识别
+            language=MINERU_LANGUAGE,
+            pages=pages,
+            extra_formats=["latex"],  # 额外产出 LaTeX，便于精读公式
+            timeout=MINERU_TIMEOUT,
         )
+    finally:
+        client.close()
 
-    # 3. 轮询解析结果
-    poll_url = f"{base}/api/v4/extract-results/batch/{batch_id}"
-    deadline = time.time() + MINERU_POLL_TIMEOUT
-    full_zip_url: str | None = None
-    while time.time() < deadline:
-        time.sleep(MINERU_POLL_INTERVAL)
-        pr = requests.get(poll_url, headers=auth, timeout=60)
-        if pr.status_code != 200:
-            continue
-        pj = pr.json()
-        if pj.get("code") != 0:
-            continue
-        results = (pj.get("data") or {}).get("extract_result") or []
-        if not results:
-            continue
-        item = results[0]
-        state = item.get("state")
-        if state == "done":
-            full_zip_url = item.get("full_zip_url")
-            break
-        if state == "failed":
-            raise ExtractionFailed(f"MinerU 解析失败: {item.get('err_msg')}")
-        prog = item.get("extract_progress") or {}
-        if prog.get("total_pages"):
-            print(
-                f"[pdf_extract] MinerU {state}: "
-                f"{prog.get('extracted_pages')}/{prog.get('total_pages')} 页"
-            )
-    if not full_zip_url:
-        raise ExtractionFailed(
-            f"MinerU 轮询超时（>{MINERU_POLL_TIMEOUT}s），未取得结果"
-        )
-
-    # 4. 下载 zip，解压取 full.md
-    zr = requests.get(full_zip_url, timeout=300)
-    zr.raise_for_status()
-    with zipfile.ZipFile(io.BytesIO(zr.content)) as zf:
-        names = zf.namelist()
-        target = next((n for n in names if n.endswith("full.md")), None) or next(
-            (n for n in names if n.endswith(".md")), None
-        )
-        if target is None:
-            raise ExtractionFailed(f"MinerU 结果 zip 内未找到 .md：{names[:10]}")
-        return zf.read(target).decode("utf-8", errors="replace")
+    state = getattr(result, "state", None)
+    if state is not None and state != "done":
+        raise ExtractionFailed(f"MinerU 解析未完成（state={state}）")
+    md = getattr(result, "markdown", "") or ""
+    if not md.strip():
+        raise ExtractionFailed("MinerU 返回空 markdown")
+    return md
 
 
 def _pdf_page_count(pdf_path: Path) -> int:
@@ -272,64 +198,32 @@ def _pdf_page_count(pdf_path: Path) -> int:
         return 0
 
 
-def _split_pdf_into_chunks(pdf_path: Path, chunk_pages: int) -> list[Path]:
-    """把 PDF 切成每块 ≤chunk_pages 页的临时文件，返回块路径（顺序即页序）。
-
-    临时块写入独立 tmp 目录，调用方用完后负责删除（见 _extract_with_mineru_cloud）。
-    """
-    import tempfile
-
-    import fitz  # type: ignore
-
-    tmpdir = Path(tempfile.mkdtemp(prefix="mineru_chunks_"))
-    chunks: list[Path] = []
-    with fitz.open(str(pdf_path)) as doc:
-        n = doc.page_count
-        for start in range(0, n, chunk_pages):
-            end = min(start + chunk_pages, n)  # 页区间 [start, end)
-            sub = fitz.open()
-            sub.insert_pdf(doc, from_page=start, to_page=end - 1)
-            cp = tmpdir / f"{pdf_path.stem}_p{start + 1:04d}-{end:04d}.pdf"
-            sub.save(str(cp))
-            sub.close()
-            chunks.append(cp)
-    return chunks
-
-
 def _extract_with_mineru_cloud(pdf_path: Path) -> str:
-    """MinerU 云端后端（对外入口）：>MINERU_MAX_PAGES 页时自动分页转换再拼接。
+    """MinerU 云端后端（对外入口）：>MINERU_MAX_PAGES 页时用 pages= 分段转换再拼接。
 
-    MinerU 单文件有 200 页硬上限（超出报 "number of pages exceeds limit"）。教材/
-    学位论文等大文件在此按 MINERU_CHUNK_PAGES 页切块，逐块走云端转换，再按页序拼接为
-    一份完整 Markdown（每块前加 HTML 注释标记块号与页范围，便于溯源）。任一块失败则
-    整体抛错（交由上层回退或重试），避免产出残缺全文。
+    mineru-open-sdk 的 Precision Extract 单文件有 600 页上限（超出抛 PageLimitError）。
+    教材/学位论文等大文件在此按页区间分段调用 SDK，再按页序拼接为一份完整 Markdown
+    （每段前加 HTML 注释标记页范围，便于溯源）。任一段失败则整体抛错（交由上层回退
+    或重试），避免产出残缺全文。
     """
     n_pages = _pdf_page_count(pdf_path)
     if n_pages <= MINERU_MAX_PAGES:
-        return _mineru_extract_one(pdf_path)
+        return _mineru_extract_pages(pdf_path)
 
+    total = (n_pages + MINERU_CHUNK_PAGES - 1) // MINERU_CHUNK_PAGES
     print(
         f"[pdf_extract] MinerU: {n_pages} 页 > {MINERU_MAX_PAGES} 页上限，"
-        f"自动分页（每块 ≤{MINERU_CHUNK_PAGES} 页）转换 ..."
+        f"分 {total} 段（每段 ≤{MINERU_CHUNK_PAGES} 页）转换 ..."
     )
-    chunks = _split_pdf_into_chunks(pdf_path, MINERU_CHUNK_PAGES)
-    if not chunks:
-        return _mineru_extract_one(pdf_path)
-    tmpdir = chunks[0].parent
     parts: list[str] = []
-    try:
-        total = len(chunks)
-        for i, cp in enumerate(chunks, 1):
-            print(f"[pdf_extract] MinerU 分块 {i}/{total}: {cp.name} ...")
-            md = _mineru_extract_one(cp)
-            pages_tag = cp.stem.rsplit("_p", 1)[-1]
-            parts.append(
-                f"\n\n<!-- ===== MinerU chunk {i}/{total} (pages {pages_tag}) ===== -->\n\n{md}"
-            )
-    finally:
-        import shutil
-
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    for i in range(total):
+        start = i * MINERU_CHUNK_PAGES + 1
+        end = min((i + 1) * MINERU_CHUNK_PAGES, n_pages)
+        print(f"[pdf_extract] MinerU 分段 {i + 1}/{total}: 页 {start}-{end} ...")
+        md = _mineru_extract_pages(pdf_path, pages=f"{start}-{end}")
+        parts.append(
+            f"\n\n<!-- ===== MinerU pages {start}-{end} ({i + 1}/{total}) ===== -->\n\n{md}"
+        )
     return "".join(parts).strip() + "\n"
 
 

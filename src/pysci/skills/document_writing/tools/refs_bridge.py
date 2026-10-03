@@ -1,11 +1,13 @@
 """refs_bridge —— 把 Zotero 文献库导出为 LaTeX 可用的 refs.bib。
 
-复用 literature_research 的 ZoteroBridge 读取条目（本地 API 优先、Web API 兜底），
-再确定性地转成 BibTeX。citekey 采用 Better BibTeX 风格（首作者姓+年+标题首词），
-与文献调研 skill 入库的条目无缝衔接——调研时存进 Zotero，写作时一键拉成 .bib。
+复用 literature_research 的 ZoteroCli（委托社区 zotero-mcp 的 `zotero-cli --json`
+读取条目，本地 sqlite / Web API 由 zotero-cli 自行解析），再确定性地转成 BibTeX。
+citekey 采用 Better BibTeX 风格（首作者姓+年+标题首词），与文献调研 skill 入库的
+条目无缝衔接——调研时存进 Zotero，写作时一键拉成 .bib。
 
-说明：本模块跨 skill 复用 ``pysci.skills.literature_research.tools.zotero_bridge``
-（延迟导入 + 清晰报错），避免重复实现 Zotero 客户端。
+说明：本模块跨 skill 复用 ``pysci.skills.literature_research.tools.zotero_cli``
+（延迟导入 + 清晰报错），避免重复实现 Zotero 客户端。条目 dict 兼容
+``{key, data:{...}}`` 与扁平 ``{...}`` 两种形态（下游 ``it.get('data', it)``）。
 """
 
 from __future__ import annotations
@@ -197,12 +199,17 @@ def item_to_bibtex(item: dict[str, Any], *, citekey: str | None = None) -> str:
 # ---------------------------------------------------------------------------
 def _get_bridge() -> Any:
     try:
-        from pysci.skills.literature_research.tools import zotero_bridge
+        from pysci.skills.literature_research.tools import zotero_cli
     except ImportError as e:  # pragma: no cover
         raise RuntimeError(
-            "无法导入 literature_research.zotero_bridge；refs 导出依赖文献调研 skill。"
+            "无法导入 literature_research.zotero_cli；refs 导出依赖文献调研 skill。"
         ) from e
-    return zotero_bridge.ZoteroBridge()
+    if not zotero_cli.available():
+        raise RuntimeError(
+            "zotero-cli 未安装（zotero-mcp-server）；refs 导出需先运行 "
+            "scripts/zotero_mcp/setup_zotero_mcp.ps1 安装社区 zotero-mcp。"
+        )
+    return zotero_cli.ZoteroCli()
 
 
 def export_bib(

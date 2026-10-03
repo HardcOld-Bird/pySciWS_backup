@@ -14,13 +14,13 @@
 ----------
 - 目前仅显式适配 **APS**（journals.aps.org），全文容器为 ``#fulltext-content``。
   其他出版商走 generic 兜底（article/main/body），需各自适配后再保证质量。
-- 散文/正文/参考文献/图表标题提取质量高；**公式常丢失**——若出版商把公式渲染为
-  图片/SVG 且无 MathML（APS 即如此，页面 <math> 数为 0），inner_text 取不到。
-  公式敏感的精读请改走 PDF + 云端公式识别，或 arXiv LaTeX 源码。
+- 散文/正文/参考文献/图表标题提取质量高（正文经 trafilatura 抽为结构化 markdown）；
+  **公式常丢失**——若出版商把公式渲染为图片/SVG 且无 MathML（APS 即如此，页面
+  <math> 数为 0），正文抽取取不到。公式敏感的精读请改走 PDF + 云端公式识别，或 arXiv LaTeX 源码。
 
 依赖
 ----
-    uv add playwright      # 仅 Python 包；用 channel 复用本机浏览器，通常无需下载 Chromium
+    uv add playwright trafilatura   # playwright 复用本机浏览器过 CF；trafilatura 从 HTML 抽正文 markdown
     # 若本机没有 Chrome/Edge，再执行： playwright install chromium
 
 用法::
@@ -136,6 +136,21 @@ _JS_EXTRACT = r"""
   }
   if (!root) root = document.querySelector('article, main, [role=main]') || document.body;
   return root ? root.innerText : '';
+}
+"""
+
+# 同上，但返回命中容器的 outerHTML（供 trafilatura 抽结构化 markdown 正文；
+# 保留 DOM 结构，比 innerText 更利于标题/列表/表格还原）。
+_JS_EXTRACT_HTML = r"""
+(selectors) => {
+  document.querySelectorAll('script,style,noscript,nav,footer,aside,form').forEach(e => e.remove());
+  let root = null;
+  for (const s of selectors) {
+    const el = document.querySelector(s);
+    if (el && (el.innerText || '').trim().length > 200) { root = el; break; }
+  }
+  if (!root) root = document.querySelector('article, main, [role=main]') || document.body;
+  return root ? root.outerHTML : '';
 }
 """
 
@@ -281,6 +296,75 @@ def _slug(res: FetchResult) -> str:
 
 
 # ---------------------------------------------------------------------------
+# 正文抽取（trafilatura 优先，浏览器 innerText 兜底）
+# ---------------------------------------------------------------------------
+def _wrap_document(html: str) -> str:
+    """把 HTML 片段包成完整文档（trafilatura 要求根为 <html>，裸片段会返回 None）。"""
+    h = (html or "").strip()
+    if not h:
+        return ""
+    head = h[:512].lower()
+    if "<html" in head or "<!doctype" in head:
+        return h
+    return f"<html><body>{h}</body></html>"
+
+
+def _trafilatura_body(html: str, url: str) -> str | None:
+    """用 trafilatura 从原始 HTML 提取结构化 markdown 正文。
+
+    未安装 / 解析异常 / 结果为空时返回 None，由调用方回退。favor_precision 去噪
+    （导航/页脚/链接堆），保留表格/图片/链接/格式；不取评论区。
+    """
+    if not html or not html.strip():
+        return None
+    try:
+        from trafilatura import extract
+    except ImportError:
+        return None
+    try:
+        md = extract(
+            html,
+            url=url,
+            output_format="markdown",
+            include_comments=False,
+            include_tables=True,
+            include_images=True,
+            include_links=True,
+            include_formatting=True,
+            favor_precision=True,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    return md.strip() if md and md.strip() else None
+
+
+def _extract_body(page: Any, url: str, adapter: PublisherAdapter) -> str:
+    """正文抽取：trafilatura（结构化 markdown）优先，逐级回退到浏览器 innerText。
+
+    1. trafilatura 解析适配器命中的正文容器（outerHTML 包成完整文档）；
+    2. trafilatura 解析整页 HTML；
+    3. 浏览器内 innerText（旧 ``_JS_EXTRACT``）——保证 trafilatura 不可用/失配时仍出正文。
+    """
+    selectors = list(adapter.fulltext_selectors)
+    try:
+        scoped = page.evaluate(_JS_EXTRACT_HTML, selectors) or ""
+    except Exception:  # noqa: BLE001
+        scoped = ""
+    try:
+        full = page.content() or ""
+    except Exception:  # noqa: BLE001
+        full = ""
+    for candidate in (_wrap_document(scoped), _wrap_document(full)):
+        md = _trafilatura_body(candidate, url)
+        if md and len(md) > 200:
+            return md
+    try:
+        return page.evaluate(_JS_EXTRACT, selectors) or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+# ---------------------------------------------------------------------------
 # 核心抓取
 # ---------------------------------------------------------------------------
 def fetch_html(
@@ -347,7 +431,7 @@ def fetch_html(
 
             res.meta = page.evaluate(_JS_META) or {}
             res.title = _pick_title(res.meta)
-            res.text = page.evaluate(_JS_EXTRACT, list(ad.fulltext_selectors)) or ""
+            res.text = _extract_body(page, url, ad)
             try:
                 res.math_latex = page.evaluate(_JS_MATH) or []
             except Exception:  # noqa: BLE001
@@ -717,7 +801,7 @@ def fetch_bundle(
             res.out_dir = art_dir
 
             if want_html:
-                fr.text = page.evaluate(_JS_EXTRACT, list(ad.fulltext_selectors)) or ""
+                fr.text = _extract_body(page, url, ad)
                 try:
                     fr.math_latex = page.evaluate(_JS_MATH) or []
                 except Exception:  # noqa: BLE001

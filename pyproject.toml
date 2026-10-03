@@ -30,15 +30,19 @@ dependencies = [
     # COMSOL 仿真接口
     "mph",
     # 文献检索与知识库（代码：src/pysci/skills/literature_research/；数据：data/skills/literature_research/，详见其 README.md）
-    "requests",         # HTTP 客户端（OpenAlex / arXiv / WoS / Zotero）
+    "requests",         # HTTP 客户端（OpenAlex / arXiv / WoS）
     "python-dotenv",    # 加载项目根 .env
-    "pyzotero",         # Zotero API 官方 Python 封装
-    "markdown",         # markdown → HTML（Zotero 笔记写入时需要）
-    # PDF → Markdown 抽取（src/pysci/skills/literature_research/tools/pdf_extract.py 使用）
-    # 公式精读首选云端 MinerU Open API（仅需 requests，无本地重型依赖）；
-    # marker-pdf / magic-pdf 实测本机不可用且云端可替代，已移除。
+    # Zotero 文献库层：委托社区 zotero-mcp 的 `zotero-cli`（经 `uv tool install "zotero-mcp-server[pdf,scite]"`
+    # 独立安装于隔离工具环境，见 scripts/zotero_mcp/）；本项目仅 subprocess 调用它，故原 pyzotero / markdown
+    # （zotero_bridge.py 手写 API 回退与 md→html 所需）已随该模块删除而移除，不再是项目依赖。
+    # PDF → Markdown 抽取 + 付费墙全文（src/pysci/skills/literature_research/tools/）：
+    # pdf_extract.py 公式精读首选云端 MinerU（mineru-open-sdk 封装鉴权/上传/轮询/取结果，
+    # 仅依赖 httpx，无本地重型依赖）；marker-pdf / magic-pdf 实测本机不可用且云端可替代，已移除。
+    "mineru-open-sdk>=0.2.5",  # 云端 MinerU Open API SDK：PDF→MD、公式→LaTeX（需 .env 配 MINERU_TOKEN）
     "pymupdf4llm",      # 本地兜底后端：纯 CPU，快，但公式会丢失
     "playwright>=1.63.0",  # 付费墙论文抓取：HTML 全文 / 正文 PDF / 补充材料
+    # browser_fetch.py 正文抽取：从 Playwright 抓取的 HTML 提取结构化 markdown 正文（替代手写 innerText JS）。
+    "trafilatura>=2.2.0",
     # 文档写作 skill（src/pysci/skills/document_writing/；数据：data/skills/document_writing/）：
     # markitdown 会带入 onnxruntime/magika 做文件类型识别；LaTeX 编译另需外部 TeX 发行版
     # （TeX Live），非 pip 依赖，须另行安装并加入 PATH。
@@ -66,6 +70,7 @@ dependencies = [
     # requests，零新增核心依赖。（历史上曾绕道无头 ComfyUI 做编排，因本机无 CUDA GPU
     # 且方舟 API 能力面更宽，已于重构中整层移除。）
     "pillow",
+    "paper-qa>=5",
 ]
 
 # ------------------------------------------------------------

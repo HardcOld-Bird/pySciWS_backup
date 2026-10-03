@@ -44,15 +44,6 @@ PROJECTS_DIR: Path = settings.projects_dir
 # ===========================================================================
 # 通用小工具
 # ===========================================================================
-def _module_available(name: str) -> bool:
-    import importlib.util
-
-    try:
-        return importlib.util.find_spec(name) is not None
-    except (ImportError, ValueError):
-        return False
-
-
 def _list_templates() -> list[str]:
     if not LATEX_TEMPLATES.exists():
         return []
@@ -126,8 +117,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             else "✗ 未检测到 pandoc"
         )
     )
+    try:
+        from pysci.skills.literature_research.tools import zotero_cli as _zc
+
+        _zotero_ok = _zc.available()
+    except Exception:
+        _zotero_ok = False
     print(
-        f"  Zotero→refs.bib : {'✓ 复用 literature_research' if _module_available('pyzotero') else '△ 需 pyzotero'}"
+        f"  Zotero→refs.bib : {'✓ 复用 literature_research（zotero-cli）' if _zotero_ok else '△ 需装 zotero-cli（见 scripts/zotero_mcp/）'}"
     )
     print()
     print(

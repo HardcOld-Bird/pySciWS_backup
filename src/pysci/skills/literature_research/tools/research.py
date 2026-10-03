@@ -1,16 +1,18 @@
 """research —— 文献调研统一 CLI 门面（literature-research skill 的后端）。
 
 一个入口收敛「检索 / 阅读 / 元数据 / 入库 / 库查询 / 索引」的全部能力，
-供 skill 文档与 LLM 直接调用，无需了解底层 8 个客户端模块的实现细节。
+供 skill 文档与 LLM 直接调用，无需了解底层 9 个客户端模块的实现细节。
 
 子命令
 ------
     doctor   环境与能力自检（检索源 / PDF 后端 / Playwright / Zotero 就绪状态）
-    search   多源融合检索（OpenAlex 主 + arXiv；--enrich 追加 WoS 官方 JIF/JCR + S2 TLDR）
+    search   多源融合检索（OpenAlex 主 + arXiv + WoS；--enrich 追加 WoS 收录号）
     read     给 DOI/URL/arXiv id：抓全文 → 抽取 Markdown → 生成 papers/ 笔记骨架
     get      给 DOI/OpenAlex/arXiv id：输出融合后的完整元数据（--json 输出机器可读）
-    add      给 DOI：入库 Zotero + 生成 papers/ 笔记骨架（不抓全文）
+    add      给 DOI：入库 Zotero + 生成 papers/ 笔记骨架（不抓全文；写入前三源引用核验）
+    citecheck 引用完整性门：DOI/arXiv id/标题 或 papers/ 笔记走 OpenAlex+Crossref+arXiv 三源交叉核验
     library  查询 Zotero 库（ping / list / search / get）
+    rag      PaperQA2 语义检索本地文献库（index 建索引 / search 纯 embedding 检索 / ask 可选 LLM 综述 / status）
     index    扫描 papers/ 重建 INDEX.md（--check 仅校验不写）
     cache    缓存治理（stats 概览 / clean 清 Tier B / prune 手动 LRU 淘汰 Tier A）
 
@@ -21,11 +23,10 @@
 设计原则
 --------
 1. 只做编排，不重复造轮子——所有能力复用 tools/ 下已验证的客户端模块。
-2. S2（Semantic Scholar）为末位可选源：无 API key 时**完全跳过**；即便配置了 key，
-   其所有输出与异常也被静默吞掉（校园网通常不可达，失败是预期行为，不需为它排障）。
-3. WoS（Web of Science）为可选增强源：未配置或调用失败时静默降级到 OpenAlex 估算值。
-4. 所有产物路径基于 settings.module_dir（= data/skills/literature_research/）。
-5. 不依赖 PyYAML：frontmatter 由内置 _dump_yaml 生成，避免额外依赖。
+2. WoS（Web of Science Starter API）为主力检索/增强源：提供 Times Cited 与收录号（wos_id）；
+   未配置或调用失败时静默降级到 OpenAlex 估算值。
+3. 所有产物路径基于 settings.module_dir（= data/skills/literature_research/）。
+4. 不依赖 PyYAML：frontmatter 由内置 _dump_yaml 生成，避免额外依赖。
 """
 
 from __future__ import annotations
@@ -44,12 +45,13 @@ from . import (
     arxiv_client,
     browser_fetch,
     cache_manager,
+    citation_verify,
     local_ingest,
     openalex_client,
     pdf_extract,
-    semantic_scholar_client,
+    rag,
     wos_client,
-    zotero_bridge,
+    zotero_cli,
 )
 from .config import settings
 
@@ -276,10 +278,9 @@ def _frontmatter_from_work(source: str, work: dict[str, Any]) -> dict[str, Any]:
 def _enrich_work(
     work: dict[str, Any], *, collect: list[str] | None = None
 ) -> dict[str, Any]:
-    """用 WoS（官方 JIF/JCR/ESI）+ S2（TLDR，若有 key）增强单个 work dict。
+    """用 WoS Starter API 增强单个 work dict（补收录号 wos_id）。
 
-    两源均静默降级：全程重定向 stdout/stderr，任何异常都吞掉并返回原 dict。
-    S2 无 key 时完全不调用（符合"失败是预期、不引导排障"的策略）。
+    静默降级：全程重定向 stdout/stderr，任何异常都吞掉并返回原 dict。
     被抑制的提示信息收集进 collect（若提供），供上层汇总一行简报。
     """
     out, err = io.StringIO(), io.StringIO()
@@ -288,11 +289,6 @@ def _enrich_work(
             if settings.wos_ready:
                 try:
                     work = wos_client.enrich_openalex_work(work)
-                except Exception:
-                    pass
-            if settings.semantic_scholar_api_key:
-                try:
-                    work = semantic_scholar_client.enrich_from_s2(work)
                 except Exception:
                     pass
     finally:
@@ -304,22 +300,15 @@ def _enrich_work(
 
 
 def _overlay_enrichment(fm: dict[str, Any], work: dict[str, Any]) -> dict[str, Any]:
-    """把 _enrich_work 写进 work 的独家字段叠加到 frontmatter（覆盖 OpenAlex 估算值）。"""
-    for k in (
-        "wos_id",
-        "jif",
-        "jif_5yr",
-        "jcr_quartile",
-        "esi_highly_cited",
-        "esi_hot_paper",
-    ):
+    """把 _enrich_work 写进 work 的 WoS 独家字段叠加到 frontmatter。
+
+    WoS Starter API 只贡献 wos_id（收录号）；jif/jcr_quartile/esi_* 并非 Starter
+    API 能力，仍由 OpenAlex 估算值填充，不在此覆盖。
+    """
+    for k in ("wos_id",):
         v = work.get(k)
         if v not in (None, "", False):
             fm[k] = v
-    if work.get("tldr"):
-        fm["tldr"] = work["tldr"]
-    if work.get("influential_citation_count"):
-        fm["influential_citation_count"] = work["influential_citation_count"]
     return fm
 
 
@@ -495,8 +484,6 @@ def _sources_used(args: argparse.Namespace) -> list[str]:
         used = ["openalex", "arxiv"]
         if getattr(args, "enrich", False) and settings.wos_ready:
             used.append("wos")
-        if settings.semantic_scholar_api_key:
-            used.append("semantic_scholar")
         return used
     return [src]
 
@@ -513,22 +500,18 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print()
 
     print("【检索源】")
-    oa = (
-        "就绪"
-        if settings.openalex_email
-        else "可用（未设 OPENALEX_EMAIL，仍能用；建议设置以进入 polite pool 提速）"
-    )
-    print(f"  OpenAlex         : {oa}（主源，无需 key）")
+    if settings.openalex_api_key:
+        oa = "就绪（已配置 OPENALEX_API_KEY）"
+    elif settings.openalex_email:
+        oa = "降级（仅设 mailto；OpenAlex 自 2026-02-13 起需 API key，否则限 100 credits/天）"
+    else:
+        oa = "降级（未配置 OPENALEX_API_KEY，限 100 credits/天测试配额；建议申请免费 key）"
+    print(f"  OpenAlex         : {oa}（主源）")
     print("  arXiv            : 就绪（无需 key）")
+    print("  Crossref         : 就绪（引用完整性门三源之一，无需 key）")
     print(
-        f"  Web of Science   : {'就绪（官方 JIF/JCR/ESI 增强）' if settings.wos_ready else '未配置（可选增强源）'}"
+        f"  Web of Science   : {'就绪（补收录号 wos_id + Times Cited）' if settings.wos_ready else '未配置（可选增强源）'}"
     )
-    s2 = (
-        "已配置 key"
-        if settings.semantic_scholar_api_key
-        else "未配置（可选末位源；校园网通常不可达，属预期，无需处理）"
-    )
-    print(f"  Semantic Scholar : {s2}")
     print(
         f"  Elsevier/Scopus  : {'已配置 key' if settings.elsevier_api_key else '未配置（预留）'}"
     )
@@ -555,16 +538,39 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     print("【Zotero 文献库】")
     print(
-        f"  Web API 凭据     : {'就绪' if settings.zotero_web_ready else '未配置（ZOTERO_USER_ID / ZOTERO_API_KEY）'}"
+        f"  zotero-cli       : {'已安装（社区 zotero-mcp）' if zotero_cli.available() else '未安装——运行 scripts/zotero_mcp/setup_zotero_mcp.ps1'}"
     )
-    try:
-        zb = zotero_bridge.ZoteroBridge()
-        info = zb.ping()
-        print(f"  连通性           : 后端={zb.backend or '—'}；ping={info}")
-    except Exception as e:
+    print(
+        f"  Web API 凭据     : {'就绪' if settings.zotero_web_ready else '未配置（本地模式无需；Web 模式需 ZOTERO_USER_ID / ZOTERO_API_KEY）'}"
+    )
+    if zotero_cli.available():
+        try:
+            zb = zotero_cli.ZoteroCli()
+            info = zb.ping()
+            print(
+                f"  连通性           : 后端={zb.backend}；ping ok={info.get('ok')}"
+                + (f"；{info.get('error')}" if not info.get("ok") else "")
+            )
+        except Exception as e:
+            print(f"  连通性           : 探测失败（{type(e).__name__}）")
+    print()
+
+    print("【PaperQA2 RAG 语义检索】")
+    _st = rag.index_status()
+    print(
+        f"  后端就绪         : {'是（硅基流动 embedding）' if _st['ready'] else '否——缺 SILICONFLOW_API_KEY'}"
+    )
+    print(f"  embedding 模型   : {_st['embedding_model']}")
+    if _st["exists"]:
         print(
-            f"  连通性           : 不可达（{type(e).__name__}）——本地 API 需 Zotero 桌面版开启 Settings→Advanced→Allow other applications"
+            f"  本地索引         : docs={_st['n_docs']} chunks={_st['n_chunks']}（built {_st['built_at'] or '?'}）"
         )
+    else:
+        print("  本地索引         : 未建（运行 `research rag index`）")
+    print(
+        f"  ask LLM          : {settings.pqa_llm}"
+        + (f"（回退 {settings.pqa_llm_fallback}）" if settings.pqa_llm_fallback else "")
+    )
     print()
     print("=== 自检结束 ===")
     return 0
@@ -623,30 +629,11 @@ def cmd_search(args: argparse.Namespace) -> int:
             f"[search] WoS: 取回 {len(res.get('hits', []))} 条（总匹配 {res.get('total')}）"
         )
 
-    if source == "s2":
-        if not settings.semantic_scholar_api_key:
-            print(
-                "[search] S2 未配置 key——可选末位源，已跳过（校园网通常不可达，属预期）。"
-            )
-            return 0
-        with (
-            contextlib.redirect_stdout(io.StringIO()),
-            contextlib.redirect_stderr(io.StringIO()),
-        ):
-            try:
-                res = semantic_scholar_client.search_papers(
-                    query, limit=limit, year_range=args.year
-                )
-            except Exception:
-                res = {"data": []}
-        rows.extend(("s2", p) for p in res.get("data", []))
-        print(f"[search] S2: 取回 {len(res.get('data', []))} 条")
-
     rows = _dedupe(rows)
 
-    # 批量增强（--enrich）：对 OpenAlex 条目补 WoS 官方 JIF/JCR + S2 TLDR
+    # 批量增强（--enrich）：对 OpenAlex 条目补 WoS 收录号（wos_id）
     if getattr(args, "enrich", False) and source == "auto":
-        if settings.wos_ready or settings.semantic_scholar_api_key:
+        if settings.wos_ready:
             enriched: list[tuple[str, dict]] = []
             for src, w in rows:
                 if src == "openalex" and w.get("doi"):
@@ -654,7 +641,7 @@ def cmd_search(args: argparse.Namespace) -> int:
                 enriched.append((src, w))
             rows = enriched
         else:
-            print("[search] --enrich 已忽略：WoS/S2 均未配置。")
+            print("[search] --enrich 已忽略：WoS 未配置。")
 
     # auto 融合后可能超过 limit（两源相加），截断
     if source == "auto":
@@ -665,7 +652,7 @@ def cmd_search(args: argparse.Namespace) -> int:
 
     if collected:
         print(
-            f"[search] 注：{len(collected)} 处 WoS/S2 增强不可用，相关条目已回退到 OpenAlex 估算值。"
+            f"[search] 注：{len(collected)} 处 WoS 增强不可用，相关条目已回退到 OpenAlex 估算值。"
         )
 
     if args.save:
@@ -857,7 +844,7 @@ def _safe_fetch(url: str, out_dir: Path, args: argparse.Namespace) -> Any:
 # 子命令：get
 # ===========================================================================
 def cmd_get(args: argparse.Namespace) -> int:
-    """输出融合元数据（OpenAlex + WoS 官方 JIF/JCR + S2 TLDR，若可用）。"""
+    """输出融合元数据（OpenAlex + WoS 收录号，若可用）。"""
     src, work = _resolve_work(args.identifier)
     if not work:
         print(f"[get] 未找到：{args.identifier}", file=sys.stderr)
@@ -871,17 +858,154 @@ def cmd_get(args: argparse.Namespace) -> int:
         print(f"---\n{_dump_yaml(fm)}---")
     if collected:
         print(
-            f"[get] 注：{len(collected)} 处 WoS/S2 增强不可用，已用 OpenAlex 估算值。",
+            f"[get] 注：{len(collected)} 处 WoS 增强不可用，已用 OpenAlex 估算值。",
             file=sys.stderr,
         )
     return 0
 
 
 # ===========================================================================
+# 引用完整性门（阶段6）：三源核验 + citecheck 子命令
+# ===========================================================================
+def _citation_gate(
+    fm: dict[str, Any], *, force: bool = False, tag: str = "add"
+) -> bool:
+    """写入前引用核验门。
+
+    - 三源（OpenAlex+Crossref+arXiv）实质冲突 → FAIL：非 ``force`` 时返回 False（阻止写入）；
+    - PASS / WARN / NOT_FOUND → 放行（True）；
+    - 核验本身抛异常（网络全断等）→ 优雅降级放行（True），绝不因核验故障卡住主流程。
+    """
+    try:
+        v = citation_verify.verify_frontmatter(fm)
+    except Exception as e:
+        print(f"[{tag}] 引用核验跳过（{type(e).__name__}: {e}）。", file=sys.stderr)
+        return True
+    print(citation_verify.render_verdict(v, color=sys.stdout.isatty()))
+    if v.status == citation_verify.FAIL:
+        if force:
+            print(
+                f"[{tag}] ✗ 核验 FAIL，但 --force 已指定，继续写入。", file=sys.stderr
+            )
+            return True
+        print(
+            f"[{tag}] ✗ 引用核验未通过（三源实质冲突），已阻止写入。"
+            "修正引用后重试；或 --force 越过、--no-verify 跳过。",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _cite_from_identifier(raw: str) -> dict[str, Any]:
+    """把裸标识（DOI / arXiv id / OpenAlex id / 标题）转为 verify_citation 的 cite dict。
+
+    ``_classify_id`` 对未知形式兼底归为 ``doi``；此处额外要求值确实匹配 DOI 图形
+    （``10.<前缀>/``），否则归为自由文本标题——避免把论文标题误当非法 DOI。
+    """
+    kind, val = _classify_id(raw)
+    if kind == "doi" and re.match(r"^10\.\d{4,9}/", val):
+        return {"doi": val}
+    if kind == "arxiv":
+        return {"arxiv_id": val}
+    if kind == "openalex":
+        return {"openalex_id": val}
+    return {"title": raw}  # 自由文本标题 / url / 非法 DOI → 尽力当标题核验
+
+
+def _verdict_to_json(v: Any) -> dict[str, Any]:
+    """把 CitationVerdict 投影为机器可读 dict（--json 输出）。"""
+    return {
+        "label": v.label,
+        "kind": v.kind,
+        "status": v.status,
+        "passed": v.passed(),
+        "reasons": v.reasons,
+        "sources": {
+            name: {
+                "reachable": r.reachable,
+                "found": r.found,
+                "title": r.title,
+                "first_author_last_name": r.first_author_last_name,
+                "year": r.year,
+                "journal": r.journal,
+                "doi": r.doi,
+                "error": r.error,
+            }
+            for name, r in v.records.items()
+        },
+        "conflicts": [
+            {
+                "field": c.field,
+                "worst": c.worst,
+                "values": c.values,
+                "pairs": [f"{a}!={b}" for a, b, _ in c.conflicts],
+            }
+            for c in v.checks
+            if c.conflicts
+        ],
+    }
+
+
+def cmd_citecheck(args: argparse.Namespace) -> int:
+    """引用完整性门：对 DOI/arXiv id/标题 或 papers/ 笔记做三源交叉核验。
+
+    退出码：存在 FAIL（三源实质冲突）→ 1；否则 0（可作 CI/写入前门）。
+    """
+    verdicts: list[Any] = []
+    color = sys.stdout.isatty() and not getattr(args, "no_color", False)
+
+    # 1) 笔记文件：--all 扫 papers/；--note 指定文件/目录
+    note_paths: list[Path] = []
+    if getattr(args, "all", False):
+        note_paths.extend(sorted(PAPERS_DIR.glob("*.md")))
+    for np in getattr(args, "note", None) or []:
+        p = Path(np)
+        if p.is_dir():
+            note_paths.extend(sorted(p.glob("*.md")))
+        else:
+            note_paths.append(p)
+    for p in note_paths:
+        try:
+            verdicts.append(citation_verify.verify_note_file(p))
+        except Exception as e:
+            print(
+                f"[citecheck] 跳过 {p.name}：{type(e).__name__}: {e}", file=sys.stderr
+            )
+
+    # 2) 裸标识（DOI / arXiv id / OpenAlex id / 标题）
+    for t in getattr(args, "targets", None) or []:
+        verdicts.append(citation_verify.verify_citation(_cite_from_identifier(t)))
+
+    if not verdicts:
+        print(
+            "[citecheck] 无引用可核验（给 DOI/arXiv id/标题、--note <path> 或 --all）。",
+            file=sys.stderr,
+        )
+        return 2
+
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                [_verdict_to_json(v) for v in verdicts], ensure_ascii=False, indent=2
+            )
+        )
+    else:
+        print(citation_verify.render_report(verdicts, color=color))
+
+    n_fail = sum(1 for v in verdicts if v.status == citation_verify.FAIL)
+    return 1 if n_fail else 0
+
+
+# ===========================================================================
 # 子命令：add
 # ===========================================================================
 def _extract_zotero_key(resp: Any) -> str:
-    """从 Zotero 创建响应里尽力提取新条目 key（兼容 pyzotero / 原生 requests）。"""
+    """从建条目响应里尽力提取新条目 key。
+
+    兼容两种形态：zotero_cli.create_item_from_metadata 返回的 {"key": ..., "raw": ...}，
+    以及旧式 Zotero POST 响应（success/successful/data.key）。
+    """
     if not isinstance(resp, dict):
         return ""
     succ = resp.get("success") or resp.get("successful")
@@ -898,6 +1022,13 @@ def _extract_zotero_key(resp: Any) -> str:
     return ""
 
 
+def _zotero_uri(key: str) -> str:
+    """构造条目 URI：Web 模式用 zotero.org/users/<id>；本地模式用 zotero://select。"""
+    if settings.zotero_user_id:
+        return f"https://zotero.org/users/{settings.zotero_user_id}/items/{key}"
+    return f"zotero://select/library/items/{key}"
+
+
 def cmd_add(args: argparse.Namespace) -> int:
     """入库 Zotero + 生成 papers/ 笔记骨架（不抓全文）。"""
     src, work = _resolve_work(args.doi)
@@ -908,21 +1039,26 @@ def cmd_add(args: argparse.Namespace) -> int:
     fm = _overlay_enrichment(_frontmatter_from_work(src or "openalex", work), work)
     tags = [t.strip() for t in args.tags.split(",")] if args.tags else []
 
-    if not settings.zotero_web_ready:
+    # 引用完整性门（阶段6）：默认三源核验；FAIL 且非 --force → 阻止入库/写笔记。
+    if getattr(args, "verify", True) and not _citation_gate(
+        fm, force=getattr(args, "force", False), tag="add"
+    ):
+        return 1
+
+    if not zotero_cli.available():
         print(
-            "[add] Zotero Web API 未配置（缺 ZOTERO_USER_ID/API_KEY），跳过入库，仅生成笔记骨架。",
+            "[add] 未检测到 zotero-cli（zotero-mcp 未安装），跳过入库，仅生成笔记骨架。\n"
+            "      安装：运行 scripts/zotero_mcp/setup_zotero_mcp.ps1。",
             file=sys.stderr,
         )
     else:
         try:
-            zb = zotero_bridge.ZoteroBridge()
+            zb = zotero_cli.ZoteroCli()
             resp = zb.create_item_from_metadata(fm, tags=tags)
             key = _extract_zotero_key(resp)
             if key:
                 fm["zotero_key"] = key
-                fm["zotero_uri"] = (
-                    f"https://zotero.org/users/{settings.zotero_user_id}/items/{key}"
-                )
+                fm["zotero_uri"] = _zotero_uri(key)
                 print(f"[add] 已入库 Zotero：{key}")
             else:
                 print(f"[add] Zotero 响应未含 key：{resp}", file=sys.stderr)
@@ -959,9 +1095,16 @@ def _print_zotero_items(items: list[dict[str, Any]]) -> None:
 
 
 def cmd_library(args: argparse.Namespace) -> int:
-    """查询 Zotero 库：ping / list / search / get。"""
+    """查询 Zotero 库：ping / list / search / get（委托 zotero-cli）。"""
+    if not zotero_cli.available():
+        print(
+            "[library] 未检测到 zotero-cli（zotero-mcp 未安装）。运行 "
+            "scripts/zotero_mcp/setup_zotero_mcp.ps1 安装后重试。",
+            file=sys.stderr,
+        )
+        return 1
     try:
-        zb = zotero_bridge.ZoteroBridge()
+        zb = zotero_cli.ZoteroCli()
     except Exception as e:
         print(f"[library] Zotero 初始化失败：{type(e).__name__}: {e}", file=sys.stderr)
         return 1
@@ -1190,6 +1333,98 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 
 
 # ===========================================================================
+# 子命令：rag（PaperQA2 语义检索本地文献库）
+# ===========================================================================
+def _print_rag_status(st: dict[str, Any]) -> None:
+    ready = (
+        "是（硅基流动 embedding）" if st.get("ready") else "否——缺 SILICONFLOW_API_KEY"
+    )
+    print(f"  后端就绪   : {ready}")
+    print(f"  embedding  : {st.get('embedding_model')}")
+    if st.get("exists"):
+        print(
+            f"  本地索引   : docs={st.get('n_docs')} chunks={st.get('n_chunks')}"
+            f"（built {st.get('built_at') or '?'}）"
+        )
+    else:
+        print("  本地索引   : 未建（运行 `research rag index`）")
+    print(f"  索引位置   : {st.get('index_path')}")
+
+
+def cmd_rag(args: argparse.Namespace) -> int:
+    """PaperQA2 RAG：本地文献库语义检索基础设施（index / search / ask / status）。
+
+    search 为 agent 主力（纯 embedding、零 LLM、零成本）；ask 为可选 LLM 综述，
+    免费档不可用时回退付费档，全失败则静默降级为 search 结果，永不阻塞。
+    """
+    action = args.action
+    as_json = getattr(args, "json", False)
+
+    if action == "status":
+        st = rag.index_status()
+        if as_json:
+            print(json.dumps(st, ensure_ascii=False, indent=2))
+        else:
+            print("【PaperQA2 RAG 检索状态】")
+            _print_rag_status(st)
+        return 0
+
+    if not settings.pqa_ready:
+        print(
+            "[rag] 未就绪：缺 SILICONFLOW_API_KEY（.env）。索引/检索依赖硅基流动的 "
+            "OpenAI 兼容 embedding。",
+            file=sys.stderr,
+        )
+        return 1
+
+    if action == "index":
+        try:
+            rep = rag.build_index(
+                getattr(args, "paths", None) or None,
+                rebuild=getattr(args, "rebuild", False),
+                verbose=not as_json,
+            )
+        except Exception as e:
+            print(f"[rag] 索引失败：{type(e).__name__}: {e}", file=sys.stderr)
+            return 1
+        if as_json:
+            print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=2))
+        for err in rep.errors:
+            print(f"[rag] ! {err}", file=sys.stderr)
+        return 1 if (rep.errors and rep.n_docs == 0) else 0
+
+    if not args.query:
+        print(f"[rag] {action} 需要查询词。", file=sys.stderr)
+        return 2
+
+    if action == "search":
+        try:
+            res = rag.search(args.query, k=getattr(args, "top_k", 8))
+        except Exception as e:
+            print(f"[rag] 检索失败：{type(e).__name__}: {e}", file=sys.stderr)
+            return 1
+        if as_json:
+            print(json.dumps(res.to_dict(), ensure_ascii=False, indent=2))
+        else:
+            print(rag.render_search(res, chars=getattr(args, "chars", 400)))
+        return 0
+
+    if action == "ask":
+        try:
+            ans = rag.ask(args.query, k=getattr(args, "top_k", rag.ASK_EVIDENCE_K))
+        except Exception as e:
+            print(f"[rag] ask 失败：{type(e).__name__}: {e}", file=sys.stderr)
+            return 1
+        if as_json:
+            print(json.dumps(ans.to_dict(), ensure_ascii=False, indent=2))
+        else:
+            print(rag.render_ask(ans, chars=getattr(args, "chars", 400)))
+        return 0
+
+    return 2
+
+
+# ===========================================================================
 # 参数解析与入口
 # ===========================================================================
 def build_parser() -> argparse.ArgumentParser:
@@ -1205,7 +1440,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("search", help="多源融合检索（OpenAlex + arXiv）")
     sp.add_argument("query", help="检索式（多词请用单引号包裹）")
     sp.add_argument(
-        "--source", default="auto", choices=["auto", "openalex", "arxiv", "wos", "s2"]
+        "--source", default="auto", choices=["auto", "openalex", "arxiv", "wos"]
     )
     sp.add_argument("--year", default=None, help="如 2023-2026 / 2023- / 2023")
     sp.add_argument("--limit", type=int, default=15)
@@ -1217,7 +1452,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--enrich",
         action="store_true",
-        help="补 WoS 官方 JIF/JCR + S2 TLDR（逐条调用，较慢）",
+        help="补 WoS 收录号 wos_id（逐条调用，较慢）",
     )
     sp.add_argument("--save", action="store_true", help="保存检索快照到 shortlists/")
     sp.add_argument("--purpose", default=None, help="本次检索目的（写入快照）")
@@ -1255,7 +1490,36 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("doi", help="DOI（或 arXiv / OpenAlex id）")
     sp.add_argument("--tags", default=None, help="逗号分隔的标签")
     sp.add_argument("--overwrite", action="store_true")
+    sp.add_argument(
+        "--verify",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="verify",
+        help="写入前三源引用核验（默认开；--no-verify 跳过）",
+    )
+    sp.add_argument(
+        "--force", action="store_true", help="越过引用核验门（FAIL 也写入）"
+    )
     sp.set_defaults(func=cmd_add)
+
+    sp = sub.add_parser(
+        "citecheck", help="引用完整性门（OpenAlex+Crossref+arXiv 三源交叉核验）"
+    )
+    sp.add_argument(
+        "targets", nargs="*", help="DOI / arXiv id / OpenAlex id / 论文标题（可多个）"
+    )
+    sp.add_argument(
+        "--note",
+        action="append",
+        default=None,
+        help="核验指定笔记 .md 文件/目录（可重复）",
+    )
+    sp.add_argument("--all", action="store_true", help="扫 papers/ 全部笔记核验")
+    sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
+    sp.add_argument(
+        "--no-color", action="store_true", dest="no_color", help="禁用 ANSI 颜色"
+    )
+    sp.set_defaults(func=cmd_citecheck)
 
     sp = sub.add_parser("library", help="查询 Zotero 库")
     sp.add_argument("action", choices=["ping", "list", "search", "get"])
@@ -1264,6 +1528,27 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--type", default=None, dest="type", help="list 时按 itemType 过滤")
     sp.add_argument("--limit", type=int, default=25)
     sp.set_defaults(func=cmd_library)
+
+    sp = sub.add_parser(
+        "rag",
+        help="PaperQA2 语义检索本地文献库（index/search/ask/status）",
+    )
+    sp.add_argument("action", choices=["index", "search", "ask", "status"])
+    sp.add_argument("query", nargs="?", default=None, help="search/ask 的查询词")
+    sp.add_argument(
+        "--path",
+        action="append",
+        default=None,
+        dest="paths",
+        help="index：显式指定 .md 文件/目录（可重复；默认扫 cache/extracted）",
+    )
+    sp.add_argument("--rebuild", action="store_true", help="index：清空全量重建")
+    sp.add_argument(
+        "-k", "--top-k", type=int, default=8, dest="top_k", help="检索/证据块数"
+    )
+    sp.add_argument("--chars", type=int, default=400, help="渲染时每块正文截断长度")
+    sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
+    sp.set_defaults(func=cmd_rag)
 
     sp = sub.add_parser("index", help="从 papers/ 重建 INDEX.md")
     sp.add_argument("--check", action="store_true", help="仅校验一致性，不写文件")
@@ -1359,7 +1644,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if getattr(args, "cmd", None) in {"search", "read", "get", "add"}:
+    if getattr(args, "cmd", None) in {"search", "read", "get", "add", "citecheck"}:
         cache_manager.maybe_autoclean()
     try:
         rc = args.func(args)
