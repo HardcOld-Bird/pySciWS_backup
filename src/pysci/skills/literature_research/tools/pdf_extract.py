@@ -286,12 +286,123 @@ def _extract_from_arxiv_source(arxiv_id: str) -> str | None:
         return None
 
 
+#: 这些环境里的 ``%`` 是**字面字符**（代码清单、ASCII 图），逐行剥注释时必须整段放行。
+_TEX_VERBATIM_ENVS = frozenset(
+    {"verbatim", "Verbatim", "lstlisting", "minted", "alltt"}
+)
+
+#: 这些环境的内容 LaTeX 自己就整段丢弃（``comment`` 包），与注释同类，一并剥掉——
+#: 否则被作者注掉的一整节会以正文身份进入 markdown 与 RAG 语料。
+_TEX_DROPPED_ENVS = ("comment",)
+
+_TEX_BEGIN_ENV_RE = re.compile(r"\\begin\{([A-Za-z]+\*?)\}")
+
+
+def _strip_line_comment(line: str) -> str:
+    """删掉一行里第一个**未转义**的 ``%`` 及其后内容。
+
+    判据是它前面连续反斜杠的个数：偶数个 ⇒ 这个 ``%`` 是注释起始；奇数个 ⇒ 它是被
+    ``\\%`` 转义出来的字面百分号（``50\\% efficiency`` 在物理论文里很常见，删掉就丢字）。
+    """
+    i = 0
+    while True:
+        j = line.find("%", i)
+        if j < 0:
+            return line
+        k, n = j - 1, 0
+        while k >= 0 and line[k] == "\\":
+            n += 1
+            k -= 1
+        if n % 2 == 0:
+            return line[:j].rstrip()
+        i = j + 1
+
+
+def _strip_tex_comments(tex: str) -> str:
+    """逐行剥掉 LaTeX 注释；verbatim 类环境整段放行，``comment`` 环境整段丢弃。
+
+    为什么必须放在 :func:`_tex_to_markdown` 的**最前面**：arXiv 源码包里挑出的主 .tex
+    不一定含 ``\\begin{document}``（多文件工程常把它留在被 ``\\input`` 的子文件里），
+    此时「去掉 preamble」那一步整个失效，于是 ``%\\title{...}``、``%\\author{...}`` 这类
+    被作者注掉的行会以正文身份留在产物里——实测 1803.04110 的 markdown 前 500 字符
+    全是 ``%`` 注释，而它是要进 RAG 语料的。先剥注释，preamble 切不切得掉就不再决定
+    这类噪声会不会漏进去。
+    """
+    # 只在确实配平时才启用整段丢弃：不配平的 \begin{comment}（作者手改留下的）会把
+    # 此后整个文档吃掉，那比漏几行注释严重得多。
+    droppable: set[str] = set()
+    for env in _TEX_DROPPED_ENVS:
+        b = tex.count(f"\\begin{{{env}}}")
+        if b and b == tex.count(f"\\end{{{env}}}"):
+            droppable.add(env)
+
+    out: list[str] = []
+    keep_env: str | None = None  # verbatim 类：整段原样放行
+    drop_env: str | None = None  # comment 类：整段丢弃
+    for line in tex.split("\n"):
+        lead = line.lstrip()
+        if drop_env is not None:
+            if lead.startswith(f"\\end{{{drop_env}}}"):
+                drop_env = None
+            continue
+        if keep_env is not None:
+            out.append(line)
+            if lead.startswith(f"\\end{{{keep_env}}}"):
+                keep_env = None
+            continue
+        m = _TEX_BEGIN_ENV_RE.match(lead)
+        if m:
+            env = m.group(1)
+            if env in droppable:
+                drop_env = env
+                continue
+            if env in _TEX_VERBATIM_ENVS:
+                keep_env = env
+                out.append(line)
+                continue
+        out.append(_strip_line_comment(line))
+    return "\n".join(out)
+
+
+#: 一层嵌套的花括号组（`\title{The {XYZ} effect}` 这类）。`.+?` 会在内层花括号处
+#: 提前收尾，故显式写出「非花括号 或 一层嵌套」的交替。
+_TEX_BRACED = r"\{((?:[^{}]|\{[^{}]*\})*)\}"
+
+#: REVTeX / article 的前置宏。`\title` 转成一级标题（对 RAG 分块有实际价值：真正的
+#: 标题应当落在第一个分块里），`\author` 合并成一行，其余（单位、邮箱、`\maketitle`）
+#: 对阅读与检索都零贡献，直接丢掉。不处理的话产物会以二十来行 `\affiliation{...}`
+#: 开头——实测 1803.04110 正是如此。
+_TEX_TITLE_RE = re.compile(r"\\title\*?\s*(?:\[[^\]]*\])?\s*" + _TEX_BRACED, re.S)
+_TEX_AUTHOR_RE = re.compile(r"\\author\*?\s*(?:\[[^\]]*\])?\s*" + _TEX_BRACED, re.S)
+_TEX_FRONT_MATTER_DROP_RE = re.compile(
+    r"\\(?:affiliation|altaffiliation|email|onlinemail|homepage|thanks|date|address"
+    r"|maketitle|tableofcontents|keywords|preprint|fax)\*?\s*(?:\[[^\]]*\])?"
+    r"\s*(?:\{(?:[^{}]|\{[^{}]*\})*\})?"
+)
+
+#: 图片本体与浮动体包裹在 markdown 里无从渲染，但 caption 有信息量——故只删包裹与
+#: `\includegraphics`，`\caption` 留给前一步转成 `_Figure/Table caption: ..._`。
+#: **不动 table 环境**：本模块对表格的既定处置是「保留原样」（见 :func:`_tex_to_markdown`
+#: 末尾的注释），删掉包裹只会把 tabular 的 `&` 行拆散，比留着更糟。
+_TEX_GRAPHICS_DROP_RE = re.compile(
+    r"\\includegraphics\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}"
+    r"|\\begin\{(?:figure\*?|wrapfigure\*?|subfigure|subfloat)\}"
+    r"|\\end\{(?:figure\*?|wrapfigure\*?|subfigure|subfloat)\}"
+    r"|\\centering\b"
+)
+
+
 def _tex_to_markdown(tex: str) -> str:
     """极简 LaTeX → Markdown（保留公式、章节、引用）。
 
     对物理论文，公式应保留为原始 LaTeX，因为 markdown 渲染器（Obsidian、Typora、
     GitHub）都支持 $...$ 与 $$...$$ 语法。
+
+    第一步必须剥注释（:func:`_strip_tex_comments`）：下面的 preamble 切割对多文件 arXiv
+    工程常常失效，指望它兜住被注掉的行是不成立的。
     """
+    tex = _strip_tex_comments(tex)
+
     # 去掉 preamble
     m = re.search(r"\\begin\{document\}", tex)
     if m:
@@ -301,6 +412,20 @@ def _tex_to_markdown(tex: str) -> str:
     m = re.search(r"\\end\{document\}", body)
     if m:
         body = body[: m.start()]
+
+    # 前置宏：先取出 title / author 的值，再把这些宏整体删掉，最后拼回开头。
+    # 顺序不能反——删除正则跑过之后 title 就没了。
+    title_m = _TEX_TITLE_RE.search(body)
+    authors = [a.strip() for a in _TEX_AUTHOR_RE.findall(body) if a.strip()]
+    body = _TEX_FRONT_MATTER_DROP_RE.sub("", body)
+    body = _TEX_AUTHOR_RE.sub("", body)
+    body = _TEX_TITLE_RE.sub("", body)
+    head = ""
+    if title_m:
+        head += f"# {title_m.group(1).strip()}\n\n"
+    if authors:
+        head += f"**Authors:** {', '.join(authors)}\n\n"
+    body = head + body
 
     # 章节标题
     body = re.sub(r"\\section\*?\{(.+?)\}", r"\n## \1\n", body)
@@ -320,6 +445,9 @@ def _tex_to_markdown(tex: str) -> str:
     body = re.sub(
         r"\\caption\{(.+?)\}", r"\n_Figure/Table caption: \1_\n", body, flags=re.S
     )
+
+    # 图片本体与浮动体包裹（caption 已在上一步转换并保留）
+    body = _TEX_GRAPHICS_DROP_RE.sub("", body)
 
     # itemize / enumerate → markdown list
     body = re.sub(
