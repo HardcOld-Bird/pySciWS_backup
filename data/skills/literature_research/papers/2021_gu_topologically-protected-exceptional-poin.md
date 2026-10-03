@@ -22,26 +22,31 @@ pages: ''
 doi: 10.1103/physrevapplied.15.014025
 arxiv_id: ''
 openalex_id: W3119112366
-wos_id: ''
+wos_id: WOS:000607535300001
 zotero_key: CV3HFVR2
 zotero_uri: https://zotero.org/users/21618028/items/CV3HFVR2
 local_pdf_path: ''
 extracted_md_path: ''
+extracted_html_path: ''
 oa_url: http://link.aps.org/pdf/10.1103/PhysRevApplied.15.014025
 oa_status: bronze
-cited_by_count: 24
-cited_by_count_normalized: 94
-jif: 4.08
+cited_by_count: 25
+cited_by_count_normalized: 96
+jif: 4.19
 jif_5yr: null
 jcr_quartile: ''
 scimago_quartile: ''
 citescore: null
-esi_highly_cited: false
-esi_hot_paper: false
-journal_h_index: 137
-journal_tier: ''
-journal_tier_basis: []
-listed_in: []
+esi_highly_cited: null
+esi_hot_paper: null
+journal_h_index: 138
+journal_tier: top
+journal_tier_basis:
+  - norway-2
+listed_in:
+  - cwts-core
+  - jufo-2
+  - norway-2
 topics: []
 methods: []
 systems: []
@@ -181,3 +186,4 @@ _（用户或 AI 随时补充；此段落不受模板约束）_
 - YYYY-MM-DD: TLDR & Key Claims drafted
 - YYYY-MM-DD: Full read completed, evaluation filled
 - YYYY-MM-DD: User review
+- 2026-10-03: 数据修复——按权威源刷新 wos_id, cited_by_count, cited_by_count_normalized, jif, journal_h_index, journal_tier, journal_tier_basis, listed_in, esi_highly_cited, esi_hot_paper（esi_* 由 false 改为 null：ESI 名单需 WoS Journals API，当前无程序化来源，false 等于断言一件未知的事）。正文其余部分未改。

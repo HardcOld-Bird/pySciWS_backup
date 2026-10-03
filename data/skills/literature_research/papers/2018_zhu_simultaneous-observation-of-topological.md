@@ -12,36 +12,44 @@ authors:
 first_author_last_name: zhu
 corresponding_author: ''
 year: 2018
-publication_date: '2018-03-12T04:08:19Z'
-journal: Phys. Rev. Lett. 121, 124501 (2018)
-journal_ref: ''
-publisher: arXiv
-volume: ''
-issue: ''
-pages: ''
+publication_date: '2018-09-20'
+journal: Physical Review Letters
+journal_ref: Phys. Rev. Lett. 121, 124501 (2018)
+publisher: American Physical Society
+volume: '121'
+issue: '12'
+pages: '124501'
 doi: 10.1103/PhysRevLett.121.124501
 arxiv_id: '1803.04110'
-openalex_id: ''
-wos_id: ''
+openalex_id: W2789790776
+wos_id: WOS:000445177300011
 zotero_key: ''
 zotero_uri: ''
 local_pdf_path: D:\XXXIIIGGG\projects\pySci\pySciWS\data\skills\literature_research\cache\pdfs\1803.04110.pdf
-extracted_md_path: ''
+extracted_md_path: D:\XXXIIIGGG\projects\pySci\pySciWS\data\skills\literature_research\cache\extracted\simultaneous-observation-of-topological_fulltext.md
+extracted_html_path: ''
 oa_url: https://arxiv.org/pdf/1803.04110v1
 oa_status: green
-cited_by_count: null
-cited_by_count_normalized: null
-jif: null
+cited_by_count: 231
+cited_by_count_normalized: 89
+jif: 8.97
 jif_5yr: null
 jcr_quartile: ''
 scimago_quartile: ''
 citescore: null
-esi_highly_cited: false
-esi_hot_paper: false
-journal_h_index: null
-journal_tier: ''
-journal_tier_basis: []
-listed_in: []
+esi_highly_cited: null
+esi_hot_paper: null
+journal_h_index: 982
+journal_tier: top
+journal_tier_basis:
+  - jufo-3
+  - norway-2
+listed_in:
+  - cwts-core
+  - jufo-3
+  - ki-jl-2
+  - medline
+  - norway-2
 topics:
   - cond-mat.mes-hall
 methods: []
@@ -178,3 +186,5 @@ _（用户或 AI 随时补充；此段落不受模板约束）_
 - YYYY-MM-DD: TLDR & Key Claims drafted
 - YYYY-MM-DD: Full read completed, evaluation filled
 - YYYY-MM-DD: User review
+- 2026-10-03: 数据修复——按权威源刷新 publication_date, journal, journal_ref, publisher, volume, issue, pages, openalex_id, wos_id, cited_by_count, cited_by_count_normalized, jif, journal_h_index, journal_tier, journal_tier_basis, listed_in, esi_highly_cited, esi_hot_paper（esi_* 由 false 改为 null：ESI 名单需 WoS Journals API，当前无程序化来源，false 等于断言一件未知的事）。正文其余部分未改。
+- 2026-10-04: 补齐字段 extracted_md_path

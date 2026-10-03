@@ -22,26 +22,31 @@ pages: ''
 doi: 10.1103/physrevapplied.19.054003
 arxiv_id: ''
 openalex_id: W4367599326
-wos_id: ''
+wos_id: WOS:000985581500003
 zotero_key: F6NH9JN9
 zotero_uri: zotero://select/library/items/F6NH9JN9
 local_pdf_path: D:/XiGPrograms/zotero/data/storage/35ZQTHWE/Fang 等 - 2023 - Extreme Wave Manipulation via Non-Hermitian Metagratings on Degenerated States.pdf
-extracted_md_path: ''
+extracted_md_path: D:/XXXIIIGGG/projects/pySci/pySciWS/data/skills/literature_research/cache/extracted/group_pubs/fang_ep_metagrating.md
+extracted_html_path: ''
 oa_url: ''
 oa_status: closed
 cited_by_count: 10
-cited_by_count_normalized: 90
-jif: 4.08
+cited_by_count_normalized: 89
+jif: 4.19
 jif_5yr: null
 jcr_quartile: ''
 scimago_quartile: ''
 citescore: null
-esi_highly_cited: false
-esi_hot_paper: false
-journal_h_index: 137
-journal_tier: ''
-journal_tier_basis: []
-listed_in: []
+esi_highly_cited: null
+esi_hot_paper: null
+journal_h_index: 138
+journal_tier: top
+journal_tier_basis:
+  - norway-2
+listed_in:
+  - cwts-core
+  - jufo-2
+  - norway-2
 topics:
   - non-hermitian
   - exceptional-point
@@ -186,3 +191,5 @@ _（用户或 AI 随时补充）_
 - 2026-09-18: Created (AI auto-fill from OpenAlex)
 - 2026-09-18: Added to Zotero library (key F6NH9JN9) via Web API
 - 2026-09-18: PDF fetched via Zotero (Find Available PDF); extracted full text (39457 chars)
+- 2026-10-03: 数据修复——按权威源刷新 wos_id, cited_by_count_normalized, jif, journal_h_index, journal_tier, journal_tier_basis, listed_in, esi_highly_cited, esi_hot_paper（esi_* 由 false 改为 null：ESI 名单需 WoS Journals API，当前无程序化来源，false 等于断言一件未知的事）。正文其余部分未改。
+- 2026-10-04: 补齐字段 extracted_md_path——指向 research ingest 的产物 cache/extracted/group_pubs/fang_ep_metagrating.md（标题逐字校对一致；据 ingest/manifest.json，该文件由本地 PDF “房鑫盛师兄文章/房师兄EP.pdf” 经 MinerU 抽取得到，42225 字符）。本字段此前为空：2026-09-18 那次抽取的 39457 字符版本已不在缓存中。正文其余部分未改。
