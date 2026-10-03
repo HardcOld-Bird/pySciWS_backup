@@ -121,6 +121,30 @@ overrides (all have built-in defaults).
   queue); the daily file cap is 5000.
 - **pymupdf4llm** is the local fallback: fast, CPU-only, but **equations are lost**. Use it only
   when equations don't matter or MinerU is down.
+- **arXiv LaTeX source path** (`_tex_to_markdown`, tried *before* any PDF backend once an arXiv id is
+  known): unpacks the e-print tarball, picks the main `.tex`, converts it. Step 1 is
+  `_strip_tex_comments` — it removes `%` comments (honouring `\%` escapes), passes `verbatim`-class
+  environments through untouched, and drops `comment` environments whole. Step 2 cuts everything
+  outside `\begin{document}…\end{document}`. Only *then* do the two targeted regexes run:
+  `_TEX_FRONT_MATTER_DROP_RE` deletes the REVTeX front-matter macros that carry no reading value
+  (`\affiliation`, `\altaffiliation`, `\email`, `\onlinemail`, `\homepage`, `\thanks`, `\date`,
+  `\address`, `\maketitle`, `\tableofcontents`, `\keywords`, `\preprint`, `\fax`), while
+  `_TEX_TITLE_RE` / `_TEX_AUTHOR_RE` promote `\title` to an `# H1` and merge `\author` into one
+  `**Authors:**` line; `_TEX_GRAPHICS_DROP_RE` removes `\includegraphics` and the figure wrappers but
+  keeps `\caption` (already turned into `_Figure/Table caption: …_`). Verified end-to-end on
+  `1803.04110`: 717 lines out, **0** comment lines, **0**
+  `\documentclass`/`\usepackage`/`\begin{document}` leaks, all eight body sections (`Introduction` …
+  `Conclusion`) intact.
+  **Order matters and is load-bearing**: the comment strip must come *first*, because the
+  `\begin{document}` cut routinely fails on multi-file arXiv projects (`\input{sec1.tex}`), so it
+  cannot be relied on to swallow commented-out lines. The same reason means a `\newcommand`/`\def`
+  written *inside* the body survives — those are only removed when the preamble cut succeeds.
+  **Further known limits** (pre-existing; none touch body prose or equations): the `thebibliography`
+  block is kept as *raw REVTeX* (`\bibinfo`/`\bibfield`/`\BibitemShut`) — lines 136–~705 of that same
+  717-line file, i.e. ~80 % of it and pure noise to `rag`'s embedder; in-text citations stay as
+  BibTeX *keys* (`systems[EP2]`), key → number mapping not being implemented; `\ref` becomes
+  `§label`; accents are not converted (`Aubry-Andr{\'e}-Harper`). Pinned by
+  `test_tex_to_markdown.py`.
 
 ---
 
@@ -222,7 +246,8 @@ policy lives (`research cache` is a thin facade over it).
   `cache/.autoclean_state.json` (`last_autoclean`); if older than `CACHE_AUTOCLEAN_INTERVAL_DAYS`
   it runs `clean_tier_b()` and rewrites the state. Fully `try/except` — never fatal, prints one line
   only when it actually deletes something.
-- **`keep_referenced`**: `prune` protects files referenced by any `papers/*.md` frontmatter —
+- **`keep_referenced`**: `prune` protects `protected_paths()`, the union of **two** sources — and
+  losing either one fails *silently*. The first is files referenced by any `papers/*.md` frontmatter —
   `REFERENCED_FIELDS` = (`local_pdf_path`, `extracted_md_path`, `extracted_html_path`). The third
   one must stay in that tuple: when `read` cannot get a PDF it records *only*
   `extracted_html_path` (see *When no PDF can be had: the HTML fallback* in `read.md`), so dropping
@@ -233,6 +258,20 @@ policy lives (`research cache` is a thin facade over it).
   `-`-prefixed line and returned quoted values *quotes included*; on block-style and flow-style notes
   alike it therefore yielded an empty set, and `--keep-referenced` protected **nothing**. Do not
   revert it (regression pinned by `test_referenced_paths.py`).
+- **The second source is `ingest/manifest.json`** (`ingest_manifest_paths()`, fields
+  `MANIFEST_PATH_FIELDS` = `md_path` + `pdf_path`). `research ingest`'s products hang off **no** note
+  — the manifest is their only record (§5b) — so `referenced_paths()` alone returns an empty set for
+  them and `--keep-referenced` protected *nothing*. Measured on the real tree, `prune --max-mb 0
+  --dry-run` listed **41** eviction units before this and **8** after; the 33 rescued files are the
+  entire 2026-09 ingest batch, which is also the *oldest* by mtime and therefore precisely what LRU
+  eats first. Re-extraction costs MinerU quota. `protected_paths()` is the union; keep
+  `referenced_paths()` semantically pure (notes only) so each source stays separately testable rather
+  than hiding behind one assertion that can't tell which side worked. It parses the JSON **directly**
+  instead of calling `local_ingest.load_manifest`, for two reasons: that would close an import cycle
+  (`local_ingest` → `pdf_extract` → `cache_manager`), and its "a missing manifest is an error"
+  semantics are wrong on a *protection* path — raising there turns "protect" into "refuse to clean",
+  which is worse than not protecting. A missing / corrupt / mis-shaped manifest therefore degrades to
+  an empty set (invariant 1).
 - **HTML bundle reuse (`.by_url`)**: a bundle's slug is only known after the page title is fetched,
   so hits can't be predicted by slug up front. `browser_fetch` therefore keeps a URL index at
   `cache/html_fulltext/.by_url/<sha1(url)>.json` recording `{url, slug, out_dir, ts, ok, ...}`.
@@ -251,9 +290,21 @@ Cache governance config (`.env`, all optional): `CACHE_B_MAX_AGE_DAYS` (default 
 > which is MinerU-quota-expensive and worth version-controlling. (The project-root `.gitignore` must
 > NOT exclude `.../cache/` as a whole directory, or Git's "parent dir excluded" rule makes the
 > `!cache/extracted/` re-inclusion inert.) Consequence for `prune`: it can delete tracked `.md` under
-> `cache/extracted/` (showing as Git deletions). These files are small, so the 2 GB soft limit is
-> effectively never hit by text; still, prefer `prune --keep-referenced` and think before pruning
-> ingested full text — re-extraction costs quota.
+> `cache/extracted/` (showing as Git deletions). Measured on the real tree, Tier A is 339 MB against
+> the 2 GB soft limit and `extracted/` is only 19 MB of that — but `prune` evicts on **total** Tier A
+> across all three dirs, which is dominated by `pdfs/` (316 MB). The limit is therefore reached by
+> *PDF* growth while the units eaten first are the *oldest* by mtime, i.e. the extracted corpus.
+> Keep `--keep-referenced` on (it is the default) and read the `--dry-run` list before a real prune —
+> re-extraction costs quota.
+>
+> **Not everything under `cache/extracted/` is protected *or* tracked.** Two classes fall outside both
+> sources. (i) `read`'s `<slug>_fulltext.md` before its note records it — transient, since the `read`
+> that produced it also wrote the note. (ii) Cross-skill spillover: `comsol_simulation/tools/docs.py`
+> calls `pdf_extract.extract_pdf()` **without** `write_cache=False`, so MinerU's own cache copy of
+> each COMSOL manual lands here as `*_<hash>.mineru-cloud.md` (5 files, 12.5 MB, git-**untracked**,
+> absent from the literature manifest). A prune can therefore delete them outright — quota lost, but
+> *not* data: `docs.py` writes the canonical copy to `comsol_simulation/docs/*.md`, and that is what
+> its FTS5 index reads.
 
 ---
 
@@ -289,6 +340,11 @@ a curated, git-tracked ledger `data/skills/literature_research/ingest/manifest.j
 - The manifest is generated once by a throwaway walk+classify script, then hand-curated; it is the
   single source of truth (no parallel catalog). Non-PDF assets (`.nb/.wls/.epub/.txt`) are listed
   under `non_pdf_assets` with `status=skipped` for provenance, never converted.
+- **The manifest doubles as `cache prune`'s protection list** (§5a): ingest products hang off no
+  note, so `cache_manager.ingest_manifest_paths()` reads `md_path` / `pdf_path` straight out of it.
+  Consequence when editing it by hand: deleting an entry, or blanking its `md_path`, silently
+  un-protects that artifact from LRU eviction. Entries with `status=pending`/`skipped` have no path
+  fields and contribute nothing, which is expected.
 
 ---
 
@@ -416,7 +472,20 @@ cycle hub.
   *incoming* values are skipped too (writing `None` into a missing key is just noise; presence is
   `normalize_frontmatter`'s job). An empty `changed_keys` means the caller must not touch the file
   at all, so mtime survives. Worth remembering: **merging cannot correct a wrong value.** A note
-  written before a field's semantics were fixed keeps the old value — fix such a value by hand.
+  written before a field's semantics were fixed keeps the old value — fix such a value by hand. But
+  **don't hand-type the bibliographic data**: recompute it through the project's own funnel
+  (`research._resolve_work` → `_enrich_work` → `_build_frontmatter`) in a throwaway script, then
+  overwrite an **explicit whitelist** of machine fields and nothing else. That is how the three
+  pre-WP-D notes were repaired (37 fields, bodies byte-identical): the values come out identical to
+  what today's code gives a brand-new note, instead of being a transcription of what a website showed
+  me. Four classes stay out of the whitelist *by name* — filename-determining keys
+  (`title`/`short_title`/`year`/`first_author_last_name`, since renaming breaks `INDEX.md` and the
+  `reviews/` wiki links), local facts (`zotero_*`, `*_path`, `added_date`), hand-written evaluation
+  (`status`/`my_rating`/`related_to_my_work*`/`topics`/`methods`/`systems`), and `oa_url`/`oa_status`
+  (an arXiv green-OA direct link beats the Cloudflare-gated publisher URL OpenAlex would substitute).
+  A key the authoritative source also leaves blank is **skipped, not cleared** — an honest gap stays
+  visible. Never use `add` for this (it creates a duplicate Zotero item) or `--overwrite` (it resets
+  the body).
 - **`normalize_frontmatter(fm, template=…)` → `(normalized, added_keys)`** is *not* interchangeable
   with `merge_frontmatter`: it adds key **presence** from `template_defaults()` even when the
   template default is itself empty, because the template is the field contract. A note missing a

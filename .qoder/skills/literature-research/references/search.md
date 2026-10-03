@@ -337,11 +337,25 @@ research library get --key <ITEMKEY>
   "（无条目）" would read as "your library is empty", which is simply false. **When you need to know
   whether a specific paper is in the library, use `search --query`, not `list`.**
 - `search` — metadata search (title/author/tag). Full-text search needs the local backend.
-- `get` — one item's full JSON by key.
+- `get` — one item's full JSON by key. **stdout is a data channel**: on success it carries the item
+  JSON and *nothing else*. Three outcomes are kept apart, because their next actions are opposite:
+
+  | Situation | Where | Exit |
+  |---|---|---|
+  | item found | item JSON on **stdout** | 0 |
+  | bridge answered `ok:true` but with no data (the key genuinely isn't there) | `（未找到）` on **stdout** | 0 |
+  | `zotero-cli` errored — then `ping` arbitrates: bridge up ⇒ “probably not in this library”; bridge down ⇒ “Zotero unreachable, this is *not* a not-found” | reason on **stderr** | 1 |
+
+  `zotero-cli` reports `ok:false` for *both* “can't connect” and “no such key”, and the error text
+  alone cannot tell them apart, so `cmd_library` calls `zb.ping()` as the judge — only on the failure
+  path, so the happy path pays no extra subprocess. Collapsing the two into one “not found” used to
+  disguise “Zotero desktop isn't running” as “your library doesn't have this paper”. Relatedly,
+  `zotero_cli.get_item()` **re-raises** instead of printing the error itself: it used to print one
+  Chinese sentence to *stdout*, which turned the JSON channel into invalid JSON for every caller.
 
 `list` and `search` failures (Zotero not running, local API not authorized — both ordinary states,
 not exceptions) degrade to one stderr line + exit **1**; `search` without `--query` and `get` without
-`--key` exit **2**.
+`--key` exit **2** — usage errors, which never touch the bridge at all.
 
 Use `library` to check whether a paper is **already in the user's Zotero** before `add`-ing it
 (avoids duplicates), and to find the `zotero_key` that links a note to its library entry.

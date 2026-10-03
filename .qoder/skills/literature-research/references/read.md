@@ -41,6 +41,22 @@ What it does, in order:
    an arXiv id — whether you passed one or the metadata carries `arxiv_id` — extraction goes through
    the **arXiv LaTeX source** instead of the PDF, so equations come out as real LaTeX rather than as
    fragments recognized off the rendered page.
+   - That path (`pdf_extract._tex_to_markdown`) **strips `%` comment lines first**, then cuts
+     everything outside `\begin{document}…\end{document}`, then drops the REVTeX front-matter macros
+     that carry no reading value (`\affiliation`/`\email`/`\maketitle`/`\preprint`/…) while promoting
+     `\title` to an `# H1` and `\author` to one `**Authors:**` line. Comments were previously kept
+     verbatim and the front matter reached the RAG corpus as prose. Verified end-to-end on
+     `1803.04110`: 717 lines out, **0** comment lines, **0**
+     `\documentclass`/`\usepackage`/`\begin{document}` leaks, all eight body sections intact. See
+     `maintenance.md` §3 for the exact regexes and why the comment strip must run *before* the
+     preamble cut.
+   - **Known limits — read the output critically.** The `thebibliography` block survives as *raw
+     REVTeX* (`\bibinfo`/`\bibfield`/`\BibitemShut`): for that same paper it is lines 136–~705 of 717,
+     i.e. **~80 % of the file**, and pure noise to `rag`'s embedder. In-text citations stay as BibTeX
+     *keys* (`systems[EP2]`) because key → number mapping is not implemented, and `\ref` becomes
+     `§label`. Accents are not converted (`Aubry-Andr{\'e}-Harper`). A `\newcommand` written *inside*
+     the body also survives (only the preamble cut removes those, and that cut often fails on
+     multi-file arXiv projects). None of this touches the body prose or the equations.
 5. **Write outputs** — the extracted full text to `cache/extracted/<slug>_fulltext.md` (the single
    canonical extracted artifact — `read` extracts with `write_cache=False` so no duplicate is
    left behind), and a structured note skeleton to `papers/{year}_{author}_{slug}.md`. The full
@@ -69,7 +85,8 @@ article page, `read` falls back to the **web text** and records it in a *differe
   images or SVG), would quietly degrade every later retrieval. The file is *not* copied into
   `cache/extracted/` either: one copy, one location, provenance intact.
 - `read` says all of this on stderr, and the file is still protected from
-  `cache prune --keep-referenced` (the field is in `cache_manager.REFERENCED_FIELDS`). Note that
+  `cache prune --keep-referenced` (the field is one of `cache_manager.REFERENCED_FIELDS`; the full
+  protection set has a second, note-independent source — see `maintenance.md` §5a). Note that
   `prune` treats a whole `html_fulltext/<slug>/` **directory** as one unit, so keeping the article
   text also keeps the supplementary material fetched alongside it.
 
@@ -97,7 +114,13 @@ when nothing was, `2` when an OpenAlex id could not be resolved to a fetchable U
 ### DOI vs arXiv input
 
 - **DOI / OpenAlex id** → richest metadata (citation counts, normalized citations, JIF estimate,
-  volume/issue/pages, OA link). Prefer this for published papers.
+  volume/issue/pages, OA link). Prefer this for published papers. One `pages` caveat is handled for
+  you: electronic-only journals (all of APS, the Nature family) use an **article number**, and
+  OpenAlex puts the same number in *both* `first_page` and `last_page`. `_format_pages` therefore
+  collapses `first == last` to a single value — emitting `124501-124501` would be worse than leaving
+  it blank, because the value travels: `add` writes it into the Zotero item's `pages`
+  (`zotero_cli.create_item_from_metadata`), and document_writing's `refs_bridge.item_to_bibtex` maps
+  *that* field into BibTeX `pages` — so a fake range ends up printed in your reference list.
 - **arXiv id** → guaranteed open PDF, but frontmatter has **no citation count** and uses the
   preprint title. The venue is now parsed out of `journal_ref` (`journal: Phys. Rev. Lett.` rather
   than the whole citation string), and when a DOI is present the journal metrics are looked up
@@ -112,7 +135,8 @@ when nothing was, `2` when an OpenAlex id could not be resolved to a fetchable U
 distinction matters: the previous writer was all-or-nothing, so on a note that already existed it
 **returned without writing anything** — which is how `local_pdf_path` and `extracted_md_path` went
 missing from every note built by the normal `add`-then-`read` workflow, and with them the
-`cache prune --keep-referenced` protection that reads those two fields.
+`cache prune --keep-referenced` protection that reads those fields (three now — WP-H added
+`extracted_html_path`; `maintenance.md` §5a documents the second, note-independent source).
 
 | Action | When | What happens to the file |
 |---|---|---|
@@ -137,7 +161,9 @@ The rules that make this safe to run repeatedly:
 > **One thing merging cannot do: correct a wrong value.** It fills blanks; it never overwrites. Notes
 > written before a field's semantics were fixed therefore keep the old value — re-running `read` will
 > not repair it, and `index --fix` normalizes *shape* (field order, block style, missing keys) while
-> likewise preserving existing values. Fix such a value by hand.
+> likewise preserving existing values. Fix such a value by hand — but **recompute** it through the
+> project's own funnel instead of typing bibliographic data; `maintenance.md` §5e records the
+> whitelist recipe used to repair the three pre-WP-D notes (37 fields, body untouched).
 
 ---
 
