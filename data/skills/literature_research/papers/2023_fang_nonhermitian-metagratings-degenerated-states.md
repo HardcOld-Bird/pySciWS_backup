@@ -1,46 +1,73 @@
 ---
-title: "Extreme Wave Manipulation via Non-Hermitian Metagratings on Degenerated States"
-short_title: "Extreme Wave Manipulation Non Hermitian Metagratings"
-authors: ["Xinsheng Fang", "Nengyin Wang", "Wenwei Wu", "Weibo Wang", "Xuewen Yin", "Xu Wang", "Yong Li"]
-first_author_last_name: "fang"
-corresponding_author: "Wenwei Wu"
+title: Extreme Wave Manipulation via Non-Hermitian Metagratings on Degenerated States
+short_title: Extreme Wave Manipulation Non Hermitian Metagratings
+authors:
+  - Xinsheng Fang
+  - Nengyin Wang
+  - Wenwei Wu
+  - Weibo Wang
+  - Xuewen Yin
+  - Xu Wang
+  - Yong Li
+first_author_last_name: fang
+corresponding_author: Wenwei Wu
 year: 2023
-publication_date: "2023-05-01"
-journal: "Physical Review Applied"
-publisher: "American Physical Society"
-volume: "19"
-issue: "5"
-pages: ""
-doi: "10.1103/physrevapplied.19.054003"
-arxiv_id: ""
-openalex_id: "W4367599326"
-wos_id: ""
-zotero_key: "F6NH9JN9"
-zotero_uri: "zotero://select/library/items/F6NH9JN9"
-local_pdf_path: "D:/XiGPrograms/zotero/data/storage/35ZQTHWE/Fang 等 - 2023 - Extreme Wave Manipulation via Non-Hermitian Metagratings on Degenerated States.pdf"
-oa_url: ""
-oa_status: "closed"
+publication_date: '2023-05-01'
+journal: Physical Review Applied
+journal_ref: ''
+publisher: American Physical Society
+volume: '19'
+issue: '5'
+pages: ''
+doi: 10.1103/physrevapplied.19.054003
+arxiv_id: ''
+openalex_id: W4367599326
+wos_id: ''
+zotero_key: F6NH9JN9
+zotero_uri: zotero://select/library/items/F6NH9JN9
+local_pdf_path: D:/XiGPrograms/zotero/data/storage/35ZQTHWE/Fang 等 - 2023 - Extreme Wave Manipulation via Non-Hermitian Metagratings on Degenerated States.pdf
+extracted_md_path: ''
+oa_url: ''
+oa_status: closed
 cited_by_count: 10
 cited_by_count_normalized: 90
 jif: 4.08
 jif_5yr: null
-jcr_quartile: ""
-scimago_quartile: ""
+jcr_quartile: ''
+scimago_quartile: ''
 citescore: null
 esi_highly_cited: false
 esi_hot_paper: false
 journal_h_index: 137
-topics: ["non-hermitian", "exceptional-point", "metagrating", "acoustic", "wave-manipulation"]
-methods: ["coupled-mode-theory", "transfer-matrix", "FEM-simulation"]
-systems: ["metagrating", "acoustic-waveguide"]
-related_to_my_work: "high"
-related_to_my_work_reason: "Same group (Tongji/Yong Li), directly related to gainEP project"
-status: "unread"
+journal_tier: ''
+journal_tier_basis: []
+listed_in: []
+topics:
+  - non-hermitian
+  - exceptional-point
+  - metagrating
+  - acoustic
+  - wave-manipulation
+methods:
+  - coupled-mode-theory
+  - transfer-matrix
+  - FEM-simulation
+systems:
+  - metagrating
+  - acoustic-waveguide
+related_to_my_work: high
+related_to_my_work_reason: Same group (Tongji/Yong Li), directly related to gainEP project
+status: unread
 my_rating: null
-added_date: "2026-09-18"
-last_reviewed: ""
+added_date: '2026-09-18'
+last_reviewed: ''
 review_count: 0
-keywords_auto: ["scattering", "physics", "hermitian matrix", "diffraction", "perturbation (astronomy)"]
+keywords_auto:
+  - scattering
+  - physics
+  - hermitian matrix
+  - diffraction
+  - perturbation (astronomy)
 ---
 
 # Non-Hermitian Metagratings (Fang 2023)

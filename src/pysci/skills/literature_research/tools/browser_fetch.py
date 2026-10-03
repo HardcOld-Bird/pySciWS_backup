@@ -59,6 +59,7 @@ from urllib.parse import unquote, urlparse
 
 from .cache_manager import bump_mtime
 from .config import settings
+from .notes import render_note
 
 
 # ---------------------------------------------------------------------------
@@ -283,11 +284,6 @@ def _pick_title(meta: dict[str, Any]) -> str:
     return _strip_tags(re.split(r"\s*\|\s*", dt)[0])
 
 
-def _yaml_str(s: str) -> str:
-    s = (s or "").replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{s}"'
-
-
 def _slug(res: FetchResult) -> str:
     base = _first(res.meta, "citation_doi") or res.title or res.url
     base = re.sub(r"https?://", "", base)
@@ -468,40 +464,38 @@ def fetch_html(
 # 序列化为 Markdown（带 YAML frontmatter）
 # ---------------------------------------------------------------------------
 def to_markdown(res: FetchResult) -> str:
-    lines = ["---", f"source_url: {res.url}", f"title: {_yaml_str(res.title)}"]
-    for key, label in (
-        ("citation_doi", "doi"),
-        ("citation_journal_title", "journal"),
-        ("citation_publication_date", "publication_date"),
-        ("citation_volume", "volume"),
-        ("citation_firstpage", "firstpage"),
-    ):
-        v = _first(res.meta, key)
-        lines.append(f"{label}: {_yaml_str(v) if v else 'null'}")
-    authors = res.meta.get("citation_author") or []
-    lines.append("authors: [" + ", ".join(_yaml_str(a) for a in authors) + "]")
-    lines.append(f"fetched_at: {datetime.now().isoformat(timespec='seconds')}")
-    lines.append(
-        f"fetcher: browser_fetch (playwright, adapter={res.adapter}, browser={res.browser})"
-    )
-    lines.append(f"institutional_access: {str(bool(res.institutional_access)).lower()}")
-    lines.append(f"cloudflare_passed: {str(not res.cloudflare).lower()}")
-    lines.append(f"char_count: {len(res.text)}")
-    lines.append(
-        "equations_note: "
-        + _yaml_str(
+    """把抓取结果序列化为带 YAML frontmatter 的 markdown（存于 ``cache/html_fulltext/``）。
+
+    frontmatter 的序列化统一走 :func:`notes.dump_frontmatter`（PyYAML）。原先手写的
+    ``_yaml_str`` 只处理双引号与反斜杠，遇到值里含换行、前导特殊字符（``*`` ``&`` ``#``
+    ``: `` 等）或形如 ``2018-03-12`` 的日期串时会产出语义错误或非法的 YAML；
+    交给 PyYAML 后引号策略由库负责，不必自己维护转义规则。
+    """
+    fm: dict[str, Any] = {
+        "source_url": res.url,
+        "title": res.title,
+        "doi": _first(res.meta, "citation_doi") or None,
+        "journal": _first(res.meta, "citation_journal_title") or None,
+        "publication_date": _first(res.meta, "citation_publication_date") or None,
+        "volume": _first(res.meta, "citation_volume") or None,
+        "firstpage": _first(res.meta, "citation_firstpage") or None,
+        "authors": list(res.meta.get("citation_author") or []),
+        "fetched_at": datetime.now().isoformat(timespec="seconds"),
+        "fetcher": (
+            f"browser_fetch (playwright, adapter={res.adapter}, browser={res.browser})"
+        ),
+        "institutional_access": bool(res.institutional_access),
+        "cloudflare_passed": not res.cloudflare,
+        "char_count": len(res.text),
+        "equations_note": (
             "公式可能以图片/SVG 呈现而未被提取；需公式请走 PDF + 云端识别或 arXiv LaTeX"
-        )
-    )
-    lines += ["---", "", f"# {res.title}", "", res.text.strip()]
+        ),
+    }
+    body = f"\n# {res.title}\n\n{res.text.strip()}\n"
     if res.math_latex:
-        lines += [
-            "",
-            f"<!-- 另检测到 {len(res.math_latex)} 条 MathML alttext(LaTeX) 公式 -->",
-            "",
-        ]
-        lines += [f"$$ {m} $$" for m in res.math_latex]
-    return "\n".join(lines) + "\n"
+        body += f"\n<!-- 另检测到 {len(res.math_latex)} 条 MathML alttext(LaTeX) 公式 -->\n\n"
+        body += "".join(f"$$ {m} $$\n" for m in res.math_latex)
+    return render_note(fm, body)
 
 
 # ---------------------------------------------------------------------------
@@ -903,6 +897,12 @@ def fetch_supplements(
 # CLI
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    print(
+        "[browser_fetch] 调试后门——`research read <id>` 内部就是调本模块的 fetch_all。"
+        "直接跑它是为了把 Playwright / 付费墙 / Cloudflare 这一段单独隔离出来排查；"
+        "其中 batch（批量抓取）与 pdf（只下正文 PDF）在 research CLI 里没有独立入口。",
+        file=sys.stderr,
+    )
     parser = argparse.ArgumentParser(
         description="付费墙论文 HTML 全文抓取（Playwright + 本机浏览器）"
     )

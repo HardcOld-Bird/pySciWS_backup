@@ -19,6 +19,9 @@ cache/extracted/ApplicationProgrammingGuide_*
 *.zip
 *.tar
 *.tar.gz
+# SCImago 官方导出约 15 MB，只用于本地构建索引；构建产物 data/scimago_index.json
+# （约 1.4 MB 紧凑 JSON）不在本规则内，默认即被跟踪。
+*.csv
 
 # ===== 凭据 =====
 .env

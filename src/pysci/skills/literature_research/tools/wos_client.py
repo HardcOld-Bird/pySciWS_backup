@@ -1,6 +1,7 @@
 """Web of Science (Clarivate) **Starter API** 客户端。
 
-状态：**已批准并启用**——WoS 是本项目的主力检索/增强源之一。
+状态：**已批准并启用**——但它是 OpenAlex 主源之上的**可选增强**，不是主力：
+它只补 Times Cited 与收录号，而期刊质量指标（JIF / 分区）一律不经过本模块。
 
 Starter API 是 Clarivate 的轻量元数据/检索接口，鉴权只需 **API Key**
 （``X-ApiKey`` 头，无需 client secret / OAuth2）。Base URL::
@@ -15,10 +16,35 @@ Starter API 提供文献/期刊的基础元数据 + 检索，其独有价值在�
 3. 严格的期刊收录过滤（自动排除未收录来源）；
 4. **JCR URL**（``/journals`` 的 links 中指向 Journal Citation Reports 的链接，供人工查阅）。
 
-**Starter API 不提供**（这些属于 Web of Science API Expanded / Journal Citation
-Reports API，切勿声称本模块能给出）：官方 JIF 数值、JCR 分区（Q1–Q4）、
+**Starter API 不提供**（切勿声称本模块能给出）：官方 JIF 数值、JCR 分区（Q1–Q4）、
 ESI Highly Cited / Hot Paper 标签、Citation Report（h-index / 总被引汇总等）。
-本项目 frontmatter 里的 ``jif``/``jcr_quartile``/``esi_*`` 字段由 OpenAlex 估算值填充。
+
+本项目 frontmatter 里那几个字段的**真实来源**（WP-D/WP-E 后的现状）：
+
+- ``jif`` —— OpenAlex ``summary_stats.2yr_mean_citedness`` 的**估算值**，非官方 JIF；
+  中段（3-9）较准，顶刊与低引用密度刊可低估 2-3 倍；
+- ``jcr_quartile`` —— **恒为空**，直到下述 Journals API 接入；
+- ``scimago_quartile`` —— SCImago SJR 本地索引（:mod:`.journal_metrics`，按 ISSN）；
+- ``journal_tier`` —— OpenAlex ``listed_in`` 里 JUFO / Norway / KI-JL 的专家评议分级；
+- ``esi_highly_cited`` / ``esi_hot_paper`` —— **恒为 ``None``**（“未知”）。这里曾是
+  硬编码的 ``False``，而 ``False`` 断言的是“这篇不是 ESI 高被引”——对真正的高被引
+  论文那是数据里的谎言，故改为未知。
+
+**升级路径（官方 JIF / JIF 分区 / JCI / ESI 的程序化来源）**
+
+要拿到上述四个指标，需的是 **Web of Science Journals API**::
+
+    https://api.clarivate.com/apis/wos-journals/v1
+
+同样用 ``X-ApiKey`` 鉴权（无 OAuth2），故接入时可直接复用本模块的 ``_headers`` /
+``_get`` 写法；官方 Python 客户端（OpenAPI 生成）：
+https://github.com/clarivate/wosjournals-python-client
+
+**易混淆点（已查证，记下免得重新研究一遍）**：WoS API **Expanded** 名字里带
+“Web of Science”，但它增加的是作者 / 机构 / 标识符 / 基金等**文献级**字段，
+**不含 JIF**。JIF 从来不在 WoS 系 API 里，而在单独的 Journals / JCR 产品线上。
+该申请尚未落地；在此之前上述两个**免费**替代层（``journal_tier`` /
+``scimago_quartile``）已接进笔记生成链路，三者语义不同、并存不冲突。
 
 端点（均为 GET）::
 
@@ -466,6 +492,16 @@ def enrich_openalex_work(w: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+    import sys
+
+    print(
+        "[wos_client] 调试后门——凭据与可达性看 `research doctor` 的【检索源】段，"
+        "检索走 `research search '<query>' --source wos`。"
+        "注意本入口的 journal 动作（按 ISSN 查 WoS 期刊记录 + JCR URL）在 research CLI "
+        "里没有等价物：`research journal lookup` 查的是 OpenAlex listed_in 与 SCImago "
+        "SJR，数据源不同，两者互补而非替代。",
+        file=sys.stderr,
+    )
 
     parser = argparse.ArgumentParser(description="WoS Starter API CLI")
     sub = parser.add_subparsers(dest="cmd")

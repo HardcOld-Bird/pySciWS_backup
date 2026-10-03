@@ -35,16 +35,15 @@ Crossref REST（免费、无需 key，``mailto`` 进 polite pool）::
 from __future__ import annotations
 
 import difflib
-import hashlib
-import json
 import re
-import unicodedata
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
+from .cache_manager import cache_key, read_cache, write_cache
 from .config import http_session, settings
+from .notes import load_frontmatter, normalize_last_name, strip_accents
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -68,11 +67,9 @@ PASS, WARN, FAIL, NOT_FOUND = "PASS", "WARN", "FAIL", "NOT_FOUND"
 # ---------------------------------------------------------------------------
 # 归一化纯函数（离线可测）
 # ---------------------------------------------------------------------------
-def _strip_accents(s: str) -> str:
-    """去声调（NFKD 分解后剔除组合记号），便于跨源作者名比对。"""
-    return "".join(
-        c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
-    )
+#: 声调**转写**的唯一权威实现在 :mod:`.notes`（``Büttner`` → ``Buttner``，而非删除声调
+#: 得到 ``Bttner``）；此处保留私有别名以免改动本模块内的既有调用方。
+_strip_accents = strip_accents
 
 
 def normalize_title(t: str | None) -> str:
@@ -92,24 +89,10 @@ def title_similarity(a: str | None, b: str | None) -> float:
     return difflib.SequenceMatcher(None, na, nb).ratio()
 
 
-def normalize_last_name(name: str | None) -> str:
-    """从各种作者名形态提取「姓」并归一化（去声调/小写/去标点）。
-
-    兼容 ``'Zhu, Zheng'``（逗号前为姓）、``'Zheng Zhu'``（末词为姓）、
-    ``'Zheng'``（单词名）三种形态；空值返回 ``''``。
-    """
-    if not name:
-        return ""
-    s = _strip_accents(str(name)).strip()
-    if not s:
-        return ""
-    if "," in s:  # 'Last, First' → 取逗号前
-        s = s.split(",", 1)[0]
-    else:  # 'First M. Last' → 取末词
-        parts = [p for p in re.split(r"\s+", s) if p]
-        s = parts[-1] if parts else s
-    s = re.sub(r"[^a-zA-Z]", "", s).lower()
-    return s
+# ``normalize_last_name`` 已从 :mod:`.notes` re-export（见文件顶部 import）。
+# 保留本模块作为对外入口，使 ``citation_verify.normalize_last_name`` 这个历史路径
+# 继续成立；全项目现在只有 notes.py 里那一份实现，不会再出现同一位作者
+# 在不同源派生出不同姓氏的情况。
 
 
 def normalize_doi(d: str | None) -> str:
@@ -215,10 +198,13 @@ class CitationVerdict:
 # Crossref REST（新源；免费无 key，mailto 进 polite pool，响应复用两层缓存）
 # ---------------------------------------------------------------------------
 def _crossref_cache_path(url: str, params: dict[str, Any]) -> Any:
-    raw = url + "|" + json.dumps(params or {}, sort_keys=True, ensure_ascii=False)
-    h = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
-    slug = re.sub(r"[^a-zA-Z0-9]+", "_", url.split("?")[0])[-60:]
-    return settings.cache_api_responses / f"crossref_{slug}_{h}.json"
+    """Crossref 响应的缓存路径（一行委托 :func:`cache_manager.cache_key`）。
+
+    本函数过去是 ``openalex_client._cache_key`` 的**逐行副本**，只差文件名前缀：四行
+    哈希/slug 逻辑写了两遍，任何一边改了另一边就默默漂移。保留这个具名函数而不直接
+    内联调用，是因为「crossref 的缓存路径」是个有用的概念名（且现有测试就盯着它）。
+    """
+    return cache_key(url, params, prefix="crossref")
 
 
 def _crossref_message(
@@ -228,8 +214,6 @@ def _crossref_message(
 
     网络/HTTP 异常向上抛，由 :func:`fetch_crossref` 归类为 ``reachable=False``。
     """
-    from .openalex_client import _read_cache, _write_cache
-
     url = f"{CROSSREF_BASE}/{path}"
     params = dict(params or {})
     if settings.openalex_email and "mailto" not in params:
@@ -237,7 +221,7 @@ def _crossref_message(
 
     cache_path = _crossref_cache_path(url, params)
     if use_cache:
-        cached = _read_cache(cache_path)
+        cached = read_cache(cache_path)
         if cached is not None:
             return cached.get("message") if isinstance(cached, dict) else None
 
@@ -248,7 +232,7 @@ def _crossref_message(
         r.raise_for_status()
         data = r.json()
 
-    _write_cache(cache_path, data)
+    write_cache(cache_path, data)
     return data.get("message") if isinstance(data, dict) else None
 
 
@@ -690,32 +674,14 @@ def verify_frontmatter(
     )
 
 
-def _parse_frontmatter_scalars(text: str) -> dict[str, Any]:
-    """极简 frontmatter 解析（仅标量；够核验用）。避免与 research.py 循环依赖。"""
-    m = re.match(r"^---\s*\n(.*?)\n---", text or "", re.DOTALL)
-    fm: dict[str, Any] = {}
-    if not m:
-        return fm
-    for line in m.group(1).splitlines():
-        line = line.rstrip()
-        if (
-            not line
-            or line.lstrip().startswith("#")
-            or line.startswith((" ", "\t", "-"))
-        ):
-            continue
-        if ":" not in line:
-            continue
-        k, _, v = line.partition(":")
-        v = v.strip()
-        if v.startswith('"') and v.endswith('"') and len(v) >= 2:
-            v = v[1:-1]
-        elif v in ("null", "~"):
-            v = None  # type: ignore[assignment]
-        elif re.match(r"^[-+]?\d+$", v):
-            v = int(v)  # type: ignore[assignment]
-        fm[k.strip()] = v
-    return fm
+#: 笔记 frontmatter 的解析统一到 :mod:`.notes`（基于 ``yaml.safe_load``）。
+#:
+#: 旧的手写「仅标量」解析器会跳过所有以 ``-`` 开头的行，导致 block-style 的
+#: ``authors`` / ``topics`` 全部丢失。对核验而言影响有限（``first_author_last_name``
+#: 仍在），但它是同一个缺陷在 ``cache_manager.referenced_paths()`` 里造成
+#: ``prune --keep-referenced`` 保护失效的根源，因此一并消除。
+#: 保留旧名作为别名，既有调用方与测试无需改动。
+_parse_frontmatter_scalars = load_frontmatter
 
 
 def verify_note_file(
@@ -726,8 +692,413 @@ def verify_note_file(
 
     text = Path(path).read_text(encoding="utf-8")
     return verify_frontmatter(
-        _parse_frontmatter_scalars(text), sources=sources, use_cache=use_cache
+        load_frontmatter(text), sources=sources, use_cache=use_cache
     )
+
+
+# ---------------------------------------------------------------------------
+# 参考文献解析：BibTeX 与 markdown 参考文献段（``citecheck --bib``）
+# ---------------------------------------------------------------------------
+#: BibTeX 条目头 ``@article{key,``。``@string`` / ``@comment`` / ``@preamble`` 由
+#: :data:`_BIB_SKIP_TYPES` 排除——它们定义宏而非文献，混进核验列表只会产出一堆
+#: NOT_FOUND 噪声。
+_BIB_ENTRY_HEAD_RE = re.compile(r"@(\w+)\s*\{\s*([^,\s]*)\s*,")
+_BIB_SKIP_TYPES = frozenset({"string", "comment", "preamble", "set"})
+
+#: DOI 与 arXiv 编号在**自由文本**里的形态（参考文献段不像 BibTeX 有字段名可依靠）。
+_DOI_IN_TEXT_RE = re.compile(r"\b10\.\d{4,9}/[^\s\]\)>,;\"'\u3001\uff0c\u3002\uff1b]+")
+_ARXIV_IN_TEXT_RE = re.compile(
+    r"(?:arxiv\s*[:\uff1a]?\s*)?(\d{4}\.\d{4,5})(v\d+)?", re.I
+)
+#: 显式带 ``arXiv:`` 前缀的编号（带 DOI 的行里只认这一种）。
+_ARXIV_PREFIXED_RE = re.compile(r"arxiv\s*[:\uff1a#]\s*(\d{4}\.\d{4,5})(?:v\d+)?", re.I)
+#: 裸编号。前后都加了边界断言，避免从 ``1234.56789`` 这样的长数字串里切出假编号。
+_ARXIV_BARE_RE = re.compile(r"(?<![\d.])(\d{4}\.\d{4,5})(?:v\d+)?(?!\d)")
+
+#: 参考文献段的标题（中英、带不带编号都认）。
+_REFS_HEADING_RE = re.compile(
+    r"^(?P<hashes>#{1,6})[ \t]*"
+    r"(?:\d+(?:[\.\u3001\)])?[ \t]*)?"
+    r"(?:\u53c2\u8003\u6587\u732e|\u53c2\u8003\u8d44\u6599|\u5f15\u6587|References?|Bibliography)"
+    r"[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+#: TeX 重音原语（``\"`` ``\'`` ``\^`` ``\~`` ``\=`` ``\.`` ``\u`` ``\v`` ``\H`` ``\t``
+#: ``\c`` ``\d`` ``\b``）。它们后面紧跟的**那一个字母**就是基字母，重音本身丢弃。
+#:
+#: 三种写法都得认，而**顺序**（长形态在前）是关键：``{\"u}`` 是 Zotero/BibTeX 导出的
+#: 主流形态，``\"{u}`` 与 ``\"u`` 也出现。若只写一条「命令 + 可选花括号 + 字母 + 可选
+#: 花括号」的松散正则，``B{\"u}ttner`` 会匹配到 ``\"u}`` ——即把**闭合花括号**当成重音
+#: 自己的可选右括号吃掉，留下一个孤立的 ``{`` 在后续步骤里变成空格，得到 ``B uttner``。
+#: 那个空格随后会被姓氏归一化折叠掉，于是 BibTeX 的 ``Buttner`` 与 OpenAlex 的
+#: ``Büttner`` 对不上，每条含分音符作者的引用都报一个假 WARN。
+#:
+#: 裸字母形态只给**符号型**重音（``\` \' \^ \" \~ \= \.``），字母型（``\u \v \H \t \c \d \b``）
+#: 只认带花括号的形态：``\bibitem`` / ``\usepackage`` 的前两个字符会被误当成 ``\b i`` /
+#: ``\u s`` 而把命令名劈开，而 ``\c{c}`` ``\u{a}`` 正是字母型重音的常见写法。
+#: 两个裸形态都**不允许空白**（``\"`` 与 ``h`` 之间不得有空格）：TeX 里控制符号后的
+#: 空白是真实排版空格而非终止符，所以 ``\" loudly`` 里的 ``\"`` 只是个转义引号（第 4 步
+#: 会把它变回 ``"``）。允许空白会把它误读成「l 上的分音符」，连同空格一起吃掉，
+#: 得到 ``helloloudly`` 这种把两个词糊在一起的结果。
+#: 三个分支合在一条正则里而不是拆成两个常量：两份重叠的重音正则很容易只改其中
+#: 一份，而那就是先前 ``B{\"u}ttner`` → ``B uttner`` 那个 bug 的形状。
+_LATEX_ACCENT_RE = re.compile(
+    r"\{\s*\\[`'^\"~=.uvHtcdb]\s*([a-zA-Z])\s*\}"  # {\"u} —— 花括号在外
+    r"|\\[`'^\"~=.uvHtcdb]\s*\{\s*([a-zA-Z])\s*\}"  # \"{u} —— 花括号在内
+    r"|\\[`'^\"~=.]([a-zA-Z])"  # \"u   —— 裸字母（仅符号型重音）
+)
+
+
+def _accent_repl(m: re.Match[str]) -> str:
+    """三个分支各有一个捕获组，命中哪个就取哪个（都未命中说明基字母缺失）。"""
+    return m.group(1) or m.group(2) or m.group(3) or ""
+
+
+def _strip_latex(s: str) -> str:
+    """剥离 BibTeX 值里的 LaTeX 标记，得到可与三源比对的纯文本。
+
+    重音命令按**转写**处理（``\\"o`` → ``o``、``{\\'e}`` → ``e``），与
+    :func:`notes.normalize_last_name` 的语义一致——于是 BibTeX 里的 ``B{\\"u}ttner``
+    与 OpenAlex 里的 ``Büttner`` 归一化后能对上，不会因排版差异产生假冲突。
+
+    best-effort：本项目只需处理 ``compose refs.bib`` 从 Zotero 产出的规整格式
+    （方案假设 1：不引入 ``bibtexparser``），不追求覆盖任意 TeX 宏包。
+    """
+    s = str(s or "")
+    # 1) TeX 重音原语 → 基字母。**必须排在命名命令解包之前**：字母型重音
+    #    （``\c`` ``\u`` ``\v`` ``\b`` ``\d`` ``\t`` ``\H``）同时也是合法的「命令名 + 分组」，
+    #    先跑解包会把 ``\c{c}ervenka`` 变成 `` c ernenka``——凭空多出的那个空格使它与
+    #    OpenAlex 的 ``Červenka``（归一化后 ``cervenka``）对不上。先转写重音则得到
+    #    ``cervenka``；而 ``\textbf`` / ``\title`` 这类真命名命令不会被重音正则误伤
+    #    （它们的第二个字符不是 ``{``）。
+    s = _LATEX_ACCENT_RE.sub(_accent_repl, s)
+    # 2) 命名命令的分组解包：``\textbf{X}`` → ``X``（留内容、丢命令）
+    s = re.sub(r"\\[a-zA-Z]+\s*\{([^{}]*)\}", r" \1 ", s)
+    # 3) 剩下的单/双字母命令（``\oe`` ``\ss`` ``\i`` ``\l`` ``\o`` ``\aa``）→ 去反斜杠。
+    #    连同其后的空白一起吃掉：TeX 里控制词的结尾空白是**终止符而非排版空格**，
+    #    ``\oe uvre`` 排版出来就是 ``oeuvre``。留着那个空格会让它永远对不上
+    #    OpenAlex 的 ``œuvre``（归一化后 ``oeuvre``），产生一条假 WARN。
+    s = re.sub(r"\\([a-zA-Z]{1,2})\s*", r"\1", s)
+    # 4) 转义的标点：``\&`` ``\$`` ``\%`` ``\_`` ``\#`` → 字面量
+    s = re.sub(r"\\([^a-zA-Z\s])", r"\1", s)
+    # 5) 分组花括号与数学模式定界符
+    s = s.replace("{", " ").replace("}", " ").replace("$", " ")
+    # 6) BibTeX 的不换行空格与页码连字符习惯
+    s = s.replace("~", " ").replace("--", "-")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _bibtex_tokens(
+    text: str, start: int = 0, depth: int = 0
+) -> Iterator[tuple[int, str, str, int]]:
+    """逐字符扫描 BibTeX 文本，产出 ``(索引, 字符, 类型, 更新后深度)``。
+
+    类型 ∈ ``open`` / ``close`` / ``comma`` / ``quote`` / ``text``；只有前四种是
+    **结构性**的，``text`` 一律当字面量看待。:func:`_scan_bibtex_entry` 与
+    :func:`_split_bibtex_fields` 共用本分词器，因为它们需要的是**同一套**「哪个字符
+    算数」的判据——两份各自手写的状态机正是本模块先前那个 bug 的根源。
+
+    三条规则：
+
+    1. **反斜杠转义下一个字符**。``author = {B{\\"u}ttner, Ralph}`` 里那个 ``"`` 是重音
+       命令的参数，不是字符串定界符。不跳过它会让状态机进入 in_str，把随后的闭合
+       ``}`` 当普通字符吞掉，深度计数从此崩坏——该条目一路吞到文件末尾，把后面
+       所有条目全都吃进一个 ``author`` 字段里。而 ``\\"u`` 是 Zotero 导出里最常见的
+       分音符编码，也就是说：只要 .bib 里有一位带分音符的作者，它**之后**的全部内容
+       都会解析崩坏。
+    2. **``"`` 只在深度 0 处才是定界符**。花括号包起来的值里，``"`` 只是字面量
+       （``title = {The "Best" Paper}``）；当成定界符会让奇数个引号的值把后续 ``}``
+       全部吞掉。
+    3. ``{`` / ``}`` 只在字符串外才改变深度（引号值里的花括号不参与字段切分）。
+    """
+    i, n = start, len(text)
+    in_str = False
+    while i < n:
+        ch = text[i]
+        if ch == "\\" and i + 1 < n:
+            yield i, ch, "text", depth
+            yield i + 1, text[i + 1], "text", depth
+            i += 2
+            continue
+        if in_str:
+            if ch == '"':
+                in_str = False
+                yield i, ch, "quote", depth
+            else:
+                yield i, ch, "text", depth
+            i += 1
+            continue
+        if ch == '"' and depth == 0:
+            in_str = True
+            yield i, ch, "quote", depth
+        elif ch == "{":
+            depth += 1
+            yield i, ch, "open", depth
+        elif ch == "}":
+            depth -= 1
+            yield i, ch, "close", depth
+        elif ch == "," and depth == 0:
+            yield i, ch, "comma", depth
+        else:
+            yield i, ch, "text", depth
+        i += 1
+
+
+def _scan_bibtex_entry(text: str, start: int) -> tuple[str, int]:
+    """从 ``@type{key,`` 之后扫到配对的 ``}``，返回（字段区文本, 结束位置）。
+
+    用**深度计数**而不是「找下一个 ``}``」：BibTeX 标题字段里常含成对花括号
+    （``title = {The {C--H} bond}``），按第一个 ``}`` 截断会把字段区切坏。未闭合时
+    尽力而为取到文末（残缺的 .bib 仍应能核对其前面的条目）。
+
+    ``start`` 已在条目的 ``{`` **之后**，因此条目自己的闭合 ``}`` 会把相对深度推到
+    ``-1``；值字段的内层 ``}`` 只回到 ``0``，据此区分两者。
+    """
+    for i, _ch, kind, depth in _bibtex_tokens(text, start):
+        if kind == "close" and depth < 0:
+            return text[start:i], i + 1
+    return text[start:], len(text)
+
+
+def _split_bibtex_fields(body: str) -> list[str]:
+    """按**顶层**逗号切分字段区（花括号内与引号内的逗号不算分隔符）。
+
+    作者字段里满是逗号（``B{\\"u}ttner, Ralph and ...``），直接 ``split(",")`` 会把一个
+    字段拆成好几块。
+    """
+    parts: list[str] = []
+    buf: list[str] = []
+    for _i, ch, kind, _depth in _bibtex_tokens(body):
+        if kind == "comma":
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    if "".join(buf).strip():
+        parts.append("".join(buf))
+    return [p for p in parts if p.strip()]
+
+
+def _strip_bibtex_value(raw: str) -> str:
+    """去掉值外层的 ``{}`` / ``""``，再剥离 LaTeX 标记。"""
+    v = str(raw or "").strip()
+    if len(v) >= 2 and v[0] == "{" and v[-1] == "}":
+        v = v[1:-1]
+    elif len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+        v = v[1:-1]
+    return _strip_latex(v)
+
+
+def _split_bibtex_authors(value: str) -> list[str]:
+    """按 BibTeX 的 `` and `` 分隔符切分作者列表。"""
+    return [
+        a.strip()
+        for a in re.split(r"\s+and\s+", str(value or ""), flags=re.I)
+        if a.strip()
+    ]
+
+
+def parse_bibtex(text: str) -> list[dict[str, Any]]:
+    """解析 ``.bib`` 文本，返回每条记录一个 dict。
+
+    输出形状：``{"key": <引用键>, "entry_type": <article|inproceedings|...>, <字段名小写>: <值>}``。
+    值已经去引号并剥离 LaTeX 标记（见 :func:`_strip_latex`），因此可直接拿去与三源比对。
+
+    不用 ``bibtexparser`` 是方案的明确取舍（假设 1：不引入新依赖）；代价是只支持
+    ``@type{key, ...}`` 形态，**不支持** ``@type(key, ...)`` 的旧式括号。Zotero 与
+    本项目 ``compose refs.bib`` 产出的都是前者。
+
+    畸形输入（未闭合、缺 ``=``）一律跳过该字段/条目而不抛异常：一份 .bib 里有一条坏记录
+    不应该让其余几百条都核不了。
+    """
+    text = str(text or "")
+    entries: list[dict[str, Any]] = []
+    pos = 0
+    while True:
+        m = _BIB_ENTRY_HEAD_RE.search(text, pos)
+        if m is None:
+            break
+        etype = m.group(1).lower()
+        key = m.group(2).strip()
+        body, pos = _scan_bibtex_entry(text, m.end())
+        if etype in _BIB_SKIP_TYPES:
+            continue
+        entry: dict[str, Any] = {"key": key, "entry_type": etype}
+        for part in _split_bibtex_fields(body):
+            if "=" not in part:
+                continue
+            name, _, raw = part.partition("=")
+            name = name.strip().lower()
+            if not name:
+                continue
+            entry[name] = _strip_bibtex_value(raw)
+        entries.append(entry)
+    return entries
+
+
+def citation_from_bibtex(entry: dict[str, Any]) -> dict[str, Any]:
+    """把 :func:`parse_bibtex` 的一条记录映射为 :func:`verify_citation` 的 ``cite`` dict。
+
+    只写**确实有值**的键：所有比对器（``_cmp_*``）对空值一律返回 ``None``（不计冲突），
+    因此「BibTeX 没写这个字段」与「BibTeX 声称它为空」在行为上无区别——但前者语义上
+    更诚实，也避免 JSON 日志里充满无信息量的空字符串。
+
+    期刊字段兼容三种命名：``journal``（传统 BibTeX）、``journaltitle``（biblatex）、
+    ``booktitle``（会议论文的 venue）。不兼容 ``booktitle`` 会让所有 ``@inproceedings``
+    的期刊比对直接缺失。
+    """
+    entry = dict(entry or {})
+    cite: dict[str, Any] = {}
+
+    title = str(entry.get("title") or "").strip()
+    if title:
+        cite["title"] = title
+
+    authors = _split_bibtex_authors(entry.get("author") or "")
+    if authors:
+        cite["authors"] = authors
+        last = normalize_last_name(authors[0])
+        if last:
+            cite["first_author_last_name"] = last
+
+    year = extract_year(entry.get("year") or entry.get("date"))
+    if year:
+        cite["year"] = year
+
+    journal = ""
+    for k in ("journal", "journaltitle", "booktitle"):
+        if str(entry.get(k) or "").strip():
+            journal = str(entry[k]).strip()
+            break
+    if journal:
+        cite["journal"] = journal
+
+    doi = normalize_doi(entry.get("doi"))
+    if doi:
+        cite["doi"] = doi
+
+    # ``eprint`` 只在确实指向 arXiv 时才当 arXiv id 用：它也可能是 Zenodo / HAL 编号，
+    # 误当 arXiv id 会让 arXiv 源报一个假 NOT_FOUND。
+    eprint = str(entry.get("eprint") or "").strip()
+    prefix = str(entry.get("archiveprefix") or entry.get("eprinttype") or "").lower()
+    if eprint and ("arxiv" in prefix or _ARXIV_IN_TEXT_RE.fullmatch(eprint)):
+        cite["arxiv_id"] = eprint
+    return cite
+
+
+def _references_line_range(lines: list[str]) -> tuple[int, int]:
+    """定位参考文献段，返回半开区间 ``[start, end)`` 的 0-based 行号；找不到返回 ``(-1, -1)``。
+
+    段落边界：从匹配 :data:`_REFS_HEADING_RE` 的标题起，到**同级或更高级**的下一个标题
+    （或文末）止——``## References`` 不会吃掉后面 ``## Appendix`` 的内容。
+
+    按行号而不是按子串切分，是因为调用方需要给每条引用报准确的原文行号（``_line``），
+    而「先切子串再 ``text.find`` 反推偏移」在段落内容重复出现时会算错，且是 O(n²)。
+    """
+    start, level = -1, 0
+    for i, raw in enumerate(lines):
+        line = raw.rstrip()
+        m = _REFS_HEADING_RE.match(line)
+        if m:
+            start, level = i + 1, len(m.group("hashes"))
+            continue
+        if start >= 0 and re.match(rf"^#{{1,{level}}}[ \t]+\S", line):
+            return start, i
+    return (start, len(lines)) if start >= 0 else (-1, -1)
+
+
+def _clean_doi(raw: str) -> str:
+    """去掉 DOI 末尾误吞的句读（``...124501.`` 的那个句点不属于 DOI）。"""
+    return str(raw or "").strip().rstrip(".,;:)]}>\"'\u3002\uff0c\uff1b\u3001")
+
+
+def _title_from_reference_line(line: str) -> str:
+    """从一行参考文献里尽力提取标题（候选中取最长的一段）。
+
+    best-effort：参考文献的排版千差万别（APS / IEEE / Nature 各一套）且无可靠语法。
+    策略是**剔除**已知噪声（序号标记、URL、DOI、arXiv 编号、括号年份）后，在剩下的
+    片段里取最长的那段——标题几乎总是最长的一段。候选还需过两道门：≥ 3 个词且
+    字母占比 ≥ 60%，否则返回空串——这能挡下 ``Phys. Rev. Lett. 121, 124501 (2018).``
+    这种**无标题**格式里的期刊碎片，避免把碎片当标题去核（那会产生一堆假 NOT_FOUND）。
+    """
+    s = str(line or "")
+    s = re.sub(r"^\s*(?:[-*\u2022]|\[\d+\]|\d+[.)\u3001]|\(\d+\))\s*", "", s)
+    s = re.sub(r"https?://\S+", " ", s)
+    s = _DOI_IN_TEXT_RE.sub(" ", s)
+    s = re.sub(r"arxiv\s*[:\uff1a]?\s*\d{4}\.\d{4,5}(?:v\d+)?", " ", s, flags=re.I)
+    s = re.sub(r"[\(\uff08\[]\s*(?:19|20)\d{2}[a-z]?\s*[\)\uff09\]]", " ", s)
+    s = re.sub(r"^\s*(?:[A-Z][a-zA-Z'\-.]+(?:,?\s+[A-Z]\.?)+)\s*[,;.]\s*", "", s)
+
+    chunks = [
+        c.strip(" \t\"'“”‘’")
+        for c in re.split(r"[.,;:|\u3002\uff0c\uff1b\uff1a\u3001]+", s)
+    ]
+    best, best_len = "", 0
+    for c in chunks:
+        if len(c) < 20 or len(c.split()) < 3:
+            continue
+        letters = sum(ch.isalpha() or ord(ch) > 0x2E80 for ch in c)
+        if letters / max(1, len(c)) < 0.6:
+            continue
+        if len(c) > best_len:
+            best, best_len = c, len(c)
+    return best
+
+
+def parse_markdown_references(text: str) -> list[dict[str, Any]]:
+    """从 markdown 文本里提取参考文献，返回 :func:`verify_citation` 可直接吃的 ``cite`` 列表。
+
+    两档强度（故意不对称）：
+
+    - **参考文献段内**（标题匹配 ``参考文献`` / ``References`` / ``Bibliography``）：
+      接受带 DOI / arXiv 编号的行，**也**接受只带可辨识标题的行；
+    - **段外**：只接受带硬标识（DOI / 显式 ``arXiv:`` 前缀）的行。否则正文里一句提到
+      某篇论文的话会被当成一条待核引用，而那句散文根本提不出可靠标题。
+
+    arXiv 编号同样分两档：行里已有 DOI 时只认**显式前缀**的 ``arXiv:NNNN.NNNNN``。裸的
+    四位点五位数字在带 DOI 的行里更可能是 DOI 尾巴或页码，误当成 arXiv id 会让 arXiv
+    源报一个假 NOT_FOUND，甚至把本该 PASS 的引用拖成 WARN。
+
+    无标识且无标题的行一律跳过（方案明确要求的 best-effort 语义）。每条额外携带
+    ``_line``（原文行号，从 1 起）与 ``_raw``（原行），供报告里定位「哪一行错了」。
+    这两个键以 ``_`` 开头：``verify_citation`` 只按名取键，多余键不影响核验。
+    """
+    lines = str(text or "").splitlines()
+    start, end = _references_line_range(lines)
+    out: list[dict[str, Any]] = []
+    for idx, line in enumerate(lines):
+        if not line.strip():
+            continue
+        in_refs = start >= 0 and start <= idx < end
+
+        dois: list[str] = []
+        for m in _DOI_IN_TEXT_RE.finditer(line):
+            d = normalize_doi(_clean_doi(m.group(0)))
+            if d and d not in dois:
+                dois.append(d)
+        m_arx = _ARXIV_PREFIXED_RE.search(line)
+        if m_arx is None and not dois:
+            m_arx = _ARXIV_BARE_RE.search(line)
+        arxiv_id = m_arx.group(1) if m_arx else ""
+        title = _title_from_reference_line(line) if in_refs else ""
+        if not dois and not arxiv_id and not title:
+            continue
+
+        cite: dict[str, Any] = {}
+        if dois:
+            cite["doi"] = dois[0]
+        if arxiv_id:
+            cite["arxiv_id"] = arxiv_id
+        if title:
+            cite["title"] = title
+        m_year = re.search(r"\b(?:19|20)\d{2}\b", line)
+        if m_year:
+            cite["year"] = int(m_year.group(0))
+        cite["_line"] = idx + 1
+        cite["_raw"] = line.strip()
+        out.append(cite)
+    return out
 
 
 # ---------------------------------------------------------------------------

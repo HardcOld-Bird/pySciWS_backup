@@ -3,8 +3,8 @@
 锁定各源→本项目 frontmatter schema 的规范化层：
 - ``_extract_work_summary`` 把原始 OpenAlex /works JSON 收敛为统一 work-dict；
 - ``work_to_note_frontmatter`` 把 work-dict 转为 paper_note frontmatter；
-- 纯辅助函数 ``reconstruct_abstract`` / ``_guess_last_name`` / ``_make_short_title`` /
-  ``_format_pages``。
+- 纯辅助函数 ``reconstruct_abstract`` / ``normalize_last_name``（从 :mod:`notes` re-export）/
+  ``_make_short_title`` / ``_format_pages``。
 
 替换检索/HTTP 层（阶段 2 起）时，这些字段映射必须逐字段保持不变——本测试即护栏。
 """
@@ -190,11 +190,23 @@ def test_reconstruct_abstract_empty():
     assert oa.reconstruct_abstract({}) == ""
 
 
-def test_guess_last_name():
-    assert oa._guess_last_name("Zheng Zhu") == "zhu"
-    assert oa._guess_last_name("Plato") == "plato"  # 单段
-    assert oa._guess_last_name("Jean-Luc Picard") == "picard"
-    assert oa._guess_last_name("") == ""
+def test_normalize_last_name():
+    """原 ``_guess_last_name`` 已删除，姓氏归一化统一到 :func:`notes.normalize_last_name`。"""
+    assert oa.normalize_last_name("Zheng Zhu") == "zhu"
+    assert oa.normalize_last_name("Plato") == "plato"  # 单段
+    assert oa.normalize_last_name("Jean-Luc Picard") == "picard"
+    assert oa.normalize_last_name("") == ""
+
+
+def test_normalize_last_name_transliterates_accents():
+    """R4 语义修正：声调是**转写**而非删除。
+
+    旧 ``_guess_last_name`` 用 ``re.sub(r"[^a-zA-Z]", "", ...)`` 直接剔除非 ASCII 字母，
+    ``Büttner`` 会变成 ``bttner``；而 ``citation_verify`` 那份实现用 ``unicodedata`` 转写
+    得到 ``buttner``。同一位作者在两个源派生出不同姓氏，现已统一到转写语义。
+    """
+    assert oa.normalize_last_name("Kai Büttner") == "buttner"
+    assert oa.normalize_last_name("José García") == "garcia"
 
 
 def test_make_short_title_strips_stopwords():
@@ -233,7 +245,9 @@ def test_frontmatter_contract_when_source_unavailable(monkeypatch):
     assert fm["corresponding_author"] == "Zheng Zhu"
     assert fm["authors"] == ["Zheng Zhu", "Xiangang Wan"]
     assert fm["year"] == 2018
+    assert fm["publication_date"] == "2018-09-21"  # date-only，与 arXiv 源归一
     assert fm["journal"] == "Physical Review Letters"
+    assert fm["journal_ref"] == ""  # OpenAlex 不给引文串；本键只为与 arXiv 源契约对齐
     assert fm["pages"] == "124501"
     assert fm["doi"] == "10.1103/PhysRevLett.121.124501"
     assert fm["arxiv_id"] == "1803.04110"
@@ -244,17 +258,75 @@ def test_frontmatter_contract_when_source_unavailable(monkeypatch):
     assert fm["keywords_auto"] == ["exceptional point"]
     # WoS 独家字段：OpenAlex 转换时留空，由 wos_client.enrich_openalex_work 补齐
     assert fm["wos_id"] == ""
-    # Starter API / OpenAlex 都无法给出的字段：诚实留空而非伪造
+    # Starter API / OpenAlex 都无法给出的字段：诚实留空而非伪造。
+    # 注意 esi_* 必须是 None（= 未知）而不是 False（= 已确认不是）：写 False 对真正的
+    # 高被引论文是数据里的谎言，而 ESI 名单只能由 WoS Journals API 给出。
     assert fm["jif"] is None
     assert fm["jif_5yr"] is None
     assert fm["jcr_quartile"] == ""
     assert fm["scimago_quartile"] == ""
     assert fm["citescore"] is None
-    assert fm["esi_highly_cited"] is False
-    assert fm["esi_hot_paper"] is False
+    assert fm["esi_highly_cited"] is None
+    assert fm["esi_hot_paper"] is None
+    # 期刊档次三件套：没有 source 就无从判断，诚实留空而非伪造（arXiv 源同样留空，
+    # 之后由 research._attach_journal_metrics 拿到 source 再回填）。
+    assert fm["journal_tier"] == ""
+    assert fm["journal_tier_basis"] == []
+    assert fm["listed_in"] == []
     # 笔记工作流状态字段
     assert fm["status"] == "unread"
     assert fm["my_rating"] is None
     assert fm["review_count"] == 0
     assert fm["related_to_my_work"] is None
     assert fm["topics"] == [] and fm["methods"] == [] and fm["systems"] == []
+
+
+def test_frontmatter_truncates_datetime_publication_date(monkeypatch):
+    """``publication_date`` 一律截断为 YYYY-MM-DD。
+
+    OpenAlex 本身给 date-only，截断是防御性的；真正的动机是与 arXiv 归一——后者给
+    ``"2018-03-12T04:08:19Z"``，不截断则同一篇论文在两个源下写出两种值，merge 时无法对齐。
+    """
+    monkeypatch.setattr(oa, "get_source", lambda **kw: None)
+    w = oa._extract_work_summary(RAW_WORK)
+    w["publication_date"] = "2018-09-21T13:45:00Z"
+    assert oa.work_to_note_frontmatter(w)["publication_date"] == "2018-09-21"
+    # 缺失时不报错，得空串
+    w["publication_date"] = None
+    assert oa.work_to_note_frontmatter(w)["publication_date"] == ""
+
+
+# ---------------------------------------------------------------------------
+# WP-E：``_extract_source`` 不再丢弃 ``listed_in``
+# ---------------------------------------------------------------------------
+#: 实测的 PRL source 响应（只留相关字段）。``listed_in`` 与 ``summary_stats`` 同居一份
+#: 响应，因此保留它**零额外请求**。
+RAW_SOURCE = {
+    "id": "https://openalex.org/S85682845",
+    "display_name": "Physical Review Letters",
+    "issn": ["0031-9007", "1079-7114"],
+    "summary_stats": {"h_index": 1005, "2yr_mean_citedness": 8.97},
+    "listed_in": ["cwts-core", "jufo-3", "ki-jl-2", "medline", "norway-2"],
+}
+
+
+def test_extract_source_keeps_listed_in():
+    """P0 回归：旧实现只取 ``summary_stats``，把 ``listed_in`` 整个丢了。
+
+    丢掉它的后果是期刊档次只剩引用类指标可用——对声学这类**低引用密度**领域严重失真
+    （``J. Acoust. Soc. Am.`` 的 ``2yr_mean_citedness`` 只有 0.82，但 JUFO 专家小组判它
+    最高档）。档次派生本身的用例见 ``test_journal_metrics.py``。
+    """
+    src = oa._extract_source(RAW_SOURCE)
+    assert src["listed_in"] == RAW_SOURCE["listed_in"]
+
+
+def test_extract_source_listed_in_defaults_to_empty_list():
+    """缺字段时给 ``[]`` 而不是 ``None``。
+
+    下游 ``derive_journal_tier`` 与 frontmatter 的 list 字段都假定可迭代；``None`` 还会让
+    ``merge_frontmatter`` 把它当「空键」反复回填，每次 ``index --fix`` 都报变更。
+    """
+    src = oa._extract_source({"id": "https://openalex.org/S1"})
+    assert src["listed_in"] == []
+    assert src["listed_in"] is not None

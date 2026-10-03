@@ -263,13 +263,27 @@ def _extract_from_arxiv_source(arxiv_id: str) -> str | None:
     except ImportError:
         return None
 
-    tar_path = arxiv_client.download_source(arxiv_id)
-    if not tar_path:
+    # 整段包在 try 里，以兑现上面那句「失败返回 None」：``download_source`` 的
+    # ``mkdir`` 在它自己的 try 之外（磁盘满 / 无写权限 → OSError），``_tex_to_markdown``
+    # 的正则也可能对畸形 LaTeX 抛。自 ``cmd_read`` 接进 ``prefer_latex_source`` 之后，
+    # 这里的异常会让整个 :func:`extract_pdf` 失败——连 PDF 抽取都不做，把「本来能抽出
+    # 正文」变成「什么都没抽到」。LaTeX 源码只是**更准**的一条路，不该有能力否决那条
+    # **能用**的路（不变量 1：降级静默、不阻塞）。
+    try:
+        tar_path = arxiv_client.download_source(arxiv_id)
+        if not tar_path:
+            return None
+        tex = arxiv_client.extract_tex_from_source(tar_path)
+        if not tex:
+            return None
+        return _tex_to_markdown(tex)
+    except Exception as e:
+        print(
+            f"[pdf_extract] arXiv LaTeX source failed for {arxiv_id} "
+            f"({type(e).__name__}: {e}); falling back to PDF extraction",
+            file=sys.stderr,
+        )
         return None
-    tex = arxiv_client.extract_tex_from_source(tar_path)
-    if not tex:
-        return None
-    return _tex_to_markdown(tex)
 
 
 def _tex_to_markdown(tex: str) -> str:
@@ -528,6 +542,14 @@ def extract_many(
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
+    print(
+        "[pdf_extract] 调试后门——抽取全文请走 `research read <id>`"
+        "（论文有 arXiv 预印本时它会自动优先 LaTeX 源码路径，公式更忠实）。"
+        "后端可用性与 MINERU_TOKEN 状态看 `research doctor` 的"
+        "【PDF → Markdown 后端】段。本入口用于把单个后端 / 单个 PDF 隔离出来排查。",
+        file=sys.stderr,
+    )
 
     parser = argparse.ArgumentParser(description="PDF extraction CLI")
     sub = parser.add_subparsers(dest="cmd")

@@ -15,6 +15,8 @@ arXiv 是物理学前沿的必经之路——凝聚态、量子光学、声学�
 - :func:`list_recent`     : 按 category 列出最新提交（追踪前沿）
 - :func:`download_pdf`    : 下载 PDF 到 cache/pdfs/
 - :func:`download_source` : 下载 LaTeX 源码（对物理论文极有价值，比 PDF 解析更准）
+- :func:`parse_journal_ref` : 把自由文本 ``journal_ref`` 拆成刊名/卷/页/年
+- :func:`arxiv_to_note_frontmatter` : 转成 paper_note 的 frontmatter
 """
 
 from __future__ import annotations
@@ -27,8 +29,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from .cache_manager import bump_mtime
+from .cache_manager import bump_mtime, cache_key, read_cache, write_cache
 from .config import http_session, settings
+from .notes import normalize_last_name
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -38,11 +41,22 @@ ARXIV_ABS_BASE = "https://arxiv.org/abs"
 ARXIV_PDF_BASE = "https://arxiv.org/pdf"
 ARXIV_SRC_BASE = "https://arxiv.org/e-print"
 
+#: 尚未正式发表的 arXiv 预印本，其 ``journal`` 字段用的占位刊名。
+#:
+#: 下游（``research._attach_journal_metrics``）靠它识别「这不是一本真期刊」而跳过期刊指标
+#: 查询，因此两边必须引用同一常量，不得各写一份字面量。
+ARXIV_PREPRINT_JOURNAL = "arXiv preprint"
+
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
 ARXIV_NS = "{http://arxiv.org/schemas/atom}"
 OPENSEARCH_NS = "{http://a9.com/-/spec/opensearch/1.1/}"
 
 # 用户领域的 arXiv category（订阅列表）
+#
+# 状态：预留，当前无调用方。设计意图是给 :func:`list_recent` 当默认订阅表，但
+# ``list_recent`` 自己也没有调用方（``research`` CLI 未暴露「追踪前沿」这个动作），
+# 两者是一对。保留的理由：arXiv 的 category 词表本身稳定，而这张表的价值在于它
+# 已经按用户领域（声学 / 非厄米 / 拓扑 / BIC）从全量 taxonomy 里筛过一遍。
 KNOWN_CATEGORIES: dict[str, str] = {
     "cond-mat.mes-hall": "Mesoscale and Nanoscale Physics",
     "cond-mat.mtrl-sci": "Materials Science",
@@ -114,7 +128,7 @@ def _parse_entry(e: ET.Element) -> dict[str, Any]:
         "title": re.sub(r"\s+", " ", _text("title")),
         "abstract": re.sub(r"\s+", " ", _text("summary")),
         "authors": authors,
-        "first_author_last_name": _guess_last_name(authors[0]["name"])
+        "first_author_last_name": normalize_last_name(authors[0]["name"])
         if authors
         else "",
         "published": _text("published"),
@@ -128,15 +142,6 @@ def _parse_entry(e: ET.Element) -> dict[str, Any]:
         "pdf_url": pdf_url,
         "src_url": f"{ARXIV_SRC_BASE}/{arxiv_id}{version}",
     }
-
-
-def _guess_last_name(full_name: str) -> str:
-    if not full_name:
-        return ""
-    parts = re.split(r"\s+", full_name.strip())
-    last = parts[-1] if parts else ""
-    last = re.sub(r"[^a-zA-Z]", "", last)
-    return last.lower() or (parts[-1].lower() if parts else "")
 
 
 # ---------------------------------------------------------------------------
@@ -176,13 +181,10 @@ def search_arxiv(
             cat_expr = " OR ".join(f"cat:{c}" for c in cats)
             params["search_query"] = f"({query}) AND ({cat_expr})"
 
-    from .openalex_client import _cache_key, _read_cache
-
-    cache_path = _cache_key("arxiv_search", params)
+    cache_path = cache_key("search", params, prefix="arxiv")
     if use_cache:
-        cached = _read_cache(
-            cache_path, max_age_seconds=86400
-        )  # arXiv 每日更新，缓存 1 天
+        # arXiv 每日更新，故用 1 天而不是 Tier B 的默认 7 天
+        cached = read_cache(cache_path, max_age_seconds=86400)
         if cached is not None:
             return cached
 
@@ -213,9 +215,7 @@ def search_arxiv(
         "_raw_xml_len": len(raw_xml),
     }
 
-    from .openalex_client import _write_cache as _wc
-
-    _wc(cache_path, {k: v for k, v in result.items() if k != "_raw_xml_len"})
+    write_cache(cache_path, {k: v for k, v in result.items() if k != "_raw_xml_len"})
     return result
 
 
@@ -225,11 +225,14 @@ def get_paper(arxiv_id: str, use_cache: bool = True) -> dict[str, Any] | None:
     if not re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id):
         # 可能是老式 ID，如 cond-mat/0601234
         arxiv_id = quote(arxiv_id, safe="/")
-    return (
-        search_arxiv(f"id:{arxiv_id}", max_results=1, use_cache=use_cache)["entries"][0]
-        if search_arxiv(f"id:{arxiv_id}", max_results=1, use_cache=use_cache)["entries"]
-        else None
-    )
+    # 原实现在**条件与分支里各调一次** ``search_arxiv()``。有 Tier B 缓存兜底时那只是
+    # 两次函数调用 + 两次 XML 解析 + 两次 dict 构造；但 ``use_cache=False``（``read --refresh``）
+    # 时它是**两次真实的 arXiv 请求**，而 arXiv 对高频请求会返 429。``get_paper`` 正是
+    # ``read`` 路径的必经之处，所以这个重复值得消除。
+    entries = search_arxiv(f"id:{arxiv_id}", max_results=1, use_cache=use_cache)[
+        "entries"
+    ]
+    return entries[0] if entries else None
 
 
 def list_recent(
@@ -238,7 +241,10 @@ def list_recent(
     max_results: int = 50,
     days_back: int | None = None,
 ) -> dict[str, Any]:
-    """列出指定 category 的最新提交（追踪前沿）。
+    """状态：预留，当前无调用方（``research`` CLI 未暴露「追踪前沿」动作）。
+
+    列出指定 category 的最新提交（追踪前沿）。默认订阅表见 :data:`KNOWN_CATEGORIES`，
+    它同样处于预留状态——两者应当一起被接进 CLI，或者一起被删除。
 
     days_back: 若指定，只返回最近 N 天内 submitted 的（客户端过滤）
     """
@@ -371,6 +377,69 @@ def extract_tex_from_source(tar_path: Path) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# journal_ref 自由文本 → 结构化书目字段
+# ---------------------------------------------------------------------------
+#: arXiv ``journal_ref`` 的主模式：``刊名 卷, 页 (年)``。
+#:
+#: ``journal`` 用惰性 ``.+?``，使正则优先拿**最短**的前缀当刊名、把第一个数字串当卷号
+#: （刊名本身可含数字，如 ``2D Materials 5, 031001 (2018)``）。``page`` 的字符类含
+#: ``()``，故缺空格的 ``085117(2018)`` 也能靠回溯正确拆开。
+_JOURNAL_REF_FULL_RE = re.compile(
+    r"^\s*(?P<journal>.+?)\s*(?P<volume>\d+)\s*,\s*(?P<page>[\w\-.()]+)?\s*\((?P<year>\d{4})\)"
+)
+
+#: 退化模式：``刊名 卷, 页``（无年份括号），如 ``"Phys. Rev. B 96, 085117"``。
+_JOURNAL_REF_NOYEAR_RE = re.compile(
+    r"^\s*(?P<journal>.+?)\s*(?P<volume>\d+)\s*,\s*(?P<page>[\w\-.()]+)?\s*$"
+)
+
+
+def parse_journal_ref(ref: str | None) -> dict[str, Any]:
+    """把 arXiv 的自由文本 ``journal_ref`` 拆成结构化书目字段。
+
+    arXiv 的 ``journal_ref`` 是作者自填的一整串引文（``"Phys. Rev. Lett. 121, 124501
+    (2018)"``）。旧实现把它整个塞进 frontmatter 的 ``journal`` 键，于是 ``INDEX.md`` 的
+    Journal 列、笔记的 Journal-tier 段落都变成一串引文，而所有按**刊名**做的期刊指标
+    查询（``get_source(name=...)``）全部落空。
+
+    Args:
+        ref: arXiv 返回的原始 ``journal_ref``，可为 ``None`` / 空串。
+
+    Returns:
+        ``{"journal", "volume", "pages", "year", "journal_ref"}``：
+
+        * ``journal`` —— 纯刊名；拆不出结构时**回落为原串**（宁可粗糙也不丢信息）
+        * ``volume`` / ``pages`` —— 字符串或 ``None``（保持源数据的文本形态，不数值化：
+          页码可以是 ``eabn7905``、``44-48`` 这类非数字串）
+        * ``year`` —— ``int`` 或 ``None``
+        * ``journal_ref`` —— 原串（空白折叠后）。拆解是**有损**的，留着原文才能审计。
+
+    空输入 → 四个字段全空、``journal_ref`` 为 ``""``，**不抛异常**。
+    """
+    raw = re.sub(r"\s+", " ", str(ref or "")).strip()
+    out: dict[str, Any] = {
+        "journal": "",
+        "volume": None,
+        "pages": None,
+        "year": None,
+        "journal_ref": raw,
+    }
+    if not raw:
+        return out
+    m = _JOURNAL_REF_FULL_RE.match(raw) or _JOURNAL_REF_NOYEAR_RE.match(raw)
+    if m:
+        groups = m.groupdict()
+        out["journal"] = (groups.get("journal") or "").strip()
+        out["volume"] = groups.get("volume")
+        out["pages"] = (groups.get("page") or "").strip() or None
+        # 退化模式无 year 组，用 groupdict 取值避开 IndexError
+        year = groups.get("year")
+        out["year"] = int(year) if year else None
+    out["journal"] = out["journal"] or raw
+    return out
+
+
+# ---------------------------------------------------------------------------
 # 与 openalex_client 的对接
 # ---------------------------------------------------------------------------
 def arxiv_to_note_frontmatter(e: dict[str, Any]) -> dict[str, Any]:
@@ -381,19 +450,26 @@ def arxiv_to_note_frontmatter(e: dict[str, Any]) -> dict[str, Any]:
             year = int(e["published"][:4])
         except ValueError:
             pass
+    jr = parse_journal_ref(e.get("journal_ref"))
     return {
         "title": e.get("title", ""),
         "short_title": " ".join(re.split(r"\W+", e.get("title", ""))[:6]),
         "authors": [a["name"] for a in e.get("authors", [])],
         "first_author_last_name": e.get("first_author_last_name", ""),
         "corresponding_author": "",
-        "year": year,
-        "publication_date": e.get("published", ""),
-        "journal": e.get("journal_ref", "") or "arXiv preprint",
+        # arXiv 的 submitted 年份优先：它决定文件名 {year}_{last}_{slug}.md，改用出版年会
+        # 让跨年发表（如 2017-12 投稿、2018-01 见刊）的笔记改名，破坏既有 wiki 链接。
+        # 只在 published 缺失时才回落 journal_ref 里的出版年。
+        "year": year if year is not None else jr["year"],
+        # arXiv 给 ISO-8601 带时分秒（"2018-03-12T04:08:19Z"），OpenAlex 给 date-only。
+        # 统一截断为 YYYY-MM-DD，否则同一篇论文在两个源下写出两种值，merge 时无法对齐。
+        "publication_date": (e.get("published") or "")[:10],
+        "journal": jr["journal"] or ARXIV_PREPRINT_JOURNAL,
+        "journal_ref": jr["journal_ref"],
         "publisher": "arXiv",
-        "volume": "",
+        "volume": jr["volume"] or "",
         "issue": "",
-        "pages": "",
+        "pages": jr["pages"] or "",
         "doi": e.get("doi", ""),
         "arxiv_id": e.get("arxiv_id", ""),
         "openalex_id": "",
@@ -410,10 +486,20 @@ def arxiv_to_note_frontmatter(e: dict[str, Any]) -> dict[str, Any]:
         "jcr_quartile": "",
         "scimago_quartile": "",
         "citescore": None,
-        "esi_highly_cited": False,
-        "esi_hot_paper": False,
+        # None = **未知**；False = 「已确认不是」。旧值 False 对真正的高被引论文是数据里的
+        # 谎言（ESI 需 WoS Journals API，当前无程序化来源）。
+        "esi_highly_cited": None,
+        "esi_hot_paper": None,
         "journal_h_index": None,
-        "topics": e.get("categories", []),
+        # 期刊档次与 SCImago 分区都靠期刊记录（OpenAlex source）才能得出，而 arXiv 的
+        # Atom 响应里根本没有。故这里一律留空，由 research._attach_journal_metrics 在
+        # 拿到 source 后回填——两个转换器的**键集**必须一致，否则 merge 时会出现单源独有键。
+        "journal_tier": "",
+        "journal_tier_basis": [],
+        "listed_in": [],
+        # topics 是留给 AI 填的**研究主题**标签（如 non-hermitian / exceptional-point），
+        # 旧实现把它与 keywords_auto 都等于 arXiv categories，两键完全重复；现在只留后者。
+        "topics": [],
         "methods": [],
         "systems": [],
         "related_to_my_work": None,
@@ -432,6 +518,14 @@ def arxiv_to_note_frontmatter(e: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+    import sys
+
+    print(
+        "[arxiv_client] 调试后门——日常检索请走 "
+        "`research search '<query>' --source arxiv`。"
+        "本入口只在单独排查 arXiv API 本身时用（字段语法、限速/429、Atom 解析）。",
+        file=sys.stderr,
+    )
 
     parser = argparse.ArgumentParser(description="arXiv search CLI")
     parser.add_argument(

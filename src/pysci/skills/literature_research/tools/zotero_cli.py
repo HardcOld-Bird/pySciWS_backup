@@ -486,17 +486,31 @@ class ZoteroCli:
         return _items_from_data(data)
 
     def get_bibtex(self, key: str) -> str:
-        """导出单条 BibTeX（``get metadata <key> --format bibtex``）。"""
+        """状态：预留，``research`` CLI 未暴露；仅本模块 ``__main__`` 调试后门在用。
+
+        导出单条 BibTeX（``get metadata <key> --format bibtex``）。
+        """
         data = _run_json(["get", "metadata", key, "--format", "bibtex"])
         return _text_from_data(data)
 
     def get_fulltext(self, key: str) -> str:
-        """导出条目全文（``get fulltext <key>``）。"""
+        """状态：预留，当前无调用方（仅测试覆盖）。
+
+        导出条目全文（``get fulltext <key>``）。
+
+        与 :func:`pdf_extract.extract_pdf` 的职责重叠：后者抽 PDF 得到带 LaTeX 公式的
+        markdown，质量高于 Zotero 存的纯文本全文，所以 ``read`` 走的是后者。
+        """
         data = _run_json(["get", "fulltext", key])
         return _text_from_data(data)
 
     def library_info(self) -> dict[str, Any]:
-        """库概况（``library info``）。"""
+        """状态：预留，当前无调用方（仅测试覆盖）。
+
+        库概况（``library info``）。``research library`` 的四个 action
+        （ping / list / search / get）都不用它：「桥能不能通」由 :meth:`ping` 回答，
+        而条目计数对文献评估没有贡献。
+        """
         data = _run_json(["library", "info"])
         return data if isinstance(data, dict) else {"raw": data}
 
@@ -525,7 +539,14 @@ class ZoteroCli:
         return {"key": _extract_key_from_add(data), "raw": data}
 
     def add_doi(self, doi: str, *, collections: Iterable[str] = ()) -> dict[str, Any]:
-        """按 DOI 建条目（``add doi``，自动抓元数据 + OA PDF）。返回同 create_item_*。"""
+        """状态：预留，当前无调用方（仅测试覆盖）。
+
+        按 DOI 建条目（``add doi``，自动抓元数据 + OA PDF）。返回同 create_item_*。
+
+        ``research add <doi>`` 走的是 :meth:`create_item_from_metadata`：它先自己把
+        OpenAlex/Crossref 元数据拉齐并过引用核验门，再交给 Zotero；而 ``add doi`` 把
+        元数据抓取交给 zotero-cli 的 translator，跳过了那道门。
+        """
         args = ["add", "doi", doi]
         for c in collections:
             if str(c).strip():
@@ -536,9 +557,14 @@ class ZoteroCli:
     def add_note(
         self, parent_item_key: str, note_text: str, *, tags: Iterable[str] = ()
     ) -> dict[str, Any]:
-        """为某条目追加子笔记（``notes create --item-key KEY --text ...``）。
+        """状态：预留，当前无调用方（仅测试覆盖）。
+
+        为某条目追加子笔记（``notes create --item-key KEY --text ...``）。
 
         zotero-cli 负责文本 → Zotero 笔记（HTML）转换；本模块不再自带 md→html。
+        设计意图是把 ``papers/*.md`` 的评估结论同步成 Zotero 子笔记（在 Zotero 里就能
+        读到判断，不用切回仓库），但 ``research`` CLI 当前没有任何把笔记正文写回
+        Zotero 的动作：``add`` 只建 / 更新条目元数据（走 :meth:`create_item_from_metadata`）。
         """
         args = ["notes", "create", "--item-key", parent_item_key, "--text", note_text]
         tag_list = [str(t).strip() for t in (tags or []) if str(t).strip()]
@@ -553,6 +579,16 @@ class ZoteroCli:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+    import sys
+
+    print(
+        "[zotero_cli] 调试后门——ping / search / get 三个动作等价于 "
+        "`research library ping|search|get`（另有 `library list`，是尽力而为的枚举）。"
+        "只有 bibtex 动作在 research CLI 里没有入口：要导出 BibTeX 请用 "
+        "`pysci-compose tex refs`（从 Zotero 整库产 refs.bib）"
+        "或 zotero MCP 的 zotero_export_bibliography。",
+        file=sys.stderr,
+    )
 
     parser = argparse.ArgumentParser(description="zotero-cli 桥接自测")
     sub = parser.add_subparsers(dest="cmd")

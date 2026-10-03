@@ -725,4 +725,12 @@ def render_ask(res: RagAskResult, *, chars: int = 400) -> str:
 # CLI: 打印索引状态
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    import sys
+
+    print(
+        "[rag] 调试后门——本入口只打印 index_status()，能力是 `research rag` 的真子集："
+        "看状态用 `research rag status`（加 `--json` 得到与下方同形的输出），"
+        "建索引 / 检索 / 问答分别是 `rag index` / `rag search` / `rag ask`。",
+        file=sys.stderr,
+    )
     print(json.dumps(index_status(), ensure_ascii=False, indent=2))

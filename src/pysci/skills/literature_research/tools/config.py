@@ -173,6 +173,28 @@ class Settings:
         """
         return bool(self.siliconflow_api_key)
 
+    @property
+    def scimago_index_path(self) -> Path:
+        """SCImago SJR 本地索引（紧凑 JSON）的路径。
+
+        落在模块根的 ``data/`` 下而非 ``cache/`` 下：它不是可随手重取的易失产物，而是
+        用户手工下载官方 CSV 后构建、需要随仓库版本化的**数据资产**（约 1.4 MB）。
+        ``cache/*`` 的 .gitignore 规则因此不会碰到它。
+
+        做成 property 而非 dataclass 字段，是为了让它始终跟随 ``module_dir``——测试可以用
+        ``dataclasses.replace(settings, module_dir=tmp_path)`` 整体重定向，无需再改一处。
+        """
+        return self.module_dir / "data" / "scimago_index.json"
+
+    @property
+    def scimago_ready(self) -> bool:
+        """SCImago 分区索引是否已构建。
+
+        未构建时 ``scimago_quartile`` 静默留空（不变量 1），不报错、不阻塞；构建方式是
+        ``research journal build-scimago --csv <官方 CSV 路径>``。
+        """
+        return self.scimago_index_path.exists()
+
     def summary(self) -> str:
         """人类可读的配置摘要，用于日志。敏感字段做脱敏。"""
 
@@ -201,6 +223,9 @@ class Settings:
             f"zotero_web_ready    : {self.zotero_web_ready}",
             "",
             f"elsevier            : {mask(self.elsevier_api_key)}",
+            "",
+            f"scimago_index       : {self.scimago_index_path}",
+            f"scimago_ready       : {self.scimago_ready}",
             "",
             f"pdf_extract_backend : {self.pdf_extract_backend}",
             f"mineru_token        : {mask(self.mineru_token)}",
@@ -402,4 +427,9 @@ def http_session(retries: int | None = None, *, retry_on_status: bool = True) ->
 # CLI: 打印当前配置摘要
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    print(
+        "[config] 调试后门——等价能力请用 `research doctor`"
+        "（它还额外探测各数据源的凭据与可达性，并给出修复建议）。",
+        file=sys.stderr,
+    )
     print(settings.summary())

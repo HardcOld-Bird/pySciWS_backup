@@ -16,12 +16,17 @@
   ``cache/.autoclean_state.json`` 记录上次清理时间；未到期时仅一次小 JSON 读，开销可忽略。
 - 所有清理/淘汰都提供 ``dry_run``，先列后删。
 
-本模块只依赖 :mod:`config` 与标准库；各 client 通过 ``from .cache_manager import bump_mtime``
-在命中处回touch，不构成循环导入。
+本模块只依赖 :mod:`config`、:mod:`notes`（frontmatter 解析与尺寸格式化）与标准库；
+各 client 从它导入 :func:`bump_mtime` 与 Tier B 读写三件套（:func:`cache_key` /
+:func:`read_cache` / :func:`write_cache`），不构成循环导入。那三个函数过去寄居在
+:mod:`openalex_client` 里，却以**私有名**被 ``arxiv_client`` 与 ``citation_verify`` 跳模块
+导入；提级到此是因为它们治理的正是本模块定义的那一层（Tier B），而“谁是缓存的
+主人”应当只有一个答案。
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -32,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import settings
+from .notes import fmt_size, load_frontmatter
 
 # ---------------------------------------------------------------------------
 # 分层定义
@@ -63,6 +69,70 @@ def bump_mtime(path: Path | str) -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# Tier B（api_responses）读写三件套
+# ---------------------------------------------------------------------------
+#: Tier B 缓存的默认有效期（7 天）。API 响应是廉价可重取的元数据，但也不宜每次重取；
+#: arXiv 搜索用的是一天（见 ``arxiv_client.search_arxiv``），因为 arXiv 每日更新。
+API_CACHE_MAX_AGE_SECONDS: int = 86400 * 7
+
+
+def cache_key(
+    namespace: str, params: dict[str, Any] | None = None, *, prefix: str = ""
+) -> Path:
+    """把 ``(namespace, params)`` 映射为 ``cache/api_responses/`` 下稳定的文件名。
+
+    ``namespace`` 是被缓存请求的标识——通常是完整 URL，也可以是个短名（``search``）。
+    它同时进 SHA1（决定唯一性）与文件名的可读段（决定可 grep 性），因此**改动它会
+    让既有缓存全部失效**：这是可接受的，Tier B 本就是可重建的易失层。
+
+    ``prefix`` 标明数据源（``openalex`` / ``crossref`` / ``arxiv``），只影响文件名可读性。
+    三个源共用 ``api_responses/`` 一个目录，没有前缀就无法从文件名判断某条缓存是谁的
+    ——排查「这条脏数据从哪来」时全靠它。（旧实现把前缀硬编码为 ``openalex_``，于是
+    arXiv 的搜索缓存被命名成 ``openalex_arxiv_search_*.json``——一个说谎的文件名。）
+
+    ``params`` 用 ``sort_keys=True`` 序列化：同一组参数无论插入顺序如何都得到同一个
+    文件名，否则 ``{"a":1,"b":2}`` 与 ``{"b":2,"a":1}`` 会存成两份，命中率白白减半。
+    """
+    raw = namespace + "|" + json.dumps(params or {}, sort_keys=True, ensure_ascii=False)
+    h = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", namespace.split("?")[0])[-60:]
+    name = f"{prefix}_{slug}_{h}.json" if prefix else f"{slug}_{h}.json"
+    return settings.cache_api_responses / name
+
+
+def read_cache(
+    path: Path, *, max_age_seconds: int = API_CACHE_MAX_AGE_SECONDS
+) -> Any | None:
+    """读 Tier B 缓存；不存在 / 过期 / 损坏一律返回 ``None``（不变量 1：降级静默）。
+
+    命中会 :func:`bump_mtime` touch 一下：Windows 上 atime 不可靠，故用 mtime 近似
+    「最近访问」，使 ``cache prune`` 的 LRU 排序准确。
+
+    JSON 解析失败也返回 ``None`` 而不是抛：半写入的缓存文件（上次进程被杀）应当被
+    当作未命中并重新取回，而不是让整个命令失败。
+    """
+    if not path.exists():
+        return None
+    age = time.time() - path.stat().st_mtime
+    if age > max_age_seconds:
+        return None
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+    bump_mtime(path)
+    return data
+
+
+def write_cache(path: Path, payload: Any) -> None:
+    """写 Tier B 缓存（JSON、UTF-8、``indent=2`` 以便人工排查）。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
 def _dir_files(d: Path) -> list[Path]:
     """递归列出目录下所有文件；目录不存在则返回空表。"""
     if not d.exists():
@@ -78,13 +148,9 @@ def _size_and_mtime(p: Path) -> tuple[int, float]:
         return 0, 0.0
 
 
-def _fmt_size(nbytes: float) -> str:
-    n = float(nbytes)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if n < 1024 or unit == "TB":
-            return f"{int(n)} B" if unit == "B" else f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} TB"
+#: 字节数格式化的实现已提到 :func:`notes.fmt_size`（与 ``research.py`` 共用一份）；
+#: 保留本模块内的私有别名，既有调用方无需改动。
+_fmt_size = fmt_size
 
 
 def _fmt_age(ts: float) -> str:
@@ -101,30 +167,27 @@ def _fmt_age(ts: float) -> str:
 # ---------------------------------------------------------------------------
 # 被笔记引用的文件（prune --keep-referenced 时保护）
 # ---------------------------------------------------------------------------
-def _frontmatter_values(text: str, keys: set[str]) -> list[str]:
-    """从 markdown 的 YAML frontmatter 尽力提取指定 key 的标量值（不依赖 PyYAML）。"""
-    if not text.startswith("---"):
-        return []
-    end = text.find("\n---", 3)
-    fm = text[3:end] if end != -1 else text[3:]
-    out: list[str] = []
-    for line in fm.splitlines():
-        m = re.match(r"\s*([A-Za-z_]\w*)\s*:\s*(.*)$", line)
-        if not m:
-            continue
-        k, v = m.group(1), m.group(2)
-        if k in keys:
-            v = v.split(" #", 1)[0].strip().strip('"').strip("'")
-            if v:
-                out.append(v)
-    return out
+#: 被视为「笔记引用产物」的 frontmatter 字段。
+#:
+#: ``extracted_html_path`` 必须与 ``extracted_md_path`` 并列收录：``read`` 拿不到 PDF 时
+#: 只记前者（网页正文兜底，方案 H5），若不在本表里，那些笔记引用的
+#: ``cache/html_fulltext/`` 产物就得不到 ``prune --keep-referenced`` 的保护。
+REFERENCED_FIELDS: tuple[str, ...] = (
+    "local_pdf_path",
+    "extracted_md_path",
+    "extracted_html_path",
+)
 
 
 def referenced_paths() -> set[Path]:
     """收集所有 ``papers/*.md`` frontmatter 引用的本地文件绝对路径。
 
-    取 ``local_pdf_path`` 与 ``extracted_md_path`` 两个字段；同时收录其 resolve 形态，
+    取 :data:`REFERENCED_FIELDS` 里的字段；同时收录其 resolve 形态，
     便于与实际文件比对。prune 的 ``keep_referenced`` 用它避免误删仍在用的产物。
+
+    解析走 :func:`notes.load_frontmatter`（``yaml.safe_load``）。**不要**改回手写的
+    逐行正则：旧实现会把带引号的值连同引号一起返回，也无法处理 flow-style 笔记，
+    导致本函数对现存笔记返回空集、``--keep-referenced`` 保护完全失效。
     """
     papers = settings.module_dir / "papers"
     refs: set[Path] = set()
@@ -135,8 +198,12 @@ def referenced_paths() -> set[Path]:
             text = note.read_text(encoding="utf-8")
         except OSError:
             continue
-        for raw in _frontmatter_values(text, {"local_pdf_path", "extracted_md_path"}):
-            p = Path(raw)
+        fm = load_frontmatter(text)
+        for key in REFERENCED_FIELDS:
+            raw = fm.get(key)
+            if not isinstance(raw, str) or not raw.strip():
+                continue
+            p = Path(raw.strip())
             if not p.is_absolute():
                 p = settings.project_root / p
             refs.add(p)
@@ -438,4 +505,11 @@ def prune_tier_a(
 # CLI（便于独立调试）
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    import sys
+
+    print(
+        "[cache_manager] 调试后门——等价能力请用 `research cache stats`"
+        "（治理动作另有 `cache clean` 清 Tier B、`cache prune` 淘汰 Tier A）。",
+        file=sys.stderr,
+    )
     print(format_stats(stats()))

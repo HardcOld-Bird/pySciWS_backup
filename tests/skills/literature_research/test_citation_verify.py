@@ -420,7 +420,7 @@ def test_crossref_cache_path_prefixed():
 
 def test_crossref_message_cache_hit_skips_http(monkeypatch):
     monkeypatch.setattr(
-        oa, "_read_cache", lambda path, **kw: {"message": {"DOI": "10.1/x"}}
+        cv, "read_cache", lambda path, **kw: {"message": {"DOI": "10.1/x"}}
     )
 
     def _no_http(*a, **k):
@@ -434,10 +434,8 @@ def test_crossref_message_cache_hit_skips_http(monkeypatch):
 def test_crossref_message_http_success_writes_cache(monkeypatch):
     captured: dict = {}
     written: dict = {}
-    monkeypatch.setattr(oa, "_read_cache", lambda path, **kw: None)
-    monkeypatch.setattr(
-        oa, "_write_cache", lambda path, data: written.update(data=data)
-    )
+    monkeypatch.setattr(cv, "read_cache", lambda path, **kw: None)
+    monkeypatch.setattr(cv, "write_cache", lambda path, data: written.update(data=data))
     _patch_settings(monkeypatch, openalex_email="me@example.org", http_timeout=7)
     payload = {"status": "ok", "message": {"DOI": "10.1/x", "title": ["T"]}}
     monkeypatch.setattr(
@@ -452,8 +450,8 @@ def test_crossref_message_http_success_writes_cache(monkeypatch):
 
 def test_crossref_message_no_mailto_when_unset(monkeypatch):
     captured: dict = {}
-    monkeypatch.setattr(oa, "_read_cache", lambda path, **kw: None)
-    monkeypatch.setattr(oa, "_write_cache", lambda path, data: None)
+    monkeypatch.setattr(cv, "read_cache", lambda path, **kw: None)
+    monkeypatch.setattr(cv, "write_cache", lambda path, data: None)
     _patch_settings(monkeypatch, openalex_email=None)
     monkeypatch.setattr(
         cv,
@@ -472,10 +470,10 @@ def test_fetch_crossref_by_doi(monkeypatch):
 
 def test_crossref_message_404_returns_none(monkeypatch):
     """真实 Crossref 对未知 DOI 返回 404 → _crossref_message 归为 None（查无），不抛异常。"""
-    monkeypatch.setattr(oa, "_read_cache", lambda path, **kw: None)
+    monkeypatch.setattr(cv, "read_cache", lambda path, **kw: None)
     wrote = {"called": False}
     monkeypatch.setattr(
-        oa, "_write_cache", lambda path, data: wrote.__setitem__("called", True)
+        cv, "write_cache", lambda path, data: wrote.__setitem__("called", True)
     )
     monkeypatch.setattr(
         cv,
@@ -488,8 +486,8 @@ def test_crossref_message_404_returns_none(monkeypatch):
 
 def test_fetch_crossref_404_via_http_is_not_found(monkeypatch):
     """端到端：Crossref HTTP 404 → reachable=True, found=False（非「不可达」）。"""
-    monkeypatch.setattr(oa, "_read_cache", lambda path, **kw: None)
-    monkeypatch.setattr(oa, "_write_cache", lambda path, data: None)
+    monkeypatch.setattr(cv, "read_cache", lambda path, **kw: None)
+    monkeypatch.setattr(cv, "write_cache", lambda path, data: None)
     monkeypatch.setattr(
         cv,
         "http_session",
@@ -819,8 +817,17 @@ def test_parse_frontmatter_scalars():
     assert fm["doi"] == "10.1103/PhysRevLett.121.124501"
     assert fm["year"] == 2018  # 纯数字 → int
     assert fm["first_author_last_name"] == "Zhu"
-    # 列表项（以 - 开头）被跳过，不进标量结果
-    assert "  - Zheng Zhu" not in fm
+
+
+def test_parse_frontmatter_scalars_reads_block_style_lists():
+    """回归：旧的手写解析器跳过所有 ``-`` 开头行，``authors`` 会全部丢失。
+
+    现在 ``_parse_frontmatter_scalars`` 已改为 :func:`notes.load_frontmatter` 的别名，
+    列表字段能正常读出（这也是 ``cache_manager.referenced_paths()`` 能重新生效的前提）。
+    """
+    fm = cv._parse_frontmatter_scalars(NOTE_MD)
+    assert fm["authors"] == ["Zheng Zhu", "Xiangang Wan"]
+    assert "  - Zheng Zhu" not in fm  # 列表项不再被当成键
 
 
 def test_parse_frontmatter_scalars_no_frontmatter():
@@ -1076,13 +1083,13 @@ def test_cmd_add_gate_blocks_write(monkeypatch, capsys):
     )
     called = {"zotero": False, "write": False}
     monkeypatch.setattr(research.zotero_cli, "available", lambda: False)
-    monkeypatch.setattr(
-        research,
-        "_write_note",
-        lambda fm, **kw: (
-            called.__setitem__("write", True) or research.PAPERS_DIR / "x.md"
-        ),
-    )
+
+    def _fake_merge_note(fm, **kw):
+        # 签名跟 research._merge_note 一致：返回 (path, action, changed)
+        called["write"] = True
+        return research.PAPERS_DIR / "x.md", research.NOTE_CREATED, []
+
+    monkeypatch.setattr(research, "_merge_note", _fake_merge_note)
     args = argparse.Namespace(
         doi="10.1/x", tags=None, overwrite=False, verify=True, force=False
     )

@@ -10,42 +10,47 @@ authors:
   - Yong Li
   - Jie Zhu
 first_author_last_name: gu
-corresponding_author: ""
+corresponding_author: ''
 year: 2021
-publication_date: "2021-01-14"
+publication_date: '2021-01-14'
 journal: Physical Review Applied
+journal_ref: ''
 publisher: American Physical Society
-volume: "15"
-issue: "1"
-pages: ""
-doi: "10.1103/physrevapplied.15.014025"
-arxiv_id: ""
+volume: '15'
+issue: '1'
+pages: ''
+doi: 10.1103/physrevapplied.15.014025
+arxiv_id: ''
 openalex_id: W3119112366
-wos_id: ""
+wos_id: ''
 zotero_key: CV3HFVR2
 zotero_uri: https://zotero.org/users/21618028/items/CV3HFVR2
-local_pdf_path: ""
+local_pdf_path: ''
+extracted_md_path: ''
 oa_url: http://link.aps.org/pdf/10.1103/PhysRevApplied.15.014025
 oa_status: bronze
 cited_by_count: 24
 cited_by_count_normalized: 94
 jif: 4.08
 jif_5yr: null
-jcr_quartile: ""
-scimago_quartile: ""
+jcr_quartile: ''
+scimago_quartile: ''
 citescore: null
 esi_highly_cited: false
 esi_hot_paper: false
 journal_h_index: 137
+journal_tier: ''
+journal_tier_basis: []
+listed_in: []
 topics: []
 methods: []
 systems: []
 related_to_my_work: null
-related_to_my_work_reason: ""
+related_to_my_work_reason: ''
 status: unread
 my_rating: null
-added_date: "2026-09-21"
-last_reviewed: ""
+added_date: '2026-09-21'
+last_reviewed: ''
 review_count: 0
 keywords_auto:
   - physics

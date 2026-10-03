@@ -2,6 +2,8 @@
 
 包含以下模块：
 - config: 统一配置加载（读取项目根 .env）
+- notes: paper-note frontmatter 的读写/规范化/合并（叶子模块，只依赖 config + PyYAML）
+- journal_metrics: 期刊质量指标的免费替代层（SCImago SJR 本地索引，按 ISSN 精确匹配分区）
 - openalex_client: OpenAlex 学术元数据检索（主源）
 - arxiv_client: arXiv 预印本检索
 - wos_client: Web of Science Starter API（Times Cited + 收录号 wos_id + JCR 链接）
@@ -12,7 +14,8 @@
 - local_ingest: 批量归档本地 PDF 文件夹（复制 → 抽取 → manifest 台账）
 - rag: PaperQA2 语义检索本地文献库全文（硅基流动 embedding 索引+检索为主；可选 LLM 综述，失败降级）
 - cache_manager: 两层缓存治理（stats/clean/prune + LRU）
-- research: 统一 CLI 门面（doctor/search/read/get/add/citecheck/library/rag/index/ingest/cache）
+- research: 统一 CLI 门面，14 个子命令（doctor / search / read / get / add / citecheck /
+  citegraph / library / journal / review / rag / index / cache / ingest）
 
 设计原则：
 1. 所有凭据从项目根 .env 加载，代码中绝不硬编码

@@ -28,16 +28,22 @@ OpenAlex 是完全免费、CC0 协议的开放学术数据库（https://openalex
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from .cache_manager import bump_mtime
+from . import journal_metrics
+from .cache_manager import (
+    API_CACHE_MAX_AGE_SECONDS,
+    cache_key,
+    read_cache,
+    write_cache,
+)
 from .config import http_session, settings
+from .notes import derive_journal_tier, normalize_last_name
 
 # ---------------------------------------------------------------------------
 # 常量
@@ -46,6 +52,12 @@ OPENALEX_BASE = "https://api.openalex.org"
 
 # 用户领域的常见 OpenAlex concept ID（可扩充）
 # 参考: https://api.openalex.org/concepts?search=...
+#
+# 状态：预留，当前无调用方（全仓库仅此一处定义，无测试）。
+# 9 个键里 8 个是空串，唯一有值的 "non-hermitian" 自己也注着「需要核实」。保留的理由：
+# OpenAlex 按 concept 过滤比 keyword 检索准得多，真要收窄检索时这张表就是落点；而那些
+# 空串**不是没填完的坑**，它们记录的是「OpenAlex 没有直接对应这个主题的 concept」（见
+# "exceptional-point" 那行的注释），删掉就丢了这条已查证过的结论，下次得重新查一遍。
 KNOWN_CONCEPTS: dict[str, str] = {
     # 非厄米 / EP
     "non-hermitian": "C121616955",  # 需要核实，占位
@@ -83,39 +95,33 @@ KNOWN_VENUES_ISSN: dict[str, str] = {
 
 
 # ---------------------------------------------------------------------------
-# 缓存工具
+# 缓存工具（delegating shim）
 # ---------------------------------------------------------------------------
+# 下面三个函数已提级为 :mod:`cache_manager` 的公开 API（``cache_key`` / ``read_cache`` /
+# ``write_cache``）。保留这些**私有名**作为一行委托，是为了不扰动本模块内部的调用点
+# 与现有测试的 patch 目标（``monkeypatch.setattr(oa, "_read_cache", ...)``）；而跳模块的
+# 调用方（``arxiv_client`` / ``citation_verify``）已改为直接用公开 API，不再以私有名
+# 深入别的模块。新增代码请直接用 :mod:`cache_manager` 的名字。
+
+
 def _cache_key(url: str, params: dict[str, Any] | None = None) -> Path:
-    """根据 URL + params 生成稳定的缓存文件名。"""
-    raw = url + "|" + json.dumps(params or {}, sort_keys=True, ensure_ascii=False)
-    h = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
-    # 从 URL 提取一个可读的 slug
-    slug = re.sub(r"[^a-zA-Z0-9]+", "_", url.split("?")[0])[-60:]
-    return settings.cache_api_responses / f"openalex_{slug}_{h}.json"
+    """根据 URL + params 生成稳定的缓存文件名（委托 :func:`cache_manager.cache_key`）。"""
+    return cache_key(url, params, prefix="openalex")
 
 
-def _read_cache(path: Path, max_age_seconds: int = 86400 * 7) -> Any | None:
-    """读取缓存；若不存在或过期则返回 None。默认 7 天有效期。命中会 touch 更新 mtime（供 LRU）。"""
-    if not path.exists():
-        return None
-    import time
+def _read_cache(
+    path: Path, max_age_seconds: int = API_CACHE_MAX_AGE_SECONDS
+) -> Any | None:
+    """读缓存；不存在或过期则返回 None（委托 :func:`cache_manager.read_cache`）。
 
-    age = time.time() - path.stat().st_mtime
-    if age > max_age_seconds:
-        return None
-    try:
-        with path.open(encoding="utf-8") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
-    bump_mtime(path)
-    return data
+    签名故意**不**做成 keyword-only：与提级前的形态一致，既有调用点两种写法都能用。
+    """
+    return read_cache(path, max_age_seconds=max_age_seconds)
 
 
 def _write_cache(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    """写缓存（委托 :func:`cache_manager.write_cache`）。"""
+    write_cache(path, data)
 
 
 # ---------------------------------------------------------------------------
@@ -177,11 +183,30 @@ def _get(
 # ---------------------------------------------------------------------------
 # Work（论文）相关
 # ---------------------------------------------------------------------------
-def _extract_work_summary(w: dict[str, Any]) -> dict[str, Any]:
-    """把 OpenAlex 原始 work JSON 精简为本项目使用的统一结构。"""
+def _extract_work_summary(w: dict[str, Any], *, max_refs: int = 100) -> dict[str, Any]:
+    """把 OpenAlex 原始 work JSON 精简为本项目使用的统一结构。
+
+    ``max_refs`` 控制 ``referenced_works`` 保留的条数（``referenced_works_count`` 始终是
+    **未截断**的真实总数）。默认 100 而非旧值 20：滚雪球（``research citegraph
+    --direction backward``）要拿这些 id 去批量取回被引工作，而一篇 PRL 级论文的参考
+    文献表常有 40-60 条，20 条上限会静默丢掉一半以上的引文网络。``_raw`` 本就保留了
+    完整原始 JSON，因此提高这个上限**不增加缓存体积**，只多占一点内存里的短字符串。
+
+    同时就地派生 ``listed_in`` / ``journal_tier`` / ``journal_tier_basis``：OpenAlex 把
+    ``primary_location.source`` **内联**在 work 响应里，其中就带专家评议名单，因此
+    这一步是**零额外请求**的（实测 2024 Nature Physics 的内联 source 给出
+    ``cwts-core,jufo-3,ki-jl-2,norway-2``，与单独 ``GET /sources/S…`` 的结果一致）。
+    于是 ``search`` / ``citegraph`` / ``get`` 这三条**不查 source** 的路径也能带上期刊
+    档次——否则展示层的 tier 尾注会恒空，等于没做。
+    """
+    # 负数会让切片变成「去掉末尾 N 条」而非「不保留」，故先归一。
+    max_refs = 100 if max_refs is None else max(0, int(max_refs))
     primary_loc = w.get("primary_location") or {}
     source = primary_loc.get("source") or {}
     best_oa = w.get("best_oa_location") or {}
+
+    listed_in = source.get("listed_in") or []
+    journal_tier, journal_tier_basis = derive_journal_tier(listed_in)
 
     authors = []
     for a in w.get("authorships", []) or []:
@@ -237,14 +262,24 @@ def _extract_work_summary(w: dict[str, Any]) -> dict[str, Any]:
         "journal_openalex_id": (source.get("id") or "").replace(
             "https://openalex.org/", ""
         ),
+        "journal_issn": source.get("issn") or [],
+        "listed_in": listed_in,
+        "journal_tier": journal_tier,
+        "journal_tier_basis": journal_tier_basis,
+        # 两个键取自**同一个** source 对象（函数开头已安全地取成 ``{}``）。原实现绕过它
+        # 重新挖一遍原始 JSON，而 ``.get("source", {})`` 在 ``primary_location`` 存在但
+        # ``source`` 为 **null** 时返回的是 None 而不是 ``{}``（键存在，默认值不生效），
+        # 于是紧跟着的 ``.get("publisher")`` 抛 AttributeError。无期刊的纯预印本正是
+        # 这种形态（``"primary_location": {"source": null}``），也就是说这条崩溃路径
+        # 会在最普通的预印本上触发，而不是在罕见畸形数据上。
         "publisher": source.get("host_organization_name", "")
-        or (w.get("primary_location") or {}).get("source", {}).get("publisher", ""),
+        or source.get("publisher", ""),
         "volume": (w.get("biblio") or {}).get("volume", ""),
         "issue": (w.get("biblio") or {}).get("issue", ""),
         "first_page": (w.get("biblio") or {}).get("first_page", ""),
         "last_page": (w.get("biblio") or {}).get("last_page", ""),
         "authors": authors,
-        "first_author_last_name": _guess_last_name(authors[0]["name"])
+        "first_author_last_name": normalize_last_name(authors[0]["name"])
         if authors
         else "",
         "abstract": reconstruct_abstract(w.get("abstract_inverted_index")),
@@ -267,7 +302,7 @@ def _extract_work_summary(w: dict[str, Any]) -> dict[str, Any]:
         "referenced_works_count": len(w.get("referenced_works") or []),
         "referenced_works": [
             x.replace("https://openalex.org/", "")
-            for x in (w.get("referenced_works") or [])[:20]
+            for x in (w.get("referenced_works") or [])[:max_refs]
         ],
         "related_works": [
             x.replace("https://openalex.org/", "")
@@ -276,19 +311,6 @@ def _extract_work_summary(w: dict[str, Any]) -> dict[str, Any]:
         "counts_by_year": w.get("counts_by_year", []),
         "_raw": w,  # 保留原始 JSON，供特殊需求
     }
-
-
-def _guess_last_name(full_name: str) -> str:
-    """从 'First M. Last' 形式猜测姓氏（末段），做基础清理。"""
-    if not full_name:
-        return ""
-    parts = re.split(r"\s+", full_name.strip())
-    if len(parts) == 1:
-        return parts[0].lower()
-    last = parts[-1]
-    # 去声调、去非字母
-    last = re.sub(r"[^a-zA-Z]", "", last)
-    return last.lower() or parts[-1].lower()
 
 
 def search_works(
@@ -401,9 +423,146 @@ def get_work(
     try:
         data = _get(url, use_cache=use_cache)
     except Exception as e:  # 404 等
-        print(f"[openalex] get_work failed for {doi or openalex_id}: {e}")
+        # 必须是 stderr：``research get --json`` / ``citegraph --json`` 把 JSON 写在
+        # stdout，一行提示混进去会让调用方的 ``json.loads(stdout)`` 直接失败。
+        print(
+            f"[openalex] get_work failed for {doi or openalex_id}: {e}",
+            file=sys.stderr,
+        )
         return None
     return _extract_work_summary(data)
+
+
+# ---------------------------------------------------------------------------
+# 引文图谱（滚雪球）：批量取回 + 前向引用
+# ---------------------------------------------------------------------------
+#: 合法的 OpenAlex work id 形态。只接受这一种形态是有意的：``works_by_ids`` 把 id 用
+#: ``|`` 拼进 filter，一个畸形 id（比如误传的 DOI）会让**整批**请求返回 400，而不是只
+#: 丢掉它自己。
+_OPENALEX_ID_RE = re.compile(r"^W\d{5,}$")
+
+#: OpenAlex 对单个 filter 值里 ``|`` 分隔项数量的上限（超过会 400）。
+MAX_IDS_PER_REQUEST = 50
+
+
+def _norm_openalex_id(raw: Any) -> str:
+    """把 ``https://openalex.org/W123`` / ``w123`` / ``123`` 统一成 ``W123``。
+
+    归一化后仍不匹配 :data:`_OPENALEX_ID_RE` 的一律返回空串，由调用方跳过。
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r"^https?://(?:www\.)?openalex\.org/", "", s).strip("/").upper()
+    if not s.startswith("W"):
+        s = f"W{s}"
+    return s if _OPENALEX_ID_RE.match(s) else ""
+
+
+def works_by_ids(
+    ids: Iterable[str], *, batch_size: int = MAX_IDS_PER_REQUEST, use_cache: bool = True
+) -> list[dict[str, Any]]:
+    """按 OpenAlex id 批量取回 work_summary（滚雪球的 **backward** 方向）。
+
+    用 ``filter=openalex_id:W1|W2|...`` 一次取多篇，而不是逐篇 :func:`get_work`：50 条
+    参考文献逐篇取是 50 次请求（无 key 时 OpenAlex 每天只给 100 credits），批量取是 1 次。
+    ``batch_size`` 硬上限 :data:`MAX_IDS_PER_REQUEST`。
+
+    降级与契约（调用方**不得**假定一一对应）：
+
+    - 非法/重复 id 直接跳过（不污染整批请求）；
+    - 某一批网络失败只跳过该批并留一行 stderr，其余批照常返回；
+    - OpenAlex 查不到的 id（已合并/删除的记录）不会出现在结果里，
+      因此**返回列表长度通常小于输入**。
+    """
+    clean: list[str] = []
+    seen: set[str] = set()
+    for raw in ids or []:
+        oid = _norm_openalex_id(raw)
+        if oid and oid not in seen:
+            seen.add(oid)
+            clean.append(oid)
+    if not clean:
+        return []
+
+    size = min(max(1, int(batch_size)), MAX_IDS_PER_REQUEST)
+    out: list[dict[str, Any]] = []
+    for i in range(0, len(clean), size):
+        chunk = clean[i : i + size]
+        params: dict[str, Any] = {
+            "filter": "openalex_id:" + "|".join(chunk),
+            "per-page": len(chunk),
+        }
+        try:
+            data = _get(f"{OPENALEX_BASE}/works", params=params, use_cache=use_cache)
+        except Exception as e:  # 一批失败不该拖垮整个图谱
+            print(
+                f"[openalex] works_by_ids 第 {i // size + 1} 批（{len(chunk)} 个 id）失败："
+                f"{type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
+            continue
+        out.extend(_extract_work_summary(w) for w in (data.get("results") or []))
+    return out
+
+
+def works_citing(
+    openalex_id: str,
+    *,
+    per_page: int = 25,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    sort: str = "cited_by_count:desc",
+    use_cache: bool = True,
+) -> dict[str, Any]:
+    """取「引用了某篇论文」的工作（滚雪球的 **forward** 方向）。
+
+    用 ``filter=cites:{id}``。返回结构与 :func:`search_works` 完全一致
+    （``{"results", "meta", "next_cursor"}``），因此上层能复用同一套去重 / 展示 / 落盘逻辑。
+
+    **不**按 ``type:article`` 过滤：前向引用里预印本、综述、书章都是真实信号，过滤掉会
+    让「这篇论文有没有被跟进」的判断失真（这正是 forward 方向要回答的问题）。
+
+    与降级路径不同，id 非法时**抛 ValueError**：这是调用方的输入错误而非环境故障，
+    静默返回空集会被误读成「无人引用这篇论文」。
+    """
+    oid = _norm_openalex_id(openalex_id)
+    if not oid:
+        raise ValueError(
+            "works_citing 需要 OpenAlex work id（形如 W2789790776）；"
+            "只有 DOI / arXiv id 时请先用 get_work 解析。"
+        )
+    filters = [f"cites:{oid}"]
+    if year_from:
+        filters.append(f"publication_year:>{year_from - 1}")
+    if year_to:
+        filters.append(f"publication_year:<{year_to + 1}")
+    params: dict[str, Any] = {
+        "filter": ",".join(filters),
+        "per-page": min(max(int(per_page), 1), 200),
+        "sort": sort,
+    }
+    try:
+        data = _get(f"{OPENALEX_BASE}/works", params=params, use_cache=use_cache)
+    except Exception as e:
+        print(
+            f"[openalex] works_citing({oid}) 失败：{type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
+        return {"results": [], "meta": {"count": 0}, "next_cursor": None}
+
+    meta = data.get("meta") or {}
+    return {
+        "results": [_extract_work_summary(w) for w in (data.get("results") or [])],
+        "meta": {
+            "count": meta.get("count", 0),
+            "db_response_time_ms": meta.get("db_response_time_ms"),
+            "page": meta.get("page"),
+            "per_page": meta.get("per_page"),
+            "next_cursor": meta.get("next_cursor"),
+        },
+        "next_cursor": meta.get("next_cursor"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -438,7 +597,7 @@ def get_source(
     try:
         data = _get(url, use_cache=use_cache)
     except Exception as e:
-        print(f"[openalex] get_source failed: {e}")
+        print(f"[openalex] get_source failed: {e}", file=sys.stderr)
         return None
     return _extract_source(data)
 
@@ -457,6 +616,11 @@ def _extract_source(s: dict[str, Any]) -> dict[str, Any]:
         "is_in_doaj": s.get("is_in_doaj", False),
         "apc_usd": (s.get("apc_usd") or 0),
         "country_code": s.get("country_code", ""),
+        # 专家评议名单（JUFO / Norway / KI-JL / CWTS / ERIH+ / MEDLINE …）。
+        # 旧实现把它整个丢掉，于是期刊档次只剩引用类指标可用——对声学这类低引用
+        # 密度领域严重失真（JASA 的 2yr_mean_citedness 只有 0.82，但 JUFO 判它顶级）。
+        # 零额外请求：本字段就在同一份 source 响应里。
+        "listed_in": s.get("listed_in") or [],
         # 关键指标
         "h_index": stats.get("h_index"),
         "works_count": stats.get("works_count"),
@@ -486,7 +650,21 @@ def work_to_note_frontmatter(w: dict[str, Any]) -> dict[str, Any]:
     )
 
     jif = source_stats.get("2yr_mean_citedness")
-    # OpenAlex 不提供官方 JCR 分区，此处留空由 wos_client 补齐
+    # OpenAlex 不提供官方 JCR 分区；jcr_quartile 留空待 WoS Journals API，
+    # scimago_quartile 由 journal_metrics 按 ISSN 查本地 SCImago 索引填。
+    # journal_tier 则由 listed_in 的专家评议名单派生（见 notes.derive_journal_tier）。
+    #
+    # 两处都**回落到 work dict 自带的内联字段**：``get_source`` 要一次额外请求，无 key
+    # 降级态（~100 credits/天）下很容易失败，而内联的 ``listed_in`` / ``journal_issn`` 总在。
+    # 不回落的话，降级态下笔记的档次与 SCImago 分区会静默全空——而这恰恰是最需要
+    # 免费指标层的时刻。tier 与 basis 在这里**重算**而不是直接取 ``w["journal_tier"]``：
+    # 纯函数重算的成本可忽略，但能保证 tier / basis / listed_in 三者永远自洽（不会一个
+    # 来自 source_stats、另一个来自内联而对不上）。
+    listed_in = source_stats.get("listed_in") or w.get("listed_in") or []
+    tier, tier_basis = derive_journal_tier(listed_in)
+    scimago_quartile = journal_metrics.quartile_for(
+        source_stats.get("issn") or w.get("journal_issn") or []
+    )
     return {
         "title": w.get("title", ""),
         "short_title": _make_short_title(w.get("title", "")),
@@ -494,8 +672,12 @@ def work_to_note_frontmatter(w: dict[str, Any]) -> dict[str, Any]:
         "first_author_last_name": w.get("first_author_last_name", ""),
         "corresponding_author": corresponding,
         "year": w.get("publication_year"),
-        "publication_date": w.get("publication_date", ""),
+        # 统一为 YYYY-MM-DD：OpenAlex 本就给 date-only，但防御性截断使它与 arXiv 的
+        # ISO-8601 带时分秒形态归一，同一篇论文不会因源不同而在笔记里写出两种值。
+        "publication_date": (w.get("publication_date") or "")[:10],
         "journal": w.get("journal", ""),
+        # OpenAlex 不提供引文串；本键只为与 arXiv 源的 frontmatter 契约对齐（见 arxiv_client）。
+        "journal_ref": "",
         "publisher": w.get("publisher", ""),
         "volume": w.get("volume", ""),
         "issue": w.get("issue", ""),
@@ -514,11 +696,16 @@ def work_to_note_frontmatter(w: dict[str, Any]) -> dict[str, Any]:
         "jif": round(jif, 2) if isinstance(jif, (int, float)) else None,
         "jif_5yr": None,
         "jcr_quartile": "",
-        "scimago_quartile": "",
+        "scimago_quartile": scimago_quartile,
         "citescore": None,
-        "esi_highly_cited": False,
-        "esi_hot_paper": False,
+        # None = **未知**；False = 「已确认不是」。ESI 高被引/热点名单只能由 WoS Journals
+        # API 给出（Starter API 不提供），写 False 等于在数据里断言一件我们无从知道的事。
+        "esi_highly_cited": None,
+        "esi_hot_paper": None,
         "journal_h_index": source_stats.get("h_index"),
+        "journal_tier": tier,
+        "journal_tier_basis": tier_basis,
+        "listed_in": listed_in,
         "topics": [],
         "methods": [],
         "systems": [],
@@ -568,6 +755,14 @@ def _make_short_title(title: str, max_words: int = 6) -> str:
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
+    print(
+        "[openalex_client] 调试后门——日常检索请走 "
+        "`research search '<query>' --source openalex`，取单篇用 `research get <id>`。"
+        "本入口只在单独排查 OpenAlex 本身时用（filter 语法、credits 配额与 429、"
+        "字段映射对不对）；它绕过 research 的 _row() 投影，故看到的字段与 CLI 不同。",
+        file=sys.stderr,
+    )
 
     parser = argparse.ArgumentParser(description="OpenAlex search CLI")
     parser.add_argument(

@@ -10,43 +10,48 @@ authors:
   - Yun Jing
   - Hong Chen
 first_author_last_name: zhu
-corresponding_author: ""
+corresponding_author: ''
 year: 2018
-publication_date: "2018-03-12T04:08:19Z"
+publication_date: '2018-03-12T04:08:19Z'
 journal: Phys. Rev. Lett. 121, 124501 (2018)
+journal_ref: ''
 publisher: arXiv
-volume: ""
-issue: ""
-pages: ""
-doi: "10.1103/PhysRevLett.121.124501"
-arxiv_id: "1803.04110"
-openalex_id: ""
-wos_id: ""
-zotero_key: ""
-zotero_uri: ""
+volume: ''
+issue: ''
+pages: ''
+doi: 10.1103/PhysRevLett.121.124501
+arxiv_id: '1803.04110'
+openalex_id: ''
+wos_id: ''
+zotero_key: ''
+zotero_uri: ''
 local_pdf_path: D:\XXXIIIGGG\projects\pySci\pySciWS\data\skills\literature_research\cache\pdfs\1803.04110.pdf
+extracted_md_path: ''
 oa_url: https://arxiv.org/pdf/1803.04110v1
 oa_status: green
 cited_by_count: null
 cited_by_count_normalized: null
 jif: null
 jif_5yr: null
-jcr_quartile: ""
-scimago_quartile: ""
+jcr_quartile: ''
+scimago_quartile: ''
 citescore: null
 esi_highly_cited: false
 esi_hot_paper: false
 journal_h_index: null
+journal_tier: ''
+journal_tier_basis: []
+listed_in: []
 topics:
   - cond-mat.mes-hall
 methods: []
 systems: []
 related_to_my_work: null
-related_to_my_work_reason: ""
+related_to_my_work_reason: ''
 status: unread
 my_rating: null
-added_date: "2026-09-21"
-last_reviewed: ""
+added_date: '2026-09-21'
+last_reviewed: ''
 review_count: 0
 keywords_auto:
   - cond-mat.mes-hall
