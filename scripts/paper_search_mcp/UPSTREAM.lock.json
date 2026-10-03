@@ -1,0 +1,140 @@
+{
+  "_README": [
+    "社区 paper-search-mcp 的上游来源、版本 pin 与 spike 结论清单（tracked，在本项目版本控制内）。",
+    "本文件是唯一事实来源（provenance）；setup_paper_search_mcp.ps1 是唯一安装/校验入口。",
+    "",
+    "定位：该 MCP 是本项目 literature_research 的【多源检索主力层】（对齐 comsol-simulation 的『社区 MCP 主力 +",
+    "  自研 CLI 差异化/兜底』架构）。它以 stdio 方式由 Qoder 经 uvx 拉起，【刻意不做 git submodule、不落本地仓库】——",
+    "  与 comsol MCP 不同，它是无状态 PyPI 包（无 RAG 索引、无 license、无 JVM、无常驻服务端），uvx 从 PyPI 直接跑即可，",
+    "  没有任何必须置于仓库内的运行时资产，故不需要 comsol 那套 repo_dir / 隔离 venv / commit-pin 机制。",
+    "可复现性由本清单记录的 upstream_version + 注册 args（可选 ==0.1.4 钉版本）保证。",
+    "升级流程：改本文件 upstream_version → 跑 setup_paper_search_mcp.ps1（-StatusOnly 做只读核对）→ 提交。"
+  ],
+
+  "package": "paper-search-mcp",
+  "role": "多源学术检索主力层（search_papers 多源并发+去重 / download_with_fallback OA 全文回退链）；差异化与兜底走 pysci-research CLI，见 .qoder/skills/literature-research/SKILL.md",
+
+  "upstream": {
+    "project": "openags/paper-search-mcp",
+    "canonical_url": "https://github.com/openags/paper-search-mcp",
+    "pypi_url": "https://pypi.org/project/paper-search-mcp/",
+    "license": "MIT",
+    "upstream_version": "0.1.4",
+    "upstream_version_uploaded": "2026-07-02",
+    "requires_python": ">=3.10",
+    "stars_approx": "2.4k",
+    "dependencies": [
+      "beautifulsoup4>=4.12.0",
+      "fastmcp",
+      "feedparser",
+      "httpx[socks]>=0.28.1",
+      "lxml>=4.9.0",
+      "mcp[cli]>=1.6.0",
+      "pypdf",
+      "requests"
+    ],
+    "dependencies_note": "全部为轻量纯 Python / HTTP 依赖，无 torch、无本地重依赖；与 comsol MCP 需独立 Python 3.12 venv 隔离形成鲜明对比——本包在任意 Python>=3.10 环境经 uvx 即可跑，不污染 pysci@3.13.15。",
+    "architecture": {
+      "layer1": "统一工具：search_papers（多源并发 + 去重）、download_with_fallback（OA-first 回退链：source-native → OpenAIRE/CORE/Europe PMC/PMC → Unpaywall DOI → 可选 Sci-Hub）",
+      "layer2": "平台连接器（~22 源）：arXiv / PubMed / bioRxiv / medRxiv / Google Scholar / IACR / Semantic Scholar / Crossref / OpenAlex / PMC / CORE / Europe PMC / dblp / OpenAIRE / CiteSeerX / DOAJ / BASE / Zenodo / HAL / SSRN / Unpaywall / 可选 Sci-Hub",
+      "output_contract": "所有源统一返回 Paper 类的标准化 dict（title/authors/abstract/doi/url/source/year 等）"
+    },
+    "not_implemented": {
+      "wos": "TODO 未实现（上游 README 的 Optional and Non-Core Integrations 里 Web of Science 仍为 [ ]）",
+      "scopus": "TODO 未实现（同上，Scopus 仍为 [ ]）",
+      "ieee_acm": "仅 skeleton：search 注册但 download/read 抛 NotImplementedError，需 PAPER_SEARCH_MCP_IEEE_API_KEY / _ACM_API_KEY 才激活",
+      "citation_graph": "TODO 未完成（Development Tasks 里 Citation graph & Paper relation context 仍为 [ ]）",
+      "consequence": "WoS/Scopus 未实现 → 【验证了本项目保留自研 wos_client 的决策】：WoS Starter API 是付费独家、已批准、事实上主力文献源，社区无等价覆盖。期刊指标（Times Cited / JCR URL）继续走 wos_client + search --enrich。"
+    },
+    "source_capability_notes": {
+      "arxiv": "search ✅ / download ✅ / read ✅（Open API，可靠）——是本项目 arXiv 兜底之外的主力下载源",
+      "openalex": "search ✅ / download ❌ / read ⚠️ info-only；且 v0.1.4 【无 OpenAlex API key 环境变量】→ 无 key 跑，受 2026-02 起 ~100 credits/天限制",
+      "crossref_dblp": "search ✅ / download ❌ / read ⚠️ info-only（元数据/发现用）",
+      "semantic_scholar": "search ✅ / download ✅(OA) / read ✅(OA)；无 key 匿名限速。本项目【刻意不用】：校园网不可达 + 阶段1a 已删 S2",
+      "oa_fulltext_sources": "arXiv / PMC / CORE / Europe PMC / bioRxiv / medRxiv / Zenodo / HAL / IACR 可下载 OA 全文；付费墙全文仍【只能走本项目 browser_fetch】（Playwright 机构 IP + 过 CF，社区无替代）"
+    }
+  },
+
+  "install": {
+    "installer": "scripts/paper_search_mcp/setup_paper_search_mcp.ps1",
+    "primary_method": "uvx（无状态、从 PyPI 直接跑，Qoder 每次拉起时解析）",
+    "primary_method_note": "注册 command=uvx / args=[paper-search-mcp]。无需 clone、无需 venv、无需常驻服务端。首次运行下载并缓存依赖，之后秒起。",
+    "alt_methods": [
+      "uv tool install paper-search-mcp（持久安装，额外提供 paper-search CLI；注册改 command=uv / args=[tool, run, paper-search-mcp]）",
+      "pip install paper-search-mcp（command=python / args=[-m, paper_search_mcp.server]）",
+      "npx -y @smithery/cli run @openags/paper-search-mcp（无本地 Python）",
+      "docker run --rm -i paper-search-mcp"
+    ],
+    "cli": {
+      "name": "paper-search",
+      "provided_by": "uv tool install paper-search-mcp",
+      "output": "search / download 出 JSON，read 出纯文本；与 MCP server 共用同一库",
+      "role_in_project": "非本项目主路径（本项目 CLI 兜底是 pysci-research）；仅作为脱离 Qoder 时手动核验 paper-search-mcp 是否可用的探针"
+    },
+    "env_config": {
+      "prefix": "PAPER_SEARCH_MCP_",
+      "legacy_no_prefix_supported": true,
+      "file_location": "~/.config/paper-search-mcp/.env（服务端启动自动加载；可用 PAPER_SEARCH_MCP_ENV_FILE 指定自定义路径）",
+      "required": {
+        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "Unpaywall 源必需（不设则该源整体跳过）；任意有效邮箱"
+      },
+      "recommended": {
+        "PAPER_SEARCH_MCP_CORE_API_KEY": "免费，提高 CORE 稳定性/限额"
+      },
+      "optional": [
+        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY（本项目刻意留空）",
+        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL",
+        "PAPER_SEARCH_MCP_DOAJ_API_KEY",
+        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN",
+        "PAPER_SEARCH_MCP_IEEE_API_KEY（skeleton）",
+        "PAPER_SEARCH_MCP_ACM_API_KEY（skeleton）"
+      ]
+    }
+  },
+
+  "registration": {
+    "config_file": "C:\\Users\\antar\\.qoder-cn\\shared_client\\mcp.json",
+    "config_file_mirror": "C:\\Users\\antar\\.qoder-cn\\shared_client\\extension\\local\\mcp.json",
+    "config_file_mirror_note": "Qoder 派生的镜像，多一个 userConfigMD5 键用于变更检测；不要手改。",
+    "server_name": "paper-search-mcp",
+    "active_entry": {
+      "command": "uvx",
+      "args": ["paper-search-mcp"],
+      "env": {
+        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "<your@email.com>",
+        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
+        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": "",
+        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL": "",
+        "PAPER_SEARCH_MCP_DOAJ_API_KEY": "",
+        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN": ""
+      }
+    },
+    "active_entry_note": "stdio（uvx）注册，与现有 arxiv-mcp-server 同模式；Qoder 负责拉起，无常驻服务端。args 默认不钉版本（能力优先）；要复现 spike 行为改 args=[paper-search-mcp==0.1.4]。",
+    "coexisting_servers": {
+      "arxiv-mcp-server": "【保留互补】user 源、19 工具、arxiv-only。深度 arXiv 工具（get_paper_latex / read_paper_section / semantic_search / citation_graph / watch_topic）是 paper-search-mcp 所无，故不下线。",
+      "comsol": "无关（另一技能）。"
+    },
+    "template": "scripts/paper_search_mcp/mcp_servers.template.json"
+  },
+
+  "verified": {
+    "verified_on": "2026-10-02",
+    "method": "spike（PyPI JSON 元数据 + 上游 README 契约核验），未在本机实跑 uvx（网络受限，注册后由 Qoder 首拉验证）",
+    "checks": {
+      "pypi_metadata": "PyPI JSON 确认 name=paper-search-mcp / version=0.1.4 / license=MIT / requires_python>=3.10 / requires_dist 如上；0.1.4 于 2026-07-02 上传，wheel+sdist 均在。",
+      "two_layer_contract": "上游 README 的 Features 段确认 Layer1 = search_papers + download_with_fallback，Layer2 = 平台连接器；download_with_fallback 回退链 source-native → OpenAIRE/CORE/EuropePMC/PMC → Unpaywall DOI → 可选 Sci-Hub。",
+      "wos_scopus_absent": "上游 TODO 的 Optional and Non-Core Integrations 里 Web of Science 与 Scopus 仍为 [ ]（未实现）→ 坐实保留 wos_client。",
+      "openalex_keyless": "Credential & API Key Requirements 表【无 OpenAlex 条目】→ v0.1.4 的 OpenAlex 连接器不带 API key，无 key 跑（受 ~100 credits/天限制）。本项目 openalex_client 已注入 OPENALEX_API_KEY（阶段0），配额敏感检索以 CLI 兜底为准。",
+      "uvx_registration_shape": "上游 Method 2 给出 {command:uvx, args:[paper-search-mcp], env:{PAPER_SEARCH_MCP_*}} 形状，与本项目 template 逐字段一致。",
+      "cli_contract": "上游 Claude Code (Skill) 段确认 uv tool install 提供 paper-search CLI（search/download→JSON，read→纯文本），共用同一库。",
+      "env_prefix": "所有 env 前缀 PAPER_SEARCH_MCP_（旧无前缀名兼容）；UNPAYWALL_EMAIL 为 Unpaywall 必需；配置可落 ~/.config/paper-search-mcp/.env。",
+      "arxiv_download_ok": "Platform Capability Matrix：arXiv search/download/read 全 ✅（Open API 可靠）→ 可作 OA 全文下载主力。",
+      "s2_deliberately_unused": "S2 连接器无 key 匿名限速、校园网可达性差；本项目阶段1a 已删 S2，故 template 刻意留空 SEMANTIC_SCHOLAR_API_KEY。"
+    },
+    "pending_live_checks": [
+      "注册后由 Qoder 首拉：确认 uvx 能解析并启动 stdio 服务端（首次下载依赖，需网络）。",
+      "经 CallMcpTool 实调 search_papers（如 arXiv 源）确认返回标准化 Paper dict。",
+      "实调 download_with_fallback 对一篇 OA 论文确认回退链落盘 PDF。"
+    ]
+  }
+}

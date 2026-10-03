@@ -1,0 +1,63 @@
+{
+  "_README": [
+    "模板参考：把社区 zotero-mcp（54yyyu/zotero-mcp，PyPI 名 zotero-mcp-server）注册进 Qoder，作为【文献库主力层】。",
+    "定位（对齐 comsol-simulation / paper-search-mcp 既有架构）：Agent 主路径经此 MCP 直接读写 Zotero 库——",
+    "  库检索（title/author/tag/collection/full text）、读全文与 PDF 页图（公式/图/表）、按 DOI/URL/ISBN/BibTeX/file 建条目、",
+    "  合并重复、Scite 引用计数与撤稿告警。本项目 research CLI 收缩为【差异化 + 兜底层】：",
+    "  frontmatter→BibTeX 规范化入库并回写 zotero_key/zotero_uri、笔记骨架、INDEX；这些委托 zotero-cli 实现同行为。",
+    "",
+    "用户级配置文件：C:/Users/antar/.qoder-cn/shared_client/mcp.json（与现有 arxiv / paper-search-mcp / comsol 同处）。",
+    "把下面 mcpServers 里的 zotero 条目复制进去即可（保留现有其它服务器）。",
+    "JSON 不支持注释：粘贴到 mcp.json 时请删除本 _README 与所有下划线开头的键。",
+    "同目录 extension/local/mcp.json 是 Qoder 派生的镜像（多一个 userConfigMD5 键），不要手改。",
+    "上游溯源、版本 pin 与 spike 结论见 scripts/zotero_mcp/UPSTREAM.lock.json（唯一事实来源）。",
+    "运行 setup_zotero_mcp.ps1 结尾会打印已解析好的 JSON，直接粘贴更省事。",
+    "",
+    "【与 paper-search-mcp 的关键差异：必须先持久安装，不能只靠 uvx】",
+    "  本项目 research add/library 与 document_writing refs 导出会 subprocess 调用 `zotero-cli --json`，",
+    "  故 zotero-cli 必须在 PATH 上。`uv tool install \"zotero-mcp-server[pdf,scite]\"` 会同时提供",
+    "  zotero-mcp（MCP 服务端）与 zotero-cli（命令行）两个 console script。setup 脚本默认走这条持久安装。",
+    "",
+    "【env 说明】",
+    "  - ZOTERO_LOCAL=\"true\"：本地模式（默认）——读直接来自 zotero.sqlite，写走运行中的 Zotero 10+。",
+    "    前提：Zotero 桌面版运行中，Settings→Advanced→勾选 'Allow other applications...'；",
+    "    写入前需一次性运行 `zotero-mcp authorize-local` 并选 'Always Allow'（Zotero 10+）。",
+    "  - ZOTERO_API_KEY / ZOTERO_LIBRARY_ID：Web 模式（旧版 Zotero 或无桌面版时）——留空即用本地模式。",
+    "    本项目 .env 的 ZOTERO_USER_ID 会被 zotero_cli 子进程翻译为 ZOTERO_LIBRARY_ID（Web 模式时）。",
+    "  - ZOTERO_LIBRARY_TYPE：user（默认）或 group。",
+    "  - ZOTERO_MCP_TOOLSETS：留空=标准工具集（默认约 38 工具）；设为 'scite' 可开启 Scite 引用/撤稿工具组",
+    "    （已随 scite extra 安装）。首次真机验证其确切语义（见 UPSTREAM.lock pending_live_checks）。",
+    "",
+    "【spike 关键结论，务必知悉】",
+    "  1) zotero-mcp 内部依赖 pyzotero，故 `zotero-cli --json` 的 search/get 条目多为 Zotero API 原形",
+    "     （{key, data:{itemType,title,creators,publicationTitle,extra,...}}）——本项目 refs_bridge 字段访问无需改动。",
+    "  2) 两种入口：MCP server（约 38 工具，~13.4k tokens/请求）供无 shell 的客户端；zotero-cli + agent skill（~98 tokens）",
+    "     供有 shell 的编码 Agent。Qoder 用 MCP 注册；本项目 CLI 用 zotero-cli subprocess。二者共用同一份配置。",
+    "  3) 建条目按 DOI/URL/ISBN/BibTeX/CSL-JSON/file（非任意 dict）→ 本项目 research add 走 `add bibtex`，",
+    "     由 zotero_cli.frontmatter_to_bibtex 把 frontmatter（含自定义增强字段折进 note）规范化为 BibTeX 后导入。",
+    "  4) semantic 检索 extra【本轮不装】：它拉入 sentence-transformers（torch，重）。已装 pdf（页图/公式，PyMuPDF）+ scite（撤稿）。",
+    "     需要语义检索时后续 `uv tool install \"zotero-mcp-server[semantic]\"` 或 `zotero-mcp update` 增量补装。"
+  ],
+  "mcpServers": {
+    "zotero": {
+      "_note": "持久安装变体（推荐）：先 `uv tool install \"zotero-mcp-server[pdf,scite]\"`（同时提供 zotero-mcp 与 zotero-cli），注册 command=zotero-mcp。setup 脚本默认打印此形状。",
+      "command": "zotero-mcp",
+      "env": {
+        "ZOTERO_LOCAL": "true",
+        "ZOTERO_API_KEY": "",
+        "ZOTERO_LIBRARY_ID": "",
+        "ZOTERO_LIBRARY_TYPE": "user",
+        "ZOTERO_MCP_TOOLSETS": ""
+      }
+    },
+    "zotero__uvx_variant": {
+      "_note": "【备选】uvx 无状态拉起 MCP 服务端（不依赖 PATH 上的 zotero-mcp）。但注意：本项目 research/refs 仍需 zotero-cli 在 PATH，故即便用此变体注册 MCP，也必须另行 `uv tool install \"zotero-mcp-server[pdf,scite]\"` 以提供 zotero-cli。",
+      "command": "uvx",
+      "args": ["--from", "zotero-mcp-server[pdf,scite]", "zotero-mcp"],
+      "env": {
+        "ZOTERO_LOCAL": "true",
+        "ZOTERO_MCP_TOOLSETS": ""
+      }
+    }
+  }
+}

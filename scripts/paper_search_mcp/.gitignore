@@ -1,0 +1,3 @@
+# setup_paper_search_mcp.ps1 的运行日志（若 tee 到文件）：
+# 记录了社区 MCP 的一次性安装/校验过程，无需入版本控制。
+*.log

@@ -1,0 +1,59 @@
+{
+  "_README": [
+    "模板参考：把社区 paper-search-mcp 注册进 Qoder，作为【多源检索主力层】。",
+    "定位（对齐 comsol-simulation 既有架构）：Agent 主路径经此 MCP 的 search_papers（多源并发+去重）",
+    "  与 download_with_fallback（OA 全文回退链）；本项目 research CLI 收缩为【兜底 + 差异化层】：",
+    "  规范化→frontmatter 契约、WoS 增强叠加、arXiv LaTeX 源码路径（download_source / extract_tex_from_source），",
+    "  这些是 paper-search-mcp 所无。仅当此 MCP 不可用时才退回 CLI 自带检索（openalex_client + arxiv_client）。",
+    "用户级配置文件：C:/Users/antar/.qoder-cn/shared_client/mcp.json（与现有 arxiv / comsol 同处）。",
+    "把下面 mcpServers 里的 paper-search-mcp 条目复制进去即可（保留现有其它服务器）。",
+    "JSON 不支持注释：粘贴到 mcp.json 时请删除本 _README 与所有下划线开头的键。",
+    "同目录 extension/local/mcp.json 是 Qoder 派生的镜像（多一个 userConfigMD5 键），不要手改。",
+    "上游溯源、版本 pin 与 spike 结论见 scripts/paper_search_mcp/UPSTREAM.lock.json（唯一事实来源）。",
+    "运行 setup_paper_search_mcp.ps1 结尾会打印已解析好的 JSON（把 <your@email.com> 换成真实邮箱），直接粘贴更省事。",
+    "",
+    "【env 全部可选，除 UNPAYWALL_EMAIL 外】所有变量前缀 PAPER_SEARCH_MCP_（旧无前缀名亦兼容）。",
+    "  - UNPAYWALL_EMAIL：Unpaywall 源【必需】（不设则该源整体跳过）；填任意有效邮箱即可。",
+    "  - CORE_API_KEY：推荐（免费），提高 CORE 稳定性/限额；不设时连接器退避重试并可无 key 回退。",
+    "  - SEMANTIC_SCHOLAR_API_KEY：【本项目刻意留空】——校园网不可达 S2 且本项目已在阶段1a 删除 S2；",
+    "    该连接器无 key 时匿名限速、可达性差，留空即可（不要指望它）。",
+    "  - GOOGLE_SCHOLAR_PROXY_URL / DOAJ_API_KEY / ZENODO_ACCESS_TOKEN：可选，按需填。",
+    "  - IEEE_API_KEY / ACM_API_KEY：【上游仅 skeleton】search 注册但 download/read 抛 NotImplementedError；无 key 别设。",
+    "  - 也可改用 ~/.config/paper-search-mcp/.env 承载这些 key（服务端启动自动加载），JSON 里就不必写 env。",
+    "",
+    "【spike 关键结论，务必知悉】",
+    "  1) WoS + Scopus 上游仍为 TODO 未实现 → 期刊指标 / WoS 检索【继续走本项目 wos_client】（付费独家、无社区覆盖）。",
+    "  2) OpenAlex 连接器 v0.1.4 【无】PAPER_SEARCH_MCP_OPENALEX_API_KEY 环境变量 → 它以【无 key】方式跑，",
+    "     受 OpenAlex 自 2026-02 起 ~100 credits/天 限制；本项目 openalex_client 已注入 OPENALEX_API_KEY（阶段0），",
+    "     故配额敏感的 OpenAlex 检索仍以 CLI 兜底为准。",
+    "  3) OpenAlex / Crossref / dblp 连接器为【search-only】（download ❌、read ⚠️ info-only）；OA 全文下载走",
+    "     arXiv / PMC / CORE / Europe PMC / bioRxiv / Zenodo / HAL 等，或 download_with_fallback 的回退链。",
+    "  4) 已注册的 arxiv-mcp-server【保留互补】：它有 get_paper_latex / read_paper_section / semantic_search /",
+    "     citation_graph / watch_topic 等深度 arXiv 工具，是 paper-search-mcp 所无。"
+  ],
+  "mcpServers": {
+    "paper-search-mcp": {
+      "_note": "uvx stdio 注册（同 arxiv-mcp-server 模式）：Qoder 每次拉起时 uvx 从 PyPI 解析并运行——无需常驻服务端、无 license、无 JVM。首次运行下载并缓存包及其依赖，之后走缓存秒起。",
+      "_pin_note": "args 默认不钉版本（跟最新，契合本项目『能力优先于可复现性』）。要复现 spike 时验证过的行为，把 args 换成 [\"paper-search-mcp==0.1.4\"]。",
+      "command": "uvx",
+      "args": ["paper-search-mcp"],
+      "env": {
+        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "<your@email.com>",
+        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
+        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": "",
+        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL": "",
+        "PAPER_SEARCH_MCP_DOAJ_API_KEY": "",
+        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN": ""
+      }
+    },
+    "paper-search-mcp__uv_tool_variant": {
+      "_note": "【备选】持久安装变体：先 `uv tool install paper-search-mcp`（同时提供 paper-search CLI，search/download 出 JSON、read 出纯文本），再用 uv tool run 拉起 MCP。比 uvx 少一层解析、升级需自己维护。setup 脚本 -InstallTool 会走这条并打印此形状。",
+      "command": "uv",
+      "args": ["tool", "run", "paper-search-mcp"],
+      "env": {
+        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "<your@email.com>",
+        "PAPER_SEARCH_MCP_CORE_API_KEY": ""
+      }
+    }
+  }
+}

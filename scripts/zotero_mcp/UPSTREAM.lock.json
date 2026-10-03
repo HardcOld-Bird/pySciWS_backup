@@ -1,0 +1,166 @@
+{
+  "_README": [
+    "社区 zotero-mcp 的上游来源、版本 pin 与 spike 结论清单（tracked，在本项目版本控制内）。",
+    "本文件是唯一事实来源（provenance）；setup_zotero_mcp.ps1 是唯一安装/校验入口。",
+    "",
+    "定位：该 MCP 是本项目 literature_research 的【文献库主力层】（对齐 comsol-simulation / paper-search-mcp 的",
+    "  『社区 MCP 主力 + 自研 CLI 差异化/兜底』架构）。Agent 经 MCP 直接读写 Zotero；本项目 research CLI 与",
+    "  document_writing refs 导出则 subprocess 调用同一包提供的 `zotero-cli --json` 实现同行为。",
+    "与 paper-search-mcp（无状态 uvx）不同：本包【必须持久安装】（uv tool install），因为 zotero-cli 需在 PATH 上",
+    "  供本项目 CLI 调用；MCP 服务端注册用安装后的 console script `zotero-mcp`。",
+    "可复现性由本清单记录的 upstream_version + 安装 extras（[pdf,scite]）保证；升级改本文件后重跑 setup。"
+  ],
+
+  "package": "zotero-mcp-server",
+  "role": "Zotero 文献库主力层（库检索/读全文与页图/建条目/合并重复/Scite 撤稿）；差异化与兜底走 pysci-research CLI + document_writing refs_bridge（均委托 zotero-cli），见 .qoder/skills/literature-research/SKILL.md",
+
+  "upstream": {
+    "project": "54yyyu/zotero-mcp",
+    "canonical_url": "https://github.com/54yyyu/zotero-mcp",
+    "pypi_url": "https://pypi.org/project/zotero-mcp-server/",
+    "docs_url": "https://stevenyuyy.com/zotero-mcp/",
+    "license": "MIT",
+    "upstream_version": "0.13.1",
+    "upstream_version_uploaded": "2026-09-23",
+    "requires_python": ">=3.10",
+    "dependencies": [
+      "bibtexparser<2,>=1.4",
+      "fastmcp<5,>=2.14.0",
+      "httpx>=0.27",
+      "markdownify>=1.2",
+      "pdf-inspector==0.2.6",
+      "pydantic>=2.0.0",
+      "python-dotenv>=1.0.0",
+      "pyzotero>=1.14.0",
+      "requests>=2.28.0",
+      "unidecode>=1.3.0"
+    ],
+    "dependencies_note": "base 依赖轻量（无 torch）。内部用 pyzotero → `zotero-cli --json` 的条目多为 Zotero API 原形，本项目 refs_bridge 的 {key,data:{...}} 字段访问可直接透传。",
+    "extras": {
+      "pdf": "PyMuPDF：PDF 大纲、页面版式、页图（公式/图/表文本抽取失真时的图像证据）、EPUB 注释。【本轮安装】——计划要求『读全文/公式页图』。",
+      "scite": "Scite 引用计数与撤稿告警（无需账号）。【本轮安装】——计划要求『Scite 撤稿告警』。",
+      "semantic": "ChromaDB + sentence-transformers + OpenAI/Gemini embeddings 的语义检索。【本轮不装】：拉入 torch 重依赖，与阶段5『避免 torch』降本取向冲突；需要时后续增量补装。",
+      "all": "semantic + pdf + scite（本项目刻意不用，避免 torch）。",
+      "install_command": "uv tool install \"zotero-mcp-server[pdf,scite]\""
+    },
+    "capabilities": {
+      "search": "title / author / tag / collection / full text / semantic（本轮未装 semantic）；--all-libraries 跨库（需 sqlite 后端）",
+      "read": "metadata / BibTeX / full text / PDF 页范围 / 页图（公式、图、表文本失真时的图像证据）",
+      "annotate": "highlights / area boxes（精确落在词、图、表、公式上）/ notes / PDF 注释提取 / sticky notes",
+      "write": "按 DOI / URL / ISBN / BibTeX / CSL-JSON / file 建条目（附 OA PDF）、collections/tags 管理、合并重复；add 默认幂等（--if-exists file）",
+      "backend": "local（读 zotero.sqlite，写走运行中的 Zotero 10+ 或 Web API）或 web（ZOTERO_API_KEY + ZOTERO_LIBRARY_ID）",
+      "scite": "引用计数 + 撤稿/编辑通告告警（scite extra）"
+    },
+    "two_entry_points": {
+      "mcp_server": "默认约 38 工具，每请求发全部工具 schema（~13,448 tokens）；供无 shell 的 MCP 客户端（Claude Desktop/ChatGPT/Qoder）。注册 command=zotero-mcp。",
+      "cli_and_skill": "`zotero-cli` + agent skill（frontmatter 仅 ~98 tokens）；供有 shell 的编码 Agent。`zotero-mcp install-skill` 安装 skill。本项目 research/refs 走 zotero-cli subprocess（--json 稳定契约）。二者共用同一份配置。"
+    },
+    "cli_contract": {
+      "envelope_success": "{\"ok\": true, \"command\": \"...\", \"schema\": 1, \"data\": {...}}",
+      "envelope_error": "{\"ok\": false, \"command\": \"...\", \"schema\": 1, \"error\": {\"message\": \"...\", \"code\": \"...\"}}",
+      "stdout_stderr": "stdout 只含 JSON；[INFO]/[WARN] 诊断走 stderr。用 data 前先判 ok。`zotero-cli --json-schema` 打印完整契约。",
+      "core_loop": "find keys → act on keys（item key 为 8 字符，是所有命令的通货）",
+      "key_commands": [
+        "zotero-cli config（回显解析后的 Zotero 设置，探测可达性）",
+        "zotero-cli --json search \"<q>\" --limit N [--detail keys_only] [--mode items|semantic|tag|advanced|citekey|notes] [--all-libraries]",
+        "zotero-cli --json get metadata <KEY> [--format bibtex] / get fulltext <KEY> / get children <KEY> / get collection-items <COLL>",
+        "zotero-cli --json read <KEY> --start-page A --end-page B / outline <KEY>",
+        "zotero-cli --json add doi <DOI> | add url <URL> | add isbn <ISBN> | add bibtex --bibtex '<entry>' | add bibtex --file refs.bib | add csl-json ... | add file --filepath <p> [-c <collection>] [--if-exists file|skip|duplicate]",
+        "zotero-cli --json edit <KEY> --title ... --add-tags ... / notes create --item-key <KEY> --text ... / collections manage --item-keys ... --add-to ...",
+        "zotero-cli db update | db status（语义检索索引）/ duplicates find / library info"
+      ]
+    },
+    "not_covered_by_upstream": {
+      "frontmatter_normalization": "zotero-mcp 建条目按 DOI/URL/ISBN/BibTeX/file，不接受本项目任意 frontmatter dict → 本项目 zotero_cli.frontmatter_to_bibtex 保留『frontmatter→BibTeX』规范化（自定义增强字段 openalex_id/wos_id/jif/jcr_quartile/cited_by_count/oa_status 折进 BibTeX note，Zotero 导入映射为 Extra）。",
+      "consequence": "验证了保留自研规范化层的决策：源输出→frontmatter 的铁律契约与 frontmatter→Zotero 的写回都在本项目侧，zotero-mcp 只负责最后的 BibTeX/DOI→Zotero 落地。"
+    }
+  },
+
+  "install": {
+    "installer": "scripts/zotero_mcp/setup_zotero_mcp.ps1",
+    "primary_method": "uv tool install \"zotero-mcp-server[pdf,scite]\"（持久安装，提供 zotero-mcp 与 zotero-cli 两个 console script）",
+    "primary_method_note": "与 paper-search-mcp（uvx 无状态）不同：本项目 research/refs 需 subprocess 调用 zotero-cli，故必须持久安装使其在 PATH。MCP 注册用安装后的 command=zotero-mcp。",
+    "alt_methods": [
+      "pip install \"zotero-mcp-server[pdf,scite]\"（command=python / args=[-m, zotero_mcp] 或安装后的 zotero-mcp）",
+      "uvx --from \"zotero-mcp-server[pdf,scite]\" zotero-mcp（MCP 无状态拉起；但 zotero-cli 仍需另行持久安装）",
+      "docker run ghcr.io/<owner>/zotero-mcp（容器；ZOTEROAPP=cli 走独立 CLI 模式）"
+    ],
+    "post_install": [
+      "Zotero 桌面版：Settings→Advanced→勾选 'Allow other applications on this computer to communicate with Zotero'",
+      "写入（Zotero 10+）：一次性运行 `zotero-mcp authorize-local`，弹窗选 'Always Allow'",
+      "写入（旧版 Zotero / 无桌面版）：设 ZOTERO_API_KEY + ZOTERO_LIBRARY_ID（Web API）",
+      "可选：`zotero-mcp install-skill` 给有 shell 的编码 Agent 装 zotero-cli skill（~98 tokens，比 MCP schema 省）",
+      "PATH：uv tool 的 bin 目录须在 PATH（若 zotero-cli 未找到，运行 `uv tool update-shell` 后重启 shell）"
+    ],
+    "cli": {
+      "name": "zotero-cli",
+      "provided_by": "uv tool install \"zotero-mcp-server[pdf,scite]\"",
+      "output": "默认 markdown（人读）；--json 出稳定信封 {ok,command,schema,data|error}",
+      "role_in_project": "【本项目主路径之一】research add/library、document_writing refs 导出经 zotero_cli.py subprocess 调用它；与 MCP server 共用同一份配置"
+    },
+    "env_config": {
+      "prefix": "ZOTERO_",
+      "file_location": "由 `zotero-mcp setup` / dotenv 解析；MCP 注册在 mcp.json 的 env 块，CLI 读同一配置",
+      "local_mode": {
+        "ZOTERO_LOCAL": "true=本地模式（读 zotero.sqlite，写走 Zotero 10+）"
+      },
+      "web_mode": {
+        "ZOTERO_API_KEY": "Web API key（本地模式不需要）",
+        "ZOTERO_LIBRARY_ID": "库 ID（用户库=用户 ID；本地模式不需要）",
+        "ZOTERO_LIBRARY_TYPE": "user（默认）或 group"
+      },
+      "optional": [
+        "ZOTERO_MCP_TOOLSETS（留空=标准工具集；'scite' 开启 Scite 引用/撤稿工具组）"
+      ]
+    }
+  },
+
+  "registration": {
+    "config_file": "C:\\Users\\antar\\.qoder-cn\\shared_client\\mcp.json",
+    "config_file_mirror": "C:\\Users\\antar\\.qoder-cn\\shared_client\\extension\\local\\mcp.json",
+    "config_file_mirror_note": "Qoder 派生的镜像，多一个 userConfigMD5 键用于变更检测；不要手改。",
+    "server_name": "zotero",
+    "active_entry": {
+      "command": "zotero-mcp",
+      "env": {
+        "ZOTERO_LOCAL": "true",
+        "ZOTERO_API_KEY": "",
+        "ZOTERO_LIBRARY_ID": "",
+        "ZOTERO_LIBRARY_TYPE": "user",
+        "ZOTERO_MCP_TOOLSETS": ""
+      }
+    },
+    "active_entry_note": "持久安装后注册 command=zotero-mcp（本地模式）。与现有 arxiv / paper-search-mcp / comsol 同处 mcp.json。默认不钉版本（能力优先）；要复现 spike 行为改 command=uvx / args=[--from, zotero-mcp-server[pdf,scite]==0.13.1, zotero-mcp]。",
+    "coexisting_servers": {
+      "paper-search-mcp": "互补（检索层）：负责多源发现/OA 下载；zotero 负责库内读写。",
+      "arxiv-mcp-server": "互补（arXiv 深度工具）。",
+      "comsol": "无关（另一技能）。"
+    },
+    "template": "scripts/zotero_mcp/mcp_servers.template.json"
+  },
+
+  "verified": {
+    "verified_on": "2026-10-02",
+    "method": "spike（PyPI JSON 元数据 + 上游 README/docs/cli.md 契约核验 + WebSearch 命令参考）；未在本机实跑（Zotero 桌面版未运行、包未安装，注册后由 Qoder 首拉与用户 authorize-local 验证）",
+    "checks": {
+      "pypi_metadata": "PyPI JSON 确认 name=zotero-mcp-server / version=0.13.1 / license=MIT / requires_python>=3.10 / deps 含 pyzotero>=1.14.0、fastmcp、bibtexparser、pdf-inspector 等；extras=semantic/pdf/scite/all/dev。",
+      "two_entry_points": "上游 README 确认 MCP server（默认 38 工具 ~13,448 tokens/请求）与 zotero-cli + agent skill（~98 tokens）两条入口，共用一份配置。",
+      "cli_envelope": "docs/cli.md（经 WebSearch 命中）确认 --json 稳定信封 {ok,command,schema,data|error}、stdout 只含 JSON、find keys→act on keys 核心环、`--json-schema` 打印完整契约。",
+      "add_commands": "命令参考确认 add doi/url/isbn/bibtex/csl-json/file，-c/--collections、--if-exists file|skip|duplicate（默认幂等 file），add bibtex --bibtex '<entry>' 或 --file/--bibtex -（stdin）。",
+      "local_vs_web": "README 确认 local 模式读 zotero.sqlite、写走 Zotero 10+（authorize-local 选 Always Allow）或 Web API（ZOTERO_API_KEY+ZOTERO_LIBRARY_ID）。",
+      "registration_shape": "README 给出 {command:zotero-mcp, env:{ZOTERO_LOCAL:true}} 形状，与本项目 template 逐字段一致。",
+      "pyzotero_passthrough": "deps 含 pyzotero → search/get 条目为 Zotero API 原形；本项目 refs_bridge 的 {key,data:{itemType,creators,publicationTitle,extra,...}} 访问可透传（其单元测试 test_refs_bridge.py 已固化此形状）。",
+      "bibtex_normalization_kept": "上游只按 DOI/URL/ISBN/BibTeX/file 建条目、不接受任意 dict → 本项目 zotero_cli.frontmatter_to_bibtex 保留 frontmatter→BibTeX 规范化（自定义增强字段折进 note）。",
+      "semantic_deferred": "semantic extra 拉入 sentence-transformers/torch → 本轮装 [pdf,scite]，不装 semantic（与阶段5 避免 torch 一致）。"
+    },
+    "pending_live_checks": [
+      "注册后由 Qoder 首拉：确认 command=zotero-mcp 能启动 stdio 服务端（依赖 uv tool 的 bin 在 PATH）。",
+      "运行 `zotero-mcp authorize-local` 并选 Always Allow 后，经 CallMcpTool 或 `zotero-cli --json config` 确认本地库可达。",
+      "核验 `zotero-cli --json search/get metadata` 返回的 data 形状（items 列表键名、条目是否 {key,data:{...}} 原形）——若与 _items_from_data/get_item 的候选键不符，据实调整。",
+      "核验 `add bibtex --bibtex '<entry>'` 的响应里新条目 key 的位置（data.key / data.item.key / data.items[0].key / data.text 里的 8 位 key）——若 _extract_key_from_add 未命中，据实补候选。",
+      "核验 BibTeX note 字段是否被 Zotero 导入映射为条目 Extra（refs_bridge._extra_field 依赖此）；若被落成子笔记，把 zotero_cli._BIBTEX_EXTRA_FIELD 从 'note' 改为 'annote'（一行切换）。",
+      "核验 ZOTERO_MCP_TOOLSETS='scite' 的确切语义（是仅启用 scite 组还是限定白名单），据此设默认值。",
+      "端到端：research add <DOI> 入库并在 frontmatter 回写 zotero_key/zotero_uri；compose tex refs 从库导出 .bib 且 citekey 与调研侧一致。"
+    ]
+  }
+}
