@@ -225,6 +225,19 @@ def test_format_pages():
     assert oa._format_pages("", "") == ""
 
 
+def test_format_pages_does_not_double_a_single_article_number():
+    """``first == last`` 只写一次：电子刊用文章号，OpenAlex 会把它填进两个字段。
+
+    实测 10.1103/PhysRevLett.121.124501 的 ``biblio`` 正是
+    ``first_page == last_page == "124501"``，旧实现因此产出 ``124501-124501``。
+    那不是无害的冗余：``refs_bridge`` 把 ``pages`` 原样映射成 BibTeX 的 ``pages``，
+    于是参考文献里会出现一个并不存在的页码区间。
+    """
+    assert oa._format_pages("124501", "124501") == "124501"
+    # 非数字的文章号同样适用（见 test_journal_ref 里那个 ``eabn7905`` 用例）
+    assert oa._format_pages("eabn7905", "eabn7905") == "eabn7905"
+
+
 # ---------------------------------------------------------------------------
 # work_to_note_frontmatter —— frontmatter 契约（get_source 被 mock，全程离线）
 # ---------------------------------------------------------------------------

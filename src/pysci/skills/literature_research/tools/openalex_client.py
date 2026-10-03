@@ -723,7 +723,17 @@ def work_to_note_frontmatter(w: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_pages(first: str, last: str) -> str:
-    if first and last:
+    """把 OpenAlex ``biblio`` 的 first/last page 合成 frontmatter 的 ``pages``。
+
+    ``first == last`` 时必须只写一次：电子刊（APS 全系、Nature 系）用的是**文章号**而不是
+    页码区间，OpenAlex 把同一个号同时填进两个字段，于是旧实现产出
+    ``124501-124501``——一个看着像页码区间、实则把同一个文章号写了两遍的值。它比空着
+    更糟：空值是可辨识的「没数据」，而 ``124501-124501`` 看着像个真区间，会一路传下去：
+    ``research add`` 经 :func:`.zotero_cli.create_item_from_metadata` 把它写进 Zotero 条目的
+    ``pages``，document_writing 的 ``refs_bridge.item_to_bibtex`` 再把**那个**字段映射成
+    BibTeX 的 ``pages``，最终印在参考文献里。实测 10.1103/PhysRevLett.121.124501 正是这个形态。
+    """
+    if first and last and first != last:
         return f"{first}-{last}"
     return first or last or ""
 
