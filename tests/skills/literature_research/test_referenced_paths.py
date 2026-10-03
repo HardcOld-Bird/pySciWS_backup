@@ -18,11 +18,18 @@ git 跟踪的刻意例外，重获要再花一次配额）。
 WP-H（方案 H5）之后追加第 4 条：``read`` 拿不到 PDF 时只把网页正文兜底记为
 ``extracted_html_path``（**不**设 ``extracted_md_path``，以免污染 rag 语料），因此该字段
 必须同样受保护——否则「只有 HTML 全文」的笔记会在一次 prune 里丢掉它唯一的全文。
+
+第 5 条是同一个缺陷的**更大一处实例**：``referenced_paths()`` 只读笔记，而
+``research ingest`` 的产物（实测 73 个文件，含数本教材）**根本不挂在任何笔记上**——
+manifest 才是它们的唯一真源。于是整个入库语料对 ``--keep-referenced`` 不可见，而
+LRU 按 mtime 从最老删起时，最老的恰恰就是它们。故保护集改由
+:func:`cache_manager.protected_paths` 给出（笔记 ∪ manifest）。
 """
 
 from __future__ import annotations
 
 import dataclasses
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -344,3 +351,152 @@ def test_prune_keeps_referenced_html_fallback(env):
     assert n == 1 and freed == 4096
     assert orphan.parent in removed and not orphan.exists()
     assert kept.exists() and kept.parent.exists()
+
+
+# ===========================================================================
+#  ingest 清单：prune 的第二个保护来源
+# ===========================================================================
+def _write_manifest(env: SimpleNamespace, entries: list[object]) -> Path:
+    """照 ``ingest/manifest.json`` 的真实形状写一份最小清单。
+
+    夹具已把 ``module_dir`` 指到 ``tmp_path``，故路径是 ``env.root/ingest/manifest.json``。
+    只写 ``version`` 与 ``entries`` 两个键：那是本模块唯一读的部分。
+    """
+    p = env.root / "ingest" / "manifest.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        json.dumps({"version": 1, "entries": entries}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return p
+
+
+def test_manifest_products_are_collected(env):
+    """``md_path`` / ``pdf_path`` 都收，raw 与 resolve 两种形态都收（与笔记那条同规则）。"""
+    md = env.extracted / "group_pubs" / "fang_ep_metagrating.md"
+    pdf = env.pdfs / "group_pubs" / "fang_ep_metagrating.pdf"
+    for p in (md, pdf):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x", encoding="utf-8")
+    _write_manifest(
+        env,
+        [
+            {
+                "id": "group_pubs/fang",
+                "status": "done",
+                "md_path": _as_posix(md),
+                "pdf_path": _as_posix(pdf),
+            }
+        ],
+    )
+
+    refs = cache_manager.ingest_manifest_paths()
+
+    assert Path(_as_posix(md)) in refs and md.resolve() in refs
+    assert Path(_as_posix(pdf)) in refs and pdf.resolve() in refs
+
+
+def test_prune_keeps_an_ingest_product_that_no_note_references(env):
+    """**核心回归**：ingest 产物不挂在任何笔记上，只认笔记就会把它删掉。
+
+    这就是仓库里的真实形态：``cache/extracted/`` 下几十个由 ``research ingest`` 产出的
+    文件（含数本 >150 页的教材），而 ``papers/`` 只有三篇笔记、``extracted_md_path``
+    全空。它们全是花 MinerU 配额换的，且是 git 跟踪的刻意例外——被 LRU 按 mtime
+    删掉时，最老的入库批次恰恰排在最前面。
+    """
+    ingested = env.extracted / "group_pubs" / "fang_ep_metagrating.md"
+    ingested.parent.mkdir(parents=True, exist_ok=True)
+    ingested.write_text("I" * 4096, encoding="utf-8")
+    orphan = env.extracted / "orphan_fulltext.md"
+    orphan.write_text("O" * 4096, encoding="utf-8")
+    _write_manifest(env, [{"id": "group_pubs/fang", "md_path": _as_posix(ingested)}])
+
+    # 刻意不写任何笔记：ingest 产物本来就不挂在笔记上。这一行同时钉住「只靠
+    # referenced_paths 确实保护不到」，否则下面的存活断言可能被别的机制偶然满足。
+    assert cache_manager.referenced_paths() == set()
+
+    n, freed, removed, _ = cache_manager.prune_tier_a(
+        max_mb=0, dry_run=False, keep_referenced=True
+    )
+
+    assert n == 1 and freed == 4096
+    assert orphan in removed and not orphan.exists()
+    assert ingested.exists(), "manifest 登记过的产物必须受保护"
+
+
+def test_protected_paths_is_the_union_of_both_sources(env):
+    """``protected_paths`` = 笔记 ∪ manifest；而 ``referenced_paths`` 仍**只**是笔记。
+
+    不把 manifest 合进 ``referenced_paths`` 是为了保住它的语义（「笔记引用了什么」）：
+    本文件有三处 ``== set()`` 的断言靠它成立，混进另一个来源会让那些断言失去意义。
+    """
+    md = env.extracted / "from_manifest.md"
+    md.write_text("x", encoding="utf-8")
+    noted = env.extracted / "from_note.md"
+    noted.write_text("x", encoding="utf-8")
+    _write_manifest(env, [{"md_path": _as_posix(md)}])
+    _write_note(
+        env,
+        "2020_a_n.md",
+        notes.render_note({"title": "T", "extracted_md_path": _as_posix(noted)}, BODY),
+    )
+
+    refs = cache_manager.referenced_paths()
+    prot = cache_manager.protected_paths()
+
+    assert Path(_as_posix(noted)) in refs
+    assert Path(_as_posix(md)) not in refs, "manifest 不得混进笔记那一层的语义"
+    assert Path(_as_posix(md)) in prot and Path(_as_posix(noted)) in prot
+
+
+def test_manifest_entries_without_paths_are_ignored(env):
+    """``pending`` / ``skipped`` 条目没有 ``md_path``，不得产出幽灵路径或炸掉。
+
+    真实 manifest 里另有一份 skipped 列表，元素只有 ``source`` / ``kind`` / ``status``；
+    ``pending`` 条目则连 ``pdf_path`` 都还没回填。照单全收会把 ``None`` 拼进 ``Path``。
+    """
+    _write_manifest(
+        env,
+        [
+            {"id": "a", "status": "pending"},
+            {"id": "b", "md_path": "", "pdf_path": None},
+            {"source": "x.nb", "kind": "nb", "status": "skipped"},
+            "not-a-dict",
+        ],
+    )
+
+    assert cache_manager.ingest_manifest_paths() == set()
+
+
+def test_manifest_relative_paths_resolve_against_project_root(env):
+    """相对路径按 ``settings.project_root`` 解析，与笔记那条来源同一套规则。"""
+    (env.extracted / "rel.md").write_text("x", encoding="utf-8")
+    _write_manifest(env, [{"md_path": "cache/extracted/rel.md"}])
+
+    refs = cache_manager.ingest_manifest_paths()
+
+    joined = env.root / "cache" / "extracted" / "rel.md"
+    assert joined in refs and joined.resolve() in refs
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["", "not json at all", "[]", '{"entries": "nope"}', '{"entries": [1, null]}'],
+)
+def test_a_missing_or_broken_manifest_degrades_to_an_empty_set(env, raw: str) -> None:
+    """manifest 缺失 / 损坏 / 形状不符 ⇒ 空集，**绝不抛**。
+
+    本函数在保护路径上：抛异常会让「保护」变成「拒绝清理」，那比不保护更糟（不变量 1）。
+    这也是为何不复用 ``local_ingest.load_manifest``——那个「缺失就报错」的语义在这里是
+    错的（除了 import 成环之外另一个理由）。
+
+    参数里的空串代表「根本没这个文件」。
+    """
+    if raw:
+        p = env.root / "ingest" / "manifest.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(raw, encoding="utf-8")
+
+    assert cache_manager.ingest_manifest_paths() == set()
+    # 退化后保护集必须恰好回到「只有笔记」，而不是整体失效或整体报错
+    assert cache_manager.protected_paths() == cache_manager.referenced_paths()

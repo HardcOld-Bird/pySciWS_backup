@@ -172,6 +172,9 @@ def _fmt_age(ts: float) -> str:
 #: ``extracted_html_path`` 必须与 ``extracted_md_path`` 并列收录：``read`` 拿不到 PDF 时
 #: 只记前者（网页正文兜底，方案 H5），若不在本表里，那些笔记引用的
 #: ``cache/html_fulltext/`` 产物就得不到 ``prune --keep-referenced`` 的保护。
+#:
+#: 本表**只**覆盖笔记这一条来源。``ingest`` 的产物不写在笔记里，另走
+#: :func:`ingest_manifest_paths`；两者由 :func:`protected_paths` 合并。
 REFERENCED_FIELDS: tuple[str, ...] = (
     "local_pdf_path",
     "extracted_md_path",
@@ -223,6 +226,69 @@ def _is_referenced(p: Path, refs: set[Path]) -> bool:
         return p.resolve() in refs
     except OSError:
         return False
+
+
+#: ``ingest/manifest.json`` 里登记产物路径的字段。
+MANIFEST_PATH_FIELDS: tuple[str, ...] = ("md_path", "pdf_path")
+
+#: manifest 相对 ``settings.module_dir`` 的位置。刻意在这里独立给出而不取
+#: ``local_ingest.DEFAULT_MANIFEST``：理由见 :func:`ingest_manifest_paths`。
+_MANIFEST_RELPATH: tuple[str, ...] = ("ingest", "manifest.json")
+
+
+def ingest_manifest_paths() -> set[Path]:
+    """收集 ``ingest/manifest.json`` 登记的产物路径（raw 与 resolve 两种形态）。
+
+    为什么 ``prune`` 必须认它：``research ingest`` 的产物（实测 73 个文件，含数本
+    >150 页的教材）**不挂在任何 papers/ 笔记上**——manifest 才是它们的唯一真源（见
+    :mod:`.local_ingest` 的模块 docstring）。只读笔记 frontmatter 的
+    :func:`referenced_paths` 因此对这批文件返回空集，``--keep-referenced`` 形同虚设：
+    Tier A 软上限一被越过，LRU 就按 mtime 从最老的删起，而最老的恰恰是入库那一批。
+    删掉在 git 里看得见，但要重跑 ingest 才能拿回来——那是真金白银的 MinerU 配额。
+
+    直接读 JSON 而**不**走 :func:`local_ingest.load_manifest`：后者 import
+    ``pdf_extract``，而 ``pdf_extract`` import 本模块，那是一条环。manifest 的形状很
+    简单（``entries`` 列表里的两个路径字段），独立解析不引入耦合。
+
+    缺失 / 损坏 / 形状不符一律返回空集：本函数在**保护**路径上，抛异常会让「保护」
+    变成「拒绝清理」，那比不保护更糟（不变量 1）。同理，它也不复用
+    :func:`local_ingest.load_manifest` 那个「缺失就报错」的语义。
+    """
+    p = settings.module_dir.joinpath(*_MANIFEST_RELPATH)
+    out: set[Path] = set()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return out
+    entries = data.get("entries") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        return out
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        for key in MANIFEST_PATH_FIELDS:
+            raw = entry.get(key)
+            if not isinstance(raw, str) or not raw.strip():
+                continue
+            q = Path(raw.strip())
+            if not q.is_absolute():
+                q = settings.project_root / q
+            out.add(q)
+            try:
+                out.add(q.resolve())
+            except OSError:
+                pass
+    return out
+
+
+def protected_paths() -> set[Path]:
+    """``prune --keep-referenced`` 的完整保护集：笔记引用的 ∪ ingest 清单登记的。
+
+    两个来源缺一不可，而缺任一个的失效方式都是**静默**的：少前者会删掉精读笔记唯一的
+    全文，少后者会删掉整个 ingest 语料。拆成两个函数是为了让两边的测试能各自钉住，
+    而不是共用一个看不出到底谁生效的断言。
+    """
+    return referenced_paths() | ingest_manifest_paths()
 
 
 # ---------------------------------------------------------------------------
@@ -466,13 +532,14 @@ def prune_tier_a(
 ) -> tuple[int, int, list[Path], int]:
     """按 LRU（mtime 升序）淘汰 Tier A，直到总占用 ≤ ``max_mb``（默认软上限）。
 
-    ``keep_referenced=True`` 时跳过被 ``papers/`` 笔记引用的文件。返回
-    ``(淘汰单元数, 释放字节, 淘汰清单, 淘汰后剩余总字节)``。``dry_run`` 只列不删。
+    ``keep_referenced=True`` 时跳过 :func:`protected_paths` 里的文件（笔记引用的 +
+    ingest 清单登记的）。返回 ``(淘汰单元数, 释放字节, 淘汰清单, 淘汰后剩余总字节)``。
+    ``dry_run`` 只列不删。
     """
     target_bytes = (
         max_mb if max_mb is not None else settings.cache_soft_limit_mb
     ) * _MB
-    refs = referenced_paths() if keep_referenced else set()
+    refs = protected_paths() if keep_referenced else set()
     units = _collect_tier_a_units(refs)
 
     total = sum(u["bytes"] for u in units)

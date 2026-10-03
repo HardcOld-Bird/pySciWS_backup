@@ -1771,9 +1771,12 @@ def _print_zotero_items(items: list[dict[str, Any]]) -> None:
 def cmd_library(args: argparse.Namespace) -> int:
     """查询 Zotero 库：ping / list / search / get（委托 zotero-cli）。
 
-    ``list`` 与 ``search`` 的失败均降级为一行 stderr 提示 + 退出码 1（不变量 1）：
-    :mod:`.zotero_cli` 只在 ``ping`` / ``get_item`` 里自己吞异常，其余读操作会抛
-    ``ZoteroCliError``，而 Zotero 没启动 / 本地 API 未授权是常态而非异常。
+    四个 action 的失败一律降级为「一行 stderr 提示 + 退出码 1」（不变量 1）：除 ``ping``
+    自己把错误折进返回值外，:mod:`.zotero_cli` 的读操作都抛 ``ZoteroCliError``，而
+    Zotero 没启动 / 本地 API 未授权是常态而非异常，不该变成未处理 traceback。
+
+    ``get`` 还要多分一层：「桥断了」与「这个 key 不在库里」的处置完全不同（前者去开
+    Zotero，后者去核对 key），故失败时用 ``ping`` 作连通性裁判再决定怎么说。
     """
     if not zotero_cli.available():
         print(
@@ -1809,7 +1812,7 @@ def cmd_library(args: argparse.Namespace) -> int:
         try:
             items = zb.list_items(limit=args.limit, item_type=args.type)
         except zotero_cli.ZoteroCliError as e:
-            # zotero_cli 只有 ping / get_item 自己吞异常，list / search 会往上抛。
+            # zotero_cli 的读操作（除 ping 自己把错误折进返回值）都会往上抛。
             # 不接住就是一个未处理 traceback——而 Zotero 没开 / 本地 API 没授权是常态，
             # 属降级路径，该一行提示 + 非零退出码（不变量 1）。
             print(f"[library] list 失败：{e}", file=sys.stderr)
@@ -1844,8 +1847,31 @@ def cmd_library(args: argparse.Namespace) -> int:
         if not args.key:
             print("[library] get 需要 --key。", file=sys.stderr)
             return 2
-        item = zb.get_item(args.key)
-        print(json.dumps(item, ensure_ascii=False, indent=2) if item else "（未找到）")
+        try:
+            item = zb.get_item(args.key)
+        except zotero_cli.ZoteroCliError as e:
+            # zotero-cli 对「连不上」与「没这条」都回 ok:false，错误文本本身不足以区分
+            # 两者。用 ping 作裁判——「桥能不能通」正是它存在的理由（参见
+            # ZoteroCli.library_info 的 docstring）。一律报「（未找到）」会把「Zotero
+            # 桌面没开」伪装成「你的库里没这篇」，而这两种误判的下一步行动相反。
+            # ping 只在失败路径上调，不给正常路径加子进程开销。
+            if zb.ping().get("ok"):
+                print(
+                    f"[library] 取不到 key {args.key}（桥连通，故多半是该 key 不在当前库）：{e}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"[library] get 失败（Zotero 不可达，这不是「未找到」）：{e}",
+                    file=sys.stderr,
+                )
+            return 1
+        if not item:
+            # 桥回了 ok:true 但 data 为空 / 非 dict：查询本身成功了，答案就是「没有」。
+            # 这是唯一能说「未找到」的分支，故退出码 0。
+            print("（未找到）")
+            return 0
+        print(json.dumps(item, ensure_ascii=False, indent=2))
         return 0
     return 2
 
@@ -2740,7 +2766,7 @@ def cmd_cache(args: argparse.Namespace) -> int:
     if n == 0:
         print(f"[cache] Tier A 占用未超目标（{target} MB），无需淘汰。")
     else:
-        keep = "（保留被笔记引用者）" if args.keep_referenced else ""
+        keep = "（保留笔记与 ingest 清单引用者）" if args.keep_referenced else ""
         print(
             f"[cache] {verb} Tier A {n} 个单元{keep}，释放 {notes.fmt_size(freed)}，剩余 {notes.fmt_size(remain)}。"
         )
@@ -3250,7 +3276,10 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
         dest="keep_referenced",
-        help="prune：跳过被 papers/ 笔记引用的文件（默认开）",
+        help=(
+            "prune：跳过仍被引用的文件——两个来源：papers/ 笔记的 frontmatter 与 "
+            "ingest/manifest.json（ingest 产物不挂在笔记上，只认前者会漏掉整个入库语料）。默认开"
+        ),
     )
     sp.set_defaults(func=cmd_cache)
 

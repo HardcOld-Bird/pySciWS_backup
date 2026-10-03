@@ -568,13 +568,35 @@ def test_get_item_returns_data(monkeypatch):
     assert zotero_cli.ZoteroCli().get_item("A") == {"key": "A", "data": {"title": "T"}}
 
 
-def test_get_item_swallows_error(monkeypatch, capsys):
+def test_get_item_raises_instead_of_printing_to_stdout(monkeypatch, capsys):
+    """失败必须抛，且**绝不**往 stdout 写东西。
+
+    ``library get`` 的 stdout 就是 JSON 数据通道；此前这里独自吞异常并把中文错误打到
+    stdout，调用方拿到的既不是合法 JSON 也不是可判读的诊断。抛上去之后由
+    ``cmd_library`` 用 ``ping`` 区分「桥断了」与「库里没这条」（见 test_cli_consistency）。
+    """
+
     def _boom(args, *, timeout=None):
         raise zotero_cli.ZoteroCliError("nope")
 
     monkeypatch.setattr(zotero_cli, "_run_json", _boom)
+
+    with pytest.raises(zotero_cli.ZoteroCliError, match="nope"):
+        zotero_cli.ZoteroCli().get_item("A")
+
+    cap = capsys.readouterr()
+    assert cap.out == "" and cap.err == "", "诊断属于调用方，不在这一层自己 print"
+
+
+def test_get_item_returns_none_for_a_non_dict_payload(monkeypatch):
+    """``ok:true`` 但 data 不是 dict：查询成功了，答案就是「没有」。
+
+    这是 ``cmd_library`` 唯一能说「（未找到）」并返 0 的分支，与上面那条抛异常的
+    失败路径必须分得开。
+    """
+    monkeypatch.setattr(zotero_cli, "_run_json", lambda args, *, timeout=None: [])
+
     assert zotero_cli.ZoteroCli().get_item("A") is None
-    assert "get_item(A)" in capsys.readouterr().out
 
 
 def test_search_items_default_mode(monkeypatch):

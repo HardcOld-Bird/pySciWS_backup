@@ -466,12 +466,20 @@ class ZoteroCli:
         return _items_from_data(data)
 
     def get_item(self, key: str) -> dict[str, Any] | None:
-        """按 item key 获取单条元数据（返回 zotero-cli 的 data，形状透传）。"""
-        try:
-            data = _run_json(["get", "metadata", key])
-        except ZoteroCliError as e:
-            print(f"[zotero-cli] get_item({key}) 失败：{e}")
-            return None
+        """按 item key 获取单条元数据（返回 zotero-cli 的 data，形状透传）。
+
+        与其它读操作一致：失败抛 :class:`ZoteroCliError`，由调用方决定怎么降级。
+
+        此前这里是本模块**唯一**自己吞异常的读方法，而且把错误 print 到 **stdout**：
+
+        - ``library get`` 的 stdout 正是 JSON 数据通道，混进一行中文错误就把它变成
+          非法 JSON（调用方拿到的是既不是数据也不是可判读诊断的东西）；
+        - 返回 ``None`` 抹掉了「桥断了」与「库里没这条」的区别，上层只能一律显示
+          「（未找到）」，于是「Zotero 桌面没开」被伪装成「你的库里没这篇」。
+
+        改成抛之后，``cmd_library`` 用 :meth:`ping` 作连通性裁判把两种情况分开说。
+        """
+        data = _run_json(["get", "metadata", key])
         return data if isinstance(data, dict) else None
 
     def search_items(

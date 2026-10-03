@@ -16,8 +16,14 @@
   ``ingest`` 是唯一不合形的（用 ``--status`` 布尔充当 action），补上位置参数。
 - **H4** ``library list`` 的诚实性：它不是真枚举（上游无「列全部」命令，退化为空关键词
   检索且 limit 被夹到 ≤100），不说的话「只回了 25 条」会被读成「库里就 25 条」。
-  连带修掉一个真 bug：``list`` / ``search`` 失败时抛未处理 traceback（``zotero_cli``
-  只在 ``ping`` / ``get_item`` 里自己吞异常），而 Zotero 没开是常态。
+  连带修掉一个真 bug：``list`` / ``search`` 失败时抛未处理 traceback，而 Zotero 没开
+  是常态。
+- **H4+**（方案外的后续修复）``library get`` 曾把「桥断了」与「库里没这条」说成同一句
+  「（未找到）」。根因在 :mod:`.zotero_cli`：``get_item`` 是全模块唯一自己吞异常的读
+  方法，还把中文错误 print 到 **stdout**——而 stdout 正是这个子命令的 JSON 数据通道，
+  一行就足以让它变成非法 JSON（调用方拿到的既不是数据也不是可判读诊断）。改为抛
+  ``ZoteroCliError`` 后，``cmd_library`` 用 ``ping`` 作连通性裁判把两种失败分开说：
+  它们的下一步行动相反（核对 key vs 去开 Zotero），合并成一句就没法选。
 - **H6** OpenAlex 降级态下的空结果告警：无 key 时限 ~100 credits/天，配额耗尽与「真没
   文献」在返回值上完全同形，静默返回空集会让调用方把前者当后者写进综述。
 """
@@ -552,8 +558,22 @@ def test_the_epilog_is_actually_rendered_with_its_manual_alignment(
 # ===========================================================================
 @pytest.fixture
 def zotero(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """把 Zotero 桥换成可控替身；返回一个可写的行为容器。"""
-    box: dict[str, Any] = {"items": [], "exc": None, "calls": []}
+    """把 Zotero 桥换成可控替身；返回一个可写的行为容器。
+
+    两个开关各管一件事，不能合并：``exc`` 管**读操作**抛不抛，``reachable`` 只管
+    ``ping`` 的答案。``cmd_library`` 的 ``get`` 分支拿 ``ping`` 当连通性裁判，所以要
+    分别复现「桥断了」与「桥通着但库里没这条」，就必须能独立翻 ``reachable``。
+
+    ``get_item`` 的返回类型刻意标 ``Any`` 而非 ``dict | None``：真实实现遇到
+    ``ok:true`` 但 data 非 dict 时返 ``None``，而这一层要能把任意形状塞进去。
+    """
+    box: dict[str, Any] = {
+        "items": [],
+        "item": None,
+        "exc": None,
+        "calls": [],
+        "reachable": False,
+    }
 
     class _Fake:
         def __init__(self, *a: Any, **k: Any) -> None:
@@ -570,6 +590,16 @@ def zotero(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             if box["exc"]:
                 raise box["exc"]
             return box["items"]
+
+        def get_item(self, key: str) -> Any:
+            box["calls"].append(("get", key))
+            if box["exc"]:
+                raise box["exc"]
+            return box["item"]
+
+        def ping(self) -> dict[str, Any]:
+            box["calls"].append(("ping",))
+            return {"ok": box["reachable"]}
 
     monkeypatch.setattr(research.zotero_cli, "available", lambda: True)
     monkeypatch.setattr(research.zotero_cli, "ZoteroCli", _Fake)
@@ -687,20 +717,105 @@ def test_an_empty_library_search_is_reported_plainly(
     assert _EMPTY_LIST_DISCLAIMER not in cap.err
 
 
-@pytest.mark.parametrize("action", ["list", "search"])
+@pytest.mark.parametrize(
+    ("action", "extra"),
+    [
+        ("list", {}),
+        ("search", {"query": "acoustic"}),
+        ("get", {"key": "ABCD1234"}),
+    ],
+)
 def test_a_failing_zotero_bridge_degrades_instead_of_crashing(
-    action: str, zotero: dict[str, Any], capsys: pytest.CaptureFixture
+    action: str,
+    extra: dict[str, Any],
+    zotero: dict[str, Any],
+    capsys: pytest.CaptureFixture,
 ) -> None:
     """Zotero 没开 / 本地 API 未授权时：一行提示 + 退出码 1，而不是 traceback。
 
-    ``zotero_cli`` 只在 ``ping`` / ``get_item`` 里自己吞异常，``list_items`` /
-    ``search_items`` 会把 ``ZoteroCliError`` 一路抛到 ``main()``——而后者只接
-    ``KeyboardInterrupt``。那是降级路径上的未处理崩溃（违反不变量 1）。
+    :mod:`.zotero_cli` 的读操作（``list_items`` / ``search_items`` / ``get_item``）都会
+    把 ``ZoteroCliError`` 一路抛到 ``main()``——而后者只接 ``KeyboardInterrupt``。那是
+    降级路径上的未处理崩溃（违反不变量 1）。
+
+    夹具的 ``reachable`` 默认 False，这正是「Zotero 桌面没开」的形态：``get`` 因此走
+    ``ping`` 裁判的**不可达**分支，措辞与另外两个 action 同形（``[library] <action>
+    失败``），所以三个能用同一条断言钉住。
     """
     zotero["exc"] = research.zotero_cli.ZoteroCliError("Zotero 本地 API 未开启")
 
-    rc = research.cmd_library(_library_args(action=action, query="acoustic"))
+    rc = research.cmd_library(_library_args(action=action, **extra))
 
     assert rc == 1
-    err = capsys.readouterr().err
-    assert f"[library] {action} 失败" in err and "本地 API" in err
+    cap = capsys.readouterr()
+    assert f"[library] {action} 失败" in cap.err and "本地 API" in cap.err
+    # 诊断必须全在 stderr：stdout 是数据通道（get 打 JSON，list/search 打条目表）。
+    # 修掉的那个 bug 恰恰是把错误打到 stdout，这一行就是它的反向钉子。
+    assert cap.out == "", "降级提示不得混进数据通道"
+
+
+def test_library_get_tells_a_reachable_bridge_apart_from_a_missing_key(
+    zotero: dict[str, Any], capsys: pytest.CaptureFixture
+) -> None:
+    """桥**连通**却取不到 key ⇒ 说「多半是该 key 不在当前库」，仍退 1。
+
+    与上一条（``reachable=False`` ⇒「Zotero 不可达」）合起来才是完整判据：两种失败的
+    下一步行动相反（核对 key vs 去开 Zotero）。共用一句「（未找到）」时调用方无从选择，
+    而且会把「Zotero 桌面没开」伪装成「你的库里没这篇」——后者会让人去怀疑自己的
+    藏书，而真相只是一个没启动的进程。
+    """
+    zotero["exc"] = research.zotero_cli.ZoteroCliError("item not found")
+    zotero["reachable"] = True
+
+    rc = research.cmd_library(_library_args(action="get", key="ABCD1234"))
+
+    assert rc == 1
+    cap = capsys.readouterr()
+    assert "桥连通" in cap.err and "不在当前库" in cap.err
+    assert "不可达" not in cap.err, "桥明明通着，说不可达就反了"
+    assert ("ping",) in zotero["calls"], "ping 是这里的连通性裁判，必须真的被调到"
+
+
+def test_library_get_reports_not_found_on_stdout_with_exit_code_0(
+    zotero: dict[str, Any], capsys: pytest.CaptureFixture
+) -> None:
+    """桥回 ``ok:true`` 但 data 为空：查询成功了，答案就是「没有」⇒ 退 0。
+
+    这是**唯一**能说「（未找到）」的分支。退出码必须是 0：非零会让调用方把它当故障
+    去重试，而重试一个不存在的 key 永远不会成功。
+    """
+    zotero["item"] = None
+
+    rc = research.cmd_library(_library_args(action="get", key="ABCD1234"))
+
+    assert rc == 0
+    cap = capsys.readouterr()
+    assert "（未找到）" in cap.out
+    assert cap.err == "", "成功的查询不该伴随任何提示"
+
+
+def test_library_get_prints_valid_json_and_nothing_else(
+    zotero: dict[str, Any], capsys: pytest.CaptureFixture
+) -> None:
+    """正常路径的 stdout 必须是**可解析的 JSON**，且 stderr 干净。
+
+    断言 ``json.loads`` 能过而不是断言某个子串：前者才是这个子命令对调用方的真实
+    契约。``get_item`` 曾在失败时往 stdout 多打一行中文，子串断言看不出那种损坏。
+    """
+    zotero["item"] = _ITEM["data"]
+
+    assert research.cmd_library(_library_args(action="get", key="ABCD1234")) == 0
+
+    cap = capsys.readouterr()
+    assert json.loads(cap.out) == _ITEM["data"]
+    assert cap.err == ""
+
+
+def test_library_get_without_a_key_is_a_usage_error_that_never_touches_the_bridge(
+    zotero: dict[str, Any], capsys: pytest.CaptureFixture
+) -> None:
+    """缺 ``--key`` 退 2（用法错），且不得去碰桥——那不是桥的问题。"""
+    rc = research.cmd_library(_library_args(action="get"))
+
+    assert rc == 2
+    assert "--key" in capsys.readouterr().err
+    assert zotero["calls"] == [], "用法错不该消耗一次 zotero-cli 子进程"
