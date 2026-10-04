@@ -50,7 +50,7 @@ right beside its page's text, position (nine-grid label), inferred caption (near
 layout map, and a `解读：_(待填)_` slot — so the image↔text binding survives. Images are sha1-deduped
 into `images/`; repeats point back to their first occurrence (interpret once, reuse everywhere).
 
-**Two phases** (overview in SKILL.md → “Translating a huge, image-heavy deck”):
+**Two phases**:
 - **Phase A** = this command (pure code, no vision). Emits `index.md` (nav + section list +
   high-frequency duplicate figures + batch policy), `part_*.md` skeletons, `sidecar/slides.jsonl`
   (machine-readable per-slide record), `images_manifest.json`, `progress.json` (resumable ledger).
@@ -71,6 +71,10 @@ and double-count in `--lint`). `--lint` classifies every image link as ok / brok
 Output defaults to `cache/digests/<stem>/`; use `--out` to place it beside the source deck.
 `images/` and `renders/` are git-ignored (regenerable from the pptx); the `.md` / sidecar /
 manifest / progress ledger are meant to be committed.
+
+If every slide shares one layout, auto-sectioning finds nothing — define sections by hand with
+`--section-at 12,40,77,…`. `--render` needs LibreOffice; without it Phase A still completes and
+records renders as *pending*, so add `--render` on a later re-run.
 
 ## `read` — fast generic extraction
 
@@ -128,9 +132,16 @@ Pandoc outline conventions:
 `--reference-doc` templates: generate a default with
 `pandoc -o ref.docx --print-default-data-file reference.docx` (or `.pptx`), restyle it, then pass it.
 
-Incremental edits (`slides new` / `slides add` / `docx add`) still go through python-pptx /
-python-docx — Pandoc can only generate a **fresh** file; it cannot append to an existing
-.pptx/.docx, and it cannot read .pptx at all (see references/maintenance.md).
+Incremental edits still go through python-pptx / python-docx — Pandoc can only generate a **fresh**
+file; it cannot append to an existing .pptx/.docx, and it cannot read .pptx at all (see
+[maintenance.md](maintenance.md)):
+
+```
+compose slides new 'deck.pptx' --title '…'
+compose slides add 'deck.pptx' --title '…' --bullet '…' --notes '…'
+compose docx add 'report.docx' --heading '…' --level 2
+compose docx read 'report.docx' --preview     # structured read-back
+```
 
 ## Choosing for PDFs
 

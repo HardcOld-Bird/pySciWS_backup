@@ -1,72 +1,48 @@
 ---
 name: document-writing
-description: Create, edit, compile, and proofread LaTeX manuscripts (revtex4-2 / article / Beamer) to journal-submission-grade PDF; read, create, and edit PPTX slides and DOCX documents; extract PPTX/DOCX/PDF to Markdown; digest a huge image-heavy .pptx into image-text-linked Markdown for LLM reading; convert Office files to PDF via LibreOffice. Drives a unified `compose` CLI that scaffolds LaTeX projects from templates, compiles via latexmk with file:line error parsing, lints with chktex, refreshes refs.bib from Zotero, renders PDF pages to PNG for visual proofreading, structurally reads/writes .pptx (slides, tables, speaker notes) and .docx (headings, bullets, tables), and builds decks/docs from Markdown outlines. Use when the user asks to write / draft / revise / compile a paper or report in LaTeX, produce or proofread a PDF, read / summarize / create / edit / translate a .pptx or .docx, extract slides or speaker notes, digest a large deck, build slides from an outline, or refresh a bibliography from Zotero.
+description: Create, edit, compile, and proofread LaTeX manuscripts (revtex4-2 / article / Beamer) to journal-submission-grade PDF; read, create, and edit PPTX slides and DOCX documents; extract PPTX/DOCX/PDF to Markdown; digest a huge image-heavy .pptx into image-text-linked Markdown for LLM reading; convert Office files to PDF via LibreOffice. Drives a unified `compose` CLI that scaffolds LaTeX projects from templates, compiles via latexmk with file:line error parsing, lints with chktex, refreshes refs.bib from Zotero, renders PDF pages to PNG for visual proofreading, structurally reads/writes .pptx and .docx, and builds decks/docs from Markdown outlines. Use when the user asks to write / draft / revise / compile a paper or report in LaTeX, produce or proofread a PDF, read / summarize / create / edit / translate a .pptx or .docx, extract slides or speaker notes, digest a large deck, build slides from an outline, or refresh a bibliography from Zotero.
 ---
 
 # Document Writing
 
 A single CLI drives the whole writing workflow: **scaffold → write → compile → proofread → references**.
 
-The backend lives in `src/pysci/skills/document_writing/` (a set of modules + a `compose` facade).
-**You do not need to read the backend code** — treat it as a black box and drive everything
-through the `compose` CLI below. Only open the code when maintaining it (see
-[references/maintenance.md](references/maintenance.md)).
+The backend in `src/pysci/skills/document_writing/` is a **black box** — drive it through the `compose`
+CLI, open code only when maintaining it ([maintenance.md](references/maintenance.md)).
 
 ## Invocation
 
-Run from the **project root**. The skill installs a console script `pysci-compose`:
+From the **project root**: `uv run pysci-compose <command> [options]`, below `compose …` (fallback:
+`uv run python -m pysci.skills.document_writing.tools.compose …`). This CLI prints Chinese and takes
+multi-word titles — apply `.qoder/rules/basic.md` §3 or you read mojibake and broken commands.
 
-```
-uv run pysci-compose <command> [options]
-```
+## Capability boundary
 
-Below, `compose …` is shorthand for `uv run pysci-compose …`. (Fallback if the script
-isn't installed: `uv run python -m pysci.skills.document_writing.tools.compose …`.)
-
-> **PowerShell rules (critical):** first set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
-> in the same shell — this CLI prints Chinese, and piping its stdout decodes those UTF-8 bytes with
-> the GBK/936 console codepage (mojibake). Then: wrap multi-word arguments in **single quotes**, e.g.
-> `compose tex new my_paper --title 'Gain-induced Exceptional Points'`. Double quotes get split by the
-> shell and break the command. Use `;` (never `&&`) to chain commands. See `.qoder/rules/basic.md` §2.
-
-## Capability boundary (read this first)
-
-**Available now:**
-- LaTeX manuscript authoring → compiled PDF (revtex4-2 / generic article / **Beamer slides**).
-- Compile with parsed `file:line` errors; chktex lint; PDF→PNG visual proofreading.
+- LaTeX manuscript authoring → compiled PDF (revtex4-2 / generic article / **Beamer slides**); compile
+  with parsed `file:line` errors; chktex lint; PDF→PNG visual proofreading.
 - **Read/extract** `.pptx` (per-slide text, bullets, tables, images, speaker notes), `.docx`
-  (headings/paragraphs/bullets/tables), `.pdf`, and other Office formats → Markdown.
-- **Create/edit** `.pptx` (new deck, append slides) and `.docx` (new doc, append blocks) via
-  python-pptx/python-docx; **Markdown→pptx/docx** via **Pandoc** (`--reference-doc` for house style).
+  (headings / paragraphs / bullets / tables), `.pdf` and other Office formats → Markdown.
+- **Create/edit** `.pptx` and `.docx` via python-pptx / python-docx; **Markdown→pptx/docx** via
+  **Pandoc** (`--reference-doc` for house style).
 - Refresh `refs.bib` from the user's Zotero library.
-- `convert` (pptx/docx ↔ pdf/…) via LibreOffice headless — **only when LibreOffice is
-  installed**; otherwise it degrades gracefully with install guidance. Custom install path
-  (e.g., a non-standard D-drive location)? Set `DOCWRITING_SOFFICE` in `.env` to the absolute
-  path of `soffice.exe`; it takes precedence over auto-detection.
+- `convert` (pptx/docx ↔ pdf/…) via LibreOffice headless — **only when LibreOffice is installed**.
+  Non-standard install path? Set `DOCWRITING_SOFFICE` in `.env` to the absolute path of `soffice.exe`;
+  it takes precedence over auto-detection. If `convert` reports LibreOffice missing, fall back to the
+  always-available routes (read/extract, or LaTeX→PDF) instead of failing the task.
 
-If `convert` reports LibreOffice missing, fall back to the always-available routes
-(read/extract, or LaTeX→PDF) instead of failing the task.
+## Commands
 
-## Commands at a glance
-
-| Command | Use when | Key output |
+| Group | Commands | For |
 |---|---|---|
-| `doctor` | Session start, or anything seems broken | TeX / LibreOffice / Python-lib self-check |
-| `tex new <slug>` | Starting a manuscript | Scaffolded project in `projects/<slug>/` |
-| `tex build <target>` | Compiling | PDF + parsed errors (`file:line`), warnings, boxes |
-| `tex lint <target>` | Static check before submitting | chktex issues |
-| `tex refs <target>` | Refreshing the bibliography | `refs.bib` regenerated from Zotero |
-| `read <file>` | Quick extract of any doc (pptx/docx/pdf/xlsx/…) | Markdown in `cache/extracted/` |
-| `slides extract <pptx>` | Deep-reading a slide deck | Per-slide Markdown + notes/tables/images |
-| `slides new / add` | Incrementally creating / extending a deck (python-pptx) | New / updated `.pptx` |
-| `slides from-markdown` | Markdown outline → deck (Pandoc) | New `.pptx` |
-| `slides digest <pptx>` | Translating a huge, image-heavy deck you must *understand* | Image-text-linked `index.md` + `part_*.md` + deduped `images/` |
-| `docx read / add` | Reading or appending to Word docs (python-docx) | Markdown / `.docx` |
-| `docx from-markdown` | Markdown → Word doc (Pandoc) | New `.docx` |
-| `convert <file> --to pdf` | Delivering a PDF of an Office file | Converted file (needs LibreOffice) |
-| `verify <pdf>` | Proofreading the compiled layout | PNG pages for you to Read |
+| health | `doctor` | TeX / LibreOffice / Pandoc / Python-lib self-check |
+| LaTeX | `tex new <slug>` · `tex build <target>` · `tex lint <target>` · `tex refs <target>` | scaffold `projects/<slug>/`; compile → PDF + parsed `file:line`; chktex; regenerate `refs.bib` from Zotero |
+| read | `read <file>` · `slides extract <pptx>` · `docx read <file>` | fast flat extract of any doc → Markdown; deep per-slide read (notes / tables / images); structured Word read |
+| write | `slides new｜add` · `slides from-markdown` · `docx add` · `docx from-markdown` | incremental edits (python-pptx / docx); outline → deck / doc (Pandoc) |
+| digest | `slides digest <pptx> [--out --render --lint]` | huge image-heavy deck → image-text-linked workspace |
+| deliver | `convert <file> --to pdf` · `verify <pdf>` | Office → PDF (needs LibreOffice); PNG pages for you to Read |
 
-Run `compose <command> -h` (and `compose tex <sub> -h`) for the full option list.
+Full flags: `compose <command> -h` (and `compose tex <sub> -h`), or
+[latex.md](references/latex.md) / [read.md](references/read.md).
 
 ## Quick start: zero → submission-grade PDF
 
@@ -80,108 +56,49 @@ Run `compose <command> -h` (and `compose tex <sub> -h`) for the full option list
 - [ ] 7. compose tex lint my_paper                        # final static check
 ```
 
-Loop steps 3–6 until the PDF looks right. **Always `verify` + Read the PNGs before declaring
-done** — LaTeX compiles cleanly even when the layout is wrong (overfull boxes, floats adrift).
+Loop steps 3–6 until the PDF looks right. **Always `verify` + Read the PNGs before declaring done** —
+LaTeX compiles cleanly even when the layout is wrong (overfull boxes, floats adrift). If `doctor`
+reports TeX missing, follow its printed TUNA install guide; reading and extracting (`read`,
+`slides extract`, `verify`) works without TeX.
 
-If `doctor` reports TeX missing, follow its printed TUNA install guide; reading/extracting
-(`read`, `slides extract`, `verify`) works without TeX.
+## Office documents: read, digest, write
 
-## Reading a slide deck or document
+Three routes; commands, flags and conventions in [read.md](references/read.md).
 
-**Structured slide read** (preferred for `.pptx` — keeps notes/tables/image list):
-```
-compose slides extract 'path/to/deck.pptx' --with-images
-```
-Then **Read** the printed Markdown path. Speaker notes appear as `> **演讲者备注：** …`;
-tables become Markdown tables; `--with-images` dumps embedded images so you can Read them too.
-
-**Fast generic read** (any Office/PDF file → Markdown):
-```
-compose read 'path/to/file.docx' --preview
-```
-Re-running reuses the cache; add `--force` to re-extract.
-
-## Translating a huge, image-heavy deck
-
-For a big deck (dozens–hundreds of slides, more images than text) that you must *understand* —
-not just extract — use `slides digest`. It builds an **image-text-linked Markdown workspace** so
-each picture stays bound to its surrounding text (never split into a separate folder), and every
-image gets a `解读` slot you fill in **once** and reuse forever. This is the fix for the classic
-failure where bulk-extracting images severs the image↔text link.
-
-```
-compose slides digest 'path/to/huge.pptx' --out 'path/to/translated' --render
-```
-
-Two phases:
-- **Phase A (this command; no LLM vision needed):** dedupes (sha1) + exports every image to
-  `images/`, detects logical sections, packs them into `part_*.md` chunks, infers each image's
-  nearby caption text, draws an ASCII layout map per slide, and leaves a `解读：_(待填)_` slot
-  under each image plus a whole-page render link. Unreadable formats are pre-handled: **gif**
-  animations get first/mid/last frames extracted to `images/previews/`; **wmf/emf** vectors get a
-  PNG preview via LibreOffice. Writes `progress.json` (a resumable ledger) + `index.md` (nav).
-- **Phase B (you, in small batches):** for each figure slide, Read its whole-page composite render
-  `renders/slide-NNN.png` **once** (sees all images + text in place), then fill each image's `解读`.
-  Default batch suggestion: **5 figure slides / 15 text slides**. Duplicate images just point back
-  to their first occurrence — interpret once. Re-running **without** `--force` resumes and never
-  overwrites filled interpretations. Health-check links anytime with `--lint` (missing renders /
-  vector previews are reported as *pending*, not broken).
-
-`--render` needs LibreOffice (see Capability boundary); without it Phase A still completes and
-records renders as pending — add `--render` later. If every slide shares one layout (auto-sectioning
-finds nothing), define sections by hand: `--section-at 12,40,77,…`. Finish with a narrative review
-md that condenses the whole deck into prose, linking back to each part and key figure.
-
-For the full interpretation workflow — the per-figure loop, SearchReplace anchor technique,
-duplicate-figure handling, a resumable status-ledger pattern, batch cadence, and the narrative
-finish — see [references/digest.md](references/digest.md).
-
-## Creating & editing slides / Word docs
-
-**Build a deck / doc from a Markdown outline** — driven by **Pandoc** (the community converter
-standard), so headings, nested lists, pipe tables, math and images all map faithfully:
-```
-compose slides from-markdown 'outline.md' --out 'deck.pptx' [--slide-level 2] [--reference-doc master.pptx]
-compose docx   from-markdown 'draft.md'   --out 'report.docx' [--reference-doc style.docx]
-```
-`--slide-level` (default 2) picks which heading starts a new slide; `--reference-doc` applies a
-Word/PPT house style. **Speaker notes** go in a fenced `::: notes` div (not `> `). Full outline
-conventions in [references/read.md](references/read.md).
-
-**Incremental edits** (append to an *existing* file) stay on python-pptx / python-docx — Pandoc can
-only generate a fresh file, it cannot append to an existing `.pptx`/`.docx`:
-```
-compose slides new 'deck.pptx' --title '…'
-compose slides add 'deck.pptx' --title '…' --bullet '…' --notes '…'
-compose docx add 'report.docx' --heading '…' --level 2
-compose docx read 'report.docx' --preview     # structured read-back
-```
+- **Read a deck or doc.** `slides extract 'deck.pptx' --with-images` for structure (notes, tables,
+  bullet hierarchy, embedded images); `read 'file.docx' --preview` for a fast flat dump of anything —
+  re-runs reuse the cache, `--force` re-extracts. Then **Read** the printed Markdown path.
+- **Digest a huge, image-heavy deck you must *understand*.** `slides digest 'huge.pptx' --out
+  'translated/' --render` builds an **image-text-linked** workspace: each image stays inline beside its
+  page's text with a `解读：_(待填)_` slot you fill **once** and reuse (sha1-deduped) — the fix for
+  bulk extraction severing the image↔text link. Phase A is pure code (skeletons, `index.md`,
+  `progress.json`); Phase B is you, batch by batch, Reading each figure slide's whole-page render
+  **once**. Resumable: re-running without `--force` never overwrites filled interpretations. The
+  interpretation loop, edit anchors and narrative finish: [digest.md](references/digest.md).
+- **Write.** `slides|docx from-markdown` (Pandoc — headings, nested lists, pipe tables, math and images
+  map faithfully; `--slide-level` picks the slide heading, `--reference-doc` applies house style,
+  speaker notes go in a fenced `::: notes` div) for a **fresh** file; `slides new|add` / `docx add`
+  (python-pptx / docx) to append to an existing one — **Pandoc cannot append**.
 
 ## Output locations
 
 | Path | Contents |
 |---|---|
-| `data/skills/document_writing/projects/<slug>/` | One writing project (`main.tex`, `refs.bib`, `figures/`, `build/`) |
-| `data/skills/document_writing/templates/latex/` | Scaffold templates (`revtex/`, `article/`) |
-| `data/skills/document_writing/cache/extracted/` | Extracted Markdown from `read` / `slides extract` (git-ignored) |
-| `data/skills/document_writing/cache/digests/<deck>/` | Default `slides digest` workspace (override with `--out`; `images/` + `renders/` git-ignored) |
+| `data/skills/document_writing/projects/<slug>/` | one writing project (`main.tex`, `refs.bib`, `figures/`, `build/`) |
+| `data/skills/document_writing/templates/latex/` | scaffold templates (`revtex/`, `article/`) |
+| `data/skills/document_writing/cache/extracted/` | Markdown from `read` / `slides extract` (git-ignored) |
+| `data/skills/document_writing/cache/digests/<deck>/` | default `slides digest` workspace (override with `--out`; `images/` + `renders/` git-ignored) |
 | `data/skills/document_writing/cache/renders/` | PNG pages from `verify` (git-ignored) |
 
 ## When something breaks
 
-1. Run `compose doctor` — it reports TeX, engines, LibreOffice, Pandoc, and every Python lib.
-2. Compile errors are already parsed to `file:line`; open that line in `main.tex`.
-3. For backend / template / config issues, see [references/maintenance.md](references/maintenance.md).
+`compose doctor` first — it reports TeX, engines, LibreOffice, Pandoc and every Python lib. Compile
+errors are already parsed to `file:line`; open that line in `main.tex`. Backend / template / config:
+[maintenance.md](references/maintenance.md).
 
 ## Reference files
 
-- [references/latex.md](references/latex.md) — the LaTeX workflow in depth: templates
-  (revtex / article / **beamer**), engines, the compile→verify loop, bibliography handling,
-  and manuscript-quality guidance.
-- [references/read.md](references/read.md) — reading **and writing** pptx / docx / pdf:
-  backends, caches, what each extractor preserves, and the Markdown outline conventions.
-- [references/digest.md](references/digest.md) — the `slides digest` interpretation workflow in
-  depth: the per-figure loop, SearchReplace anchors, duplicate-figure reuse, the resumable
-  status-ledger pattern, batch cadence, and the narrative-review finish.
-- [references/maintenance.md](references/maintenance.md) — how the backend works and how to fix
-  or extend it (config, log parsing, adding templates, LibreOffice conversion).
+- [latex.md](references/latex.md) — the LaTeX workflow in depth: templates (revtex / article / **beamer**), engines, the compile→verify loop, bibliography handling, manuscript-quality guidance, lint.
+- [read.md](references/read.md) — reading **and writing** pptx / docx / pdf: backends, caches, what each extractor preserves, Markdown outline conventions.
+- [digest.md](references/digest.md) — the `slides digest` interpretation workflow: per-figure loop, SearchReplace anchors, duplicate-figure reuse, resumable status ledger, batch cadence, narrative-review finish.
+- [maintenance.md](references/maintenance.md) — how the backend works and how to fix or extend it (config, log parsing, adding templates, LibreOffice conversion).

@@ -18,19 +18,10 @@ numerical pipelines, eigenvalue analysis, topology exploration, lightweight plot
 
 ## Invocation
 
-Run from the **project root**. The skill installs a console script `pysci-theory`:
+From the **project root**: `uv run pysci-theory <command> [options]`, below `theory …` (fallback:
+`uv run --no-sync python -m pysci.skills.theoretical_computation.tools.theory …`).
 
-```
-uv run pysci-theory <command> [options]
-```
-
-Below, `theory …` is shorthand for `uv run pysci-theory …`. (Fallback if the script isn't
-installed: `uv run --no-sync python -m pysci.skills.theoretical_computation.tools.theory …`.)
-
-> **PowerShell rules (critical):** first set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
-> in the same shell — this CLI prints Chinese, and piping its stdout decodes those UTF-8 bytes with
-> the GBK/936 console codepage (mojibake). Then: wrap multi-word arguments in **single quotes**; use
-> `;` (never `&&`) to chain commands. See `.qoder/rules/basic.md` §2.
+> **PowerShell:** this CLI prints Chinese — apply `.qoder/rules/basic.md` §3 or you read mojibake.
 
 ## Capability boundary (read this first)
 
@@ -99,34 +90,12 @@ def main(session_dir: Path | None = None) -> None:
 └── notes.md       # computation log (timestamped entries)
 ```
 
-## Module API quick reference
+## Module API
 
-When writing computation scripts, import from the tools package:
-
-```python
-from pysci.skills.theoretical_computation.tools import (
-    cas,
-    numerical,
-    eigen,
-    topology,
-    visualize,
-)
-from pysci.skills.theoretical_computation.tools.session import (
-    ensure_session,
-    save_results,
-    save_plot,
-)
-from pysci.skills.theoretical_computation.tools.config import settings
-```
-
-| Module | Key functions |
-|---|---|
-| `cas` | `symbolic_matrix`, `simplify_expr`, `series_expand`, `expr_to_latex`, `solve_system`, `discriminant_2x2` |
-| `numerical` | `ParamAxis`, `ParamSpace`, `lambdify_expr`, `evaluate_on_grid`, `make_meshgrid`, `adaptive_sample_1d` |
-| `eigen` | `eigensystem_symbolic`, `eigensystem_numeric`, `detect_ep`, `track_branches`, `ep_condition_symbolic` |
-| `topology` | `find_zero_set`, `find_isosurface`, `find_singularities`, `find_critical_points`, `compute_winding_number` |
-| `visualize` | `quick_plot_2d`, `quick_plot_complex`, `quick_plot_complex_plane`, `quick_plot_3d_surface`, `quick_plot_zero_set_3d`, `export_exploration` |
-| `session` | `ensure_session`, `save_results`, `save_plot`, `write_log`, `list_sessions` |
+Computation scripts import the toolkit directly:
+`from pysci.skills.theoretical_computation.tools import cas, numerical, eigen, topology, visualize`,
+plus `session` (`ensure_session` / `save_results` / `save_plot`) and `config.settings`. The exact
+import block and the per-module function inventory: [api.md](references/api.md).
 
 ## Visual closed loop
 
@@ -166,3 +135,7 @@ For 3D pyvista renders, the CLI forces `pv.OFF_SCREEN = True` — no window pops
   by comparing exported data arrays.
 - **literature_research**: theory reproduces paper models. Use `pysci-research` to fetch
   the source paper, then scaffold a computation to verify equations.
+
+## Reference files
+
+- [api.md](references/api.md) — the exact import block and the per-module function inventory (`cas` / `numerical` / `eigen` / `topology` / `visualize` / `session`).

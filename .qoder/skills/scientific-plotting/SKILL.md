@@ -26,10 +26,7 @@ uv run pysci-figures <command> [options]
 Below, `figures …` is shorthand for `uv run pysci-figures …`. (Fallback if the script isn't
 installed / offline: `uv run --no-sync python -m pysci.skills.scientific_plotting.tools.figures …`.)
 
-> **PowerShell rules (critical):** first set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
-> in the same shell — this CLI prints Chinese, and piping its stdout decodes those UTF-8 bytes with
-> the GBK/936 console codepage (mojibake). Then: wrap multi-word arguments in **single quotes**; use
-> `;` (never `&&`) to chain commands. See `.qoder/rules/basic.md` §2.
+> **PowerShell:** this CLI prints Chinese — apply `.qoder/rules/basic.md` §3 or you read mojibake.
 
 ## Capability boundary (read this first)
 
@@ -134,6 +131,6 @@ Do not ask the user to eyeball intermediate results — use the preview yourself
 
 ## Reference files
 
-- [references/plotting.md](references/plotting.md) — the publication conventions in depth:
+- [plotting.md](references/plotting.md) — the publication conventions in depth:
   mathtext italic/upright/bold rules, colorblind palettes, design widths, manual SVG/EPS
   editing, and the iteration-scenario playbook.
