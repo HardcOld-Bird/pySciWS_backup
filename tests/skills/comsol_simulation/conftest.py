@@ -1,6 +1,6 @@
 """comsol_simulation 测试的共享 fixture 与 hardware 守卫。
 
-约定（对齐 ``tests/gain_ep/experiment/conftest.py``，但**不**整目录忽略收集）：
+约定（对齐 ``tests/research/gain_ep/experiment/conftest.py``，但**不**整目录忽略收集）：
 - 纯 Python 单测不依赖 COMSOL/mph，始终运行——因此这里不能用 ``collect_ignore_glob``。
 - 需要活体 COMSOL 的 hardware 冒烟用例通过 ``comsol_client`` / ``smoke_mph`` fixture 守卫：
   mph 不可导入、未发现 COMSOL 安装、或冒烟模型缺失时 ``pytest.skip``（而非 collection error）。

@@ -10,8 +10,8 @@
 import matplotlib.pyplot as plt
 
 # 导入matplotlib中文配置
-from pysci.common.plotting import setup_chinese_fonts
 from pysci.paths import research_asset_dir
+from pysci.research.gain_ep.plotting import setup_chinese_fonts
 from pysci.research.gain_ep.theory.theory import (
     plot_eigenvalues_3d,
     plot_scattering_matrix_2d,
@@ -28,7 +28,13 @@ setup_chinese_fonts()
 client = None
 
 # COMSOL模型文件
-MPH_FILE = research_asset_dir("gain_ep") / "experiment" / "mphs" / "gainEP_basic.mph"
+MPH_FILE = (
+    research_asset_dir("gain_ep")
+    / "simulation"
+    / "old_mphs"
+    / "others"
+    / "gainEP_basic.mph"
+)
 
 # 数据存储目录
 DATA_DIR = research_asset_dir("gain_ep") / "storage" / "data"

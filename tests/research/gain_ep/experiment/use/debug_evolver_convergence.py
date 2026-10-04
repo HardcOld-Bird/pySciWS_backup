@@ -17,7 +17,7 @@
 
 用法（在仓库根目录下）：
 
-    python tests/gain_ep/experiment/use/debug_evolver_convergence.py
+    python tests/research/gain_ep/experiment/use/debug_evolver_convergence.py
 
 或在 PyCharm/IDEA 里直接运行此文件即可。
 """

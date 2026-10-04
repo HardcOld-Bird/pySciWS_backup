@@ -13,9 +13,10 @@ import matplotlib.pyplot as plt
 import mph
 import numpy as np
 
-# 导入并应用项目的中文字体配置
-from pysci.common.plotting import setup_chinese_fonts
 from pysci.paths import research_asset_dir
+
+# 导入并应用项目的中文字体配置（取自研究线根，避开 experiment 包的 nidaqmx 硬件依赖链）
+from ..plotting import setup_chinese_fonts
 
 setup_chinese_fonts()
 
@@ -119,7 +120,7 @@ class GainEPSimulator:
     Examples:
         使用上下文管理器（推荐）:
         >>> from pathlib import Path
-        >>> mph_file = Path("data/research/1_gain_ep/experiment/mphs/gainEP_10in16out.mph")
+        >>> mph_file = Path("data/research/1_gain_ep/simulation/old_mphs/gainEP_10in16out.mph")
         >>> with GainEPSimulator(mph_file) as simulator:
         ...     sim_input = SimulationInput(1.0, 1.0, 0j, 0j, 0j, 0j, 0j, 0j, 0j, 0j)
         ...     output = simulator.run_simulation(sim_input)

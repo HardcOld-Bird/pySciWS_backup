@@ -1,7 +1,7 @@
 """
 # CaliberAnemone 类测试模块
 
-测试路径：`tests/gain_ep/experiment/calib/test_caliber_anemone.py`
+测试路径：`tests/research/gain_ep/experiment/calib/test_caliber_anemone.py`
 
 本模块包含对 CaliberAnemone 类的系统化测试，验证其校准功能是否正常工作。
 """

@@ -4,7 +4,7 @@
 由于 COMSOL 仿真需要硬件连接，本测试仅覆盖纯计算逻辑和可 Mock 的部分。
 
 运行方式：
-    pytest tests/gain_ep/experiment/sim/test_simulator.py -v
+    pytest tests/research/gain_ep/experiment/sim/test_simulator.py -v
 """
 
 from __future__ import annotations

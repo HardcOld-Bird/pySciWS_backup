@@ -7,8 +7,8 @@
 
 因此默认忽略这两个文件的收集。需要手动运行（且已启动 COMSOL Server）时，直接执行::
 
-    python tests/gain_ep/theory/test_gain_ep_functions.py
-    python tests/gain_ep/theory/test_10in16out_function.py
+    python tests/research/gain_ep/theory/test_gain_ep_functions.py
+    python tests/research/gain_ep/theory/test_10in16out_function.py
 
 日后在本目录新增**真正的** pytest 理论单元测试（安全 import + mock COMSOL）时不受此守卫
 影响——``collect_ignore`` 只精确排除上述两个脚本，而非整个目录。
