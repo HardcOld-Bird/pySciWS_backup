@@ -141,7 +141,11 @@ _（待精读后填写）_
 
 ## Journal-tier Justification
 
-- **Journal**：Physical Review Applied（JIF 4.08）
+- **Journal**：Physical Review Applied
+- **Metrics**：JIF 4.19（OpenAlex 估算，非官方 JCR）｜SCImago Q1｜JCR —（待 WoS Journals API）
+- **Expert tier**：top（依据 norway-2）
+  > 对声学这类**低引用密度**领域，专家评议档次比 JIF 更贴近领域共识：
+  > JASA 的 2yr_mean_citedness 只有 0.82，但 JUFO 把它判为 3 级（最高档）。
 - **Fit assessment**：
   - [ ] **Over-claimed**
   - [ ] **Matched**
@@ -194,3 +198,5 @@ _（用户或 AI 随时补充）_
 - 2026-10-03: 数据修复——按权威源刷新 wos_id, cited_by_count_normalized, jif, journal_h_index, journal_tier, journal_tier_basis, listed_in, esi_highly_cited, esi_hot_paper（esi_* 由 false 改为 null：ESI 名单需 WoS Journals API，当前无程序化来源，false 等于断言一件未知的事）。正文其余部分未改。
 - 2026-10-04: 补齐字段 extracted_md_path——指向 research ingest 的产物 cache/extracted/group_pubs/fang_ep_metagrating.md（标题逐字校对一致；据 ingest/manifest.json，该文件由本地 PDF “房鑫盛师兄文章/房师兄EP.pdf” 经 MinerU 抽取得到，42225 字符）。本字段此前为空：2026-09-18 那次抽取的 39457 字符版本已不在缓存中。正文其余部分未改。
 - 2026-10-04: 补齐字段 scimago_quartile（Q1）——按 OpenAlex source 的 ISSN（2331-7019）查本地 SCImago SJR 2025 索引（53404 条）得到；该字段此前为空是因为索引当时尚未构建。正文其余部分未改。
+- 2026-10-04: 文件重命名 `2023_fang_nonhermitian-metagratings-degenerated-states.md` → `2023_fang_extreme-wave-manipulation-non-hermitian.md`（用 `git mv`，保留历史）。旧名与本篇 frontmatter 派生出的规范名不符，`research index --fix` 一直在报；而 `_merge_note` 是按**本次新取到的** frontmatter 现算目标路径的，名字对不上就会新建一份重复笔记而不是合并。新名由 `year` + `first_author_last_name` + `short_title` 派生，与规范一致。frontmatter 与正文其余部分未改；`INDEX.md` 已由 `research index` 重建。
+- 2026-10-04: 正文 Journal-tier 段同步 frontmatter——旧正文把 JIF 硬编进 `**Journal**` 行（4.08），而 frontmatter 已在 10-03 刷新为 4.19、于 10-04 新增 scimago_quartile（Q1），于是那一行成了陈旧快照，且 SCImago 分区与专家评议档次（journal_tier top / norway-2）在正文里完全看不见。改为当前 `templates/paper_note.md` 的三行形状（Journal / Metrics / Expert tier），值逐一取自本篇 frontmatter；Fit assessment / Reasoning 等待填项未动。同时把 Zotero 条目 F6NH9JN9 的 extra 补齐 wos_id 与 jif（此前只有 openalex_id / cited_by_count / oa_status；行序按 `zotero_cli._EXTRA_FIELDS`）。

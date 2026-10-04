@@ -131,7 +131,11 @@ _（≤150 字的段落总结，读完 abstract + intro 最后一段 + conclusio
 
 ## Journal-tier Justification
 
-- **Journal**：Phys. Rev. Lett. 121, 124501 (2018)（JIF —, —）
+- **Journal**：Physical Review Letters
+- **Metrics**：JIF 8.97（OpenAlex 估算，非官方 JCR）｜SCImago Q1｜JCR —（待 WoS Journals API）
+- **Expert tier**：top（依据 jufo-3, norway-2）
+  > 对声学这类**低引用密度**领域，专家评议档次比 JIF 更贴近领域共识：
+  > JASA 的 2yr_mean_citedness 只有 0.82，但 JUFO 把它判为 3 级（最高档）。
 - **Fit assessment**：
   - [ ] **Over-claimed**：论文的分量不足以支撑该刊
   - [ ] **Matched**：恰当
@@ -189,3 +193,4 @@ _（用户或 AI 随时补充；此段落不受模板约束）_
 - 2026-10-03: 数据修复——按权威源刷新 publication_date, journal, journal_ref, publisher, volume, issue, pages, openalex_id, wos_id, cited_by_count, cited_by_count_normalized, jif, journal_h_index, journal_tier, journal_tier_basis, listed_in, esi_highly_cited, esi_hot_paper（esi_* 由 false 改为 null：ESI 名单需 WoS Journals API，当前无程序化来源，false 等于断言一件未知的事）。正文其余部分未改。
 - 2026-10-04: 补齐字段 extracted_md_path
 - 2026-10-04: 补齐字段 scimago_quartile（Q1）——按 OpenAlex source 的 ISSN（0031-9007 / 1079-7114）查本地 SCImago SJR 2025 索引（53404 条）得到；该字段此前为空是因为索引当时尚未构建。正文其余部分未改。
+- 2026-10-04: 正文 Journal-tier 段同步 frontmatter——旧正文的 `**Journal**` 行填的是 journal_ref（`Phys. Rev. Lett. 121, 124501 (2018)`）且 JIF 为 `—`，因为建笔记时 journal 与 jif 都还是空的；frontmatter 现已有 journal（Physical Review Letters）、jif（8.97）、scimago_quartile（Q1），那一行遂同时是「错位」与「陈旧」。改为当前 `templates/paper_note.md` 的三行形状（Journal / Metrics / Expert tier），值逐一取自本篇 frontmatter；Fit assessment / Reasoning 等待填项未动。本篇 `zotero_key` 仍为空（尚未入库），故无 Zotero 侧快照需同步。
