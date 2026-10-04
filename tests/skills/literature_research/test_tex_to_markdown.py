@@ -78,6 +78,44 @@ def test_an_unbalanced_comment_environment_does_not_eat_the_rest() -> None:
     assert _strip(tex) == tex
 
 
+def test_a_balanced_thebibliography_environment_is_dropped_whole() -> None:
+    """REVTeX 书目环境整段不进产物——这是源头修复，:mod:`corpus_clean` 是兼顶。
+
+    不删的话产物里会原样留下整个环境，里面全是 ``\\bibitem``/``\\citenamefont``/
+    ``\\bibinfo``/``\\BibitemShut`` 宏残渣（实测某 arXiv 产物 768 个宏、35,633 字符，
+    占该文件 58.8%）。而 paperqa 把 ``.md`` 按行硬切（``chunk_code_text``），这些宏会
+    直接吃掉 chunk 预算。书目信息另有权威来源（citation_verify / Zotero / OpenAlex）。
+    """
+    tex = (
+        "\\begin{document}\n"
+        "\\title{Real Title}\n"
+        "Body text stays.\n"
+        "\\begin{thebibliography}{2}\n"
+        "\\bibitem{bender99} \\citenamefont{Bender} \\bibinfo{year}{1999}\n"
+        "\\BibitemShut{NoStop}\n"
+        "\\end{thebibliography}\n"
+        "\\end{document}\n"
+    )
+
+    out = _to_md(tex)
+
+    assert "Body text stays." in out
+    assert "thebibliography" not in out
+    for macro in ("bibitem", "citenamefont", "bibinfo", "BibitemShut", "bender99"):
+        assert macro not in out
+
+
+def test_an_unbalanced_thebibliography_environment_does_not_eat_the_rest() -> None:
+    """不配平时宁可漏删（交给 :mod:`corpus_clean` 的“吞到 EOF”兼顶），不能把正文吃掉。
+
+    与 ``comment`` 环境同一个配平守卫：作者手改留下的半个 ``\\begin{thebibliography}``
+    是真实存在的形态，照删会把此后整个文档变成空文档，而且是**静默**的。
+    """
+    tex = "keep me\n\\begin{thebibliography}{1}\n\\bibitem{a} x\n"
+
+    assert _strip(tex) == tex
+
+
 # ---------------------------------------------------------------------------
 #  REVTeX 前置宏
 # ---------------------------------------------------------------------------

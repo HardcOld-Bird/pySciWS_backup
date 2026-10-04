@@ -291,9 +291,18 @@ _TEX_VERBATIM_ENVS = frozenset(
     {"verbatim", "Verbatim", "lstlisting", "minted", "alltt"}
 )
 
-#: 这些环境的内容 LaTeX 自己就整段丢弃（``comment`` 包），与注释同类，一并剥掉——
-#: 否则被作者注掉的一整节会以正文身份进入 markdown 与 RAG 语料。
-_TEX_DROPPED_ENVS = ("comment",)
+#: 这些环境整段丢弃，不进 markdown。两类理由：
+#:
+#: - ``comment``：LaTeX 自己就整段丢弃（``comment`` 包），与注释同类，一并剥掉——
+#:   否则被作者注掉的一整节会以正文身份进入 markdown 与 RAG 语料。
+#: - ``thebibliography``：LaTeX **会**渲染它，渲染结果是参考文献表；但源码形态对下游
+#:   只有坏处——REVTeX 的书目环境里全是 ``\bibitem``/``\citenamefont``/``\bibinfo``/
+#:   ``\BibitemShut`` 宏残渣（实测某 arXiv 产物 768 个宏、35,633 字符，占该文件 58.8%），
+#:   对语义检索零价值却占满 chunk 预算。书目信息另有权威来源（``citation_verify`` /
+#:   Zotero / OpenAlex），不必从全文里捞。
+#:
+#: 两者都受下面的配平守卫保护：``\begin``/``\end`` 数目不等时**不**启用整段丢弃。
+_TEX_DROPPED_ENVS = ("comment", "thebibliography")
 
 _TEX_BEGIN_ENV_RE = re.compile(r"\\begin\{([A-Za-z]+\*?)\}")
 
