@@ -148,12 +148,16 @@ def reconstruct_abstract(inv_index: dict[str, list[int]] | None) -> str:
 def _get(
     url: str, params: dict[str, Any] | None = None, use_cache: bool = True
 ) -> dict[str, Any]:
-    """底层 GET，自动附加 API key（若配置）与 polite pool 邮箱、自动缓存。
+    """底层 GET，自动附加 API key（若配置）与 ``mailto``、自动缓存。
 
-    OpenAlex 自 2026-02-13 起强制要求 API key：``mailto`` 已被忽略，无 key 时仅
-    100 credits/天（testing/demos only）。若 .env 配置了 ``OPENALEX_API_KEY``，以
-    ``Authorization: Bearer <key>`` 头注入——放在 header 而非 query，避免 key 进入
-    缓存文件名与 URL（_cache_key 只对 url+params 取哈希）。
+    OpenAlex 自 2026-02-13 起改为「免费注册 + 按用量计费」：配额由 key 决定，不再是
+    polite pool 模型（``mailto`` 照旧附加——无害，但别再指望它抬配额）。无 key 时每天
+    只有 **$0.10** 的用量预算（官方定位 testing/demos），免费 key 提到 **$1/天**（10×）。
+    计价按调用形态而非请求数：按 ID/DOI 取单条**免费且不限量**，list/filter 每千次
+    $0.10，search 每千次 $1——故 $0.10 约等于 1000 次 list 或 100 次 search。
+    若 .env 配置了 ``OPENALEX_API_KEY``，以 ``Authorization: Bearer <key>`` 头注入
+    ——放在 header 而非 query，避免 key 进入缓存文件名与 URL（_cache_key 只对
+    url+params 取哈希）。
     """
     params = dict(params or {})
     if settings.openalex_email and "mailto" not in params:
@@ -464,8 +468,10 @@ def works_by_ids(
 ) -> list[dict[str, Any]]:
     """按 OpenAlex id 批量取回 work_summary（滚雪球的 **backward** 方向）。
 
-    用 ``filter=openalex_id:W1|W2|...`` 一次取多篇，而不是逐篇 :func:`get_work`：50 条
-    参考文献逐篇取是 50 次请求（无 key 时 OpenAlex 每天只给 100 credits），批量取是 1 次。
+    用 ``filter=openalex_id:W1|W2|...`` 一次取多篇，而不是逐篇 :func:`get_work`。
+    这么做的理由在 2026-02-13 计价改版后**变了，但结论没变**：按 ID 取单条现在免费且
+    不限量，而 list/filter 每千次 $0.10，故批量在配额上反而略贵（1 次 list ≈ $0.0001
+    对 50 次单条 = $0）；真正省下的是 50 次 HTTP 往返的延迟与超时风险。
     ``batch_size`` 硬上限 :data:`MAX_IDS_PER_REQUEST`。
 
     降级与契约（调用方**不得**假定一一对应）：
@@ -655,7 +661,8 @@ def work_to_note_frontmatter(w: dict[str, Any]) -> dict[str, Any]:
     # journal_tier 则由 listed_in 的专家评议名单派生（见 notes.derive_journal_tier）。
     #
     # 两处都**回落到 work dict 自带的内联字段**：``get_source`` 要一次额外请求，无 key
-    # 降级态（~100 credits/天）下很容易失败，而内联的 ``listed_in`` / ``journal_issn`` 总在。
+    # 降级态下预算极小（$0.10/天）、限流更紧，多一次往返就多一分失败概率；而内联的
+    # ``listed_in`` / ``journal_issn`` 总在且零请求。
     # 不回落的话，降级态下笔记的档次与 SCImago 分区会静默全空——而这恰恰是最需要
     # 免费指标层的时刻。tier 与 basis 在这里**重算**而不是直接取 ``w["journal_tier"]``：
     # 纯函数重算的成本可忽略，但能保证 tier / basis / listed_in 三者永远自洽（不会一个

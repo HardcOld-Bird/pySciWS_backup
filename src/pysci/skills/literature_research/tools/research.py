@@ -696,9 +696,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if settings.openalex_api_key:
         oa = "就绪（已配置 OPENALEX_API_KEY）"
     elif settings.openalex_email:
-        oa = "降级（仅设 mailto；OpenAlex 自 2026-02-13 起需 API key，否则限 100 credits/天）"
+        oa = "降级（仅设 mailto；OpenAlex 自 2026-02-13 起配额由 key 决定，无 key 仅 $0.10/天）"
     else:
-        oa = "降级（未配置 OPENALEX_API_KEY，限 100 credits/天测试配额；建议申请免费 key）"
+        oa = "降级（未配置 OPENALEX_API_KEY，仅 $0.10/天用量预算；免费 key 提到 $1/天）"
     print(f"  OpenAlex         : {oa}（主源）")
     print("  arXiv            : 就绪（无需 key）")
     print("  Crossref         : 就绪（引用完整性门三源之一，无需 key）")
@@ -874,14 +874,14 @@ def cmd_search(args: argparse.Namespace) -> int:
     if source == "auto":
         rows = rows[:limit]
 
-    # 降级态下的空结果**不可判读**：可能是 100 credits/天 的配额已耗尽，也可能是该主题
+    # 降级态下的空结果**不可判读**：可能是 $0.10/天 的用量预算已耗尽，也可能是该主题
     # 确实无文献。静默返回空集会让调用方（尤其是 LLM）直接得出后一个结论，并据此
     # 写进综述——这是最坏的失败形态，因为它看起来完全正常。故此处破例不静默。
     # 只在真走过 OpenAlex 那条分支时告警：``--source arxiv`` 压根没查 OpenAlex，
     # 对它喊配额耗尽是误导。走 stderr：它是告警而非结果，且 JSON 模式下 stdout 必须纯净。
     if not rows and source in ("auto", "openalex") and not settings.openalex_api_key:
         print(
-            "[search] 注意：OpenAlex 处于无 key 降级态（限 ~100 credits/天）。\n"
+            "[search] 注意：OpenAlex 处于无 key 降级态（每天仅 $0.10 用量预算）。\n"
             "         空结果可能是配额耗尽，而非该主题确实无文献——"
             "建议改用 arxiv-mcp-server 或 --source arxiv 复核。",
             file=sys.stderr,

@@ -283,7 +283,7 @@ def test_works_by_ids_returns_empty_without_any_http_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """无可用的合法 id 时**一次请求都不发**。无 key 降级态下 OpenAlex 每天只给
-    ~100 credits，一次空 filter 请求就是白烧一份配额（而且会返回 400）。"""
+    $0.10 的用量预算，一次空 filter 请求就是白烧一份预算（而且会返回 400）。"""
     rec = _Recorder([(_is_list, _echo_batch)]).install(monkeypatch)
 
     assert oa.works_by_ids([]) == []

@@ -296,7 +296,7 @@ playwright install chromium   # 仅当系统无 Chrome/Edge 时，browser_fetch 
 `openai/Qwen/Qwen2.5-7B-Instruct`）、`PQA_LLM_FALLBACK`（付费回退 `openai/Qwen/Qwen2.5-32B-Instruct`）、
 `PQA_HOME`（默认 `cache/rag`）。
 
-除 arXiv 外全部可选；缺失时对应功能静默降级（OpenAlex 无 key 时限 100 credits/天测试配额）。**Crossref 引用核验无需任何 key**（`OPENALEX_EMAIL` 兼作 polite-pool `mailto`）。用 `research doctor` 一览当前凭据与可达性（含 Crossref 就绪行）。
+除 arXiv 外全部可选；缺失时对应功能静默降级（OpenAlex 无 key 时每天仅 $0.10 用量预算，免费 key 提到 $1/天）。**Crossref 引用核验无需任何 key**（`OPENALEX_EMAIL` 仍作 `mailto` 附加，但自 2026-02-13 起配额由 key 决定，不再是 polite-pool 模型）。用 `research doctor` 一览当前凭据与可达性（含 Crossref 就绪行）。
 
 ---
 

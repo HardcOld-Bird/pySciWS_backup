@@ -21,7 +21,7 @@ Reach for the MCP first for broad discovery. Use `research search` when the MCP 
 when you need what only the CLI provides: the **frontmatter normalization contract**, **WoS
 enrichment** (`--enrich`; WoS/Scopus are unimplemented in the MCP), and the **arXiv LaTeX-source**
 path behind `read`. Two caveats: the MCP's OpenAlex connector runs **key-less** (no API-key env var
-upstream), so it is subject to OpenAlex's ~100 credits/day cap — the CLI's `openalex_client` injects
+upstream), so it is subject to OpenAlex's keyless **$0.10/day** usage budget — the CLI's `openalex_client` injects
 `OPENALEX_API_KEY` and stays the quota-safe OpenAlex path; and the separately-registered
 `arxiv-mcp-server` is kept as complementary (deep arXiv tools the MCP lacks). Its `citation_graph` is
 the **one overlap** with the CLI, and the split is by *coverage*: it reaches arXiv papers only,
@@ -123,7 +123,7 @@ Two contract details worth relying on:
 - When OpenAlex is running **key-less** (no `OPENALEX_API_KEY`) *and* the result set is empty,
   `search` prints one extra warning to **stderr**. This is the single deliberate exception to the
   module's otherwise-silent degradation: an empty list is indistinguishable from an exhausted
-  ~100 credits/day quota, and quietly returning `[]` there is exactly how a survey ends up asserting
+  $0.10/day usage budget, and quietly returning `[]` there is exactly how a survey ends up asserting
   that a field is empty. It fires only when the OpenAlex branch actually ran — `--source arxiv` never
   queried OpenAlex, so warning about its quota would be misleading.
 
