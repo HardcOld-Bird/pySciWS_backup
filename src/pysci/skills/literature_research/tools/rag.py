@@ -28,6 +28,12 @@
    否则启动会去拉 raw.githubusercontent.com（校园网超时 ~40s）。
 4. **懒导入**：``paperqa`` / ``litellm`` 只在真正调用时导入，避免拖慢 research CLI 启动，
    也便于离线单测 monkeypatch。
+5. **语料规范化**：索引前先把 ``cache/extracted`` 的产物洗一遍（:mod:`corpus_clean`），
+   删掉图片占位行 / 编号参考文献表 / REVTeX 书目宏。理由是 paperqa 把 ``.md`` 当**代码**
+   按行硬切（``readers.read_doc`` 无 ``.md`` 分支 → ``chunk_code_text``），噪声会直接吃掉
+   chunk 预算——实测单篇论文的这类噪声占 25%–40%。原始产物**绝不被修改**，副本写到
+   ``pqa_home/corpus/``；台账仍记**源文件**路径，故 :func:`search` 的出处指向原文。
+   ``--no-clean`` 可关掉；规则版本变了会自动全量重建。
 
 用法::
 
@@ -52,6 +58,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import corpus_clean
 from .config import settings
 
 # ---------------------------------------------------------------------------
@@ -228,6 +235,8 @@ class IndexReport:
     n_stale: int = 0  # mtime 变了但 docname 已在索引（建议 --rebuild）
     n_docs: int = 0
     n_chunks: int = 0
+    n_chars_raw: int = 0  # 规范化前的字符总数（--no-clean 时为 0）
+    n_chars_clean: int = 0  # 规范化后实际被嵌入的字符总数
     index_path: str = ""
     embedding_model: str = ""
     rebuilt: bool = False
@@ -381,6 +390,24 @@ def _docname_for(path: Path) -> str:
     return "__".join(parts)
 
 
+def _corpus_dir() -> Path:
+    """规范化副本目录（``pqa_home/corpus``，随数据区 ``cache/*`` 一起被 git 忽略）。"""
+    return settings.pqa_home / corpus_clean.CORPUS_DIRNAME
+
+
+def _prepare_text(
+    path: Path, corpus_dir: Path, docname: str, *, clean: bool
+) -> tuple[Path, corpus_clean.CleanStats | None]:
+    """返回**实际交给 paperqa 的文本路径**与该文件的规范化统计。
+
+    ``clean=False`` 时原样返回源文件、统计为 ``None``（而不是零值 CleanStats）——
+    上层据此省略「删了多少噪声」的汇总，免得报出 0→0 这种像是测过的假数字。
+    """
+    if not clean:
+        return path, None
+    return corpus_clean.materialize_clean(path, corpus_dir, docname)
+
+
 def _candidate_md_files(paths: list[str | Path] | None) -> list[Path]:
     """确定要索引的 .md 列表：显式 paths 优先，否则默认扫 cache/extracted/**/*.md。"""
     out: list[Path] = []
@@ -453,6 +480,7 @@ def index_status() -> dict[str, Any]:
         "embedding_model": meta.get("embedding_model") or settings.pqa_embedding,
         "built_at": meta.get("built_at"),
         "paperqa_version": meta.get("paperqa_version"),
+        "cleaner_version": meta.get("cleaner_version", 0),
     }
 
 
@@ -464,11 +492,17 @@ def build_index(
     *,
     rebuild: bool = False,
     verbose: bool = True,
+    clean: bool = True,
 ) -> IndexReport:
     """对文献库全文 .md 建/更新 embedding 索引（**仅免费 embedding，无 LLM**）。
 
     默认扫 ``cache/extracted/**/*.md``；``paths`` 给定则只索引这些。增量：已在台账且
     未变更的文件跳过；``rebuild=True`` 清空重建。索引 pickle 到 ``pqa_home/index.pkl``。
+
+    ``clean=True``（默认）先把每个产物经 :mod:`corpus_clean` 洗成副本再嵌入；副本落在
+    ``pqa_home/corpus/<docname>.md``，台账里的 ``path`` 仍指向**源文件**（故检索出处不变）。
+    ``clean=False`` 直接嵌原文。两种模式的 ``cleaner_version`` 不同（分别为
+    :data:`corpus_clean.CLEANER_VERSION` 与 0），故翻转这个开关会自动触发全量重建。
     """
     paperqa = _import_backend(models=[(settings.pqa_embedding, "embedding")])
     _map_mailto_env()
@@ -488,6 +522,17 @@ def build_index(
 
     meta = {} if rebuild else _load_meta()
     docs = None if rebuild else _load_docs(paperqa)
+    corpus_dir = _corpus_dir()
+    want_cleaner = corpus_clean.CLEANER_VERSION if clean else 0
+    if docs is not None and int(meta.get("cleaner_version") or 0) != want_cleaner:
+        # 规范化规则改了（或 --no-clean 开关翻转）：旧索引嵌的是另一套语料，而增量路径
+        # 按 mtime 跳过未变文件，新规则会**永远不生效**——故强制全量重建。
+        if verbose:
+            print(
+                f"[rag] 语料规范化版本变更（{int(meta.get('cleaner_version') or 0)} → "
+                f"{want_cleaner}），转为全量重建。"
+            )
+        docs, meta, rebuild = None, {}, True
     if docs is None:
         docs = paperqa.Docs()
         meta = {
@@ -497,6 +542,10 @@ def build_index(
         }
         rebuild = True
         report.rebuilt = True
+    if rebuild:
+        # 清掉上一轮的派生副本，免得已删源文件的副本变成孤儿（守卫在函数里：
+        # 只肯删名为 corpus 的目录，不会误伤同级的 index.pkl / index_meta.json）。
+        corpus_clean.reset_corpus_dir(corpus_dir)
     file_meta: dict[str, Any] = meta.setdefault("files", {})
 
     pqa_settings = _build_pqa_settings()  # embedding-only
@@ -521,8 +570,16 @@ def build_index(
                 continue
             derived = _derive_meta_from_md(path)
             try:
+                target, stats = _prepare_text(path, corpus_dir, docname, clean=clean)
+            except OSError as e:
+                report.errors.append(f"{path.name}: 语料规范化失败（{e}）")
+                continue
+            if stats is not None:
+                report.n_chars_raw += stats.chars_in
+                report.n_chars_clean += stats.chars_out
+            try:
                 await docs.aadd(
-                    str(path),
+                    str(target),
                     docname=docname,
                     citation=derived["citation"],
                     title=derived["title"],
@@ -539,7 +596,12 @@ def build_index(
             }
             report.n_added += 1
             if verbose:
-                print(f"[rag] + {docname}  «{derived['citation']}»")
+                cut = (
+                    f"  （-{stats.removed_ratio:.0%} 噪声）"
+                    if stats is not None and stats.chars_in
+                    else ""
+                )
+                print(f"[rag] + {docname}  «{derived['citation']}»{cut}")
 
     _run(_add_all())
 
@@ -550,6 +612,7 @@ def build_index(
         n_chunks=report.n_chunks,
         embedding_model=settings.pqa_embedding,
         paperqa_version=getattr(paperqa, "__version__", None),
+        cleaner_version=want_cleaner,
         built_at=datetime.now(UTC).isoformat(timespec="seconds"),
     )
     _save_docs(docs, meta)
@@ -558,6 +621,15 @@ def build_index(
             f"[rag] 索引就绪：docs={report.n_docs} chunks={report.n_chunks} "
             f"(+{report.n_added} 新增, {report.n_skipped} 跳过, {report.n_stale} 待重建) → {_index_path()}"
         )
+        if not clean:
+            print(
+                "[rag] 语料规范化：已关闭（--no-clean），嵌入的是 cache/extracted 原文"
+            )
+        elif report.n_chars_raw:
+            print(
+                f"[rag] 语料规范化：{report.n_chars_raw:,} → {report.n_chars_clean:,} 字符"
+                f"（删 {1 - report.n_chars_clean / report.n_chars_raw:.1%} 噪声）→ {corpus_dir}"
+            )
     return report
 
 

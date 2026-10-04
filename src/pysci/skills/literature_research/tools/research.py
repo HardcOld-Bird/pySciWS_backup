@@ -58,6 +58,7 @@ from . import (
     browser_fetch,
     cache_manager,
     citation_verify,
+    corpus_clean,
     journal_metrics,
     local_ingest,
     notes,
@@ -2814,6 +2815,14 @@ def _print_rag_status(st: dict[str, Any]) -> None:
             f"  本地索引   : docs={st.get('n_docs')} chunks={st.get('n_chunks')}"
             f"（built {st.get('built_at') or '?'}）"
         )
+        # 语料规范化版本：0 = 当时用了 --no-clean（嵌的是原文），否则是 corpus_clean
+        # 的规则版本。与当前代码里的版本不一致时，下次 `rag index` 会自动全量重建。
+        cv = st.get("cleaner_version") or 0
+        want = corpus_clean.CLEANER_VERSION
+        tail = "已关闭（嵌的是原文）" if not cv else f"规则 v{cv}"
+        if cv and cv != want:
+            tail += f"，当前代码为 v{want} → 下次 index 会全量重建"
+        print(f"  语料规范化 : {tail}")
     else:
         print("  本地索引   : 未建（运行 `research rag index`）")
     print(f"  索引位置   : {st.get('index_path')}")
@@ -2851,6 +2860,7 @@ def cmd_rag(args: argparse.Namespace) -> int:
                 getattr(args, "paths", None) or None,
                 rebuild=getattr(args, "rebuild", False),
                 verbose=not as_json,
+                clean=not getattr(args, "no_clean", False),
             )
         except Exception as e:
             print(f"[rag] 索引失败：{type(e).__name__}: {e}", file=sys.stderr)
@@ -3217,6 +3227,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="index：显式指定 .md 文件/目录（可重复；默认扫 cache/extracted）",
     )
     sp.add_argument("--rebuild", action="store_true", help="index：清空全量重建")
+    sp.add_argument(
+        "--no-clean",
+        action="store_true",
+        dest="no_clean",
+        help=(
+            "index：跳过语料规范化，直接嵌 cache/extracted 原文。默认会先洗掉图片占位行、"
+            "编号参考文献表与 REVTeX 书目宏（实测单篇论文占 25%–40%），副本写到 "
+            "cache/rag/corpus/，原文不动"
+        ),
+    )
     sp.add_argument(
         "-k", "--top-k", type=int, default=8, dest="top_k", help="检索/证据块数"
     )

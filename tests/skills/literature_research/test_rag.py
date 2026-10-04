@@ -10,6 +10,9 @@
 - **索引持久化**：``_save_meta``/``_load_meta`` 往返、``index_status``（空/已建）；
 - **配置形状**：``_router_cfg``（LiteLLM model_list）、``_import_backend`` 未就绪即抛；
 - **build_index**：全量重建 / 增量跳过未变 / 变更标 stale / 空目录报错 / 落盘 pickle+meta；
+- **语料规范化接线**（:mod:`corpus_clean`）：嵌的是 ``pqa_home/corpus/`` 副本而台账记源路径 /
+  源文件绝不被改 / ``--no-clean`` 嵌原文且不建副本目录 / 规则版本变更强制全量重建 /
+  ``--rebuild`` 清孤儿副本但保留索引文件；
 - **search**：Text→RagChunk 映射（rank/docname/citation/source_path）、无索引抛错；
 - **ask 三态**：免费成功 / 免费失败回退付费 / 全失败静默降级为 search（永不抛）；
 - **渲染**：``render_search`` / ``render_ask``（含降级态）纯字符串输出；
@@ -19,11 +22,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from pysci.skills.literature_research.tools import rag
+from pysci.skills.literature_research.tools import corpus_clean, rag
 
 # ---------------------------------------------------------------------------
 # 假后端（paperqa / Docs / Text / Doc）——形状对齐真实 paperqa，但绝不触网
@@ -384,6 +388,164 @@ def test_build_index_empty_dir_reports_error(tmp_path, monkeypatch):
     rep = rag.build_index(rebuild=True, verbose=False)
     assert rep.n_docs == 0
     assert rep.errors and "未找到可索引" in rep.errors[0]
+
+
+# ===========================================================================
+#  build_index × 语料规范化（corpus_clean 接线）
+# ===========================================================================
+#: MinerU 的图片命名法：64 位内容哈希（取自真实产物）。
+_IMG_HASH = "2a1996510c1d32b9360d9ae00136abf963b55636ba871c7965a8a86d70337b92"
+
+#: 带两类实测噪声的产物：MinerU 的空 alt 图片占位行 + 3 条编号参考文献（刚好
+#: 达 :data:`corpus_clean.MIN_REF_BLOCK`）。正文部分沿用 ``PRL_MD``，以便元数据派生的
+#: 断言（``Xia et al. (2025)``）与既有测试保持一致。
+NOISY_MD = (
+    PRL_MD
+    + f"\n![](images/{_IMG_HASH}.jpg)\n"
+    + "\n[1] Y. D. Chong, Coherent perfect absorbers, Phys. Rev. Lett. 105, 053901 (2010).\n"
+    + "\n[2] S. Longhi, PT-symmetric laser absorber, Phys. Rev. A 82, 031801 (2010).\n"
+    + "\n[3] W. Wan, Time-reversed lasing, Science 331, 889 (2011).\n"
+)
+
+
+def _patch_backend_spy(monkeypatch, holder: list) -> None:
+    """同 :func:`_patch_backend`，但把 ``build_index`` 内部构造的 Docs 实例存进 ``holder``。
+
+    光看 ``index.pkl`` 不够：要断言「到底把哪个**路径**交给了 ``aadd``」，必须拿到
+    那个实例的 ``added`` 列表。
+    """
+
+    class _SpyPaperQA(_FakePaperQA):
+        @staticmethod
+        def Docs():
+            d = _FakeDocs()
+            holder.append(d)
+            return d
+
+    monkeypatch.setattr(rag, "_import_backend", lambda *, models: _SpyPaperQA())
+    monkeypatch.setattr(rag, "_build_pqa_settings", lambda **kw: None)
+    monkeypatch.setattr(rag, "_map_mailto_env", lambda: None)
+
+
+def test_build_index_embeds_a_cleaned_copy_but_records_the_source_path(
+    tmp_path, monkeypatch
+):
+    """F 项的核心契约：**洗副本去嵌入，台账记源文件**。
+
+    两条缺一不可：副本保证噪声不进 embedding；台账记源文件保证 :func:`rag.search` 的
+    ``source_path`` 仍指向人能打开的原文（而不是一个随 ``--rebuild`` 消失的派生物）。
+    """
+    monkeypatch.setattr(rag, "settings", _fake_settings(tmp_path))
+    holder: list = []
+    _patch_backend_spy(monkeypatch, holder)
+    ex = rag.settings.cache_extracted
+    src = _write_md(ex, "cpa_ep/noisy.md", NOISY_MD)
+
+    rep = rag.build_index(rebuild=True, verbose=False)
+
+    corpus = rag._corpus_dir()
+    embedded = Path(holder[0].added[0]["path"])
+    assert embedded == corpus / "cpa_ep__noisy.md"
+    assert embedded != src.resolve(), "绝不能把源文件直接交给 paperqa"
+    cleaned = embedded.read_text(encoding="utf-8")
+    assert "![](images/" not in cleaned and "Y. D. Chong" not in cleaned
+    assert "We demonstrate CPA EP" in cleaned, "正文不得被误删"
+    # 原始产物一字未改（它们是 MinerU 配额换来的、或人工整理的不可再生数据）
+    assert src.read_text(encoding="utf-8") == NOISY_MD
+
+    meta = rag._load_meta()
+    assert meta["files"]["cpa_ep__noisy"]["path"] == str(src.resolve())
+    assert meta["files"]["cpa_ep__noisy"]["citation"] == "Xia et al. (2025)"
+    assert meta["cleaner_version"] == corpus_clean.CLEANER_VERSION
+    assert rag.index_status()["cleaner_version"] == corpus_clean.CLEANER_VERSION
+
+    assert rep.errors == [] and rep.n_added == 1
+    assert rep.n_chars_raw == len(NOISY_MD)
+    assert 0 < rep.n_chars_clean < rep.n_chars_raw
+
+
+def test_build_index_no_clean_embeds_the_source_and_makes_no_corpus_dir(
+    tmp_path, monkeypatch
+):
+    """``--no-clean`` 是一条完整的旁路：嵌原文、不建副本目录、不报假的 0→0 字符数。"""
+    monkeypatch.setattr(rag, "settings", _fake_settings(tmp_path))
+    holder: list = []
+    _patch_backend_spy(monkeypatch, holder)
+    ex = rag.settings.cache_extracted
+    src = _write_md(ex, "cpa_ep/noisy.md", NOISY_MD)
+
+    rep = rag.build_index(rebuild=True, verbose=False, clean=False)
+
+    assert Path(holder[0].added[0]["path"]) == src
+    assert not rag._corpus_dir().exists()
+    # 统计为 0（而不是「测过了、删了 0 字符」）：_prepare_text 返回 None 而非零值 CleanStats
+    assert rep.n_chars_raw == 0 and rep.n_chars_clean == 0
+    assert rep.n_added == 1 and rep.errors == []
+    # cleaner_version=0 与 CLEANER_VERSION 不同 → 下次不带 --no-clean 会自动全量重建
+    assert rag._load_meta()["cleaner_version"] == 0
+    assert rag.index_status()["cleaner_version"] == 0
+
+
+def test_build_index_rebuilds_when_the_cleaner_version_changes(tmp_path, monkeypatch):
+    """规则版本守卫：少了它，新规则会**永远不生效**。
+
+    增量路径按 mtime 跳过未变文件，而源文件的 mtime 不随规范化规则变——于是「旧规则
+    洗的副本 + 新规则的代码」会一直共存。同理，翻转 ``--no-clean`` 也得重建。
+    """
+    monkeypatch.setattr(rag, "settings", _fake_settings(tmp_path))
+    holder: list = []
+    _patch_backend_spy(monkeypatch, holder)
+    _write_md(rag.settings.cache_extracted, "cpa_ep/noisy.md", NOISY_MD)
+    rag.build_index(rebuild=True, verbose=False)
+    assert len(holder) == 1
+
+    # 模拟「规则改了」：台账里存的是旧版本号（源文件 mtime 保持不动）
+    meta = rag._load_meta()
+    meta["cleaner_version"] = corpus_clean.CLEANER_VERSION - 1
+    rag._save_meta(meta)
+
+    rep = rag.build_index(rebuild=False, verbose=False)
+
+    assert rep.rebuilt is True
+    assert rep.n_added == 1 and rep.n_skipped == 0
+    assert len(holder) == 2, "应丢弃旧 pickle 重建一个 Docs，而不是增量追加"
+    assert rag._load_meta()["cleaner_version"] == corpus_clean.CLEANER_VERSION
+
+
+def test_rebuild_clears_orphaned_copies_but_keeps_index_files(tmp_path, monkeypatch):
+    """``--rebuild`` 顺手清副本目录，但不得牵连同级的 ``index.pkl`` / ``index_meta.json``。"""
+    monkeypatch.setattr(rag, "settings", _fake_settings(tmp_path))
+    _patch_backend(monkeypatch)
+    _write_md(rag.settings.cache_extracted, "cpa_ep/noisy.md", NOISY_MD)
+    rag.build_index(rebuild=True, verbose=False)
+
+    corpus = rag._corpus_dir()
+    assert (corpus / "cpa_ep__noisy.md").exists()
+    orphan = corpus / "gone_source__deleted.md"
+    orphan.write_text("orphan of a deleted source", encoding="utf-8")
+
+    rag.build_index(rebuild=True, verbose=False)
+
+    assert not orphan.exists(), "源文件已删的副本必须被清掉，否则无人能发现它变成了孤儿"
+    assert (corpus / "cpa_ep__noisy.md").exists(), "仍在的源文件副本要重新洗出来"
+    home = rag.settings.pqa_home
+    assert (home / rag.INDEX_FILENAME).exists()
+    assert (home / rag.META_FILENAME).exists()
+
+
+def test_build_index_verbose_reports_the_noise_cut(tmp_path, monkeypatch, capsys):
+    """verbose 汇总报的是**实测数字**，且两种模式的措辞不同（不把关闭说成“删了 0%”）。"""
+    monkeypatch.setattr(rag, "settings", _fake_settings(tmp_path))
+    _patch_backend(monkeypatch)
+    _write_md(rag.settings.cache_extracted, "cpa_ep/noisy.md", NOISY_MD)
+
+    rag.build_index(rebuild=True, verbose=True)
+    out = capsys.readouterr().out
+    assert "语料规范化" in out and "%" in out
+
+    rag.build_index(rebuild=True, verbose=True, clean=False)
+    out2 = capsys.readouterr().out
+    assert "已关闭" in out2 and "--no-clean" in out2
 
 
 # ===========================================================================
