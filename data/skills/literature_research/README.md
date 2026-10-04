@@ -182,9 +182,11 @@ stderr 打一行 banner 并指向等价的 `research` 子命令，见 SKILL.md�
    `index --fix [--dry-run]` 则把既有笔记的 frontmatter 规范化（补齐模板字段、统一字段序与 block
    style），**正文逐字节保留、既有值一律不动**。两者分工易记错：「文件名与命名规范不符」的告警
    只由 `--fix` 报（它才会走 `_normalize_note_file`），`--check` 看不到——查命名问题请跑
-   `index --fix --dry-run`。但它比的是笔记**自己存的** frontmatter，因此照不出「重跑 `read` 会新建
-   重复笔记」那类漂移（那是拿**新取到的** `short_title` 比的，详见
-   `.qoder/skills/literature-research/references/maintenance.md` §5f）
+   `index --fix --dry-run`。但它比的是笔记**自己存的** frontmatter，因此照不出「新取到的
+   `short_title` 与存的不一致」那类漂移（三篇存量笔记均报「已是规范形态」，而 `2018_zhu` 确实
+   漂移）。那类漂移改由**写入路径上的同一性守卫**兜住（2026-10-04）：派生名落空时按 `doi` /
+   `openalex_id` / `arxiv_id` 认亲，认出唯一一篇就合并进它而不再新建重复笔记，认出多篇则拒写交
+   人工裁决（详见 `.qoder/skills/literature-research/references/maintenance.md` §5f）
 7. **（可选）综述骨架** `research review new '<topic>' --from-shortlist shortlists/<f>.md`
    → 生成 `reviews/{YYYY-MM}_{topic}_survey.md`，填好 frontmatter 并从快照聚合 `sources_used` /
    `query_strings` 后**就此停住**——§1-§5 的综述正文是 AI/人的判断，`review` 刻意不生成任何一行

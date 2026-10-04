@@ -83,23 +83,40 @@ SCImago 每年（约 5-6 月）随新版 Scopus 数据发布一次 SJR。刷新�
    的「只填空、绝不覆盖」语义）。因此旧笔记不会自动刷新分区——这是刻意的：
    分区会随年份变动，自动覆盖会让用户的历年判断失去参照。
 
-   确需刷新时，**不要**清空后重跑 `research read <id>`。`_merge_note` 的目标路径由
+   确需刷新时，仍**不要**清空后重跑 `research read <id>`。`_merge_note` 的目标路径由
    **本次新取到的** frontmatter 现算（`notes.note_filename`，输入含 `short_title`），而
    `_make_short_title` 会剔除 of/and/in 等虚词后取前 6 个实词；一旦算出的名字与磁盘上的
-   旧名不同，`read` 就**新建一个重复笔记**而不是合并——实测当前三篇存量笔记里仍有一篇会这样：
-   `2018_zhu` 存的是 `short_title: Simultaneous Observation of Topological Edge State`（→
-   `2018_zhu_simultaneous-observation-of-topological.md`），而全新一次 `read` 会拿
+   旧名不同，旧实现就**新建一个重复笔记**而不是合并，且无任何报错。存量三篇里
+   `2018_zhu` 正处于该状态：它存的是 `short_title: Simultaneous Observation of Topological Edge
+   State`（→ `2018_zhu_simultaneous-observation-of-topological.md`），而全新一次 `read` 会拿
    `_make_short_title(全标题)` 现算出 `Simultaneous Observation Topological Edge State Exceptional`
    （→ `2018_zhu_simultaneous-observation-topological-edg.md`）。`2023_fang` 曾同属此例，已于
    2026-10-04 用 `git mv` 改名为 `note_filename` 会算出的
-   `2023_fang_extreme-wave-manipulation-non-hermitian.md`，不再漂移；但陷阱对下一篇 `short_title`
-   变动的笔记依旧成立。**注意 `index --fix` 照不出它**：那条「文件名与命名规范不符」的告警比的是
-   笔记**自己存的** frontmatter（故上面三篇均报「已是规范形态」），而漂移发生在「新取到的」
-   frontmatter 上；`--fix` 也只**报**不改名。
+   `2023_fang_extreme-wave-manipulation-non-hermitian.md`。
+
+   **2026-10-04 起写入路径带同一性守卫**，重跑 `read` 不再会造出重复笔记：派生名落空时按
+   `doi` / `openalex_id` / `arxiv_id` 认亲（DOI 大小写不敏感、arXiv 版本号剥离），认出唯一
+   一篇就合并进它并打印两个文件名；认出多篇则**拒写**交人工裁决；三个标识符**全缺**的
+   笔记认不了亲，仍会新建（唯一残留路径）。细节与第三条边界（`--overwrite` 在该路径上
+   降级为合并，以免静默抹掉人工正文）见
+   `.qoder/skills/literature-research/references/maintenance.md` §5f。不推荐重跑 `read` 的
+   **现行**理由是成本：它要联网、可能重抽全文，而白名单回填只改那一个键。
+
+   另注意 `index --fix` **报不出**这类漂移：那条「文件名与命名规范不符」的告警比的是笔记
+   **自己存的** frontmatter（故上面三篇均报「已是规范形态」），而漂移发生在「新取到的」
+   frontmatter 上；`--fix` 也只**报**不改名。想自己看，用 `research get <id>` 打印的
+   `short_title` 与笔记里的比。
+
    安全做法是按白名单只改 `scimago_quartile` 一个键：值取自
    `research journal lookup <ISSN>`（ISSN 出自该笔记对应的 OpenAlex source 记录），
    再往该笔记的 `## Changelog` 追加一行；改前改后用正文 SHA256 自证逐字节未变
    （配方见 `.qoder/skills/literature-research/references/maintenance.md` §5e）。
+
+   分区值最终会出现在三处：笔记 frontmatter、`INDEX.md` 的列，以及 Zotero 条目的 Extra。
+   第三处曾漏了它：`zotero_cli._EXTRA_FIELDS` 于 2026-10-04 才补上 `scimago_quartile`，此前
+   只有它的 WoS 对应物 `jcr_quartile` 在列，后果是 SCImago 分区——对本领域当前**唯一可用**
+   的分区源——永远到不了 Zotero。既有条目的 Extra 不会因此自动刷新，需重跑 `research add`
+   或用 zotero MCP 的 `zotero_update_item` 手写（本仓三篇已于同日按规范形状整体重写）。
 7. 原始 CSV 可以删掉（索引已自足），也可以留着——反正不入 Git。
 
 ---

@@ -655,30 +655,51 @@ Existing notes are **not** rewritten by a refresh. A note whose `scimago_quartil
 filled on the next `read` / `add` / `get`; a note that already has a value keeps the old quartile,
 because `merge_frontmatter` never overwrites (§5e).
 
-Re-running `read <id>` is **not** a safe way to refresh one field, and the reason is worth stating
-because the failure looks like a merge and isn't. `_merge_note` computes its target path from the
+Re-running `read <id>` to refresh one field is still the wrong tool, but as of 2026-10-04 it is no
+longer *dangerous*. The reason it used to be: `_merge_note` computes its target path from the
 *freshly fetched* frontmatter (`notes.note_filename`, whose slug comes from `short_title`), and
 `openalex_client._make_short_title` drops stopwords (`of` / `and` / `in` / …) before taking the first
-six content words. If that derivation has drifted from the value stored in the note — or the note was
-named by hand — the computed path misses the existing file, `_merge_note` sees `existed=False` and
-**creates a second note**. There is no DOI / `openalex_id` identity check anywhere on that path.
-Verified on all three notes in `papers/` (2026-10-04): `2021_gu` merges correctly, whereas `2018_zhu`
-(stored `short_title` "Simultaneous Observation **of** Topological Edge State" vs fresh "Simultaneous
-Observation Topological Edge State Exceptional" → `2018_zhu_simultaneous-observation-topological-edg.md`)
-would spawn a duplicate. (`2023_fang` was in the same boat and has since been renamed with `git mv`
-to `2023_fang_extreme-wave-manipulation-non-hermitian.md`, so it now merges correctly too — but the
-trap is unchanged for the next note whose `short_title` drifts.) So: refresh a single field by the §5e
-whitelist write-back.
+six content words. Whenever that derivation drifts from the value stored in the note — upstream
+retitled the work, or the note was named by hand — the computed path missed the existing file,
+`_merge_note` saw `existed=False` and **created a second note**. Nothing complained: the output looked
+exactly like a normal merge. `2018_zhu` was in that state (stored `short_title` "Simultaneous
+Observation **of** Topological Edge State" vs fresh "Simultaneous Observation Topological Edge State
+Exceptional" → `2018_zhu_simultaneous-observation-topological-edg.md`), and so was `2023_fang` before
+it was renamed with `git mv`.
 
-**No command detects that drift — don't go looking for one.** `index --check` only diffs `INDEX.md`
-against `papers/`. `index --fix` *does* warn when a filename doesn't match `{year}_{last}_{slug}.md`
-(the warning comes from `_normalize_note_file`, and it never renames) — but it derives the expected
-name from the note's **own stored** frontmatter, which by construction agrees with the file it lives
-in. Verified 2026-10-04: `index --fix --dry-run` reports 已是规范形态 for all three notes, including
-`2018_zhu`, which demonstrably drifts (`…-observation-of-topological.md` stored vs
-`…-observation-topological-edg.md` fresh). To see the drift, compare a fresh derivation against the
-stored value — `research get <id>` prints the `short_title` a new fetch would produce. The durable fix
-is a DOI / `openalex_id` identity guard inside `_merge_note` (not implemented).
+**The write path now guards on identity, so that whole class of duplicate is gone.** When the derived
+path does not exist, `_find_note_by_identity` scans `papers/` for a note carrying the same `doi`,
+`openalex_id` or `arxiv_id` and merges into *that* file, printing both filenames so you can `git mv`
+if you want the canonical name. The comparison is normalized, because all three identifiers have real
+spelling variance: DOI is case-folded (OpenAlex returns lowercase, publishers and humans do not),
+`openalex_id` is upper-cased, and an arXiv version suffix is stripped (`1803.04110` and
+`1803.04110v2` are the same paper). Three limits are deliberate:
+
+- **Several matches → refuse to write** (`blocked`; no file is created or touched). Guessing would
+  fold two different papers' prose into one file, which is unrecoverable; a leftover duplicate is not.
+- **`--overwrite` is downgraded to a merge** on that path. The redirect target is a file the caller
+  never named, and rebuilding it from the template would silently erase hand-written TLDR / Key
+  Claims / Novelty / Rigor prose. Rename or delete it first if you truly want a rebuild.
+- **No identifier at all → old behaviour** (create). A note with none of the three keys still cannot
+  be recognized — that is the one remaining route to a duplicate, and it is pinned by
+  `test_merge_note_without_identity_keys_creates_as_before`.
+
+`title` / `short_title` / `year` / `first_author_last_name` are deliberately **not** identity keys:
+they are precisely the inputs to `note_filename`, so using them to decide "same paper?" is circular.
+Keep all four out of any batch write-back whitelist (§5e).
+
+Still prefer the §5e whitelist write-back for a single field: it costs no network call, triggers no
+re-extraction, and cannot touch anything but the one key.
+
+**No command *reports* the drift — the guard absorbs it at write time.** `index --check` only diffs
+`INDEX.md` against `papers/`. `index --fix` *does* warn when a filename doesn't match
+`{year}_{last}_{slug}.md` (the warning comes from `_normalize_note_file`, and it never renames) — but
+it derives the expected name from the note's **own stored** frontmatter, which by construction agrees
+with the file it lives in. Verified 2026-10-04: `index --fix --dry-run` reports 已是规范形态 for all
+three notes, including `2018_zhu`, which demonstrably drifts (`…-observation-of-topological.md`
+stored vs `…-observation-topological-edg.md` fresh). To see the drift yourself, compare a fresh
+derivation against the stored value — `research get <id>` prints the `short_title` a new fetch would
+produce.
 
 ---
 
@@ -720,7 +741,7 @@ pass — see §5b.
 | `add` created a duplicate Zotero item | Ran `add` twice for one DOI | Check `library search` before adding; merge the dup via the `zotero` MCP (`duplicates find`) or delete it in Zotero. |
 | Cache growing / disk pressure | Tier A artifacts kept forever by design | `research cache stats`; then `prune --max-mb N` (Tier A) or `clean` (Tier B). |
 | `read` shows `命中缓存全文` but you want a fresh fetch | Cached `{stem}_fulltext.md` was reused | Re-run with `--refresh` (`--force` is a deprecated alias) to re-fetch + re-extract. |
-| `read <id>` on an existing note wrote a **second** file | `_merge_note` derives the path from the *fresh* `short_title`, and `_make_short_title` output drifted from the stored value | **No command shows this** — `index --fix` compares against the note's *own stored* frontmatter, and `--check` only diffs `INDEX.md` (§5f). Detect it by comparing `research get <id>`'s `short_title` with the note's. Refresh single fields via the §5e whitelist write-back, never by re-running `read`. |
+| `read <id>` on an existing note wrote a **second** file | `_merge_note` derives the path from the *fresh* `short_title`, and `_make_short_title` output drifted from the stored value | Closed at the source (2026-10-04): `_find_note_by_identity` redirects the write to the note carrying the same `doi` / `openalex_id` / `arxiv_id` and prints both names (§5f). It can still happen if the note has **none** of those three keys — give it one. No command *reports* the drift (`index --fix` compares against the note's *own stored* frontmatter, `--check` only diffs `INDEX.md`); compare `research get <id>`'s `short_title` with the note's. |
 | `add` blocked with `✗ 引用核验未通过` | Citation gate FAIL (≥2 sources hard-conflict on title/DOI/year) | Inspect with `research citecheck <doi> --json`; fix the mismatched field, or `--allow-fail` to override / `--no-verify` to skip. |
 | `citecheck` reports `?NOT_FOUND` for a real paper | All three sources missed it (typo'd DOI, very new, or offline) | Check the DOI/id; a lone `openalex=不可达`/`crossref=不可达` is a network blip (downgraded, not a FAIL) — re-run. |
 | `citecheck` first-author `△WARN` on an accented name | Cross-source transliteration/abbreviation noise | Expected — author surname is a soft signal and never blocks; title/DOI/year are the hard signals. |

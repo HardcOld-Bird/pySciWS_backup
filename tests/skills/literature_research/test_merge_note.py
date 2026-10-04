@@ -6,14 +6,16 @@
 抓全文）下永远写不进笔记；连带 ``cache_manager.referenced_paths()`` 取不到这两个字段，
 ``cache prune --keep-referenced`` 的保护对现存全部笔记完全失效。
 
-锁定的四条不变量：
+锁定的五条不变量：
 
 1. ``merged`` 时**只填空键**——用户手填的 ``my_rating`` / ``status`` /
    ``related_to_my_work`` 永不被机器值顶掉；
 2. ``merged`` / ``--fix`` 时**正文逐字节保留**（``merged`` 只允许在 ``## Changelog``
    段末追加一行，``--fix`` 连那一行都不加）；
 3. ``unchanged`` 时**完全不触碰文件**（保留 mtime，免得无谓刷新 prune 的 LRU 依据）；
-4. 无法解析 frontmatter 的既有文件（人工笔记）**绝不被自动改写**。
+4. 无法解析 frontmatter 的既有文件（人工笔记）**绝不被自动改写**；
+5. 派生名落不到既有文件上时，先按稳定标识符（DOI / ``openalex_id`` / ``arxiv_id``）
+   认亲：认出唯一一篇就合并进去而**不新建重复笔记**，认出多篇则拒绝写入交人工裁决。
 """
 
 from __future__ import annotations
@@ -238,7 +240,8 @@ def test_merge_note_does_not_clobber_user_fields(papers_dir):
 def test_merge_note_merges_flow_style_note(papers_dir):
     """``2023_fang`` 那类 flow-style 笔记同样能被 merge（旧解析器读不出它的列表）。"""
     fm = notes.load_frontmatter(FLOW_NOTE)
-    # 文件名必须合命名规范，否则 _merge_note 会另建一篇而不是合并到它
+    # 文件名必须合命名规范，否则 _merge_note 会另建一篇而不是合并到它——本夹具三个
+    # 稳定标识符全缺（无 doi / openalex_id / arxiv_id），同一性守卫认不了亲，故仍靠名字。
     path = _write_raw_note(papers_dir, notes.note_filename(fm), FLOW_NOTE)
 
     incoming = dict(fm)
@@ -282,7 +285,181 @@ def test_merge_note_preserves_newline_style(papers_dir, newline):
 
 
 # ===========================================================================
-#  _report_note_action —— 四种 action 必须可分辨
+#  同一性守卫 —— short_title 漂移不再静默产生第二份笔记
+# ===========================================================================
+#: 与 ``BASE_FM`` 同一篇论文（同 DOI）、但 ``short_title`` 已漂移的 incoming。
+#:
+#: 派生名因此从 ``BASE_NAME`` 变成 ``DRIFTED_NAME``。旧实现在这种情况下
+#: ``existed=False`` → 直接新建，于是同一篇论文躺着两份笔记，**且无任何报错或警告**
+#: ——这正是存量 ``2018_zhu`` 的真实形态（存名含 "of"，fresh 值把它剔了）。
+DRIFTED_FM: dict = {**BASE_FM, "short_title": "Simultaneous Observation Topological"}
+DRIFTED_NAME = "2018_zhu_simultaneous-observation-topological.md"
+
+
+def test_identity_value_normalization():
+    """三种归一化各对应一个真实存在的写法差异，不是防御性的多余动作。"""
+    # DOI 按规范大小写不敏感：OpenAlex 回小写，出版社/用户手填常是混合大小写
+    for raw in (
+        "10.1103/PhysRevLett.121.124501",
+        "  10.1103/PHYSREVLETT.121.124501 ",
+    ):
+        assert research._identity_value("doi", raw) == "10.1103/physrevlett.121.124501"
+    assert research._identity_value("openalex_id", "w123") == "W123"
+    # 版本号必须剥掉：按 v1 建过笔记、后来抓到 v2，是同一篇
+    assert research._identity_value("arxiv_id", "1803.04110v2") == "1803.04110"
+    assert research._identity_value("arxiv_id", "1803.04110V2") == "1803.04110"
+    assert research._identity_value("arxiv_id", "1803.04110") == "1803.04110"
+    # 无值一律 ""，使「两边都缺该键」不会被误判成命中
+    for key in research._NOTE_IDENTITY_KEYS:
+        for blank in (None, "", "   "):
+            assert research._identity_value(key, blank) == ""
+
+
+def test_find_note_by_identity_needs_a_key_on_both_sides(papers_dir):
+    """只有 incoming 有标识符、既有笔记没有 → 不算命中（宁漏合不误合）。"""
+    stored = {k: v for k, v in BASE_FM.items() if k != "doi"}
+    _seed_note(papers_dir, stored)
+
+    hit, hits = research._find_note_by_identity(dict(BASE_FM))
+
+    assert hit is None and hits == []
+
+
+def test_merge_note_redirects_to_identity_match(papers_dir, capsys):
+    """核心回归：派生名落空但 DOI 认得出来 → 合并进既有笔记，不新建。"""
+    path = _seed_note(papers_dir, dict(BASE_FM))
+    incoming = dict(DRIFTED_FM)
+    incoming["jif"] = 8.97
+
+    p2, action, changed = research._merge_note(incoming)
+
+    assert p2 == path  # 而不是 papers_dir / DRIFTED_NAME
+    assert not (papers_dir / DRIFTED_NAME).exists()
+    assert sorted(papers_dir.glob("*.md")) == [path]  # 全目录仍只有一篇
+    assert action == research.NOTE_MERGED and changed == ["jif"]
+    err = capsys.readouterr().err
+    assert "已合并进它而不是新建" in err
+    # 两个名字都报出来，人工改名时不用再自己算一遍
+    assert BASE_NAME in err and DRIFTED_NAME in err
+    assert "git mv" in err
+
+
+def test_merge_note_matches_on_openalex_id_without_doi(papers_dir):
+    """arXiv 来源的笔记常常没有 DOI，只剩 openalex_id / arxiv_id 可认。"""
+    stored = {k: v for k, v in BASE_FM.items() if k != "doi"}
+    stored["openalex_id"] = "W123"
+    path = _seed_note(papers_dir, stored)
+    incoming = {k: v for k, v in DRIFTED_FM.items() if k != "doi"}
+    incoming["openalex_id"] = "w123"  # 大小写不同也必须认得
+    incoming["jif"] = 8.97
+
+    p2, action, _ = research._merge_note(incoming)
+
+    assert p2 == path and action == research.NOTE_MERGED
+    assert not (papers_dir / DRIFTED_NAME).exists()
+
+
+def test_merge_note_matches_arxiv_id_across_versions(papers_dir):
+    stored = {k: v for k, v in BASE_FM.items() if k != "doi"}
+    stored["arxiv_id"] = "1803.04110"
+    path = _seed_note(papers_dir, stored)
+    incoming = {k: v for k, v in DRIFTED_FM.items() if k != "doi"}
+    incoming["arxiv_id"] = "1803.04110v2"
+    incoming["jif"] = 8.97
+
+    p2, action, _ = research._merge_note(incoming)
+
+    assert p2 == path and action == research.NOTE_MERGED
+
+
+def test_merge_note_blocks_when_several_notes_match(papers_dir, capsys):
+    """多篇候选 → 拒绝写入。猜错一次就是把两篇论文的正文合进同一个文件，不可逆。"""
+    dup = dict(BASE_FM)
+    dup.update(year=2019, first_author_last_name="other", short_title="Another Paper")
+    first = _seed_note(papers_dir, dict(BASE_FM))
+    second = _seed_note(papers_dir, dup)
+    before = [p.read_bytes() for p in (first, second)]
+    incoming = dict(DRIFTED_FM)
+    incoming["jif"] = 8.97
+
+    p2, action, changed = research._merge_note(incoming)
+
+    assert action == research.NOTE_BLOCKED and changed == []
+    assert p2 == papers_dir / DRIFTED_NAME and not p2.exists()  # 什么都没落盘
+    assert [p.read_bytes() for p in (first, second)] == before  # 两篇都逐字节未动
+    err = capsys.readouterr().err
+    assert "拒绝写入" in err and "2 篇" in err
+    assert first.name in err and second.name in err
+
+
+def test_merge_note_overwrite_is_downgraded_when_redirected(papers_dir, capsys):
+    """``--overwrite`` 撞上另一路径上的既有笔记时降级为合并。
+
+    否则 ``read --overwrite`` 会静默把一个用户根本没意识到是目标的文件里的人工正文
+    （TLDR / Key Claims / Novelty / Rigor）整段重置为模板——那比留一份重复笔记严重得多。
+    """
+    path = _seed_note(papers_dir, dict(BASE_FM))
+    incoming = dict(DRIFTED_FM)
+    incoming["jif"] = 8.97
+
+    p2, action, _ = research._merge_note(incoming, overwrite=True)
+
+    assert p2 == path
+    assert action != research.NOTE_OVERWRITTEN
+    _, body = notes.split_note(path.read_text(encoding="utf-8"))
+    assert "- 2026-09-21: Created (AI auto-fill from arXiv)" in body  # 人工正文还在
+    assert "--overwrite 已降级为合并" in capsys.readouterr().err
+
+
+def test_merge_note_guard_not_consulted_when_canonical_path_exists(papers_dir, capsys):
+    """规范名已命中时守卫不参与：既有行为一字不改，也不多打告警。"""
+    path = _seed_note(papers_dir, dict(BASE_FM))
+    dup = dict(BASE_FM)
+    dup.update(year=2019, first_author_last_name="other", short_title="Another Paper")
+    _seed_note(papers_dir, dup)  # 同 DOI 的另一篇（人为制造的重复）
+    incoming = dict(BASE_FM)
+    incoming["jif"] = 8.97
+
+    p2, action, _ = research._merge_note(incoming)
+
+    assert p2 == path and action == research.NOTE_MERGED
+    assert "已合并进它而不是新建" not in capsys.readouterr().err
+
+
+def test_merge_note_without_identity_keys_creates_as_before(papers_dir, capsys):
+    """三个标识符全缺 → 守卫无从认亲，退回旧行为（新建）。
+
+    这是守卫之后**仍会**产生重复笔记的唯一情形，故必须显式钉住而不是当作没发生。
+    """
+    fm = {k: v for k, v in DRIFTED_FM.items() if k != "doi"}
+
+    path, action, _ = research._merge_note(fm)
+
+    assert action == research.NOTE_CREATED
+    assert path.name == DRIFTED_NAME
+    assert capsys.readouterr().err == ""
+
+
+def test_merge_note_identity_scan_is_silent_on_unparsable_notes(papers_dir, capsys):
+    """扫描静默：``papers/`` 里允许有人工笔记，它们的解析失败不该刷到 read/add 的输出上。
+
+    复用 :func:`research._read_note_frontmatter` 会把每篇坏笔记打一行 ``[index]`` 提示——
+    在一条与索引无关的命令上，那只会训练读者忽略告警。
+    """
+    (papers_dir / "手写笔记.md").write_text("# 手写\n\n正文。\n", encoding="utf-8")
+    path = _seed_note(papers_dir, dict(BASE_FM))
+    incoming = dict(DRIFTED_FM)
+    incoming["jif"] = 8.97
+
+    p2, action, _ = research._merge_note(incoming)
+
+    assert p2 == path and action == research.NOTE_MERGED
+    err = capsys.readouterr().err
+    assert "解析" not in err and "[index]" not in err
+
+
+# ===========================================================================
+#  _report_note_action —— 五种 action 必须可分辨
 # ===========================================================================
 @pytest.mark.parametrize(
     ("action", "expect"),
@@ -291,10 +468,15 @@ def test_merge_note_preserves_newline_style(papers_dir, newline):
         (research.NOTE_OVERWRITTEN, "--overwrite 重建"),
         (research.NOTE_MERGED, "补齐 1 个空字段"),
         (research.NOTE_UNCHANGED, "笔记未变"),
+        (research.NOTE_BLOCKED, "笔记未写"),
     ],
 )
-def test_report_note_action_distinguishes_all_four(tmp_path, capsys, action, expect):
-    """旧措辞把 merged 与 unchanged 压成同一句「已存在，未覆盖」，LLM 会误判成写入失败。"""
+def test_report_note_action_distinguishes_all_five(tmp_path, capsys, action, expect):
+    """旧措辞把 merged 与 unchanged 压成同一句「已存在，未覆盖」，LLM 会误判成写入失败。
+
+    ``blocked`` 单列一支同理：它也「一个字都没写」，但原因是守卫拒绝裁决；报成
+    「无空字段可补」会让读者以为一切正常。
+    """
     research._report_note_action("read", tmp_path / BASE_NAME, action, ["jif"])
     out = capsys.readouterr().out
     assert expect in out

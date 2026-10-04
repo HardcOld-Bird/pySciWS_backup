@@ -27,7 +27,7 @@ import types
 
 import pytest
 
-from pysci.skills.literature_research.tools import zotero_cli
+from pysci.skills.literature_research.tools import notes, zotero_cli
 
 # ---------------------------------------------------------------------------
 #  fixtures：贴近 openalex/arxiv 转换器产出的 paper-note frontmatter
@@ -265,6 +265,45 @@ def test_frontmatter_extras_folded_into_note_in_order():
         "oa_status: green"
     )
     assert f"note = {{{note}}}" in bib
+    # FM_JOURNAL 没有 scimago_quartile → 该行必须整个缺席，而不是写成空值
+    assert "scimago_quartile" not in bib
+
+
+def test_frontmatter_folds_scimago_quartile_next_to_jcr():
+    """两套分区必须成对抵达 Zotero Extra。
+
+    回归：``scimago_quartile`` 曾不在 ``_EXTRA_FIELDS`` 里（而它的 WoS 对应物
+    ``jcr_quartile`` 在），后果是 SCImago 分区永远到不了 Zotero——而它对物理声学
+    领域恰恰是当前唯一可用的分区源（WoS Journals API 尚在申请中）。
+    """
+    fm = dict(FM_JOURNAL)
+    fm["scimago_quartile"] = "Q1"
+    bib = zotero_cli.frontmatter_to_bibtex(fm)
+    note = (
+        "openalex_id: W123\n"
+        "wos_id: WOS:0001\n"
+        "jif: 8.6\n"
+        "jcr_quartile: Q1\n"
+        "scimago_quartile: Q1\n"
+        "cited_by_count: 42\n"
+        "oa_status: green"
+    )
+    assert f"note = {{{note}}}" in bib
+
+
+def test_extra_fields_are_known_frontmatter_keys():
+    """``_EXTRA_FIELDS`` 必须是 ``notes.FIELD_ORDER`` 的子集。
+
+    这些键只从 frontmatter 取值，写错一个字母不会报错，只会静默变成「永远取不到」。
+    本断言把那个静默失败变成一条红测试。
+    """
+    unknown = [k for k in zotero_cli._EXTRA_FIELDS if k not in notes.FIELD_ORDER]
+    assert unknown == []
+
+
+def test_extra_fields_pair_both_quartile_sources():
+    """两个分区字段同在或同不在；只收录其一是无意义的不对称。"""
+    assert {"jcr_quartile", "scimago_quartile"} <= set(zotero_cli._EXTRA_FIELDS)
 
 
 def test_frontmatter_tags_become_keywords():

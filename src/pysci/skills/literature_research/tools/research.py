@@ -158,11 +158,12 @@ def build_note_markdown(fm: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # 笔记写入：合并语义（而非全有或全无）
 # ---------------------------------------------------------------------------
-#: :func:`_merge_note` 的四种 action 取值。
+#: :func:`_merge_note` 的五种 action 取值。
 NOTE_CREATED = "created"  # 文件不存在 → 新建（正文即模板骨架）
 NOTE_MERGED = "merged"  # 已存在 → 只补空字段，正文保留 + Changelog 追加一行
 NOTE_UNCHANGED = "unchanged"  # 已存在且无空字段可补 → 完全不触碰文件（保留 mtime）
 NOTE_OVERWRITTEN = "overwritten"  # --overwrite → 全量重建（正文重置为模板）
+NOTE_BLOCKED = "blocked"  # 同一性守卫认出多篇候选 → 拒绝写入，交人工裁决
 
 
 def _read_note_text(path: Path) -> tuple[str, str]:
@@ -183,6 +184,73 @@ def _write_note_text(path: Path, text: str, newline: str) -> None:
     path.write_text(text, encoding="utf-8", newline=newline)
 
 
+#: 判定「两篇笔记属同一篇论文」用的稳定标识符，按可信度降序。
+#:
+#: 刻意**不含** ``title`` / ``short_title`` / ``year`` / ``first_author_last_name``：
+#: 那四个正是 :func:`notes.note_filename` 的输入，也正是会漂移的量——拿它们当同一性
+#: 依据等于用「名字对不上」这件事去判断「是不是同一篇」，循环论证。
+_NOTE_IDENTITY_KEYS: tuple[str, ...] = ("doi", "openalex_id", "arxiv_id")
+
+
+def _identity_value(key: str, raw: Any) -> str:
+    """把一个标识符字段归一化成可比对的字符串；无值返回 ``""``。
+
+    三种归一化各对应一个真实存在的写法差异，不是防御性的多余动作：
+
+    * ``doi`` 按规范大小写不敏感——OpenAlex 回小写，而出版社/用户手填常是
+      ``10.1103/PhysRevLett.121.124501``；
+    * ``openalex_id`` 统一大写（``_classify_id`` 也这么归一）；
+    * ``arxiv_id`` 去掉版本号后缀——同一篇预印本的 ``1803.04110`` 与 ``1803.04110v2``
+      必须算同一篇，否则「先按 v1 建过笔记、后来抓到 v2」就又是一份重复文件。
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    if key == "openalex_id":
+        return s.upper()
+    if key == "arxiv_id":
+        return re.sub(r"v\d+$", "", s, flags=re.IGNORECASE).lower()
+    return s.lower()
+
+
+def _find_note_by_identity(fm: dict[str, Any]) -> tuple[Path | None, list[Path]]:
+    """在 ``papers/`` 里找与 ``fm`` 属同一篇论文的既有笔记。
+
+    存在的理由是 :func:`_merge_note` 的一个静默缺陷：目标路径由**本次新取到的**
+    frontmatter 现算，而 ``short_title`` 经 :func:`openalex_client._make_short_title`
+    派生（剔 12 个虚词后取前 6 个实词），上游改一次标题或换一次数据源，派生名就变了；
+    旧实现在这种情况下 ``existed=False`` → 直接新建，于是同一篇论文躺着两份笔记，
+    **且无任何报错或警告**。实测存量三篇里就有一篇（``2018_zhu``）会这样。
+
+    Returns:
+        ``(唯一命中, 全部命中)``。**命中多于一个时唯一命中为 ``None``**，由调用方拒绝
+        写入并请人工裁决。守卫的全部价值就在于不猜：猜错一次是把两篇论文的正文合进
+        同一个文件，那比留一份重复文件严重得多，而且合完就再也分不开了。
+
+    扫描刻意**静默**——不像 :func:`_read_note_frontmatter` 那样对每篇解析失败的笔记
+    打一行提示。本函数在 ``read`` / ``add`` 的正常路径上每次都要跑，而 ``papers/`` 里
+    允许存在人工笔记；把它们的解析失败刷到一条与索引无关的命令上，只会训练读者忽略
+    告警。解析不出的文件按「不是同一篇」处理（漏合并可自愈，误合并不可逆）。
+    """
+    wanted = {k: v for k in _NOTE_IDENTITY_KEYS if (v := _identity_value(k, fm.get(k)))}
+    if not wanted:
+        return None, []
+    hits: list[Path] = []
+    for p in sorted(PAPERS_DIR.glob("*.md")):
+        try:
+            stored = notes.load_frontmatter(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not stored:
+            continue
+        for k in _NOTE_IDENTITY_KEYS:  # 按可信度序，取第一个对得上的键即算命中
+            have = _identity_value(k, stored.get(k))
+            if have and wanted.get(k) == have:
+                hits.append(p)
+                break
+    return (hits[0] if len(hits) == 1 else None), hits
+
+
 def _merge_note(
     fm: dict[str, Any], *, overwrite: bool = False
 ) -> tuple[Path, str, list[str]]:
@@ -194,8 +262,8 @@ def _merge_note(
     后 ``read`` 抓全文）下永远写不进笔记；连带 ``cache_manager.referenced_paths()``
     取不到这两个字段，``cache prune --keep-referenced`` 的保护对现存笔记完全失效。
 
-    action 的四种取值见 :data:`NOTE_CREATED` / :data:`NOTE_MERGED` /
-    :data:`NOTE_UNCHANGED` / :data:`NOTE_OVERWRITTEN`。关键约束：
+    action 的五种取值见 :data:`NOTE_CREATED` / :data:`NOTE_MERGED` /
+    :data:`NOTE_UNCHANGED` / :data:`NOTE_OVERWRITTEN` / :data:`NOTE_BLOCKED`。关键约束：
 
     * 只有 :func:`notes.merge_frontmatter` 认定的**空键**会被填，用户手填的
       ``my_rating`` / ``status`` / ``related_to_my_work`` 永不被机器值顶掉；
@@ -203,14 +271,53 @@ def _merge_note(
     * ``unchanged`` 时**完全不触碰文件**（保留 mtime，免得无谓地刷新
       ``cache prune`` 赖以为 LRU 依据的时间戳）；
     * frontmatter 无法解析的既有文件（人工笔记 / 损坏）按 ``unchanged`` 处理并
-      打一行提示——**绝不**自动改写它。
+      打一行提示——**绝不**自动改写它；
+    * 派生名落不到既有文件上时，先按 :func:`_find_note_by_identity` 认亲：认出唯一
+      一篇就合并进**它**（不新建重复笔记），此时 ``--overwrite`` 降级为合并——目标是
+      另一路径上的既有笔记，照原样重建会把人工写就的正文整段抹掉；认出多篇则
+      ``blocked``，什么都不写。
 
     Returns:
         ``changed`` 仅在 ``action == "merged"`` 时非空，为本次补齐的键列表；
-        调用方据此打印准确信息（见 :func:`_report_note_action`）。
+        调用方据此打印准确信息（见 :func:`_report_note_action`）。``blocked`` 时返回的
+        ``path`` 是**未落盘**的派生名，只为让报告有个可打印的目标。
     """
     PAPERS_DIR.mkdir(parents=True, exist_ok=True)
     path = PAPERS_DIR / notes.note_filename(fm)
+    if not path.exists():
+        hit, hits = _find_note_by_identity(fm)
+        if len(hits) > 1:
+            names = "、".join(p.name for p in hits)
+            print(
+                f"[note] 拒绝写入：{len(hits)} 篇既有笔记的标识符都与本篇相符（{names}），"
+                "无法判断该合并进哪一篇。请人工合并或删除多余者后重试。",
+                file=sys.stderr,
+            )
+            return path, NOTE_BLOCKED, []
+        if hit is not None:
+            print(
+                "[note] 同一篇论文的既有笔记文件名与命名规范不符，已合并进它而不是新建：",
+                file=sys.stderr,
+            )
+            print(f"[note]   既有：{hit.name}", file=sys.stderr)
+            print(
+                f"[note]   规范：{path.name}（由本次取到的 frontmatter 派生）",
+                file=sys.stderr,
+            )
+            print(
+                "[note]   不代为改名：改名会破坏 reviews/ 的 [[wiki-link]] 与外部引用，"
+                "如需改名请用 git mv 手工处理。",
+                file=sys.stderr,
+            )
+            if overwrite:
+                print(
+                    "[note]   --overwrite 已降级为合并：目标是另一路径上的既有笔记，"
+                    "照 --overwrite 重建会把人工写就的正文整段重置为模板。"
+                    "确需重建请先手工改名或删除该文件。",
+                    file=sys.stderr,
+                )
+                overwrite = False
+            path = hit
     existed = path.exists()
     if not existed or overwrite:
         path.write_text(build_note_markdown(fm), encoding="utf-8")
@@ -242,10 +349,12 @@ def _merge_note(
 
 
 def _report_note_action(tag: str, path: Path, action: str, changed: list[str]) -> None:
-    """把 :func:`_merge_note` 的四种 action 打印成准确的一两行信息。
+    """把 :func:`_merge_note` 的五种 action 打印成准确的一两行信息。
 
     旧实现只有一句「笔记已存在，未覆盖（加 --overwrite 可重建）」，把「已合并补齐了
     字段」与「本来就无需改动」压成同一句话，读到的 LLM 容易误判成写入失败而反复重试。
+    :data:`NOTE_BLOCKED` 因此单列一支而不折进 ``else``：它同样「一个字都没写」，但原因
+    是守卫拒绝裁决；报成「无空字段可补」会让读者以为一切正常，正是上面那个老毛病。
     """
     if action == NOTE_CREATED:
         print(f"[{tag}] 笔记骨架 : {path}（新建）")
@@ -255,6 +364,8 @@ def _report_note_action(tag: str, path: Path, action: str, changed: list[str]) -
         print(f"[{tag}] 笔记合并 : {path}")
         print(f"[{tag}]   补齐 {len(changed)} 个空字段：{', '.join(changed)}")
         print(f"[{tag}]   正文逐字节未改动；本次变更已记入笔记的 ## Changelog 段。")
+    elif action == NOTE_BLOCKED:
+        print(f"[{tag}] 笔记未写 : {path}（同一性守卫拒绝裁决，原因见上面的 stderr）")
     else:
         print(f"[{tag}] 笔记未变 : {path}（无空字段可补，文件未被触碰）")
 

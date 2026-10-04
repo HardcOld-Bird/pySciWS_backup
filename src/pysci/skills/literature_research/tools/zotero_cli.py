@@ -51,16 +51,29 @@ from .config import settings
 CLI_BIN_CANDIDATES = ("zotero-cli",)
 
 # frontmatter 自定义增强字段 → 折进 BibTeX note（Zotero 导入映射为 Extra）。
-# 顺序即写入 note 的行序，与旧 create_item_from_metadata 的 extra 保持一致。
+# 顺序即写入 note 的行序，与旧 create_item_from_metadata 的 extra 保持一致，并与
+# notes.FIELD_ORDER 里的相对次序对齐（标识符 → 指标 → 开放获取），便于两处对照维护。
+# 键必须都存在于 notes.FIELD_ORDER：本模块只从 frontmatter 取值，写错的键会静默变成
+# 永远取不到（test_zotero_cli.py 有一条断言钉住这个子集关系）。
 _EXTRA_FIELDS = (
     "openalex_id",
     "wos_id",
     "arxiv_id",
     "jif",
     "jcr_quartile",
+    # scimago_quartile 与 jcr_quartile 是同类量（两套不同排名体系的分区），必须成对出现。
+    # 它此前缺失，后果是 SCImago 分区永远到不了 Zotero Extra——而对本项目所在的物理声学
+    # 领域，SCImago 恰恰是**当前唯一可用**的分区源（WoS Journals API 尚在申请中），且
+    # journal_metrics 的本地 SCImago 索引已建好、笔记 frontmatter 里也一直有这个值。
+    "scimago_quartile",
     "cited_by_count",
     "oa_status",
 )
+
+# 刻意**不**折进 Extra 的派生字段：journal_tier / journal_tier_basis（top|leading|basic
+# 脱离 basis 无从解读，而 basis 是一串 jufo-3 / norway-2 之类的原始条目，写进 Extra 只是
+# 噪声）、citescore / journal_h_index（与 jif 高度冗余）、esi_*（绝大多数论文为空）。
+# 需要这些值时看笔记 frontmatter 或跑 `research journal lookup <ISSN>`，两者都是权威源。
 
 # BibTeX note → Zotero Extra 的映射键。若首次真机验证发现 zotero-mcp 把 note 落成
 # 子笔记而非 Extra，改此常量为 "annote" 即可（一行切换，见 UPSTREAM.lock pending_live_checks）。

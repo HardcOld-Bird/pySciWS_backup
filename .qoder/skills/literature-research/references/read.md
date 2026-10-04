@@ -138,7 +138,7 @@ when nothing was, `2` when an OpenAlex id could not be resolved to a fetchable U
 
 ## How notes are written: the merge contract
 
-`read` and `add` both write through the same `_merge_note()`, which reports one of four actions. The
+`read` and `add` both write through the same `_merge_note()`, which reports one of five actions. The
 distinction matters: the previous writer was all-or-nothing, so on a note that already existed it
 **returned without writing anything** — which is how `local_pdf_path` and `extracted_md_path` went
 missing from every note built by the normal `add`-then-`read` workflow, and with them the
@@ -151,6 +151,7 @@ missing from every note built by the normal `add`-then-`read` workflow, and with
 | `merged` | note exists and the new data fills at least one **empty** key | frontmatter re-rendered; **body preserved byte for byte**; one audit line appended under `## Changelog` |
 | `unchanged` | note exists, nothing empty left to fill | **not touched at all** — mtime preserved, so `cache prune`'s LRU ordering isn't disturbed |
 | `overwritten` | `--overwrite` | rebuilt from the template; the body is reset |
+| `blocked` | the derived filename is new **and several** existing notes carry the same `doi` / `openalex_id` / `arxiv_id` | **nothing is written anywhere** — the guard refuses to guess which one to merge into; resolve the duplicates by hand |
 
 The rules that make this safe to run repeatedly:
 
@@ -162,8 +163,16 @@ The rules that make this safe to run repeatedly:
   rather than silent.
 - **Unparseable frontmatter is never rewritten.** A hand-written or corrupted note is reported and
   left alone (`unchanged`); pass `--overwrite` explicitly if you truly want the template back.
+- **A drifted filename no longer spawns a duplicate.** The target path is derived from the *freshly
+  fetched* `short_title`, which drifts whenever upstream retitles a work. When that path does not
+  exist, the write is redirected to whichever existing note carries the same `doi` / `openalex_id` /
+  `arxiv_id`, and both filenames are printed so you can `git mv` if you want the canonical name.
+  `--overwrite` is **downgraded to a merge** on that path: the target is a file you never named, and
+  rebuilding it from the template would silently erase hand-written prose. A note with none of the
+  three identifiers cannot be recognized and still gets created (`maintenance.md` §5f).
 - The report separates `merged` (naming the keys it filled) from `unchanged` ("nothing to fill, file
-  untouched"), so neither can be misread as a failed write.
+  untouched"), so neither can be misread as a failed write. `blocked` gets its own wording for the
+  same reason — it also writes nothing, but because the guard refused to decide.
 
 > **One thing merging cannot do: correct a wrong value.** It fills blanks; it never overwrites. Notes
 > written before a field's semantics were fixed therefore keep the old value — re-running `read` will
@@ -279,10 +288,12 @@ Run it after adding or editing notes.
   style. **All existing values are preserved and every body stays byte-identical.** `INDEX.md` is then
   rebuilt in the same pass, so one run suffices. It also *reports* notes whose filename doesn't match
   `{year}_{last}_{slug}.md` but **never renames them** — a rename would break the `[[wiki-links]]` in
-  `reviews/*.md` and any external reference you have made. Be clear about what that check can see: the
+  `reviews/*.md` and any external reference you have made. Be clear about what that report can see: the
   expected name is derived from the note's **own stored** frontmatter, so it catches a hand-renamed file
-  or a `short_title` edited after creation, but **not** the drift that makes `read <id>` spawn a
-  duplicate note — that one is against a *freshly fetched* `short_title` (`maintenance.md` §5f).
+  or a `short_title` edited after creation, but **not** the gap between a stored and a *freshly fetched*
+  `short_title` — `index --fix --dry-run` reports 已是规范形态 for all three current notes even though
+  `2018_zhu` demonstrably drifts. That one is now absorbed at write time rather than reported
+  (`maintenance.md` §5f).
 - `--dry-run` — with `--fix` only: report what would change and write **nothing at all**, `INDEX.md`
   included. (Given without `--fix` it is ignored, with a notice.) On a real library always run this
   first, then confirm `git diff data/skills/literature_research/papers/` shows frontmatter only.
