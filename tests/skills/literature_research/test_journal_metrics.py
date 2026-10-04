@@ -96,12 +96,14 @@ CSV_HEADER = (
     "Total Docs. (2024);Country"
 )
 
-#: 5 行夹具，逐行覆盖一种真实会遇到的形态：
+#: 5 行夹具，逐行覆盖一种形态（其中「未加引号」一行是**防御性**覆盖，见下）：
 #:
 #: - Nature：单值 ISSN + **欧洲小数逗号**（``24,000`` = 24.0）
 #: - PRL：**引号包住**的多值 ISSN（csv reader 正常解析为一个字段）
 #: - PRB：**未加引号**的多值 ISSN —— ``;`` 既是多值分隔符又是字段分隔符，该行会比表头
-#:   多出一个字段，构建器必须做错位补偿，否则 SJR / Quartile / H index 全部读错列
+#:   多出一个字段，构建器必须做错位补偿，否则 SJR / Quartile / H index 全部读错列。
+#:   实测 2025 版官方导出把多值 Issn 都加了引号（见 :data:`CSV_2025_REAL`），故这一行
+#:   是「哪年 SCImago 改了写法」的兵来将挡，而不是当前真实数据的样子
 #: - JASA：低 SJR（真实世界它就是 0.81 量级）
 #: - Ultrasonics：校验位是 **X**（``0041-624X``）
 CSV_ROWS = [
@@ -113,6 +115,20 @@ CSV_ROWS = [
 ]
 
 FIXTURE_CSV = CSV_HEADER + "\n" + "\n".join(CSV_ROWS) + "\n"
+
+#: **实测**的 2025 版官方导出形态（前 12 列，逐字截自 ``scimagojr 2025.csv`` 的表头与
+#: 第 820 行）：多值 Issn 被引号包住、用 ``, `` 分隔、且**不带连字符**；列序与上面的
+#: 夹具也不同（构建器按列名取，不按位置），小数依旧是欧洲逗号（``2,790`` → 2.79）。
+#: 这一份存在的理由是把「真实数据长这样」钉住，免得日后只改防御分支而无人发现。
+CSV_2025_HEADER = (
+    "Rank;Sourceid;Title;Type;Issn;Publisher;Open Access;Open Access Diamond;"
+    "SJR;SJR Best Quartile;H index;Total Docs. (2025)"
+)
+CSV_2025_ROW = (
+    '819;29150;"Physical Review Letters";journal;"10797114, 00319007";'
+    '"American Physical Society";Yes;No;2,790;Q1;750;3001'
+)
+CSV_2025_REAL = CSV_2025_HEADER + "\n" + CSV_2025_ROW + "\n"
 
 #: 夹具索引里应当出现的全部归一化 ISSN（5 行 → 7 个 key，因两行是多值）。
 EXPECTED_KEYS = {
@@ -527,8 +543,44 @@ def test_build_index_writes_compact_json(csv_file: Path, tmp_path: Path):
     assert '": [' not in text and '", "' not in text
 
 
+def test_build_index_ends_with_exactly_one_newline(csv_file: Path, tmp_path: Path):
+    """索引是**入库文件**，故必须满足仓库的 ``end-of-file-fixer`` 钩子。
+
+    本条是实测教训：首次提交 ``scimago_index.json`` 时钩子给它补上了末尾换行
+    （1,427,726 → 1,427,727 B）并**中止提交**。不写换行意味着每年的刷新都要白撞
+    一次失败的 ``git commit``。上限（``not endswith("\\n\\n")``）同样要钉：钩子会把
+    多余的空行删掉，那又是一次改写。
+
+    ``endswith(b"}\\n")`` 而不仅仅是 ``endswith(b"\\n")``，是为了同时钉住写盘的
+    ``newline="\\n"``：少了它，Windows 的通用换行翻译会把那一个 LF 写成 CRLF，
+    同一份 CSV 在两个平台上就产出不同的入库字节。
+    """
+    dest = tmp_path / "idx.json"
+    journal_metrics.build_scimago_index(csv_file, out_path=dest)
+    raw = dest.read_bytes()
+    assert raw.endswith(b"}\n")
+    assert not raw.endswith(b"\n\n")
+
+
+def test_build_index_matches_the_real_2025_export_shape(tmp_path: Path):
+    """逐字复现 2025 版官方导出的那一行，确认当前真实形态走的是**引号**分支。
+
+    该行的多值 Issn 写作 ``"10797114, 00319007"``（引号 + 逗号 + 不带连字符），
+    csv reader 直接得到单个字段，不需错位补偿；两个归一化 key 都应指向同一条
+    ``["Q1", 2.79, 750]``（这三个值已用 ``research journal lookup 0031-9007`` 核对过）。
+    列序也与夹具不同，验证构建器确实按列名取而不是按位置。
+    """
+    p = tmp_path / "scimagojr 2025.csv"
+    p.write_text(CSV_2025_REAL, encoding="utf-8")
+    payload = journal_metrics.build_scimago_index(p, out_path=tmp_path / "idx.json")
+    by = payload["by_issn"]
+    assert set(by) == {"10797114", "00319007"}
+    assert by["00319007"] == by["10797114"] == ["Q1", 2.79, 750]
+    assert payload["_meta"]["sjr_year"] == 2025
+
+
 def test_multi_value_issn_builds_both_keys(csv_file: Path, tmp_path: Path):
-    """方案点名的用例：``"0031-9007;1079-7114"`` 两个 key 都要建立，指向同一条记录。"""
+    """引号版多值 ISSN：``"0031-9007;1079-7114"`` 两个 key 都要建立，指向同一条记录。"""
     payload = journal_metrics.build_scimago_index(
         csv_file, out_path=tmp_path / "idx.json"
     )
@@ -541,9 +593,11 @@ def test_multi_value_issn_builds_both_keys(csv_file: Path, tmp_path: Path):
 def test_unquoted_multi_value_issn_is_realigned(csv_file: Path, tmp_path: Path):
     """未加引号的多值 ISSN 会让该行多出一个字段；不做错位补偿就会读错列。
 
-    这是 SCImago CSV 的真实形态（``;`` 既是字段分隔符又是多值分隔符），补偿逻辑一旦
-    退化，PRB 的 SJR 会读成第二个 ISSN、分区会读成 SJR，而测试数值全是 plausible 的
-    字符串——不会报错，只会静默产出垃圾索引。
+    **防御性用例**：实测 2025 版官方导出把多值 Issn 都加了引号（见
+    :func:`test_build_index_matches_the_real_2025_export_shape`），故当前这份 CSV 上
+    ``extra`` 恒为 0。但 ``;`` 既是字段分隔符又是一个合理的 ISSN 分隔符，哪年导出
+    改了写法就会走进这里：补偿逻辑一旦退化，PRB 的 SJR 会读成第二个 ISSN、分区会
+    读成 SJR，而测试数值全是 plausible 的字符串——不会报错，只会静默产出垃圾索引。
     """
     payload = journal_metrics.build_scimago_index(
         csv_file, out_path=tmp_path / "idx.json"

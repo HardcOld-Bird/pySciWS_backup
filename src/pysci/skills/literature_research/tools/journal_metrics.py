@@ -281,10 +281,12 @@ def _rehyphen(tok: str) -> str:
 def _extract_issns(cell: str) -> list[str]:
     """从 Issn 列的原始文本里抽出全部归一化 ISSN（保序去重）。
 
-    官方 CSV 的多值 ISSN 用 ``;`` 分隔——而 ``;`` 恰好也是字段分隔符，因此当某行的
-    Issn 未被引号包住时，多值会被 csv reader 拆成**多个字段**（见
-    :func:`build_scimago_index` 里的错位补偿，它会把它们重新拼回来）。分隔符集合刻意
-    **不含** ``-``，否则 ``0031-9007`` 会被切成两半。
+    分隔符集合刻意**不含** ``-``，否则 ``0031-9007`` 会被切成两半；除此之外任何非
+    ``[0-9Xx-]`` 字符都当分隔符，故逗号版与分号版、带连字符与不带连字符都吃得下。
+    实测 2025 版官方导出：Issn 列**被引号包住**、多值用 ``, `` 分隔且**不带连字符**
+    （PRL 写作 ``"10797114, 00319007"``），csv reader 正常解析为单个字段。若哪年改成
+    不加引号，``;`` 既是多值分隔符又是字段分隔符，该行就会比表头多出字段——见
+    :func:`build_scimago_index` 里的错位补偿。
     """
     keys: list[str] = []
     for tok in re.split(r"[^0-9Xx-]+", cell or ""):
@@ -317,9 +319,13 @@ def build_scimago_index(
     """把官方 SCImago CSV 构建成紧凑的本地索引 JSON 并写盘。
 
     只保留 ``Issn`` / ``SJR`` / ``SJR Best Quartile`` / ``H index`` 四列（其余列对分区
-    判断无用；丢掉可把约 15 MB 的 CSV 压到约 1.4 MB 的 JSON，git 可接受）。``Issn``
-    字段可能多值，每个值都建一个 key、指向同一条记录。序列化用 ``separators=(",", ":")``
-    且不缩进。
+    判断无用；丢掉可把约 11 MB 的 CSV 压到约 1.4 MB 的 JSON，git 可接受——2025 版
+    实测 10.73 MB → 1,427,727 B / 53404 条）。``Issn`` 字段可能多值，每个值都建一个
+    key、指向同一条记录（故 key 数远多于 CSV 行数：2025 版 32194 行→ 53404 个 key）。
+    序列化用 ``separators=(",", ":")`` 且不缩进，末尾补**一个** LF：索引是入库文件，
+    不带末尾换行会被 pre-commit 的 ``end-of-file-fixer`` 改写并中止提交（每年刷新都
+    会白撞一次）；``newline="\n"`` 则是为了关掉 Windows 的通用换行翻译——否则那一个
+    ``\n`` 会变成 ``\r\n``，同一份 CSV 在两个平台上产出的入库字节就不一致了。
 
     Args:
         csv_path: 用户手工下载的官方 CSV 路径（见 :data:`DOWNLOAD_URL`）。
@@ -358,9 +364,11 @@ def build_scimago_index(
 
     by_issn: dict[str, list[Any]] = {}
     for row in body:
-        # 错位补偿：多值 ISSN 用 `;` 分隔而 `;` 又是字段分隔符，未被引号包住时该行会比
-        # 表头多出 k 个字段，且多出的都紧跟在 Issn 列之后。把它们并回 Issn 列，同时把它
-        # 右侧的列整体右移 k 位——否则 SJR / Quartile / H index 会全部读错列。
+        # 错位补偿（防御性：2025 版官方导出把多值 Issn 加了引号，故 extra 恒为 0）：
+        # 若某年的导出改用不加引号的 `;` 分隔多值 ISSN，而 `;` 又正是字段分隔符，该行就会
+        # 比表头多出 k 个字段，且多出的都紧跟在 Issn 列之后。把它们并回 Issn 列，同时把它
+        # 右侧的列整体右移 k 位——否则 SJR / Quartile / H index 会全部读错列，而且读错后
+        # 的值全是 plausible 的字符串：不报错，只静默产出垃圾索引。
         extra = max(0, len(row) - width)
         if extra:
             issn_cell = ";".join(row[i_issn : i_issn + extra + 1])
@@ -395,8 +403,9 @@ def build_scimago_index(
     dest = Path(out_path) if out_path else index_path()
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     _CACHE.clear()  # 旧路径/旧内容的缓存立即作废
     return payload
