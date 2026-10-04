@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `scimago_index.json` | SCImago SJR 分区索引（按 ISSN 精确匹配） | **是** | 约 1.4 MB |
 | `SOURCE.md` | 本文件：数据来源、版本、归属声明与刷新步骤 | **是** | — |
-| `*.csv` | 用户手工下载的官方原始导出 | **否**（`.gitignore` 已排除） | 约 15 MB |
+| `*.csv` | 用户手工下载的官方原始导出 | **否**（`.gitignore` 已排除） | 约 11 MB |
 
 ---
 
@@ -24,26 +24,29 @@
 | 项 | 值 |
 |---|---|
 | 下载 URL | <https://www.scimagojr.com/journalrank.php>（页面底部的数据下载区，选 *Scimago Journal & Country Rank \<年份\>* 的 **CSV**） |
-| SJR 版本年 | **待填**（构建时从 CSV 表头的 `Total Docs. (YYYY)` 推断，或用 `--year` 指定） |
-| 下载日期 | **待填** |
-| 源 CSV 文件名 | **待填**（原始 CSV 不入库，只在此记录文件名以便追溯） |
-| 索引条目数 | **待填**（`research journal status` 会打印） |
+| SJR 版本年 | **2025**（构建时从 CSV 表头的 `Total Docs. (2025)` 自动推断，非人工填写） |
+| 下载日期 | **2026-10-04** |
+| 源 CSV 文件名 | **`scimagojr 2025.csv`**（10.73 MB；原始 CSV 不入库，只在此记录文件名以便追溯） |
+| 索引条目数 | **53404** 条 ISSN（`research journal status` 会打印） |
 | 索引构建时间 | 见 `scimago_index.json` 的 `_meta.built_at` |
 
-> 索引尚未构建时上表的「待填」保持原样即可——所有查询路径都会静默返回空值，
-> `scimago_quartile` 字段留空，不影响任何其它功能。
+> 上表随每次刷新更新（见下方第 5 步）。索引若被删掉、尚未重建，所有查询路径都会
+> 静默返回空值、`scimago_quartile` 字段留空，不影响任何其它功能。
 
-> 本文件刻意**不写死版本年**：`scimagojr.com` 对程序化请求返回 403（含 AI 的网页
-> 读取工具），维护者无从核实页面当前提供的是哪一版，写下一个年份只会变成一句
-> 无法检验的断言。SCImago 每年约 5-6 月随新版 Scopus 发布上一年的数据，下载时以
-> 页面实际标明的最新版为准；版本年由构建过程从 CSV 表头自行推断，不靠人记。
+> 下载步骤刻意**不写死版本年**（上表记的是「已构建的这一版」，随刷新更新）：
+> `scimagojr.com` 对程序化请求返回 403（含 AI 的网页读取工具），维护者无从核实
+> 页面当前提供的是哪一版，写下一个年份只会变成一句无法检验的断言。SCImago 每年
+> 约 5-6 月随新版 Scopus 发布上一年的数据，下载时以页面实际标明的最新版为准；
+> 版本年由构建过程从 CSV 表头自行推断，不靠人记。
 
 ### 为什么只跟踪索引 JSON、不跟踪原始 CSV
 
-官方导出约 15 MB，其中绝大部分列（`Total Docs.` / `Total Refs.` / `%Female` /
-`Overton` / `SDG` / `Country` …）对本项目的**分区判断**毫无用处。
+官方导出约 11 MB（2025 版实测 10.73 MB），其中绝大部分列（`Total Docs.` /
+`Total Refs.` / `%Female` / `Overton` / `SDG` / `Country` …）对本项目的**分区判断**
+毫无用处。
 `journal_metrics.build_scimago_index` 只保留 `Issn` / `SJR` / `SJR Best Quartile` /
-`H index` 四列，压成约 1.4 MB 的紧凑 JSON——这个体积 git 可以长期承受，而 15 MB
+`H index` 四列，压成约 1.4 MB 的紧凑 JSON（2025 版实测 1,427,727 B，含末尾一个换行，
+以免被 pre-commit 的 `end-of-file-fixer` 改写）——这个体积 git 可以长期承受，而 11 MB
 的二进制式宽表不行。原始 CSV 已被 `.gitignore` 的 `*.csv` 规则排除，**不要**强制添加。
 
 ### 为什么不自动下载
@@ -78,8 +81,17 @@ SCImago 每年（约 5-6 月）随新版 Scopus 数据发布一次 SJR。刷新�
 5. 更新本文件「当前版本」表里的 SJR 版本年 / 下载日期 / 源 CSV 文件名 / 条目数。
 6. 让既有笔记吃到新分区：`scimago_quartile` 是**只在字段为空时才补**的（`merge_frontmatter`
    的「只填空、绝不覆盖」语义）。因此旧笔记不会自动刷新分区——这是刻意的：
-   分区会随年份变动，自动覆盖会让用户的历年判断失去参照。确需批量刷新时，
-   把目标笔记的 `scimago_quartile` 清空后重跑 `research read <id>`。
+   分区会随年份变动，自动覆盖会让用户的历年判断失去参照。
+
+   确需刷新时，**不要**清空后重跑 `research read <id>`。`_merge_note` 的目标路径由
+   **本次新取到的** frontmatter 现算（`notes.note_filename`，输入含 `short_title`），而
+   `_make_short_title` 会剔除 of/and/in 等虚词后取前 6 个实词；一旦算出的名字与磁盘上的
+   旧名不同，`read` 就**新建一个重复笔记**而不是合并——实测当前三篇存量笔记里有两篇
+   会这样（`2018_zhu` 因 `short_title` 新旧不一致，`2023_fang` 因文件名本就待改）。
+   安全做法是按白名单只改 `scimago_quartile` 一个键：值取自
+   `research journal lookup <ISSN>`（ISSN 出自该笔记对应的 OpenAlex source 记录），
+   再往该笔记的 `## Changelog` 追加一行；改前改后用正文 SHA256 自证逐字节未变
+   （配方见 `.qoder/skills/literature-research/references/maintenance.md` §5e）。
 7. 原始 CSV 可以删掉（索引已自足），也可以留着——反正不入 Git。
 
 ---

@@ -35,7 +35,7 @@ cited_by_count_normalized: 89
 jif: 8.97
 jif_5yr: null
 jcr_quartile: ''
-scimago_quartile: ''
+scimago_quartile: Q1
 citescore: null
 esi_highly_cited: null
 esi_hot_paper: null
@@ -188,3 +188,4 @@ _（用户或 AI 随时补充；此段落不受模板约束）_
 - YYYY-MM-DD: User review
 - 2026-10-03: 数据修复——按权威源刷新 publication_date, journal, journal_ref, publisher, volume, issue, pages, openalex_id, wos_id, cited_by_count, cited_by_count_normalized, jif, journal_h_index, journal_tier, journal_tier_basis, listed_in, esi_highly_cited, esi_hot_paper（esi_* 由 false 改为 null：ESI 名单需 WoS Journals API，当前无程序化来源，false 等于断言一件未知的事）。正文其余部分未改。
 - 2026-10-04: 补齐字段 extracted_md_path
+- 2026-10-04: 补齐字段 scimago_quartile（Q1）——按 OpenAlex source 的 ISSN（0031-9007 / 1079-7114）查本地 SCImago SJR 2025 索引（53404 条）得到；该字段此前为空是因为索引当时尚未构建。正文其余部分未改。

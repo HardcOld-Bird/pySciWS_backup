@@ -35,7 +35,7 @@ cited_by_count_normalized: 89
 jif: 4.19
 jif_5yr: null
 jcr_quartile: ''
-scimago_quartile: ''
+scimago_quartile: Q1
 citescore: null
 esi_highly_cited: null
 esi_hot_paper: null
@@ -193,3 +193,4 @@ _（用户或 AI 随时补充）_
 - 2026-09-18: PDF fetched via Zotero (Find Available PDF); extracted full text (39457 chars)
 - 2026-10-03: 数据修复——按权威源刷新 wos_id, cited_by_count_normalized, jif, journal_h_index, journal_tier, journal_tier_basis, listed_in, esi_highly_cited, esi_hot_paper（esi_* 由 false 改为 null：ESI 名单需 WoS Journals API，当前无程序化来源，false 等于断言一件未知的事）。正文其余部分未改。
 - 2026-10-04: 补齐字段 extracted_md_path——指向 research ingest 的产物 cache/extracted/group_pubs/fang_ep_metagrating.md（标题逐字校对一致；据 ingest/manifest.json，该文件由本地 PDF “房鑫盛师兄文章/房师兄EP.pdf” 经 MinerU 抽取得到，42225 字符）。本字段此前为空：2026-09-18 那次抽取的 39457 字符版本已不在缓存中。正文其余部分未改。
+- 2026-10-04: 补齐字段 scimago_quartile（Q1）——按 OpenAlex source 的 ISSN（2331-7019）查本地 SCImago SJR 2025 索引（53404 条）得到；该字段此前为空是因为索引当时尚未构建。正文其余部分未改。
