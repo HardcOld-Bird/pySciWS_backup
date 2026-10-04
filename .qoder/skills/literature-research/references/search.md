@@ -291,11 +291,13 @@ research journal build-scimago --csv <path-to-csv> [--year 2024]
 ```
 
 Only `Issn` / `SJR` / `SJR Best Quartile` / `H index` are kept — enough for quartile judgment, and it
-compresses a ~15 MB CSV into a ~1.4 MB JSON that git can carry. Output:
-`data/skills/literature_research/scimago_index.json` (**tracked**); `*.csv` there is git-ignored, so
-don't leave the raw download in the data dir. Multi-valued `Issn` cells (`0031-9007;1079-7114`)
-produce **one key per ISSN** pointing at the same record. The version year is inferred from the
-header (`Total Docs. (2024)`) or the file name, and `--year` overrides it — it is never invented.
+compresses a ~11 MB CSV into a ~1.4 MB JSON that git can carry. Output:
+`data/skills/literature_research/data/scimago_index.json` (**tracked**); `*.csv` under that tree is
+git-ignored, so the raw download may sit beside the index or be deleted — the index is self-sufficient.
+Multi-valued `Issn` cells produce **one key per ISSN** pointing at the same record; the 2025 export
+quotes them and separates with a comma, unhyphenated (`"10797114, 00319007"`), which is why that
+build yielded **53,404** keys from a 32,194-line CSV. The version year is inferred from the
+header (`Total Docs. (2025)`) or the file name, and `--year` overrides it — it is never invented.
 ISSNs are normalized by stripping hyphens, so `0031-9007` and `00319007` both match.
 
 > **This one path is deliberately *not* silent.** Everywhere else in the module a missing input
@@ -303,7 +305,7 @@ ISSNs are normalized by stripping hyphens, so `0031-9007` and `00319007` both ma
 > `scimago_quartile` blank in *every* note with no visible cause — far harder to diagnose than an
 > error. So: missing `--csv` → exit **2**; unreadable, empty, or column-less CSV → exit **1** with the
 > reason on stderr. After a successful build, record the download URL / version year / download date
-> in `data/skills/literature_research/SOURCE.md` (the attribution line is printed for you), and
+> in `data/skills/literature_research/data/SOURCE.md` (the attribution line is printed for you), and
 > refresh yearly — see `references/maintenance.md`.
 
 ### `status`

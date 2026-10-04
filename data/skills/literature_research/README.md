@@ -196,9 +196,10 @@ Expanded 也不含 JIF”这个易混淆点记在 `tools/wos_client.py` 的模�
 
 **期刊质量指标**（`research journal lookup <issn>` 可并排看）：官方 JIF 到位前由两个**免费**层填充——
 `journal_tier`（OpenAlex `listed_in` 里 JUFO / Norway / KI-JL 的**专家评议**分级，零额外请求；对低引用
-密度领域比 JIF 更贴近共识）与 `scimago_quartile`（SCImago SJR 本地索引，需先手工下载官方 CSV 后
-`research journal build-scimago --csv <path>` 构建；未建则静默留空）。`jcr_quartile` 在 Journals API
-接入前恒为空，三者语义不同、并存不冲突。
+密度领域比 JIF 更贴近共识）与 `scimago_quartile`（SCImago SJR 本地索引 `data/scimago_index.json`，已随仓库
+版本化，当前为 **SJR 2025 / 53404 条 ISSN**；换年版需手工下载官方 CSV 后跑
+`research journal build-scimago --csv <path>` 重建，版本表与刷新步骤见 `data/SOURCE.md`；索引缺失或
+该刊无 ISSN 时静默留空）。`jcr_quartile` 在 Journals API 接入前恒为空，三者语义不同、并存不冲突。
 
 **引用完整性门**：`add` 写入前自动用 **OpenAlex + Crossref + arXiv 三源**交叉核验每条引用（标题/DOI/年份/期刊/首作者），实质冲突（FAIL）阻止入库（`--allow-fail` 越过 / `--no-verify` 跳过）；也可独立跑 `research citecheck <doi｜标题>`、`citecheck --all`（审计 `papers/` 全部笔记）、`citecheck --bib <refs.bib｜refs.md>`（核验一份参考文献）或 `citecheck --review`（前者的简写，扫全部综述）；有 FAIL 退出码 1，可作 CI 门。仅硬冲突（标题/DOI 不符、年份差≥2）判 FAIL；作者姓 / 年份差 1 / 期刊名差异只 WARN；某源不可达只降级、绝不误判。
 
