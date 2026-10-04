@@ -23,7 +23,7 @@
 
 | 项 | 值 |
 |---|---|
-| 下载 URL | <https://www.scimagojr.com/journalrank.php>（页面底部 “Download data” → *Scimago Journal & Country Rank 2024*） |
+| 下载 URL | <https://www.scimagojr.com/journalrank.php>（页面底部的数据下载区，选 *Scimago Journal & Country Rank \<年份\>* 的 **CSV**） |
 | SJR 版本年 | **待填**（构建时从 CSV 表头的 `Total Docs. (YYYY)` 推断，或用 `--year` 指定） |
 | 下载日期 | **待填** |
 | 源 CSV 文件名 | **待填**（原始 CSV 不入库，只在此记录文件名以便追溯） |
@@ -32,6 +32,11 @@
 
 > 索引尚未构建时上表的「待填」保持原样即可——所有查询路径都会静默返回空值，
 > `scimago_quartile` 字段留空，不影响任何其它功能。
+
+> 本文件刻意**不写死版本年**：`scimagojr.com` 对程序化请求返回 403（含 AI 的网页
+> 读取工具），维护者无从核实页面当前提供的是哪一版，写下一个年份只会变成一句
+> 无法检验的断言。SCImago 每年约 5-6 月随新版 Scopus 发布上一年的数据，下载时以
+> 页面实际标明的最新版为准；版本年由构建过程从 CSV 表头自行推断，不靠人记。
 
 ### 为什么只跟踪索引 JSON、不跟踪原始 CSV
 
