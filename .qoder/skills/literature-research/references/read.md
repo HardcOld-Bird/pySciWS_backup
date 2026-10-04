@@ -50,13 +50,20 @@ What it does, in order:
      `\documentclass`/`\usepackage`/`\begin{document}` leaks, all eight body sections intact. See
      `maintenance.md` §3 for the exact regexes and why the comment strip must run *before* the
      preamble cut.
-   - **Known limits — read the output critically.** The `thebibliography` block survives as *raw
-     REVTeX* (`\bibinfo`/`\bibfield`/`\BibitemShut`): for that same paper it is lines 136–~705 of 717,
-     i.e. **~80 % of the file**, and pure noise to `rag`'s embedder. In-text citations stay as BibTeX
-     *keys* (`systems[EP2]`) because key → number mapping is not implemented, and `\ref` becomes
-     `§label`. Accents are not converted (`Aubry-Andr{\'e}-Harper`). A `\newcommand` written *inside*
-     the body also survives (only the preamble cut removes those, and that cut often fails on
-     multi-file arXiv projects). None of this touches the body prose or the equations.
+   - **The bibliography is dropped at the source** (`_TEX_DROPPED_ENVS = ("comment",
+     "thebibliography")`, 2026-10-04). It used to survive as *raw REVTeX*
+     (`\bibitem`/`\citenamefont`/`\bibinfo`/`\BibitemShut`): for that same `1803.04110` paper, lines
+     136–709 of 717 — **~80 % of that file's lines** (35,633 chars, 58.8 % of it), pure macro residue
+     with zero retrieval value. The drop only fires when the `\begin`/`\end` counts **match**, so an
+     unbalanced environment is left intact rather than half-eaten. Bibliographic data has better
+     sources anyway (`citecheck` / Zotero / OpenAlex). Artifacts extracted *before* the fix still
+     carry it — `rag` scrubs its embedded **copies** at index time (`corpus_clean`, see
+     `maintenance.md` §5d), so neither route reaches the embedder.
+   - **Known limits — read the output critically.** In-text citations stay as BibTeX *keys*
+     (`systems[EP2]`) because key → number mapping is not implemented, and `\ref` becomes `§label`.
+     Accents are not converted (`Aubry-Andr{\'e}-Harper`). A `\newcommand` written *inside* the body
+     also survives (only the preamble cut removes those, and that cut often fails on multi-file arXiv
+     projects). None of this touches the body prose or the equations.
 5. **Write outputs** — the extracted full text to `cache/extracted/<slug>_fulltext.md` (the single
    canonical extracted artifact — `read` extracts with `write_cache=False` so no duplicate is
    left behind), and a structured note skeleton to `papers/{year}_{author}_{slug}.md`. The full
@@ -272,7 +279,10 @@ Run it after adding or editing notes.
   style. **All existing values are preserved and every body stays byte-identical.** `INDEX.md` is then
   rebuilt in the same pass, so one run suffices. It also *reports* notes whose filename doesn't match
   `{year}_{last}_{slug}.md` but **never renames them** — a rename would break the `[[wiki-links]]` in
-  `reviews/*.md` and any external reference you have made.
+  `reviews/*.md` and any external reference you have made. Be clear about what that check can see: the
+  expected name is derived from the note's **own stored** frontmatter, so it catches a hand-renamed file
+  or a `short_title` edited after creation, but **not** the drift that makes `read <id>` spawn a
+  duplicate note — that one is against a *freshly fetched* `short_title` (`maintenance.md` §5f).
 - `--dry-run` — with `--fix` only: report what would change and write **nothing at all**, `INDEX.md`
   included. (Given without `--fix` it is ignored, with a notice.) On a real library always run this
   first, then confirm `git diff data/skills/literature_research/papers/` shows frontmatter only.

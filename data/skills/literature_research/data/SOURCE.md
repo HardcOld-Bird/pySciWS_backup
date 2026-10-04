@@ -86,8 +86,16 @@ SCImago 每年（约 5-6 月）随新版 Scopus 数据发布一次 SJR。刷新�
    确需刷新时，**不要**清空后重跑 `research read <id>`。`_merge_note` 的目标路径由
    **本次新取到的** frontmatter 现算（`notes.note_filename`，输入含 `short_title`），而
    `_make_short_title` 会剔除 of/and/in 等虚词后取前 6 个实词；一旦算出的名字与磁盘上的
-   旧名不同，`read` 就**新建一个重复笔记**而不是合并——实测当前三篇存量笔记里有两篇
-   会这样（`2018_zhu` 因 `short_title` 新旧不一致，`2023_fang` 因文件名本就待改）。
+   旧名不同，`read` 就**新建一个重复笔记**而不是合并——实测当前三篇存量笔记里仍有一篇会这样：
+   `2018_zhu` 存的是 `short_title: Simultaneous Observation of Topological Edge State`（→
+   `2018_zhu_simultaneous-observation-of-topological.md`），而全新一次 `read` 会拿
+   `_make_short_title(全标题)` 现算出 `Simultaneous Observation Topological Edge State Exceptional`
+   （→ `2018_zhu_simultaneous-observation-topological-edg.md`）。`2023_fang` 曾同属此例，已于
+   2026-10-04 用 `git mv` 改名为 `note_filename` 会算出的
+   `2023_fang_extreme-wave-manipulation-non-hermitian.md`，不再漂移；但陷阱对下一篇 `short_title`
+   变动的笔记依旧成立。**注意 `index --fix` 照不出它**：那条「文件名与命名规范不符」的告警比的是
+   笔记**自己存的** frontmatter（故上面三篇均报「已是规范形态」），而漂移发生在「新取到的」
+   frontmatter 上；`--fix` 也只**报**不改名。
    安全做法是按白名单只改 `scimago_quartile` 一个键：值取自
    `research journal lookup <ISSN>`（ISSN 出自该笔记对应的 OpenAlex source 记录），
    再往该笔记的 `## Changelog` 追加一行；改前改后用正文 SHA256 自证逐字节未变

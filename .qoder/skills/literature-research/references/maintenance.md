@@ -139,20 +139,35 @@ overrides (all have built-in defaults).
   `\begin{document}` cut routinely fails on multi-file arXiv projects (`\input{sec1.tex}`), so it
   cannot be relied on to swallow commented-out lines. The same reason means a `\newcommand`/`\def`
   written *inside* the body survives — those are only removed when the preamble cut succeeds.
-  **Further known limits** (pre-existing; none touch body prose or equations): the `thebibliography`
-  block is kept as *raw REVTeX* (`\bibinfo`/`\bibfield`/`\BibitemShut`) — lines 136–~705 of that same
-  717-line file, i.e. ~80 % of it and pure noise to `rag`'s embedder; in-text citations stay as
-  BibTeX *keys* (`systems[EP2]`), key → number mapping not being implemented; `\ref` becomes
+  **The `thebibliography` block is now dropped at the source** (`_TEX_DROPPED_ENVS`, 2026-10-04).
+  For that same 717-line file it was lines 136–~709 — **~80 % of that file** — and pure REVTeX macro
+  residue (`\bibitem`/`\citenamefont`/`\bibinfo`/`\BibitemShut`) as far as `rag`'s embedder is
+  concerned. The drop is guarded on the `\begin`/`\end` counts matching, so an *unbalanced*
+  environment is left alone rather than swallowing the rest of the paper; the already-extracted
+  artifacts and the unterminated case are covered at read time by `corpus_clean` (§5d).
+  Bibliographic data has authoritative sources elsewhere (`citation_verify` / Zotero / OpenAlex), so
+  nothing worth keeping is lost. Note the ~80 % figure belongs to *that one file*: measured across
+  the whole corpus (74 `.md`, 19.5 M chars) `thebibliography` is only **0.2 %** and appears in
+  **1 of 74** files — it is the arXiv-LaTeX path's noise, not the corpus's.
+  **Remaining known limits** (pre-existing; none touch body prose or equations): in-text citations
+  stay as BibTeX *keys* (`systems[EP2]`), key → number mapping not being implemented; `\ref` becomes
   `§label`; accents are not converted (`Aubry-Andr{\'e}-Harper`). Pinned by
   `test_tex_to_markdown.py`. One further limit is *not* pinned, because it is not recoverable from
   syntax at all: a heading the authors set by hand as `\emph{Introduction.--}` (common in PRL, where
   `\section` is skipped to save space) stays *italic prose* instead of becoming `##`, so such a file
   can end up with **zero** Markdown headings. Verified on 1803.04110 — all eight sections do survive,
   but as `*X.--*` / `*X. --*` lines, and `^#` matches only the H1. Nothing in the source marks an
-  italic phrase as a heading, so no amount of regex fixes this; the consequence is that heading-based
-  chunking in `rag` sees the whole paper as one block. A workable heuristic, if it is ever wanted:
-  promote a line that is *only* an italic phrase ending in `.--` or `. --`, which is the APS run-in
-  heading convention.
+  italic phrase as a heading, so no amount of regex fixes this.
+  **That last one costs far less than it looks like, and the reason is worth un-learning.** This file
+  used to record that heading-based chunking in `rag` would then see the whole paper as one block.
+  It does not: paperqa `2026.8.12`'s `readers.read_doc` has **no `.md` branch**, so a `.md` falls
+  through to `parse_text(split_lines=True)` + `chunk_code_text` — "based on line numbers (for
+  code)" — which accumulates lines and hard-cuts at `chunk_chars` (default 5000, overlap 250)
+  regardless of headings *or* sentence boundaries. Markdown structure has never influenced chunking;
+  only **character count** does. That is precisely why §5d's `corpus_clean` deletes noise instead of
+  repairing heading structure — the latter would buy nothing. (Should paperqa ever grow a real
+  Markdown parser, the run-in heuristic becomes worth implementing: promote a line that is *only* an
+  italic phrase ending in `.--` or `. --`, the APS run-in convention.)
 
 ---
 
@@ -421,13 +436,46 @@ primary path (pure embedding, free, no LLM); `ask` is an optional convenience th
   `DOI:`; the first plausible author line — skipping URL/affiliation lines and requiring ≥2 name tokens).
   A journal paper yields `Xia et al. (2025)`; a manual/no-author doc degrades to its title. `_map_mailto_env`
   still forwards `OPENALEX_EMAIL` → `CROSSREF_MAILTO`/`OPENALEX_MAILTO` for politeness if any source is hit.
-- **Persistence + incremental index.** `build_index(paths=None, rebuild=False)` embeds each candidate `.md`
+- **Corpus cleaning before embedding (`corpus_clean.py`, 2026-10-04).** Because paperqa chunks a
+  `.md` by *character count* (§3), every noise character is a character of body text pushed out of a
+  chunk. `build_index(clean=True)` — the default — therefore passes each artifact through
+  `corpus_clean.clean_markdown` first and hands **the copy** to `Docs.aadd`. Three deletion rules,
+  each independently unit-tested and *deletion-only* (no rewriting, no reordering, no guessing at
+  semantic structure): a LaTeX/REVTeX `thebibliography` environment (unterminated → swallow to EOF);
+  MinerU's standalone empty-alt image placeholder lines (`![](images/<64-hex>.jpg)` — figure
+  *captions*, which MinerU emits as separate `FIG. 1. (a) …` text lines, are **kept**);
+  and numbered reference tables (≥ `MIN_REF_BLOCK` = 3 consecutive `[n] …` lines, blank lines
+  between entries allowed — fewer than 3 is kept, because a short list can't be told from prose
+  enumeration). Runs of ≥3 blank lines left behind are collapsed to one, since blank lines also cost
+  chunk budget.
+  Measured on the real corpus: image placeholders 272,685 chars (1.40 %), numbered reference blocks
+  319,995 chars (1.64 %, 95 blocks) → **3.0 % overall**, but that average is diluted by the 12.4 M-char
+  COMSOL manual (63 % of the corpus, and not what anyone asks questions of). **Per physics paper the
+  same noise is 25 %–40 %** — which is the number that actually matters.
+  Two invariants worth protecting: the **original artifacts are never modified** (they are either
+  MinerU-quota-expensive or hand-curated into topic subdirs like `cpa_ep/` that don't match
+  `pdf_extract`'s `{stem}_{key}.{backend}.md` cache naming, i.e. not reproducible), and the copies
+  are written with `newline="\n"` so they are byte-identical across platforms.
+- **Persistence + incremental index.** `build_index(paths=None, rebuild=False, clean=True)` embeds each candidate `.md`
   (docname = `__`-joined path-relative-to-`cache/extracted` stem) via `Docs.aadd(citation=…, title=…, doi=…)`,
   then pickles the `Docs` to `cache/rag/index.pkl` + writes `index_meta.json` (`files{docname:{path,mtime,
   title,year,doi,first_author,citation}}`, `n_docs`, `n_chunks`, `embedding_model`, `paperqa_version`,
-  `built_at`). Re-running is incremental: same mtime → **skip**, changed mtime → **stale** (not silently
-  overwritten), new → **add**; `--rebuild` starts fresh. `_load_docs` returns `None` on a version mismatch or
+  `cleaner_version`, `built_at`). Re-running is incremental: same mtime → **skip**, changed mtime → **stale** (not silently
+  overwritten), new → **add**; `--rebuild` starts fresh *and* wipes `cache/rag/corpus/` so a deleted
+  source can't leave an orphaned copy behind (`reset_corpus_dir` refuses to delete anything not named
+  `corpus`, so a mistaken `pqa_home` makes it a no-op rather than an accident). `_load_docs` returns `None` on a version mismatch or
   corrupt pickle (→ treated as "no index"). `PQA_HOME` overrides the index dir (default `cache/rag/`).
+  **The ledger's `path` stays the *source* file even though the *copy* is what got embedded** — that is
+  what keeps `search`'s `source_path` pointing at a file a human can open, rather than at a derivative
+  that vanishes on the next `--rebuild`.
+- **`cleaner_version` is a rebuild trigger, and it has to be.** The incremental path skips on mtime,
+  and a source file's mtime does not change when the *cleaning rules* change — so without this guard
+  "copies cleaned by the old rules + code implementing the new ones" would coexist forever and the new
+  rule would never take effect. Bump `corpus_clean.CLEANER_VERSION` whenever you touch a deletion rule.
+  The same mechanism makes flipping `--no-clean` (stored as version `0`) force a full rebuild.
+  `IndexReport.n_chars_raw` / `n_chars_clean` carry the measured cut; `clean=False` leaves both at 0
+  because `_prepare_text` returns `None` rather than a zero-valued `CleanStats` — so the verbose
+  summary can say "disabled" instead of printing a fake "removed 0 %".
 - **`search` (primary).** `Docs.retrieve_texts(query, k)` → `list[Text]` (MMR-ranked, embedding-only, no LLM).
   Each `Text` maps to a `RagChunk(rank, text, docname, citation, source_path, chunk_name)`; the source
   attribution chain is `chunk.text` + `chunk.doc.docname` + `chunk.doc.citation`, with `source_path` recovered
@@ -617,9 +665,20 @@ named by hand — the computed path misses the existing file, `_merge_note` sees
 Verified on all three notes in `papers/` (2026-10-04): `2021_gu` merges correctly, whereas `2018_zhu`
 (stored `short_title` "Simultaneous Observation **of** Topological Edge State" vs fresh "Simultaneous
 Observation Topological Edge State Exceptional" → `2018_zhu_simultaneous-observation-topological-edg.md`)
-and `2023_fang` (whose file already awaits its rename) would each spawn a duplicate. So: refresh a
-single field by the §5e whitelist write-back, and run `index --check` first — it reports exactly
-these filename mismatches and, by design, never renames anything.
+would spawn a duplicate. (`2023_fang` was in the same boat and has since been renamed with `git mv`
+to `2023_fang_extreme-wave-manipulation-non-hermitian.md`, so it now merges correctly too — but the
+trap is unchanged for the next note whose `short_title` drifts.) So: refresh a single field by the §5e
+whitelist write-back.
+
+**No command detects that drift — don't go looking for one.** `index --check` only diffs `INDEX.md`
+against `papers/`. `index --fix` *does* warn when a filename doesn't match `{year}_{last}_{slug}.md`
+(the warning comes from `_normalize_note_file`, and it never renames) — but it derives the expected
+name from the note's **own stored** frontmatter, which by construction agrees with the file it lives
+in. Verified 2026-10-04: `index --fix --dry-run` reports 已是规范形态 for all three notes, including
+`2018_zhu`, which demonstrably drifts (`…-observation-of-topological.md` stored vs
+`…-observation-topological-edg.md` fresh). To see the drift, compare a fresh derivation against the
+stored value — `research get <id>` prints the `short_title` a new fetch would produce. The durable fix
+is a DOI / `openalex_id` identity guard inside `_merge_note` (not implemented).
 
 ---
 
@@ -661,12 +720,14 @@ pass — see §5b.
 | `add` created a duplicate Zotero item | Ran `add` twice for one DOI | Check `library search` before adding; merge the dup via the `zotero` MCP (`duplicates find`) or delete it in Zotero. |
 | Cache growing / disk pressure | Tier A artifacts kept forever by design | `research cache stats`; then `prune --max-mb N` (Tier A) or `clean` (Tier B). |
 | `read` shows `命中缓存全文` but you want a fresh fetch | Cached `{stem}_fulltext.md` was reused | Re-run with `--refresh` (`--force` is a deprecated alias) to re-fetch + re-extract. |
-| `read <id>` on an existing note wrote a **second** file | `_merge_note` derives the path from the *fresh* `short_title`, and `_make_short_title` output drifted from the stored value | `index --check` shows the mismatch; refresh single fields via the §5e whitelist write-back, never by re-running `read` (§5f). |
+| `read <id>` on an existing note wrote a **second** file | `_merge_note` derives the path from the *fresh* `short_title`, and `_make_short_title` output drifted from the stored value | **No command shows this** — `index --fix` compares against the note's *own stored* frontmatter, and `--check` only diffs `INDEX.md` (§5f). Detect it by comparing `research get <id>`'s `short_title` with the note's. Refresh single fields via the §5e whitelist write-back, never by re-running `read`. |
 | `add` blocked with `✗ 引用核验未通过` | Citation gate FAIL (≥2 sources hard-conflict on title/DOI/year) | Inspect with `research citecheck <doi> --json`; fix the mismatched field, or `--allow-fail` to override / `--no-verify` to skip. |
 | `citecheck` reports `?NOT_FOUND` for a real paper | All three sources missed it (typo'd DOI, very new, or offline) | Check the DOI/id; a lone `openalex=不可达`/`crossref=不可达` is a network blip (downgraded, not a FAIL) — re-run. |
 | `citecheck` first-author `△WARN` on an accented name | Cross-source transliteration/abbreviation noise | Expected — author surname is a soft signal and never blocks; title/DOI/year are the hard signals. |
 | `rag search`/`ask` errors "未配置 SILICONFLOW_API_KEY" | `pqa_ready` false (no key in `.env`) | Set `SILICONFLOW_API_KEY` (+ `SILICONFLOW_BASE_URL`); confirm with `research rag status`. |
 | `rag search` says "no index" / `先运行 research rag index` | Index never built, or paperqa version changed / pickle corrupt | Run `research rag index` (add `--rebuild` to force). `cache/rag/` is rebuildable + git-ignored. |
+| `rag index` prints `语料规范化版本变更（N → M），转为全量重建` | `corpus_clean.CLEANER_VERSION` was bumped, or `--no-clean` was flipped | Expected and self-healing — the old index embedded a differently-cleaned corpus, and the mtime-based incremental path could never notice. Let the rebuild finish. |
+| A `rag search` hit's text has no image lines / reference list | `corpus_clean` removed them from the embedded **copy** | Expected. `source_path` still points at the untouched original under `cache/extracted/`, which has everything. Pass `--no-clean` to `rag index` if you want the raw text embedded instead. |
 | `rag ask` prints a degrade notice + returns search results | Free **and** paid LLM both failed (quota / 503 / network) | By design — `ask` never blocks; use the returned `search` chunks or retry later. Check the `SILICONFLOW_API_KEY` quota. |
 | `rag` embedding `KeyError` on max_input_tokens | A model was registered without `max_input_tokens` | Ensure `_register_litellm_models` declares it for both the bare and `openai/`-prefixed name (§5d). |
 

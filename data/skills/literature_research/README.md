@@ -41,7 +41,7 @@ data/skills/literature_research/     # 本目录（数据区）
     ├── extracted/           # Tier A：抽取的全文 markdown（三种命名，见下）
     ├── html_fulltext/       # Tier A：浏览器抓取的网页正文 bundle（trafilatura 抽成 markdown，**不是原始 HTML**；
     │                        #   每个 bundle 一个 <slug>/ 子目录，另有 .by_url/ URL→bundle 命中清单）
-    ├── rag/                 # 本地 PaperQA2 embedding 索引（index.pkl + index_meta.json；research rag，可重建）
+    ├── rag/                 # 本地 PaperQA2 embedding 索引（index.pkl + index_meta.json + corpus/ 清洗副本；research rag，可重建）
     └── .autoclean_state.json  # 上次自动清理时间戳
 
 data/skills/literature_research/data/   # 数据资产（**入 Git**，不在 cache/* 规则内）
@@ -63,6 +63,7 @@ src/pysci/skills/literature_research/   # 代码区（随 pysci 包 editable 安
     ├── browser_fetch.py     # Playwright 抓取付费墙全文 / PDF / 补充材料（URL 命中即复用）
     ├── pdf_extract.py       # PDF → Markdown（arXiv 论文优先走 LaTeX 源码→公式忠实；否则 MinerU 云端主力 / pymupdf4llm 兜底）
     ├── local_ingest.py      # 批量归档本地 PDF 文件夹（复制 → 抽取 → manifest 台账）；research ingest
+    ├── corpus_clean.py      # rag 语料的删除式规范化（图片占位行 / 编号参考文献块 / REVTeX 书目宏）：洗出副本去嵌，原产物绝不改
     ├── rag.py               # 本地语义检索（PaperQA2 + 硅基流动 bge-m3）：research rag index/search/ask（embedding 免费检索为主，ask 可选免费→付费→降级）
     └── cache_manager.py     # 两层缓存治理：stats/clean/prune + LRU（bump_mtime）
 ```
@@ -79,7 +80,9 @@ stderr 打一行 banner 并指向等价的 `research` 子命令，见 SKILL.md�
 | `{stem}_fulltext.md` | `research read` | 单篇精读的**规范副本**，路径写进笔记的 `extracted_md_path` |
 | `{stem}_{sha1[:12]}.{backend}.md` | `pdf_extract` 自身 | 按 PDF 内容哈希 + 后端名的缓存（仅 `write_cache=True` 时）。`read`/`ingest` 都传 `False` 以免留双副本，故这一种主要来自 `python -m …pdf_extract` 调试后门 |
 
-三种都是 `rag index` 的语料（它扫 `cache/extracted/**/*.md`）。
+三种都是 `rag index` 的语料（它扫 `cache/extracted/**/*.md`）。三种都**只被读、不被改**：`rag index`
+先把每份产物洗成 `cache/rag/corpus/` 下的副本（`tools/corpus_clean.py`）再嵌入，台账里的
+`source_path` 仍指向原文。
 
 ---
 
@@ -175,8 +178,13 @@ stderr 打一行 banner 并指向等价的 `research` 子命令，见 SKILL.md�
    云端抽取；随后 AI 读 `cache/extracted/*_fulltext.md`，在 `papers/*.md` 填 TLDR / Key Claims /
    Novelty / Rigor / Journal-tier / Relevance 各章节
 6. **更新索引** `research index` — 扫描 `papers/` 重建 `INDEX.md`（**勿手动编辑 INDEX.md**）；
-   `index --check` 只校验（不一致退出码 1，可作 CI 门），`index --fix [--dry-run]` 则把既有笔记的
-   frontmatter 规范化（补齐模板字段、统一字段序与 block style），**正文逐字节保留、既有值一律不动**
+   `index --check` 只校验 `INDEX.md` 与 `papers/` 是否一致（不一致退出码 1，可作 CI 门），
+   `index --fix [--dry-run]` 则把既有笔记的 frontmatter 规范化（补齐模板字段、统一字段序与 block
+   style），**正文逐字节保留、既有值一律不动**。两者分工易记错：「文件名与命名规范不符」的告警
+   只由 `--fix` 报（它才会走 `_normalize_note_file`），`--check` 看不到——查命名问题请跑
+   `index --fix --dry-run`。但它比的是笔记**自己存的** frontmatter，因此照不出「重跑 `read` 会新建
+   重复笔记」那类漂移（那是拿**新取到的** `short_title` 比的，详见
+   `.qoder/skills/literature-research/references/maintenance.md` §5f）
 7. **（可选）综述骨架** `research review new '<topic>' --from-shortlist shortlists/<f>.md`
    → 生成 `reviews/{YYYY-MM}_{topic}_survey.md`，填好 frontmatter 并从快照聚合 `sources_used` /
    `query_strings` 后**就此停住**——§1-§5 的综述正文是 AI/人的判断，`review` 刻意不生成任何一行
@@ -212,6 +220,15 @@ Expanded 也不含 JIF”这个易混淆点记在 `tools/wos_client.py` 的模�
 `research cache stats｜clean｜prune` 治理磁盘（分层模型见 §3）。
 
 **本地语义检索（RAG）**：`read`/`ingest` 抽取到 `cache/extracted/` 的全文可用 `research rag index` 建本地 embedding 索引（硅基流动 bge-m3，免费），随后 `research rag search '<query>'` 做纯 embedding 语义检索（返回 top-k 相关段落 + 出处引文 + 文件路径，无 LLM、零成本、不阻塞，是跨本地文献综合的主力）；`research rag ask '<query>'` 为可选的一句话综述（免费 Qwen2.5-7B → 不可用丝滑回退付费 Qwen2.5-32B → 全失败静默降级为 search，永不阻塞）。需 `SILICONFLOW_API_KEY`；`research rag status` 查看后端就绪与索引状态。
+
+索引前会先做**语料规范化**（`tools/corpus_clean.py`）：删掉 MinerU 的空 alt 图片占位行、≥3 条连续的
+编号参考文献块、arXiv LaTeX 路径残留的 REVTeX `thebibliography` 环境（图注**保留**）。这三类噪声
+占语料整体 3.0%，但**占单篇物理论文 25%–40%**（整体数被 12.4M 字符的 COMSOL 手册稀释）。规范化的
+意义在于 paperqa `2026.8.12` 对 `.md` 走的是 `chunk_code_text`（按行累加到字符预算就硬切，不看标题
+也不看句子边界），噪声字符会实打实吃掉 chunk 预算、把正文挤出 top-k。洗出的**副本**写到
+`cache/rag/corpus/` 并被嵌入，`cache/extracted/` 的原产物一字不改（那里既有 MinerU 配额换来的
+抽取件，也有人工整理进主题子目录的不可再生存量）；`--no-clean` 可关掉规范化直接嵌原文；改动任何
+一条删除规则要把 `CLEANER_VERSION` +1，索引台账据此自动触发全量重建。
 
 ---
 
@@ -301,4 +318,4 @@ playwright install chromium   # 仅当系统无 Chrome/Edge 时，browser_fetch 
 
 ---
 
-_Last updated: 2026-10-03 · Maintained by: AI Agent (Qoder) · 配对 skill：`.qoder/skills/literature-research/`_
+_Last updated: 2026-10-04 · Maintained by: AI Agent (Qoder) · 配对 skill：`.qoder/skills/literature-research/`_
