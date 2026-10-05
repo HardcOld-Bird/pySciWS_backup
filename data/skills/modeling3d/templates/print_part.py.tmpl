@@ -1,0 +1,46 @@
+"""%TITLE% — 3D 打印件参数化建模脚本（build123d）。
+
+单位：毫米（mm）。所有尺寸必须与理论设计一致；改参数后同步更新第 3 节的几何断言。
+执行：uv run pysci-model3d build 本文件 --strict-volume
+交付：stl/%SLUG%.stl 过验收门（watertight/体积/包围盒）后方可切片打印。
+"""
+
+from pathlib import Path
+
+from build123d import *
+
+SESSION_DIR = Path(r"%SESSION_DIR%")
+STL_OUT = SESSION_DIR / "stl" / "%SLUG%.stl"
+STEP_OUT = SESSION_DIR / "step" / "%SLUG%.step"
+
+# %% === 1. 设计参数（mm，来源：理论设计/文献，逐项注明出处） ===
+# TODO: 例
+# L_base = 40.0   # 底板长 —— 来源：<设计依据>
+# d_hole = 3.0    # 安装孔径 —— 与 M3 螺纹件配合
+
+
+# %% === 2. 建模（B-rep 布尔运算，流形闭合由构造保证） ===
+with BuildPart() as part:
+    Box(40, 20, 5)  # TODO: 替换为实际几何
+    # 常用算子速查：
+    #   Box/Cylinder/Sphere/Cone、extrude(revolve/sweep/loft)、
+    #   fillet(length, edges) / chamfer(length, edges)、
+    #   with Locations((x, y, z)): Hole(radius)（Z 向通孔）、
+    #   Mode.SUBTRACT / Mode.ADD / Mode.INTERSECT（布尔模式）
+
+
+# %% === 3. 几何断言（物理正确性守门；参数一改这里必须跟着复核） ===
+bb = part.part.bounding_box()
+assert abs(bb.size.X - 40) < 1e-6, f"X 尺寸不符: {bb.size.X}"
+assert abs(bb.size.Y - 20) < 1e-6, f"Y 尺寸不符: {bb.size.Y}"
+assert abs(bb.size.Z - 5) < 1e-6, f"Z 尺寸不符: {bb.size.Z}"
+
+
+# %% === 4. 导出（标记行是与 pysci-model3d build 的协议，勿改动格式） ===
+STL_OUT.parent.mkdir(parents=True, exist_ok=True)
+STEP_OUT.parent.mkdir(parents=True, exist_ok=True)
+export_stl(part.part, str(STL_OUT))
+export_step(part.part, str(STEP_OUT))
+print(f"[model3d] stl: {STL_OUT}")
+print(f"[model3d] step: {STEP_OUT}")
+print(f"[model3d] volume_mm3: {part.part.volume:.4f}")

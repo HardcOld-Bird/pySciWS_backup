@@ -71,6 +71,16 @@ dependencies = [
     # 且方舟 API 能力面更宽，已于重构中整层移除。）
     "pillow",
     "paper-qa>=5",
+    # 3D 建模 skill（src/pysci/skills/modeling3d/；数据：data/skills/modeling3d/）：
+    # build123d —— 3D 打印件的参数化 CAD（OCCT B-rep 内核），尺寸精确、流形闭合由构造保证，
+    #   直接导出 STL/STEP。选型时与 CadQuery 2.7.0 实测对决（同一测试件：体积/网格/包围盒
+    #   完全一致），弃 CadQuery 的原因：内核更旧（OCCT 7.8 vs 8.0）、其 cadquery-ocp 捆绑
+    #   VTK 与既有 pyvista 依赖面冲突，且 build123d 是 CadQuery 作者的后继项目、维护更活跃。
+    # trimesh —— 网格验收门（watertight/体积/包围盒/壁厚），STL 交付前必过 `model3d check`。
+    # 渲染不经 Python 依赖：直接 subprocess 驱动本机 Blender headless（路径见 .env 的
+    #   MODELING3D_BLENDER；交互通道为 blender-mcp addon + MCP server，均社区维护）。
+    "build123d>=0.13",
+    "trimesh>=5",
 ]
 
 # ------------------------------------------------------------
@@ -95,6 +105,7 @@ pysci-simulation = "pysci.skills.comsol_simulation.tools.simulation:main"
 pysci-figures = "pysci.skills.scientific_plotting.tools.figures:main"
 pysci-theory = "pysci.skills.theoretical_computation.tools.theory:main"
 pysci-imagine = "pysci.skills.ai_drawing.tools.imagine:main"
+pysci-model3d = "pysci.skills.modeling3d.tools.model3d:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra
@@ -173,6 +184,9 @@ ignore = [
 # 注意：import 排序（I）与正确性规则（F401/F811/E9）不在此列，仍全树严格。
 "src/pysci/research/gain_ep/article/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
 "src/pysci/skills/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
+# build123d builder 模式的官方写法即星号导入（算子由上下文管理器注入命名空间），
+# F403/F405 误报不可避免；豁免各研究线的 3D 建模脚本（模板在 data/ 下本就不参与 lint）。
+"src/pysci/research/*/models/**" = ["F403", "F405"]
 "scripts/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
 "tests/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731", "F841"]
 # 既有硬件脚本 exp/ 下含未定义名（历史遗留 bug，待后续单独修复）；

@@ -77,6 +77,12 @@ THEORY_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "theoretical_computation"
 #: 各研究资产目录 ``data/research/<n>_<name>/article/artwork/``。
 AI_DRAWING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "ai_drawing"
 
+#: 3D 建模数据区（templates/cache/recipes）。
+#: 与代码树 ``src/pysci/skills/modeling3d/`` 镜像：``data/skills/modeling3d/``。
+#: 注意：本目录只放技能级资产（脚手架模板、渲染配方、缓存）；具体研究线的模型产物
+#: （STL/STEP/渲染图）落在各研究资产目录 ``data/research/<n>_<name>/models/<slug>/``。
+MODELING3D_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "modeling3d"
+
 
 def research_asset_dir(name: str) -> Path:
     """解析某条研究线的资产目录。
@@ -149,6 +155,21 @@ def research_artwork_dir(name: str, *, slug: str | None = None) -> Path:
         slug: 可选的效果图 slug；None → 返回 artwork 根。
     """
     base = research_asset_dir(name) / "article" / "artwork"
+    return base / slug if slug else base
+
+
+def research_model_dir(name: str, *, slug: str | None = None) -> Path:
+    """解析某研究线 3D 模型产物目录。
+
+    规范位置：``data/research/<n>_<name>/models[/<slug>]``。技能级模板/配方在
+    :data:`MODELING3D_ROOT`，具体研究线的模型会话产物（CAD 脚本导出的 STL/STEP、
+    Blender 渲染图、notes.md）一律落在本目录。
+
+    Args:
+        name: 研究线名称（不含数字前缀），如 ``"gain_ep"``。
+        slug: 可选的模型会话 slug；None → 返回 models 根。
+    """
+    base = research_asset_dir(name) / "models"
     return base / slug if slug else base
 
 
