@@ -34,7 +34,7 @@ alwaysApply: true
 - **唯一需要斟酌的例外：`data/research/`** —— 这是用户与 Agent 的工作交接区，双方都有编辑权。
   在此目录下**删除**内容时，**倾向于先问一句**（非强制要求，用户仍自行负责备份）；
   该目录下的新增与修改不受此限。
-- 另一例外见 §5：本规则文件自身的裁决须由用户授权修改。
+- 另一例外见 §6：本规则文件自身的裁决须由用户授权修改。
 
 ### 1.2 自研 vs 社区
 
@@ -115,7 +115,25 @@ alwaysApply: true
 
 ---
 
-## 4. 环境与代码约定
+## 4. 网络代理约定（跨技能生效）
+
+- **默认一律直连**：不设任何 `http(s)_proxy` 环境变量，git 全局 / 局部配置均不设 `http.proxy`。
+  **文献调研访问期刊数据库 / 下载正版全文绝对禁止走代理**（走代理即丧失机构访问资格）。
+- **仅当访问 GitHub 系域名（github.com、api.github.com、raw.githubusercontent.com）
+  超时或被重置时**，改用本机常驻代理 `http://127.0.0.1:7890` 重试。
+  实测（2026-10-05）：直连 github.com 15 s 超时；经该代理 HTTP 200 / 0.77 s，
+  `git ls-remote` 经代理成功。
+- **代理只允许单命令级注入，命令结束即失效，不存在「恢复原状」步骤**：
+  - git：`git -c http.proxy=http://127.0.0.1:7890 push ...`
+  - curl：`curl -x http://127.0.0.1:7890 ...`
+  - Git Bash 环境变量前缀：`https_proxy=http://127.0.0.1:7890 <cmd>`（仅此一条命令生效；
+    环境变量名用小写；PowerShell 下该语法需 set + remove、会留会话状态，优先用前两种）。
+- ❌ 禁止任何持久化代理设置：`git config --global/--local http.proxy`、`setx`、
+  写入 profile 或会话级 `$env:` / `export` 后不清理。
+
+---
+
+## 5. 环境与代码约定
 
 - **Python 3.13.15**（`.python-version` 与 `requires-python` 锁定），**uv** 管理唯一 `.venv`，
   `pysci` 以 editable 方式装入。运行统一用 `uv run python ...` / `uv run pytest`；
@@ -138,7 +156,7 @@ alwaysApply: true
 
 ---
 
-## 5. 本文件自身的维护
+## 6. 本文件自身的维护
 
 - **本文件只增不减是失败信号。** 每次新增条目前，先检查能否合并进已有条目，或删除一条过时的。
 - 修改 §1 的裁决**必须由用户明确授权**，Agent 不得自行改写护栏。
