@@ -1,0 +1,16 @@
+# 技能部署 manifest（README §2/§7）：唯一真本 → 部署目标的映射。
+# 真本 = orchestration/skills/<name>/（git 跟踪，devops 维护）；
+# 部署副本 = <target>/<name>/（gitignored，`pysci-orch sync` 再生，哈希防漂移）。
+# 红线：sync 只触碰此处声明的部署名，绝不删除成员自建技能。
+version = 1
+
+[[skills]]
+name = "scientific-plotting"
+source = "orchestration/skills/scientific-plotting"
+targets = ["orchestration/pods/figure/.qoder/skills"]
+# Phase 3 起追加 deputy：orchestration/pods/deputy/.qoder/skills
+
+[[skills]]
+name = "orchestration"
+source = "orchestration/skills/orchestration"
+targets = [".qoder/skills"]   # 部署到项目根 = 组长专属技能（skills 不向下泄漏，Phase 0 实锤）
