@@ -24,9 +24,10 @@
   绘图代码里**不要**显式传 `fontsize=`，交给 style_context 继承即可。
 - **CLI 用法**：从项目根运行，裸名 `pysci-figures` 本机可用（只试一次）；Git Bash 下多词参数
   用单引号；`build`/`audit` 的 figdir 用相对路径即可。
-- **单栏图要在图目录内放 `STYLE.yaml`**：`audit`/`build` 不带 `--width` 时读 figures 根目录的
-  `STYLE.yaml`（gain_ep 现为 `width: double`），单栏图会被按 170 mm 判定而“假通过”宽度检查；
-  本目录放 `style: aps / width: single / aspect / palette` 后，组长的原命令也能测到 85 mm。
+- **STYLE.yaml 须逐图目录放置（已知缺陷，组长已确认）**：根目录 `STYLE.yaml` 非逐键合并，
+  缺本图专属文件时 `audit`/`build` 会用根默认值判定（gain_ep 根为 `width: double`，单栏图被按
+  170 mm「假通过」）。devops 修复（backlog 20261009-audit-width-masked）前，正式交付务必确保
+  figdir 内有本图专属 `STYLE.yaml`（`style/aspect/palette` 一并给出）或显式传 `--width`。
 - **数据驱动管线的落法**：合成数据生成脚本放 pod `bench/`（草稿），产出的 CSV 落
   `<figdir>/data/`，CSV 的 `#` 注释行写模型与参数（`np.loadtxt(comments='#')` 默认跳过），
   管线只读 CSV、不再自己造数。

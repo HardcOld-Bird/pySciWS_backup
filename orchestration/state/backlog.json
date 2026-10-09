@@ -4,10 +4,13 @@
     {
       "id": "20261009-fig-new-path-mismatch",
       "member": "figure",
-      "status": "pending",
+      "status": "done",
       "summary": "pysci-figures new 打印的管线模块路径（图目录内）与实际写入位置（src/pysci/research/<线>/article/figures/）不一致，误导组员与任务书白名单声明",
       "evidence": "复现：pysci-figures new gain_ep fig0_orch_smoke --style aps --width single；实际写入 src\\pysci\\research\\gain_ep\\article\\figures\\fig0_orch_smoke.py，但 stdout 显示 data/research/.../fig0_orch_smoke/fig0_orch_smoke.py。期望：打印真实路径，并在输出中提示「该路径需列入任务书白名单」",
-      "proposed": "2026-10-09"
+      "proposed": "2026-10-09",
+      "started_at": "2026-10-09T21:14:22+08:00",
+      "done_at": "2026-10-09T21:28:47+08:00",
+      "note": "orch 自动销账"
     },
     {
       "id": "20261009-discover-pipeline-fake-green",
@@ -31,6 +34,14 @@
       "status": "pending",
       "summary": "任务书/文档中 build 命令示例与 CLI 签名不符（build 只收 figdir 位置参数，示例写成 build gain_ep fig0_orch_smoke 会 unrecognized arguments）——需统一 charter/任务书模板/SKILL.md 的命令范式",
       "evidence": "组员按任务书步骤 2 照抄报 unrecognized arguments，自行改用 build '<figdir>' 成功。期望：模板统一为 build 'data/research/<n>_<线>/article/figures/<slug>'",
+      "proposed": "2026-10-09"
+    },
+    {
+      "id": "20261009-byok-cost-accounting",
+      "member": "leader",
+      "status": "pending",
+      "summary": "BYOK 档位下 envelope 的 total_credits/usage tokens 恒为 0，台账成本维度缺失——评估替代计量（duration/轮数已有；或经 BYOK 供应商侧账单对账、或 usage 字段在不同 output-format 下的可用性）",
+      "evidence": "Phase 0/1 实测：-m Qwen3.8-Flash/Max 与默认 BYOK 模型下 total_cost_usd=0、usage.input_tokens=0、modelUsage.contextWindow=0；仅 context_usage_ratio 有效。用户裁决：BYOK 为主力模式，计费实现留待未来完善（2026-10-09）",
       "proposed": "2026-10-09"
     }
   ]

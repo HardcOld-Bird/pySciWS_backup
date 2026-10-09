@@ -590,13 +590,25 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
       （疑似该账号/模型不上报计费；成本统计暂以耗时+轮数为准，持续观察）
 - 验收：✅ 达成——真实任务全环路无人工兜底（blocked 分支的组长决策属设计内环节）
 
-### Phase 2 —— 计划驱动 + 改进循环 + devops
-- [ ] orch plan new/run/amend/adhoc（§4.2 状态机 + 交接决策点 + 环节模型档位）
-- [ ] orch approve/reject、backlog、replies 附送、consult、stats（三级统计）
-- [ ] `orchestration/pods/devops/`：charter、devops 技能真本、`src/pysci/skills/devops/`
-      + `pysci-dev` 骨架、worktree 作业规程（venv 策略实测定型）、git 纪律
-- [ ] 首个完整循环：组员建议 → 审批 → devops worktree 实施 → 回复附送
-- [ ] orch archive/sessions/prune（含归档前蒸馏跳）
+### Phase 2 —— 计划驱动 + 改进循环 + devops（**完成**，2026-10-09）
+- [x] orch plan new/run/amend/drop/list/adhoc：状态机全生命周期实测（登记/延迟书写
+      强制/对账/中止审计）；带派发的完整 run 与 dispatch 同源（dispatch 已实战）
+- [x] orch approve/reject/suggestions/backlog/consult/stats：命令面实装 + 冒烟通过
+      （consult 在 deputy 缺位时优雅降级）；approve 全链路待首个自然建议到来时实战
+- [x] `orchestration/pods/devops/`：charter（worktree/git 纪律/巡检职责）、devops 技能
+      真本+部署、`src/pysci/skills/devops/` + `pysci-dev`（doctor/sync/worktree）；
+      registry 注册（max 档 + extra_dirs=项目根）
+- [x] worktree venv 策略**实测定型：PYTHONPATH 覆盖法**——`PYTHONPATH=<wt>/src uv run
+      --no-sync pytest <wt>/tests`（复用主 .venv，worktree 代码优先；1452 项收集 7.5 s，
+      全量 45 s）；worktree 内裸 uv run 不可用（无环境）；仅依赖变更时才 `uv sync
+      --project <wt>`（重）。已写入 devops 技能
+- [x] **首个完整改进循环实战**：backlog 队首（figures new 路径打印缺陷）→ orch
+      dispatch devops --from-backlog（任务书自动生成）→ devops worktree 实施 +
+      回归测试新增 + 全量 1416 passed → 合并 commit（cz 规范，未 push）→ 交付含
+      backlog id → orch 自动销账。实测：31 轮 / 855 s / Max 档 / ctx 29%
+- [x] orch archive/sessions/prune + 归档前蒸馏跳：实测通过——蒸馏跳中成员**自主整合
+      升华**了此前任务经验进 AGENTS.md（STYLE.yaml 缺陷规避、数据管线约定），
+      「越来越聪明」机制成立；归档后池默认正确回退工作会话
 - [ ] 模型双档路由实装（registry 映射 + `-m` 传参）
 
 ### Phase 3 —— reviewer + 副组长
@@ -644,6 +656,9 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-07 | CLI 范式：~/.bashrc PATH 持久化（用户授权的全局改动）+ 裸命令首选/uv run fallback/禁重试循环；orch 内部用 uv run | 用户授权 + Agent 实测 |
 | 2026-10-05~07 | 实测事实登记：resume 接力、headless Teams、Agent 工具单层、exe 直调、泄漏面矩阵（§1.1）、CLI 三范式同速、自动记忆仅交互式、自动压缩为运行时行为（文档级） | Agent 实测/查证 |
 | 2026-10-09 | **Phase 0 验证冲刺完成**（16 项全过，详见 §12）：envelope 字段全清单（含 context_usage_ratio/permission_denials/total_credits/duration_ms）；yolo 默认在 headless 生效；delivery-gate 与 pod-guard 全链路拦截实锤；strict-mcp-config 与 mcp.excluded 双通道实锤；自维护层三形态加载实锤；--add-dir 在 yolo 下非硬边界（路径纪律唯一硬防线=pod-guard）；list/delete-session 聚合视图与序号漂移坑（orch 池索引自管）；自动压缩 jsonl 实证（isCompactSummary）；后台任务 3600 s 存活+事件通知；kill-resume 精确恢复中断现场 | Agent 实测 |
+| 2026-10-09 | 任务级授权例外（组员白名单可扩至研究线代码镜像 src/pysci/research/<线>/） | 用户追认 |
+| 2026-10-09 | credits 恒 0 根因 = 用户级默认模型为 BYOK（不计入 Qoder 订阅计费）；BYOK 成本统计方案入 backlog（20261009-byok-cost-accounting），不阻塞主线 | 用户说明 + 组长登记 |
+| 2026-10-09 | **Phase 2 完成**：plan 状态机、改进循环命令化、devops pod + pysci-dev、worktree venv 策略定型（PYTHONPATH 覆盖法）、首个完整改进循环实战（devops worktree 修复合并 + 自动销账）、归档蒸馏实测（成员自主整合升华经验进 AGENTS.md） | Agent 实测 |
 
 ## 14. 已知代价与风险
 
