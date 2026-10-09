@@ -14,32 +14,38 @@ targets = ["orchestration/pods/figure/.qoder/skills",
 [[skills]]
 name = "comsol-simulation"
 source = "orchestration/skills/comsol-simulation"
-targets = ["orchestration/pods/deputy/.qoder/skills"]
+targets = ["orchestration/pods/sim/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
 
 [[skills]]
 name = "document-writing"
 source = "orchestration/skills/document-writing"
-targets = ["orchestration/pods/deputy/.qoder/skills"]
+targets = ["orchestration/pods/writing/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
 
 [[skills]]
 name = "literature-research"
 source = "orchestration/skills/literature-research"
-targets = ["orchestration/pods/deputy/.qoder/skills"]
+targets = ["orchestration/pods/lit/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
 
 [[skills]]
 name = "theoretical-computation"
 source = "orchestration/skills/theoretical-computation"
-targets = ["orchestration/pods/deputy/.qoder/skills"]
+targets = ["orchestration/pods/theory/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
 
 [[skills]]
 name = "ai-drawing"
 source = "orchestration/skills/ai-drawing"
-targets = ["orchestration/pods/deputy/.qoder/skills"]
+targets = ["orchestration/pods/drawing/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
 
 [[skills]]
 name = "modeling3d"
 source = "orchestration/skills/modeling3d"
-targets = ["orchestration/pods/deputy/.qoder/skills"]
+targets = ["orchestration/pods/model3d/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
 
 [[skills]]
 name = "orchestration"
