@@ -28,3 +28,9 @@ __pycache__/
 # .gitignore（cache/* + !cache/extracted/）——cache 下默认全部忽略，唯独
 # cache/extracted/（MinerU 配额换来的转换全文 .md）纳入跟踪。此处不再重复排除，
 # 否则整目录排除会使子目录的 !cache/extracted/ 再包含规则失效。
+
+# 编排体系机器产物不入库（orchestration/README.md §2 git 策略）：
+# 台账流水为运行期数据；根 .qoder/skills/orchestration/ 是部署副本
+#（真本在 orchestration/skills/orchestration/，orch sync 再生）。
+/orchestration/state/ledger/
+/.qoder/skills/orchestration/

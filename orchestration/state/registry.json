@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "exe": null,
+  "models": {
+    "max": "Qwen3.8-Max",
+    "flash": "Qwen3.8-Flash"
+  },
+  "members": {
+    "figure": {
+      "pod": "orchestration\\pods\\figure",
+      "model_tier": "flash",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json",
+      "sessions": [
+        {
+          "sid": "76757469-9ab9-49a7-af62-8a4c76178895",
+          "name": "smoke-test",
+          "hops": 3,
+          "created": "2026-10-09T20:08:37+08:00",
+          "last_active": "2026-10-09T20:27:32+08:00",
+          "status": "active"
+        }
+      ]
+    }
+  },
+  "checks": {
+    "figure-audit": {
+      "cmd": [
+        "uv",
+        "run",
+        "pysci-figures",
+        "audit",
+        "{path}",
+        "--panels"
+      ]
+    }
+  }
+}

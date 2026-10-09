@@ -83,6 +83,20 @@ AI_DRAWING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "ai_drawing"
 #: （STL/STEP/渲染图）落在各研究资产目录 ``data/research/<n>_<name>/models/<slug>/``。
 MODELING3D_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "modeling3d"
 
+#: 编排系统根：多 Agent 编排的全部资产（顶层设计 README、技能唯一真本 skills/、
+#: 机器状态 state/、hook 守卫 guards/、组员工作区 pods/）。权威定义见
+#: ``orchestration/README.md``；由 ``pysci-orch`` CLI（pysci.skills.orchestration）读写。
+ORCHESTRATION_ROOT: Path = PROJECT_ROOT / "orchestration"
+
+#: 编排机器状态区：registry.json（成员注册表与会话池索引）、plans/、backlog.json、
+#: replies/、ledger/。全部为可读 JSON/MD/YAML（orch fail-open 红线），仅 orch 与
+#: devops 可写；组长经 orch 间接读写。
+ORCH_STATE_ROOT: Path = ORCHESTRATION_ROOT / "state"
+
+#: 组员 pod 工作区根：每 pod 是一个完整 Qoder 项目（独立 .qoder/ + AGENTS.md +
+#: bench/inbox/outbox），以 pod 为 cwd 的 headless 会话在此运行。
+PODS_ROOT: Path = ORCHESTRATION_ROOT / "pods"
+
 
 def research_asset_dir(name: str) -> Path:
     """解析某条研究线的资产目录。

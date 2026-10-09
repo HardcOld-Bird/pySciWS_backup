@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "scientific-plotting": {
+      "source_hash": "7d99db796a8bb441a956e77baf47c12fc0c60e0a1fb4c3063aa50d3fd459d889",
+      "targets": {
+        "orchestration/pods/figure/.qoder/skills/scientific-plotting": "7d99db796a8bb441a956e77baf47c12fc0c60e0a1fb4c3063aa50d3fd459d889"
+      }
+    },
+    "orchestration": {
+      "source_hash": "c1d9f5b483f9a0f059f8a16e1e7d2a825fb58f1ac08b866bf7c903d5f3ac40bb",
+      "targets": {
+        ".qoder/skills/orchestration": "c1d9f5b483f9a0f059f8a16e1e7d2a825fb58f1ac08b866bf7c903d5f3ac40bb"
+      }
+    }
+  }
+}

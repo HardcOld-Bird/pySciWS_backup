@@ -106,6 +106,9 @@ pysci-figures = "pysci.skills.scientific_plotting.tools.figures:main"
 pysci-theory = "pysci.skills.theoretical_computation.tools.theory:main"
 pysci-imagine = "pysci.skills.ai_drawing.tools.imagine:main"
 pysci-model3d = "pysci.skills.modeling3d.tools.model3d:main"
+# 编排 CLI：组长专属工作通道（派发/会话池/台账/技能部署；设计见 orchestration/README.md）。
+# 与前 7 个「末端技能 CLI」不同，这是管理设施——服务对象是组长（TUI 主会话）而非组员。
+pysci-orch = "pysci.skills.orchestration.tools.orch:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra

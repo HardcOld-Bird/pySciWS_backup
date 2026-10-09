@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "20261009-fig-new-path-mismatch",
+      "member": "figure",
+      "status": "pending",
+      "summary": "pysci-figures new 打印的管线模块路径（图目录内）与实际写入位置（src/pysci/research/<线>/article/figures/）不一致，误导组员与任务书白名单声明",
+      "evidence": "复现：pysci-figures new gain_ep fig0_orch_smoke --style aps --width single；实际写入 src\\pysci\\research\\gain_ep\\article\\figures\\fig0_orch_smoke.py，但 stdout 显示 data/research/.../fig0_orch_smoke/fig0_orch_smoke.py。期望：打印真实路径，并在输出中提示「该路径需列入任务书白名单」",
+      "proposed": "2026-10-09"
+    },
+    {
+      "id": "20261009-discover-pipeline-fake-green",
+      "member": "figure",
+      "status": "pending",
+      "summary": "runner.discover_pipeline() src 优先：图目录内定制管线被 src 脚手架占位文件静默压制，build 出占位图但流程显示成功（假绿）",
+      "evidence": "组员交付记录：figdir 内 fig0_orch_smoke.py 完整，但 build 渲染的是 src 占位管线；无告警。期望：build 时若 figdir 与 src 同时存在同名管线，打印实际选用者；或提供 --pipeline-in-figdir / STYLE.yaml pipeline: 覆盖项",
+      "proposed": "2026-10-09"
+    },
+    {
+      "id": "20261009-audit-width-masked",
+      "member": "figure",
+      "status": "pending",
+      "summary": "audit/build 不带 --width 时设计宽度取 STYLE.yaml，且 load_style_config 取第一个存在的文件而非逐键合并——研究线根 STYLE.yaml 的 width:double 会掩盖单栏图的宽度判定（85mm 产物按 170mm 目标 PASS，假绿）",
+      "evidence": "实测：figdir 无 STYLE.yaml 时 audit 报 width_mm:170.0/target_width_mm:170.0，而 out/ 交付件实际 85mm；写入 figdir STYLE.yaml width:single 后判定才正确。期望：产物宽度与判定目标不一致至少 WARN，或 STYLE.yaml 逐键继承父级",
+      "proposed": "2026-10-09"
+    },
+    {
+      "id": "20261009-taskbook-cli-signature",
+      "member": "figure",
+      "status": "pending",
+      "summary": "任务书/文档中 build 命令示例与 CLI 签名不符（build 只收 figdir 位置参数，示例写成 build gain_ep fig0_orch_smoke 会 unrecognized arguments）——需统一 charter/任务书模板/SKILL.md 的命令范式",
+      "evidence": "组员按任务书步骤 2 照抄报 unrecognized arguments，自行改用 build '<figdir>' 成功。期望：模板统一为 build 'data/research/<n>_<线>/article/figures/<slug>'",
+      "proposed": "2026-10-09"
+    }
+  ]
+}
