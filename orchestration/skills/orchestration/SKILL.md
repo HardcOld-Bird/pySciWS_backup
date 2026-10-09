@@ -1,67 +1,81 @@
 ---
 name: orchestration
-description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 派发/续作组员任务、管理会话池、读取台账与统计、审批改进建议的规程与纪律。当用户提出任何需要末端生产的工作（仿真/绘图/写作/理论/文献/AI 作画/3D 建模）而需要派发给组员时，或询问编排体系状态时，使用本技能。组长自己严禁执行末端工作。
+description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计划驱动派发组员任务、审查产物、审批改进建议、管理会话池与统计。当用户提出任何需要末端生产的工作（仿真/绘图/写作/理论/文献/AI 作画/3D 建模）需派发组员时，或询问编排体系状态时，使用本技能。组长自己严禁执行末端工作。
 ---
 
-# 编排操作规程（组长技能 v1，Phase 1 范围）
+# 编排操作规程（组长技能 v2）
 
 权威设计：`orchestration/README.md`。本技能只放**操作面**；架构疑问读 README。
 
 ## 铁律
 
-1. **严禁亲自执行末端工作**（生产/编辑代码/跑仿真绘图等），一律经 `pysci-orch`
-   派发。唯一例外：用户明确要求你亲做。
-2. **长任务必须后台运行**：`dispatch` 用 Bash 工具的 `run_in_background` 启动，
-   完成通知自动唤醒你；等待期间**禁止 sleep-轮询循环**、禁止反复读输出文件。
-3. 派发前**不需要**记忆任何 sid/型号/参数细节——orch 全部代管并在回复中给下一步。
-4. 对 orch 输出的 `[NEXT]` 段照做即可；需要决策时它会列出选项。
+1. **严禁亲自执行末端工作**（生产/改代码/跑仿真绘图等），一律经 `pysci-orch` 派发。
+   唯一例外：用户明确要求你亲做。
+2. **一切工作走 plan 系统**（plan-first）：多环节工作 `plan new`；计划外单件事
+   `plan adhoc`。底层命令（dispatch/sessions/ledger/sync）仅降级与调试用，勿养成
+   绕过 plan 的习惯。
+3. **长任务必须后台运行**：`plan run`/`dispatch`/`review` 用 Bash 工具的
+   `run_in_background` 启动，完成通知自动唤醒；等待期间**禁止 sleep-轮询**、禁止反复
+   读输出文件。
+4. 派发前不需要记忆 sid/型号/参数——orch 全代管，[NEXT] 段给下一步；需要决策时照
+   选项执行。
+5. 任务书**延迟书写**：计划阶段只写环节粗描述（brief），推进到该环节时才写完整任务书
+   （自包含：目标/输入路径/交付要求/白名单/验收预期——组员看不到你的会话上下文）。
 
-## 命令面（Phase 1 已实装）
+## 命令面
 
 ```
-uv run pysci-orch status                    # 全景：成员/会话池/台账近况/队列
-uv run pysci-orch dispatch <member> --task <file>      # 任务书文件派发
-uv run pysci-orch dispatch <member> --text "<任务>"    # 正文直接派发
-        [--session latest|new|<sid前缀>]    # 默认 latest=续最近活跃会话
-        [--name <slug>] [--model-tier max|flash] [--dirs d1,d2]
-        [--max-turns N] [--timeout S] [--no-checks]
-uv run pysci-orch sessions <member> [--all] [--archive <sid> [--distill]] [--prune <sid>]
-uv run pysci-orch ledger [--member M] [--days N] [--stats]
-uv run pysci-orch sync [--check]            # 技能真本→部署副本
+uv run pysci-orch status                        # 全景：计划/成员/队列/台账
+# —— 日常面 ——
+uv run pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
+uv run pysci-orch plan run <id> --text "<当前环节任务书>"   # 推进（交接处暂停）
+uv run pysci-orch plan amend <id>               # 直接编辑 plan YAML 后校验对账
+uv run pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步
+uv run pysci-orch plan list | plan drop <id>
+uv run pysci-orch suggestions                   # 待审批改进建议
+uv run pysci-orch approve|reject <建议id> --note "..."   # 审批（回复自动附送）
+uv run pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
+uv run pysci-orch review <产物> --origin <member> [--rubric generic]
+        # 审查链：VERDICT → FAIL 自动回派返工 → 复审一次 → 二次 FAIL 升级你仲裁
+uv run pysci-orch stats [--plan id|--member m|--days N]
+# —— 底层命令面（降级/调试）——
+uv run pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
+uv run pysci-orch sessions <member> [--all|--archive <sid> [--distill]|--prune <sid>]
+uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 ```
 
-成员 id：`sim` `figure` `writing` `theory` `lit` `drawing` `model3d`（专职×7）；
-`deputy` `reviewer` `devops`（Phase 2/3 接入）。当前已就绪的 pod 以 `orch status` 为准。
+成员 id：`sim` `figure` `writing` `theory` `lit` `drawing` `model3d`（专职）；
+`deputy` `reviewer` `devops`。已就绪 pod 以 `orch status` 为准。
 
 ## 派发要领
 
-- **任务书自包含**：目标、输入路径（绝对或项目相对）、交付要求、白名单目录
-  （`--dirs`，注入 pod-guard）、验收预期。组员看不到你的会话上下文——一切经任务书传递；
-- **会话选择**：同一工作的后续跳用默认 `latest`；全新且无关的工作用 `--session new`
-  并给 `--name`；要续更早的特定会话先看 `orch sessions <member>` 再显式指定；
-- **白名单最小化**：只给任务需要的 `data/research/...` 目录；
-- **模型档位**：默认 flash（专职组员）；任务复杂/组员连续 blocked 时升 `--model-tier max`；
-- 交接物：把上一环节产物路径写进下一环节任务书（Phase 2 起 plan 系统自动注入）。
+- **会话选择**：默认 latest（续最近活跃会话）；全新无关工作 `--session new --name <slug>`；
+  续更早会话先 `sessions` 查池再显式指定；
+- **白名单最小化**：`--dirs` 只给任务需要的目录；生产型组员涉代码镜像时加
+  `src/pysci/research/<线>/`（任务级授权例外，README §2 脚注）；
+- **模型档位**：专职组员默认 flash；复杂环节/连续 blocked 升 `--model-tier max`；
+  deputy/reviewer/devops 默认 max；
+- **devops 派发**：`dispatch devops --from-backlog`（自动取队首+交付后销账）；
+- **review 默认不发起**：用户点名审查或计划环节 review:true 时才用（重炮）。
 
-## 交付判读
+## 交付判读与决策点
 
-- `<result>` = 成功；`<blocked>` = 失败（含卡点描述）——orch 已解析并给出 [NEXT]；
-- 机械验收 FAIL → 按 [NEXT] 回派返工（同会话），同指纹连败 3 次停止回派、升级决策；
-- `<infra_suggestion>` 非空 → 审批（Phase 2 前手动）：
-  值得采纳 → 编辑 `orchestration/state/backlog.json` 追加
-  `{"id": "<ts>", "member": "<id>", "summary": "...", "status": "pending"}`；
-  无论采纳与否，把回复写到 `orchestration/state/replies/<member>/<id>.md`
-  （下次派发自动附送给组员，闭环告知）；
-- `run_failed`（运行级失败）→ 按 [NEXT] 三选一（再试/查 jsonl/上报用户）。
+- `<result>`=成功，`<blocked>`=失败（含卡点）；机械验收 FAIL 按 [NEXT] 回派返工，
+  同指纹连败 3 次停止回派升级决策；
+- blocked → 三选一：补充重派 / consult 副组长 / 上报用户；
+- 建议审批：approve 入 backlog（devops FIFO 消化），reject 附理由——回复都会自动
+  附送提议人；护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
+- 副组长拒绝任务（blocked 首行「拒绝任务」）：修改任务书重派，或行使最终裁定权
+  坚持原派（理由留痕台账）；
+- 交接处决策：一键继续 / plan amend 改后续 / drop 中止。
 
 ## 归档与成本
 
-- 一项工作彻底完结且会话不再需要 → `orch sessions <member> --archive <sid> --distill`
-  （先派蒸馏跳写 AGENTS.md 再归档）；
-- `orch ledger --stats` 看成员耗时/credits 占比；ctx 占用高（>60%）的会话提示归档。
+- 工作完结且会话不再需要 → `sessions <member> --archive <sid> --distill`；
+- ctx>60% 的会话提示归档；`stats` 看成员耗时占比（BYOK 下 credits 恒 0，以耗时/轮数
+  为准）；成本曲线异常 → 考虑 harness 改进或档位调整。
 
 ## 降级
 
-orch 瘫痪 → 照 `orchestration/README.md` 附录 A 手动模板派发（原生 exe 直调，
-**勿用 .cmd 包装器**——剥引号），台账手工补记，并尽快派 devops 修复（Phase 2 前
-向用户报告）。
+orch 瘫痪 → 照 README 附录 A 手动模板派发（原生 exe 直调，**勿用 .cmd 包装器**），
+台账手工补记，尽快以 adhoc 计划派 devops 修复。

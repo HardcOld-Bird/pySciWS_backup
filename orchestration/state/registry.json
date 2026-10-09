@@ -42,6 +42,46 @@
           "status": "active"
         }
       ]
+    },
+    "reviewer": {
+      "pod": "orchestration\\pods\\reviewer",
+      "model_tier": "max",
+      "max_turns": 40,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json",
+      "readonly_extra": [
+        "rubrics"
+      ],
+      "sessions": [
+        {
+          "sid": "26aba21c-3d26-4f9f-95fa-c63caa7ebd81",
+          "name": "rev-20261009-231247-r1",
+          "hops": 1,
+          "created": "2026-10-09T23:12:47+08:00",
+          "last_active": "2026-10-09T23:14:55+08:00",
+          "status": "active"
+        }
+      ]
+    },
+    "deputy": {
+      "pod": "orchestration\\pods\\deputy",
+      "model_tier": "max",
+      "max_turns": 60,
+      "timeout_s": 10800,
+      "mcp_config": ".qoder/mcp.json",
+      "extra_dirs": [
+        "."
+      ],
+      "sessions": [
+        {
+          "sid": "2db7352d-f88d-42d6-8aaa-78de7e9460c3",
+          "name": "consult-231557",
+          "hops": 1,
+          "created": "2026-10-09T23:15:57+08:00",
+          "last_active": "2026-10-09T23:19:28+08:00",
+          "status": "active"
+        }
+      ]
     }
   },
   "checks": {

@@ -1,10 +1,12 @@
 # pySci 多 Agent 编排顶层设计
 
-**状态**：v2.2 设计定稿（用户已审阅无异议）；**Phase 0 验证冲刺已完成**（§12），
-下一步 Phase 1（orch 骨架 + figure 纵切面）。本文档是编排体系的**唯一权威**：架构、
-目录契约、协议、阶段计划与裁决记录以本文为准。护栏级条款（红线、审批权、角色边界、
-门禁策略）的修改须用户明确授权；其余条款由组长（主代理）会同 devops 组员修订并向
-用户报告。
+**状态**：v2.2 设计定稿；**Phase 0–3 已完成**（§12：验证冲刺、orch 骨架+figure 纵切面、
+plan/改进循环/devops、reviewer+副组长均实战验收），下一步 Phase 4（六 pod 脚手架
+批量建 + 战备逐个验收 + 组长 harness 收尾瘦身）。本文档是编排体系的**唯一权威**：
+架构、目录契约、协议、阶段计划与裁决记录以本文为准。护栏级条款（红线、审批权、
+角色边界、门禁策略）的修改须用户明确授权；其余条款由组长（主代理）会同 devops
+组员修订并向用户报告。**阶段完成须当轮登记本文件**（Phase 3 咨询中副组长指出的
+文档滞后教训）。
 
 > **设计理念（用户裁决）**：用户是科研工作者，其关注面与责任面最小化——仅在直接影响
 > 产物质量或长期影响项目的顶层决策节点出面；末端具体工作与基础设施维护由 LLM Agent
@@ -611,20 +613,46 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
       「越来越聪明」机制成立；归档后池默认正确回退工作会话
 - [ ] 模型双档路由实装（registry 映射 + `-m` 传参）
 
-### Phase 3 —— reviewer + 副组长
-- [ ] `orchestration/pods/reviewer/`：rubric 体系（草稿组长出，**用户审定后生效**）、
-      文献对比规程、VERDICT 格式；orch review + 自动回派 + 复审
-- [ ] `orchestration/pods/deputy/`：全技能部署、宽白名单、平级协作条款（拒绝流程）、
-      顾问模式轻量参数
-- [ ] 端到端演练：跨域任务走「副组长单体」与「计划接力」两路径，stats 对比成本
+### Phase 3 —— reviewer + 副组长（**完成**，2026-10-09）
+- [x] `orchestration/pods/reviewer/`：charter（VERDICT 协议/独立性纪律/审查流程）、
+      `rubrics/generic.md` **最小占位版 v0.1**（用户裁决：跑通流程优先，正式评审体系
+      ——科学正确性/创新性/美观性 + 专属技能与程序基础设施——待框架稳定后用户与
+      组长深度共议）、文献 MCP（arxiv/zotero/paper-search）、registry（max 档 +
+      `readonly_extra: ["rubrics"]` 只读保护——成员级只读层扩展机制首用）
+- [x] `orch review`：VERDICT 解析（单测过）+ FAIL 自动回派 + 复审一次 + 升级仲裁
+      状态机；审查记录持久化 `state/reviews/`
+- [x] **review PASS 链路实战**（reviewer 首战，fig0_orch_smoke）：独立复跑 audit CLI、
+      手算抽查数据自洽性、Read 图件视觉判读——占位 rubric 下仍展现审查素养；
+      7 轮/106 s。reviewer 并提出高质量建议（review 任务书应嵌原生产任务目标陈述，
+      否则 G2 依赖生产者自述、与独立性纪律冲突）→ **approve 全链路实战通过**
+      （建议→审批→backlog 第 6 位→回复入队附送）
+- [ ] FAIL→回派→复审链路：代码已实现，待首个自然 FAIL 实战（占位 rubric 判定从宽，
+      人为构造 FAIL 成本不划算——Phase 3 验收以 PASS 链 + 状态机代码审查为准）
+- [x] `orchestration/pods/deputy/`：全 7 技能部署（**9 技能真本迁移提前全部完成**，
+      根 `.qoder/skills/` 只剩 orchestration 部署副本）、平级协作条款 charter
+      （拒绝权流程/异议义务/全项目视野）、extra_dirs=项目根、MCP 不配 comsol
+      （license 纪律，仿真走 CLI 或改派 sim）
+- [x] **consult 实战**（deputy 首战）：异议义务成立——副组长按 charter 先校正了任务书
+      两处前提错误（根技能已清空、README Phase 3 未登记），再以实证给出
+      「**脚手架批量建、战备逐个验收**」的 Phase 4 策略（引 figure pod 首任务即
+      blocked 的先例：charter/白名单冲突只有实战暴露）。组长采纳。
+- [x] 跨域双路径对比演练 → **延后至 Phase 4 末**（全员就绪后成本对比才有意义；
+      用户裁决跑通流程优先）
 
-### Phase 4 —— 全员迁移 + 组长 harness 瘦身
-- [ ] 其余组员 pod 批量建（模板复制 + 技能迁移 + MCP 归属落位）
-- [ ] 根 `.qoder/skills/` 清空 7 大末端技能（保留 orchestration）；用户级 MCP 清零
-      （§8 用户裁决执行）
+### Phase 4 —— 全员迁移 + 组长 harness 瘦身（策略已按副组长咨询意见修订）
+- [ ] 其余 6 专职 pod **脚手架批量建**（一次 devops worktree 任务：模板复制 +
+      manifest targets 追加 + sync + registry 注册 + 各域 MCP 归属落位）
+- [ ] **战备逐个验收**：每个新 pod 的首个真实任务即验收（预期暴露各域特有冲突：
+      comsol SSE 生命周期/license、blender 活实例、lit 代理纪律、writing LaTeX 链、
+      model3d 验收门——参照 figure 首战模式处理）
+- [x] 根 `.qoder/skills/` 清空 7 大末端技能（Phase 3 提前完成——真本全迁 + 副本仅存
+      orchestration）
+- [ ] 用户级 MCP 清零（§8 用户裁决执行；**执行前告知用户**——影响其账户下其他项目
+      的即开即用性；组长会话经根 settings `mcp.excluded` 可先行屏蔽过渡）
 - [ ] basic.md 重写（公约数精简，泄漏税最小化）
 - [ ] orch 移交 devops 维护（此后组长对 orch 的改进也走 backlog）
 - [ ] devops 巡检例程上线（自维护层质量、成本曲线、transcript 抽查）
+- [ ] 跨域双路径对比演练（自 Phase 3 移入）
 - [ ] （可选加固）组长侧 permission deny：禁 Write/Edit 于生产目录
 
 ---
@@ -659,6 +687,9 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-09 | 任务级授权例外（组员白名单可扩至研究线代码镜像 src/pysci/research/<线>/） | 用户追认 |
 | 2026-10-09 | credits 恒 0 根因 = 用户级默认模型为 BYOK（不计入 Qoder 订阅计费）；BYOK 成本统计方案入 backlog（20261009-byok-cost-accounting），不阻塞主线 | 用户说明 + 组长登记 |
 | 2026-10-09 | **Phase 2 完成**：plan 状态机、改进循环命令化、devops pod + pysci-dev、worktree venv 策略定型（PYTHONPATH 覆盖法）、首个完整改进循环实战（devops worktree 修复合并 + 自动销账）、归档蒸馏实测（成员自主整合升华经验进 AGENTS.md） | Agent 实测 |
+| 2026-10-09 | reviewer rubric 现阶段为**最小占位版**（跑通流程优先；正式评审体系——科学正确性/创新性/美观性及专属技能基础设施——待框架稳定后用户与组长深度共议） | 用户裁决 |
+| 2026-10-09 | **Phase 3 完成**：reviewer/deputy pod 实战验收；review PASS 链 + approve 全链 + consult 全链通过；9 技能真本迁移提前完成（根技能列表仅剩 orchestration）；readonly_extra 成员级只读扩展机制上线 | Agent 实测 |
+| 2026-10-09 | Phase 4 策略采纳副组长咨询意见：**脚手架批量建、战备逐个验收**；文档滞后教训入状态条款（阶段完成当轮登记） | 组长裁决（consult 输入） |
 
 ## 14. 已知代价与风险
 

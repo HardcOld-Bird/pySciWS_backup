@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "arxiv": { "command": "uvx", "args": ["arxiv-mcp-server"] },
+    "zotero": {
+      "command": "zotero-mcp",
+      "env": {
+        "ZOTERO_LOCAL": "true",
+        "ZOTERO_API_KEY": "",
+        "ZOTERO_LIBRARY_ID": "",
+        "ZOTERO_LIBRARY_TYPE": "user",
+        "ZOTERO_MCP_TOOLSETS": ""
+      }
+    },
+    "paper-search-mcp": {
+      "command": "uvx",
+      "args": ["paper-search-mcp"],
+      "env": {
+        "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "2411361@tongji.edu.cn",
+        "PAPER_SEARCH_MCP_CORE_API_KEY": "",
+        "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY": "",
+        "PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL": "",
+        "PAPER_SEARCH_MCP_DOAJ_API_KEY": "",
+        "PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN": ""
+      }
+    },
+    "blender-mcp": { "command": "uvx", "args": ["blender-mcp"] }
+  }
+}

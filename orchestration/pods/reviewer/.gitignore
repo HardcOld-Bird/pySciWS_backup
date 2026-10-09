@@ -1,0 +1,4 @@
+# 可再生物与草稿区不入库（README §2 git 策略）
+bench/
+outbox/
+.qoder/skills/

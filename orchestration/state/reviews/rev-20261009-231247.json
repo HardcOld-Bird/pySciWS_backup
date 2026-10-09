@@ -1,0 +1,18 @@
+{
+  "id": "rev-20261009-231247",
+  "artifact": "data/research/1_gain_ep/article/figures/fig0_orch_smoke",
+  "origin": "figure",
+  "rubric": "generic",
+  "started": "2026-10-09T23:12:47+08:00",
+  "rounds": [
+    {
+      "round": 1,
+      "reviewer_session": "26aba21c-3d26-4f9f-95fa-c63caa7ebd81",
+      "kind": "result",
+      "verdict": "PASS",
+      "body_excerpt": "<verdict>PASS</verdict>\n<scores>规范性: 5/5; 美观度: 4/5; 科学正确性: n/a; 创新性: n/a</scores>\n<evidence>\n- G1 产物存在且可读：`data/research/1_gain_ep/article/figures/fig0_orch_smoke/` 含 STYLE.yaml、notes.md、data/dispersion.csv（245 行）、out/ 四格式（eps/pdf/svg/png）+ `_preview.png`；Read 打开 preview 与主 png 均正常渲染。\n- G2 与任务书目标一致：产物为合成避免交叉色散单面板图（smoke 测试图），与 notes.md 记录的原生产任务（task-20261009-201037 / -202508）意图一致；数据 CSV 头声明模型 ω± = ω̄ ± √(δ²+κ²)、κ=0.06，手算抽查 k=0.4 行 ω₊=0.85+√(0.45²+0.06²)=1.303982 与文件值吻合，图内注记 Δω=2κ=0.12 与参数自洽。\n- G3 生产者自检已完成：notes.md 声明 `pysci-figures audit --panels` PASS（0 error, 0 warn）与预览视觉自检；reviewer 独立复跑 `uv run pysci-figures audit <figdir> --panels` 实测 width 85.0/85.0 mm、min_fontsize 7.0 pt、colorblind_confusable_pairs 0、verdict PASS (0 error, 0 warn)，与声明一致。\n- G4 无明显质量缺陷：Read 主 png 与 preview——布局完整无破碎；轴标签 k / Re ω、刻度、图例（bare branch / Re ω₊ / Re ω₋，右下）无溢出错位；Δω 注记与 k₀ 旋转标签不与曲线遮挡；okabe-ito 配色、灰虚线裸分支清晰可辨。\n- 美观度扣分点（不阻断）：k₀ 处 Δω 双向箭头的箭头头部大于间隙本身，渲染呈小实心块状；图例 \"bare branch\" 距右边界偏近（audit 未报溢出）。\n</evidence>\n审查总结：产物经正规管线产出、格式齐备（投稿 eps + 微调 svg/pdf + 校验 png）、风格绑定（aps/single 85 mm）与 audit 指标全部达标，数据与声明模型数值自洽，视觉判读无硬缺陷，四项硬项全过，判 PASS。可改进项：Δω 双向箭头宜缩短箭头头或改用 bracket/文字引线以免呈实心块；图例右缘留白可再放宽。二者均不影响本轮判定。"
+    }
+  ],
+  "completed": "2026-10-09T23:14:55+08:00",
+  "final": "PASS"
+}

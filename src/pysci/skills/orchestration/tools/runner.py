@@ -125,7 +125,10 @@ def build_command(
 
 
 def build_env(
-    member: Member, task_dirs: list[str], deployed_skills: list[str] | None = None
+    member: Member,
+    task_dirs: list[str],
+    deployed_skills: list[str] | None = None,
+    readonly_extra: list[str] | None = None,
 ) -> dict[str, str]:
     """构造派发进程的环境：guard 白名单注入 + UTF-8 纪律。
 
@@ -134,6 +137,8 @@ def build_env(
         task_dirs: 本任务额外放行的项目内目录（相对项目根或绝对路径）。
         deployed_skills: 部署副本技能名清单（pod-guard 保护其不被成员改写；
             由 orch 门面从 manifest 解析后传入）。
+        readonly_extra: 调用方追加的成员级只读条目；registry 成员配置中的同名
+            字段（如 reviewer 的 ``rubrics``）也会自动并入。
 
     Returns:
         完整的子进程环境变量字典。
@@ -151,6 +156,8 @@ def build_env(
         ".qoder/hooks",
         "inbox",
     ]
+    readonly += list(readonly_extra or [])
+    readonly += [str(r) for r in member.raw.get("readonly_extra", [])]
     env["PYSCI_READONLY"] = ";".join(readonly)
     env["PYSCI_DEPLOYED_SKILLS"] = ";".join(deployed_skills or [])
     env["PYSCI_POD"] = str(member.pod)

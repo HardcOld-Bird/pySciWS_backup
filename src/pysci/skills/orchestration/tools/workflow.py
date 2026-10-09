@@ -220,3 +220,137 @@ def cmd_stats(args) -> int:
         kinds[e.kind] = kinds.get(e.kind, 0) + 1
     print(f"  交付分布：{kinds}")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# review（README §5.2：reviewer 派发 + VERDICT 解析 + FAIL 自动回派 + 复审一次）
+# ---------------------------------------------------------------------------
+import re  # noqa: E402
+
+REVIEWS_DIR = ORCH_STATE_ROOT / "reviews"
+
+_VERDICT_RE = re.compile(r"<verdict>\s*(PASS|FAIL)\s*</verdict>", re.IGNORECASE)
+
+
+def parse_verdict(body: str) -> str | None:
+    """从 reviewer 交付正文解析 VERDICT（PASS/FAIL/None）。"""
+    m = _VERDICT_RE.search(body or "")
+    return m.group(1).upper() if m else None
+
+
+def _save_review(record: dict) -> Path:
+    REVIEWS_DIR.mkdir(parents=True, exist_ok=True)
+    p = REVIEWS_DIR / f"{record['id']}.json"
+    p.write_text(
+        json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return p
+
+
+def cmd_review(args) -> int:
+    """审查产物：reviewer 出具 VERDICT；FAIL → 自动回派 origin 返工 → 复审一次；
+    二次 FAIL → 升级组长仲裁（README §5.2）。长链路，建议后台 Bash 运行。"""
+    from pysci.paths import PODS_ROOT
+
+    review_id = f"rev-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    rubric_rel = f"rubrics/{args.rubric}.md"
+    rubric_abs = PODS_ROOT / "reviewer" / rubric_rel
+    if not rubric_abs.exists():
+        print(f"[!] rubric 不存在：{rubric_abs}")
+        return 2
+    record: dict = {
+        "id": review_id,
+        "artifact": args.artifact,
+        "origin": args.origin,
+        "rubric": args.rubric,
+        "started": _now(),
+        "rounds": [],
+    }
+    max_rounds = 2  # 初审 + 复审一次（用户裁决）
+    for round_no in range(1, max_rounds + 1):
+        task = (
+            f"审查任务（第 {round_no} 轮，review id={review_id}）：\n\n"
+            f"- 产物：{args.artifact}\n"
+            f"- rubric（必读，按它逐项检查）：{rubric_abs}\n"
+            f"- 生产组员：{args.origin}\n"
+            + (
+                "- 上一轮 FAIL 证据与返工说明见你的会话历史/任务书附件。\n"
+                if round_no > 1
+                else ""
+            )
+            + "\n要求：按 charter 的 VERDICT 交付格式出具 <result>，内含 "
+            "<verdict>PASS|FAIL</verdict>、<scores>、<evidence>（FAIL 时附可执行返工指引）。"
+        )
+        outcome = do_dispatch(
+            "reviewer", text=task, slug=f"{review_id}-r{round_no}", session="new"
+        )
+        verdict = parse_verdict(outcome.body) if outcome.kind == "result" else None
+        record["rounds"].append(
+            {
+                "round": round_no,
+                "reviewer_session": outcome.sid,
+                "kind": outcome.kind,
+                "verdict": verdict,
+                "body_excerpt": outcome.body[:1200],
+            }
+        )
+        if outcome.kind != "result" or verdict is None:
+            _save_review(record)
+            print(
+                f"[?] 审查未完成（kind={outcome.kind}, verdict={verdict}）——见上方 reviewer 交付。"
+            )
+            print()
+            print(
+                "[NEXT] 人工判读 reviewer 输出：补派审查（dispatch reviewer --session "
+                f"{outcome.sid[:8]}）或放弃本次审查。审查记录：{_rel(record)}"
+            )
+            return 2
+        if verdict == "PASS":
+            record["completed"] = _now()
+            record["final"] = "PASS"
+            p = _save_review(record)
+            print(f"[√] 审查 PASS（第 {round_no} 轮）。记录：{p.name}")
+            print()
+            print("[NEXT] 该环节工作宣告完成；若有后续环节按计划推进，否则向用户交付。")
+            return 0
+        # FAIL
+        print(f"[✗] 审查 FAIL（第 {round_no} 轮）。")
+        if round_no >= max_rounds:
+            record["completed"] = _now()
+            record["final"] = "FAIL_ESCALATED"
+            p = _save_review(record)
+            print()
+            print("[NEXT] 复审仍 FAIL → 组长仲裁（用户裁决的升级路径）：")
+            print(
+                '  1) 改派副组长攻坚：orch plan adhoc deputy --text "..."（附审查记录）'
+            )
+            print("  2) 修改方案/rubric 适用性后重审")
+            print("  3) 呈报用户裁定。审查记录：" + p.name)
+            return 2
+        record_round = record["rounds"][-1]
+        rework_text = (
+            f"返工任务（审查 FAIL 自动回派，review id={review_id}）：\n\n"
+            f"reviewer 对你的产物 {args.artifact} 出具 FAIL。审查证据与返工指引：\n\n"
+            f"{outcome.body[:1500]}\n\n"
+            "请针对证据逐条修正后重新交付（机械验收照旧声明）。"
+        )
+        rework = do_dispatch(
+            args.origin, text=rework_text, slug=f"{review_id}-rework", session="latest"
+        )
+        record_round["rework_session"] = rework.sid
+        record_round["rework_kind"] = rework.kind
+        if rework.code != 0:
+            _save_review(record)
+            print(f"[!] 返工未成功（kind={rework.kind}）——中止复审，升级组长决策。")
+            print()
+            print(
+                "[NEXT] 可选：补充信息再回派 / 咨询副组长 / 呈报用户（附审查记录 "
+                f"{review_id}.json）"
+            )
+            return 2
+        print("[√] 返工交付成功，进入复审…")
+    return 2
+
+
+def _rel(record: dict) -> str:
+    return f"orchestration/state/reviews/{record['id']}.json"

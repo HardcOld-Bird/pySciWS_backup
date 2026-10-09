@@ -377,6 +377,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--session", help="latest(默认)|new|<sid前缀>")
     p.set_defaults(func=_workflow.cmd_consult)
 
+    p = sub.add_parser(
+        "review", help="审查产物：VERDICT → FAIL 自动回派返工 → 复审一次 → 升级仲裁"
+    )
+    p.add_argument("artifact", help="产物路径（文件或目录）")
+    p.add_argument(
+        "--origin", required=True, help="生产该产物的成员 id（FAIL 回派对象）"
+    )
+    p.add_argument(
+        "--rubric", default="generic", help="rubric 名（reviewer pod rubrics/ 下）"
+    )
+    p.set_defaults(func=_workflow.cmd_review)
+
     p = sub.add_parser("stats", help="三级统计：--plan 计划级 / --member 成员级 / 全体")
     p.add_argument("--plan")
     p.add_argument("--member")

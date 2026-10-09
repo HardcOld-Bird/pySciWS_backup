@@ -43,6 +43,15 @@
       "summary": "BYOK 档位下 envelope 的 total_credits/usage tokens 恒为 0，台账成本维度缺失——评估替代计量（duration/轮数已有；或经 BYOK 供应商侧账单对账、或 usage 字段在不同 output-format 下的可用性）",
       "evidence": "Phase 0/1 实测：-m Qwen3.8-Flash/Max 与默认 BYOK 模型下 total_cost_usd=0、usage.input_tokens=0、modelUsage.contextWindow=0；仅 context_usage_ratio 有效。用户裁决：BYOK 为主力模式，计费实现留待未来完善（2026-10-09）",
       "proposed": "2026-10-09"
+    },
+    {
+      "id": "20261009-231455-reviewer",
+      "member": "reviewer",
+      "summary": "审查任务书（rev-*）目前只含产物路径、rubric 路径与生产者 id，不嵌原生产任务的目标陈述；G2「与任务书目标一致」因此只能依赖生产者自写的 notes.md 重构意图，与 charter 的独立性纪律（不参考生产者自述）存在张力。建议派发 review 任务书时从原生产任务书摘一段「目标陈述」字段嵌入，使 G2 可独立核验。场景：本轮 fig0_orch_smoke 审查中 G2 证据",
+      "evidence_file": "orchestration/state/suggestions/approved/20261009-231455-reviewer.md",
+      "status": "pending",
+      "proposed": "2026-10-09T23:15:41+08:00",
+      "note": "采纳：review 任务书应从原生产任务书自动摘录「目标陈述」嵌入，使 G2 可独立核验、消除对生产者自述的依赖。实现建议：cmd_review 增加 --goal-from <origin 最近任务书> 自动摘录（或 orch 在 reviews 状态中登记 origin 任务书路径供 reviewer 只读访问）。优先级中——不阻塞当前流程。"
     }
   ]
 }
