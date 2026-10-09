@@ -12,6 +12,12 @@
       "targets": {
         ".qoder/skills/orchestration": "c1d9f5b483f9a0f059f8a16e1e7d2a825fb58f1ac08b866bf7c903d5f3ac40bb"
       }
+    },
+    "devops": {
+      "source_hash": "e90334afb01322ad97104c3b84414fce50b2bb7efa796029e8f71abe89888509",
+      "targets": {
+        "orchestration/pods/devops/.qoder/skills/devops": "e90334afb01322ad97104c3b84414fce50b2bb7efa796029e8f71abe89888509"
+      }
     }
   }
 }

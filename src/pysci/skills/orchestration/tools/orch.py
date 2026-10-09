@@ -136,7 +136,7 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
         text = (
             f"基础设施改进任务（backlog FIFO 队首，id={item['id']}）：\n\n"
             f"摘要：{item.get('summary', '')}\n\n"
-            f"证据：{item.get('evidence_file', '（见建议归档）')}\n\n"
+            f"证据：{item.get('evidence') or item.get('evidence_file', '（见建议归档）')}\n\n"
             f"组长附注：{item.get('note', '（无）')}\n\n"
             "要求：以 worktree 隔离实施（你的 devops 技能有作业规程）；完整测试后合并、"
             "commit（不 push——push 须用户授权）；交付中报告改动清单与验证证据，"
