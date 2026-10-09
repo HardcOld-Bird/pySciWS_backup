@@ -112,15 +112,20 @@ def cmd_new(args: argparse.Namespace) -> int:
     except (KeyError, FileExistsError) as e:
         print(f"[figures] new 失败：{e}", file=sys.stderr)
         return 1
-    print(f"已脚手架图管线目录：{figdir}")
-    print(f"  管线模块 : {figdir / (args.slug + '.py')}")
+    pipeline = _runner.figures_code_root(args.research) / f"{args.slug}.py"
+    print("已脚手架图管线（代码与产物分居两侧）：")
+    print(f"  管线模块 : {pipeline}")
+    print("             ⚠ 该代码路径需列入任务书写权限白名单")
+    print(f"  产物目录 : {figdir}")
     print(
         f"  模板     : {args.template}  (可选: {', '.join(_scaffold.list_templates())})"
     )
     print("\n下一步：")
-    print(f"  1) 编辑 {args.slug}.py 里的 build_figure()（替换示例数据为真实数据）")
+    print(f"  1) 编辑 {pipeline} 里的 build_figure()（替换示例数据为真实数据）")
     print(f"  2) uv run pysci-figures build '{figdir}'")
-    print(f"  3) Read 产出的 out/{args.slug}_preview.png 做视觉校验")
+    print(
+        f"  3) Read 产出的 {figdir / 'out' / (args.slug + '_preview.png')} 做视觉校验"
+    )
     return 0
 
 
