@@ -138,6 +138,16 @@ pySciWS/
 | `src/ scripts/ tests/`、`data/` 白名单外 | ❌（纪律性） | ❌ | ✅ | ❌ | ✅ |
 | `data/research/<任务白名单>/**` | ✅ | ✅ | ✅ | 只读 | ✅ |
 
+> **任务级授权例外（2026-10-09 首次实战产生；组长裁决，待用户追认）**：项目两层结构
+> 约定「研究线代码镜像在 `src/pysci/research/<线>/`、数据资产在 `data/research/`」，
+> 生产型组员的任务白名单可按需扩展至**对应研究线的代码镜像目录**（仍是任务级最小
+> 授权，经 `--dirs` 注入 pod-guard，白名单外照拦）。起因：fig0_orch_smoke 任务中
+> `pysci-figures new` 把管线代码写入 src（脚手架既定行为），组员无 src 白名单而
+> blocked；随附发现的两条工具缺陷（new 的路径打印与实际写入不一致；discover_pipeline
+> src 优先静默压制图目录定制管线造成假绿）已入 backlog（20261009-*），待 devops 实施。
+> 此役为改进循环（§6）首次实战：blocked 交付 → 组长审批 → backlog 登记 → 审批回复
+> 附送 → 扩权续派，全链路按设计运转。
+
 **轻量笔记原则（用户裁决）**：开放自维护层的本意是补偿 headless 无自动记忆——鼓励
 组员用 rules/skills/AGENTS.md 编写**轻量（几乎纯文本）的笔记与知识**，让自己「越来越
 聪明」；**不鼓励组员自建基于代码的可运行工具**（基础设施建设是 devops 的职责，组员
@@ -559,18 +569,26 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 - [ ] 长会话成本曲线：resume 成本随跳数增长——转 Phase 1 运行期持续观察（envelope
       的 usage/cache 字段直接入台账）
 
-### Phase 1 —— orch 骨架 + figure 纵切面
-- [ ] `src/pysci/skills/orchestration/`：registry / dispatch / envelope 解析 / 交付解析 /
-      会话池封装 / 台账（credits+耗时）/ 下一步提示（plan 与 approve 后置）
-- [ ] `orchestration/pods/figure/`：charter 第一版（交付协议/自检清单/CLI 范式/轻量
-      笔记原则）、AGENTS.md 种子、pod-guard + delivery-gate 接线、mcp.json、
-      bench/inbox/outbox
-- [ ] 技能真本迁移第一份：scientific-plotting → `orchestration/skills/` + manifest +
-      sync（含部署到 pod）
-- [ ] 真实图件任务全环路：dispatch → delivery-gate → 交付解析 → 声明式机械验收
-      （figures audit 接入）→ 台账
-- [ ] orchestration 技能真本第一版（组长操作知识）+ 部署到根 `.qoder/skills/`
-- 验收：一次真实任务全环路无人工兜底；credits/耗时入台账基线
+### Phase 1 —— orch 骨架 + figure 纵切面（**基本完成**，2026-10-09）
+- [x] `src/pysci/skills/orchestration/`：registry / dispatch / envelope 解析 / 交付解析 /
+      会话池封装 / 台账（credits+耗时）/ 下一步提示（plan 与 approve 后置 Phase 2）；
+      ruff 全绿；`pysci-orch` 入口注册（pyproject）
+- [x] `orchestration/pods/figure/`：charter 第一版（交付协议/自检清单/CLI 范式/轻量
+      笔记原则）、AGENTS.md 种子、pod-guard + delivery-gate 接线（guards 正式版单测
+      8/8）、mcp.json（空集）、bench/inbox/outbox
+- [x] 技能真本迁移第一份：scientific-plotting → `orchestration/skills/` + manifest +
+      sync（部署/一致性校验通过；根技能列表热更新确认移出）
+- [x] orchestration 技能真本第一版（组长操作知识）+ 部署到根 `.qoder/skills/`
+- [x] paths.py 新增 ORCHESTRATION_ROOT / ORCH_STATE_ROOT / PODS_ROOT 锚点
+- [x] 冒烟派发全环路：任务书落 inbox → 新会话（Flash 档位路由生效）→ charter 加载 →
+      bench 可写 / charter 只读拦截（组员侧逐字回报）→ 交付协议解析 → 台账/会话池登记
+- [x] 真实图件任务全环路（fig0_orch_smoke）：首跳 blocked（白名单与两层结构冲突，
+      触发改进循环首次实战，见 §2 脚注）→ 审批+扩权续派 → 正规管线 build →
+      视觉自检 → **figure-audit 机械验收 √ PASS** → 台账/审批回复附送/归档全链路自动
+- [x] credits/耗时基线登记：冒烟跳 7 轮/48 s；fig0 阻塞跳 23 轮/251 s；收尾跳
+      15 轮/137 s；会话 ctx 三跳后 52%；**观察**：envelope `total_credits` 恒为 0
+      （疑似该账号/模型不上报计费；成本统计暂以耗时+轮数为准，持续观察）
+- 验收：✅ 达成——真实任务全环路无人工兜底（blocked 分支的组长决策属设计内环节）
 
 ### Phase 2 —— 计划驱动 + 改进循环 + devops
 - [ ] orch plan new/run/amend/adhoc（§4.2 状态机 + 交接决策点 + 环节模型档位）

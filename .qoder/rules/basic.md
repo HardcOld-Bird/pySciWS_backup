@@ -146,6 +146,10 @@ alwaysApply: true
   代码中的符号须与文献保持一致，不要重新推导一遍。
 - **写脚本时**：用 `# %%` 单元格分块（符号定义 → 推导 → 数值化 → 可视化）；
   变量名**优先用 Unicode 并与文献一致**（✅ `ωᵣ`、`Δω`、`ρ` ❌ `omega_r`、`delta_omega`）。
+- **多 Agent 编排已启用**（唯一权威 `orchestration/README.md`）：末端生产工作由组长
+  （TUI 主会话）经 `pysci-orch` 派发给 `orchestration/pods/<id>/` 的 headless 组员，
+  组长严禁亲自执行（例外：用户明确要求亲做）；组长操作规程见 orchestration 技能。
+  编排资产路径锚点：`pysci.paths.ORCHESTRATION_ROOT` / `ORCH_STATE_ROOT` / `PODS_ROOT`。
 
 ---
 
