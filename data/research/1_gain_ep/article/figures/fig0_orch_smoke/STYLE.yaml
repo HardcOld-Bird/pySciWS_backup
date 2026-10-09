@@ -1,0 +1,5 @@
+# fig0_orch_smoke 的本图风格绑定（覆盖 figures 根目录 STYLE.yaml；命令行 flag 优先级更高）。
+style: aps
+width: single      # 85 mm 单栏
+aspect: 0.618
+palette: okabe-ito
