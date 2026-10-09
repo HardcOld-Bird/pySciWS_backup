@@ -34,3 +34,4 @@ __pycache__/
 #（真本在 orchestration/skills/orchestration/，orch sync 再生）。
 /orchestration/state/ledger/
 /.qoder/skills/orchestration/
+/orchestration/state/backups/

@@ -36,9 +36,9 @@
         {
           "sid": "7e753ee1-d6e4-44c8-92bd-2af146c78c64",
           "name": "20261009-fig-new-path-mismatch",
-          "hops": 1,
+          "hops": 2,
           "created": "2026-10-09T21:14:22+08:00",
-          "last_active": "2026-10-09T21:28:47+08:00",
+          "last_active": "2026-10-10T00:31:27+08:00",
           "status": "active"
         }
       ]
@@ -79,6 +79,23 @@
           "hops": 1,
           "created": "2026-10-09T23:15:57+08:00",
           "last_active": "2026-10-09T23:19:28+08:00",
+          "status": "active"
+        }
+      ]
+    },
+    "lit": {
+      "pod": "orchestration\\pods\\lit",
+      "model_tier": "flash",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json",
+      "sessions": [
+        {
+          "sid": "c838a10d-c4a9-4e2f-94db-7d1363de3470",
+          "name": "mcp-smoke",
+          "hops": 2,
+          "created": "2026-10-10T00:32:39+08:00",
+          "last_active": "2026-10-10T00:41:09+08:00",
           "status": "active"
         }
       ]

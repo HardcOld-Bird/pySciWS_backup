@@ -1,8 +1,9 @@
 # pySci 多 Agent 编排顶层设计
 
-**状态**：v2.2 设计定稿；**Phase 0–3 已完成**（§12：验证冲刺、orch 骨架+figure 纵切面、
-plan/改进循环/devops、reviewer+副组长均实战验收），下一步 Phase 4（六 pod 脚手架
-批量建 + 战备逐个验收 + 组长 harness 收尾瘦身）。本文档是编排体系的**唯一权威**：
+**状态**：v2.2 设计定稿；**Phase 0–4 已基本完成**（§12：验证冲刺、orch 骨架+figure
+纵切面、plan/改进循环/devops、reviewer+副组长、六 pod 脚手架+MCP 清零+basic.md 重写
+均实战验收）。**体系进入常态运行**：剩余事项 = 各 pod 随首个真实任务逐个战备验收、
+跨域双路径对比（随首个真实跨域任务）、可选加固项。本文档是编排体系的**唯一权威**：
 架构、目录契约、协议、阶段计划与裁决记录以本文为准。护栏级条款（红线、审批权、
 角色边界、门禁策略）的修改须用户明确授权；其余条款由组长（主代理）会同 devops
 组员修订并向用户报告。**阶段完成须当轮登记本文件**（Phase 3 咨询中副组长指出的
@@ -639,21 +640,30 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 - [x] 跨域双路径对比演练 → **延后至 Phase 4 末**（全员就绪后成本对比才有意义；
       用户裁决跑通流程优先）
 
-### Phase 4 —— 全员迁移 + 组长 harness 瘦身（策略已按副组长咨询意见修订）
-- [ ] 其余 6 专职 pod **脚手架批量建**（一次 devops worktree 任务：模板复制 +
-      manifest targets 追加 + sync + registry 注册 + 各域 MCP 归属落位）
-- [ ] **战备逐个验收**：每个新 pod 的首个真实任务即验收（预期暴露各域特有冲突：
-      comsol SSE 生命周期/license、blender 活实例、lit 代理纪律、writing LaTeX 链、
-      model3d 验收门——参照 figure 首战模式处理）
-- [x] 根 `.qoder/skills/` 清空 7 大末端技能（Phase 3 提前完成——真本全迁 + 副本仅存
-      orchestration）
-- [ ] 用户级 MCP 清零（§8 用户裁决执行；**执行前告知用户**——影响其账户下其他项目
-      的即开即用性；组长会话经根 settings `mcp.excluded` 可先行屏蔽过渡）
-- [ ] basic.md 重写（公约数精简，泄漏税最小化）
-- [ ] orch 移交 devops 维护（此后组长对 orch 的改进也走 backlog）
-- [ ] devops 巡检例程上线（自维护层质量、成本曲线、transcript 抽查）
-- [ ] 跨域双路径对比演练（自 Phase 3 移入）
-- [ ] （可选加固）组长侧 permission deny：禁 Write/Edit 于生产目录
+### Phase 4 —— 全员迁移 + 组长 harness 瘦身（**基本完成**，2026-10-10）
+- [x] 六专职 pod **脚手架批量建**（devops worktree 任务：sim/writing/theory/lit/
+      drawing/model3d，charter 含各域自检清单，MCP 归属落位，manifest targets 追加 +
+      sync；doctor 十 pod 全绿；34457f5 合并）
+- [x] **lit pod 战备验收**（首个战备抽查）：MCP 隔离会话级实锤（只见 arxiv/zotero，
+      无 comsol/blender）、charter 加载、arxiv 实检索成功；成员自主把 429 限流经验
+      蒸馏入 AGENTS.md。**其余五 pod 战备验收随各自首个真实任务进行**（预期暴露各域
+      特有冲突，参照 figure/lit 首战模式处理）
+- [x] 根 `.qoder/skills/` 清空（Phase 3 提前完成）
+- [x] **用户级 MCP 清零**（用户授权任何时机执行；备份存 state/backups/，gitignored）：
+      根侧新会话实测零末端 MCP；lit pod strict 配置不受影响。组长本 TUI 会话的 MCP
+      工具随下次重启消失。paper-search-mcp 预先存在的连接失败入 backlog
+      （20261010-paper-search-mcp-down）
+- [x] basic.md 重写：§3 PowerShell 细节压缩为「Git Bash 为唯一工作 shell + PS 历史
+      纪律四行摘要」（完整实测结论存 git 历史）；CLI 裸命令范式入公约数；§1/§2/§6
+      原文未动
+- [x] orch 移交 devops 维护：自本登记起，orch/pysci-dev 代码改动一律走 backlog →
+      devops worktree 实施（组长不再直接改 orch 代码；bootstrap 例外条款作废）
+- [x] devops 巡检例程：pysci-dev doctor 已上线（Phase 2）；巡检节奏 = 组长按需派发
+      + 每个 Phase 收尾必跑；transcript 抽查入 devops 技能清单
+- [ ] 跨域双路径对比演练 → **延后至首个真实跨域科研任务**（届时 naturally 产生
+      「副组长单体 vs 计划接力」对比数据，stats 记录）
+- [ ] （可选加固）组长侧 permission deny：禁 Write/Edit 于生产目录——暂缓（组长
+      仍需写 orchestration/state 与本文档；deny 规则需精细豁免，收益/复杂度比待评估）
 
 ---
 
@@ -690,6 +700,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-09 | reviewer rubric 现阶段为**最小占位版**（跑通流程优先；正式评审体系——科学正确性/创新性/美观性及专属技能基础设施——待框架稳定后用户与组长深度共议） | 用户裁决 |
 | 2026-10-09 | **Phase 3 完成**：reviewer/deputy pod 实战验收；review PASS 链 + approve 全链 + consult 全链通过；9 技能真本迁移提前完成（根技能列表仅剩 orchestration）；readonly_extra 成员级只读扩展机制上线 | Agent 实测 |
 | 2026-10-09 | Phase 4 策略采纳副组长咨询意见：**脚手架批量建、战备逐个验收**；文档滞后教训入状态条款（阶段完成当轮登记） | 组长裁决（consult 输入） |
+| 2026-10-10 | **Phase 4 基本完成**：六 pod 脚手架（devops worktree，十 pod doctor 全绿）、lit 战备验收（MCP 隔离会话级实锤 + 成员自主蒸馏经验）、用户级 MCP 清零（用户全权授权，备份留档）、basic.md 重写（PS 细节压缩、Git Bash 唯一 shell、裸命令范式入公约数）、**orch 移交 devops 维护（bootstrap 例外作废，orch 改动一律走 backlog）** | Agent 实测 + 用户授权 |
 
 ## 14. 已知代价与风险
 

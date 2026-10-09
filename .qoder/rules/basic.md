@@ -5,16 +5,11 @@ alwaysApply: true
 
 # pySci 常驻开发规范
 
-本文件是项目**唯一**的常驻规则，每个会话全文注入，每个字都在向所有未来会话征税。
-
-**收录门槛**：一条内容能进这里，当且仅当「不读它就会做出错误或有破坏性的行为」。
-可按需查阅的一律不进——**资产布局与产物目录的权威索引是 `src/pysci/paths.py`**
-（模块 docstring 与各常量注释逐条写明了每个目录的用途），依赖与选型理由看 `pyproject.toml`
-注释，技能用法看各 `SKILL.md`。**新增条目前先自问：能否写成一句可机械判定的话？**
-写不成，说明它是偏好而非规则，不该占用这里。
-
-> 本文件的「实测」结论均于 2026-10-04 在 Windows PowerShell **5.1.22621** 下逐条复核。
-> 换 shell 版本或换机器后，这些结论需要重新验证。
+本文件是项目**唯一**的常驻规则，每个会话全文注入（含所有组员 pod），每个字都在向
+所有未来会话征税。**收录门槛**：一条内容能进这里，当且仅当「不读它就会做出错误或有
+破坏性的行为」。可按需查阅的一律不进——资产布局的权威索引是 `src/pysci/paths.py`，
+依赖与选型理由看 `pyproject.toml` 注释，编排体系看 `orchestration/README.md`，
+各领域操作知识看各成员的 charter 与部署技能。
 
 ---
 
@@ -65,53 +60,18 @@ alwaysApply: true
 
 ---
 
-## 3. PowerShell 约定（跨技能生效）
+## 3. Shell 与编码约定（跨技能生效）
 
-适用于各 `pysci-*` console script（清单见 `pyproject.toml` 的 `[project.scripts]`，数目会增长）
-以及任何输出中文的 Python 命令。
-
-### 3.1 中文输出必须先设 UTF-8（否则 Agent 拿不到任何状态信息）
-
-调用前先在同一 shell 执行：
-
-```powershell
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-```
-
-**实测**：环境已设 `PYTHONUTF8=1`，Python 端 `sys.stdout.encoding` 恒为 `utf-8`；但只要 stdout
-**被管道**（`| Out-String`、`2>&1 |`、重定向到文件），PowerShell 会用 `[Console]::OutputEncoding`
-（本机默认 GBK/936）去解码这些 UTF-8 字节，中文全部变成 `妯″潡鏍?` 一类乱码。
-同一 shell 会被后续命令复用，设一次即持续生效；要复现乱码基线须显式改回 `GetEncoding(936)`。
-
-**两条代码侧自愈路径已实测无效，不要再尝试**：
-
-- `sys.stdout.reconfigure(encoding="utf-8")` —— stdout 本就是 utf-8，空操作；
-- 子进程内 `ctypes.windll.kernel32.SetConsoleOutputCP(65001)` —— 实测该调用**确实成功**
-  （CP 由 936 变为 65001），但管道输出**仍然乱码**：父进程 PowerShell 在启动子进程前
-  已缓存了解码器，子进程改不动它。
-
-唯一可行的修复位置在 **PowerShell 侧**。
-
-### 3.2 其余（均实测）
-
-- **`Get-Content` / `Set-Content` 在 PS 5.1 默认按 ANSI/GBK 编解码，不是 UTF-8**（与 §3.1 的控制台
-  编码是两回事）。不加 `-Encoding` 时：读 UTF-8 中文文件得乱码；写出的是 GBK 字节
-  （实测 `增益管槽` → `d4 f6 d2 e6 b9 dc b2 db`），会**静默损坏**项目里任何 UTF-8 文件。
-  加 `-Encoding UTF8` 可修正，但 PS 5.1 会**附带 BOM**（`ef bb bf`）。
-  → **编辑项目文件一律用文件编辑工具，不要用 shell 重定向。**
-- **双引号会被剥离，一律用单引号。** 多词参数：`research search 'acoustic exceptional point'`。
-  `Write-Output` 的字符串若用双引号且含括号，括号内容会被当命令（实测 `(no pipe)` → CommandNotFound）。
-  **内层双引号同样会被剥离**：`python -c 'print("模块树")'` 实际传给 Python 的是 `print(模块树)`
-  → NameError。需要内层引号时，**把代码写进临时 `.py` 文件再执行**，不要在命令行里拼。
-  带引号的 `-f` 格式化串与 `"$()"` 插值同此理，一律避免；拼表格改用
-  `[pscustomobject]@{A = 1; B = 2} | Format-Table -AutoSize | Out-String -Width 200`。
-- **链式命令用 `;`，绝不用 `&&`**：PS 5.1 下 `a && b` 直接抛解析错误。
-- **`Select-String` 需要路径时取 `Path` 属性而非 `Filename`**：实测同名文件（如各技能下的
-  `SKILL.md`）的 `Filename` 完全相同、无法区分，`Path` 才是完整路径。
-- **丢弃 stderr 写 `2>$null`，绝不要转义成 ``2>`$null``**：反引号会让 PowerShell 把 `$null`
-  当成**字面量文件名**，实测在当前目录生成一个名为 `$null` 的垃圾文件，并被 git 当作未跟踪文件
-  混进 `git status`。要合并进 stdout 则用 `2>&1`。清理它时路径**用单引号**（`'.\$null'`）
-  或 `-LiteralPath`；用双引号会让 `$null` 展开成空串、路径退化为目录本身（实测报「访问被拒绝」）。
+- 所有 agent（组长与组员）的 Bash 工具均为 **Git Bash**：多词参数用单引号；
+  **编辑项目文件一律用文件编辑工具，不用 shell 重定向**（编码/转义事故源）。
+- CLI 调用范式（全员统一，实测三范式同速）：**首选裸 `pysci-X`**（PATH 已含
+  `.venv/Scripts`）；命令不存在时 fallback `uv run pysci-X`——**裸名只试一次，
+  禁止重试循环**。程序化子进程调用（工具内部）统一 `uv run`（不依赖会话环境）。
+- Python 输出中文：环境已设 `PYTHONUTF8=1`，Git Bash 下无需额外处理。
+- **仅当显式调用 PowerShell（5.1）时**才需其历史纪律（中文输出先设
+  `[Console]::OutputEncoding=UTF8`、双引号会被剥离一律单引号、链式用 `;` 不用 `&&`、
+  `Get/Set-Content` 必须 `-Encoding UTF8`）——完整实测结论见 git 历史本文件
+  2026-10 前版本的 §3，无必要不再使用 PowerShell。
 
 ---
 
@@ -132,12 +92,13 @@ alwaysApply: true
   `pysci` 以 editable 方式装入。运行统一用 `uv run python ...` / `uv run pytest`；
   增删依赖改 `pyproject.toml` 后 `uv sync`。
 - ❌ 禁止 `sys.path.insert(...)` hack 与脆弱的 `Path(__file__).parents[N]` 层级硬编码。
-  资产路径统一走 `pysci.paths`：`PROJECT_ROOT` / `DATA_ROOT` / `ASSET_ROOT` / `LITERATURE_ROOT` /
-  `research_asset_dir(name)`。包路径不能以数字开头，故 `data/research/1_gain_ep`
+  资产路径统一走 `pysci.paths`：`PROJECT_ROOT` / `ASSET_ROOT` / `research_asset_dir(name)` /
+  `research_fig_dir·theory_dir·artwork_dir·model_dir` / `ORCHESTRATION_ROOT` /
+  `ORCH_STATE_ROOT` / `PODS_ROOT`。包路径不能以数字开头，故 `data/research/1_gain_ep`
   对应 `pysci.research.gain_ep`。
-- **产物落盘**：写入前用 `pysci.paths.assert_within_data(path)` 断言路径落在 `data/` 内
-  （防散落护栏）；论文插图 / 理论计算 / 效果图分别用 `research_fig_dir(name, slug=...)` /
-  `research_theory_dir(...)` / `research_artwork_dir(...)` 定位，
+- **产物落盘**：写入 `data/` 前用 `pysci.paths.assert_within_data(path)` 断言（防散落护栏）；
+  论文插图 / 理论计算 / 效果图 / 模型分别用 `research_fig_dir(name, slug=...)` /
+  `research_theory_dir(...)` / `research_artwork_dir(...)` / `research_model_dir(...)` 定位，
   **不得散落到仓库根或代码树中**。
 - **分层**：`src/pysci/` 下的包**只定义**，`scripts/` **只使用**（不在 `scripts/` 里定义复杂类
   或长函数）。`pysci` 中公共接口须有 Google 风格 docstring 与完整类型注解。
@@ -148,8 +109,8 @@ alwaysApply: true
   变量名**优先用 Unicode 并与文献一致**（✅ `ωᵣ`、`Δω`、`ρ` ❌ `omega_r`、`delta_omega`）。
 - **多 Agent 编排已启用**（唯一权威 `orchestration/README.md`）：末端生产工作由组长
   （TUI 主会话）经 `pysci-orch` 派发给 `orchestration/pods/<id>/` 的 headless 组员，
-  组长严禁亲自执行（例外：用户明确要求亲做）；组长操作规程见 orchestration 技能。
-  编排资产路径锚点：`pysci.paths.ORCHESTRATION_ROOT` / `ORCH_STATE_ROOT` / `PODS_ROOT`。
+  组长严禁亲自执行（例外：用户明确要求亲做）；组员交付协议与写权限由各自 charter
+  与 pod-guard 约束。
 
 ---
 
