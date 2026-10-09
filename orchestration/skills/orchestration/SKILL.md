@@ -25,7 +25,7 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
 ## 命令面
 
 ```
-uv run pysci-orch status                        # 全景：计划/成员/队列/台账
+uv run pysci-orch status                        # 全景：计划/成员/队列/devops worker/台账
 # —— 日常面 ——
 uv run pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
 uv run pysci-orch plan run <id> --text "<当前环节任务书>"   # 推进（交接处暂停）
@@ -33,7 +33,9 @@ uv run pysci-orch plan amend <id>               # 直接编辑 plan YAML 后校�
 uv run pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步
 uv run pysci-orch plan list | plan drop <id>
 uv run pysci-orch suggestions                   # 待审批改进建议
-uv run pysci-orch approve|reject <建议id> --note "..."   # 审批（回复自动附送）
+uv run pysci-orch approve <建议id> --note "..." [--no-wake]
+        # 采纳→入 backlog，默认自动唤醒 devops 后台 FIFO 消化；--no-wake 只入队不唤醒
+uv run pysci-orch reject <建议id> --note "..."   # 否决（仅回复附送，不唤醒）
 uv run pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
 uv run pysci-orch review <产物> --origin <member> [--rubric generic]
         # 审查链：VERDICT → FAIL 自动回派返工 → 复审一次 → 二次 FAIL 升级你仲裁
@@ -63,8 +65,10 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 - `<result>`=成功，`<blocked>`=失败（含卡点）；机械验收 FAIL 按 [NEXT] 回派返工，
   同指纹连败 3 次停止回派升级决策；
 - blocked → 三选一：补充重派 / consult 副组长 / 上报用户；
-- 建议审批：approve 入 backlog（devops FIFO 消化），reject 附理由——回复都会自动
-  附送提议人；护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
+- 建议审批：approve 入 backlog 并**自动唤醒 devops 后台消化**（分离进程持锁 FIFO 串行；
+  锁忙不重复唤醒，单项失败标 needs_leader 跳过、不阻塞队列），reject 附理由——回复都会
+  自动附送提议人；`orch status` 看 devops worker 态 / 最近 run / needs_leader 提醒；
+  护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：修改任务书重派，或行使最终裁定权
   坚持原派（理由留痕台账）；
 - 交接处决策：一键继续 / plan amend 改后续 / drop 中止。

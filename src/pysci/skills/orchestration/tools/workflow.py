@@ -62,6 +62,14 @@ def backlog_pending() -> list[dict]:
     return [i for i in data.get("items", []) if i.get("status") == "pending"]
 
 
+def backlog_by_status(status: str) -> list[dict]:
+    """backlog 中指定 status 的条目（FIFO 顺序）。"""
+    if not BACKLOG_PATH.exists():
+        return []
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    return [i for i in data.get("items", []) if i.get("status") == status]
+
+
 def backlog_take_first() -> dict | None:
     """取队首 pending 条目标记 in_progress 并返回（devops 派发用）。"""
     if not BACKLOG_PATH.exists():
@@ -78,19 +86,52 @@ def backlog_take_first() -> dict | None:
     return None
 
 
-def backlog_complete(item_id: str, note: str = "") -> None:
-    """标记 backlog 条目完成（devops 交付后由组长/orch 调用）。"""
+def _backlog_set_status(
+    item_id: str, status: str, note: str = "", *, stamp: str = ""
+) -> None:
+    """把 backlog 条目置为指定 status（可选写时间戳字段与附注）。"""
     if not BACKLOG_PATH.exists():
         return
     data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
     for item in data.get("items", []):
         if item.get("id") == item_id:
-            item["status"] = "done"
-            item["done_at"] = _now()
+            item["status"] = status
+            if stamp:
+                item[stamp] = _now()
             if note:
                 item["note"] = note
     BACKLOG_PATH.write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def backlog_complete(item_id: str, note: str = "") -> None:
+    """标记 backlog 条目完成（devops 交付后由组长/orch 调用）。"""
+    _backlog_set_status(item_id, "done", note, stamp="done_at")
+
+
+def backlog_needs_leader(item_id: str, note: str = "") -> None:
+    """标记 backlog 条目需组长介入（drain 单项失败跳过时用；不再自动重试）。"""
+    _backlog_set_status(item_id, "needs_leader", note, stamp="needs_leader_at")
+
+
+def backlog_task_text(item: dict) -> str:
+    """由 backlog 条目生成 devops 派发任务书正文。
+
+    ``dispatch --from-backlog``（手动）与 ``_drain-devops``（自动）共用此模板，保证
+    两条路径派发内容一致。末尾附**合并安全**提示：devops 合并 worktree 前须核对
+    main 工作区，避免覆盖组长未提交改动（README §6 自动唤醒下的并发防护）。
+    """
+    return (
+        f"基础设施改进任务（backlog FIFO 队首，id={item['id']}）：\n\n"
+        f"摘要：{item.get('summary', '')}\n\n"
+        f"证据：{item.get('evidence') or item.get('evidence_file', '（见建议归档）')}\n\n"
+        f"组长附注：{item.get('note', '（无）')}\n\n"
+        "要求：以 worktree 隔离实施（你的 devops 技能有作业规程）；完整测试后合并、"
+        "commit（不 push——push 须用户授权）；交付中报告改动清单与验证证据，"
+        f"并注明 backlog id={item['id']} 以便销账。\n\n"
+        "合并前 git status 检查——若 main 工作区存在会被本次合并触碰的未提交改动，"
+        "交付 <blocked> 说明，等待组长清理；无关的未提交改动可照常合并。"
     )
 
 
@@ -144,6 +185,14 @@ def cmd_approve(args) -> int:
     print(
         f"[√] 已采纳 {sugg.stem} → backlog 第 {n} 位；审批回复将在下次派发 {member} 时附送。"
     )
+    # 自动唤醒 devops 后台 FIFO 消化 backlog（README §6）；--no-wake 跳过。
+    if not getattr(args, "no_wake", False):
+        from .drain import (
+            wake_devops,  # 延迟导入：workflow↔drain 环（drain 依赖 workflow）
+        )
+
+        _, msg = wake_devops()
+        print(f"    {msg}")
     return 0
 
 

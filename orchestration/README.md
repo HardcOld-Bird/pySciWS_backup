@@ -413,8 +413,16 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
   orch consult 副组长评估）
 → 组长裁决 approve（入 backlog FIFO）/ reject（附理由）
 → 审批回复存 state/replies/，下次派发该成员时自动附送（闭环告知）
-→ orch dispatch devops 自动附 backlog 队首 → devops worktree 实施（§7）
-  → 测试验证 → git 提交推送 → outbox 交付 + 台账登记
+→ approve 默认**自动唤醒** devops：分离后台进程 `_drain-devops` 持 state/devops.lock
+  锁 FIFO 串行消化整个 backlog（组长零阻塞、零轮询，对齐 §4.5 等待模型）
+  · --no-wake 只入队不唤醒；锁忙（已有 worker）不重复 spawn，本项由当前 drain 接手
+  · 锁 stale（持有进程死 / 锁龄 >6h）自动接管，防 worker 崩溃后死锁
+→ drain 每项：取队首 → 生成任务书（含合并安全句）→ dispatch devops worktree 实施（§7）
+  → 测试验证 → git 提交（不 push）→ 交付
+  · 成功 → backlog 销账（done，记 commit hash）
+  · 失败（blocked/run_failed）→ 标记 needs_leader 并**跳过**（一项卡住不阻塞全队列）
+→ run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
+  态（running/idle/stale）、最近 run 摘要、needs_leader 提醒（组长据此重派/改任务书/上报）
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
 ```
 
