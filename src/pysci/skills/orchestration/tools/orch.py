@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from . import drain as _drain
 from . import plans as _plans
 from . import sessions as _sessions
 from . import sync as _sync
@@ -95,6 +96,36 @@ def cmd_status(args: argparse.Namespace) -> int:
     for b in back[:5]:
         print(f"  [backlog] {b['id']}: {str(b.get('summary', ''))[:60]}")
 
+    print("== devops worker ==")
+    lst = _drain.lock_status()
+    if lst["state"] == "running":
+        print(
+            f"  ▶ running（pid {lst['pid']}，启动 {lst['started']}，"
+            f"日志 {lst['run_log']}）"
+        )
+    elif lst["state"] == "stale":
+        print(
+            f"  ⊘ stale 锁（pid {lst['pid']} 已死/超龄；下次 approve 或 drain 自动接管）"
+        )
+    else:
+        print("  idle（无 drain worker 运行）")
+    done = _drain.latest_done()
+    if done:
+        print(
+            f"  最近 run：{done.get('name')}——处理 {done.get('count', 0)} 项，"
+            f"耗时 {done.get('elapsed_s', '?')}s"
+        )
+        for it in done.get("items", [])[-5:]:
+            extra = f" commit={it['commit']}" if it.get("commit") else ""
+            print(f"    - {it.get('id')}: {it.get('status')}{extra}")
+    needs_leader = _workflow.backlog_by_status("needs_leader")
+    if needs_leader:
+        print(
+            f"  [!] needs_leader 条目 {len(needs_leader)}（drain 跳过，待组长处理）："
+        )
+        for b in needs_leader[:5]:
+            print(f"    - {b['id']}: {str(b.get('summary', ''))[:50]}")
+
     print("== 台账（近 5 跳）==")
     for e in read_all()[-5:]:
         checks_s = ",".join(c["verdict"] for c in e.checks) or "-"
@@ -108,6 +139,11 @@ def cmd_status(args: argparse.Namespace) -> int:
     print("[NEXT]")
     if sugg:
         print("  有待审批建议：uv run pysci-orch suggestions 查看 → approve/reject")
+    if needs_leader:
+        print(
+            "  有 needs_leader 条目（drain 跳过）：查 state/backlog.json 后决定"
+            "重派 / 改任务书 / 上报用户"
+        )
     if live:
         print(
             '  推进进行中计划：uv run pysci-orch plan run <id> --text "<当前环节任务书>"'
@@ -133,15 +169,7 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
             print("[!] backlog 无 pending 条目")
             return 2
         took_backlog_id = item["id"]
-        text = (
-            f"基础设施改进任务（backlog FIFO 队首，id={item['id']}）：\n\n"
-            f"摘要：{item.get('summary', '')}\n\n"
-            f"证据：{item.get('evidence') or item.get('evidence_file', '（见建议归档）')}\n\n"
-            f"组长附注：{item.get('note', '（无）')}\n\n"
-            "要求：以 worktree 隔离实施（你的 devops 技能有作业规程）；完整测试后合并、"
-            "commit（不 push——push 须用户授权）；交付中报告改动清单与验证证据，"
-            f"并注明 backlog id={item['id']} 以便销账。"
-        )
+        text = _workflow.backlog_task_text(item)
         if not args.name:
             args.name = item["id"]
     if not (text or task_file):
@@ -365,6 +393,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("approve", help="采纳建议 → backlog + 审批回复附送")
     p.add_argument("suggestion_id")
     p.add_argument("--note", default="")
+    p.add_argument(
+        "--no-wake",
+        action="store_true",
+        help="入队后不自动唤醒 devops 后台消化（默认唤醒；锁忙时本就不重复唤醒）",
+    )
     p.set_defaults(func=_workflow.cmd_approve)
 
     p = sub.add_parser("reject", help="否决建议 → 仅回复附送")
@@ -436,6 +469,17 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("sync", help="[底层] 技能真本 → 部署副本同步")
     p.add_argument("--check", action="store_true")
     p.set_defaults(func=cmd_sync)
+
+    # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
+    p = sub.add_parser(
+        "_drain-devops",
+        help="[内部] approve 自动唤醒派生的 backlog drain 循环（下划线前缀=内部命令）",
+    )
+    p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
+    p.add_argument(
+        "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
+    )
+    p.set_defaults(func=_drain.cmd_drain_devops)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
