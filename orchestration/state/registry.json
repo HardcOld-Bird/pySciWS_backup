@@ -22,6 +22,17 @@
           "status": "active"
         }
       ]
+    },
+    "devops": {
+      "pod": "orchestration/pods/devops",
+      "model_tier": "max",
+      "max_turns": 80,
+      "timeout_s": 10800,
+      "mcp_config": ".qoder/mcp.json",
+      "extra_dirs": [
+        "."
+      ],
+      "sessions": []
     }
   },
   "checks": {

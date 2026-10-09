@@ -14,3 +14,8 @@ targets = ["orchestration/pods/figure/.qoder/skills"]
 name = "orchestration"
 source = "orchestration/skills/orchestration"
 targets = [".qoder/skills"]   # 部署到项目根 = 组长专属技能（skills 不向下泄漏，Phase 0 实锤）
+
+[[skills]]
+name = "devops"
+source = "orchestration/skills/devops"
+targets = ["orchestration/pods/devops/.qoder/skills"]

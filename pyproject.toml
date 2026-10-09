@@ -109,6 +109,8 @@ pysci-model3d = "pysci.skills.modeling3d.tools.model3d:main"
 # 编排 CLI：组长专属工作通道（派发/会话池/台账/技能部署；设计见 orchestration/README.md）。
 # 与前 7 个「末端技能 CLI」不同，这是管理设施——服务对象是组长（TUI 主会话）而非组员。
 pysci-orch = "pysci.skills.orchestration.tools.orch:main"
+# devops 组员工具（worktree/部署/巡检）：与 orch 严格分离——orch 服务组长，dev 服务 devops 组员。
+pysci-dev = "pysci.skills.devops.tools.dev:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra
