@@ -117,19 +117,12 @@ alwaysApply: true
 
 ## 4. 网络代理约定（跨技能生效）
 
-- **默认一律直连**：不设任何 `http(s)_proxy` 环境变量，git 全局 / 局部配置均不设 `http.proxy`。
-  **文献调研访问期刊数据库 / 下载正版全文绝对禁止走代理**（走代理即丧失机构访问资格）。
-- **仅当访问 GitHub 系域名（github.com、api.github.com、raw.githubusercontent.com）
-  超时或被重置时**，改用本机常驻代理 `http://127.0.0.1:7890` 重试。
-  实测（2026-10-05）：直连 github.com 15 s 超时；经该代理 HTTP 200 / 0.77 s，
-  `git ls-remote` 经代理成功。
-- **代理只允许单命令级注入，命令结束即失效，不存在「恢复原状」步骤**：
-  - git：`git -c http.proxy=http://127.0.0.1:7890 push ...`
-  - curl：`curl -x http://127.0.0.1:7890 ...`
-  - Git Bash 环境变量前缀：`https_proxy=http://127.0.0.1:7890 <cmd>`（仅此一条命令生效；
-    环境变量名用小写；PowerShell 下该语法需 set + remove、会留会话状态，优先用前两种）。
-- ❌ 禁止任何持久化代理设置：`git config --global/--local http.proxy`、`setx`、
-  写入 profile 或会话级 `$env:` / `export` 后不清理。
+- **默认直连；访问期刊数据库 / 下载正版全文绝对禁止走代理**（走代理即丧失机构访问资格）。
+- 访问国内常无法直连的站点（GitHub、Google、YouTube 等）失败时，用本机代理
+  `http://127.0.0.1:7890` 重试（2026-10-05 实测可用），**仅限单命令级注入，禁止持久化**：
+  `git -c http.proxy=http://127.0.0.1:7890 push ...`、`curl -x http://127.0.0.1:7890 ...`、
+  bash 前缀 `https_proxy=http://127.0.0.1:7890 <cmd>`。
+- ❌ 禁止 `git config --global/--local http.proxy`、`setx`、写 profile、`export`/`$env:` 残留。
 
 ---
 
