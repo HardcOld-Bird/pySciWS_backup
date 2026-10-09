@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ../../guards/delivery-gate.mjs",
+            "name": "delivery-gate",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ../../guards/pod-guard.mjs",
+            "name": "pod-guard",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

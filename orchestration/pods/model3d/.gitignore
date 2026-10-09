@@ -1,0 +1,5 @@
+# 可再生物与草稿区不入库（README §2 git 策略）：
+# 部署技能副本由 orch skills sync 从真本再生；bench/outbox 是运行期产物。
+bench/
+outbox/
+.qoder/skills/
