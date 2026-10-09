@@ -145,6 +145,10 @@ def build_env(
     """
     env = dict(os.environ)
     env["PYTHONUTF8"] = "1"
+    # 组员裸 pysci-X 命令可用性不依赖组长会话环境快照的时效：显式注入 venv Scripts
+    # （旧会话快照可能早于 ~/.bashrc 的 PATH 追加；charter 的 uv run fallback 仍保留兜底）
+    scripts_dir = str(PROJECT_ROOT / ".venv" / "Scripts")
+    env["PATH"] = scripts_dir + os.pathsep + env.get("PATH", "")
     env["PYSCI_TASK_DIRS"] = ";".join(
         task_dirs
     )  # 固定分号：Windows 路径含冒号，不能用 os.pathsep
