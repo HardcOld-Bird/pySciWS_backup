@@ -71,3 +71,11 @@
   `mkdir` + `sync` 再生（worktree 内建了也不随合并 transfer）。settings 模板两件事必带：
   两个 hook 接线 + `"agentsMdExcludes": ["**/leader-only.md"]`（组长专属根规则；写 `**/*.md`
   会连 `basic.md` 公约数一起吞掉）。勿把 pod 自建规则命名成 `leader-only*`（撞排除 glob）。
+- **agentsMdExcludes 生效性机械哨兵（2026-10-10 建，backlog 20261010-165408-devops）**：
+  静态 doctor 只验 settings 写了 glob、验不出 CLI 真据此排除。`pysci-dev probe` 在 Temp
+  `git init` 造自足 fixture：两枚 always_on 规则各带不可猜 token（keep/hide），control
+  （不排除）与 withexclude（`**/hide.md`）各跑一跳「列出上下文所有 TOK- 标记」，因果断言
+  （hide 在 control 现 + 在 withexclude 消）才判 ok，不灵敏则 inconclusive（重试、绝不误绿）。
+  结论写**无时间戳**台账 `state/agents-md-excludes-probe.json`（staleness=hash{cli_version,
+  排除面}，仅 CLI 升级或 glob 面变时复测），doctor 读它定三档。与预算审计互补：
+  预算量落盘字节，probe 验实际注入。

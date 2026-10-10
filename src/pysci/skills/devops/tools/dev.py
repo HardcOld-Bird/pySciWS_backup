@@ -6,6 +6,7 @@
     ... dev sync [--check]                   # 技能真本→部署副本（复用 orchestration.sync 引擎）
     ... dev worktree add|remove|list [<name>]
     ... dev skilltax [--apply|--probe]       # 平台技能清单税：量、落关停配置、复测键义
+    ... dev probe [--json|--no-ledger]       # agentsMdExcludes 生效性机械探针：因果 A/B、写台账
 
 作业规程全文见 devops 技能 SKILL.md（部署于 devops pod）；设计依据 orchestration/README.md §7。
 """
@@ -183,8 +184,20 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             f"（保留 {list(_tax.KEEP_ON_PODS)}）"
         )
     print()
+    # agentsMdExcludes 生效性哨兵（backlog 20261010-165408-devops）：静态段只证明 settings
+    # 写了排除 glob；此段读机械探针台账，证明 CLI 真据此把组长专属根规则挡在组员会话外。
+    # 机制判假=真越权回归（硬失败）；未跑/CLI 或排除面变更=advisory（headless 昂贵，不硬失败）。
+    print("== agentsMdExcludes 生效性哨兵 ==")
+    from pysci.skills.devops.tools import probe as _probe
+
+    level, msg = _probe.doctor_status()
     print(
-        f"[{'√ 全部健康' if not bad else f'✗ {bad} 项问题（pod/部署台账/预算/平台税）'}]"
+        f"  [{'✗' if level == 'fail' else '!' if level == 'advisory' else '√'}] {msg}"
+    )
+    bad += 1 if level == "fail" else 0
+    print()
+    print(
+        f"[{'√ 全部健康' if not bad else f'✗ {bad} 项问题（pod/部署台账/预算/平台税/排除哨兵）'}]"
     )
     return 0 if not bad else 2
 
@@ -263,6 +276,21 @@ def cmd_skilltax(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# probe（agentsMdExcludes 生效性哨兵）
+# ---------------------------------------------------------------------------
+def cmd_probe(args: argparse.Namespace) -> int:
+    """跑 agentsMdExcludes 因果 A/B 探针、写台账、打印机制结论。"""
+    from pysci.skills.devops.tools import probe as _probe
+
+    argv: list[str] = []
+    if args.json:
+        argv += ["--json"]
+    if args.no_ledger:
+        argv += ["--no-ledger"]
+    return _probe.main(argv)
+
+
+# ---------------------------------------------------------------------------
 # 门面
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
@@ -298,6 +326,19 @@ def main(argv: list[str] | None = None) -> int:
         "--apply", action="store_true", help="把应关平台技能写进各 pod settings"
     )
     p.set_defaults(func=cmd_skilltax)
+
+    p = sub.add_parser(
+        "probe",
+        help="agentsMdExcludes 生效性机械探针：Temp 因果 A/B（hide token 在 control 现、"
+        "在 withexclude 消），结论写 git 跟踪台账；doctor 据此报警",
+    )
+    p.add_argument("--json", action="store_true", help="只打印 verdict JSON")
+    p.add_argument(
+        "--no-ledger",
+        action="store_true",
+        help="只复测不落台账（临时核查，不改动仓库）",
+    )
+    p.set_defaults(func=cmd_probe)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
