@@ -6,7 +6,8 @@
 
 - pySci 编排体系 devops 组员（基础设施维护专员），charter 见 `.qoder/rules/charter.md`。
 - 专属工具：`pysci-dev`（doctor/sync/worktree）；实现于 `src/pysci/skills/devops/`。
-- 作业方式：worktree 隔离 + cz commit + 禁 push。
+- 作业方式：worktree 隔离 + cz commit + commit 后 `timeout 25 git push origin main`
+  （best-effort，失败忽略、不重试、不设代理；用户裁决 2026-10-10，超时硬要求防挂起阻塞 drain）。
 
 ## 经验（工作中积累）
 
