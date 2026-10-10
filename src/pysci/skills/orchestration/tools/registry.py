@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -29,6 +31,22 @@ DEFAULT_MODELS: dict[str, str] = {
     "flash": "Qwen3.8-Flash",
     "flash_fallback": "",
 }
+
+#: 档位 → ``--list-models`` 人类名精确匹配表（用户裁决 2026-10-10，模型映射自动刷新）；
+#: registry.json 的 ``model_patterns`` 块可逐档覆盖。BYOK 命名是账号级配置（当前
+#: Qwen-3.8-Max/Flash），改名后更新这里或 registry——**精确匹配**是硬要求：内置
+#: ``Qwen3.8-Flash`` 与 BYOK ``Qwen-3.8-Flash`` 仅差一个连字符，模糊匹配必串档。
+DEFAULT_MODEL_PATTERNS: dict[str, str] = {
+    "max": "Qwen-3.8-Max",
+    "flash_fallback": "Qwen-3.8-Flash",
+    "flash": "Qwen3.8-Flash",
+}
+
+#: --list-models 的 BYOK 行：``人类名 (uuid)``；内置行为裸名（无 UUID）。
+_MODEL_LINE_RE = re.compile(
+    r"^(?P<name>.+?)\s+\((?P<uuid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+    r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\)\s*$"
+)
 
 
 def resolve_exe(registry: dict[str, Any] | None = None) -> Path:
@@ -185,6 +203,85 @@ class Registry:
             }
 
 
+# ---------------------------------------------------------------------------
+# 模型映射自动刷新（用户裁决 2026-10-10：--list-models 是唯一 name→UUID 目录，
+# settings.json 只有当前激活模型 UUID，无法监听；重配 BYOK 后下次 drain 自愈，零 daemon）
+# ---------------------------------------------------------------------------
+def list_models_output(*, timeout_s: int = 60) -> str:
+    """运行原生 exe ``--list-models``，返回合并输出（账户级查询，实测秒级）。
+
+    Raises:
+        FileNotFoundError: exe 未找到（resolve_exe）。
+        OSError / subprocess.TimeoutExpired: 调用失败/超时——是否 fail-open 由调用方决定。
+    """
+    exe = resolve_exe()
+    proc = subprocess.run(
+        [str(exe), "--list-models"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout_s,
+    )
+    return (proc.stdout or "") + (proc.stderr or "")
+
+
+def parse_model_catalog(output: str) -> dict[str, str]:
+    """解析 --list-models 输出 → ``{人类名: UUID 或名自身}``。
+
+    实测格式（2026-10-10）：表头行 ``MODEL``；BYOK 行 ``Name (uuid)``；内置行裸名
+    （无 UUID）→ 值即人类名本身（-m 直接可用）。空行/表头跳过，其余裸名行按内置收录。
+    """
+    catalog: dict[str, str] = {}
+    for line in (output or "").splitlines():
+        line = line.strip()
+        if not line or line.upper() == "MODEL":
+            continue
+        m = _MODEL_LINE_RE.match(line)
+        if m:
+            catalog[m.group("name").strip()] = m.group("uuid")
+        else:
+            catalog[line] = line
+    return catalog
+
+
+def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
+    """按 --list-models 刷新 registry.models（drain 启动自愈 + 手动 refresh-models）。
+
+    以 model_patterns（registry.json 可覆盖 :data:`DEFAULT_MODEL_PATTERNS`）**精确匹配**
+    人类名；命中且与现值不同 → 写回 registry。未命中的档**保持现值不清空**——目录缺名
+    多为账户瞬时状态，宁旧勿空（清空 max 会静默改变计费渠道）。
+
+    Returns:
+        ``{"changed": {tier: {"old":…, "new":…}}, "missing": ["tier←名"…],
+        "catalog_size": n}``。
+
+    Raises:
+        ValueError: 目录解析为空（输出格式变化/exe 异常）；
+        以及 :func:`list_models_output` 的子进程异常——调用方 fail-open。
+    """
+    catalog = parse_model_catalog(list_models_output(timeout_s=timeout_s))
+    if not catalog:
+        raise ValueError("--list-models 输出解析为空目录（格式变化或 exe 异常？）")
+    reg = Registry.load()
+    patterns = {**DEFAULT_MODEL_PATTERNS, **reg.data.get("model_patterns", {})}
+    models = reg.data.setdefault("models", {})
+    changed: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    for tier, name in patterns.items():
+        if name not in catalog:
+            missing.append(f"{tier}←{name}")
+            continue
+        new = catalog[name]
+        old = models.get(tier)
+        if old != new:
+            models[tier] = new
+            changed[tier] = {"old": old, "new": new}
+    if changed:
+        reg.save()
+    return {"changed": changed, "missing": missing, "catalog_size": len(catalog)}
+
+
 def pod_session_key(pod: Path) -> str:
     """把 pod 绝对路径映射为 Qoder 的项目存储键（实测规则：非字母数字逐字符替换为 '-'）。
 
@@ -195,8 +292,6 @@ def pod_session_key(pod: Path) -> str:
         ``~/.qoder-cn/projects/`` 下的目录名，如
         ``D--XXXIIIGGG-projects-pySci-pySciWS-orchestration-pods-figure``。
     """
-    import re
-
     return re.sub(r"[^A-Za-z0-9]", "-", str(pod.resolve()))
 
 

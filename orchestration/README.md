@@ -263,6 +263,13 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
     用户开通）。**回退逻辑已实现**（backlog 20261010-flash-fallback）：do_dispatch
     遇 quota_exhausted 且该档配了非空 `<tier>_fallback`（异于当前型号）→ 换备用渠道
     重试一次；仍耗尽才归类 quota_exhausted 触发 drain 全局停止（见 §3.3 失败处理）；
+- **模型映射自动刷新**（用户裁决 2026-10-10）：BYOK 模型的人类名→UUID 目录只来自
+  `--list-models`（账户级；settings.json 仅存当前激活 UUID、无法监听），故 orch 在
+  **drain 启动时**跑 `--list-models` 按名称模式（`DEFAULT_MODEL_PATTERNS`：Qwen-3.8-Max→max、
+  Qwen-3.8-Flash→flash_fallback、内置无 UUID 的 Qwen3.8-Flash→flash；registry.model_patterns
+  可覆盖）刷新 registry.models，重配 BYOK 后下次 drain 自愈、零 daemon；手动 `orch
+  refresh-models` 同逻辑。**未命中档保持现值不清空**（宁旧勿空）；刷新只更新既有档的
+  UUID/名，**不改变哪个名对应哪个档**——那仍是护栏级（下方教训登记），改名须更新模式表；
 - 默认档位：组长（TUI）/deputy/reviewer/devops = **max**；7 专职组员 = **flash**；
   计划环节可覆盖（`steps[].model`）；
 - **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射改动属护栏级（影响全体
