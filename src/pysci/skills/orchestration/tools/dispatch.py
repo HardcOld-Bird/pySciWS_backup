@@ -28,6 +28,7 @@ from .runner import (
     build_command,
     build_env,
     new_session_id,
+    normalize_effort,
     run_headless,
 )
 
@@ -69,6 +70,7 @@ class DispatchOutcome:
     sid: str = ""
     session_name: str = ""
     task_file: str = ""
+    effort: str = ""  # 本跳实际所用的推理强度档位（""=跟随用户级默认）
     body: str = ""  # 交付正文（result/blocked 块内容）
     checks: list[dict] = field(default_factory=list)
     infra_suggestion: str = ""
@@ -179,6 +181,7 @@ def do_dispatch(
     slug: str | None = None,
     session: str = "latest",
     model_tier: str | None = None,
+    effort: str | None = None,
     max_turns: int | None = None,
     timeout: int | None = None,
     dirs: list[str] | None = None,
@@ -190,12 +193,25 @@ def do_dispatch(
 ) -> DispatchOutcome:
     """执行一跳派发（完整链路）。参数语义与 ``orch dispatch`` 一致。
 
+    推理强度（``effort``）来源优先级：**调用方覆盖**（CLI ``--effort``、plan 环节、
+    backlog 条目）> **registry 成员级** ``effort`` > 不传（跟随用户级默认=中）。
+    标注非法时**硬失败且不派发**（code=2）——exe 收到非法档位会启动即失败（实测 rc=1），
+    在本层先拦住才拿得到可读原因，也不白烧一跳、不写无意义台账行。
+
     Returns:
         DispatchOutcome（code=0 仅当 result 交付且声明的机械验收全过）。
     """
     reg = Registry.load()
     reg.ensure_member_defaults(member_id)
     m = reg.member(member_id)
+    try:
+        level = normalize_effort(effort) or normalize_effort(m.effort) or ""
+    except ValueError as exc:
+        if not quiet:
+            print(f"[!] effort 标注无效，未派发：{exc}")
+        return DispatchOutcome(
+            code=2, kind="run_failed", member=member_id, error=str(exc)
+        )
     if not m.pod.exists():
         if not quiet:
             print(f"[!] 成员 pod 不存在：{orchestration_rel(m.pod)}")
@@ -244,14 +260,21 @@ def do_dispatch(
     extra_dirs = list(m.raw.get("extra_dirs", []))
     all_dirs = list(dirs or []) + extra_dirs
     cmd = build_command(
-        m, prompt, session_id=sid, resume=resume, model=model, max_turns=max_turns
+        m,
+        prompt,
+        session_id=sid,
+        resume=resume,
+        model=model,
+        max_turns=max_turns,
+        effort=level,
     )
     env = build_env(m, all_dirs, deployed_skills=deployed_skills_for(m.pod))
 
     if not quiet:
+        eff = f"，effort {level}" if level else ""
         print(
             f"→ 派发 {member_id}（会话 {'续:' + sid[:8] if resume else '新:' + sid[:8]}"
-            f"，模型 {model or '(默认)'}，任务书 {taskbook.name}）"
+            f"，模型 {model or '(默认)'}{eff}，任务书 {taskbook.name}）"
         )
     rc, out, err = run_headless(
         cmd, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
@@ -278,6 +301,7 @@ def do_dispatch(
             resume=True,
             model=model,
             max_turns=max_turns,
+            effort=level,
         )
         rc, out, err = run_headless(
             cmd2, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
@@ -310,6 +334,7 @@ def do_dispatch(
                 resume=True,
                 model=model,
                 max_turns=max_turns,
+                effort=level,
             )
             rc, out, err = run_headless(
                 cmd3, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
@@ -334,6 +359,7 @@ def do_dispatch(
                 duration_ms=env_json.duration_ms,
                 credits=env_json.total_credits,
                 model=model,
+                effort=level,
                 ctx_ratio=env_json.context_usage_ratio,
                 permission_denials=len(env_json.permission_denials),
                 plan=plan,
@@ -351,6 +377,7 @@ def do_dispatch(
             sid=sid,
             session_name=name,
             task_file=orchestration_rel(taskbook),
+            effort=level,
             body=env_json.result[:800],
             envelope=env_json,
             error=err.strip()[-400:] or env_json.stop_reason,
@@ -382,6 +409,7 @@ def do_dispatch(
         duration_ms=env_json.duration_ms,
         credits=env_json.total_credits,
         model=model,
+        effort=level,
         ctx_ratio=env_json.context_usage_ratio,
         permission_denials=len(env_json.permission_denials),
         plan=plan,
@@ -405,6 +433,7 @@ def do_dispatch(
         sid=sid,
         session_name=name,
         task_file=orchestration_rel(taskbook),
+        effort=level,
         body=delivery.body,
         checks=check_results,
         infra_suggestion=delivery.infra_suggestion,

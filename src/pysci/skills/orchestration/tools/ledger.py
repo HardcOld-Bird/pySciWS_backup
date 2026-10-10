@@ -39,6 +39,10 @@ class LedgerEntry:
     # 完整计费留待未来，故此处**不做** token/账单核算，只补齐让既有部分数据可解释的最小维度。
     # model = 本跳实际派发的模型名（dispatch 解析 -m 后写入；旧台账无此字段→""）。
     model: str = ""
+    # effort = 本跳实际所用的推理强度档位（""=跟随用户级默认=中）。用户裁决 2026-10-10
+    # 的按项标注机制要靠台账做 A/B（同类项 high vs medium 的轮数/失败率/返工率），
+    # 缺这个字段就分不清哪一跳是被标注的——旧行无此字段→""。
+    effort: str = ""
     ctx_ratio: float = 0.0
     permission_denials: int = 0
     plan: str = ""  # 所属计划 id（Phase 2 起填充）

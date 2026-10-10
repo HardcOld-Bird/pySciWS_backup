@@ -87,6 +87,10 @@ class Member:
     max_turns: int = 60
     timeout_s: int = 7200
     mcp_config: str | None = ".qoder/mcp.json"
+    #: 成员级推理强度标注（可选，档位名见 runner.VALID_EFFORTS）。空 = 不覆盖，跟随
+    #: 用户级默认（中）。派发旗标 --effort / 计划环节 effort 覆盖它（backlog
+    #: 20261010-orch-effort-per-item，用户裁决 2026-10-10：不做全局 high，按项标注）。
+    effort: str = ""
     sessions: list[dict[str, Any]] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -168,6 +172,7 @@ class Registry:
             max_turns=int(raw.get("max_turns", 60)),
             timeout_s=int(raw.get("timeout_s", 7200)),
             mcp_config=raw.get("mcp_config", ".qoder/mcp.json"),
+            effort=str(raw.get("effort", "") or ""),
             sessions=list(raw.get("sessions", [])),
             raw=raw,
         )
@@ -187,6 +192,12 @@ class Registry:
                 "sessions": m.sessions,
             }
         )
+        # effort 是**可选**标注：非空才落键，空则移除——registry 里少一个恒为 "" 的
+        # 噪声键，且组长手改清空后不会残留旧档位。
+        if m.effort:
+            entry["effort"] = m.effort
+        else:
+            entry.pop("effort", None)
 
     def ensure_member_defaults(self, member_id: str) -> None:
         """为尚未注册的成员生成默认条目（pod 目录存在时才可用，dispatch 前调用）。"""

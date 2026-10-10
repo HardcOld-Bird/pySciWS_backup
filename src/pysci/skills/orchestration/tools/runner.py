@@ -29,6 +29,52 @@ PROTOCOL_REMINDER = """
 """.strip()
 
 
+#: 推理强度档位（原生 exe 接受的**实测**集合，2026-10-10：对每个值跑
+#: ``qoderclicn --reasoning-effort <v> --list-models`` 看退出码——auto/none/low/medium/
+#: high/xhigh/max/ultracode 与别名 off/disabled 均 rc=0，``min`` 等非法值 rc=1
+#: 「Invalid reasoning effort: … Valid values are: auto, none, low, medium, high,
+#: xhigh, max, ultracode」；大小写不敏感）。
+#: **不传本旗标 = 跟随用户级默认（中）**——用户裁决 2026-10-10：不做全局 high，只由组长
+#: 对推理密集项**按项**标 high（旗标/计划环节/backlog 条目/registry 成员四层来源）。
+VALID_EFFORTS: tuple[str, ...] = (
+    "auto",
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultracode",
+)
+EFFORT_ALIASES: dict[str, str] = {"off": "none", "disabled": "none"}
+
+
+def normalize_effort(value: object) -> str | None:
+    """把 effort 标注规范成 CLI 档位名。
+
+    Args:
+        value: 任意标注串（CLI 参数、registry/计划/backlog 字段）；``None``/空白 = 不覆盖。
+
+    Returns:
+        规范档位名；空标注返回 ``None``（意为跟随用户级默认，不透传旗标）。
+
+    Raises:
+        ValueError: 标注不在 :data:`VALID_EFFORTS` 内。exe 对非法值本身会**启动即失败**
+            （rc=1），但在我们这层先拦住才能给出可读的 ``[!]`` 提示、不烧跳、不往台账
+            里塞一条无意义记录（registry/条目来源的值可不经 argparse choices 直接到达）。
+    """
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    text = EFFORT_ALIASES.get(text, text)
+    if text not in VALID_EFFORTS:
+        raise ValueError(
+            f"无效 effort '{value}'；可用：{', '.join(VALID_EFFORTS)}"
+            "（别名 off/disabled→none；留空=跟随用户级默认）"
+        )
+    return text
+
+
 @dataclass
 class Envelope:
     """``-o json`` 结果 envelope 的感兴趣字段（Phase 0 实测字段清单）。"""
@@ -98,6 +144,7 @@ def build_command(
     resume: bool,
     model: str,
     max_turns: int | None = None,
+    effort: str | None = None,
     timeout_note: bool = True,
     exe: Path | None = None,
 ) -> list[str]:
@@ -110,6 +157,8 @@ def build_command(
         resume: True 用 ``--resume``，False 用 ``--session-id``。
         model: 具体模型名（已经过档位路由）。
         max_turns: 覆盖成员默认轮数上限。
+        effort: 推理强度档位（**已规范**的档位名，见 :func:`normalize_effort`）；
+            空/None 时不透传 ``--reasoning-effort``，跟随用户级默认（中）。
         timeout_note: 占位（保持签名稳定），未使用。
         exe: 覆盖注册表/默认 exe。
 
@@ -123,6 +172,8 @@ def build_command(
     cmd += ["--max-turns", str(max_turns or member.max_turns)]
     if model:
         cmd += ["-m", model]
+    if effort:
+        cmd += ["--reasoning-effort", effort]
     if member.mcp_config:
         # pod 相对路径：headless 以 pod 为 cwd，相对路径即 pod 内文件（Phase 0 实锤）
         cmd += ["--mcp-config", member.mcp_config, "--strict-mcp-config"]

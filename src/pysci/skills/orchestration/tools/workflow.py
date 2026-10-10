@@ -16,6 +16,7 @@ from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 from .dispatch import REPLIES_DIR, do_dispatch
 from .ledger import format_credits, read_all, summarize
 from .registry import orchestration_rel
+from .runner import normalize_effort
 
 SUGGESTIONS_DIR = ORCH_STATE_ROOT / "suggestions"
 BACKLOG_PATH = ORCH_STATE_ROOT / "backlog.json"
@@ -93,6 +94,18 @@ def backlog_take_first() -> dict | None:
     return None
 
 
+def _effort_key(item: dict) -> str:
+    """条目 effort 的**组包比较键**：规范档位名，空标注 → ""（=跟随用户级默认）。
+
+    非法标注不抛（fail-soft）：原样作键，让它自己当种子派发时由 do_dispatch 硬失败并
+    报出原因——组包阶段抛异常会拖垮整个 drain 循环。
+    """
+    try:
+        return normalize_effort(item.get("effort")) or ""
+    except ValueError:
+        return str(item.get("effort") or "").strip().lower()
+
+
 def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
     """取队首 pending 为**种子**（标记 in_progress），收集同 member（提请者）的 pending
     为**组包**（批量消化，backlog 20261010-batch-digest）。
@@ -106,6 +119,7 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
         组包中未被 devops 选取的项留待下轮，worker 死亡也只种子成孤儿。
         ``len(group) <= max_batch - 1``（护栏：单批 ≤ max_batch 项，含种子）。
         member 为空的条目不组包（按单项处理），兼容旧数据与手动入队条目。
+        effort 标注不同的条目也不组包（一批只有一跳，跳级参数不能一档多标）。
     """
     if not BACKLOG_PATH.exists():
         return None, []
@@ -118,12 +132,15 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
     seed["started_at"] = _now()
     seed["worktree"] = str(seed.get("id", ""))
     member = seed.get("member")
+    seed_effort = _effort_key(seed)
     group: list[dict] = []
     if member and max_batch > 1:
         for it in items:
             if it is seed or it.get("status") != "pending":
                 continue
-            if it.get("member") == member:
+            # 组包只吃**同档位**：一批只有一跳，effort 是跳级参数——混档会让被标的项
+            # 按种子档位跑完，静默污染台账 A/B 数据（backlog 20261010-orch-effort-per-item）
+            if it.get("member") == member and _effort_key(it) == seed_effort:
                 group.append(it)
                 if len(group) >= max_batch - 1:
                     break
@@ -313,17 +330,21 @@ def cmd_approve(args) -> int:
     member = _member_of(sugg)
     body = sugg.read_text(encoding="utf-8")
     first = next((ln.strip() for ln in body.splitlines()[2:] if ln.strip()), sugg.stem)
-    n = _backlog_append(
-        {
-            "id": sugg.stem,
-            "member": member,
-            "summary": first[:200],
-            "evidence_file": f"orchestration/state/suggestions/approved/{sugg.name}",
-            "status": "pending",
-            "proposed": _now(),
-            "note": args.note or "",
-        }
-    )
+    entry = {
+        "id": sugg.stem,
+        "member": member,
+        "summary": first[:200],
+        "evidence_file": f"orchestration/state/suggestions/approved/{sugg.name}",
+        "status": "pending",
+        "proposed": _now(),
+        "note": args.note or "",
+    }
+    # effort 是**入队时**的组长判断（推理密集项标 high，机械项不标=默认中）；drain 消化
+    # 时透传给该跳（见 drain._drain_batch）。getattr 同 no_wake：程序化调用方常建 partial 参数。
+    level = normalize_effort(getattr(args, "effort", None))
+    if level:
+        entry["effort"] = level
+    n = _backlog_append(entry)
     REPLIES_DIR.joinpath(member).mkdir(parents=True, exist_ok=True)
     (REPLIES_DIR / member / f"{sugg.stem}.md").write_text(
         f"# 组长审批：采纳（{_now()}）\n\n{args.note or '（无附注）'}\n\n"
