@@ -350,7 +350,8 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
   大小写不敏感；标注非法 → **在本层硬失败、不派发**（exe 自己也会启动即失败 rc=1，但先拦
   才有可读提示、不烧跳、不写无意义台账行）。每跳把实际所用档位记入台账
   `effort` 字段（`orch ledger` 显示 `[effort=high]`），据此做同类项 high vs medium 的
-  轮数/失败率/返工率对比，**数据驱动再调策略**；
+  轮数/失败率/返工率对比，**数据驱动再调策略**（聚合视图已就绪：`orch stats` / `orch ledger
+  --stats` 的 by_effort 段，§4.4，backlog 20261010-153041-devops）；
 - **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射改动属护栏级（影响全体
   成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止**已实现**（backlog
   20261010-orch-quota-awareness，见 §3.3 失败处理与 §6）。
@@ -460,6 +461,15 @@ steps:
 - 增量基准优先取上一跳记账水位：崩溃跳/手动 resume 造成的「记账外增长」计入同会话
   下一跳，总量守恒（漏记会扭曲成员间排名）；水位高于实测起点只可能是文件被重写
   （压缩/清理），此时以实测起点为准。
+
+**by_effort 聚合**（backlog 20261010-153041-devops）：`summarize` 除 `by_member`
+外并列 `by_effort` 桶——按 `Ledger.effort` 分档，空标注（跟随用户级默认=中）归入
+哨兵键 `"(默认)"`（永不与真实档 auto/none/low/medium/high 撞名）。每桶给
+`{hops, sum_turns, avg_turns, fail_hops, fail_pct, duration_ms, duration_pct,
+est_tokens_pct, credits_pct}`。`orch stats` 与 `orch ledger --stats` 两处**只在
+≥2 档时**打印 by_effort 段（单档 ≡ 全体，无对比信号可看）。用途：**按项标注机制
+（§3.5）的价值靠台账自然 A/B**——同类项 high vs medium 的轮均与返工率就是「档位
+策略应否调整」的直接读数，替代此前手工导出 jsonl 逐行比对。
 
 ### 4.5 等待与唤醒模型（长任务零轮询）
 
