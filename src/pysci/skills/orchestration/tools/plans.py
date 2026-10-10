@@ -17,7 +17,7 @@ import yaml
 from pysci.paths import ORCH_STATE_ROOT
 
 from .dispatch import DispatchOutcome, do_dispatch
-from .ledger import format_credits, read_all, summarize
+from .ledger import format_credits, format_est_tokens, read_all, summarize
 
 PLANS_DIR = ORCH_STATE_ROOT / "plans"
 
@@ -318,11 +318,13 @@ def _report_plan_complete(plan_id: str, state: dict) -> None:
     entries = [e for e in read_all() if e.plan == plan_id]
     s = summarize(entries)
     print(
-        f"计划统计：{s['hops']} 跳，总耗时 {s['duration_ms'] / 1000:.0f}s，{format_credits(s)}"
+        f"计划统计：{s['hops']} 跳，总耗时 {s['duration_ms'] / 1000:.0f}s，"
+        f"{format_est_tokens(s)}，{format_credits(s)}"
     )
     for mid, row in sorted(s["by_member"].items()):
         print(
-            f"  {mid:<10} 跳数={row['hops']}  耗时占比={row['duration_pct']}%  credits占比={row['credits_pct']}%"
+            f"  {mid:<10} 跳数={row['hops']}  耗时占比={row['duration_pct']}%  "
+            f"est占比={row['est_tokens_pct']}%  credits占比={row['credits_pct']}%"
         )
     print()
     print("[NEXT]")

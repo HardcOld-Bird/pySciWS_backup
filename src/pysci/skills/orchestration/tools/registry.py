@@ -48,6 +48,20 @@ _MODEL_LINE_RE = re.compile(
     r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\)\s*$"
 )
 
+#: est_tokens 换算系数（**token/字符**）——启发式，非测量值。用户裁决 2026-10-10
+#: （backlog 20261010-ledger-est-tokens）：双渠道 envelope/jsonl 逐轮 usage 实锤全为 0、
+#: 平台网关无 usage/balance 路由 → 绝对精度不可得，改用「会话 jsonl 字符增量」做
+#: **相对排名**。既然只做排名，系数取任何固定值都不改变排序结果，只影响绝对数字的可读性；
+#: 关键是**双渠道同法同尺**（BYOK 与内置跳用同一系数，才可比）。
+#: 标定依据（2026-10-10 实测 devops 主会话 jsonl，6.28 M 字符）：非 ASCII 占比 4.0%、
+#: 中文以原生 UTF-8 存储（全文件仅 6 处 ``\uXXXX`` 转义）→ 字符数不被转义膨胀扭曲，
+#: 混合中英取 0.6 token/字符作粗估。registry.json 顶层 ``est_tokens_per_char`` 可覆盖。
+#: **绝对量偏高约 3–4×**（同会话实测对照：整段 est≈3.52 M tok，而 ctx_ratio 峰 0.9246
+#: × jsonl 内 contextWindow 1,000,000 ≈ 925 k 真实上下文 token）——jsonl 里的 uuid/
+#: timestamp/工具元数据不进上下文。常系数在**相对排名**中抵消，不影响裁决用途；若要拿
+#: 绝对值对外汇报，先按上面这条对照重新标定，别默认 0.6 是测量值。
+DEFAULT_TOKENS_PER_CHAR = 0.6
+
 
 def resolve_exe(registry: dict[str, Any] | None = None) -> Path:
     """定位 qoderclicn 原生 exe（`.cmd` 包装器剥引号，程序化调用必须直连 exe）。
@@ -152,6 +166,20 @@ class Registry:
     def checks(self) -> dict[str, dict[str, Any]]:
         """check 类型 → {cmd: [...含 {path} 占位], cwd: project|pod}。"""
         return self.data.get("checks", {})
+
+    @property
+    def est_tokens_per_char(self) -> float:
+        """est_tokens 换算系数（见 :data:`DEFAULT_TOKENS_PER_CHAR`，registry 可配）。
+
+        fail-open：缺失/非数/非正 → 回落默认。系数只让估算失准，不该拖垮派发或
+        台账写入（写进台账的是**已换算值**，故还须把字符增量原值一并记下，见
+        LedgerEntry.delta_chars——改系数后可重算历史而不必重跑派发）。
+        """
+        try:
+            value = float(self.data.get("est_tokens_per_char"))
+        except (TypeError, ValueError):
+            return DEFAULT_TOKENS_PER_CHAR
+        return value if value > 0 else DEFAULT_TOKENS_PER_CHAR
 
     def member(self, member_id: str) -> Member:
         """按 id 取成员条目。
@@ -322,6 +350,7 @@ def orchestration_rel(path: Path) -> str:
 #: 便于 doctest/调试的常量再导出。
 __all__ = [
     "DEFAULT_MODELS",
+    "DEFAULT_TOKENS_PER_CHAR",
     "Member",
     "ORCHESTRATION_ROOT",
     "REGISTRY_PATH",

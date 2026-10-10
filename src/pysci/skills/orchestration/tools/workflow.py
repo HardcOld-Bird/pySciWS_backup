@@ -14,7 +14,7 @@ from pathlib import Path
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from .dispatch import REPLIES_DIR, do_dispatch
-from .ledger import format_credits, read_all, summarize
+from .ledger import format_credits, format_est_tokens, read_all, summarize
 from .registry import orchestration_rel
 from .runner import normalize_effort
 
@@ -505,12 +505,12 @@ def cmd_stats(args) -> int:
         print(f"== {title} ==")
         print(
             f"  跳数={s['hops']}  总耗时={s['duration_ms'] / 1000:.0f}s  "
-            f"{format_credits(s)}"
+            f"{format_est_tokens(s)}  {format_credits(s)}"
         )
         for mid, row in sorted(s["by_member"].items()):
             print(
                 f"  {mid:<10} 跳数={row['hops']:<4} 耗时占比={row['duration_pct']}%  "
-                f"credits占比={row['credits_pct']}%"
+                f"est占比={row['est_tokens_pct']}%  credits占比={row['credits_pct']}%"
             )
         kinds: dict[str, int] = {}
         for e in sub:
