@@ -1,0 +1,18 @@
+[08:01:47] [▶] drain 启动（pid=11592, dry=False）
+[08:01:47] [→] 消化 20261009-discover-pipeline-fake-green: runner.discover_pipeline() src 优先：图目录内定制管线被 src 脚手架占位文件静默压制，
+[08:18:57] [√] 20261009-discover-pipeline-fake-green 完成（1030.0s，commit=-）
+[08:18:57] [→] 消化 20261009-audit-width-masked: audit/build 不带 --width 时设计宽度取 STYLE.yaml，且 load_style_config
+[08:32:51] [√] 20261009-audit-width-masked 完成（833.2s，commit=-）
+[08:32:51] [→] 消化 20261009-taskbook-cli-signature: 任务书/文档中 build 命令示例与 CLI 签名不符（build 只收 figdir 位置参数，示例写成 build
+[08:41:05] [√] 20261009-taskbook-cli-signature 完成（494.8s，commit=-）
+[08:41:05] [→] 消化 20261009-byok-cost-accounting: BYOK 档位下 envelope 的 total_credits/usage tokens 恒为 0，台账成本维度缺失
+[08:54:15] [√] 20261009-byok-cost-accounting 完成（790.0s，commit=b13c91f）
+[08:54:15] [→] 消化 20261009-231455-reviewer: 审查任务书（rev-*）目前只含产物路径、rubric 路径与生产者 id，不嵌原生产任务的目标陈述；G2「与任务书目标
+[09:03:27] [√] 20261009-231455-reviewer 完成（552.1s，commit=437cd38）
+[09:03:27] [→] 消化 20261010-003127-devops: ① 缺陷类——**worktree 内 `pysci-dev sync` 污染 `skills-deployed.jso
+[09:25:36] [√] 20261010-003127-devops 完成（1329.0s，commit=-）
+[09:25:36] [→] 消化 20261010-paper-search-mcp-down: paper-search-mcp（uvx）在用户级清零前即 Disconnected，lit/reviewer/depu
+[09:29:58] [!] 20261010-paper-search-mcp-down 跳过→needs_leader（run_failed）：stop_sequence
+[09:29:58] [→] 消化 20261010-orch-taskbook-newline: orch write_taskbook 写 inbox 任务书不带结尾换行符，触发 pre-commit end-of-
+[09:30:13] [!] 20261010-orch-taskbook-newline 跳过→needs_leader（run_failed）：stop_sequence
+[09:30:13] [√] drain 结束：处理 8 项，耗时 5305.2s → orchestration\state\devops-runs\20261010-080147.done

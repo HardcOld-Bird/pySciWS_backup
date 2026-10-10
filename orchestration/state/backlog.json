@@ -15,52 +15,68 @@
     {
       "id": "20261009-discover-pipeline-fake-green",
       "member": "figure",
-      "status": "pending",
+      "status": "done",
       "summary": "runner.discover_pipeline() src 优先：图目录内定制管线被 src 脚手架占位文件静默压制，build 出占位图但流程显示成功（假绿）",
       "evidence": "组员交付记录：figdir 内 fig0_orch_smoke.py 完整，但 build 渲染的是 src 占位管线；无告警。期望：build 时若 figdir 与 src 同时存在同名管线，打印实际选用者；或提供 --pipeline-in-figdir / STYLE.yaml pipeline: 覆盖项",
-      "proposed": "2026-10-09"
+      "proposed": "2026-10-09",
+      "started_at": "2026-10-10T08:01:47+08:00",
+      "done_at": "2026-10-10T08:18:57+08:00",
+      "note": "drain 自动销账（commit 未报告）"
     },
     {
       "id": "20261009-audit-width-masked",
       "member": "figure",
-      "status": "pending",
+      "status": "done",
       "summary": "audit/build 不带 --width 时设计宽度取 STYLE.yaml，且 load_style_config 取第一个存在的文件而非逐键合并——研究线根 STYLE.yaml 的 width:double 会掩盖单栏图的宽度判定（85mm 产物按 170mm 目标 PASS，假绿）",
       "evidence": "实测：figdir 无 STYLE.yaml 时 audit 报 width_mm:170.0/target_width_mm:170.0，而 out/ 交付件实际 85mm；写入 figdir STYLE.yaml width:single 后判定才正确。期望：产物宽度与判定目标不一致至少 WARN，或 STYLE.yaml 逐键继承父级",
-      "proposed": "2026-10-09"
+      "proposed": "2026-10-09",
+      "started_at": "2026-10-10T08:18:57+08:00",
+      "done_at": "2026-10-10T08:32:51+08:00",
+      "note": "drain 自动销账（commit 未报告）"
     },
     {
       "id": "20261009-taskbook-cli-signature",
       "member": "figure",
-      "status": "pending",
+      "status": "done",
       "summary": "任务书/文档中 build 命令示例与 CLI 签名不符（build 只收 figdir 位置参数，示例写成 build gain_ep fig0_orch_smoke 会 unrecognized arguments）——需统一 charter/任务书模板/SKILL.md 的命令范式",
       "evidence": "组员按任务书步骤 2 照抄报 unrecognized arguments，自行改用 build '<figdir>' 成功。期望：模板统一为 build 'data/research/<n>_<线>/article/figures/<slug>'",
-      "proposed": "2026-10-09"
+      "proposed": "2026-10-09",
+      "started_at": "2026-10-10T08:32:51+08:00",
+      "done_at": "2026-10-10T08:41:05+08:00",
+      "note": "drain 自动销账（commit 未报告）"
     },
     {
       "id": "20261009-byok-cost-accounting",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "summary": "BYOK 档位下 envelope 的 total_credits/usage tokens 恒为 0，台账成本维度缺失——评估替代计量（duration/轮数已有；或经 BYOK 供应商侧账单对账、或 usage 字段在不同 output-format 下的可用性）",
       "evidence": "Phase 0/1 实测：-m Qwen3.8-Flash/Max 与默认 BYOK 模型下 total_cost_usd=0、usage.input_tokens=0、modelUsage.contextWindow=0；仅 context_usage_ratio 有效。用户裁决：BYOK 为主力模式，计费实现留待未来完善（2026-10-09）",
-      "proposed": "2026-10-09"
+      "proposed": "2026-10-09",
+      "started_at": "2026-10-10T08:41:05+08:00",
+      "done_at": "2026-10-10T08:54:15+08:00",
+      "note": "drain 自动销账（commit b13c91f）"
     },
     {
       "id": "20261009-231455-reviewer",
       "member": "reviewer",
       "summary": "审查任务书（rev-*）目前只含产物路径、rubric 路径与生产者 id，不嵌原生产任务的目标陈述；G2「与任务书目标一致」因此只能依赖生产者自写的 notes.md 重构意图，与 charter 的独立性纪律（不参考生产者自述）存在张力。建议派发 review 任务书时从原生产任务书摘一段「目标陈述」字段嵌入，使 G2 可独立核验。场景：本轮 fig0_orch_smoke 审查中 G2 证据",
       "evidence_file": "orchestration/state/suggestions/approved/20261009-231455-reviewer.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-09T23:15:41+08:00",
-      "note": "采纳：review 任务书应从原生产任务书自动摘录「目标陈述」嵌入，使 G2 可独立核验、消除对生产者自述的依赖。实现建议：cmd_review 增加 --goal-from <origin 最近任务书> 自动摘录（或 orch 在 reviews 状态中登记 origin 任务书路径供 reviewer 只读访问）。优先级中——不阻塞当前流程。"
+      "note": "drain 自动销账（commit 437cd38）",
+      "started_at": "2026-10-10T08:54:15+08:00",
+      "done_at": "2026-10-10T09:03:27+08:00"
     },
     {
       "id": "20261010-003127-devops",
       "member": "devops",
       "summary": "① 缺陷类——**worktree 内 `pysci-dev sync` 污染 `skills-deployed.json`，合并后 main 报漂移**：",
       "evidence_file": "orchestration/state/suggestions/approved/20261010-003127-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-10T00:32:39+08:00",
-      "note": "采纳，根因定位出色。修复方向建议：为 orchestration/skills/** 与工作区文本增加 .gitattributes 规范化（或 sync 的 tree_hash 在读取时统一换行），二者择一由你评估；修复后 doctor 增加一项「sync --check 漂移」联动巡检。优先级中。"
+      "note": "drain 自动销账（commit 未报告）",
+      "started_at": "2026-10-10T09:03:27+08:00",
+      "done_at": "2026-10-10T09:25:36+08:00"
     },
     {
       "id": "20261010-paper-search-mcp-down",
@@ -68,7 +84,10 @@
       "status": "pending",
       "summary": "paper-search-mcp（uvx）在用户级清零前即 Disconnected，lit/reviewer/deputy 的 pod mcp.json 中同样无法连接——排查 uvx 包安装/启动错误（uvx paper-search-mcp 手动跑一次看 stderr），修复或从三个 pod 的 mcp.json 移除",
       "evidence": "mcp list（用户级时期与 pod strict 时期）均显示 ✗ Disconnected；lit 会话内工具清单仅 arxiv/zotero。arxiv 首轮 uvx 冷启动偶发慢（复跑即好），一并观察",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T09:25:36+08:00",
+      "needs_leader_at": "2026-10-10T09:29:58+08:00",
+      "note": "drain 首轮 run_failed(stop_sequence, turns=1)——devops 会话疲劳，已归档轮换，重置重排"
     },
     {
       "id": "20261010-orch-taskbook-newline",
@@ -76,7 +95,10 @@
       "status": "pending",
       "summary": "orch write_taskbook 写 inbox 任务书不带结尾换行符，触发 pre-commit end-of-file-fixer 拦截含任务书的提交（本笔 Phase 4 提交实测被撞回）",
       "evidence": "复现：dispatch 任意任务后 git add inbox 任务书并 commit → end-of-file-fixer Failed 并改写文件。期望：write_taskbook 落盘文本以 \n 结尾（dispatch.py 两处 write_text）",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T09:29:58+08:00",
+      "needs_leader_at": "2026-10-10T09:30:13+08:00",
+      "note": "drain 首轮 run_failed(stop_sequence, turns=1)——devops 会话疲劳，已归档轮换，重置重排"
     },
     {
       "id": "20261010-orch-auto-wake-devops",
@@ -87,6 +109,22 @@
       "proposed": "2026-10-10",
       "note": "bfb3754 实施 + 8c7a7d7 合并；组长手动销账（该条目不走 drain 队列）",
       "done_at": "2026-10-10T08:05:00+08:00"
+    },
+    {
+      "id": "20261010-drain-orphan-reclaim",
+      "member": "leader",
+      "status": "pending",
+      "summary": "drain 启动时回收孤儿 in_progress 条目：backlog_take_first 标记 in_progress 后若 worker 被杀，条目永久卡死（take_first 只找 pending）。启动时应检测 in_progress 且锁持有者已死/无锁的条目并重置为 pending",
+      "evidence": "代码审查确认：workflow.backlog_take_first 仅筛 pending；drain 无 reclaim 逻辑。场景：drain 进程在 take_first 与 backlog_complete 之间被杀（OS 关机/手动 kill）",
+      "proposed": "2026-10-10"
+    },
+    {
+      "id": "20261010-drain-cooperative-stop",
+      "member": "leader",
+      "status": "pending",
+      "summary": "为 drain 增加协作式停止：orch drain-stop 命令写 state/devops.cancel；drain 每项间隙检查该文件→干净退出（释放锁、写部分 .done 摘要、cancel 文件自删）；orch status 展示停止方式。补足「分离进程无规范停止手段」的缺口",
+      "evidence": "用户问询（2026-10-10）：detached drain 目前只能手动 kill pid 或 OS 关机终止；kill 于条目中途会留下孤儿 in_progress（与 20261010-drain-orphan-reclaim 互补）",
+      "proposed": "2026-10-10"
     }
   ]
 }
