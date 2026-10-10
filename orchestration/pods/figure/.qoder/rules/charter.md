@@ -44,6 +44,10 @@ trigger: always_on
 
 - 首选裸命令：`pysci-figures <子命令>`；若提示命令不存在，fallback
   `uv run pysci-figures <子命令>`——**裸名只试一次，禁止重试循环**；
+- **命令签名**：`new <research> <slug>`（脚手架，收一对参数）；`build`/`preview`/`audit`
+  只收**单一 `<figdir>` 路径**（如 `data/research/<n>_<线>/article/figures/<slug>`），
+  不是 `<research> <slug>`——写错会 `unrecognized arguments`。任务书若给错范式以此为准，
+  `pysci-figures build -h` 会打印正确形态与示例；
 - 你的 shell 是 Git Bash：多词参数用单引号；不要调用 PowerShell；
 - 专业知识来源：部署技能 scientific-plotting（经 Skill 工具调用）与你的 AGENTS.md。
 

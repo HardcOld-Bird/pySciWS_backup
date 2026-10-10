@@ -56,10 +56,10 @@ supported precisely: `raster-panel` crops the axis frame via the comsol export s
 | `build <figdir>` | Producing deliverables | EPS/PDF/SVG/PNG + `_preview.png` in `out/` |
 | `preview <figdir>` | Fast visual iteration (no deliverables) | `_preview.png` only |
 | `audit <figdir>` | Checking publication compliance | PASS/FAIL report |
-| `raster-panel --image I --out O [--sidecar S --overlay spec.json]` | Overlaying annotations/placeholder panels on an external render (COMSOL PNG) | single-panel PNG with data-coord overlays |
+| `raster-panel --image I --out O [--sidecar S --overlay spec.json]` | Overlaying annotations on an external COMSOL PNG | single-panel PNG with data-coord overlays |
 | `list <research>` | Seeing existing figure pipelines | pipeline inventory |
 
-Run `figures <command> -h` for the full option list.
+Run `figures <command> -h` for options. **`new`: `<research> <slug>`; `build`/`preview`/`audit`: one `<figdir>` path.**
 
 ## Quick start: zero → submission-grade figure
 
@@ -73,7 +73,7 @@ Run `figures <command> -h` for the full option list.
 ```
 
 **Always Read the `_preview.png` before declaring done** — a figure can export cleanly yet look
-wrong (overlapping labels, cramped panels, wrong colors). The preview is your eyes.
+wrong. The preview is your eyes.
 
 ## The per-figure pipeline
 
