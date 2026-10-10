@@ -5,6 +5,7 @@
     uv run pysci-dev doctor [--pod <id>]     # pod 健康巡检
     ... dev sync [--check]                   # 技能真本→部署副本（复用 orchestration.sync 引擎）
     ... dev worktree add|remove|list [<name>]
+    ... dev skilltax [--apply|--probe]       # 平台技能清单税：量、落关停配置、复测键义
 
 作业规程全文见 devops 技能 SKILL.md（部署于 devops pod）；设计依据 orchestration/README.md §7。
 """
@@ -164,7 +165,27 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     bad += sum(1 for f in findings if f.over)
     bad += sum(1 for d in desc if d.over)
     print()
-    print(f"[{'√ 全部健康' if not bad else f'✗ {bad} 项问题（pod/部署台账/预算）'}]")
+    # 平台注入税关停核查（backlog 20261010-plugin-tax-probe）：每 pod settings 须
+    # 声明关掉跨 cwd 注入的平台技能，新 pod 漏配 = 每跳多交一份税。
+    print("== 平台技能税关停核查 ==")
+    from pysci.skills.devops.tools import skilltax as _tax
+
+    gaps: list[str] = []
+    for pod in pods:
+        gap = _tax.disabled_gap(pod)
+        if gap:
+            gaps.append(pod.name)
+            print(f"  [✗] {pod.name}：应关未关 {len(gap)} 项 ({_tax.short_names(gap)})")
+    bad += len(gaps)
+    if not gaps:
+        print(
+            f"  [√] 全部 pod 已声明关停 {len(_tax.recommended_disabled())} 项平台技能"
+            f"（保留 {list(_tax.KEEP_ON_PODS)}）"
+        )
+    print()
+    print(
+        f"[{'√ 全部健康' if not bad else f'✗ {bad} 项问题（pod/部署台账/预算/平台税）'}]"
+    )
     return 0 if not bad else 2
 
 
@@ -223,6 +244,25 @@ def cmd_worktree(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# skilltax（平台注入税）
+# ---------------------------------------------------------------------------
+def cmd_skilltax(args: argparse.Namespace) -> int:
+    """量各 pod 的平台技能清单税与关停缺口（``--probe`` 则实跑 headless 一跳复测键义）。"""
+    from pysci.skills.devops.tools import skilltax as _tax
+
+    argv: list[str] = []
+    if args.pod:
+        argv += ["--pod", args.pod]
+    if args.apply:
+        argv += ["--apply"]
+    if args.probe:
+        argv += ["--probe"]
+    if args.overlay:
+        argv += ["--overlay", args.overlay]
+    return _tax.main(argv)
+
+
+# ---------------------------------------------------------------------------
 # 门面
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
@@ -245,6 +285,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("action", choices=["add", "remove", "list"])
     p.add_argument("name", nargs="?")
     p.set_defaults(func=cmd_worktree)
+
+    p = sub.add_parser(
+        "skilltax",
+        help="量平台注入税（技能清单/agent 清单）与按 pod 关停缺口；--apply 落配置，"
+        "--probe 实跑一跳复测键义",
+    )
+    p.add_argument("--pod", help="只处理指定成员")
+    p.add_argument("--probe", action="store_true", help="造探针 pod 实跑 headless 一跳")
+    p.add_argument("--overlay", help="探针 settings 叠加层（JSON 串）")
+    p.add_argument(
+        "--apply", action="store_true", help="把应关平台技能写进各 pod settings"
+    )
+    p.set_defaults(func=cmd_skilltax)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
