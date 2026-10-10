@@ -149,6 +149,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         stem=args.stem,
         save_dpi=args.save_dpi,
         preview_dpi=args.preview_dpi,
+        prefer="figdir" if args.pipeline_in_figdir else None,
     )
     print(res.report())
     if res.ok:
@@ -167,6 +168,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
         palette=args.palette,
         stem=args.stem,
         preview_dpi=args.preview_dpi,
+        prefer="figdir" if args.pipeline_in_figdir else None,
     )
     print(res.report())
     if res.ok:
@@ -276,13 +278,15 @@ def cmd_list(args: argparse.Namespace) -> int:
     found = False
     for d in sorted(p for p in root.iterdir() if p.is_dir()):
         try:
-            pipeline = _runner.discover_pipeline(d)
+            # 批量列举：静默逐目录告警（warn=False），改用 [src]/[figdir] 侧标记呈现选用者。
+            pipeline = _runner.discover_pipeline(d, warn=False)
         except FileNotFoundError:
             continue
         found = True
+        side = "figdir" if pipeline.resolve().parent == d.resolve() else "src"
         out = d / "out"
         n_out = len(list(out.glob("*"))) if out.is_dir() else 0
-        print(f"  {d.name:<28} pipeline={pipeline.name}  out_files={n_out}")
+        print(f"  {d.name:<28} pipeline={pipeline.name} [{side}]  out_files={n_out}")
     if not found:
         print("  (未发现任何图管线；用 `figures new` 脚手架一个)")
     return 0
@@ -335,6 +339,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--stem", default=None, help="交付件主名（默认图目录名）")
     s.add_argument("--save-dpi", type=int, default=None, dest="save_dpi")
     s.add_argument("--preview-dpi", type=int, default=None, dest="preview_dpi")
+    s.add_argument(
+        "--pipeline-in-figdir",
+        action="store_true",
+        dest="pipeline_in_figdir",
+        help="src 与 figdir 双侧同名管线并存时强制选用 figdir 侧（默认 src 优先并告警）",
+    )
     s.set_defaults(func=cmd_build)
 
     # preview
@@ -346,6 +356,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--palette", default=None)
     s.add_argument("--stem", default=None)
     s.add_argument("--preview-dpi", type=int, default=None, dest="preview_dpi")
+    s.add_argument(
+        "--pipeline-in-figdir",
+        action="store_true",
+        dest="pipeline_in_figdir",
+        help="src 与 figdir 双侧同名管线并存时强制选用 figdir 侧（默认 src 优先并告警）",
+    )
     s.set_defaults(func=cmd_preview)
 
     # audit

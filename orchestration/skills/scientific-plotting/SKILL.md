@@ -102,6 +102,10 @@ The three common iteration needs map to:
 
 A `STYLE.yaml` at the figures root (or per-figure) pins the default preset/width; CLI flags win.
 
+Discovery is **src-first**; if a same-named pipeline also sits in `<figdir>/`, `build` WARNs which
+file it rendered (no silent placeholder). Force figdir: `--pipeline-in-figdir`, or pin
+`pipeline: src|figdir` in STYLE.yaml. Details: `references/plotting.md`.
+
 ## Visual closed loop
 
 `build` / `preview` always emit `out/<stem>_preview.png`. **Read it** to see the figure, then
