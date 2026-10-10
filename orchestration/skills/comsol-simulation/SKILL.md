@@ -46,10 +46,10 @@ prints the URL. These output lines decide everything:
 Companions: `mcp status` (read-only), `mcp stop`, `license`, `--json`. **Never hand-write spawn/kill
 logic.** WMI detachment (a terminal child is silently reclaimed with the shell), the ~30 s lazy JVM boot,
 explicit `comsol_start`, `--restart` invalidating Qoder's session, and the 403 `Invalid Origin` fallback:
-[references/mcp.md](references/mcp.md#step-0-internals--wmi-detachment-lazy-boot-restart-403-origin).
+[references/mcp-01-overview.md](references/mcp-01-overview.md).
 
 **Driving the MCP by hand? Read the
-[five measured constraints](references/mcp.md#building-a-model-through-the-mcp--five-measured-constraints)
+[five measured constraints](references/mcp-03-building-a-model-through-the-m.md)
 first** — each cost a license-holding round trip to learn.
 
 ## Invocation
@@ -107,12 +107,13 @@ pitfalls · `runs/` exports/logs (+ `runs/tmp` tempdir).
 → sidecar `interior.blank` (usual cause: plot group with no dataset); **unknown node type/property** →
 never guess, never write probe scripts — `inspect node --path …` plus
 `knowledge/java_api_pitfalls.md`. All failure modes:
-[references/cli.md](references/cli.md#when-something-breaks).
+[cli-02](references/cli-02-when-something-breaks.md).
 
 ## Reference files
 
-- [references/mcp.md](references/mcp.md) — the community MCP: path C transport, license probing and
-  duplicate instances, WMI detachment, upstream location / pinning / upgrade, `pdf_search` coverage and
-  the `module_count: 0` lie, the five measured modelling constraints.
-- [references/cli.md](references/cli.md) — the CLI: full flag table, manual-knowledge pipeline
-  (MinerU → FTS5), sessions / persistent server / licensing, GUI and Blender fallback, troubleshooting.
+（`*`=分册索引，按需读单册）
+
+- [references/mcp.md](references/mcp.md) * — the community MCP: transport, license probing,
+  Step 0 internals, pinning, the five modelling constraints.
+- [references/cli.md](references/cli.md) * — the CLI: flag table, knowledge pipeline,
+  sessions / licensing, troubleshooting.

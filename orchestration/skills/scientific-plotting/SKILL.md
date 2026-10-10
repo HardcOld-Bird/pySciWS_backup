@@ -137,6 +137,7 @@ Do not ask the user to eyeball intermediate results — use the preview yourself
 
 ## Reference files
 
-- [plotting.md](references/plotting.md) — the publication conventions in depth:
-  mathtext italic/upright/bold rules, colorblind palettes, design widths, manual SVG/EPS
-  editing, and the iteration-scenario playbook.
+（`*`=分册索引，按需读单册）
+
+- [plotting.md](references/plotting.md) * — publication conventions: mathtext, palettes,
+  design widths, SVG/EPS, iteration playbook, CLI argument forms.

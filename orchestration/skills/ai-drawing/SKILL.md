@@ -20,7 +20,7 @@ to bring an orchestrator back: [backends.md](references/backends.md). The backen
 From the **project root**: `uv run pysci-imagine <command> [options]`, below `imagine …` (fallback:
 `uv run --no-sync python -m pysci.skills.ai_drawing.tools.imagine …`). This CLI prints Chinese — apply
 `.qoder/rules/basic.md` §3 or you read mojibake. Setup: `ARK_API_KEY=<key>` in the project-root `.env`
-([walkthrough](references/backends.md#getting-an-ark_api_key)); OpenCV / scikit-image operators also
+([walkthrough](references/backends-02-provider-options-pluggable.md)); OpenCV / scikit-image operators also
 need `uv pip install -e ".[imaging]"`.
 
 > **Cost rule:** every Tier 1 `gen` / `i2i` / `edit` / `layers` call spends real money (~¥0.2/image).
@@ -100,8 +100,12 @@ individually in 模型广场; a rejected 1K probe is the cheapest test — only 
 
 ## Reference files
 
+（`*`=分册索引，按需读单册）
+
 - [cli.md](references/cli.md) — every flag for all 24 commands, output paths, provenance, troubleshooting.
 - [workflows.md](references/workflows.md) — checklists B (artwork), C (`mark`→`edit`), D (layers), E (local bitmap).
-- [backends.md](references/backends.md) — Tier 0 vs Tier 1 matrix, **why ComfyUI was removed and when to bring an orchestrator back**, `ARK_API_KEY` walkthrough, cost.
-- [prompting.md](references/prompting.md) — prompt recipes (cover / graphical abstract / schematic / bridge ref), negative constraints (no `--negative` flag), prompting for `edit` / `layers`, seed/size/model truth.
+- [backends.md](references/backends.md) * — Tier 0 vs Tier 1 matrix, why ComfyUI was removed (and when to
+  bring a node graph back), `ARK_API_KEY` walkthrough, cost.
+- [prompting.md](references/prompting.md) * — recipes (cover / graphical abstract / schematic / bridge ref),
+  negative constraints, `edit` / `layers`, seed-size-model truth.
 - [bridge.md](references/bridge.md) — the aesthetic-reference → data-reproduction playbook and its deliberate limits.
