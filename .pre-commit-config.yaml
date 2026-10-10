@@ -57,3 +57,20 @@ repos:
     hooks:
       - id: commitizen
         stages: [commit-msg] # 在 commit-msg 阶段触发
+
+  # ========================================================================
+  # 4. 本地硬闸（harness 预算三层执法之真本侧，basic.md §1 / backlog 20261010-budget-precommit）
+  # ========================================================================
+  # 组员侧由 delivery-gate（Stop hook）执法，巡检由 pysci-dev doctor 出报告；这里拦的是
+  # **组长与 devops 自己**改真本时的文档膨胀——超限即拒绝提交，不靠事后发现。
+  # language: python 而非 system：钩子解释器由 pre-commit 自身的 venv 提供，不依赖提交
+  # 上下文（TUI/IDE/CI）的 PATH 里有 python，避免"钩子起不来 → 一切提交被堵"。
+  - repo: local
+    hooks:
+      - id: harness-budget
+        name: harness 预算（真本 SKILL.md/references/根 rules 每文件 ≤8192B）
+        language: python
+        entry: python orchestration/guards/budget_check.py
+        additional_dependencies: []
+        files: >-
+          ^(orchestration/skills/[^/]+/(SKILL\.md|references/[^/]+\.md)|\.qoder/rules/(basic|leader-only)\.md)$

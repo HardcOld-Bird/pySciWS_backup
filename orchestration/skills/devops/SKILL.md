@@ -61,11 +61,10 @@ gitignore）；需要真实数据验证时以绝对路径只读引用主树。
   worktree 内 sync 提交的 `skills-deployed.json` 对 main 即正确，无需合并后重跑；doctor
   「部署台账巡检（sync --check）」哨兵记录哈希漂移；
 - 红线：只碰 manifest 声明的部署名；**不删除成员自建技能**；不手改部署副本。
-- **真本 references 超 8KB 的处置**（basic.md §1 按需档）：按 `##` 主题拆成
-  `<stem>-0N-<slug>.md` 分册（逐字搬运、拼回原文须逐字节相等），原名留作**分册索引**
-  （列出各册所含小节与尺寸）；所属 SKILL.md 的索引行标 ``*`` 并在节首加一行
-  「（`*`=分册索引，按需读单册）」——SKILL.md 自身也须 ≤8192B（超限就压缩措辞，
-  细节本就在分册里）。改完跑 `pysci-dev doctor` 的预算审计复测。
+- **真本 references 超 8KB 的处置**：按 `##` 主题拆 `<stem>-0N-<slug>.md` 分册（逐字
+  搬运、原名留分册索引），所属 SKILL.md 索引行标 ``*`` + 节首加图例行。机械拆分与验证
+  次序（含 pre-commit 会先改写文件的坑）见
+  [references/budget-layers.md](references/budget-layers.md) §4。
 
 ## pysci-dev 命令面
 
@@ -86,22 +85,20 @@ PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
 `"agentsMdExcludes": ["**/leader-only.md"]` 排除组长专属根规则（缺则组员注入
 `leader-only.md`；glob 写成 `**/*.md` 会连 `basic.md` 公约数一起吞掉，doctor 两项都判 ✗）。
 
-## guards 面（delivery-gate 预算硬闸）
+## harness 预算三层执法（basic.md §1）
 
-`orchestration/guards/delivery-gate.mjs`（Stop hook）除交付格式外，还按 basic.md §1
-执法组员**自维护层**四条：`AGENTS.md` ≤8192B；自建 rules 禁 `trigger: always_on`
-（charter 豁免）；自建 rules 与自建 skills 的 `description` 行合计各 ≤8192B；
-每个自建 `SKILL.md` ≤8192B。违规 exit 2 + stderr 给出路径/实测字节/上限/整改动作，
-格式与预算两类问题**合并成一轮**报（否则格式退回吃掉唯一一次拦截）。口径为落盘字节
-（CRLF 计税），与 `wc -c` / `find -size +8192c` 一致。
+三档上限（每文件/每类合计 ≤8192B）由三层兜住，口径统一为**落盘字节**（CRLF 计税，
+同 `wc -c` / `find -size +8192c`）：
 
-- **部署副本豁免**：`PYSCI_DEPLOYED_SKILLS`（runner 注入，`;` 分隔）里的技能目录不算
-  自建；该变量缺失时自建技能那一支整体不执法——分不清自建与副本时卡组员不如不卡。
-- **`stop_hook_active` 优先**：循环防护为真时一切放行（拦一次即止，兜底靠 doctor 与
-  pre-commit 真本侧）。
-- **fail-open 会吞掉 guard 自己的 bug**：预算段包在 try 里，异常即静默放行。改 guard
-  必须先跑 `tests/skills/orchestration/test_delivery_gate_budget.py`（node 跑真 guard）；
-  ESM 顶层 `const` 有 TDZ，`run()` 只能放文件末尾。
+| 层 | 位置 | 管谁 |
+|---|---|---|
+| 组员侧硬闸 | `guards/delivery-gate.mjs`（Stop） | 自维护层四条：`AGENTS.md` 尺寸、自建 rules 禁 `always_on`、rules·skills 的 `description` 合计、自建 `SKILL.md` 尺寸 |
+| 真本侧硬闸 | pre-commit `harness-budget`（`guards/budget_check.py`） | 真本 `SKILL.md`/`references/*.md` 与根 `basic.md`·`leader-only.md` 每文件 |
+| 观测 | `pysci-dev doctor` 三档审计 | 全量扫描 + 台账，唯一能看见「会话中途死掉留下的膨胀」的一层 |
+
+改任一层、或处置超限 references 前，先读
+[references/budget-layers.md](references/budget-layers.md)（豁免规则、fail-open 与 ESM
+TDZ 教训、Stop hook 的探针验证法、分册拆分与验证次序）。
 
 ## git 纪律
 
