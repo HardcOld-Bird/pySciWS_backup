@@ -98,9 +98,11 @@ def write_taskbook(
         src = Path(task_file)
         if not src.is_absolute():
             src = PROJECT_ROOT / src
-        dest.write_text(header + src.read_text(encoding="utf-8"), encoding="utf-8")
+        body = src.read_text(encoding="utf-8")
     else:
-        dest.write_text(header + (text or ""), encoding="utf-8")
+        body = text or ""
+    # 结尾恰好一个换行：裸文本会触发 pre-commit end-of-file-fixer 拦截任务书提交
+    dest.write_text(header + body.rstrip("\n") + "\n", encoding="utf-8")
     return dest
 
 
