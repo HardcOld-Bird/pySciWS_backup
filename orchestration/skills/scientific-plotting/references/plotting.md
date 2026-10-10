@@ -72,6 +72,29 @@ Illustrator/Inkscape for last-mile tweaks (nudging a label, adjusting an arrow),
 Prefer doing structural changes in `build_figure` (so they survive regeneration) and reserve
 manual edits for one-off polish that would otherwise cost many iterations.
 
+## Pipeline discovery (src vs figdir) & the fake-green guard
+
+`runner.discover_pipeline(figdir)` resolves which `.py` to render, **src-first**:
+
+1. `src/pysci/research/<name>/article/figures/<slug>.py` (canonical, Agent-managed);
+2. legacy fallback inside the figdir: `<slug>.py` → `fig.py`/`build.py`/`main.py` → the sole `.py`.
+
+When **both** a src module and an explicit figdir entry exist for the same figure, that is a
+collision: historically src won *silently*, so a member's hand-written figdir pipeline was shadowed
+by the scaffold placeholder — `build` rendered the placeholder yet reported success (**fake green**).
+
+Now a collision prints a `WARNING` naming the file actually chosen **and** the one ignored, and
+`RunResult.report` shows the chosen pipeline's full path (not just its basename), so `build` output
+is self-evidencing. To resolve intentionally:
+
+- one-off: `figures build <figdir> --pipeline-in-figdir` (same flag on `preview`) forces figdir;
+- pinned: `pipeline: figdir|src` in the figdir's (or figures-root) `STYLE.yaml`.
+
+Precedence: CLI flag > `STYLE.yaml pipeline:` > src-first default; an unknown `pipeline:` value is
+warned and ignored. `figures list` stays quiet (no per-dir warning) and instead tags each entry
+`[src]`/`[figdir]`. The canonical fix for a real collision is to keep **one** pipeline — normally
+the src module — and delete the stale figdir copy.
+
 ## Iteration playbook (the three common asks)
 
 1. **Same plot, new data** — only touch the data-loading block of `build_figure`; the plotting

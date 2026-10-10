@@ -138,6 +138,7 @@ style: {style}
 width: {width}
 aspect: 0.618
 palette: okabe-ito
+# pipeline: figdir   # 可选：src 与 figdir 双侧同名管线并存时强制选侧（默认 src 优先并告警）
 """
 
 

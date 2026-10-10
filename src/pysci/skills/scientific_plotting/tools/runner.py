@@ -26,6 +26,10 @@
 命令行 ``--style/--width`` 优先级更高。缺失时用技能默认（config.settings）。
 
 **后向兼容**：若 src/ 下未找到管线，仍会回退到旧模式（在 figdir 内发现 .py）。
+
+**双侧同名冲突（假绿防护）**：src 与 figdir 同时存在同名管线时，默认选用 src 侧，但会
+打印 WARNING 指明**实际选用的文件**与被忽略者——避免「渲染了 src 占位管线却静默显示成功」。
+可用 CLI ``--pipeline-in-figdir`` 或 STYLE.yaml ``pipeline: src|figdir`` 显式改选。
 """
 
 from __future__ import annotations
@@ -90,31 +94,43 @@ def _research_from_figdir(figdir: Path) -> tuple[str, str] | None:
     return research_name, slug
 
 
-def discover_pipeline(figdir: Path | str) -> Path:
-    """发现图管线模块（.py）。
+def _rel_to_root(path: Path) -> str:
+    """把路径显示为相对 PROJECT_ROOT（在其外时回退绝对路径）——供报告/告警消歧。"""
+    try:
+        return str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+    except ValueError:
+        return str(path)
 
-    搜索顺序：
-    1. src/ 代码目录：``src/pysci/research/<name>/article/figures/<slug>.py``
-    2. 旧模式回退：figdir 内的 ``<目录名>.py`` → fig.py/build.py/main.py → 唯一 .py
 
-    Raises:
-        FileNotFoundError: 找不到管线模块。
-    """
-    figdir = Path(figdir)
+def _warn(msg: str) -> None:
+    """统一的 runner 告警出口（stderr）。"""
+    print(f"[sciplot.runner] WARNING: {msg}", file=sys.stderr)
 
-    # --- 新位置：src/ 代码目录 ---
+
+def _discover_src_pipeline(figdir: Path) -> Path | None:
+    """src 代码侧管线：``src/pysci/research/<name>/article/figures/<slug>.py``；无则 None。"""
     parsed = _research_from_figdir(figdir)
-    if parsed:
-        research_name, slug = parsed
-        code_root = figures_code_root(research_name)
-        src_pipeline = code_root / f"{slug}.py"
-        if src_pipeline.is_file():
-            return src_pipeline
+    if not parsed:
+        return None
+    research_name, slug = parsed
+    src_pipeline = figures_code_root(research_name) / f"{slug}.py"
+    return src_pipeline if src_pipeline.is_file() else None
 
-    # --- 旧位置回退：figdir 内 ---
+
+def _discover_figdir_pipeline(figdir: Path, *, strict: bool = False) -> Path | None:
+    """figdir 数据侧管线（旧模式）：``<目录名>.py`` → fig.py/build.py/main.py → 唯一 .py。
+
+    Args:
+        figdir: 图数据目录。
+        strict: True 时只认**显式入口**（``<目录名>.py`` 与 fig.py/build.py/main.py），
+            不含「唯一 .py」宽松回退——用于 src/figdir 双侧冲突判定，避免把辅助 .py
+            误判为管线而产生假告警。
+
+    Returns:
+        命中的管线路径；找不到返回 None。
+    """
     if not figdir.is_dir():
-        raise FileNotFoundError(f"图目录不存在：{figdir}")
-
+        return None
     named = figdir / f"{figdir.name}.py"
     if named.is_file():
         return named
@@ -122,17 +138,97 @@ def discover_pipeline(figdir: Path | str) -> Path:
         p = figdir / cand
         if p.is_file():
             return p
+    if strict:
+        return None
     pys = sorted(p for p in figdir.glob("*.py") if not p.name.startswith("_"))
     if len(pys) == 1:
         return pys[0]
-    if not pys:
+    return None
+
+
+def _resolve_prefer(cli_prefer: str | None, cfg: dict[str, Any]) -> str | None:
+    """合并管线侧偏好：CLI（``--pipeline-in-figdir``）> STYLE.yaml ``pipeline:`` > 自动。
+
+    取值归一为 ``"src"`` / ``"figdir"`` / None；未知值告警并忽略（按自动处理）。
+    """
+    raw = cli_prefer or cfg.get("pipeline")
+    if raw is None:
+        return None
+    val = str(raw).strip().lower()
+    if val in ("src", "figdir"):
+        return val
+    _warn(f"忽略未知的 pipeline 偏好 {raw!r}（应为 src|figdir），按自动处理")
+    return None
+
+
+def discover_pipeline(
+    figdir: Path | str, *, prefer: str | None = None, warn: bool = True
+) -> Path:
+    """发现图管线模块（.py）。
+
+    搜索顺序（src 优先）：
+    1. src/ 代码目录：``src/pysci/research/<name>/article/figures/<slug>.py``
+    2. 旧模式回退：figdir 内的 ``<目录名>.py`` → fig.py/build.py/main.py → 唯一 .py
+
+    **双侧同名冲突**（src 与 figdir 均有显式入口）：默认选用 src 侧，但打印 WARNING 指明
+    实际选用者与被忽略者——消除「渲染了占位管线却静默成功」的假绿。``prefer`` 可显式改选。
+
+    Args:
+        figdir: 图数据目录。
+        prefer: 冲突时的选侧偏好（``"figdir"`` / ``"src"`` / None=默认 src 优先）；
+            仅当偏好侧缺失时回退另一侧并告警。
+        warn: 是否打印冲突/回退 WARNING（``list`` 等批量场景可传 False 静默）。
+
+    Raises:
+        FileNotFoundError: 找不到管线模块。
+    """
+    figdir = Path(figdir)
+    src_pipe = _discover_src_pipeline(figdir)
+    # 冲突判定用 strict（只认显式入口），避免把 figdir 内辅助 .py 误判为管线。
+    fig_strict = _discover_figdir_pipeline(figdir, strict=True)
+
+    # --- 双侧同名冲突：显式选侧 + 告警（假绿防护的核心）---
+    if src_pipe and fig_strict:
+        choice = "figdir" if prefer == "figdir" else "src"
+        chosen = fig_strict if choice == "figdir" else src_pipe
+        ignored = src_pipe if choice == "figdir" else fig_strict
+        if warn:
+            _warn(
+                f"同名图管线在 src 与 figdir 双侧并存，已选用 {choice} 侧："
+                f"{_rel_to_root(chosen)}\n"
+                f"  被忽略：{_rel_to_root(ignored)}\n"
+                "  改用另一侧：build/preview 加 --pipeline-in-figdir（强制 figdir），"
+                "或 STYLE.yaml 设 pipeline: figdir|src"
+            )
+        return chosen
+
+    # --- 单侧命中 ---
+    fig_pipe = fig_strict or _discover_figdir_pipeline(figdir)
+    if src_pipe:
+        if prefer == "figdir" and warn:
+            _warn(
+                f"指定了 figdir 侧管线但未找到，回退 src 侧：{_rel_to_root(src_pipe)}"
+            )
+        return src_pipe
+    if fig_pipe:
+        if prefer == "src" and warn:
+            _warn(
+                f"指定了 src 侧管线但未找到，回退 figdir 侧：{_rel_to_root(fig_pipe)}"
+            )
+        return fig_pipe
+
+    # --- 两侧皆无：保留原有区分性错误信息 ---
+    if not figdir.is_dir():
+        raise FileNotFoundError(f"图目录不存在：{figdir}")
+    pys = sorted(p for p in figdir.glob("*.py") if not p.name.startswith("_"))
+    if pys:
+        names = ", ".join(p.name for p in pys)
         raise FileNotFoundError(
-            f"{figdir} 下没有找到管线 .py 模块，且 src/ 代码目录中也未找到对应脚本"
+            f"{figdir} 下有多个 .py（{names}），无法确定入口；"
+            f"请重命名为 {figdir.name}.py 或 fig.py"
         )
-    names = ", ".join(p.name for p in pys)
     raise FileNotFoundError(
-        f"{figdir} 下有多个 .py（{names}），无法确定入口；"
-        f"请重命名为 {figdir.name}.py 或 fig.py"
+        f"{figdir} 下没有找到管线 .py 模块，且 src/ 代码目录中也未找到对应脚本"
     )
 
 
@@ -227,7 +323,7 @@ class RunResult:
     def report(self) -> str:
         lines = [
             f"figdir   : {self.figdir}",
-            f"pipeline : {self.pipeline.name}",
+            f"pipeline : {_rel_to_root(self.pipeline)}",
             f"stem     : {self.stem}",
         ]
         if self.style_info is not None:
@@ -253,6 +349,7 @@ def build_figure_dir(
     save_dpi: int | None = None,
     preview_dpi: int | None = None,
     extra_kwargs: dict[str, Any] | None = None,
+    prefer: str | None = None,
 ) -> RunResult:
     """运行某图目录的管线并在 style_context 下导出全部格式 + 预览。
 
@@ -265,16 +362,19 @@ def build_figure_dir(
         stem: 交付件主名（None -> 图目录名）。
         save_dpi / preview_dpi: dpi 覆盖。
         extra_kwargs: 透传给 build_figure 的额外关键字（如数据路径切换）。
+        prefer: src/figdir 双侧同名管线并存时的选侧偏好（CLI ``--pipeline-in-figdir``
+            传 ``"figdir"``）；None 时读 STYLE.yaml ``pipeline:`` 键，仍无则 src 优先。
     """
     figdir = Path(figdir)
     result = RunResult(figdir=figdir, pipeline=figdir, stem=stem or figdir.name)
     try:
         # 产物路径护栏：图目录必须落在 data/ 根内，stray（scripts/、仓库外）在写入前即报错。
         assert_within_data(figdir, what="图目录")
-        pipeline = discover_pipeline(figdir)
+        # cfg 先于发现读取：STYLE.yaml 的 pipeline: 键参与选侧（CLI prefer 优先）。
+        cfg = load_style_config(figdir)
+        pipeline = discover_pipeline(figdir, prefer=_resolve_prefer(prefer, cfg))
         result.pipeline = pipeline
 
-        cfg = load_style_config(figdir)
         eff_style = style or cfg.get("style") or settings.default_style
         eff_width = width or cfg.get("width") or "double"
         eff_aspect = aspect if aspect is not None else float(cfg.get("aspect", 0.618))
@@ -318,6 +418,7 @@ def preview_figure_dir(
     stem: str | None = None,
     preview_dpi: int | None = None,
     extra_kwargs: dict[str, Any] | None = None,
+    prefer: str | None = None,
 ) -> RunResult:
     """只渲染 PNG 预览（不产出交付件），用于快速视觉迭代。"""
     return build_figure_dir(
@@ -330,6 +431,7 @@ def preview_figure_dir(
         stem=stem,
         preview_dpi=preview_dpi,
         extra_kwargs=extra_kwargs,
+        prefer=prefer,
     )
 
 
@@ -347,15 +449,17 @@ def built_figure(
     aspect: float | None = None,
     palette: str | None = None,
     extra_kwargs: dict[str, Any] | None = None,
+    prefer: str | None = None,
 ) -> Iterator[tuple[matplotlib.figure.Figure, StyleInfo]]:
     """在 style_context 下构建图管线，产出 ``(fig, StyleInfo)`` 但不导出、不关闭。
 
     供 audit 等需要在图对象上做检查的场景复用（build_figure_dir 则在此基础上再导出）。
-    退出上下文时关闭图，释放内存。
+    退出上下文时关闭图，释放内存。``prefer`` 语义同 build_figure_dir（audit 借此与 build
+    选用同一管线，避免审查对象与产出对象不一致）。
     """
     figdir = Path(figdir)
-    pipeline = discover_pipeline(figdir)
     cfg = load_style_config(figdir)
+    pipeline = discover_pipeline(figdir, prefer=_resolve_prefer(prefer, cfg))
     eff_style = style or cfg.get("style") or settings.default_style
     eff_width = width or cfg.get("width") or "double"
     eff_aspect = aspect if aspect is not None else float(cfg.get("aspect", 0.618))
