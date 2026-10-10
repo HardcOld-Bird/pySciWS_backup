@@ -46,11 +46,11 @@
         {
           "sid": "6f0cc8e5-9aa6-41f0-86ff-58a49b002704",
           "name": "20261010-paper-search-mcp-down",
-          "hops": 27,
+          "hops": 31,
           "created": "2026-10-10T09:32:49+08:00",
-          "last_active": "2026-10-10T20:57:33+08:00",
+          "last_active": "2026-10-10T22:07:11+08:00",
           "status": "active",
-          "chars_offset": 12085978
+          "chars_offset": 14635209
         }
       ],
       "tier_note": "2026-10-10 用户裁决降档；架构敏感项由组长派发时 --model-tier max 升档；台账观察 2-3 周"

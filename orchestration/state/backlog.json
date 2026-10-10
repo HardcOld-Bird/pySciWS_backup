@@ -388,36 +388,54 @@
       "member": "devops",
       "summary": "**难用类（场景描述）**：按项标注机制的价值全押在「台账自然 A/B」（用户裁决原文），但 `orch ledger --stats` 目前只按 `by_member` 聚合，没有 `effort` 维度——要回答「同类项 high vs medium 谁轮数少、返工率低」，得手工导出 jsonl 逐行比对。本次落地后台账字段已就绪（`effort`），缺的只是聚合面。建议后续入一条小任务：`s",
       "evidence_file": "orchestration/state/suggestions/approved/20261010-153041-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-10T21:01:04+08:00",
-      "note": "采纳：orch stats 增 by_effort 聚合，服务档位数据化"
+      "note": "drain 批量销账（commit 68d09a5）",
+      "started_at": "2026-10-10T21:01:47+08:00",
+      "worktree": "20261010-153041-devops",
+      "done_at": "2026-10-10T21:11:55+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261010-153041-devops"
     },
     {
       "id": "20261010-163347-devops",
       "member": "devops",
       "summary": "**基础设施类交付无可路由的机械验收 check**（缺陷类，附证据）。`orchestration/state/registry.json` 的 `checks` 块实测仅一条：`{\"figure-audit\": {\"cmd\": [\"uv\",\"run\",\"pysci-figures\",\"audit\",\"{path}\",\"--panels\"]}}`。于是 orch CLI / guards / p",
       "evidence_file": "orchestration/state/suggestions/approved/20261010-163347-devops.md",
-      "status": "pending",
+      "status": "needs_leader",
       "proposed": "2026-10-10T21:01:04+08:00",
-      "note": "采纳：orch-tests 机械 check 注册 + devops.cancel 补 ignore + pod inbox/task-*.md 运行态治理（与 081857 残留合并处置）"
+      "note": "drain 跳过（交付=blocked）：**任务**：backlog id=20261010-163347-devops（种子三件套 orch-tests check 注册 + devops.cancel ignore + pod inbox/task-*.md 运行态治理）。  **阻塞点**：合并前 git status 检查命中「main 工作区存在会",
+      "started_at": "2026-10-10T21:11:55+08:00",
+      "worktree": "20261010-163347-devops",
+      "needs_leader_at": "2026-10-10T21:26:44+08:00"
     },
     {
       "id": "20261010-191922-devops",
       "member": "devops",
       "summary": "**机械生成/改写 `orchestration/skills/**` 下 markdown 时，首次提交必被 pre-commit 的 `end-of-file-fixer` 改写而失败**，任何「脚本产出技能文档」的任务都会撞上：钩子报 `Fixing <file>` 后中止提交，改动留在工作区，必须重新 `git add` 再提交一次。",
       "evidence_file": "orchestration/state/suggestions/approved/20261010-191922-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-10T21:01:04+08:00",
-      "note": "采纳：机械生成/改写技能文档的 EOF 窗口治理——生成侧自带 EOF 规范 + 验证终态哈希后再提交 +  Charter/技能写明 re-add 纪律"
+      "note": "drain 批量销账（commit 未报告）",
+      "started_at": "2026-10-10T21:26:44+08:00",
+      "worktree": "20261010-191922-devops",
+      "done_at": "2026-10-10T21:50:57+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261010-191922-devops"
     },
     {
       "id": "20261010-193601-devops",
       "member": "devops",
       "summary": "**（缺陷类，附证据）guard 的 fail-open 会静默吞掉 guard 自己的 bug——「全绿」不代表在执法。**",
       "evidence_file": "orchestration/state/suggestions/approved/20261010-193601-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-10T21:01:04+08:00",
-      "note": "采纳：门禁在法哨兵——pytest 直跑真 guard 固化可路由 check，doctor 增 delivery-gate 违规探针注入自检，fail-open 必须留痕不得静默"
+      "note": "drain 批量销账（commit 未报告）",
+      "started_at": "2026-10-10T21:50:57+08:00",
+      "worktree": "20261010-193601-devops",
+      "done_at": "2026-10-10T22:07:11+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261010-193601-devops"
     }
   ]
 }
