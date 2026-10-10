@@ -65,6 +65,9 @@ gitignore）；需要真实数据验证时以绝对路径只读引用主树。
   搬运、原名留分册索引），所属 SKILL.md 索引行标 ``*`` + 节首加图例行。机械拆分与验证
   次序（含 pre-commit 会先改写文件的坑）见
   [references/budget-layers.md](references/budget-layers.md) §4。
+- **机械生成/改写 markdown 的 EOF 窗口**：`pysci-dev mdgen-check <paths…>` 提前把
+  pre-commit（trailing-ws + end-of-file-fixer）改写**做完**并打印 pre/post sha256；
+  内容等价性断言以 **post_sha256**（钩子终态）为基准，非生成前字节。首提必过。
 
 ## pysci-dev 命令面
 
@@ -73,6 +76,7 @@ pysci-dev doctor [--pod <id>]   # pod 健康巡检：hooks 接线/leader 规则�
                                  # + 部署台账巡检（sync --check 漂移）+ harness 预算三档审计（≤8192B/文件）
 pysci-dev sync [--check]        # 技能部署
 pysci-dev worktree add|remove|list [<name>]
+pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写、打印终态哈希
 ```
 
 ## 新 pod 脚手架（只读层入库面）

@@ -291,6 +291,20 @@ def cmd_probe(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# mdgen-check（钩子终态治理，backlog 20261010-191922-devops）
+# ---------------------------------------------------------------------------
+def cmd_mdgen_check(args: argparse.Namespace) -> int:
+    """把 pre-commit 对文件的改写提前做完；报 pre/post sha256（供内容等价性以终态为准）。"""
+    from pysci.skills.devops.tools import mdgen as _mdgen
+
+    argv: list[str] = []
+    if args.dry_run:
+        argv += ["--dry-run"]
+    argv += list(args.paths)
+    return _mdgen.main(argv)
+
+
+# ---------------------------------------------------------------------------
 # 门面
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
@@ -339,6 +353,24 @@ def main(argv: list[str] | None = None) -> int:
         help="只复测不落台账（临时核查，不改动仓库）",
     )
     p.set_defaults(func=cmd_probe)
+
+    p = sub.add_parser(
+        "mdgen-check",
+        help="脚本批量产出/改写 .md 后，把 pre-commit（trailing-whitespace + "
+        "end-of-file-fixer 等）的改写提前做完；逐文件打印 pre/post sha256，"
+        "内容等价性断言以 post 为准（首提必过、无验证过期窗口）",
+    )
+    p.add_argument(
+        "paths",
+        nargs="+",
+        help="待治理文件路径（不存在的静默跳过，与生成脚本常带模板路径的行为一致）",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只报告钩子会改写哪些文件、跑完还原字节（预览用，不改仓库）",
+    )
+    p.set_defaults(func=cmd_mdgen_check)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

@@ -81,6 +81,12 @@ charter/AGENTS.md/自建 rules·skills），逐条 `[!]` 并计入退出码 2；
 删信息。
 
 验证两步：① 分册剥掉 5 行头块后按序拼接，与原文件比「全部内容行逐条有序相等」；
-② `find orchestration/skills -name '*.md' -size +8192c` 输出为空。**注意次序**：
-pre-commit 的 `end-of-file-fixer` 会在首次提交时削掉分册末尾的空白行而中止提交，
-须在钩子改写后的**最终字节**上重跑①（重新 add 再提交不算失败）。
+② `find orchestration/skills -name '*.md' -size +8192c` 输出为空。
+
+**EOF 窗口的机械治理**（backlog 20261010-191922-devops）：pre-commit 的
+`trailing-whitespace` 与 `end-of-file-fixer` 会在**首次提交**削掉文件末尾空白而改写
+文件、中止提交——此时 ① 校验的是**生成前**字节，钩子改后即过期。做法：生成/改写
+后立即跑 `pysci-dev mdgen-check <paths…>`，工具把这两支钩子提前做完（`pre-commit run
+<hook_id> --files …`，只跑改写类、不越权触发 ruff/budget），逐文件打印 pre/post
+sha256；① 的内容等价性断言以 **post_sha256**（钩子终态）为基准。首提即过、无验证
+过期窗口；`--dry-run` 只报告不改文件。
