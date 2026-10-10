@@ -2,8 +2,9 @@
   "version": 1,
   "exe": null,
   "models": {
-    "max": "Qwen3.8-Max",
-    "flash": "Qwen3.8-Flash"
+    "max": "",
+    "flash": "Qwen3.8-Flash",
+    "flash_fallback": null
   },
   "members": {
     "figure": {
@@ -41,6 +42,14 @@
           "last_active": "2026-10-10T09:30:13+08:00",
           "status": "archived",
           "archived_at": "2026-10-10T09:32:24+08:00"
+        },
+        {
+          "sid": "6f0cc8e5-9aa6-41f0-86ff-58a49b002704",
+          "name": "20261010-paper-search-mcp-down",
+          "hops": 5,
+          "created": "2026-10-10T09:32:49+08:00",
+          "last_active": "2026-10-10T09:34:32+08:00",
+          "status": "active"
         }
       ]
     },

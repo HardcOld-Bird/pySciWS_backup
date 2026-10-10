@@ -247,14 +247,21 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
 合规 → 放行。orch 侧解析因此几乎不会失败；`outbox/delivery-<ts>.xml` 落审计副本。
 硬 QA 已下沉为成员自检：charter 含该域自检清单，自检通过是出具 `<result>` 的前置条件。
 
-### 3.5 模型双档路由（用户裁决）
+### 3.5 模型双档路由（用户裁决，2026-10-10 渠道策略修订）
 
-- registry 维护档位抽象：`"models": {"max": "<型号>", "flash": "<型号>"}`——orch 内部
-  路由具体型号（`-m` 传参），模型更新只改 registry 映射，全体系无感切换；
-- 默认档位：组长（TUI，用户级默认模型）/deputy/reviewer/devops = **max**；7 专职组员
-  = **flash**；
-- 计划环节可覆盖：`steps[].model: max`（复杂环节升档）；成员级默认存 registry；
-- 不依赖组长记忆型号名——组长只见「max/flash」两档。
+- registry 维护档位抽象：组长只见「max/flash」两档，orch 内部路由具体渠道；
+- **渠道策略（用户裁决，源于 credit 耗尽事故）**：
+  - `max` = **不传 `-m`**，走用户级默认的 **BYOK Qwen-3.8-Max**（Token Plan 额度大且
+    实惠；**禁用内置同名模型**——烧订阅 credit 且 envelope 低报为 0，2026-10-10 实战
+    烧穿额度）；
+  - `flash` = 内置 `Qwen3.8-Flash`（**限时免费**，零额度消耗）；
+  - `flash_fallback` = BYOK Qwen-3.8-Flash 的 modelID（免费期结束后的回退；渠道待
+    用户开通，回退逻辑见 backlog 20261010-flash-fallback）；
+- 默认档位：组长（TUI）/deputy/reviewer/devops = **max**；7 专职组员 = **flash**；
+  计划环节可覆盖（`steps[].model`）；
+- **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射改动属护栏级（影响全体
+  成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止见 backlog
+  20261010-orch-quota-awareness。
 
 ---
 
@@ -712,6 +719,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-09 | **Phase 3 完成**：reviewer/deputy pod 实战验收；review PASS 链 + approve 全链 + consult 全链通过；9 技能真本迁移提前完成（根技能列表仅剩 orchestration）；readonly_extra 成员级只读扩展机制上线 | Agent 实测 |
 | 2026-10-09 | Phase 4 策略采纳副组长咨询意见：**脚手架批量建、战备逐个验收**；文档滞后教训入状态条款（阶段完成当轮登记） | 组长裁决（consult 输入） |
 | 2026-10-10 | **Phase 4 基本完成**：六 pod 脚手架（devops worktree，十 pod doctor 全绿）、lit 战备验收（MCP 隔离会话级实锤 + 成员自主蒸馏经验）、用户级 MCP 清零（用户全权授权，备份留档）、basic.md 重写（PS 细节压缩、Git Bash 唯一 shell、裸命令范式入公约数）、**orch 移交 devops 维护（bootstrap 例外作废，orch 改动一律走 backlog）** | Agent 实测 + 用户授权 |
+| 2026-10-10 | **credit 耗尽事故与模型渠道裁决**：registry 曾把双档映射到内置 Qwen3.8-Max/Flash（订阅计费）而 envelope 低报 credits=0，drain 首战 88 分钟烧穿订阅额度 → 全员派发连败。用户裁决渠道策略：**max=BYOK Qwen-3.8-Max（不传 -m，走用户级默认）；flash=内置 Qwen3.8-Flash（限时免费）；flash_fallback=BYOK flash（渠道待开通，代码先行）**。registry models 改动自此属护栏级（须经用户）。配套改进入 backlog：额度失败识别 + drain 全局停止（quota-awareness）、flash 回退机制（flash-fallback） | 用户裁决 + Agent 复盘 |
 | 2026-10-10 | **修正 2026-10-09「credits 恒 0 根因=BYOK」判断**：实测 14 跳台账证明 BYOK 下 credits **依模型上报**——max 档（Qwen3.8-Max）正常计量（devops/reviewer/deputy 跳 13~1142 credits），flash 档（Qwen3.8-Flash）恒 0（figure/lit 跳）；usage tokens 两档均 0、唯 context_usage_ratio 恒有效。台账新增 `model` 字段 + `stats` 标注成本覆盖率（`format_credits`），使部分计量数据可解释。完整 token/账单核算仍按用户 2026-10-09 裁决留待未来（backlog 20261009-byok-cost-accounting 据此销账） | devops 实测（backlog 20261009-byok-cost-accounting） |
 | 2026-10-10 | **review 任务书嵌入目标陈述**（G2 独立性）：`orch review` 增 `--goal-from <原生产任务书>`/`--goal <文本>`，把组长撰写的目标陈述摘录嵌入审查任务书并登记进 review 记录（`goal_source`/`goal_excerpt`），使 reviewer 的 G2「与任务书目标一致」据组长原意独立核验、不再依赖生产者 notes.md 自述（消除与 charter 独立性纪律的张力）；缺省告警不中断。采纳 reviewer 建议 20261009-231455-reviewer | 组长采纳 + devops 实施（backlog 20261009-231455-reviewer） |
 

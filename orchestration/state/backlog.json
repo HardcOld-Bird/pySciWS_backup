@@ -85,9 +85,9 @@
       "summary": "paper-search-mcp（uvx）在用户级清零前即 Disconnected，lit/reviewer/deputy 的 pod mcp.json 中同样无法连接——排查 uvx 包安装/启动错误（uvx paper-search-mcp 手动跑一次看 stderr），修复或从三个 pod 的 mcp.json 移除",
       "evidence": "mcp list（用户级时期与 pod strict 时期）均显示 ✗ Disconnected；lit 会话内工具清单仅 arxiv/zotero。arxiv 首轮 uvx 冷启动偶发慢（复跑即好），一并观察",
       "proposed": "2026-10-10",
-      "started_at": "2026-10-10T09:25:36+08:00",
-      "needs_leader_at": "2026-10-10T09:29:58+08:00",
-      "note": "drain 首轮 run_failed(stop_sequence, turns=1)——devops 会话疲劳，已归档轮换，重置重排"
+      "started_at": "2026-10-10T09:32:49+08:00",
+      "needs_leader_at": "2026-10-10T09:33:04+08:00",
+      "note": "订阅 credit 耗尽致 run_failed；模型渠道已改（max=BYOK 默认/flash=内置免费），重置重排"
     },
     {
       "id": "20261010-orch-taskbook-newline",
@@ -96,9 +96,9 @@
       "summary": "orch write_taskbook 写 inbox 任务书不带结尾换行符，触发 pre-commit end-of-file-fixer 拦截含任务书的提交（本笔 Phase 4 提交实测被撞回）",
       "evidence": "复现：dispatch 任意任务后 git add inbox 任务书并 commit → end-of-file-fixer Failed 并改写文件。期望：write_taskbook 落盘文本以 \n 结尾（dispatch.py 两处 write_text）",
       "proposed": "2026-10-10",
-      "started_at": "2026-10-10T09:29:58+08:00",
-      "needs_leader_at": "2026-10-10T09:30:13+08:00",
-      "note": "drain 首轮 run_failed(stop_sequence, turns=1)——devops 会话疲劳，已归档轮换，重置重排"
+      "started_at": "2026-10-10T09:33:04+08:00",
+      "needs_leader_at": "2026-10-10T09:33:17+08:00",
+      "note": "订阅 credit 耗尽致 run_failed；模型渠道已改（max=BYOK 默认/flash=内置免费），重置重排"
     },
     {
       "id": "20261010-orch-auto-wake-devops",
@@ -116,7 +116,10 @@
       "status": "pending",
       "summary": "drain 启动时回收孤儿 in_progress 条目：backlog_take_first 标记 in_progress 后若 worker 被杀，条目永久卡死（take_first 只找 pending）。启动时应检测 in_progress 且锁持有者已死/无锁的条目并重置为 pending",
       "evidence": "代码审查确认：workflow.backlog_take_first 仅筛 pending；drain 无 reclaim 逻辑。场景：drain 进程在 take_first 与 backlog_complete 之间被杀（OS 关机/手动 kill）",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T09:33:17+08:00",
+      "needs_leader_at": "2026-10-10T09:33:31+08:00",
+      "note": "订阅 credit 耗尽致 run_failed；模型渠道已改（max=BYOK 默认/flash=内置免费），重置重排"
     },
     {
       "id": "20261010-drain-cooperative-stop",
@@ -124,6 +127,36 @@
       "status": "pending",
       "summary": "为 drain 增加协作式停止：orch drain-stop 命令写 state/devops.cancel；drain 每项间隙检查该文件→干净退出（释放锁、写部分 .done 摘要、cancel 文件自删）；orch status 展示停止方式。补足「分离进程无规范停止手段」的缺口",
       "evidence": "用户问询（2026-10-10）：detached drain 目前只能手动 kill pid 或 OS 关机终止；kill 于条目中途会留下孤儿 in_progress（与 20261010-drain-orphan-reclaim 互补）",
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T09:33:31+08:00",
+      "needs_leader_at": "2026-10-10T09:33:44+08:00",
+      "note": "订阅 credit 耗尽致 run_failed；模型渠道已改（max=BYOK 默认/flash=内置免费），重置重排"
+    },
+    {
+      "id": "20261010-084105-devops",
+      "member": "devops",
+      "summary": "难用类（无 bug，但易错且属本次根因上游）：任务书由组长手写自由文本（`dispatch.py` 只落盘 content，无命令校验），故错误的 CLI 范式仍可能被再次写入并派发给组员照抄。本次已在 figure charter 与 CLI `-h` 层面兜底（组员见错范式时以 charter/`-h` 为准），但组长侧无机械护栏。期望形态（供组长裁量，非 devops 自建范围）：派发前对任",
+      "evidence_file": "orchestration/state/suggestions/approved/20261010-084105-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-10T09:34:19+08:00",
+      "note": "订阅 credit 耗尽致 run_failed；模型渠道已改（max=BYOK 默认/flash=内置免费），重置重排",
+      "started_at": "2026-10-10T09:34:20+08:00",
+      "needs_leader_at": "2026-10-10T09:34:32+08:00"
+    },
+    {
+      "id": "20261010-orch-quota-awareness",
+      "member": "leader",
+      "status": "pending",
+      "summary": "orch 需识别额度类失败：do_dispatch 检测 envelope result/errors 中的『credit usage limit』类文案 → kind=quota_exhausted（不自动重试，[NEXT] 提示检查 registry models/等待重置）；drain 遇 quota_exhausted → 全局停止（释放锁、剩余条目保持 pending 而非逐项 needs_leader、.done 注明系统性故障）",
+      "evidence": "2026-10-10 实战：内置 Qwen3.8-Max 烧穿订阅 credit 后，drain 连烧 5 项各 ~13s 全部 stop_sequence 失败，错误面对组长不可读（jsonl 内才有『credit usage limit』原文）；且逐项 needs_leader 污染了 backlog 语义",
+      "proposed": "2026-10-10"
+    },
+    {
+      "id": "20261010-flash-fallback",
+      "member": "leader",
+      "status": "pending",
+      "summary": "flash 档回退机制：registry models 新增 flash_fallback（BYOK modelID，现值 null）；quota_exhausted 且该档有 fallback 时自动降/换档重试一次；同步把代码内 DEFAULT_MODELS 更新为新渠道策略（max=''）。代码就绪即可，BYOK flash 渠道由用户重启后开通，暂无法实测 fallback 分支（单测覆盖逻辑即可）",
+      "evidence": "用户裁决 2026-10-10：内置 Qwen3.8-Flash 限时免费故 flash 档用内置；免费期结束后无 credit 时内置不可用，回退 BYOK Qwen-3.8-Flash（渠道稍后开通）。与 quota-awareness 同域（do_dispatch/drain），建议同 worktree 一并实施",
       "proposed": "2026-10-10"
     }
   ]
