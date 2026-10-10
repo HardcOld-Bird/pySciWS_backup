@@ -45,3 +45,10 @@ __pycache__/
 # orch watch 的基线快照/心跳（backlog 20261010-orch-watch）：纯运行态观察面，
 # 事件已随 orch status 补账清算，无审计价值
 /orchestration/state/watch.json
+# 会话池运行态（backlog 20261010-registry-runtime-split）：registry.json 每派发一跳
+# 就改写 sessions/hops/last_active/chars_offset——留在配置面会让 main 工作区必 dirty、
+# 碰 registry 的 worktree 交付 merge 前被心跳 dirty 拦（163347/220711 同构阻塞）。迁到
+# 本运行态文件（唯一落点 sessions-runtime.json）；registry.presplit.json 是首次迁移的
+# 原文备份，同属运行态。永久审计在 registry 配置面 + backlog + ledger，故不入库。
+/orchestration/state/sessions-runtime.json
+/orchestration/state/registry.presplit.json

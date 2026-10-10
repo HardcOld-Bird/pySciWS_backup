@@ -1,8 +1,18 @@
 """成员注册表与机械验收检查表的读写。
 
-``orchestration/state/registry.json`` 是编排体系的单一配置事实源：成员 → pod 路径、
-模型档位、参数模板、会话池索引；check 类型 → 确定性验收命令。全部为可读 JSON
-（fail-open 红线，README §4.3）。
+配置面与运行态**分储**（根治 163347/220711 两笔同构合并阻塞，backlog
+20261010-registry-runtime-split）：
+
+- ``orchestration/state/registry.json`` = **低频配置事实源**（git 跟踪）：成员 → pod
+  路径、模型档位、参数模板、checks；随代码评审演进，人手编辑。
+- ``orchestration/state/sessions-runtime.json`` = **高频运行态**（gitignore）：会话池
+  索引与心跳字段（sid/hops/last_active/chars_offset/status）。每次 dispatch 一跳都改写
+  它——留在 registry.json 里会让 main 工作区每派发必 dirty，任何碰 registry 的 worktree
+  交付 merge 前检查即被心跳拦下。
+
+首次 :meth:`Registry.load` 检测到旧配置内嵌 ``sessions`` 且运行态文件缺席，即一次性
+迁移：备份原文件（``registry.presplit.json``，已存在则不覆盖）→ 抬高会话池到运行态 →
+从配置剥离，两份原子落盘。全部为可读 JSON（fail-open 红线，README §4.3）。
 """
 
 from __future__ import annotations
@@ -18,6 +28,12 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, ORCHESTRATION_ROOT, PODS_ROOT, PROJECT_ROOT
 
 REGISTRY_PATH: Path = ORCH_STATE_ROOT / "registry.json"
+
+#: 运行态会话池文件名（落在 registry.json 同目录；gitignore，见模块 docstring）。
+RUNTIME_NAME: str = "sessions-runtime.json"
+
+#: 一次性迁移的原文备份文件名（首次 cutover 时创建，已存在则不覆盖——保留真·pre-split 快照）。
+BACKUP_NAME: str = "registry.presplit.json"
 
 #: 档位 → 具体型号映射（README §3.5）；registry.json 的 models 块覆盖这里的出厂默认。
 #: 渠道策略（用户裁决 2026-10-10，credit 耗尽事故复盘）：
@@ -126,16 +142,54 @@ class Member:
                 s.update(fields)
 
 
+def _atomic_write(path: Path, obj: Any) -> None:
+    """原子写 JSON（先写 ``*.tmp`` 再 replace，防中断损坏）。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    tmp.replace(path)
+
+
+def _empty_runtime() -> dict[str, Any]:
+    """运行态骨架（会话池唯一落点）。"""
+    return {"version": 1, "members": {}}
+
+
+def _runtime_member(runtime: dict[str, Any], member_id: str) -> dict[str, Any]:
+    """取/建运行态里某成员的条目（含 sessions 列表）。"""
+    entry = runtime.setdefault("members", {}).setdefault(member_id, {})
+    entry.setdefault("sessions", [])
+    return entry
+
+
 @dataclass
 class Registry:
-    """registry.json 的内存表示与持久化。"""
+    """registry.json（配置面）+ sessions-runtime.json（运行态）的内存表示与持久化。"""
 
     data: dict[str, Any]
+    runtime: dict[str, Any] = field(default_factory=_empty_runtime)
     path: Path = REGISTRY_PATH
+
+    @property
+    def runtime_path(self) -> Path:
+        """运行态文件路径（同目录，随 ``self.path`` 移动——测试 patch REGISTRY_PATH 即两侧隔离）。"""
+        return self.path.parent / RUNTIME_NAME
+
+    @property
+    def backup_path(self) -> Path:
+        """一次性迁移备份路径。"""
+        return self.path.parent / BACKUP_NAME
 
     @classmethod
     def load(cls) -> Registry:
-        """读取注册表；不存在时返回带骨架默认值的实例（不落盘）。"""
+        """读取配置面与运行态；首次遇到内嵌 sessions 的旧配置时自动迁移 + 备份。
+
+        路径显式取模块级 ``REGISTRY_PATH``（非 dataclass 默认值——后者在类定义时已绑定
+        真实路径，无视测试的 monkeypatch）；``runtime_path``/``backup_path`` 随 ``path``
+        的父目录移动，故 patch 一处即两面隔离。
+        """
         if REGISTRY_PATH.exists():
             data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
         else:
@@ -146,16 +200,47 @@ class Registry:
                 "members": {},
                 "checks": {},
             }
-        return cls(data=data)
+        runtime_file = REGISTRY_PATH.parent / RUNTIME_NAME
+        if runtime_file.exists():
+            runtime = json.loads(runtime_file.read_text(encoding="utf-8"))
+        else:
+            runtime = _empty_runtime()
+        reg = cls(data=data, runtime=runtime, path=REGISTRY_PATH)
+        reg._cutover_if_needed(runtime_file)
+        return reg
+
+    def _cutover_if_needed(self, runtime_file: Path) -> None:
+        """一次性迁移：配置内嵌 sessions + 运行态文件缺席 → 备份 + 抬高 + 剥离 + 双写。
+
+        只在「运行态文件尚不存在」且「配置里任一成员带 sessions 键」时触发；迁移后配置
+        不再内嵌 sessions、运行态文件已在盘，故第二次 load 天然跳过（幂等）。备份文件
+        已存在则不覆盖——保留真·pre-split 原文快照。
+        """
+        if runtime_file.exists():
+            return
+        members = self.data.get("members", {})
+        embedded = {
+            mid: list(raw.get("sessions", []))
+            for mid, raw in members.items()
+            if isinstance(raw, dict) and "sessions" in raw
+        }
+        if not embedded:
+            return
+        if not self.backup_path.exists():
+            _atomic_write(self.backup_path, self.data)
+        for mid, sessions in embedded.items():
+            _runtime_member(self.runtime, mid)["sessions"] = sessions
+            members[mid].pop("sessions", None)
+        _atomic_write(self.path, self.data)
+        _atomic_write(runtime_file, self.runtime)
 
     def save(self) -> None:
-        """原子写回注册表（先写临时文件再替换，防中断损坏）。"""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps(self.data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
-        tmp.replace(self.path)
+        """原子写回配置面与运行态两份（配置剥离任何内嵌 sessions，运行态为唯一权威）。"""
+        for raw in self.data.get("members", {}).values():
+            if isinstance(raw, dict):
+                raw.pop("sessions", None)
+        _atomic_write(self.path, self.data)
+        _atomic_write(self.runtime_path, self.runtime)
 
     @property
     def models(self) -> dict[str, str]:
@@ -193,6 +278,7 @@ class Registry:
         raw = members[member_id]
         pod_rel = raw.get("pod", f"orchestration/pods/{member_id}")
         pod = Path(pod_rel) if Path(pod_rel).is_absolute() else PROJECT_ROOT / pod_rel
+        rt = self.runtime.get("members", {}).get(member_id, {})
         return Member(
             member_id=member_id,
             pod=pod,
@@ -201,12 +287,12 @@ class Registry:
             timeout_s=int(raw.get("timeout_s", 7200)),
             mcp_config=raw.get("mcp_config", ".qoder/mcp.json"),
             effort=str(raw.get("effort", "") or ""),
-            sessions=list(raw.get("sessions", [])),
+            sessions=list(rt.get("sessions", [])),
             raw=raw,
         )
 
     def write_member(self, m: Member) -> None:
-        """把 Member 的会话池等可变状态写回底层 dict（save() 前调用）。"""
+        """把 Member 的可变状态写回底层 dict（配置面去 sessions，会话池进运行态；save() 前调用）。"""
         entry = self.data.setdefault("members", {}).setdefault(m.member_id, {})
         entry.update(
             {
@@ -217,15 +303,16 @@ class Registry:
                 "max_turns": m.max_turns,
                 "timeout_s": m.timeout_s,
                 "mcp_config": m.mcp_config,
-                "sessions": m.sessions,
             }
         )
+        entry.pop("sessions", None)
         # effort 是**可选**标注：非空才落键，空则移除——registry 里少一个恒为 "" 的
         # 噪声键，且组长手改清空后不会残留旧档位。
         if m.effort:
             entry["effort"] = m.effort
         else:
             entry.pop("effort", None)
+        _runtime_member(self.runtime, m.member_id)["sessions"] = m.sessions
 
     def ensure_member_defaults(self, member_id: str) -> None:
         """为尚未注册的成员生成默认条目（pod 目录存在时才可用，dispatch 前调用）。"""
@@ -238,8 +325,8 @@ class Registry:
                 "max_turns": 60,
                 "timeout_s": 7200,
                 "mcp_config": ".qoder/mcp.json",
-                "sessions": [],
             }
+            _runtime_member(self.runtime, member_id)
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +436,13 @@ def orchestration_rel(path: Path) -> str:
 
 #: 便于 doctest/调试的常量再导出。
 __all__ = [
+    "BACKUP_NAME",
     "DEFAULT_MODELS",
     "DEFAULT_TOKENS_PER_CHAR",
     "Member",
     "ORCHESTRATION_ROOT",
     "REGISTRY_PATH",
+    "RUNTIME_NAME",
     "Registry",
     "orchestration_rel",
     "pod_session_key",

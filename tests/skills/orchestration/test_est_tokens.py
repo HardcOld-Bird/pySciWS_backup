@@ -31,6 +31,8 @@ from .conftest import (
     fake_headless,
     grow_session,
     read_registry,
+    read_runtime,
+    write_runtime,
 )
 
 OK_BODY = "<result>出图完成，commit aaa1111 已合并。</result>"
@@ -44,8 +46,8 @@ def _write_registry(state, data):
 
 
 def seed_session(state, sid=SID, **extra):
-    """预置一个活跃会话（使 do_dispatch 走 resume 路径、sid 与文件名可预期）。"""
-    data = read_registry(state)
+    """预置一个活跃会话到运行态（使 do_dispatch 走 resume 路径、sid 与文件名可预期）。"""
+    rt = read_runtime(state)
     entry = {
         "sid": sid,
         "name": "任务A",
@@ -54,8 +56,8 @@ def seed_session(state, sid=SID, **extra):
         "status": "active",
     }
     entry.update(extra)
-    data["members"]["quotamember"]["sessions"] = [entry]
-    _write_registry(state, data)
+    rt.setdefault("members", {}).setdefault("quotamember", {})["sessions"] = [entry]
+    write_runtime(state, rt)
 
 
 def set_coefficient(state, value):
@@ -166,13 +168,13 @@ def test_offset_continuity_across_two_hops(iso_dispatch, monkeypatch):
     """第二跳只计本跳增量；水位与跳数随派发前进（跨进程基准必须落 registry）。"""
     enable_registry_save(monkeypatch, iso_dispatch)
     dispatch_one(iso_dispatch, monkeypatch, "a" * 100)
-    sess = read_registry(iso_dispatch)["members"]["quotamember"]["sessions"][0]
+    sess = read_runtime(iso_dispatch)["members"]["quotamember"]["sessions"][0]
     assert sess["chars_offset"] == 100
     fake_headless(monkeypatch, ok_after_growth(iso_dispatch, chunk="b" * 50))
     dispatch.do_dispatch("quotamember", text="继续", quiet=True)
     e = ledger_rows(iso_dispatch)[-1]
     assert e.delta_chars == 50, "不重复计入上一跳的 100"
-    sess = read_registry(iso_dispatch)["members"]["quotamember"]["sessions"][0]
+    sess = read_runtime(iso_dispatch)["members"]["quotamember"]["sessions"][0]
     assert sess["chars_offset"] == 150 and sess["hops"] == 2
 
 
@@ -209,7 +211,7 @@ def test_failed_hop_still_measured(iso_dispatch, monkeypatch):
     assert o.kind == "run_failed"
     e = ledger_rows(iso_dispatch)[-1]
     assert (e.kind, e.delta_chars, e.est_tokens) == ("run_failed", 30, 18)
-    sess = read_registry(iso_dispatch)["members"]["quotamember"]["sessions"][0]
+    sess = read_runtime(iso_dispatch)["members"]["quotamember"]["sessions"][0]
     assert sess["chars_offset"] == 30
 
 
