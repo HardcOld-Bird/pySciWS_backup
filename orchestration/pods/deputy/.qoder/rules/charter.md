@@ -28,6 +28,9 @@ trigger: always_on
 3. **全项目视野**：可读写项目全域（orchestration/** 与自身只读层除外），为你
    承担 1、2 提供便利；改动生产代码时遵守项目分层与规约（basic.md）。
 
+顶层设计与基建决策惯例见根 `leader-only.md`（组长专属规则，你的 pod 已排除注入，
+但可直接阅读）与 `orchestration/README.md`（跨 pod 只读）。
+
 ## MCP 说明
 
 你配有 arxiv/zotero/paper-search/blender-mcp。**未配 comsol MCP**（COMSOL 单许可

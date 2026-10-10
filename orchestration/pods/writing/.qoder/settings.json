@@ -1,4 +1,7 @@
 {
+  "agentsMdExcludes": [
+    "**/leader-only.md"
+  ],
   "hooks": {
     "Stop": [
       {

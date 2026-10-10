@@ -50,4 +50,6 @@
 - **pod 脚手架的 git 跟踪面**：每 pod 仅 5 个文件入库（`.gitignore`/`.qoder/settings.json`/
   `.qoder/mcp.json`/`.qoder/rules/charter.md`/`AGENTS.md`）；`bench/`·`outbox/`·`.qoder/skills/`
   被 pod `.gitignore` 排除，`inbox/` 空目录 git 不跟踪——三者均须在**合并后于 main 上**用
-  `mkdir` + `sync` 再生（worktree 内建了也不随合并 transfer）。
+  `mkdir` + `sync` 再生（worktree 内建了也不随合并 transfer）。settings 模板两件事必带：
+  两个 hook 接线 + `"agentsMdExcludes": ["**/leader-only.md"]`（组长专属根规则；写 `**/*.md`
+  会连 `basic.md` 公约数一起吞掉）。勿把 pod 自建规则命名成 `leader-only*`（撞排除 glob）。
