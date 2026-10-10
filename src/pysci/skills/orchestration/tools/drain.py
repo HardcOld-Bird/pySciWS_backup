@@ -11,11 +11,15 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
 - **唤醒**（:func:`wake_devops`）：approve 成功后调用；锁忙则不重复 spawn（本项由
   当前 drain 循环接手），空闲则 Popen 分离进程运行内部命令 ``_drain-devops``。
 - **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
-  worker 遗留，重置 pending）；``backlog_take_first`` → 任务书 →
+  worker 遗留，重置 pending），并顺带清理其残留 worktree/branch
+  （:func:`cleanup_orphan_worktrees`，worktree 名 = 条目 id，``--force`` 摘除 + ``prune``
+  兜底，只清孤儿名不误删活跃/手动 worktree）；``backlog_take_first`` → 任务书 →
   ``do_dispatch("devops")`` → 销账；单项失败（blocked/run_failed）标记 needs_leader
   并**跳过**（一项卡住不阻塞全队列）；额度类失败（quota_exhausted）例外——视为系统性
   故障**全局停止**（当前条目复位 pending、剩余保持 pending、.done 注明）；run 日志
   逐行落 ``state/devops-runs/<ts>.log``，全部完成写 ``<ts>.done``（JSON 摘要）。
+  ``.done`` 是干净完成信号：stale 锁若缺对应 ``.done`` 即 worker 被中途杀死（崩溃），
+  :func:`lock_status` 据此置 ``crashed``，orch status surfacing 供用户判断 devops 状态。
 
 分离进程无 kill 之外的规范停止手段，故补**协作式停止**：``orch drain-stop`` 写
 ``state/devops.cancel``（JSON: pid/requested_at，指向当前锁持有者）；drain 在每项
@@ -182,7 +186,11 @@ def release_lock() -> None:
 
 
 def lock_status() -> dict[str, Any]:
-    """status 命令用的锁态摘要：``{state: idle|running|stale, pid, started, ...}``。"""
+    """status 命令用的锁态摘要：``{state: idle|running|stale, pid, started, ...}``。
+
+    stale 时附 ``crashed`` 字段：该 run 无对应 ``.done`` = worker 被中途杀死（崩溃）；
+    有 ``.done`` = 上一次干净完成但锁残留（release 未及/异常）。供 orch status surfacing。
+    """
     data = read_lock()
     if not data:
         return {"state": "idle"}
@@ -190,13 +198,30 @@ def lock_status() -> dict[str, Any]:
     age = _lock_age_s(data)
     alive = _pid_alive(pid)
     state = "running" if (alive and 0 <= age <= LOCK_STALE_S) else "stale"
-    return {
+    out: dict[str, Any] = {
         "state": state,
         "pid": pid,
         "started": data.get("started", ""),
         "run_log": data.get("run_log", ""),
         "age_s": round(age, 1) if age >= 0 else -1,
     }
+    if state == "stale":
+        out["crashed"] = _stale_run_crashed(data)
+    return out
+
+
+def _stale_run_crashed(data: dict[str, Any]) -> bool:
+    """stale 锁对应的 run 是否崩溃（无 ``.done``）。
+
+    ``.done`` 由 drain_backlog 的 finally 块在正常/异常收尾时写出——存在即代表 worker
+    跑到了收尾（干净完成），缺失即代表进程被中途杀死（OS 关机 / kill -9）没机会收尾。
+    run_log 无法定位时保守判为崩溃。
+    """
+    run_log_rel = str(data.get("run_log", ""))
+    if not run_log_rel:
+        return True
+    done = (PROJECT_ROOT / run_log_rel).with_suffix(".done")
+    return not done.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +319,59 @@ def _extract_commit(body: str) -> str:
     """从交付正文尽力提取 commit hash（``commit ... <hex>``）；无则空串。"""
     m = _COMMIT_RE.search(body or "")
     return m.group(1) if m else ""
+
+
+# ---------------------------------------------------------------------------
+# 孤儿 worktree 清理（reclaim 顺带；与 pysci-dev worktree 同布局：.qoder/worktrees/<name> + wt-<name>）
+# ---------------------------------------------------------------------------
+def _run_git(*args: str) -> tuple[int, str]:
+    """在项目根运行 git，返回 (rc, 合并输出)。超时/异常一律 fail-open（返回非零、不抛）。"""
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 1, str(exc)
+    return proc.returncode, ((proc.stdout or "") + (proc.stderr or "")).strip()
+
+
+def cleanup_orphan_worktrees(
+    names: list[str], run_log: Path | None = None
+) -> list[str]:
+    """清理死 worker 残留的 worktree/branch（孤儿回收的顺带动作）。
+
+    每个 name（= 孤儿条目 id = worktree 名，见 workflow.backlog_take_first 记录约定）：
+    ``git worktree remove --force`` 摘工作树 + ``git branch -D wt-<name>`` 删分支；末尾
+    ``git worktree prune`` 兜底清悬挂管理项（目录已删但元数据残留）。
+
+    **只清传入的孤儿名**——活跃/手动 worktree（别名）不受影响，故不会误删并发的手动
+    作业（对齐任务书要求）。全程 fail-open（git 缺失/超时/该 worktree 不存在均忽略）。
+
+    Returns:
+        实际清理到（worktree 或 branch 至少其一删除成功）的 name 列表。
+    """
+    cleaned: list[str] = []
+    for name in names:
+        if not name:
+            continue
+        wt_path = PROJECT_ROOT / ".qoder" / "worktrees" / name
+        rc_wt, _ = _run_git("worktree", "remove", "--force", str(wt_path))
+        rc_br, _ = _run_git("branch", "-D", f"wt-{name}")
+        if rc_wt == 0 or rc_br == 0:
+            cleaned.append(name)
+            if run_log:
+                _log(
+                    run_log,
+                    f"[i] 清理孤儿 worktree：{name}（worktree rc={rc_wt}, branch rc={rc_br}）",
+                )
+    _run_git("worktree", "prune")  # 兜底：清悬挂管理项
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -396,6 +474,13 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
     if orphans:
         summary["reclaimed"] = orphans
         _log(run_log, f"[i] 回收孤儿 in_progress 条目：{', '.join(orphans)}")
+        # 顺带清理死 worker 残留的 worktree/branch（worktree 名 = 条目 id）；dry 演练不破坏
+        if dry:
+            _log(run_log, "[i] dry 模式：跳过孤儿 worktree 清理（非破坏性演练）")
+        else:
+            cleaned = cleanup_orphan_worktrees(orphans, run_log)
+            if cleaned:
+                summary["worktrees_cleaned"] = cleaned
     try:
         while True:
             if _consume_stop_request():

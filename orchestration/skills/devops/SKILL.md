@@ -12,6 +12,7 @@ description: devops 组员的作业规程：worktree 隔离实施、PYTHONPATH �
 
 ```bash
 # 1. 开 worktree（从最新 main）
+#    ← drain/backlog 派发时，<任务名> 必须用**任务书 id**（如 20261010-xxx），便于孤儿回收清理
 pysci-dev worktree add <任务名>        # = git worktree add -b wt-<任务名> .qoder/worktrees/<任务名>
 WT="$(git rev-parse --show-toplevel)/.qoder/worktrees/<任务名>"
 
@@ -40,6 +41,11 @@ pysci-dev worktree remove <任务名>
 
 注意：worktree 检出**不含未跟踪重数据**（data/research 的 simulation/storage 等被
 gitignore）；需要真实数据验证时以绝对路径只读引用主树。
+
+**worktree 命名约定**：drain/backlog 派发时用**条目 id** 作 `<任务名>`（take_first 已把
+`worktree=id` 记入条目）。若 devops 会话中途死亡留下孤儿条目，下次 drain 孤儿回收会据
+`wt-<id>` 名 `git worktree remove --force` + `branch -D` 清理残留（否则重派 `worktree add`
+撞名失败）。手动/组长临时派发可用任意名——不属孤儿、不会被自动清理（防误删并发作业）。
 
 ## 技能部署（真本 → 副本）
 

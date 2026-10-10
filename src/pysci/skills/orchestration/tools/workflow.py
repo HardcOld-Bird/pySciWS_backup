@@ -72,7 +72,12 @@ def backlog_by_status(status: str) -> list[dict]:
 
 
 def backlog_take_first() -> dict | None:
-    """取队首 pending 条目标记 in_progress 并返回（devops 派发用）。"""
+    """取队首 pending 条目标记 in_progress 并返回（devops 派发用）。
+
+    同时记入 ``worktree`` 字段（= 条目 id，与 dispatch slug 一致）：devops 按任务书
+    约定用此名开 worktree，worker 中途死亡后 drain 孤儿回收据此定位并清理残留
+    worktree/branch（见 :func:`drain.cleanup_orphan_worktrees`）。
+    """
     if not BACKLOG_PATH.exists():
         return None
     data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
@@ -80,6 +85,7 @@ def backlog_take_first() -> dict | None:
         if item.get("status") == "pending":
             item["status"] = "in_progress"
             item["started_at"] = _now()
+            item["worktree"] = str(item.get("id", ""))
             BACKLOG_PATH.write_text(
                 json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
@@ -105,6 +111,9 @@ def backlog_reclaim_orphans() -> list[str]:
             item["note"] = (
                 f"孤儿条目回收（原 started_at={item.pop('started_at', '?')}）"
             )
+            item.pop(
+                "worktree", None
+            )  # 复位为干净 pending（残留 worktree 由 drain 清理）
             reclaimed.append(str(item.get("id", "")))
     if reclaimed:
         BACKLOG_PATH.write_text(
@@ -174,7 +183,9 @@ def backlog_task_text(item: dict) -> str:
         f"摘要：{item.get('summary', '')}\n\n"
         f"证据：{item.get('evidence') or item.get('evidence_file', '（见建议归档）')}\n\n"
         f"组长附注：{item.get('note', '（无）')}\n\n"
-        "要求：以 worktree 隔离实施（你的 devops 技能有作业规程）；完整测试后合并、"
+        "要求：以 worktree 隔离实施，**worktree 名用本条目 id**——"
+        f"`pysci-dev worktree add {item['id']}`（分支 wt-{item['id']}），以便 worker "
+        "中途死亡时 drain 孤儿回收能据此定位并清理残留 worktree；完整测试后合并、"
         "commit（不 push——push 须用户授权）；交付中报告改动清单与验证证据，"
         f"并注明 backlog id={item['id']} 以便销账。\n\n"
         "合并前 git status 检查——若 main 工作区存在会被本次合并触碰的未提交改动，"

@@ -104,9 +104,16 @@ def cmd_status(args: argparse.Namespace) -> int:
             f"日志 {lst['run_log']}）"
         )
     elif lst["state"] == "stale":
-        print(
-            f"  ⊘ stale 锁（pid {lst['pid']} 已死/超龄；下次 approve 或 drain 自动接管）"
-        )
+        if lst.get("crashed"):
+            print(
+                f"  ⊘ 崩溃（pid {lst['pid']} 已死且该 run 无 .done）——worker 被中途杀死；"
+                "下次 approve/drain 自动接管并回收孤儿条目 + 清理残留 worktree"
+            )
+        else:
+            print(
+                f"  ⊘ stale 锁（pid {lst['pid']} 已死/超龄，但该 run 有 .done = 干净完成，"
+                "锁残留；下次 approve 或 drain 自动接管）"
+            )
     else:
         print("  idle（无 drain worker 运行）")
     cancel = _drain.cancel_status()
