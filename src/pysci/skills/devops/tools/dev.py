@@ -196,8 +196,19 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     )
     bad += 1 if level == "fail" else 0
     print()
+    # guard 在法活体探针（backlog 20261010-193601-devops）：Temp fixture + node 直跑真 guard，
+    # 双断言（违规被拦 + fail-open 留痕），把「fail-open 静默吞掉 guard 自伤」这一结构性坑
+    # 固化到观测面。bad 计入 rc=2；inconclusive（node 缺失/guard 文件缺失）advisory 不硬失败。
+    print("== guard 在法活体探针 ==")
+    from pysci.skills.devops.tools import guard_probe as _gp
+
+    gp_results = _gp.run_all()
+    for ln in _gp.report(gp_results):
+        print(ln)
+    bad += sum(1 for r in gp_results if r.status == "bad")
+    print()
     print(
-        f"[{'√ 全部健康' if not bad else f'✗ {bad} 项问题（pod/部署台账/预算/平台税/排除哨兵）'}]"
+        f"[{'√ 全部健康' if not bad else f'✗ {bad} 项问题（pod/部署台账/预算/平台税/排除哨兵/在法探针）'}]"
     )
     return 0 if not bad else 2
 

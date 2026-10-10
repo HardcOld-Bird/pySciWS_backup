@@ -4,7 +4,10 @@
 //
 // 防循环：stop_hook_active 为真时放行（避免死循环）。
 // fail-open：stdin 解析失败、或预算段自身异常（缺目录、坏 frontmatter、编码意外）一律放行——
-// 门禁故障不阻塞生产，也不把「拒绝清理」伪装成「保护」。
+// 门禁故障不阻塞生产，也不把「拒绝清理」伪装成「保护」。**但 fail-open 必须留痕**：任何
+// 吞异常处都在 stderr 打 `[delivery-gate fail-open] <原因>` 再 exit 0，让上层（doctor 的
+// 活体探针 / orch runner 的告警扫描）能机械识别「本该拦但放行了」的静默退化；否则 guard
+// 有 bug 时会伪装成一切正常（backlog 20261010-193601-devops 的教训）。
 //
 // 计量口径：fs.statSync().size = 落盘字节（Windows 检出为 CRLF），与 `wc -c` /
 // `find -size +8192c` 同口径，即 harness 实际注入所付的税。
@@ -27,11 +30,18 @@ for await (const chunk of process.stdin) raw += chunk;
 
 // 执行流见文件末尾的 run()：ESM 顶层的 `const` 有 TDZ，若在声明之前调用 run()，
 // 其中的 size/mdIn/subDirs 都还是未初始化绑定（fail-open 会把这种自伤静默吞掉）。
+// fail-open 留痕：任何吞异常处调用此 helper，stderr 打一行标签让上层能机械识别。
+function failOpen(where, err) {
+  const msg = err && (err.stack || err.message) ? err.stack || err.message : String(err);
+  console.error(`[delivery-gate fail-open] ${where} 异常，本次放行：${msg}`);
+}
+
 function run() {
   let data = {};
   try {
     data = JSON.parse(raw);
-  } catch {
+  } catch (e) {
+    failOpen('stdin JSON 解析', e);
     process.exit(0);
   }
   if (data.stop_hook_active) process.exit(0);
@@ -52,8 +62,9 @@ function run() {
       path.resolve(process.env.PYSCI_POD || data.cwd || process.cwd()),
       problems
     );
-  } catch {
-    /* fail-open：预算校验自身异常不得卡死交付 */
+  } catch (e) {
+    /* fail-open：预算校验自身异常不得卡死交付；但必须留痕（见文件头说明） */
+    failOpen('预算校验段', e);
   }
 
   if (!problems.length) process.exit(0);
@@ -199,4 +210,11 @@ function descBytes(fm) {
   return total;
 }
 
-run();
+try {
+  run();
+} catch (e) {
+  // 兜底：任何未捕获异常（含未来重构把执行流放回 const 声明前的 TDZ 事故）都必须留痕后放行，
+  // 不得静默——否则 guard 退化成一个空壳、观测面看不到它的失效（backlog 20261010-193601-devops）。
+  failOpen('run() 未捕获异常', e);
+  process.exit(0);
+}
