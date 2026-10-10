@@ -82,7 +82,9 @@ def _doctor_pod(pod: Path) -> list[str]:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    """pod 健康巡检：hooks 接线 / charter / AGENTS.md 体量 / 部署漂移 / inbox 积压。"""
+    """pod 健康巡检：hooks 接线 / charter / AGENTS.md 体量 / 部署漂移 / inbox 积压；
+    外加「部署台账巡检」——联动 ``sync --check``，捕获 skills-deployed.json 记录哈希
+    相对真本的漂移（[*]）与副本漂移（[!]），即 worktree-sync 污染类问题的哨兵。"""
     print("== pod 巡检 ==")
     pods = (
         [PODS_ROOT / args.pod]
@@ -98,7 +100,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             if "[✗]" in line or "[缺失]" in line:
                 bad += 1
     print()
-    print(f"[{'√ 全部健康' if not bad else f'✗ {bad} 个 pod 有问题'}]")
+    # 部署台账巡检（sync --check 联动）：记录哈希 vs live 真本（[*]）+ 副本漂移（[!]）
+    print("== 部署台账巡检（sync --check）==")
+    from pysci.skills.orchestration.tools import sync as _sync
+
+    drift = [ln for ln in _sync.sync(check_only=True) if ln.startswith(("[!", "[*]"))]
+    for ln in drift:
+        print(ln)
+    bad += len(drift)
+    if not drift:
+        print("  [√] 无漂移（记录哈希与真本/副本一致）")
+    elif any(ln.startswith("[*]") for ln in drift):
+        print(
+            "  → 记录哈希过期：在 main 上跑 pysci-dev sync 重生成 skills-deployed.json"
+        )
+    print()
+    print(f"[{'√ 全部健康' if not bad else f'✗ {bad} 项问题（pod/部署台账）'}]")
     return 0 if not bad else 2
 
 

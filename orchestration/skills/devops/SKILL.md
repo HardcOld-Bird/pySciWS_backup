@@ -41,12 +41,15 @@ gitignore）；需要真实数据验证时以绝对路径只读引用主树。
 
 - 真本：`orchestration/skills/<name>/`（git 跟踪）；manifest：同目录 `manifest.toml`；
 - 改完真本执行 `pysci-dev sync`（与 pysci-orch sync 同引擎）；`sync --check` 查漂移；
+- `tree_hash` **行尾无关**（哈希前 CRLF→LF，2026-10-10 修 backlog 20261010-003127-devops）：
+  worktree 内 sync 提交的 `skills-deployed.json` 对 main 即正确，无需合并后重跑；doctor
+  「部署台账巡检（sync --check）」哨兵记录哈希漂移；
 - 红线：只碰 manifest 声明的部署名；**不删除成员自建技能**；不手改部署副本。
 
 ## pysci-dev 命令面
 
 ```
-pysci-dev doctor [--pod <id>]   # pod 健康巡检：hooks 接线/charter/部署漂移/AGENTS.md 体量/积压
+pysci-dev doctor [--pod <id>]   # pod 健康巡检：hooks 接线/charter/AGENTS.md 体量/积压 + 部署台账巡检（sync --check 漂移）
 pysci-dev sync [--check]        # 技能部署
 pysci-dev worktree add|remove|list [<name>]
 ```

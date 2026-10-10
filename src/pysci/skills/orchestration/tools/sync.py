@@ -57,10 +57,18 @@ def load_manifest() -> list[SkillSpec]:
 
 
 def tree_hash(root: Path) -> str:
-    """计算目录树的内容哈希（逐文件：相对路径 + 字节内容，排序后级联 sha256）。
+    """计算目录树的内容哈希（逐文件：相对路径 + 规范化字节内容，排序后级联 sha256）。
+
+    行尾无关（ADR 2026-10-10，backlog 20261010-003127-devops）：哈希前把 CRLF→LF。
+    本机 ``core.autocrlf=true`` 且无 ``.gitattributes``，``git worktree add`` 把文本真本
+    smudge 成 CRLF，而 main 工作区是混合行尾；旧实现读**原始字节**，致同一真本在
+    worktree/main 算出不同哈希、合并后 ``skills-deployed.json`` 报假漂移。技能真本全为
+    文本（.md/.toml，无二进制），故规范化安全。选此方案而非根 ``.gitattributes``：后者需
+    仓库级 renormalize（触碰每个文本文件、与用户本地 autocrlf 交互），blast radius 大；
+    本改动外科式、只影响哈希计算，worktree 内 sync 提交的哈希对 main 即正确。
 
     Args:
-        root: 目标目录（不存在时返回空串哈希标记）。
+        root: 目标目录（不存在时返回 ``"MISSING"`` 标记）。
 
     Returns:
         十六进制 sha256 摘要。
@@ -71,7 +79,7 @@ def tree_hash(root: Path) -> str:
     for p in sorted(root.rglob("*")):
         if p.is_file():
             h.update(str(p.relative_to(root)).replace("\\", "/").encode("utf-8"))
-            h.update(p.read_bytes())
+            h.update(p.read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()
 
 
