@@ -4,7 +4,7 @@
 
     uv run pysci-dev doctor [--pod <id>]     # pod 健康巡检
     ... dev sync [--check]                   # 技能真本→部署副本（复用 orchestration.sync 引擎）
-    ... dev worktree add|remove|list [<name>]
+    ... dev worktree add|merge|remove|list [<name>]
     ... dev skilltax [--apply|--probe]       # 平台技能清单税：量、落关停配置、复测键义
     ... dev probe [--json|--no-ledger]       # agentsMdExcludes 生效性机械探针：因果 A/B、写台账
 
@@ -18,6 +18,7 @@ import fnmatch
 import json
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from pysci.paths import PODS_ROOT, PROJECT_ROOT
@@ -229,15 +230,156 @@ def cmd_sync(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # worktree
 # ---------------------------------------------------------------------------
+#: 跨合并必搬的 gitignored 运行态清单（backlog 20261010-worktree-merge-cp）。
+#: --no-ff 只带 git 面，这些文件不随迁；registry-runtime-split 那次靠 devops 人工 cp
+#: 才保住 5 成员 6 会话。此清单是**保底**——真实搬运集 = 本清单 ∪ git 侧 ignored 发现。
+MERGE_STATE_FILES = ("sessions-runtime.json", "registry.presplit.json", "watch.json")
+
+
+def _state_dir(root: Path) -> Path:
+    """某仓根（main 或 worktree）下的 orchestration/state 目录。"""
+    return root / "orchestration" / "state"
+
+
+def _ignored_state_names(wt: Path) -> set[str]:
+    """向 git 问 worktree 的 orchestration/state 顶层哪些是 ignored（分支侧 .gitignore 规则）。"""
+    sd = _state_dir(wt)
+    if not sd.exists():
+        return set()
+    candidates = [p.name for p in sd.iterdir() if p.is_file()]
+    if not candidates:
+        return set()
+    payload = "\n".join(f"orchestration/state/{n}" for n in candidates)
+    try:
+        # 用 bytes 通道：Windows subprocess text=True 会把 input 里的 \n 译成 \r\n，
+        # 而 git check-ignore --stdin 只识别裸 LF（实测 \r 让整批查询静默返空）。
+        proc = subprocess.run(
+            ["git", "-C", str(wt), "check-ignore", "--stdin"],
+            input=payload.encode("utf-8"),
+            capture_output=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return set()
+    stdout = proc.stdout.decode("utf-8", errors="replace")
+    return {Path(line.strip()).name for line in stdout.splitlines() if line.strip()}
+
+
+def _cp_ignored_state(wt: Path, main: Path, ts: str) -> list[tuple[str, str]]:
+    """纯 cp：worktree→main 同名；main 侧存在的先字节级备份 ``<name>.bak-<ts>``。
+
+    Returns:
+        ``[(name, tag)]``——tag=``new`` 表目标原本不存在，否则 ``bak=<备份名>``。
+        fail-open：worktree 侧文件缺失/读不动跳过本条不抛。
+    """
+    names = set(MERGE_STATE_FILES) | _ignored_state_names(wt)
+    sd_wt = _state_dir(wt)
+    sd_main = _state_dir(main)
+    sd_main.mkdir(parents=True, exist_ok=True)
+    log: list[tuple[str, str]] = []
+    for name in sorted(names):
+        src = sd_wt / name
+        if not src.is_file():
+            continue
+        try:
+            data = src.read_bytes()
+        except OSError:
+            continue
+        dst = sd_main / name
+        tag = "new"
+        if dst.exists():
+            bak = dst.with_name(f"{name}.bak-{ts}")
+            try:
+                bak.write_bytes(dst.read_bytes())
+                tag = f"bak={bak.name}"
+            except OSError as exc:
+                print(f"[!] 备份 {dst.name} 失败（{exc}），仍会覆盖")
+        dst.write_bytes(data)
+        log.append((name, tag))
+    return log
+
+
+def _runtime_session_total(root: Path) -> int | None:
+    """读 root 侧 sessions-runtime.json 的会话总数。
+
+    直接用运行态文件而非 Registry.load：后者会触发 cutover 或警告副作用；自检要**无副作用**
+    读数，且合并前后都拿同一把尺子量。
+
+    Returns:
+        会话总数；**运行态文件不存在返回 None**（区别于「存在但 0 条」——前者不该被当作
+        「比 main 少」而误挡合并：一个从未派发/加载过的 worktree 本就没有运行态）。
+        文件损坏按 0 计（存在但读不出）。
+    """
+    rt = _state_dir(root) / "sessions-runtime.json"
+    if not rt.exists():
+        return None
+    try:
+        data = json.loads(rt.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    total = 0
+    for entry in data.get("members", {}).values():
+        sessions = entry.get("sessions", []) if isinstance(entry, dict) else []
+        total += len(sessions)
+    return total
+
+
+def cmd_worktree_merge(name: str, wt: Path) -> int:
+    """worktree merge 主体：cp gitignored 运行态 → 会话数基线校验 → git merge --no-ff → 自检。
+
+    Returns:
+        0 成功；2 硬阻塞（worktree 缺失/会话数会倒退/merge 失败）。
+    """
+    branch = f"wt-{name}"
+    ts = datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
+
+    base_n = _runtime_session_total(PROJECT_ROOT) or 0
+    wt_n = _runtime_session_total(wt)
+    # 仅当 worktree 确实带来一个更稀疏的运行态（会覆盖 main 的更丰富数据）才中止；
+    # worktree 无运行态（从未派发/加载）时 cp 对 sessions-runtime.json 是 no-op，不该误挡。
+    if wt_n is not None and wt_n < base_n:
+        print(
+            f"[!] worktree 侧会话数 {wt_n} < main baseline {base_n}——cp 会覆盖更丰富的 main "
+            f"运行态、丢会话，中止；核对 worktree 是否 stale（应从最新 main 起 worktree add）"
+        )
+        return 2
+
+    log = _cp_ignored_state(wt, PROJECT_ROOT, ts)
+    print("== cp gitignored 运行态（worktree → main）==")
+    if log:
+        for nm, tag in log:
+            print(f"  [√] orchestration/state/{nm}（{tag}）")
+    else:
+        print("  （无候选文件需搬）")
+
+    print(f"== git merge --no-ff {branch} ==")
+    rc, out = _run_git("merge", "--no-ff", branch)
+    print(out)
+    if rc != 0:
+        print(
+            f"[!] merge 失败 rc={rc}——cp 已落；main 侧冲突请人工处理，运行态文件不受影响"
+        )
+        return rc
+
+    after_n = _runtime_session_total(PROJECT_ROOT) or 0
+    if after_n < base_n:
+        print(
+            f"[✗] 合并后会话数倒退：base={base_n} after={after_n}——请核对 sessions-runtime.json"
+        )
+        return 2
+    print(f"[√] 会话数不减（base={base_n} → after={after_n}）")
+    return 0
+
+
 def cmd_worktree(args: argparse.Namespace) -> int:
-    """worktree 生命周期：add / remove / list（统一放 .qoder/worktrees/，分支 wt-<name>）。"""
+    """worktree 生命周期：add / merge / remove / list（统一 .qoder/worktrees/，分支 wt-<name>）。"""
     action = args.action
     if action == "list":
         rc, out = _run_git("worktree", "list")
         print(out)
         return rc
     if not args.name:
-        print("[!] add/remove 需要 <name>")
+        print(f"[!] {action} 需要 <name>")
         return 2
     wt_path = WORKTREES_ROOT / args.name
     if action == "add":
@@ -254,6 +396,11 @@ def cmd_worktree(args: argparse.Namespace) -> int:
                 f'"{wt_path.as_posix()}/tests" -x -q'
             )
         return rc
+    if action == "merge":
+        if not wt_path.exists():
+            print(f"[!] worktree 不存在：{wt_path}")
+            return 2
+        return cmd_worktree_merge(args.name, wt_path)
     if action == "remove":
         rc, out = _run_git("worktree", "remove", str(wt_path))
         print(out or f"[√] worktree 已移除：{wt_path.name}")
@@ -334,8 +481,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--check", action="store_true")
     p.set_defaults(func=cmd_sync)
 
-    p = sub.add_parser("worktree", help="worktree add/remove/list")
-    p.add_argument("action", choices=["add", "remove", "list"])
+    p = sub.add_parser(
+        "worktree",
+        help="worktree add/merge/remove/list（merge=机械化跨合并搬运行态 + --no-ff + 会话数自检）",
+    )
+    p.add_argument("action", choices=["add", "merge", "remove", "list"])
     p.add_argument("name", nargs="?")
     p.set_defaults(func=cmd_worktree)
 
