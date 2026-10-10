@@ -16,6 +16,10 @@ from pysci.paths import ORCH_STATE_ROOT
 
 LEDGER_PATH: Path = ORCH_STATE_ROOT / "ledger" / "deliveries.jsonl"
 
+#: ``by_effort`` 桶里代表「未标注 → 跟随用户级默认（中）」的哨兵键。真实档位永不会
+#: 叫这个名字（CLI 枚举 auto/none/low/medium/high，见 runner.VALID_EFFORTS），故不冲。
+EFFORT_DEFAULT_KEY = "(默认)"
+
 
 @dataclass
 class LedgerEntry:
@@ -89,18 +93,24 @@ def read_all() -> list[LedgerEntry]:
 
 
 def summarize(entries: list[LedgerEntry]) -> dict[str, Any]:
-    """聚合统计：总耗时/credits/est_tokens，按成员占比（§4.4 三层统计的第一层）。
+    """聚合统计：总耗时/credits/est_tokens，按成员/推理强度分档（§4.4 三层统计的第一层）。
 
     Args:
         entries: 台账记录子集（调用方负责筛选范围）。
 
     Returns:
         ``{"hops", "duration_ms", "credits", "credits_metered_hops", "est_tokens",
-        "est_tokens_metered_hops", "by_member": {id: {...占比}}}``。
+        "est_tokens_metered_hops", "by_member": {id: {...占比}},
+        "by_effort": {档: {...占比, avg_turns, fail_pct}}}``。
         ``credits_metered_hops`` 为 credits>0 的跳数——BYOK 下计量依模型而定（见
         Ledger.model 处 ADR），故须与 ``hops`` 并读才知成本覆盖率。
         ``est_tokens_metered_hops`` 同理是 est>0 的跳数：本字段上线前的旧行记 0，
         覆盖率不足时**占比只在已计量的跳之间有意义**。
+        ``by_effort`` 依 ``Ledger.effort`` 分档；空标注（跟随用户级默认）归入哨兵键
+        :data:`EFFORT_DEFAULT_KEY`。**服务档位数据的自然 A/B**（用户裁决 2026-10-10，
+        backlog `20261010-153041-devops`）：high vs medium 同类项的 ``avg_turns``
+        （轮均）与 ``fail_pct``（``kind != "result"`` 跳占比 = 返工率）就是档位策略
+        应否调整的直接读数——不必再人肉 jsonl 逐行比对。
     """
     total_ms = sum(e.duration_ms for e in entries)
     total_cr = sum(e.credits for e in entries)
@@ -108,6 +118,7 @@ def summarize(entries: list[LedgerEntry]) -> dict[str, Any]:
     metered_hops = sum(1 for e in entries if e.credits > 0)
     est_hops = sum(1 for e in entries if e.est_tokens > 0)
     by_member: dict[str, dict[str, Any]] = {}
+    by_effort: dict[str, dict[str, Any]] = {}
     for e in entries:
         m = by_member.setdefault(
             e.member,
@@ -117,6 +128,25 @@ def summarize(entries: list[LedgerEntry]) -> dict[str, Any]:
         m["duration_ms"] += e.duration_ms
         m["credits"] += e.credits
         m["est_tokens"] += e.est_tokens
+        key = e.effort or EFFORT_DEFAULT_KEY
+        f = by_effort.setdefault(
+            key,
+            {
+                "hops": 0,
+                "duration_ms": 0,
+                "credits": 0.0,
+                "est_tokens": 0,
+                "sum_turns": 0,
+                "fail_hops": 0,
+            },
+        )
+        f["hops"] += 1
+        f["duration_ms"] += e.duration_ms
+        f["credits"] += e.credits
+        f["est_tokens"] += e.est_tokens
+        f["sum_turns"] += e.num_turns
+        if e.kind != "result":
+            f["fail_hops"] += 1
     for m in by_member.values():
         m["duration_pct"] = (
             round(100 * m["duration_ms"] / total_ms, 1) if total_ms else 0.0
@@ -125,6 +155,16 @@ def summarize(entries: list[LedgerEntry]) -> dict[str, Any]:
         m["est_tokens_pct"] = (
             round(100 * m["est_tokens"] / total_est, 1) if total_est else 0.0
         )
+    for f in by_effort.values():
+        f["duration_pct"] = (
+            round(100 * f["duration_ms"] / total_ms, 1) if total_ms else 0.0
+        )
+        f["credits_pct"] = round(100 * f["credits"] / total_cr, 1) if total_cr else 0.0
+        f["est_tokens_pct"] = (
+            round(100 * f["est_tokens"] / total_est, 1) if total_est else 0.0
+        )
+        f["avg_turns"] = round(f["sum_turns"] / f["hops"], 1) if f["hops"] else 0.0
+        f["fail_pct"] = round(100 * f["fail_hops"] / f["hops"], 1) if f["hops"] else 0.0
     return {
         "hops": len(entries),
         "duration_ms": total_ms,
@@ -133,6 +173,7 @@ def summarize(entries: list[LedgerEntry]) -> dict[str, Any]:
         "est_tokens": total_est,
         "est_tokens_metered_hops": est_hops,
         "by_member": by_member,
+        "by_effort": by_effort,
     }
 
 
@@ -178,3 +219,32 @@ def format_credits(summary: dict[str, Any]) -> str:
     if not metered:
         return f"credits 未计量（BYOK，0/{hops} 跳上报）"
     return f"credits {summary.get('credits', 0)}（覆盖 {metered}/{hops} 跳）"
+
+
+def format_by_effort(by_effort: dict[str, dict[str, Any]]) -> str:
+    """把 summarize 的 ``by_effort`` 渲染成对齐的多行文本（服务档位 A/B）。
+
+    每档一行：跳数 / 轮均（num_turns 均值）/ 返工率（kind≠result 跳占比）/
+    耗时·est·credits 占比。排序：真实档位名字典序在前，:data:`EFFORT_DEFAULT_KEY`
+    哨兵恒置末（未标注≡跟随用户级默认，与显式档位是不同语义层，不该混着读）。
+
+    Args:
+        by_effort: ``summarize()["by_effort"]``。
+
+    Returns:
+        多行字符串（行间以 ``\\n`` 分隔，无末行换行）；空输入 → ``"（无 by_effort 数据）"``。
+    """
+    if not by_effort:
+        return "（无 by_effort 数据）"
+    keys = sorted(k for k in by_effort if k != EFFORT_DEFAULT_KEY)
+    if EFFORT_DEFAULT_KEY in by_effort:
+        keys.append(EFFORT_DEFAULT_KEY)
+    lines = []
+    for k in keys:
+        r = by_effort[k]
+        lines.append(
+            f"  {k:<8} 跳数={r['hops']:<4} 轮均={r['avg_turns']:<5} "
+            f"返工率={r['fail_pct']}%  耗时占比={r['duration_pct']}%  "
+            f"est占比={r['est_tokens_pct']}%  credits占比={r['credits_pct']}%"
+        )
+    return "\n".join(lines)

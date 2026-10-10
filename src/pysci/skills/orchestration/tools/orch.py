@@ -35,6 +35,7 @@ from . import workflow as _workflow
 from .dispatch import do_dispatch
 from .ledger import (
     LEDGER_PATH,
+    format_by_effort,
     format_credits,
     format_est_tokens,
     read_all,
@@ -328,6 +329,12 @@ def cmd_ledger(args: argparse.Namespace) -> int:
                 f"  {mid:<10} 跳数={mrow['hops']:<4} 耗时占比={mrow['duration_pct']}%  "
                 f"est占比={mrow['est_tokens_pct']}%  credits占比={mrow['credits_pct']}%"
             )
+        if len(s["by_effort"]) > 1:
+            # 单一档时 by_effort ≡ 全体，无 A/B 信号；>=2 档才打（backlog 20261010-153041-devops）
+            print(
+                "  按推理强度档位（轮均=num_turns 均值，返工率=kind≠result 跳占比）："
+            )
+            print(format_by_effort(s["by_effort"]))
         return 0
     if not entries:
         print(f"（台账为空：{orchestration_rel(LEDGER_PATH)}）")

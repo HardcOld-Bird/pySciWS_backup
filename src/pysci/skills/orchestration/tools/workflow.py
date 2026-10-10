@@ -14,7 +14,13 @@ from pathlib import Path
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from .dispatch import REPLIES_DIR, do_dispatch
-from .ledger import format_credits, format_est_tokens, read_all, summarize
+from .ledger import (
+    format_by_effort,
+    format_credits,
+    format_est_tokens,
+    read_all,
+    summarize,
+)
 from .registry import orchestration_rel
 from .runner import normalize_effort
 
@@ -512,6 +518,12 @@ def cmd_stats(args) -> int:
                 f"  {mid:<10} 跳数={row['hops']:<4} 耗时占比={row['duration_pct']}%  "
                 f"est占比={row['est_tokens_pct']}%  credits占比={row['credits_pct']}%"
             )
+        if len(s["by_effort"]) > 1:
+            # 单一档时 by_effort ≡ 全体，无 A/B 信号；>=2 档才打（backlog 20261010-153041-devops）
+            print(
+                "  按推理强度档位（轮均=num_turns 均值，返工率=kind≠result 跳占比）："
+            )
+            print(format_by_effort(s["by_effort"]))
         kinds: dict[str, int] = {}
         for e in sub:
             kinds[e.kind] = kinds.get(e.kind, 0) + 1
