@@ -122,6 +122,25 @@ no-op 首跳 `context_usage_ratio` 0.313 → 0.152（**−51.5%**）；真实 ar
 的结果（arXiv `1208.1832`）、`is_error=false`——**无损，纯上下文收益**。MCP schema 不
 计入知识预算，本项属上下文优化；落地配置见 §8。
 
+**agentsMdExcludes 生效性哨兵**（实测 2026-10-10，backlog `20261010-165408-devops`；
+工具 `pysci-dev probe`，实现 `src/pysci/skills/devops/tools/probe.py`）：pod settings 的
+`agentsMdExcludes=["**/leader-only.md"]` 是 **CLI 侧行为**——doctor 的静态巡检只能证明
+settings 里写了这条 glob，**不能证明 CLI 真据此把组长专属根规则挡在组员会话之外**。若将来
+CLI 改了该键名或 glob 语义（例如不再支持 `**/` 前缀），十 pod 会**静默退回**「组员看见组长
+规程」（越权面），而 doctor 仍报全绿。固化法：**自足 Temp git fixture + 因果 A/B**，不触碰受
+治理的根规则文件——`git init` 一个临时仓库放两枚 `trigger: always_on` 规则，各带一枚**不可猜
+随机 token**（`TOK-<16hex>`）：`keep.md`（永不排除）与 `hide.md`（被 glob 命中）；两个探针 pod
+跑同一句「列出上下文里所有 TOK- 标记」的 headless 一跳（`--max-turns 1` flash 档，实测约 2–4 跳）。
+**因果断言**：`hide` 在 `control`（不排除）出现 → 证明探针灵敏、模型确会复述被注入 token；`hide`
+在 `withexclude` 消失 → 证明排除生效。二者同成立才判 `mechanism_ok`；control 不复述 →
+`inconclusive`（重试直至灵敏，**绝不误判为绿**）；withexclude 仍复述 → `exclusion_failed`（真回归，
+硬告警）。CLI `1.1.67` 实测 `status=ok`、`keep_injected=true`、`withexclude` 首跳 ratio 0.113。
+结论写 git 跟踪台账 `orchestration/state/agents-md-excludes-probe.json`，staleness 键 =
+`sha256({cli_version, 全 pod 排除模式面})`——**不含时间戳**（确定性、跨 worktree 合并零漂移），
+故复测只由「CLI 升级」或「排除 glob 语义面变更」触发。doctor 读台账三档：机制判假 →
+`[✗]` 计入 bad；未跑/哈希过期 → `[!]` advisory（headless 昂贵，不硬失败）；新鲜且成立 → `[√]`。
+与 §1 harness 预算审计**互补不重叠**：预算哨兵量**落盘字节**（静态），本哨兵验**实际注入**（动态）。
+
 ---
 
 ## 2. 目录契约

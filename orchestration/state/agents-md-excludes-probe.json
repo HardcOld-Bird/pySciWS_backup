@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "config_hash": "ddc7f14db2b49759",
+  "cli_version": "1.1.67",
+  "patterns": [
+    "leader-only.md"
+  ],
+  "status": "ok",
+  "mechanism_ok": true,
+  "keep_injected": true,
+  "model": "Qwen3.8-Flash"
+}
