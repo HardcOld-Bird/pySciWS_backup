@@ -10,14 +10,15 @@
 
 ## 经验（工作中积累）
 
-- **worktree 内 `pysci-dev sync` 会污染 `skills-deployed.json`（重要）**：本机
-  `core.autocrlf=true` 且无 `.gitattributes`，`git worktree add` 把全部文本真本 smudge 成
-  CRLF，而 main 工作区是**混合行尾**（如 `document-writing/references/digest.md` 在 main 是
-  LF、SKILL.md 是 CRLF）。`sync.tree_hash` 读**原始字节**，故含 LF 文件的技能在 worktree 与
-  main 算出不同源哈希。后果：worktree sync 写进提交的哈希对 main 是错的，合并后 main 上
-  `sync --check` 会报漂移。**正解**：worktree 内 sync 仅供 doctor 自检；`skills-deployed.json`
-  的最终值必须在**合并回 main 后、在 main 上重跑 `pysci-dev sync`** 生成再提交（main 磁盘真值）。
-  `doctor` 不受影响——它活算 source vs 部署副本哈希、不读该 json。
+- **worktree sync 与 `skills-deployed.json`（已修复 2026-10-10，backlog 20261010-003127-devops）**：
+  旧坑——本机 `core.autocrlf=true` 无 `.gitattributes`，worktree 检出把文本真本 smudge 成 CRLF、
+  main 是混合行尾，而 `sync.tree_hash` 读**原始字节**，致同一真本两侧哈希不同、合并后 `sync --check`
+  报假漂移。**修复（方案 b）**：`tree_hash` 哈希前规范化 CRLF→LF（技能真本全为 .md/.toml 文本、无
+  二进制，安全），哈希只反映内容。实测：document-writing 旧 raw-byte 哈希 main=dbac3b85/wtree=f97e5e09
+  （漂移，复现建议原值），规范化后两侧均 e43ec523；九技能全 match。**现状**：worktree 内 sync 提交的
+  `skills-deployed.json` 对 main 即正确，**无需**再「合并后在 main 重跑」；doctor 已增「部署台账巡检
+  （sync --check）」哨兵，捕获记录哈希漂移（[*]）与副本漂移（[!]）。未选方案 a（根 .gitattributes）：
+  需仓库级 renormalize、触碰每个文本文件且与用户本地 autocrlf 交互，blast radius 大。
 - **新增 pod 无需预注册 registry.json**：`orch dispatch` 前调 `ensure_member_defaults`，pod 目录
   存在即自动生成默认成员条目（flash/60轮/7200s/`.qoder/mcp.json`）。`doctor` 按 `PODS_ROOT`
   目录计数、也不依赖 registry。故脚手架新 pod 只建目录+只读层文件，注册留给组长首次派发。
