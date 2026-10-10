@@ -219,9 +219,23 @@
       "member": "devops",
       "summary": "难用类（文案矛盾，无 bug）：`workflow.backlog_task_text`（src/pysci/skills/orchestration/tools/workflow.py:178，drain 与 dispatch --from-backlog 共用模板）仍向 devops 任务书注入「commit（不 push——push 须用户授权）」，与 charter/SKILL 新规「co",
       "evidence_file": "orchestration/state/suggestions/approved/20261010-122305-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-10T14:18:24+08:00",
-      "note": "采纳：backlog_task_text 模板的「不 push」旧句与 push-after-commit 新规矛盾，是持续误导源。请改模板句为「commit 后按 charter 的 push 规程执行（限时 best-effort、失败忽略）」，并同步 tests 中 '不 push' in text 断言。一行文案+测试，优先级中。"
+      "note": "drain 批量销账（commit 82bef04）",
+      "started_at": "2026-10-10T14:20:47+08:00",
+      "worktree": "20261010-122305-devops",
+      "done_at": "2026-10-10T14:28:47+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261010-122305-devops"
+    },
+    {
+      "id": "20261010-orch-effort-per-item",
+      "member": "leader",
+      "status": "pending",
+      "summary": "推理强度按项标注机制：registry 成员可选 effort 字段 + dispatch/plan run --effort 覆盖 + build_command 透传 --reasoning-effort；backlog 条目/plan step 可选 effort 字段由 drain/run 透传。默认不传（跟随用户级默认=中）",
+      "evidence": "用户裁决 2026-10-10：双档默认推理强度保持中；不做全局 high；由组长在审批入队/派任务书时对推理密集项（并发/状态机/跨模块语义）按项标 high，机械项留默认。CLI 已有 --reasoning-effort <level> 旗标（--help 实锤）。落地后台账自然 A/B（同类项 high vs medium 的轮数/失败率/返工率），数据驱动再调策略。",
+      "proposed": "2026-10-10",
+      "effort": "high"
     }
   ]
 }

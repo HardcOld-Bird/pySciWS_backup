@@ -270,8 +270,12 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
   可覆盖）刷新 registry.models，重配 BYOK 后下次 drain 自愈、零 daemon；手动 `orch
   refresh-models` 同逻辑。**未命中档保持现值不清空**（宁旧勿空）；刷新只更新既有档的
   UUID/名，**不改变哪个名对应哪个档**——那仍是护栏级（下方教训登记），改名须更新模式表；
-- 默认档位：组长（TUI）/deputy/reviewer/devops = **max**；7 专职组员 = **flash**；
-  计划环节可覆盖（`steps[].model`）；
+- 默认档位：组长（TUI）/deputy/reviewer = **max**；7 专职组员 + **devops** = **flash**
+  （devops 于 2026-10-10 经用户裁决降档：其工作为「规格已审定的末端实现」，Flash+强
+  harness 匹配；架构敏感项由组长派发时显式 `--model-tier max` 升档；降档后以台账
+  数据观察 2~3 周失败率/返工率，质量下滑即回调）；计划环节可覆盖（`steps[].model`）；
+- 推理强度：双档默认「中」（用户裁决 2026-10-10）；不做全局 high——按项标注机制
+  （组长对推理密集项标 `effort: high`）见 backlog 20261010-orch-effort-per-item；
 - **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射改动属护栏级（影响全体
   成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止**已实现**（backlog
   20261010-orch-quota-awareness，见 §3.3 失败处理与 §6）。
@@ -748,6 +752,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-09 | Phase 4 策略采纳副组长咨询意见：**脚手架批量建、战备逐个验收**；文档滞后教训入状态条款（阶段完成当轮登记） | 组长裁决（consult 输入） |
 | 2026-10-10 | **Phase 4 基本完成**：六 pod 脚手架（devops worktree，十 pod doctor 全绿）、lit 战备验收（MCP 隔离会话级实锤 + 成员自主蒸馏经验）、用户级 MCP 清零（用户全权授权，备份留档）、basic.md 重写（PS 细节压缩、Git Bash 唯一 shell、裸命令范式入公约数）、**orch 移交 devops 维护（bootstrap 例外作废，orch 改动一律走 backlog）** | Agent 实测 + 用户授权 |
 | 2026-10-10 | **credit 耗尽事故与模型渠道裁决**：registry 曾把双档映射到内置 Qwen3.8-Max/Flash（订阅计费）而 envelope 低报 credits=0，drain 首战 88 分钟烧穿订阅额度 → 全员派发连败。用户裁决渠道策略：**max=BYOK Qwen-3.8-Max（不传 -m，走用户级默认）；flash=内置 Qwen3.8-Flash（限时免费）；flash_fallback=BYOK flash（渠道待开通，代码先行）**。registry models 改动自此属护栏级（须经用户）。配套改进入 backlog：额度失败识别 + drain 全局停止（quota-awareness）、flash 回退机制（flash-fallback） | 用户裁决 + Agent 复盘 |
+| 2026-10-10 | **渠道策略修订 + devops 降档**：BYOK 双模型就位后 max/flash_fallback 改为显式 UUID 绑定（982ae403/ed6f5996，经 refresh-models 自愈机制维持）；三通道均实测可用。devops 默认档 max→flash（末端实现属性 + 成本；升档通道保留，台账观察 2~3 周）。推理强度双档默认「中」，不做全局 high，按项标注机制入 backlog | 用户裁决 + Agent 实测 |
 | 2026-10-10 | **修正 2026-10-09「credits 恒 0 根因=BYOK」判断**：实测 14 跳台账证明 BYOK 下 credits **依模型上报**——max 档（Qwen3.8-Max）正常计量（devops/reviewer/deputy 跳 13~1142 credits），flash 档（Qwen3.8-Flash）恒 0（figure/lit 跳）；usage tokens 两档均 0、唯 context_usage_ratio 恒有效。台账新增 `model` 字段 + `stats` 标注成本覆盖率（`format_credits`），使部分计量数据可解释。完整 token/账单核算仍按用户 2026-10-09 裁决留待未来（backlog 20261009-byok-cost-accounting 据此销账） | devops 实测（backlog 20261009-byok-cost-accounting） |
 | 2026-10-10 | **review 任务书嵌入目标陈述**（G2 独立性）：`orch review` 增 `--goal-from <原生产任务书>`/`--goal <文本>`，把组长撰写的目标陈述摘录嵌入审查任务书并登记进 review 记录（`goal_source`/`goal_excerpt`），使 reviewer 的 G2「与任务书目标一致」据组长原意独立核验、不再依赖生产者 notes.md 自述（消除与 charter 独立性纪律的张力）；缺省告警不中断。采纳 reviewer 建议 20261009-231455-reviewer | 组长采纳 + devops 实施（backlog 20261009-231455-reviewer） |
 

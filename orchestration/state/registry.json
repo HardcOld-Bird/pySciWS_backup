@@ -26,7 +26,7 @@
     },
     "devops": {
       "pod": "orchestration\\pods\\devops",
-      "model_tier": "max",
+      "model_tier": "flash",
       "max_turns": 80,
       "timeout_s": 10800,
       "mcp_config": ".qoder/mcp.json",
@@ -46,12 +46,13 @@
         {
           "sid": "6f0cc8e5-9aa6-41f0-86ff-58a49b002704",
           "name": "20261010-paper-search-mcp-down",
-          "hops": 16,
+          "hops": 17,
           "created": "2026-10-10T09:32:49+08:00",
-          "last_active": "2026-10-10T13:39:33+08:00",
+          "last_active": "2026-10-10T14:28:47+08:00",
           "status": "active"
         }
-      ]
+      ],
+      "tier_note": "2026-10-10 用户裁决降档；架构敏感项由组长派发时 --model-tier max 升档；台账观察 2-3 周"
     },
     "reviewer": {
       "pod": "orchestration\\pods\\reviewer",
