@@ -11,10 +11,11 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from pysci.paths import ORCH_STATE_ROOT
+from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from .dispatch import REPLIES_DIR, do_dispatch
 from .ledger import format_credits, read_all, summarize
+from .registry import orchestration_rel
 
 SUGGESTIONS_DIR = ORCH_STATE_ROOT / "suggestions"
 BACKLOG_PATH = ORCH_STATE_ROOT / "backlog.json"
@@ -295,6 +296,39 @@ def _save_review(record: dict) -> Path:
     return p
 
 
+def _extract_goal_excerpt(path: Path, limit: int = 1500) -> str:
+    """从原生产任务书摘取目标陈述正文（供 review 任务书 G2 独立核验）。
+
+    剥离 :func:`dispatch.write_taskbook` 自动加的头（``# 任务书 …`` 与 ``（派发时间：…）``）
+    与前导空行，保留组长撰写的任务正文，限长 ``limit`` 字符（超出截断并标注）。
+
+    Args:
+        path: 原生产任务书路径（绝对或相对项目根）。
+        limit: 摘录正文的最大字符数。
+
+    Returns:
+        目标陈述正文；文件不可读/为空时返回 ``""``（调用方据此告警，不中断审查）。
+    """
+    p = path if path.is_absolute() else PROJECT_ROOT / path
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    body: list[str] = []
+    for ln in raw.splitlines():
+        s = ln.strip()
+        # 跳过自动头与前导空行，直到遇到第一行真实正文
+        if not body and (
+            s.startswith("# 任务书") or s.startswith("（派发时间") or not s
+        ):
+            continue
+        body.append(ln)
+    text = "\n".join(body).strip()
+    if len(text) > limit:
+        text = text[:limit].rstrip() + " …（截断）"
+    return text
+
+
 def cmd_review(args) -> int:
     """审查产物：reviewer 出具 VERDICT；FAIL → 自动回派 origin 返工 → 复审一次；
     二次 FAIL → 升级组长仲裁（README §5.2）。长链路，建议后台 Bash 运行。"""
@@ -306,14 +340,49 @@ def cmd_review(args) -> int:
     if not rubric_abs.exists():
         print(f"[!] rubric 不存在：{rubric_abs}")
         return 2
+    # 目标陈述（G2 独立核验）：组长显式提供，避免 reviewer 依赖生产者 notes.md 自述。
+    # --goal（直接文本）优先于 --goal-from（从原生产任务书摘录）；二者皆缺则不嵌入并告警。
+    goal_text = ""
+    goal_source = ""
+    if getattr(args, "goal", None):
+        goal_text = str(args.goal).strip()
+        goal_source = "literal(--goal)"
+    elif getattr(args, "goal_from", None):
+        gp = Path(args.goal_from)
+        goal_text = _extract_goal_excerpt(gp)
+        if goal_text:
+            goal_source = orchestration_rel(
+                gp if gp.is_absolute() else PROJECT_ROOT / gp
+            )
+        else:
+            print(
+                f"[!] --goal-from 任务书不可读或为空：{gp}"
+                "（本次审查 G2 将缺独立目标陈述）"
+            )
+    if not goal_text:
+        print(
+            "[!] 未提供目标陈述（--goal/--goal-from）——reviewer 的 G2「与任务书目标一致」"
+            "将无独立依据，建议补派时带上原生产任务书。"
+        )
     record: dict = {
         "id": review_id,
         "artifact": args.artifact,
         "origin": args.origin,
         "rubric": args.rubric,
+        "goal_source": goal_source,
+        "goal_excerpt": goal_text,
         "started": _now(),
         "rounds": [],
     }
+    goal_block = (
+        (
+            f"- 目标陈述（来自原生产任务书：{goal_source}；G2「与任务书目标一致」"
+            "**据此独立核验**，勿以生产者 notes.md/自述替代）：\n"
+            f"{goal_text}\n"
+        )
+        if goal_text
+        else ""
+    )
     max_rounds = 2  # 初审 + 复审一次（用户裁决）
     for round_no in range(1, max_rounds + 1):
         task = (
@@ -321,6 +390,7 @@ def cmd_review(args) -> int:
             f"- 产物：{args.artifact}\n"
             f"- rubric（必读，按它逐项检查）：{rubric_abs}\n"
             f"- 生产组员：{args.origin}\n"
+            + goal_block
             + (
                 "- 上一轮 FAIL 证据与返工说明见你的会话历史/任务书附件。\n"
                 if round_no > 1

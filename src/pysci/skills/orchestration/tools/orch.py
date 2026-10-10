@@ -421,6 +421,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--rubric", default="generic", help="rubric 名（reviewer pod rubrics/ 下）"
     )
+    p.add_argument(
+        "--goal-from",
+        dest="goal_from",
+        metavar="<原生产任务书>",
+        help="从原生产任务书摘录目标陈述嵌入审查任务书，供 G2 独立核验（勿依赖生产者 notes.md）",
+    )
+    p.add_argument(
+        "--goal",
+        metavar="<文本>",
+        help="直接给定目标陈述文本（无单一任务书文件时用；优先于 --goal-from）",
+    )
     p.set_defaults(func=_workflow.cmd_review)
 
     p = sub.add_parser("stats", help="三级统计：--plan 计划级 / --member 成员级 / 全体")

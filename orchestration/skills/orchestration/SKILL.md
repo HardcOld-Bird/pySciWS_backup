@@ -38,7 +38,10 @@ uv run pysci-orch approve <建议id> --note "..." [--no-wake]
 uv run pysci-orch reject <建议id> --note "..."   # 否决（仅回复附送，不唤醒）
 uv run pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
 uv run pysci-orch review <产物> --origin <member> [--rubric generic]
+        [--goal-from <原生产任务书> | --goal "<目标陈述>"]
         # 审查链：VERDICT → FAIL 自动回派返工 → 复审一次 → 二次 FAIL 升级你仲裁
+        # 带 --goal-from/--goal：把组长撰写的目标陈述嵌入审查任务书，reviewer 的 G2
+        # 「与任务书目标一致」据此独立核验，不再依赖生产者 notes.md 自述（强烈建议带上）
 uv run pysci-orch stats [--plan id|--member m|--days N]
 # —— 底层命令面（降级/调试）——
 uv run pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
