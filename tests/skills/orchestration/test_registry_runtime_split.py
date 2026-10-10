@@ -231,3 +231,62 @@ def test_member_config_fields_untouched_by_split(iso_registry):
     assert m.raw["extra_dirs"] == ["bench"]
     assert m.raw["readonly_extra"] == ["refs"]
     assert isinstance(m, Member)
+
+
+# ---------------------------------------------------------------------------
+# (a) 轻哨兵：跨合并 cp 失败的观测面（backlog 20261010-worktree-merge-cp ④）
+# ---------------------------------------------------------------------------
+def test_warns_when_members_present_but_runtime_absent(iso_registry, capsys):
+    """配置有成员但无内嵌 sessions 且运行态缺席 → stderr 打显著警告（症状=跨合并没搬）。"""
+    reg_file, _runtime, _backup = iso_registry
+    reg_file.write_text(
+        json.dumps(_legacy_data(with_sessions=False), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    Registry.load()
+
+    err = capsys.readouterr().err
+    assert "[!] registry 加载" in err
+    assert "sessions-runtime.json" in err or "运行态文件缺席" in err
+
+
+def test_no_warning_when_runtime_present(iso_registry, capsys):
+    """运行态在盘（正常态）→ 静默。"""
+    reg_file, runtime_file, _backup = iso_registry
+    reg_file.write_text(
+        json.dumps(_legacy_data(with_sessions=False), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    runtime_file.write_text(
+        json.dumps({"version": 1, "members": {"devops": {"sessions": []}}}),
+        encoding="utf-8",
+    )
+
+    Registry.load()
+
+    assert "registry 加载" not in capsys.readouterr().err
+
+
+def test_no_warning_for_fresh_empty_registry(iso_registry, capsys):
+    """首次安装（members 空）→ 静默（无成员可丢）。"""
+    reg_file, _runtime, _backup = iso_registry
+    reg_file.write_text(
+        json.dumps({"version": 1, "members": {}, "checks": {}}), encoding="utf-8"
+    )
+
+    Registry.load()
+
+    assert "registry 加载" not in capsys.readouterr().err
+
+
+def test_no_warning_during_actual_cutover(iso_registry, capsys):
+    """真迁移（有内嵌 sessions）走迁移分支 → 不触发缺席警告（数据被搬而非丢失）。"""
+    reg_file, _runtime, _backup = iso_registry
+    reg_file.write_text(
+        json.dumps(_legacy_data(), ensure_ascii=False), encoding="utf-8"
+    )
+
+    Registry.load()
+
+    assert "registry 加载" not in capsys.readouterr().err

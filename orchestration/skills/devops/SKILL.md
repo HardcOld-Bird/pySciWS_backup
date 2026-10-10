@@ -12,29 +12,28 @@ description: devops 组员的作业规程：worktree 隔离实施、PYTHONPATH �
 
 ```bash
 # 1. 开 worktree（从最新 main）
-#    ← drain/backlog 派发时，<任务名> 必须用**任务书 id**（如 20261010-xxx），便于孤儿回收清理
+#    ← drain/backlog 派发时 <任务名> 用**任务书 id**（如 20261010-xxx），便于孤儿回收
 pysci-dev worktree add <任务名>        # = git worktree add -b wt-<任务名> .qoder/worktrees/<任务名>
 WT="$(git rev-parse --show-toplevel)/.qoder/worktrees/<任务名>"
 
 # 2. 在 worktree 内改代码（Edit/Write 用 $WT 下路径）
 
 # 3. 测试 —— PYTHONPATH 覆盖策略（实测定型 2026-10-09）：
-#    复用主 .venv 全部依赖，worktree 代码优先于 editable 安装的主树 src；
-#    收集 1452 项测试约 7.5s，无需在 worktree 内新建环境。
+#    复用主 .venv 全部依赖，worktree 代码优先于 editable 主树 src（免建环境）。
 PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
 PYTHONPATH="$WT/src" uv run --no-sync python -c "import <改动模块>; ..."   # 定向验证
 
 # 3b. 仅当 pyproject 依赖本身变更时，才在 worktree 内建独立环境（重、分钟级）：
 #     uv sync --project "$WT"   然后用 "$WT/.venv" 运行
 
-# 4. 合并回 main（在主树操作）：
-git merge --no-ff wt-<任务名>      # 或 cherry-pick；冲突按项目纪律解决，不丢弃改动
+# 4. 合并回 main（先在 worktree 内 commit 本次改动，再在主树操作）：
+pysci-dev worktree merge <任务名>   # cp gitignored 运行态(旧件 .bak-<ts>) → merge --no-ff
+                                    #   → 会话数不减自检（--no-ff 不带运行态，见 references/registry-runtime.md）
 
 # 5. commit（cz 规范；pre-commit 必须全过，禁 --no-verify）
 #    合并/提交后**尝试一次限时 push**（best-effort，用户裁决 2026-10-10）：
 timeout 25 git push origin main   # 忽略一切失败（网络/认证/超时）；不重试、不设代理
-#    ↑ 超时是硬要求：直连失败/凭据缺失会挂起并阻塞 drain。push 按分支增量，
-#      首次成功即带上此前所有积压提交——故失败当预期、不着急。
+#    ↑ 超时硬要求：直连失败会挂起阻塞 drain；push 按分支增量，失败当预期、不着急。
 # 6. 清理
 pysci-dev worktree remove <任务名>
 ```
@@ -72,10 +71,10 @@ pysci-dev worktree remove <任务名>
 ## pysci-dev 命令面
 
 ```
-pysci-dev doctor [--pod <id>]   # pod 健康巡检：hooks 接线/leader 规则排除/charter/AGENTS.md 体量/积压
-                                 # + 部署台账巡检（sync --check 漂移）+ harness 预算三档审计（≤8192B/文件）
+pysci-dev doctor [--pod <id>]   # pod 巡检：hooks/leader 排除/charter/AGENTS 体量/积压
+                                 # + 部署台账（sync --check）+ 预算三档（≤8192B/文件）
 pysci-dev sync [--check]        # 技能部署
-pysci-dev worktree add|remove|list [<name>]
+pysci-dev worktree add|merge|remove|list [<name>]   # merge=搬运行态+--no-ff+会话数自检
 pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写、打印终态哈希
 ```
 

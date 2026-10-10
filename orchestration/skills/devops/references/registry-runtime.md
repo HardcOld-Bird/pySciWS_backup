@@ -35,5 +35,10 @@ sessions/hops/chars_offset 是**心跳**——每派发必变。留在 registry.
 
 - 见到 `orchestration/state/sessions-runtime.json` 出现在 `git status` → 不对，它应被
   gitignore；检查 ignore 规则是否生效。
+- **(a) 运行态缺席警告**：`Registry.load()` 时若配置面有成员却无内嵌 sessions、且
+  运行态文件不存在，即向 stderr 打显著警告（不自动反推数据）。典型触发=刚 `--no-ff`
+  合并过含运行态改动的分支却没搬运行态文件（`--no-ff` 只带 git 面）。解法：用
+  `pysci-dev worktree merge <id>`（机械化 cp + merge + 会话数不减自检）；首次安装（无成员）
+  与本就在盘的正常态都不响。
 - 改 sessions 读写逻辑后须同步 `tests/skills/orchestration/conftest.py` 的 `iso_dispatch`
   （预置运行态文件）与 `read_runtime`/`write_runtime`——est_tokens 系列断言读的是运行态。

@@ -21,6 +21,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -164,6 +165,29 @@ def _runtime_member(runtime: dict[str, Any], member_id: str) -> dict[str, Any]:
     return entry
 
 
+def _warn_missing_runtime(config_data: dict[str, Any], runtime_file: Path) -> None:
+    """(a) 轻哨兵（backlog 20261010-worktree-merge-cp ④）：members 非空 + 无内嵌 sessions
+    + 运行态文件缺席 → stderr 打印显著警告，不反推数据（避免掩盖跨合并 cp 失败的真因）。
+
+    症状来源：`--no-ff` 只带 git 面，sessions-runtime.json 是 gitignore 的运行态、
+    须由 `pysci-dev worktree merge <id>` 或手工 cp 搬到 main——没搬就是本次警告。
+    首次安装（members 空）与已完成迁移（运行态在盘）均静默。
+    """
+    members = config_data.get("members", {})
+    if not members:
+        return
+    if runtime_file.exists():
+        return
+    print(
+        f"[!] registry 加载：配置面有 {len(members)} 位成员，但运行态文件缺席"
+        f"（{runtime_file}）。跨合并的 sessions-runtime.json 不会随 --no-ff 迁移——"
+        f"若这是刚合并过 registry-runtime-split 的 main，请跑 `pysci-dev worktree "
+        f"merge <id>` 或手工 cp 从 worktree 把运行态搬来；否则 orch status 与"
+        f" dispatch 会看到 0 会话。首次安装可忽略本警告。",
+        file=sys.stderr,
+    )
+
+
 @dataclass
 class Registry:
     """registry.json（配置面）+ sessions-runtime.json（运行态）的内存表示与持久化。"""
@@ -225,6 +249,7 @@ class Registry:
             if isinstance(raw, dict) and "sessions" in raw
         }
         if not embedded:
+            _warn_missing_runtime(self.data, runtime_file)
             return
         if not self.backup_path.exists():
             _atomic_write(self.backup_path, self.data)
