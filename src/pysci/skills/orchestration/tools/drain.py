@@ -13,8 +13,9 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
 - **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
   worker 遗留，重置 pending）；``backlog_take_first`` → 任务书 →
   ``do_dispatch("devops")`` → 销账；单项失败（blocked/run_failed）标记 needs_leader
-  并**跳过**（一项卡住不阻塞全队列）；run 日志逐行落 ``state/devops-runs/<ts>.log``，
-  全部完成写 ``<ts>.done``（JSON 摘要）。
+  并**跳过**（一项卡住不阻塞全队列）；额度类失败（quota_exhausted）例外——视为系统性
+  故障**全局停止**（当前条目复位 pending、剩余保持 pending、.done 注明）；run 日志
+  逐行落 ``state/devops-runs/<ts>.log``，全部完成写 ``<ts>.done``（JSON 摘要）。
 
 分离进程无 kill 之外的规范停止手段，故补**协作式停止**：``orch drain-stop`` 写
 ``state/devops.cancel``（JSON: pid/requested_at，指向当前锁持有者）；drain 在每项
@@ -43,6 +44,7 @@ from .workflow import (
     backlog_complete,
     backlog_needs_leader,
     backlog_reclaim_orphans,
+    backlog_requeue,
     backlog_take_first,
     backlog_task_text,
 )
@@ -298,7 +300,8 @@ def _extract_commit(body: str) -> str:
 # drain 循环
 # ---------------------------------------------------------------------------
 def _drain_one(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str, Any]:
-    """消化单个 backlog 条目：派发 devops → 销账（成功）/ needs_leader（失败跳过）。
+    """消化单个 backlog 条目：派发 devops → 销账（成功）/ needs_leader（失败跳过）/
+    quota_exhausted（系统性故障：复位 pending，调用方据此全局停止）。
 
     Returns:
         结果字典（写入 .done 的 items 列表）：``{id, status, commit?, kind?, elapsed_s}``。
@@ -335,6 +338,18 @@ def _drain_one(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str, A
             "commit": commit,
             "elapsed_s": elapsed,
         }
+    # 额度类失败 = 系统性故障：本条目无罪，复位 pending 待渠道恢复（不 needs_leader）；
+    # 由 drain_backlog 据本 status 触发全局停止（剩余条目保持 pending）
+    if outcome.kind == "quota_exhausted":
+        err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
+        backlog_requeue(item_id, note="额度类全局停止，复位待渠道恢复")
+        _log(run_log, f"[Q] {item_id} 额度耗尽 → 复位回队，触发全局停止：{err[:120]}")
+        return {
+            "id": item_id,
+            "status": "quota_exhausted",
+            "error": err[:200],
+            "elapsed_s": elapsed,
+        }
     # 失败（blocked / run_failed / parse_error / 验收 FAIL）→ 跳过并标记 needs_leader
     err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
     backlog_needs_leader(
@@ -359,7 +374,8 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
 
     Returns:
         .done 摘要字典：``{started, completed, count, elapsed_s, items, run_log}``；
-        协作停止时附 ``stopped="cooperative"``。
+        协作停止时附 ``stopped="cooperative"``；额度类全局停止时附
+        ``stopped="quota_exhausted"`` 与 ``error``（系统性故障说明）。
     """
     done_path = run_log.with_suffix(".done")
     lock = acquire_lock(orchestration_rel(run_log))
@@ -389,7 +405,18 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
             item = backlog_take_first()
             if item is None:
                 break
-            summary["items"].append(_drain_one(item, run_log, dry=dry))
+            res = _drain_one(item, run_log, dry=dry)
+            summary["items"].append(res)
+            if res.get("status") == "quota_exhausted":
+                # 系统性故障 → 全局停止：当前条目已在 _drain_one 内复位 pending，
+                # 剩余条目未取用仍 pending；释放锁与写 .done 由 finally 统一处理
+                summary["stopped"] = "quota_exhausted"
+                summary["error"] = (
+                    "系统性故障：模型渠道额度耗尽（quota_exhausted）——全局停止，"
+                    "全部条目保持 pending 待渠道恢复"
+                )
+                _log(run_log, "[Q] 全局停止：额度耗尽，剩余条目保持 pending，释放锁")
+                break
     except Exception as exc:  # 记录后仍写 .done（后台进程无人值守，不留黑洞）
         summary["error"] = f"{type(exc).__name__}: {exc}"
         _log(run_log, f"[!] drain 异常中断：{summary['error']}")

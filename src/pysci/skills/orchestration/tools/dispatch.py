@@ -38,6 +38,22 @@ REPLIES_DIR = ORCH_STATE_ROOT / "replies"
 #: 组长手写任务书易把错误 CLI 范式传染给照抄的组员，落盘前扫一遍作机械护栏。
 LINT_RULES_PATH: Path = ORCH_STATE_ROOT / "taskbook-lint.json"
 
+#: 额度类失败文案（2026-10-10 事故原文 "You've reached your credit usage limit…"）。
+#: 匹配面故意收窄到 credit 类短语——误判为额度故障会全局停 drain（fail-safe 方向），
+#: 但宽匹配（如裸 "usage limit"）会把速率限制等可自愈故障也停掉。
+QUOTA_ERROR_RE = re.compile(
+    r"credit usage limit|out of credits?|insufficient credits?", re.IGNORECASE
+)
+
+
+def _detect_quota_exhaustion(env: Envelope, out: str, err: str) -> bool:
+    """识别额度类失败：文案可能出现在 envelope.result / stderr / stdout 全文。
+
+    **仅在运行已失败时调用**——成功交付的正文若只是提及该文案（如复盘任务）不应
+    重分类。
+    """
+    return any(QUOTA_ERROR_RE.search(s) for s in (env.result, err, out) if s)
+
 
 def _ts() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -47,8 +63,8 @@ def _ts() -> str:
 class DispatchOutcome:
     """一次派发（一跳）的结构化结果。"""
 
-    code: int  # 0=成功交付；2=blocked/parse_error/run_failed/验收FAIL
-    kind: str  # result | blocked | parse_error | run_failed
+    code: int  # 0=成功交付；2=blocked/parse_error/run_failed/quota_exhausted/验收FAIL
+    kind: str  # result | blocked | parse_error | run_failed | quota_exhausted
     member: str = ""
     sid: str = ""
     session_name: str = ""
@@ -240,8 +256,11 @@ def do_dispatch(
         cmd, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
     )
     env_json = Envelope.parse(out)
+    failed = rc != 0 or env_json.is_error
+    # 额度类失败不自动重试——重试只会再烧一跳，且错误面对组长同样不可读（2026-10-10 事故）
+    quota_hit = failed and _detect_quota_exhaustion(env_json, out, err)
 
-    if (rc != 0 or env_json.is_error) and not no_retry:
+    if failed and not no_retry and not quota_hit:
         if not quiet:
             print(
                 f"[!] 首跑失败（rc={rc}, stop={env_json.stop_reason}），自动重试一次…"
@@ -262,8 +281,13 @@ def do_dispatch(
             cmd2, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
         )
         env_json = Envelope.parse(out)
+        failed = rc != 0 or env_json.is_error
+        quota_hit = quota_hit or (
+            failed and _detect_quota_exhaustion(env_json, out, err)
+        )
 
-    if rc != 0 or env_json.is_error:
+    if failed:
+        kind = "quota_exhausted" if quota_hit else "run_failed"
         append(
             LedgerEntry(
                 ts="",
@@ -271,7 +295,7 @@ def do_dispatch(
                 session_id=sid,
                 session_name=name,
                 task_file=orchestration_rel(taskbook),
-                kind="run_failed",
+                kind=kind,
                 num_turns=env_json.num_turns,
                 duration_ms=env_json.duration_ms,
                 credits=env_json.total_credits,
@@ -288,7 +312,7 @@ def do_dispatch(
         reg.save()
         outcome = DispatchOutcome(
             code=2,
-            kind="run_failed",
+            kind=kind,
             member=member_id,
             sid=sid,
             session_name=name,
@@ -298,7 +322,10 @@ def do_dispatch(
             error=err.strip()[-400:] or env_json.stop_reason,
         )
         if not quiet:
-            _report_failure(outcome)
+            if quota_hit:
+                _report_quota(outcome)
+            else:
+                _report_failure(outcome)
         return outcome
 
     delivery = parse_delivery(env_json.result)
@@ -374,6 +401,19 @@ def _report_failure(o: DispatchOutcome) -> None:
             f'  1) 再试一跳：uv run pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "继续任务书 {o.task_file}"',
             "  2) 查会话原文定位卡点（registry/pod 键目录下 jsonl）",
             "  3) 仍失败 → 上报用户（附本输出全文）",
+        ]
+    )
+
+
+def _report_quota(o: DispatchOutcome) -> None:
+    print(f"[✗] 额度类失败（quota_exhausted）：{(o.error or o.body)[:160]}")
+    print(f"    envelope.result 原文（前 400 字）：\n{o.body[:400]}")
+    _print_next(
+        [
+            "系统性故障（模型渠道额度耗尽）——非任务本身问题，勿逐跳重试再烧：",
+            "  1) 检查 registry models 档位→渠道绑定（max=BYOK 默认 / flash=内置免费，README §3.5；models 属护栏级，改动须经用户）",
+            "  2) 或等待额度重置 / 请用户切换渠道后重派",
+            "  3) drain 场景已触发全局停止：剩余条目保持 pending，渠道恢复后自动续消化",
         ]
     )
 

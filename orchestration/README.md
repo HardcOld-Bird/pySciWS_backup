@@ -216,7 +216,9 @@ ledger 流水为可再生物不入库。
    回复中直接给出下一步**（决策选项，或已自动完成的机械接力说明）。
 
 失败处理：超时/非零退出 → 自动重试一次（同会话 resume，注入错误上下文）；再失败 →
-呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。
+呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。**例外**：额度类失败
+（envelope/stderr 含『credit usage limit』类文案）→ `kind=quota_exhausted`，**不自动
+重试**（重试只会再烧一跳），[NEXT] 提示检查 registry models 渠道绑定 / 等待额度重置。
 
 ### 3.4 交付协议（XML 标记块 + delivery-gate 强制）
 
@@ -435,8 +437,11 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
   → 测试验证 → git 提交（不 push）→ 交付
   · 成功 → backlog 销账（done，记 commit hash）
   · 失败（blocked/run_failed）→ 标记 needs_leader 并**跳过**（一项卡住不阻塞全队列）
+  · 额度类失败（quota_exhausted）→ **全局停止**：当前条目复位 pending（非 needs_leader）、
+    剩余条目保持 pending、释放锁、.done 注明系统性故障；渠道恢复后下次唤醒自动续消化
 → run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
-  态（running/idle/stale）、最近 run 摘要、needs_leader 提醒（组长据此重派/改任务书/上报）
+  态（running/idle/stale）、最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
+  needs_leader 提醒（组长据此重派/改任务书/上报）
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
 ```
 
