@@ -148,7 +148,9 @@ def _print_run_guidance(plan_id: str, step_state: dict, step_yaml: dict) -> None
     print(f"  当前环节 {step_state['id']}（{step_yaml.get('member')}）粗描述原文：")
     print(f"    {step_yaml.get('brief', '（无）')}")
     print(
-        f"  白名单建议：{step_yaml.get('dirs', [])}；档位：{step_yaml.get('model', '(成员默认)')}"
+        f"  白名单建议：{step_yaml.get('dirs', [])}；"
+        f"档位：{step_yaml.get('model', '(成员默认)')}；"
+        f"effort：{step_yaml.get('effort', '(默认=中)')}"
     )
     print("  → 书写该环节任务书后推进：")
     print(f'    uv run pysci-orch plan run {plan_id} --text "<任务书全文>"')
@@ -198,6 +200,7 @@ def cmd_plan_run(args) -> int:
         slug=slug,
         session=sel,
         model_tier=args.model_tier or (str(sy["model"]) if sy.get("model") else None),
+        effort=args.effort or (str(sy["effort"]) if sy.get("effort") else None),
         max_turns=args.max_turns,
         dirs=_split_dirs(args.dirs.split(","))
         if args.dirs
@@ -293,7 +296,10 @@ def _report_handoff(
     print()
     print(f"== 交接决策点：下一环节 {nxt['id']}（{ny.get('member', '?')}）==")
     print(f"  粗描述原文：{ny.get('brief', '（无）')}")
-    print(f"  白名单建议：{ny.get('dirs', [])}；档位：{ny.get('model', '(成员默认)')}")
+    print(
+        f"  白名单建议：{ny.get('dirs', [])}；档位：{ny.get('model', '(成员默认)')}；"
+        f"effort：{ny.get('effort', '(默认=中)')}"
+    )
     if outcome.kind == "result":
         print("  交接物：上一环节交付正文中的产物路径（书写任务书时引用）。")
     print()
@@ -410,4 +416,5 @@ def cmd_plan_adhoc(args) -> int:
         "latest",
     )
     a.model_tier, a.max_turns, a.dirs = args.model_tier, args.max_turns, args.dirs
+    a.effort = args.effort
     return cmd_plan_run(a)

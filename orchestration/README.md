@@ -207,7 +207,8 @@ ledger 流水为可再生物不入库。
 2. 组装：`<exe> --cwd orchestration/pods/<id> -p <注入文本> --resume <sid>|
    --session-id <新sid> --name <slug>`；注入文本 = 任务书路径 + 待附送审批回复（§6）+
    交付协议提醒；
-3. 参数模板存 registry：模型档位（§3.5）、`--max-turns`、`--mcp-config .qoder/mcp.json
+3. 参数模板存 registry：模型档位（§3.5）、推理强度（§3.5 按项标注，可选 `effort`）、
+   `--max-turns`、`--mcp-config .qoder/mcp.json
    --strict-mcp-config`（§8）；权限依赖用户级 yolo 默认（用户已设），orch 不显式传参
    （registry 留覆盖项备用）；
 4. 解析 `-o json` envelope：结果文本、credits、耗时、num_turns、session_id → 台账；
@@ -274,8 +275,18 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
   （devops 于 2026-10-10 经用户裁决降档：其工作为「规格已审定的末端实现」，Flash+强
   harness 匹配；架构敏感项由组长派发时显式 `--model-tier max` 升档；降档后以台账
   数据观察 2~3 周失败率/返工率，质量下滑即回调）；计划环节可覆盖（`steps[].model`）；
-- 推理强度：双档默认「中」（用户裁决 2026-10-10）；不做全局 high——按项标注机制
-  （组长对推理密集项标 `effort: high`）见 backlog 20261010-orch-effort-per-item；
+- **推理强度按项标注**（用户裁决 2026-10-10，backlog 20261010-orch-effort-per-item）：
+  双档默认「中」，**不做全局 high**——由组长对推理密集项（并发/状态机/跨模块语义）
+  逐项标 `high`，机械项留默认。四来源逐层覆盖，最终解析出一个跳级档位后透传原生旗标
+  `--reasoning-effort`：`dispatch/plan run --effort` > **计划环节** `steps[].effort` /
+  **backlog 条目** `effort`（`orch approve <id> --effort high` 入队时标，drain 消化透传；
+  组包只收同档位条目）> **registry 成员** `effort`（可选字段）> 不传（=用户级默认）。
+  合法档位（实测 exe 接受集，2026-10-10 逐值跑 ``--reasoning-effort <v> --list-models``
+  看退出码）：`auto/none/low/medium/high/xhigh/max/ultracode` + 别名 `off`/`disabled`→none，
+  大小写不敏感；标注非法 → **在本层硬失败、不派发**（exe 自己也会启动即失败 rc=1，但先拦
+  才有可读提示、不烧跳、不写无意义台账行）。每跳把实际所用档位记入台账
+  `effort` 字段（`orch ledger` 显示 `[effort=high]`），据此做同类项 high vs medium 的
+  轮数/失败率/返工率对比，**数据驱动再调策略**；
 - **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射改动属护栏级（影响全体
   成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止**已实现**（backlog
   20261010-orch-quota-awareness，见 §3.3 失败处理与 §6）。
@@ -330,6 +341,7 @@ steps:
     brief: 粗粒度描述：扫频仿真 X 参数，产出场数据（任务书执行时再写）
     dirs: [data/research/1_gain_ep/simulation]   # 白名单
     model: flash            # 可覆盖默认档位（§3.5）
+    effort: high            # 可选：本环节推理强度（§3.5 按项标注；不写=默认中）
     review: false           # true 时环节完成后自动 orch review
   - id: s2
     member: figure
@@ -438,7 +450,8 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
 组员交付含 <infra_suggestion>
 → orch 登记待审批项，呈组长：建议摘要 + git 历史相关改动（防往复翻转；必要时
   orch consult 副组长评估）
-→ 组长裁决 approve（入 backlog FIFO）/ reject（附理由）
+→ 组长裁决 approve（入 backlog FIFO；推理密集项可 `--effort high` 按项标注，§3.5）
+  / reject（附理由）
 → 审批回复存 state/replies/，下次派发该成员时自动附送（闭环告知）
 → approve 默认**自动唤醒** devops：分离后台进程 `_drain-devops` 持 state/devops.lock
   锁 FIFO 串行消化整个 backlog（组长零阻塞、零轮询，对齐 §4.5 等待模型）
@@ -451,8 +464,9 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
   · `orch drain-stop` 协作式停止：写 state/devops.cancel（指向当前锁持有者 pid），worker
     每项间隙消费→干净退出（释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；
     陈旧信号（pid≠本进程）清除且不误停接棒 worker；锁空闲时 drain-stop 不写信号（no-op）
-→ drain 每批：取队首为**种子** + 收集同提请者(member) pending 为**组包**（含种子 ≤4 项，
-  同提请者≈同模块/同视角）→ 批量任务书（种子必做 + 组包菜单，devops 自主选取合并实施，
+→ drain 每批：取队首为**种子** + 收集同提请者(member)**且同 effort 档位**的 pending 为
+  **组包**（含种子 ≤4 项，同提请者≈同模块/同视角；一跳只有一个跳级档位，混档会静默
+  改变被标项的强度）→ 批量任务书（种子必做 + 组包菜单，devops 自主选取合并实施，
   单 worktree=种子 id）→ dispatch devops（§7）→ 测试验证 → git 提交（+ `timeout 25 git
   push origin main` best-effort，失败忽略，用户裁决 2026-10-10）→ 交付列 `backlog id=<ids>`
   · 成功 → 按交付 id 清单**逐 id 销账**（done，记 commit hash + batch_size/batch_seed）；

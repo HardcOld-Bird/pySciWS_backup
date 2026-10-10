@@ -12,7 +12,7 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     ... orch plan adhoc <member> --text "..."        # 计划外事项的正确姿势
     ... orch approve|reject <suggestion-id> --note "..."
     ... orch suggestions | stats [--plan/--member/--days] | consult "<问题>"
-    ... orch dispatch <member> (--task F | --text T | --from-backlog) [--session ...]
+    ... orch dispatch <member> (--task F | --text T | --from-backlog) [--session ...] [--effort …]
     ... orch sessions <member> [--all|--archive SID [--distill]|--prune SID]
     ... orch ledger [--member --days --stats] | sync [--check]
 
@@ -33,6 +33,11 @@ from . import workflow as _workflow
 from .dispatch import do_dispatch
 from .ledger import LEDGER_PATH, format_credits, read_all, summarize
 from .registry import Registry, orchestration_rel, refresh_models
+from .runner import EFFORT_ALIASES, VALID_EFFORTS
+
+#: ``--effort`` 可选值（原生 exe 档位 + off/disabled 别名）。**不传=跟随用户级默认（中）**；
+#: 层级覆盖：旗标 > 计划环节/条目 effort > registry 成员 effort（README §3.5）。
+EFFORT_CHOICES: list[str] = [*VALID_EFFORTS, *EFFORT_ALIASES]
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +99,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     for p in sugg:
         print(f"  [建议] {p.stem}")
     for b in back[:5]:
-        print(f"  [backlog] {b['id']}: {str(b.get('summary', ''))[:60]}")
+        eff = f" [effort={b['effort']}]" if b.get("effort") else ""
+        print(f"  [backlog] {b['id']}: {str(b.get('summary', ''))[:60]}{eff}")
 
     print("== devops worker ==")
     lst = _drain.lock_status()
@@ -195,6 +201,9 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
         text = _workflow.backlog_task_text(item)
         if not args.name:
             args.name = item["id"]
+        # 条目自带 effort 标注（审批入队时标的）→ 作为本跳覆盖；显式 --effort 优先
+        if not args.effort:
+            args.effort = item.get("effort") or None
     if not (text or task_file):
         print("[!] 需要 --task/--text/--from-backlog 之一")
         return 2
@@ -205,6 +214,7 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
         slug=args.name,
         session=args.session,
         model_tier=args.model_tier,
+        effort=args.effort,
         max_turns=args.max_turns,
         timeout=args.timeout,
         dirs=[d.strip() for d in (args.dirs or "").split(",") if d.strip()],
@@ -311,7 +321,8 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         print(
             f"{e.ts}  {e.member:<9} {e.kind:<11} sid={e.session_id[:8]} "
             f"{e.num_turns}轮 {e.duration_ms / 1000:.0f}s ctx={e.ctx_ratio:.0%} "
-            f"credits={e.credits:g}{f'[{e.model}]' if e.model else ''} "
+            f"credits={e.credits:g}{f'[{e.model}]' if e.model else ''}"
+            f"{f'[effort={e.effort}]' if e.effort else ''} "
             f"验收[{checks_s}]"
             + (" 建议✓" if e.infra_suggestion else "")
             + (f" 计划={e.plan}/{e.step}" if e.plan else "")
@@ -427,6 +438,11 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--name", help="会话 slug 覆盖（默认 <plan>-<step>）")
     q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
     q.add_argument("--model-tier", choices=["max", "flash"])
+    q.add_argument(
+        "--effort",
+        choices=EFFORT_CHOICES,
+        help="本环节推理强度（覆盖计划 YAML 的 steps[].effort；不传=跟随用户级默认=中）",
+    )
     q.add_argument("--max-turns", type=int)
     q.add_argument("--dirs", help="覆盖计划环节的白名单（逗号分隔）")
     q.set_defaults(func=_plan_router("run"))
@@ -449,6 +465,11 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--task")
     q.add_argument("--dirs")
     q.add_argument("--model-tier", choices=["max", "flash"])
+    q.add_argument(
+        "--effort",
+        choices=EFFORT_CHOICES,
+        help="本跳推理强度按项标注（不传=跟随用户级默认=中）",
+    )
     q.add_argument("--max-turns", type=int)
     q.set_defaults(func=_plan_router("adhoc"))
 
@@ -463,6 +484,12 @@ def main(argv: list[str] | None = None) -> int:
         "--no-wake",
         action="store_true",
         help="入队后不自动唤醒 devops 后台消化（默认唤醒；锁忙时本就不重复唤醒）",
+    )
+    p.add_argument(
+        "--effort",
+        choices=EFFORT_CHOICES,
+        help="按项标注该待办的推理强度（写入 backlog 条目，drain 消化时透传；"
+        "不标=跟随用户级默认=中）",
     )
     p.set_defaults(func=_workflow.cmd_approve)
 
@@ -519,6 +546,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--session", default="latest")
     p.add_argument("--name")
     p.add_argument("--model-tier", choices=["max", "flash"])
+    p.add_argument(
+        "--effort",
+        choices=EFFORT_CHOICES,
+        help="本跳推理强度（覆盖成员级 effort；--from-backlog 时默认取条目 effort）",
+    )
     p.add_argument("--max-turns", type=int)
     p.add_argument("--timeout", type=int)
     p.add_argument("--dirs")

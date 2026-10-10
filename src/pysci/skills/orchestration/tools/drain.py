@@ -408,6 +408,9 @@ def _drain_batch(
 ) -> list[dict[str, Any]]:
     """消化一批（种子 + 同提请者组包菜单）：一次派发 devops → 逐交付 id 销账。
 
+    种子条目的 ``effort`` 标注透传给本跳（组包只收同档位条目，故一批一跳一标，
+    见 :func:`workflow.backlog_take_batch`）。
+
     - **result**（code 0）：解析交付 ``backlog id=<ids>``，与本批取交集逐 id 销账 done
       （种子必含——必做项，防御性兜底）；组包中未选的项保持 pending 留待下轮；每个 done
       项记 ``batch_size``/``batch_seed``（供 orch stats 批量分布）。
@@ -424,7 +427,12 @@ def _drain_batch(
     group_ids = [str(g.get("id", "")) for g in group if g.get("id")]
     batch_ids = [seed_id, *group_ids]
     label = seed_id if not group_ids else f"{seed_id}(+{len(group_ids)})"
-    _log(run_log, f"[→] 消化批次 {label}: {str(seed.get('summary', ''))[:50]}")
+    effort = str(seed.get("effort") or "") or None
+    eff_s = f"（effort={effort}）" if effort else ""
+    _log(
+        run_log,
+        f"[→] 消化批次 {label}: {str(seed.get('summary', ''))[:50]}{eff_s}",
+    )
     t0 = time.time()
 
     if dry:
@@ -457,6 +465,7 @@ def _drain_batch(
         text=backlog_batch_text(seed, group, max_batch=BATCH_MAX),
         slug=seed_id,
         session="latest",
+        effort=effort,
         quiet=True,
     )
     elapsed = round(time.time() - t0, 1)
