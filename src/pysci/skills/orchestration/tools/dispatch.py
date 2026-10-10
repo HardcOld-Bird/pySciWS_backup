@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -31,6 +33,10 @@ from .runner import (
 
 SUGGESTIONS_DIR = ORCH_STATE_ROOT / "suggestions"
 REPLIES_DIR = ORCH_STATE_ROOT / "replies"
+
+#: 任务书轻量 lint 规则表（JSON: {rules: [{id?, re, hint}]}）；devops 可增补。
+#: 组长手写任务书易把错误 CLI 范式传染给照抄的组员，落盘前扫一遍作机械护栏。
+LINT_RULES_PATH: Path = ORCH_STATE_ROOT / "taskbook-lint.json"
 
 
 def _ts() -> str:
@@ -83,6 +89,37 @@ def deployed_skills_for(pod: Path) -> list[str]:
     return names
 
 
+def load_lint_rules() -> list[dict]:
+    """加载任务书 lint 规则表；缺失/损坏 → 空列表（fail-open，绝不阻塞派发）。"""
+    if not LINT_RULES_PATH.exists():
+        return []
+    try:
+        data = json.loads(LINT_RULES_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    rules = data.get("rules", []) if isinstance(data, dict) else []
+    return [r for r in rules if isinstance(r, dict) and r.get("re")]
+
+
+def lint_taskbook(body: str) -> list[str]:
+    """扫任务书正文，返回命中的错误 CLI 范式告警（空=干净）。
+
+    **告警不阻断**：单条规则 regex 非法只跳过该条，不影响其余规则与派发。
+    """
+    warnings: list[str] = []
+    for rule in load_lint_rules():
+        try:
+            pat = re.compile(rule["re"])
+        except re.error:
+            continue
+        if pat.search(body):
+            tag = f"[{rule['id']}] " if rule.get("id") else ""
+            warnings.append(
+                f"{tag}{rule.get('hint', '命中错误 CLI 范式 ' + rule['re'])}"
+            )
+    return warnings
+
+
 def write_taskbook(
     pod: Path, *, text: str | None, task_file: str | None, slug: str
 ) -> Path:
@@ -101,6 +138,9 @@ def write_taskbook(
         body = src.read_text(encoding="utf-8")
     else:
         body = text or ""
+    # 落盘前轻量 lint：命中错误 CLI 范式仅告警（组长确认后可照常派发），不阻断
+    for warn in lint_taskbook(body):
+        print(f"[!] 任务书 lint：{warn}")
     # 结尾恰好一个换行：裸文本会触发 pre-commit end-of-file-fixer 拦截任务书提交
     dest.write_text(header + body.rstrip("\n") + "\n", encoding="utf-8")
     return dest
