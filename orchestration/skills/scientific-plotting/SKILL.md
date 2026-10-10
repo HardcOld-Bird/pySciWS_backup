@@ -100,7 +100,9 @@ The three common iteration needs map to:
 - **keep data, change plot** → edit the plotting calls (line↔scatter etc.).
 - **keep content, change journal style** → re-run with `--style nature` (no code change).
 
-A `STYLE.yaml` at the figures root (or per-figure) pins the default preset/width; CLI flags win.
+A figures-root `STYLE.yaml` sets preset/width defaults; a per-figure one overrides **key by
+key**; CLI wins. `audit` measures the exported `out/<stem>.eps` and WARNs (`width-deliverable`)
+on >30 % deviation — catching a root `width: double` masking a single-column figure.
 
 Discovery is **src-first**; if a same-named pipeline also sits in `<figdir>/`, `build` WARNs which
 file it rendered (no silent placeholder). Force figdir: `--pipeline-in-figdir`, or pin
