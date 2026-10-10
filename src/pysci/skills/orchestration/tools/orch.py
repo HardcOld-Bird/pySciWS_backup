@@ -117,9 +117,12 @@ def cmd_status(args: argparse.Namespace) -> int:
         )
     done = _drain.latest_done()
     if done:
+        stopped = done.get("stopped")
         how = (
             "协作停止（drain-stop）"
-            if done.get("stopped") == "cooperative"
+            if stopped == "cooperative"
+            else "额度耗尽全局停止（剩余条目保持 pending，待渠道恢复）"
+            if stopped == "quota_exhausted"
             else "异常中断"
             if done.get("error")
             else "自然跑完"

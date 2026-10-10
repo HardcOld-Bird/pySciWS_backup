@@ -142,6 +142,26 @@ def backlog_needs_leader(item_id: str, note: str = "") -> None:
     _backlog_set_status(item_id, "needs_leader", note, stamp="needs_leader_at")
 
 
+def backlog_requeue(item_id: str, note: str = "") -> None:
+    """把 in_progress 条目复位为 pending（清除 started_at）。
+
+    用于**系统性故障**（如额度耗尽）导致的全局停止：条目本身没问题，应回队等待
+    渠道恢复后续消化，而非标记 needs_leader 污染 backlog 语义。
+    """
+    if not BACKLOG_PATH.exists():
+        return
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    for item in data.get("items", []):
+        if item.get("id") == item_id and item.get("status") == "in_progress":
+            item["status"] = "pending"
+            item.pop("started_at", None)
+            if note:
+                item["note"] = note
+    BACKLOG_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
 def backlog_task_text(item: dict) -> str:
     """由 backlog 条目生成 devops 派发任务书正文。
 
