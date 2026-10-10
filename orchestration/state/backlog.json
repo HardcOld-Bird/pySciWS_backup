@@ -402,12 +402,13 @@
       "member": "devops",
       "summary": "**基础设施类交付无可路由的机械验收 check**（缺陷类，附证据）。`orchestration/state/registry.json` 的 `checks` 块实测仅一条：`{\"figure-audit\": {\"cmd\": [\"uv\",\"run\",\"pysci-figures\",\"audit\",\"{path}\",\"--panels\"]}}`。于是 orch CLI / guards / p",
       "evidence_file": "orchestration/state/suggestions/approved/20261010-163347-devops.md",
-      "status": "needs_leader",
+      "status": "done",
       "proposed": "2026-10-10T21:01:04+08:00",
-      "note": "drain 跳过（交付=blocked）：**任务**：backlog id=20261010-163347-devops（种子三件套 orch-tests check 注册 + devops.cancel ignore + pod inbox/task-*.md 运行态治理）。  **阻塞点**：合并前 git status 检查命中「main 工作区存在会",
+      "note": "组长代合并（devops 因 main 脏状态正确 blocked，纪律生效）；worktree 提交 dd522a3 已核收",
       "started_at": "2026-10-10T21:11:55+08:00",
       "worktree": "20261010-163347-devops",
-      "needs_leader_at": "2026-10-10T21:26:44+08:00"
+      "needs_leader_at": "2026-10-10T21:26:44+08:00",
+      "done_at": "2026-10-10T22:20:00+08:00"
     },
     {
       "id": "20261010-191922-devops",
