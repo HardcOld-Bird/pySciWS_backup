@@ -120,4 +120,6 @@ def test_backlog_task_text_shared_builder():
     )
     assert "id=x1" in text and "摘要A" in text and "证据B" in text and "附注C" in text
     assert "合并前 git status" in text  # 合并安全句
-    assert "不 push" in text
+    # push 规程句与 charter 一致（限时 best-effort），旧「不 push」矛盾句不得回潮
+    assert "push 规程" in text and "best-effort" in text
+    assert "不 push" not in text
