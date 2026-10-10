@@ -47,6 +47,19 @@
 - **新增 pod 无需预注册 registry.json**：`orch dispatch` 前调 `ensure_member_defaults`，pod 目录
   存在即自动生成默认成员条目（flash/60轮/7200s/`.qoder/mcp.json`）。`doctor` 按 `PODS_ROOT`
   目录计数、也不依赖 registry。故脚手架新 pod 只建目录+只读层文件，注册留给组长首次派发。
+- **改 guard（Node Stop/PreToolUse hook）的两条硬教训（2026-10-10，backlog 20261010-budget-delivery-gate）**：
+  ① guard 的 fail-open（异常即放行）会**静默吞掉 guard 自身的 bug**——首版把执行流写在
+  ESM 顶层 `const` 辅助函数之前，TDZ ReferenceError 被 catch 掉，13 例违规全绿通过；只有
+  用 pytest 直接 `node` 跑真 guard（`tests/skills/orchestration/test_delivery_gate_budget.py`）
+  才暴露。故 `run()` 调用必须放文件末尾。② Stop hook 的验证别只看 exit code：探针法=在
+  Temp 造 pod（settings.json 把 Stop 接到 worktree 里的绝对路径 guard），headless 跑完看
+  **违规文件是否被会话自己改掉** + `num_turns`（bad 12000B→12B/3 轮 vs ok 200B 不动/1 轮），
+  再从 `~/.qoder-cn/projects/<pod键>/<sid>.jsonl` 里取注入回会话的 stderr 原文核对提示是否准确。
+- **delivery-gate 现执法组员自维护层四条预算**（AGENTS.md ≤8192B / 自建 rules 禁
+  always_on / 自建 rules·skills 的 description 合计各 ≤8192B / 自建 SKILL.md ≤8192B），
+  口径=落盘字节（CRLF 计税）；`PYSCI_DEPLOYED_SKILLS` 缺失时自建技能那一支不执法。
+  细节写进 devops 技能「guards 面」小节。改完任何真本记得 `pysci-dev sync`；本条所属的
+  devops SKILL.md 自己也差点顶破 8192B——新增文档前先 `wc -c` 是省一轮返工的习惯。
 - **pod 脚手架的 git 跟踪面**：每 pod 仅 5 个文件入库（`.gitignore`/`.qoder/settings.json`/
   `.qoder/mcp.json`/`.qoder/rules/charter.md`/`AGENTS.md`）；`bench/`·`outbox/`·`.qoder/skills/`
   被 pod `.gitignore` 排除，`inbox/` 空目录 git 不跟踪——三者均须在**合并后于 main 上**用

@@ -86,6 +86,23 @@ PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
 `"agentsMdExcludes": ["**/leader-only.md"]` 排除组长专属根规则（缺则组员注入
 `leader-only.md`；glob 写成 `**/*.md` 会连 `basic.md` 公约数一起吞掉，doctor 两项都判 ✗）。
 
+## guards 面（delivery-gate 预算硬闸）
+
+`orchestration/guards/delivery-gate.mjs`（Stop hook）除交付格式外，还按 basic.md §1
+执法组员**自维护层**四条：`AGENTS.md` ≤8192B；自建 rules 禁 `trigger: always_on`
+（charter 豁免）；自建 rules 与自建 skills 的 `description` 行合计各 ≤8192B；
+每个自建 `SKILL.md` ≤8192B。违规 exit 2 + stderr 给出路径/实测字节/上限/整改动作，
+格式与预算两类问题**合并成一轮**报（否则格式退回吃掉唯一一次拦截）。口径为落盘字节
+（CRLF 计税），与 `wc -c` / `find -size +8192c` 一致。
+
+- **部署副本豁免**：`PYSCI_DEPLOYED_SKILLS`（runner 注入，`;` 分隔）里的技能目录不算
+  自建；该变量缺失时自建技能那一支整体不执法——分不清自建与副本时卡组员不如不卡。
+- **`stop_hook_active` 优先**：循环防护为真时一切放行（拦一次即止，兜底靠 doctor 与
+  pre-commit 真本侧）。
+- **fail-open 会吞掉 guard 自己的 bug**：预算段包在 try 里，异常即静默放行。改 guard
+  必须先跑 `tests/skills/orchestration/test_delivery_gate_budget.py`（node 跑真 guard）；
+  ESM 顶层 `const` 有 TDZ，`run()` 只能放文件末尾。
+
 ## git 纪律
 
 - commit：cz 规范（feat/fix/docs/refactor/test/chore + scope）；一笔提交一个主题；
