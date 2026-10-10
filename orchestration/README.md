@@ -179,6 +179,11 @@ ledger 流水为可再生物不入库。
   的 model_decision/glob 触发做按需加载，省上下文）；自建 skills=可复用的操作流程知识
   （按名调用才展开）；
 - 更新时机：任务中学到可复用经验随手记；**会话归档前必须蒸馏**（§3.2）；
+- **Harness 预算（裁决，条款全文见 basic.md §1）**：全量注入档每文件 ≤8 KB（charter、
+  AGENTS.md）；常驻暴露档每类 description 合计 ≤8 KB（自建 rules/技能）；按需档
+  （references 等）单文件 ≤8 KB、总量不限。组员自建 rules 必须条件式——`always_on`
+  槽位只留 charter。执法三层：delivery-gate（组员交付时硬闸）、pre-commit（真本侧）、
+  doctor（全域巡检）；
 - 组长侧：Qoder 自动记忆（交互式专属，用户已启用）+ orchestration 技能（编排规程）。
 
 ### 3.2 会话池（原生能力 + orch 薄封装）
@@ -822,6 +827,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-10 | **drain 观察闭环硬化**：`orch watch` 阻塞式事件等待器（QUEUE-COMPLETE/NEEDS-LEADER/QUOTA-STOP/CRASH），组长经后台 Bash 挂载、退出即原生通知唤醒；唤醒类命令 [NEXT] 代码注入挂载指令。结构上限登记：唤醒注册只能由组长会话工具发起，外部代码无法代按——硬化到「判定在代码+提示在代码」，残余软点与体系最小保证同级 | 用户理念 + Agent 设计 |
 | 2026-10-10 | **修正 2026-10-09「credits 恒 0 根因=BYOK」判断**：实测 14 跳台账证明 BYOK 下 credits **依模型上报**——max 档（Qwen3.8-Max）正常计量（devops/reviewer/deputy 跳 13~1142 credits），flash 档（Qwen3.8-Flash）恒 0（figure/lit 跳）；usage tokens 两档均 0、唯 context_usage_ratio 恒有效。台账新增 `model` 字段 + `stats` 标注成本覆盖率（`format_credits`），使部分计量数据可解释。完整 token/账单核算仍按用户 2026-10-09 裁决留待未来（backlog 20261009-byok-cost-accounting 据此销账） | devops 实测（backlog 20261009-byok-cost-accounting） |
 | 2026-10-10 | **review 任务书嵌入目标陈述**（G2 独立性）：`orch review` 增 `--goal-from <原生产任务书>`/`--goal <文本>`，把组长撰写的目标陈述摘录嵌入审查任务书并登记进 review 记录（`goal_source`/`goal_excerpt`），使 reviewer 的 G2「与任务书目标一致」据组长原意独立核验、不再依赖生产者 notes.md 自述（消除与 charter 独立性纪律的张力）；缺省告警不中断。采纳 reviewer 建议 20261009-231455-reviewer | 组长采纳 + devops 实施（backlog 20261009-231455-reviewer） |
+| 2026-10-10 | **Harness 预算三层制 + 执法 + 身份锚定**：全量注入档每文件 ≤8 KB（charter/AGENTS.md）、常驻暴露档每类 description 合计 ≤8 KB、按需档单文件 ≤8 KB 总量不限；组员自建 rules 必须条件式（always_on 槽位只留 charter）。执法=delivery-gate 预算校验（组员侧）+ pre-commit（真本侧）+ doctor（巡检），条款入 basic.md §1、§3.1。既有 10 个超限 references 文件严格拆分一劳永逸（用户裁决「严格执行」）。插件 description 税与 MCP lazyLoad 列实测探索项。leader-only.md 增「身份锚定」条款加固新会话组长自我认知。MCP schema 不计入知识预算（属工具面）。全部基建改动入 backlog 六项（refs-split-8kb / budget-delivery-gate / budget-precommit / budget-doctor / plugin-tax-probe / mcp-lazyload-probe）交 devops | 用户三点裁决 + 组长实施 |
 
 ## 14. 已知代价与风险
 
