@@ -662,7 +662,15 @@ backlog 条目经任务书注入，完成经 outbox 交付。
   pod 外路径（白名单目录除外）exit 2 + stderr 注入。保护名单由 settings 接线时经
   环境变量注入（`PYSCI_TASK_DIRS` + `PYSCI_READONLY_PATHS`）；`orch skills sync` 只
   触碰 manifest 部署名，**不删除成员自建技能**；
-- **delivery-gate**（Stop hook）：交付格式强制（§3.4）；
+- **delivery-gate**（Stop hook）：交付格式强制（§3.4）**＋组员自维护层预算硬闸四条**
+  （§3.1/§13 裁决，2026-10-10）：AGENTS.md ≤8192B；自建 rules 禁 `always_on`
+  （槽位专属 charter）；自建 rules/技能 description 合计各 ≤8192B；自建技能每个
+  SKILL.md ≤8192B——违规 exit 2 + 精确整改指令（文件、实测字节、上限、动作）；
+- **harness-budget**（pre-commit，真本侧）：`orchestration/skills/**` 的 SKILL.md 与
+  references、根 `.qoder/rules/` 每文件 ≤8192B 硬拦——管住组长与 devops 的真本编辑，
+  与 delivery-gate 同阈值常量；
+- **doctor 预算巡检**：`pysci-dev doctor` 全域审计三档（全量注入/常驻暴露/按需），
+  超限 ✗、>90% ⚠；
 - 权限模式：用户级默认 yolo（用户裁决），orch 不显式传参；hooks 在 yolo 下照常执行
   （v1 实测，Phase 0 以当前参数名复测）；
 - 诚实条款：guard 只拦 Write/Edit/NotebookEdit，Bash 重定向理论上可绕过——设计目标是
