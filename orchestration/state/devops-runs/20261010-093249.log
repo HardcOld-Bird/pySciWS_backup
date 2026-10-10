@@ -1,0 +1,10 @@
+[09:32:49] [▶] drain 启动（pid=30000, dry=False）
+[09:32:49] [→] 消化 20261010-paper-search-mcp-down: paper-search-mcp（uvx）在用户级清零前即 Disconnected，lit/reviewer/depu
+[09:33:04] [!] 20261010-paper-search-mcp-down 跳过→needs_leader（run_failed）：stop_sequence
+[09:33:04] [→] 消化 20261010-orch-taskbook-newline: orch write_taskbook 写 inbox 任务书不带结尾换行符，触发 pre-commit end-of-
+[09:33:17] [!] 20261010-orch-taskbook-newline 跳过→needs_leader（run_failed）：stop_sequence
+[09:33:17] [→] 消化 20261010-drain-orphan-reclaim: drain 启动时回收孤儿 in_progress 条目：backlog_take_first 标记 in_progre
+[09:33:31] [!] 20261010-drain-orphan-reclaim 跳过→needs_leader（run_failed）：stop_sequence
+[09:33:31] [→] 消化 20261010-drain-cooperative-stop: 为 drain 增加协作式停止：orch drain-stop 命令写 state/devops.cancel；drai
+[09:33:44] [!] 20261010-drain-cooperative-stop 跳过→needs_leader（run_failed）：stop_sequence
+[09:33:44] [√] drain 结束：处理 4 项，耗时 55.1s → orchestration\state\devops-runs\20261010-093249.done

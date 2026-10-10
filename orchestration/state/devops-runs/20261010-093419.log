@@ -1,0 +1,4 @@
+[09:34:20] [▶] drain 启动（pid=11108, dry=False）
+[09:34:20] [→] 消化 20261010-084105-devops: 难用类（无 bug，但易错且属本次根因上游）：任务书由组长手写自由文本（`dispatch.py` 只落盘 conten
+[09:34:32] [!] 20261010-084105-devops 跳过→needs_leader（run_failed）：stop_sequence
+[09:34:32] [√] drain 结束：处理 1 项，耗时 12.3s → orchestration\state\devops-runs\20261010-093419.done
