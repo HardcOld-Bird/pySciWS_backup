@@ -35,11 +35,13 @@ __pycache__/
 /orchestration/state/ledger/
 /.qoder/skills/orchestration/
 /orchestration/state/backups/
-# drain 运行态：互斥锁（含 pid，纯运行态）与每次 drain 的审计日志/摘要。
-# 永久审计在 git 提交 + backlog.json（每项 commit hash）+ ledger，故运行态文件不入库
-#（避免污染 git status 与误提交陈旧锁）。采纳 devops 建议 20261010-081857。
+# drain 运行态：互斥锁（含 pid，纯运行态）、每次 drain 的审计日志/摘要、协作式
+# 取消信号（drain-stop 写入；worker 消费后自删，中途死掉则留残）。永久审计在 git
+# 提交 + backlog.json（每项 commit hash）+ ledger，故运行态文件不入库（避免污染
+# git status 与误提交陈旧锁/信号）。采纳 devops 建议 20261010-081857 + 20261010-163347。
 /orchestration/state/devops.lock
 /orchestration/state/devops-runs/
+/orchestration/state/devops.cancel
 # orch watch 的基线快照/心跳（backlog 20261010-orch-watch）：纯运行态观察面，
 # 事件已随 orch status 补账清算，无审计价值
 /orchestration/state/watch.json

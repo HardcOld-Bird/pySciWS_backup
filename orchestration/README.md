@@ -216,7 +216,9 @@ pySciWS/
 
 git 策略：真本/charter/manifest/registry/backlog/plans 定义入库；部署副本、自建
 rules/skills 中成员私有部分（按 pod .gitignore 细则，Phase 1 定）、bench、outbox、
-ledger 流水为可再生物不入库。
+ledger 流水、`state/devops.{lock,cancel}` / `state/devops-runs/` / `state/watch.json`
+（drain/watch 运行态）、`pods/*/inbox/task-*.md`（每次派发落的任务书运行态；正文
+已随 backlog 与 ledger 记录）为可再生或运行态不入库。
 
 ---
 
@@ -538,7 +540,8 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
 交付中声明**（§3.4 `check` 属性），机械验收不得阻碍灵活任务：
 
 - `check="<type>"` → orch 自动运行对应确定性脚本（注册于 registry checks 表；如图件→
-  figures CLI 合规审计）；FAIL→自动回派返工（≤3 次，同指纹连败升级组长）；
+  figures CLI 合规审计，orch CLI/guards/pod 只读层等基础设施类→`orch-tests` 跑
+  `pytest tests/skills/orchestration`；FAIL→自动回派返工（≤3 次，同指纹连败升级组长）；
 - `check="none" reason="..."` → 放行，台账记「未验收（成员判断）」及理由；
 - 无 `<artifact>` 的交付（纯咨询类）→ 天然不触发；
 - 制衡：台账透明 + 组长 `orch check` 随时抽检 + reviewer 可见验收状态；

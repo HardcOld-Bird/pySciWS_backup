@@ -3,3 +3,7 @@
 bench/
 outbox/
 .qoder/skills/
+# 任务书运行态：orch dispatch 每次派发到 inbox 落 task-<ts>-<slug>.md，
+# 正文已被 backlog.json + 交付 ledger 记录，无需再入库（避免污染 git status
+# 与 git add -A 误提交）。采纳 devops 建议 20261010-081857 残留 + 20261010-163347。
+inbox/task-*.md

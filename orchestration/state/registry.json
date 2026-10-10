@@ -123,6 +123,15 @@
         "{path}",
         "--panels"
       ]
+    },
+    "orch-tests": {
+      "cmd": [
+        "uv",
+        "run",
+        "pytest",
+        "tests/skills/orchestration",
+        "-q"
+      ]
     }
   }
 }
