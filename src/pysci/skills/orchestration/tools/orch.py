@@ -32,7 +32,7 @@ from . import sync as _sync
 from . import workflow as _workflow
 from .dispatch import do_dispatch
 from .ledger import LEDGER_PATH, format_credits, read_all, summarize
-from .registry import Registry, orchestration_rel
+from .registry import Registry, orchestration_rel, refresh_models
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +346,36 @@ def cmd_drain_stop(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_refresh_models(args: argparse.Namespace) -> int:
+    """手动刷新 registry 模型映射（--list-models 人类名→UUID；用户裁决 2026-10-10）。
+
+    drain 启动时会自动执行同一刷新（自愈）；本命令供重配 BYOK 后立即校验/写回。
+    未命中的档保持现值不清空（宁旧勿空——清空会静默改变计费渠道）。
+    """
+    del args
+    try:
+        res = refresh_models()
+    except Exception as exc:
+        print(f"[✗] 刷新失败：{type(exc).__name__}: {exc}")
+        print(
+            "[NEXT] 检查 qoderclicn exe（registry.exe / PYSCI_ORCH_EXE / 默认位置）与"
+            "账户登录态；registry 现映射未动。"
+        )
+        return 2
+    if res["changed"]:
+        for tier, c in sorted(res["changed"].items()):
+            print(f"  [{tier}] {c['old'] or '(空)'} → {c['new']}")
+        print(f"[√] 已刷新 {len(res['changed'])} 个档位映射并写回 registry。")
+    else:
+        print(f"[√] 映射均为最新（目录 {res['catalog_size']} 个模型），无需写回。")
+    if res["missing"]:
+        print(f"[!] 未命中（保持现值）：{', '.join(res['missing'])}")
+        print(
+            "    BYOK 模型改名 → 更新 registry.model_patterns（或 registry.py 默认表）。"
+        )
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # plan 子命令路由
 # ---------------------------------------------------------------------------
@@ -521,6 +551,12 @@ def main(argv: list[str] | None = None) -> int:
         "drain-stop", help="请求后台 drain worker 协作式停止（写 devops.cancel）"
     )
     p.set_defaults(func=cmd_drain_stop)
+
+    p = sub.add_parser(
+        "refresh-models",
+        help="按 --list-models 刷新 registry 模型映射（drain 启动亦自动执行）",
+    )
+    p.set_defaults(func=cmd_refresh_models)
 
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(

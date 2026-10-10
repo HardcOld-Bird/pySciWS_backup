@@ -45,7 +45,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
-from .registry import orchestration_rel
+from .registry import orchestration_rel, refresh_models
 from .workflow import (
     backlog_batch_text,
     backlog_complete,
@@ -558,6 +558,28 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         "items": [],
     }
     _log(run_log, f"[▶] drain 启动（pid={os.getpid()}, dry={dry}）")
+    # 模型映射自愈（用户裁决 2026-10-10）：--list-models 刷新 registry.models——
+    # 重配 BYOK 后下次 drain 即恢复正确 UUID。任何失败仅告警不阻塞（宁旧勿空）。
+    try:
+        res = refresh_models()
+        if res["changed"]:
+            detail = "; ".join(
+                f"{t}: {c['old'] or '(空)'} → {c['new']}"
+                for t, c in res["changed"].items()
+            )
+            summary["models_refreshed"] = res["changed"]
+            _log(run_log, f"[i] 模型映射已刷新：{detail}")
+        if res["missing"]:
+            _log(
+                run_log,
+                f"[i] 模型映射未命中（保持现值）：{', '.join(res['missing'])}"
+                "——BYOK 改名则更新 registry.model_patterns",
+            )
+    except Exception as exc:
+        _log(
+            run_log,
+            f"[!] 模型映射刷新失败（忽略，沿用 registry 现值）：{type(exc).__name__}: {exc}",
+        )
     # 刚获锁 → 此刻的 in_progress 必是已死 worker 的孤儿，回收为 pending
     orphans = backlog_reclaim_orphans()
     if orphans:

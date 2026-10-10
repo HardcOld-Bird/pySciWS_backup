@@ -33,6 +33,13 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(drain, "LOCK_PATH", state / "devops.lock")
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
     monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")
+    # drain 启动的模型映射自愈默认 no-op（防测试真起 exe/写真实 registry；
+    # 测刷新行为的用例自行 monkeypatch 覆盖）
+    monkeypatch.setattr(
+        drain,
+        "refresh_models",
+        lambda: {"changed": {}, "missing": [], "catalog_size": 0},
+    )
     return state
 
 
