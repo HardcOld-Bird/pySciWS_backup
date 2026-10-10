@@ -276,10 +276,79 @@
     {
       "id": "20261010-pod-leader-excludes",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "summary": "全部 pod settings 加 agentsMdExcludes 排除组长专属规则 + doctor 巡检项 + deputy charter 指针",
       "evidence": "用户批准 basic.md 拆分：根 rules 现有 leader-only.md（组长专属，always_on）+ basic.md（公约数）。实测依据（2026-10-10 探针）：pod settings 的 agentsMdExcludes glob '**/<file>.md' 可选择性排除根规则（pod 不可见、根可见、basic 公约数不受影响）。要求：① 10 个 pod 的 .qoder/settings.json 增加 \"agentsMdExcludes\": [\"**/leader-only.md\"]（保留既有 hooks 配置，JSON 深合并勿覆盖）；② pysci-dev doctor 新巡检项：pod settings 缺该排除 → ✗ 报「leader 规则未排除」；③ deputy charter 补一行「顶层设计与基建决策惯例见根 leader-only.md 与 orchestration/README.md（跨 pod 只读）」；④ pod 模板/脚手架说明同步，确保未来新 pod 默认带排除。验证：任一 pod headless 探针——leader-only 标记不可见、basic §1（8KB 预算）可见。注意：组员自建规则勿命名 leader-only*（glob 会误伤），doctor 可顺带提示。",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T16:35:38+08:00",
+      "worktree": "20261010-pod-leader-excludes",
+      "done_at": "2026-10-10T16:54:08+08:00",
+      "note": "drain 批量销账（commit d10681e）",
+      "batch_size": 1,
+      "batch_seed": "20261010-pod-leader-excludes"
+    },
+    {
+      "id": "20261010-refs-split-8kb",
+      "member": "leader",
+      "status": "pending",
+      "proposed": "2026-10-10",
+      "summary": "严格拆分 10 个超 8KB 的 references 文件为多个 ≤8192B 主题文件并更新索引（用户裁决：一劳永逸）",
+      "evidence": "用户裁决「严格执行，一劳永逸地解决旧文件的超限问题」。实测超限清单（find orchestration/skills -name '*.md' -size +8192c）：literature-research/references/maintenance.md 63845B、read.md 30513B、search.md 28380B；comsol-simulation/references/mcp.md 15193B、cli.md 8472B；ai-drawing/references/backends.md 11713B、prompting.md 9898B；document-writing/references/digest.md 9755B、maintenance.md 8900B；scientific-plotting/references/plotting.md 8461B。要求：① 每个超限文件按主题拆为多个新文件，每文件 **wc -c ≤ 8192**（拆分不算压缩，内容零丢失；压缩措辞另行允许但不得删信息）；② 更新所属 SKILL.md 的「遇到 X 时读 references/x.md」索引行，索引本身保持精简；③ 拆完复测：上述 find 命令输出为空。注意 literature 的 maintenance.md 63.8KB≈8 倍超限，大概率需要 8~10 个主题分册。",
+      "note": "用户批准 harness 预算包（2026-10-10 三点裁决）"
+    },
+    {
+      "id": "20261010-budget-delivery-gate",
+      "member": "leader",
+      "status": "pending",
+      "proposed": "2026-10-10",
+      "summary": "delivery-gate Stop hook 扩展 harness 预算校验：AGENTS/charter 尺寸、自建 rules 禁 always_on、常驻 description 合计、自建技能尺寸",
+      "evidence": "用户批准的 harness 预算三层执法之一（组员侧硬闸）。basic.md §1 已写入预算裁决（全量注入档每文件 ≤8KB；常驻暴露档每类合计 ≤8KB；按需档单文件 ≤8KB；组员自建 rules 必须条件式，always_on 槽位只留 charter）。要求扩展 orchestration/guards/delivery-gate.mjs：在现有 result/blocked 格式校验之外，于 Stop 时校验该 pod 自维护层——① pod AGENTS.md ≤8192B；② pod .qoder/rules/ 下非 charter 的 md 若 frontmatter trigger: always_on → 拒绝；③ 自建 rules 与自建 skills 的 description 合计各 ≤8192B（自建技能=SKILL.md 目录名不在 PYSCI_DEPLOYED_SKILLS 环境变量列表内）；④ 自建技能每个 SKILL.md ≤8192B。违规 exit 2 + stderr 精确整改指令（文件路径、实测字节、上限、动作：精简/拆分/转条件式）。保留既有 stop_hook_active 循环防护与 fail-open 纪律（校验器自身异常不得卡死交付——预算校验代码要保证低崩溃面）。验证：headless 探针 pod 里造超大 AGENTS.md → dispatch 被拒且提示准确；删违规文件 → 正常通过。",
+      "note": "用户批准 harness 预算包（2026-10-10 三点裁决）"
+    },
+    {
+      "id": "20261010-budget-precommit",
+      "member": "leader",
+      "status": "pending",
+      "proposed": "2026-10-10",
+      "summary": "pre-commit 全域预算钩子：真本 SKILL.md/references/根 rules 每文件 ≤8KB 硬拦",
+      "evidence": "三层执法之真本侧（管组长与 devops 的编辑）。要求 .pre-commit-config.yaml 新增本地钩子：① orchestration/skills/**/SKILL.md 每个 ≤8192B；② orchestration/skills/**/references/*.md 每个 ≤8192B；③ 根 .qoder/rules/basic.md 与 leader-only.md 每个 ≤8192B。超限 fail 并打印文件+字节+上限。依赖：须排在 20261010-refs-split-8kb 完成之后（否则当前 10 个文件会拦下一切提交）；若同批处理则本项最后启用。验证：临时造一个超限文件 → git commit 被拦；移除 → 通过。",
+      "note": "用户批准 harness 预算包（2026-10-10 三点裁决）"
+    },
+    {
+      "id": "20261010-budget-doctor",
+      "member": "leader",
+      "status": "pending",
+      "proposed": "2026-10-10",
+      "summary": "pysci-dev doctor 新增预算巡检：全 pod 自维护层 + 真本侧三档尺寸审计报告",
+      "evidence": "三层执法之巡检侧。要求 pysci-dev doctor 新增检查项：① 各 pod AGENTS.md/charter 尺寸（全量注入档）；② 各 pod 自建 rules 是否违规 always_on、自建 rules/skills description 合计（常驻暴露档）；③ 各 pod 自建技能 SKILL.md 与 references 单文件尺寸（按需档）；④ 真本侧 orchestration/skills 与根 rules 尺寸。输出按 pod 分行的审计表，超限 ✗、接近上限（>90%）⚠ 提示。与 delivery-gate 同一套阈值常量（可放公共模块，避免两处漂移）。验证：doctor 实测对当前 10 pod 输出全绿（refs 拆分完成后）。",
+      "note": "用户批准 harness 预算包（2026-10-10 三点裁决）"
+    },
+    {
+      "id": "20261010-plugin-tax-probe",
+      "member": "leader",
+      "status": "pending",
+      "proposed": "2026-10-10",
+      "summary": "实测 pod 端插件/内置技能 description 常驻税，探索 enabledPlugins 按 pod 关停",
+      "evidence": "用户批准的调研纳入项。问题：headless 组员会话除自有技能外，是否也常驻加载插件/内置技能（security-scan、qoder-sites、loop、deep-research 等）的 description 占位？settings 是按 cwd 三层合并且不外泄的（P0 实测），据此推测 pod 级 settings 可关停。要求：① 探针实测：向某 pod 派一问「列出你当前可见的全部技能名与其来源」跳，比对 pod 自有 vs 平台注入；② 若平台税存在，测 pod .qoder/settings.json 的 enabledPlugins（或实测等价键）能否按 pod 关掉且不影响该 pod 自有技能；③ 可行则对十 pod 统一配置并验证 dispatch 全链正常；④ 结果登记 README §1.1 事实表。平台税不计入成员预算，但降税对 flash 档每跳上下文有实际收益。",
+      "note": "用户批准 harness 预算包（2026-10-10 三点裁决）"
+    },
+    {
+      "id": "20261010-mcp-lazyload-probe",
+      "member": "leader",
+      "status": "pending",
+      "proposed": "2026-10-10",
+      "summary": "实测 MCP lazyLoad 在 headless 下的有效性，可行则用于 lit/reviewer/deputy 多 MCP pod",
+      "evidence": "用户批准的调研纳入项。现状：MCP 工具 schema 默认全量常驻（§1.1 实测非渐进加载）；lit 挂 3 server、reviewer/deputy 各 4 server，每跳 schema 税显著。要求：① 查 CLI 1.1.66 是否存在 mcp.lazyLoad 设置或 QODER_MCP_LAZY 环境变量（--help/docs/字符串探测），确认拼写与语义；② 在 lit pod headless 实测：启用后 MCP 工具是否仍可被发现与成功调用（做一次真实 arxiv 检索任务跳），对比关闭时的会话起步上下文体量（est_tokens 或原生 context_usage_ratio 差值）；③ 无损则对多 MCP pod 启用并记录 README §1.1/§8；有害（工具不可见/调用失败/冷启动丢工具）则维持现状并登记结论。MCP schema 不计入知识预算，本项纯属上下文优化。",
+      "note": "用户批准 harness 预算包（2026-10-10 三点裁决）"
+    },
+    {
+      "id": "20261010-165408-devops",
+      "member": "devops",
+      "summary": "标题：agentsMdExcludes 生效性缺机械哨兵——doctor 只验字符串、不验实际注入",
+      "evidence_file": "orchestration/state/suggestions/approved/20261010-165408-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-10T18:54:28+08:00",
+      "note": "采纳：agentsMdExcludes 机械哨兵固化（含预算巡检同批考虑）"
     }
   ]
 }
