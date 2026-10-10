@@ -427,6 +427,9 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
   锁 FIFO 串行消化整个 backlog（组长零阻塞、零轮询，对齐 §4.5 等待模型）
   · --no-wake 只入队不唤醒；锁忙（已有 worker）不重复 spawn，本项由当前 drain 接手
   · 锁 stale（持有进程死 / 锁龄 >6h）自动接管，防 worker 崩溃后死锁
+  · `orch drain-stop` 协作式停止：写 state/devops.cancel（指向当前锁持有者 pid），worker
+    每项间隙消费→干净退出（释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；
+    陈旧信号（pid≠本进程）清除且不误停接棒 worker；锁空闲时 drain-stop 不写信号（no-op）
 → drain 每项：取队首 → 生成任务书（含合并安全句）→ dispatch devops worktree 实施（§7）
   → 测试验证 → git 提交（不 push）→ 交付
   · 成功 → backlog 销账（done，记 commit hash）

@@ -16,6 +16,11 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
   并**跳过**（一项卡住不阻塞全队列）；run 日志逐行落 ``state/devops-runs/<ts>.log``，
   全部完成写 ``<ts>.done``（JSON 摘要）。
 
+分离进程无 kill 之外的规范停止手段，故补**协作式停止**：``orch drain-stop`` 写
+``state/devops.cancel``（JSON: pid/requested_at，指向当前锁持有者）；drain 在每项
+间隙检查——信号指向本进程则干净退出（释放锁、写含 ``stopped=cooperative`` 的部分
+.done、cancel 自删）；指向他方的陈旧信号顺手清除，绝不误停新 worker。
+
 内部命令 ``_drain-devops`` 下划线前缀，argparse help 标注为 ``[内部]``（勿手调）。
 """
 
@@ -53,6 +58,9 @@ LOCK_STALE_S: int = 6 * 3600
 
 #: 干跑开关环境变量：置真值时 wake 派生的 drain 走 --dry（不真派发，演练/验证唤醒链用）。
 DRY_ENV: str = "PYSCI_ORCH_DRAIN_DRY"
+
+#: 协作式停止信号（JSON: pid/requested_at）；orch drain-stop 写，drain 消费自删。
+CANCEL_PATH: Path = ORCH_STATE_ROOT / "devops.cancel"
 
 _COMMIT_RE = re.compile(r"commit[^0-9a-f]{0,16}\b([0-9a-f]{7,40})\b", re.IGNORECASE)
 
@@ -190,6 +198,63 @@ def lock_status() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# 协作式停止（orch drain-stop ↔ drain 循环间隙消费）
+# ---------------------------------------------------------------------------
+def request_stop() -> tuple[bool, str]:
+    """写协作停止信号，目标为当前持锁 worker。供 ``orch drain-stop`` 调用。
+
+    Returns:
+        ``(ok, message)``。无运行中 worker 时**不写信号**（返回 False——空闲队列
+        不需要停，残留信号还会危及下一个 worker）。
+    """
+    st = lock_status()
+    if st["state"] != "running":
+        return False, "无运行中的 drain worker（锁空闲），无需停止。"
+    CANCEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CANCEL_PATH.write_text(
+        json.dumps(
+            {"pid": st["pid"], "requested_at": _now()}, ensure_ascii=False, indent=2
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return True, (
+        f"已请求协作停止（目标 pid {st['pid']}）：worker 将于下一条目间隙干净退出"
+        f"（释放锁、写部分 .done），信号文件 {orchestration_rel(CANCEL_PATH)} 消费后自删。"
+    )
+
+
+def cancel_status() -> dict[str, Any] | None:
+    """status 展示用：待消费的停止信号（无/损坏则 None）。"""
+    if not CANCEL_PATH.exists():
+        return None
+    try:
+        data = json.loads(CANCEL_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _consume_stop_request() -> bool:
+    """drain 循环检查：停止信号是否指向本进程；无论指向与否信号文件均被删除。
+
+    陈旧信号（pid≠本进程——被 kill 的 worker 未及消费而留下的）顺手清除并返回
+    False，绝不误停接棒的下一个 worker。
+    """
+    if not CANCEL_PATH.exists():
+        return False
+    try:
+        pid = int(json.loads(CANCEL_PATH.read_text(encoding="utf-8")).get("pid", 0))
+    except (json.JSONDecodeError, OSError, ValueError, TypeError):
+        pid = 0
+    try:
+        CANCEL_PATH.unlink()
+    except OSError:
+        pass
+    return pid == os.getpid()
+
+
+# ---------------------------------------------------------------------------
 # run 日志 / .done
 # ---------------------------------------------------------------------------
 def _log(run_log: Path, line: str) -> None:
@@ -293,7 +358,8 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         dry: True 时不真派发，仅模拟销账（唤醒链演练 / 测试）。
 
     Returns:
-        .done 摘要字典：``{started, completed, count, elapsed_s, items, run_log}``。
+        .done 摘要字典：``{started, completed, count, elapsed_s, items, run_log}``；
+        协作停止时附 ``stopped="cooperative"``。
     """
     done_path = run_log.with_suffix(".done")
     lock = acquire_lock(orchestration_rel(run_log))
@@ -316,6 +382,10 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         _log(run_log, f"[i] 回收孤儿 in_progress 条目：{', '.join(orphans)}")
     try:
         while True:
+            if _consume_stop_request():
+                summary["stopped"] = "cooperative"
+                _log(run_log, "[s] 收到协作停止信号，干净退出（条目间隙，无在途消费）")
+                break
             item = backlog_take_first()
             if item is None:
                 break
