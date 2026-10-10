@@ -437,7 +437,8 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
     每项间隙消费→干净退出（释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；
     陈旧信号（pid≠本进程）清除且不误停接棒 worker；锁空闲时 drain-stop 不写信号（no-op）
 → drain 每项：取队首 → 生成任务书（含合并安全句）→ dispatch devops worktree 实施（§7）
-  → 测试验证 → git 提交（不 push）→ 交付
+  → 测试验证 → git 提交（+ `timeout 25 git push origin main` best-effort，失败忽略，
+  用户裁决 2026-10-10）→ 交付
   · 成功 → backlog 销账（done，记 commit hash）
   · 失败（blocked/run_failed）→ 标记 needs_leader 并**跳过**（一项卡住不阻塞全队列）
   · 额度类失败（quota_exhausted）→ **全局停止**：当前条目复位 pending（非 needs_leader）、
