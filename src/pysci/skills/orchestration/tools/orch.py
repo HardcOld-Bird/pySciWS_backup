@@ -109,11 +109,24 @@ def cmd_status(args: argparse.Namespace) -> int:
         )
     else:
         print("  idle（无 drain worker 运行）")
+    cancel = _drain.cancel_status()
+    if cancel:
+        print(
+            f"  [s] 停止信号待消费（目标 pid {cancel.get('pid', '?')}，"
+            f"请求于 {cancel.get('requested_at', '?')}）"
+        )
     done = _drain.latest_done()
     if done:
+        how = (
+            "协作停止（drain-stop）"
+            if done.get("stopped") == "cooperative"
+            else "异常中断"
+            if done.get("error")
+            else "自然跑完"
+        )
         print(
             f"  最近 run：{done.get('name')}——处理 {done.get('count', 0)} 项，"
-            f"耗时 {done.get('elapsed_s', '?')}s"
+            f"耗时 {done.get('elapsed_s', '?')}s，停止方式={how}"
         )
         for it in done.get("items", [])[-5:]:
             extra = f" commit={it['commit']}" if it.get("commit") else ""
@@ -311,6 +324,18 @@ def cmd_sync(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_drain_stop(args: argparse.Namespace) -> int:
+    """请求后台 drain worker 协作式停止（写 state/devops.cancel）。
+
+    分离进程无规范 kill 手段；本命令写停止信号，worker 在下一条目间隙干净退出。
+    锁空闲时不写信号（避免残留信号危及下一个 worker），仅作提示。
+    """
+    del args
+    ok, msg = _drain.request_stop()
+    print(("[√] " if ok else "[i] ") + msg)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # plan 子命令路由
 # ---------------------------------------------------------------------------
@@ -481,6 +506,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("sync", help="[底层] 技能真本 → 部署副本同步")
     p.add_argument("--check", action="store_true")
     p.set_defaults(func=cmd_sync)
+
+    p = sub.add_parser(
+        "drain-stop", help="请求后台 drain worker 协作式停止（写 devops.cancel）"
+    )
+    p.set_defaults(func=cmd_drain_stop)
 
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(

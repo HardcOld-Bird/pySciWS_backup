@@ -25,6 +25,7 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(drain, "LOCK_PATH", state / "devops.lock")
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
+    monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")
     return state
 
 
