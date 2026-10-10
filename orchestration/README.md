@@ -84,6 +84,32 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 - 设置能力：项目级 `mcp.excluded` 可排除用户级 MCP（组长瘦身无需动用户配置的过渡
   手段）；`mcp.lazyLoad` 可减 MCP 首轮开销。
 
+**平台注入税**（实测 2026-10-10，backlog `20261010-plugin-tax-probe`；工具
+`pysci-dev skilltax`，实现 `src/pysci/skills/devops/tools/skilltax.py`）：原生 CLI
+在每个会话首跳注入两份清单附件（transcript 中 `type=attachment`）——`skill_listing`
+（技能名 + 一行描述，描述截到 `skillListingMaxDescChars` 默认 300 字符）与
+`agent_listing_delta`（可用 subagent 类型清单）。**平台内置技能与插件技能跨 cwd
+恒定注入**（headless pod 也注入，实测 16 项），不计入成员 harness 预算，但每一跳都
+向上下文交税——theory pod 未关停基线实测 `skill_listing` 3331 B（平台 2695 + 插件 307
++ 自有 330），`agent_listing_delta` 恒 1508 B。关停键实测：
+
+| settings 键 | 实测效果 |
+|---|---|
+| `skills.disabled` | 整条移除，含 `security-scan`；pod 自有技能不受影响 |
+| `skillOverrides` | `{"<名>": "off"}` 同样移除；插件技能须用全限定名 |
+| `enabledPlugins` | `{"<plugin>@<marketplace>": false}` 只动插件技能，动不了内置 |
+| `skillListingMaxDescChars` | 软手段：保名截描述（60 → 税降约 68%） |
+| `skillListingBudgetFraction` | 按优先级丢描述，落到哪条不可预测，不用于治理 |
+
+A/B 验证：`skills.disabled` 补齐 16 项后 theory `skill_listing` 降至 329 B（平台 0 +
+插件 0 + 自有 `theoretical-computation` 330 B 保留）、lit 降至 325 B（自有
+`literature-research` 保留）；`agent_listing_delta` 1508 B 不动（subagent 派发依赖，
+不关）。**主动取舍**：`security-scan` 也关——它在 push 前用 AskUserQuestion 追问扫描
+模式而 headless 无人应答，且组员写权限/push 规程本就由 charter + pod-guard +
+delivery-gate 决定（经用户认可）。落地：全部 10 pod 的 `settings.skills.disabled`
+由 `pysci-dev skilltax --apply` 补齐，`doctor` 增「平台技能税关停核查」哨兵捕获新
+pod 漏配与平台新增技能的漂移面（`应关未关` 缺口）。
+
 ---
 
 ## 2. 目录契约

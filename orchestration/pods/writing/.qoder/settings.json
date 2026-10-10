@@ -28,5 +28,25 @@
         ]
       }
     ]
+  },
+  "skills": {
+    "disabled": [
+      "agent-creator",
+      "deep-research",
+      "hook-config",
+      "loop",
+      "mcp-config",
+      "qoder-create-plugin:create-plugin",
+      "qoder-sites:sites-build-agent-app",
+      "qoder-sites:sites-building",
+      "qoder-sites:sites-hosting",
+      "qoder-sites:sites-management",
+      "run",
+      "sdk",
+      "security-scan",
+      "skill-creator",
+      "verify",
+      "workflow-authoring"
+    ]
   }
 }
