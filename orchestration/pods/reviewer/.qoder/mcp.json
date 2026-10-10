@@ -13,7 +13,7 @@
     },
     "paper-search-mcp": {
       "command": "uvx",
-      "args": ["paper-search-mcp"],
+      "args": ["--with", "mcp<2", "paper-search-mcp"],
       "env": {
         "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "2411361@tongji.edu.cn",
         "PAPER_SEARCH_MCP_CORE_API_KEY": "",
