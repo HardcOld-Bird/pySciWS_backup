@@ -7,6 +7,13 @@ style_context 下构建图再自检，一条 CLI 命令 ``figures audit <figdir>
 
 色盲模拟采用 Viénot–Brettel–Mollon (1999) 的线性 RGB 变换近似 deuteranopia / protanopia，
 对图中出现的主色两两做变换后距离检查，过近者告警。
+
+**交付件宽度假绿防护**：仅比较「内存重绘图」与其自身目标宽度是恒真的（二者同源于
+eff_width）——根级 STYLE.yaml 的 ``width: double`` 会让单栏图（85mm 交付件）按 170mm
+目标 PASS。``audit_figure_dir`` 因此额外量取 out/ 里**已导出交付件**的实际宽度（EPS
+``%%HiResBoundingBox`` / PDF ``/MediaBox``），与判定目标做**相对比例**比对，偏差过大即
+WARN（save_figure 用 ``bbox_inches='tight'``，交付件恒窄于设计宽度且裁切量随内容变化，
+故用比例而非绝对 mm 容差——足以区分单/双栏这类掩盖，又不因正常紧裁而误报）。
 """
 
 from __future__ import annotations
@@ -28,6 +35,18 @@ from .style import StyleInfo, preset
 ERROR, WARN, INFO = "ERROR", "WARN", "INFO"
 
 _PANEL_LABEL_RE = re.compile(r"^\(?[a-zA-Z]\)?$")
+
+#: PostScript point → mm（EPS BoundingBox / PDF MediaBox 均以 pt 计）。
+_MM_PER_PT: float = 25.4 / 72.0
+_EPS_HIRES_BBOX_RE = re.compile(
+    r"%%HiResBoundingBox:\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)"
+)
+_EPS_BBOX_RE = re.compile(r"%%BoundingBox:\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)")
+_PDF_MEDIABOX_RE = re.compile(
+    r"/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]"
+)
+#: 交付件宽度检查的矢量格式优先级（eps 为期刊投稿主格式）。
+_DELIVERABLE_EXTS = ("eps", "pdf")
 
 
 @dataclass
@@ -181,6 +200,41 @@ def _iter_texts(fig: Figure) -> Iterable[mtext.Text]:
             yield t
 
 
+def _measure_deliverable_width_mm(path: Path | str) -> float | None:
+    """从已导出的矢量交付件量取实际宽度（mm）。
+
+    EPS 优先读 ``%%HiResBoundingBox``（退 ``%%BoundingBox``），PDF 读 ``/MediaBox``；
+    单位 pt → mm。文件缺失、不可读或无法解析（如 PNG/SVG）时返回 None（跳过检查，
+    不误报）。
+    """
+    path = Path(path)
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="latin-1")
+    except OSError:
+        return None
+    m = (
+        _EPS_HIRES_BBOX_RE.search(text)
+        or _EPS_BBOX_RE.search(text)
+        or _PDF_MEDIABOX_RE.search(text)
+    )
+    if m is None:
+        return None
+    x0, _y0, x1, _y1 = (float(v) for v in m.groups())
+    return (x1 - x0) * _MM_PER_PT
+
+
+def _find_deliverable(out_dir: Path | str, stem: str) -> Path | None:
+    """在 out_dir 下按优先级找矢量交付件（eps → pdf）；都不存在返回 None。"""
+    out_dir = Path(out_dir)
+    for ext in _DELIVERABLE_EXTS:
+        p = out_dir / f"{stem}.{ext}"
+        if p.is_file():
+            return p
+    return None
+
+
 def audit_figure(
     fig: Figure,
     *,
@@ -188,6 +242,8 @@ def audit_figure(
     style_name: str | None = None,
     target_width_mm: float | None = None,
     width_tol_mm: float = 2.0,
+    deliverable_width_mm: float | None = None,
+    deliverable_tol_ratio: float = 0.30,
     min_fontsize: float | None = None,
     expect_panel_labels: bool = False,
     check_colorblind: bool = True,
@@ -200,6 +256,10 @@ def audit_figure(
         style_name: 若无 style_info，可按预设名推断目标宽度。
         target_width_mm: 显式指定目标宽度（优先级最高）。
         width_tol_mm: 宽度容差（mm）。constrained/tight 布局会带来轻微偏差。
+        deliverable_width_mm: out/ 里已导出交付件的**实测**宽度（mm）；给定时与判定目标
+            做相对比例比对，偏差超阈值 WARN（假绿防护，见模块 docstring）。
+        deliverable_tol_ratio: 交付件宽度相对目标的允许偏差比例（默认 0.30=±30%）。
+            紧裁使交付件恒窄于设计宽度，故用比例而非绝对 mm；足以区分单/双栏（~2×）。
         min_fontsize: 最小允许字号（pt）；None 时取预设 base 字号的 0.75 倍。
         expect_panel_labels: 是否要求多子图带 (a)(b)(c) 角标。
         check_colorblind: 是否做色盲可读性检查。
@@ -224,6 +284,27 @@ def audit_figure(
                 f"图宽 {actual_mm:.1f}mm 偏离设计宽度 {target_width_mm:.1f}mm "
                 f"(>±{width_tol_mm}mm)；请在 style_context 里用正确的 width 参数",
             )
+
+    # --- 交付件实际宽度 vs 判定目标（假绿防护）---
+    # 上面的 width 检查比较「内存重绘图」与其自身目标——二者同源于 eff_width，恒等。
+    # 真正的交付件（out/<stem>.eps）可能是早前用不同 --width 构建的陈旧件，或因根级
+    # STYLE.yaml 掩盖而与本图设计意图不符。此处量取交付件实际宽度与目标比对，偏差过大
+    # 即 WARN。紧裁使交付件恒窄于设计宽度，故用相对比例而非绝对 mm 容差。
+    if deliverable_width_mm is not None:
+        rep.metrics["deliverable_width_mm"] = round(deliverable_width_mm, 2)
+        if target_width_mm is not None:
+            lo = target_width_mm * (1 - deliverable_tol_ratio)
+            hi = target_width_mm * (1 + deliverable_tol_ratio)
+            if not (lo <= deliverable_width_mm <= hi):
+                rep.add(
+                    WARN,
+                    "width-deliverable",
+                    f"交付件实测宽度 {deliverable_width_mm:.1f}mm 与判定目标 "
+                    f"{target_width_mm:.1f}mm 偏差超过 {deliverable_tol_ratio:.0%}"
+                    f"（紧裁后应落在 [{lo:.0f}, {hi:.0f}]mm）；out/ 里的产物可能是用不同 "
+                    f"--width 构建的陈旧件，或根级 STYLE.yaml 的 width 掩盖了本图设计宽度。"
+                    f"请在图目录 STYLE.yaml 显式声明 width（逐键继承根级），或 rebuild 后再审。",
+                )
 
     # --- 最小字号 ---
     if min_fontsize is None and style_info is not None:
@@ -318,19 +399,34 @@ def audit_figure_dir(
     expect_panel_labels: bool = False,
     min_fontsize: float | None = None,
 ) -> AuditReport:
-    """在 style_context 下构建某图目录的管线并自检（不导出）。"""
+    """在 style_context 下构建某图目录的管线并自检（不导出）。
+
+    额外量取 out/ 里**已导出交付件**的实际宽度，与判定目标比对（假绿防护）——若从未
+    build 过（无交付件）则跳过该项，不误报。
+    """
     from . import runner as _runner
 
     figdir = Path(figdir)
     try:
+        # 交付件定位须与 build_figure_dir 一致：stem=cfg.stem|figdir.name，
+        # out_dir=figdir/(cfg.out_subdir|"out")。
+        cfg = _runner.load_style_config(figdir)
+        stem = cfg.get("stem") or figdir.name
+        out_dir = figdir / (cfg.get("out_subdir") or "out")
+        deliv = _find_deliverable(out_dir, stem)
+        deliv_mm = _measure_deliverable_width_mm(deliv) if deliv is not None else None
+
         with _runner.built_figure(figdir, style=style, width=width) as (fig, info):
             rep = audit_figure(
                 fig,
                 style_info=info,
                 expect_panel_labels=expect_panel_labels,
                 min_fontsize=min_fontsize,
+                deliverable_width_mm=deliv_mm,
             )
         rep.figdir = figdir
+        if deliv is not None:
+            rep.metrics["deliverable_file"] = deliv.name
         return rep
     except Exception as e:  # noqa: BLE001
         rep = AuditReport(figdir=figdir, style=style)

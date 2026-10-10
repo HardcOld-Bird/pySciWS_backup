@@ -22,8 +22,9 @@
 自省 ``build_figure`` 的签名，只传入其接受的关键字参数（如 ``style``、``data`` 等），
 因此管线可按需声明入参，未声明的会被安全忽略。
 
-**风格绑定**：``figures`` 数据根目录下的 ``STYLE.yaml`` 可固定默认预设/宽度，
-命令行 ``--style/--width`` 优先级更高。缺失时用技能默认（config.settings）。
+**风格绑定**：``figures`` 数据根目录下的 ``STYLE.yaml`` 可固定默认预设/宽度，图目录级
+``STYLE.yaml`` **逐键覆盖**根级（只声明差异键即可，其余继承）；命令行 ``--style/--width``
+优先级最高。缺失时用技能默认（config.settings）。
 
 **后向兼容**：若 src/ 下未找到管线，仍会回退到旧模式（在 figdir 内发现 .py）。
 
@@ -232,28 +233,35 @@ def discover_pipeline(
     )
 
 
+def _read_style_yaml(path: Path) -> dict[str, Any]:
+    """读取单个 STYLE.yaml 为 dict（不存在 / 无 pyyaml / 非 dict → 空 dict）。"""
+    if not path.is_file():
+        return {}
+    try:
+        import yaml  # type: ignore
+    except ImportError:
+        _warn(f"找到 {path.name} 但 pyyaml 不可用，已忽略")
+        return {}
+    with path.open(encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return data if isinstance(data, dict) else {}
+
+
 def load_style_config(figdir: Path | str) -> dict[str, Any]:
-    """读取 STYLE.yaml（图目录优先，其次 figures 根目录）。
+    """读取 STYLE.yaml，**逐键合并**：figures 根目录为基线，图目录覆盖同名键。
+
+    此前实现取「第一个存在的文件」整体返回——图目录级 STYLE.yaml 一旦存在就丢弃根级
+    其余键；反之图目录无文件时，根级 ``width: double`` 会整体掩盖单栏图的宽度判定
+    （假绿，见 backlog 20261009-audit-width-masked）。逐键合并后，图目录只需声明差异键
+    （如 ``width: single``），其余仍继承根级默认；无图目录文件时行为与旧版一致。
 
     Returns:
         含 ``style`` / ``width`` / ``aspect`` / ``palette`` 等键的 dict；无配置或无 pyyaml 时为空。
     """
     figdir = Path(figdir)
-    candidates = [figdir / "STYLE.yaml", figdir.parent / "STYLE.yaml"]
-    for path in candidates:
-        if path.is_file():
-            try:
-                import yaml  # type: ignore
-            except ImportError:
-                print(
-                    "[sciplot.runner] WARNING: 找到 STYLE.yaml 但 pyyaml 不可用，已忽略",
-                    file=sys.stderr,
-                )
-                return {}
-            with path.open(encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-            return data if isinstance(data, dict) else {}
-    return {}
+    cfg = _read_style_yaml(figdir.parent / "STYLE.yaml")  # 根级基线
+    cfg.update(_read_style_yaml(figdir / "STYLE.yaml"))  # 图目录覆盖同名键
+    return cfg
 
 
 def _import_pipeline(module_path: Path) -> Any:

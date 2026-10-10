@@ -12,8 +12,30 @@ or revising a pipeline's `build_figure`.
 | `nature` (Nature/Science) | 89 mm | 183 mm |
 
 `style_context(..., width="single"|"double"|"<mm>")` sets `figure.figsize` accordingly
-(height = width × `aspect`, default golden ratio 0.618). `audit` verifies the exported width
-matches the target within ±2 mm (tight/constrained layout introduces tiny drift).
+(height = width × `aspect`, default golden ratio 0.618).
+
+### Two width checks (and the deliverable fake-green guard)
+
+`audit` runs two distinct width checks:
+
+1. **In-memory** (`ERROR width`): the re-rendered figure's width vs the design target, ±2 mm.
+   Note this is near-tautological — both come from the same resolved `eff_width` — so it only
+   catches an explicit `width=<mm>` that disagrees with the preset, not a mis-shipped file.
+2. **Deliverable** (`WARN width-deliverable`): `audit_figure_dir` measures the *already
+   exported* `out/<stem>.eps` (or `.pdf`) via its `%%HiResBoundingBox` / `/MediaBox` and
+   compares to the target by **ratio** (default ±30 %), not absolute mm. `save_figure` uses
+   `bbox_inches="tight"`, so the deliverable is always narrower than the design width and the
+   crop varies with content — an absolute tolerance would false-warn on every correct figure.
+   A ratio still cleanly separates single from double (~2× apart). This is what catches the
+   fake green where a research-root `STYLE.yaml width: double` masks a single-column figure:
+   the 85 mm deliverable is audited against a 170 mm target and now WARNs.
+
+`STYLE.yaml` is merged **key by key**: the figures-root file is the baseline and the per-figure
+`figdir/STYLE.yaml` overrides only the keys it declares (inheriting the rest). So a single-column
+figure needs only `width: single` in its own `STYLE.yaml` — it keeps the root's `style`/`palette`
+— and the deliverable check then passes. If no deliverable exists yet (never built), check 2 is
+skipped, not failed.
+
 
 ## Fonts & sizes
 
