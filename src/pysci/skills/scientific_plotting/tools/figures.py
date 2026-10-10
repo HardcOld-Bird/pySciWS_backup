@@ -34,6 +34,20 @@ from . import scaffold as _scaffold  # noqa: E402
 from . import style as _style  # noqa: E402
 from .config import settings  # noqa: E402
 
+# build/preview/audit 都只收**单一 figdir 位置参数**；<research> <slug> 是 new 的签名。
+# 二者混淆会得到 "unrecognized arguments"（backlog 20261009-taskbook-cli-signature），
+# 故在 help/epilog 里反复点明正确形态，让误用在 --help 时就暴露。
+_FIGDIR_METAVAR = "<figdir>"
+_FIGDIR_HELP = (
+    "图目录路径（单一位置参数），如 "
+    "data/research/1_gain_ep/article/figures/<slug>；"
+    "注意不是 <research> <slug>——那是 new 的签名"
+)
+_FIGDIR_EPILOG = (
+    "例：pysci-figures build 'data/research/1_gain_ep/article/figures/fig1_ep_band'\n"
+    "build/preview/audit 只收单一 <figdir> 路径；<research> <slug> 是 new 的签名。"
+)
+
 
 # ---------------------------------------------------------------------------
 # doctor
@@ -311,7 +325,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_styles)
 
     # new
-    s = sub.add_parser("new", help="脚手架一幅图的生产管线目录")
+    s = sub.add_parser(
+        "new",
+        help="脚手架一幅图的生产管线目录",
+        epilog=(
+            "new 收 <research> <slug> 两个位置参数；随后的 build/preview/audit 只收\n"
+            "脚手架产出的单一 <figdir> 路径（见各子命令 -h）。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     s.add_argument("research", help="研究线名（不含数字前缀），如 gain_ep")
     s.add_argument("slug", help="图目录名，如 fig1_ep_band")
     s.add_argument(
@@ -327,8 +349,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_new)
 
     # build
-    s = sub.add_parser("build", help="运行图管线并导出全部格式 + PNG 预览")
-    s.add_argument("figdir", type=Path, help="图生产管线目录")
+    s = sub.add_parser(
+        "build",
+        help="运行图管线并导出全部格式 + PNG 预览",
+        epilog=_FIGDIR_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s.add_argument("figdir", type=Path, metavar=_FIGDIR_METAVAR, help=_FIGDIR_HELP)
     s.add_argument(
         "--style", default=None, help="覆盖预设（默认取 STYLE.yaml / config）"
     )
@@ -348,8 +375,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_build)
 
     # preview
-    s = sub.add_parser("preview", help="只渲染 PNG 预览（快速视觉迭代）")
-    s.add_argument("figdir", type=Path)
+    s = sub.add_parser(
+        "preview",
+        help="只渲染 PNG 预览（快速视觉迭代）",
+        epilog=_FIGDIR_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s.add_argument("figdir", type=Path, metavar=_FIGDIR_METAVAR, help=_FIGDIR_HELP)
     s.add_argument("--style", default=None)
     s.add_argument("--width", default=None)
     s.add_argument("--aspect", type=float, default=None)
@@ -365,8 +397,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_preview)
 
     # audit
-    s = sub.add_parser("audit", help="出版规范自检（宽度/字号/字体嵌入/角标/色盲）")
-    s.add_argument("figdir", type=Path)
+    s = sub.add_parser(
+        "audit",
+        help="出版规范自检（宽度/字号/字体嵌入/角标/色盲）",
+        epilog=_FIGDIR_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s.add_argument("figdir", type=Path, metavar=_FIGDIR_METAVAR, help=_FIGDIR_HELP)
     s.add_argument("--style", default=None)
     s.add_argument("--width", default=None)
     s.add_argument("--panels", action="store_true", help="要求多子图带 (a)(b)(c) 角标")
