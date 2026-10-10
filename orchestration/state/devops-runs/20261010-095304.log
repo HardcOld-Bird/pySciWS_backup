@@ -1,8 +1,0 @@
-[09:53:04] [▶] drain 启动（pid=8632, dry=False）
-[09:53:04] [→] 消化 20261010-paper-search-mcp-down: paper-search-mcp（uvx）在用户级清零前即 Disconnected，lit/reviewer/depu
-[09:58:39] [√] 20261010-paper-search-mcp-down 完成（334.4s，commit=1ad7424）
-[09:58:39] [→] 消化 20261010-orch-taskbook-newline: orch write_taskbook 写 inbox 任务书不带结尾换行符，触发 pre-commit end-of-
-[10:02:23] [√] 20261010-orch-taskbook-newline 完成（224.5s，commit=df3c37e）
-[10:02:23] [→] 消化 20261010-drain-orphan-reclaim: drain 启动时回收孤儿 in_progress 条目：backlog_take_first 标记 in_progre
-[10:07:42] [√] 20261010-drain-orphan-reclaim 完成（318.6s，commit=ce785a9）
-[10:07:42] [→] 消化 20261010-drain-cooperative-stop: 为 drain 增加协作式停止：orch drain-stop 命令写 state/devops.cancel；drai

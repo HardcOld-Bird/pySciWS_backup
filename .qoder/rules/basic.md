@@ -72,6 +72,11 @@ alwaysApply: true
   `[Console]::OutputEncoding=UTF8`、双引号会被剥离一律单引号、链式用 `;` 不用 `&&`、
   `Get/Set-Content` 必须 `-Encoding UTF8`）——完整实测结论见 git 历史本文件
   2026-10 前版本的 §3，无必要不再使用 PowerShell。
+- **Git Bash 下 Windows 命令的 `/` 前缀参数会被 MSYS 转成路径**：`tasklist /FI`、
+  `findstr /C`、`netstat /an` 等的 `/xx` 被改成 `C:/Program Files/Git/xx`，命令静默
+  报错或给出**假阴性**（2026-10-10 实测：`tasklist /FI "PID eq N"` 据此把活进程误判为
+  死）。对策（择一）：命令前缀 `MSYS_NO_PATHCONV=1`、参数写双斜杠 `//FI`、或改用
+  Python `subprocess` 直接传 argv 列表（不经 shell，免疫）。
 
 ---
 
