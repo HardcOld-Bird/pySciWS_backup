@@ -455,11 +455,16 @@
     {
       "id": "20261010-worktree-merge-cp",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-10",
       "summary": "pysci-dev worktree merge 子命令：合并前机械化搬运 worktree 侧 gitignored 运行态文件到 main（消除跨合并状态丢失）",
       "evidence": "采纳 devops 建议 20261010-223113 B 段：--no-ff 合并只带 git 面，sessions-runtime.json/registry.presplit.json 等 gitignored 运行态不随迁——registry-runtime-split 那次靠 devops 人工 cp 才保住 5 成员 6 会话。要求：① 新增 `pysci-dev worktree merge <id>`（或扩展现有 remove）：合并前扫 worktree 内 orchestration/state/ 的 gitignored 运行态清单（sessions-runtime.json、registry.presplit.json、watch.json、skills-deployed.json 若漂移），纯 cp 覆盖到 main 同名位置（main 侧同名文件先备份 .bak-<ts>），再执行 merge；② 合并后自检：Registry.load() 成员会话数不减（可对 baseline 断言）；③ devops 技能合并规程节改为指向本命令；④ 顺带在 registry-runtime.md 排查提示段补 (a) 轻哨兵：config 无内嵌 sessions 且运行态缺席时 load 打显著警告（不自动反推）。测试覆盖 cp 语义与警告分支。",
-      "note": "devops 建议 223113 工具端；纪律端已随本项批准由组长代补 charter"
+      "note": "drain 批量销账（commit 6ff6134）",
+      "started_at": "2026-10-10T22:34:06+08:00",
+      "worktree": "20261010-worktree-merge-cp",
+      "done_at": "2026-10-10T22:52:25+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261010-worktree-merge-cp"
     }
   ]
 }
