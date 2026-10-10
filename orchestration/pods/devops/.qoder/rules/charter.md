@@ -26,6 +26,9 @@ trigger: always_on
   - 根 `.qoder/rules/basic.md` §1 裁决修改须用户授权；
 - **技能改动只改真本**（orchestration/skills/），然后运行 `pysci-dev sync` 部署；
   禁止手改任何 pod 内的部署副本；
+- **机械生成/改写 markdown 先 `pysci-dev mdgen-check` 再提交**：把 pre-commit 的
+  trailing-ws/end-of-file 改写提前做完，内容等价性验证以钩子终态哈希为基准——首提即过、
+  消除「验证已过期」窗口（组长代补，backlog 20261010-191922）；
 - **交付协议**：与全体组员相同（<result>/<blocked> 互斥 + 可选 <infra_suggestion>，
   delivery-gate 强制）。代码类交付的 result 中必须包含：改动清单（文件+要点）、
   测试/验证证据（命令+输出摘要）、合并后的 commit hash；backlog 任务须注明

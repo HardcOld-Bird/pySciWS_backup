@@ -541,7 +541,8 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
 
 - `check="<type>"` → orch 自动运行对应确定性脚本（注册于 registry checks 表；如图件→
   figures CLI 合规审计，orch CLI/guards/pod 只读层等基础设施类→`orch-tests` 跑
-  `pytest tests/skills/orchestration`；FAIL→自动回派返工（≤3 次，同指纹连败升级组长）；
+  `pytest tests/skills/orchestration`，guards 面变更→`guards-in-force` 定向跑门禁在法
+  探针用例；FAIL→自动回派返工（≤3 次，同指纹连败升级组长）；
 - `check="none" reason="..."` → 放行，台账记「未验收（成员判断）」及理由；
 - 无 `<artifact>` 的交付（纯咨询类）→ 天然不触发；
 - 制衡：台账透明 + 组长 `orch check` 随时抽检 + reviewer 可见验收状态；

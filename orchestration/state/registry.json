@@ -132,6 +132,18 @@
         "tests/skills/orchestration",
         "-q"
       ]
+    },
+    "guards-in-force": {
+      "cmd": [
+        "uv",
+        "run",
+        "pytest",
+        "tests/skills/orchestration/test_pod_guard_blocks.py",
+        "tests/skills/orchestration/test_guards_in_force.py",
+        "tests/skills/orchestration/test_delivery_gate_budget.py",
+        "tests/skills/devops/test_guard_probe.py",
+        "-q"
+      ]
     }
   }
 }

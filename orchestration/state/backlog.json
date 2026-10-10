@@ -437,6 +437,15 @@
       "done_at": "2026-10-10T22:07:11+08:00",
       "batch_size": 1,
       "batch_seed": "20261010-193601-devops"
+    },
+    {
+      "id": "20261010-registry-runtime-split",
+      "member": "leader",
+      "status": "pending",
+      "proposed": "2026-10-10",
+      "summary": "registry.json 运行态（sessions/hops/last_active/chars_offset）迁出到 gitignore 的运行态文件，registry 只留低频配置面",
+      "evidence": "根治 163347/220711 两笔同构阻塞：main 工作区 registry.json 每派发必 dirty，任何碰 registry 的 worktree 交付 merge 前检查即 blocked。要求：① 新增 orchestration/state/sessions-runtime.json（gitignore），存 members[*].sessions 与心跳字段；registry.json 保留 exe/models/members 配置（pod 路径/档位/timeout/extra_dirs/checks 等）；② 迁移脚本一次性搬旧数据（首次 load 时自动迁+备份）；③ 改 registry.py/sessions.py 读写路径与 orch status/ledger/stats 读面，测试覆盖迁移幂等；④ devops charter/技能补一句运行态文件语义。验收=pytest 全过 + dispatch 一跳正常 + 碰 registry.json 的 worktree 交付不再被心跳 dirty 拦。采纳 devops 建议 20261010-220711 根治段。",
+      "note": "guards-in-force check 已由组长登记（52 例实测通过）"
     }
   ]
 }
