@@ -217,8 +217,9 @@ ledger 流水为可再生物不入库。
 
 失败处理：超时/非零退出 → 自动重试一次（同会话 resume，注入错误上下文）；再失败 →
 呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。**例外**：额度类失败
-（envelope/stderr 含『credit usage limit』类文案）→ `kind=quota_exhausted`，**不自动
-重试**（重试只会再烧一跳），[NEXT] 提示检查 registry models 渠道绑定 / 等待额度重置。
+（envelope/stderr 含『credit usage limit』类文案）→ 不做**同渠道**重试；若该档配置了
+`<tier>_fallback`（如 flash→BYOK flash）则**换档重试一次**，仍耗尽 → `kind=quota_exhausted`
+（drain 据此全局停止），[NEXT] 提示检查 registry models 渠道绑定 / 等待额度重置。
 
 ### 3.4 交付协议（XML 标记块 + delivery-gate 强制）
 
@@ -259,12 +260,14 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
     烧穿额度）；
   - `flash` = 内置 `Qwen3.8-Flash`（**限时免费**，零额度消耗）；
   - `flash_fallback` = BYOK Qwen-3.8-Flash 的 modelID（免费期结束后的回退；渠道待
-    用户开通，回退逻辑见 backlog 20261010-flash-fallback）；
+    用户开通）。**回退逻辑已实现**（backlog 20261010-flash-fallback）：do_dispatch
+    遇 quota_exhausted 且该档配了非空 `<tier>_fallback`（异于当前型号）→ 换备用渠道
+    重试一次；仍耗尽才归类 quota_exhausted 触发 drain 全局停止（见 §3.3 失败处理）；
 - 默认档位：组长（TUI）/deputy/reviewer/devops = **max**；7 专职组员 = **flash**；
   计划环节可覆盖（`steps[].model`）；
 - **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射改动属护栏级（影响全体
-  成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止见 backlog
-  20261010-orch-quota-awareness。
+  成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止**已实现**（backlog
+  20261010-orch-quota-awareness，见 §3.3 失败处理与 §6）。
 
 ---
 

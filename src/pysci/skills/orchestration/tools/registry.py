@@ -17,8 +17,18 @@ from pysci.paths import ORCH_STATE_ROOT, ORCHESTRATION_ROOT, PODS_ROOT, PROJECT_
 
 REGISTRY_PATH: Path = ORCH_STATE_ROOT / "registry.json"
 
-#: 双档模型抽象（README §3.5）：orch 内部路由具体型号，型号更新只改这里。
-DEFAULT_MODELS: dict[str, str] = {"max": "Qwen3.8-Max", "flash": "Qwen3.8-Flash"}
+#: 档位 → 具体型号映射（README §3.5）；registry.json 的 models 块覆盖这里的出厂默认。
+#: 渠道策略（用户裁决 2026-10-10，credit 耗尽事故复盘）：
+#: - ``max`` = ''（不传 -m → 走用户级默认 BYOK；**禁用内置同名模型**——烧订阅 credit）；
+#: - ``flash`` = 内置 Qwen3.8-Flash（限时免费，零额度消耗）；
+#: - ``<tier>_fallback`` = 该档额度耗尽时的备用渠道（do_dispatch 自动换档重试一次）。
+#:   BYOK modelID 账号相关，出厂默认为空=无回退；实际值由组长在 registry.json 配置
+#:   （flash_fallback=BYOK Qwen-3.8-Flash，护栏级、须经用户）。
+DEFAULT_MODELS: dict[str, str] = {
+    "max": "",
+    "flash": "Qwen3.8-Flash",
+    "flash_fallback": "",
+}
 
 
 def resolve_exe(registry: dict[str, Any] | None = None) -> Path:

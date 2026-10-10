@@ -203,7 +203,8 @@ def do_dispatch(
         return DispatchOutcome(
             code=2, kind="run_failed", member=member_id, error="pod 不存在"
         )
-    model = reg.models.get(model_tier or m.model_tier, "")
+    tier = model_tier or m.model_tier
+    model = reg.models.get(tier, "")
     slug = slug or (Path(task_file).stem if task_file else f"adhoc-{_ts()}")
 
     # 会话选择（README §3.2：默认续最近活跃会话）
@@ -257,7 +258,8 @@ def do_dispatch(
     )
     env_json = Envelope.parse(out)
     failed = rc != 0 or env_json.is_error
-    # 额度类失败不自动重试——重试只会再烧一跳，且错误面对组长同样不可读（2026-10-10 事故）
+    # 额度类失败不做**同渠道**重试——重试只会再烧一跳；若配置了 <tier>_fallback
+    # 则走下方的换档重试（2026-10-10 事故 + 用户裁决的 flash 回退机制）
     quota_hit = failed and _detect_quota_exhaustion(env_json, out, err)
 
     if failed and not no_retry and not quota_hit:
@@ -285,6 +287,38 @@ def do_dispatch(
         quota_hit = quota_hit or (
             failed and _detect_quota_exhaustion(env_json, out, err)
         )
+
+    # 额度耗尽且该档配置了备用渠道（<tier>_fallback 非空且异于当前型号）→ 换档重试一次
+    # （用户裁决 2026-10-10：flash 内置免费期结束后回退 BYOK flash；渠道未开通时
+    #   fallback 为空=不回退，仍按 quota_exhausted 处理）
+    if quota_hit and not no_retry:
+        fallback = str(reg.models.get(f"{tier}_fallback") or "")
+        if fallback and fallback != model:
+            if not quiet:
+                print(
+                    f"[!] {tier} 档渠道额度耗尽，切换备用渠道重试一次（{tier}_fallback）…"
+                )
+            model = fallback  # 台账/后续报告记实际所用渠道
+            fallback_prompt = (
+                f"上一次运行因模型渠道额度耗尽而中断（rc={rc}）。已切换备用渠道，"
+                f"请继续完成任务书 {taskbook}，按交付协议收尾。\n\n{PROTOCOL_REMINDER}"
+            )
+            cmd3 = build_command(
+                m,
+                fallback_prompt,
+                session_id=sid,
+                resume=True,
+                model=model,
+                max_turns=max_turns,
+            )
+            rc, out, err = run_headless(
+                cmd3, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
+            )
+            env_json = Envelope.parse(out)
+            failed = rc != 0 or env_json.is_error
+            # 备用渠道的结果即最终结果：再耗尽 → quota_exhausted（drain 全局停止）；
+            # 普通失败 → run_failed；成功 → 落入正常交付解析
+            quota_hit = failed and _detect_quota_exhaustion(env_json, out, err)
 
     if failed:
         kind = "quota_exhausted" if quota_hit else "run_failed"

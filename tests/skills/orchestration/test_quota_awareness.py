@@ -11,18 +11,16 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
-from pysci.skills.orchestration.tools import dispatch, drain, ledger, registry, workflow
+from pysci.skills.orchestration.tools import dispatch, drain, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 from pysci.skills.orchestration.tools.runner import Envelope
 
-from .conftest import read_backlog, seed_backlog
-
-# 事故原文（会话 jsonl 实测）
-QUOTA_TEXT = (
-    "You've reached your credit usage limit. Please upgrade your "
-    "subscription plan to get more resources. Report Issue (input /feedback)"
+from .conftest import (
+    QUOTA_TEXT,
+    envelope,
+    fake_headless,
+    read_backlog,
+    seed_backlog,
 )
 
 
@@ -57,91 +55,20 @@ def test_detect_quota_no_false_positive():
 
 
 # ---------------------------------------------------------------------------
-# do_dispatch 集成（全隔离：tmp registry/ledger + 假 run_headless + 假 exe）
+# do_dispatch 集成（全隔离夹具见 conftest.iso_dispatch）
 # ---------------------------------------------------------------------------
-@pytest.fixture
-def iso_dispatch(tmp_path, monkeypatch):
-    state = tmp_path / "state"
-    state.mkdir()
-    pod = tmp_path / "pods" / "quotamember"
-    (pod / "inbox").mkdir(parents=True)
-    reg_file = state / "registry.json"
-    reg_file.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "exe": None,
-                "models": {"max": "", "flash": ""},
-                "members": {
-                    "quotamember": {
-                        "pod": str(pod),
-                        "model_tier": "flash",
-                        "max_turns": 3,
-                        "timeout_s": 5,
-                        "sessions": [],
-                    }
-                },
-                "checks": {},
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    exe = tmp_path / "fake-exe.exe"
-    exe.write_bytes(b"")
-    monkeypatch.setenv("PYSCI_ORCH_EXE", str(exe))
-    monkeypatch.setattr(registry, "REGISTRY_PATH", reg_file)
-    # Registry.save 的 path 默认值在类定义时绑定，patch 类属性改不了 __init__ 默认——
-    # 直接 no-op save，防止测试写真实 registry.json
-    monkeypatch.setattr(registry.Registry, "save", lambda self: None)
-    monkeypatch.setattr(ledger, "LEDGER_PATH", state / "ledger.jsonl")
-    monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
-    monkeypatch.setattr(dispatch, "SUGGESTIONS_DIR", state / "suggestions")
-    monkeypatch.setattr(dispatch, "LINT_RULES_PATH", state / "taskbook-lint.json")
-    return state
-
-
-def _fake_headless(monkeypatch, responder):
-    """monkeypatch dispatch.run_headless；responder(call_index) -> (rc, out, err)。"""
-    calls = []
-
-    def fake_run(cmd, cwd=None, env=None, timeout_s=None):
-        calls.append(cmd)
-        return responder(len(calls))
-
-    monkeypatch.setattr(dispatch, "run_headless", fake_run)
-    return calls
-
-
-def _envelope(result, *, is_error=True, stop="stop_sequence", rc=1):
-    return (
-        rc,
-        json.dumps(
-            {
-                "result": result,
-                "is_error": is_error,
-                "stop_reason": stop,
-                "num_turns": 1,
-                "duration_ms": 13000,
-                "session_id": "aaaa1111",
-            }
-        ),
-        "",
-    )
-
-
 def test_do_dispatch_quota_kind_and_no_retry(iso_dispatch, monkeypatch):
-    calls = _fake_headless(monkeypatch, lambda n: _envelope(QUOTA_TEXT))
+    calls = fake_headless(monkeypatch, lambda n, cmd: envelope(QUOTA_TEXT))
     o = dispatch.do_dispatch("quotamember", text="做某事", quiet=True)
     assert o.kind == "quota_exhausted" and o.code == 2
-    assert len(calls) == 1, "额度类失败不得自动重试（重试只会再烧一跳）"
+    assert len(calls) == 1, "额度类失败不得同渠道重试（重试只会再烧一跳）"
     assert "credit usage limit" in o.body
     line = (iso_dispatch / "ledger.jsonl").read_text(encoding="utf-8").strip()
     assert '"quota_exhausted"' in line
 
 
 def test_do_dispatch_generic_failure_still_retries(iso_dispatch, monkeypatch):
-    calls = _fake_headless(monkeypatch, lambda n: _envelope("internal boom"))
+    calls = fake_headless(monkeypatch, lambda n, cmd: envelope("internal boom"))
     o = dispatch.do_dispatch("quotamember", text="做某事", quiet=True)
     assert o.kind == "run_failed"
     assert len(calls) == 2, "普通运行失败保持自动重试一次"
@@ -149,9 +76,9 @@ def test_do_dispatch_generic_failure_still_retries(iso_dispatch, monkeypatch):
 
 def test_do_dispatch_retry_then_quota(iso_dispatch, monkeypatch):
     """首跑普通失败→重试撞上额度文案：仍归类 quota_exhausted。"""
-    calls = _fake_headless(
+    calls = fake_headless(
         monkeypatch,
-        lambda n: _envelope("internal boom") if n == 1 else _envelope(QUOTA_TEXT),
+        lambda n, cmd: envelope("internal boom") if n == 1 else envelope(QUOTA_TEXT),
     )
     o = dispatch.do_dispatch("quotamember", text="做某事", quiet=True)
     assert o.kind == "quota_exhausted"
@@ -163,8 +90,9 @@ def test_do_dispatch_success_mentioning_quota_not_reclassified(
 ):
     """成功交付正文提及额度文案（如复盘任务）不得重分类——检测仅在失败分支。"""
     body = f"<result>事故复盘完成：原文为 {QUOTA_TEXT}，已钉住渠道策略。</result>"
-    _fake_headless(
-        monkeypatch, lambda n: _envelope(body, is_error=False, stop="end_turn", rc=0)
+    fake_headless(
+        monkeypatch,
+        lambda n, cmd: envelope(body, is_error=False, stop="end_turn", rc=0),
     )
     o = dispatch.do_dispatch(
         "quotamember", text="复盘额度事故", quiet=True, no_checks=True
@@ -173,7 +101,7 @@ def test_do_dispatch_success_mentioning_quota_not_reclassified(
 
 
 def test_do_dispatch_quota_report_next(iso_dispatch, monkeypatch, capsys):
-    _fake_headless(monkeypatch, lambda n: _envelope(QUOTA_TEXT))
+    fake_headless(monkeypatch, lambda n, cmd: envelope(QUOTA_TEXT))
     dispatch.do_dispatch("quotamember", text="做某事", quiet=False)
     out = capsys.readouterr().out
     assert "额度类失败（quota_exhausted）" in out
