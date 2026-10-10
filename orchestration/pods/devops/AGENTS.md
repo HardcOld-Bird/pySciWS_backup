@@ -19,6 +19,13 @@
   `skills-deployed.json` 对 main 即正确，**无需**再「合并后在 main 重跑」；doctor 已增「部署台账巡检
   （sync --check）」哨兵，捕获记录哈希漂移（[*]）与副本漂移（[!]）。未选方案 a（根 .gitattributes）：
   需仓库级 renormalize、触碰每个文本文件且与用户本地 autocrlf 交互，blast radius 大。
+- **uvx 型 MCP server 的 mcp 2.x 断供风险（2026-10-10 修，backlog 20261010-paper-search-mcp-down）**：
+  mcp Python SDK 2.x 移除了 `mcp.server.fastmcp`（FastMCP 更名 MCPServer），凡上游依赖写
+  `mcp>=x` 无上限的 uvx server（如 paper-search-mcp 0.1.4）会在新环境解析到 2.x 而启动即崩、
+  pod 侧只见 ✗ Disconnected。**修法**：mcp.json args 前插 `["--with", "mcp<2", ...]` 钉住
+  （lit/reviewer/deputy 已修，commit 40058e4）。诊断范式：`echo '' | uvx <pkg>` 直看 stderr
+  traceback；修复验证用 initialize 握手（stdin 发 JSON-RPC initialize，见 serverInfo 即通）。
+  其他 uvx server（arxiv-mcp-server、blender-mcp、zotero-mcp）暂正常，同类症状先查此项。
 - **新增 pod 无需预注册 registry.json**：`orch dispatch` 前调 `ensure_member_defaults`，pod 目录
   存在即自动生成默认成员条目（flash/60轮/7200s/`.qoder/mcp.json`）。`doctor` 按 `PODS_ROOT`
   目录计数、也不依赖 registry。故脚手架新 pod 只建目录+只读层文件，注册留给组长首次派发。
