@@ -246,19 +246,39 @@
     {
       "id": "20261010-ledger-est-tokens",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "effort": "high",
       "summary": "台账 est_tokens 相对用量估算：每跳记录会话 jsonl 字符增量，双渠道统一尺子，stats 呈现占比",
       "evidence": "用户裁决 2026-10-10：采纳估算做相对排名、放弃绝对精度。调研实锤：Qoder envelope 与 jsonl 逐轮 usage 在 BYOK/内置双渠道全为 0；平台网关无 usage/balance 路由（/models 200 而 8 个候选路径均兜底 400，含带 model 参数重试）——精确计量当前不可行，且网页仪表盘仅总览（平台产品策略，不对抗）。规格：dispatch 前后读该会话 jsonl 字符数，增量 delta_chars 与 est_tokens（换算系数 registry 可配，默认约 0.6 token/字符混合中英，注明启发式）入 ledger；会话 offset 存 registry 会话条目；ledger/stats 输出 est_tokens 与占比（补位恒 0 的 credits 列）；两渠道同法保证可比；不做缓存命中修正（本地不可得，对排名影响近似中性）。",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T15:44:53+08:00",
+      "worktree": "20261010-ledger-est-tokens",
+      "done_at": "2026-10-10T16:04:13+08:00",
+      "note": "drain 批量销账（commit 9137bc0）",
+      "batch_size": 1,
+      "batch_seed": "20261010-ledger-est-tokens"
     },
     {
       "id": "20261010-orch-watch",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "effort": "high",
       "summary": "orch watch 事件等待器 + 唤醒时 [NEXT] 注入挂载指令（drain 观察闭环硬化，弃 Monitor 工具方案）",
       "evidence": "用户裁决 2026-10-10（硬化理念：能代码硬保证的不靠 LLM 纪律；结构上限=唤醒注册只能由组长会话工具发起，故硬化到「事件判定全在代码 + 挂载提示由代码在唤醒当刻注入」，残余软点=组长照 [NEXT] 挂一条后台命令，与体系既有最小软保证同级）。规格：`pysci-orch watch [--timeout S默认4h]` 阻塞轮询（≤60s，读文件+Python 侧 _pid_alive，MSYS 免疫），命中即打印单行事件并退出 0：QUEUE-COMPLETE（.done+锁释放）/ NEEDS-LEADER <id>（新出现）/ QUOTA-STOP（日志现 quota_exhausted）/ CRASH（锁 pid 死且无 .done）；超时无事件打印 TIMEOUT 退出。用法=组长经 Bash run_in_background 启动，退出即原生完成通知唤醒组长；中途事件处理后 watch 输出提示按需重挂。wake_devops/approve/--from-backlog 的 [NEXT] 固定追加挂载指令行。watch 随组长会话消亡，不影响 detached drain；状态落盘、下次会话 orch status 补账。",
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T16:04:13+08:00",
+      "worktree": "20261010-orch-watch",
+      "done_at": "2026-10-10T16:33:47+08:00",
+      "note": "drain 批量销账（commit f21167a）",
+      "batch_size": 1,
+      "batch_seed": "20261010-orch-watch"
+    },
+    {
+      "id": "20261010-pod-leader-excludes",
+      "member": "leader",
+      "status": "pending",
+      "summary": "全部 pod settings 加 agentsMdExcludes 排除组长专属规则 + doctor 巡检项 + deputy charter 指针",
+      "evidence": "用户批准 basic.md 拆分：根 rules 现有 leader-only.md（组长专属，always_on）+ basic.md（公约数）。实测依据（2026-10-10 探针）：pod settings 的 agentsMdExcludes glob '**/<file>.md' 可选择性排除根规则（pod 不可见、根可见、basic 公约数不受影响）。要求：① 10 个 pod 的 .qoder/settings.json 增加 \"agentsMdExcludes\": [\"**/leader-only.md\"]（保留既有 hooks 配置，JSON 深合并勿覆盖）；② pysci-dev doctor 新巡检项：pod settings 缺该排除 → ✗ 报「leader 规则未排除」；③ deputy charter 补一行「顶层设计与基建决策惯例见根 leader-only.md 与 orchestration/README.md（跨 pod 只读）」；④ pod 模板/脚手架说明同步，确保未来新 pod 默认带排除。验证：任一 pod headless 探针——leader-only 标记不可见、basic §1（8KB 预算）可见。注意：组员自建规则勿命名 leader-only*（glob 会误伤），doctor 可顺带提示。",
       "proposed": "2026-10-10"
     }
   ]
