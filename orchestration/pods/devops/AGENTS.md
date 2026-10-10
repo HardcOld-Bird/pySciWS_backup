@@ -26,6 +26,14 @@
   （lit/reviewer/deputy 已修，commit 40058e4）。诊断范式：`echo '' | uvx <pkg>` 直看 stderr
   traceback；修复验证用 initialize 握手（stdin 发 JSON-RPC initialize，见 serverInfo 即通）。
   其他 uvx server（arxiv-mcp-server、blender-mcp、zotero-mcp）暂正常，同类症状先查此项。
+- **任务书轻量 lint 规则表由 devops 维护（2026-10-10 建，backlog 20261010-084105-devops）**：
+  `write_taskbook`（dispatch.py，dispatch/plan run/drain 唯一落盘口）落盘前扫正文，命中
+  `orchestration/state/taskbook-lint.json`（git 跟踪）里任一规则的正则即**打印告警但不阻断**
+  派发。**增补规则**：向该 JSON 的 `rules` 追加 `{id, re, hint}`（re 为 Python 正则、JSON 内
+  反斜杠双写）；fail-open（文件缺失/损坏/单条正则非法均跳过），故改坏 JSON 会**静默失效**——
+  test_taskbook_lint.py::test_repo_shipped_rules_file_valid 在 CI 钉住「随附规则必须可编译」。
+  首期规则 figures-two-positional-args（build/preview/audit 误跟两个位置参数）。与
+  20261009-taskbook-cli-signature（charter/文档侧改正本）互补，勿重复。
 - **新增 pod 无需预注册 registry.json**：`orch dispatch` 前调 `ensure_member_defaults`，pod 目录
   存在即自动生成默认成员条目（flash/60轮/7200s/`.qoder/mcp.json`）。`doctor` 按 `PODS_ROOT`
   目录计数、也不依赖 registry。故脚手架新 pod 只建目录+只读层文件，注册留给组长首次派发。
