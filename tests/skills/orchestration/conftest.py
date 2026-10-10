@@ -21,6 +21,9 @@ from pysci.skills.orchestration.tools import (
 )
 from pysci.skills.orchestration.tools import sessions as dispatch_sessions
 
+#: 运行态文件名（与 registry.RUNTIME_NAME 同步；夹具直接落盘用，不 import 常量以免耦合）。
+RUNTIME_FILE = "sessions-runtime.json"
+
 # 2026-10-10 额度事故原文（会话 jsonl 实测）
 QUOTA_TEXT = (
     "You've reached your credit usage limit. Please upgrade your "
@@ -103,13 +106,17 @@ def iso_dispatch(tmp_path, monkeypatch):
                         "model_tier": "flash",
                         "max_turns": 3,
                         "timeout_s": 5,
-                        "sessions": [],
                     }
                 },
                 "checks": {},
             },
             ensure_ascii=False,
         ),
+        encoding="utf-8",
+    )
+    # 运行态会话池预置为空：配置已无内嵌 sessions，load 不会触发迁移（夹具确定化）
+    (state / RUNTIME_FILE).write_text(
+        json.dumps({"version": 1, "members": {"quotamember": {"sessions": []}}}),
         encoding="utf-8",
     )
     exe = tmp_path / "fake-exe.exe"
@@ -145,23 +152,38 @@ def grow_session(state, sid: str, text: str) -> int:
 
 
 def enable_registry_save(monkeypatch, state):
-    """让本用例的 ``Registry.save`` 真写隔离 registry.json（断言会话水位落盘用）。
+    """让本用例的 ``Registry.save`` 真写隔离配置面 + 运行态两份（断言会话水位落盘用）。
 
     默认夹具把 save no-op 掉以防污染真实 state；本函数只在 tmp_path 内重建持久化。
+    写 ``self.path``/``self.runtime_path``（load 已把二者绑到 state 目录，随 monkeypatch 移动）。
     """
-    reg_file = state / "registry.json"
 
     def _save(self):
-        reg_file.write_text(
+        (state / "registry.json").write_text(
             json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (state / RUNTIME_FILE).write_text(
+            json.dumps(self.runtime, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
     monkeypatch.setattr(registry.Registry, "save", _save)
 
 
 def read_registry(state):
-    """读回隔离 registry.json 的 data dict。"""
+    """读回隔离 registry.json（配置面）的 data dict。"""
     return json.loads((state / "registry.json").read_text(encoding="utf-8"))
+
+
+def read_runtime(state):
+    """读回隔离 sessions-runtime.json（运行态会话池）的 data dict。"""
+    return json.loads((state / RUNTIME_FILE).read_text(encoding="utf-8"))
+
+
+def write_runtime(state, data):
+    """写入隔离 sessions-runtime.json（预置会话池用）。"""
+    (state / RUNTIME_FILE).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def set_models(state, **models):

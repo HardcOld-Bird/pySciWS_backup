@@ -39,19 +39,19 @@ timeout 25 git push origin main   # 忽略一切失败（网络/认证/超时）
 pysci-dev worktree remove <任务名>
 ```
 
-注意：worktree 检出**不含未跟踪重数据**（data/research 的 simulation/storage 等被
-gitignore）；需要真实数据验证时以绝对路径只读引用主树。
+注意：worktree 检出不含被 gitignore 的未跟踪重数据（data/research 的 simulation/storage）；
+需真实数据验证时用绝对路径只读引用主树。
 
-**worktree 命名约定**：drain/backlog 派发时用**条目 id** 作 `<任务名>`（take_first 已把
-`worktree=id` 记入条目）。若 devops 会话中途死亡留下孤儿条目，下次 drain 孤儿回收会据
-`wt-<id>` 名 `git worktree remove --force` + `branch -D` 清理残留（否则重派 `worktree add`
-撞名失败）。手动/组长临时派发可用任意名——不属孤儿、不会被自动清理（防误删并发作业）。
+**worktree 命名约定**：drain/backlog 派发用**条目 id** 作 `<任务名>`（take_first 记
+`worktree=id`）。会话中途死亡的孤儿条目，下次 drain 回收据 `wt-<id>` 名
+`git worktree remove --force` + `branch -D` 清理（否则重派 `worktree add` 撞名）。手动/
+临时派发可用任意名——不属孤儿、不自动清理（防误删并发作业）。
 
 **批量消化任务书**（drain 组包，backlog 20261010-batch-digest）：任务书可能含**种子**（必做）
-+ 同提请者**组包菜单**。你**自主选取 ≥1 项**（必含种子；可只吃种子），把选中项合并到
-**同一 worktree**（名 = 种子 id）实施，可按需重写为合并方案。交付时在 `<result>` 以
-`backlog id=<id1>,<id2>,…` 列出**本次完成的全部 id**（必含种子），orch 逐 id 销账；未完成的
-**不要**列入（留 pending 下轮）。种子受阻照常交付 `<blocked>`（组包不连坐）。
++ **组包菜单**。**自主选取 ≥1 项**（必含种子，可只吃种子），合并到**同一 worktree**（名
+= 种子 id）实施。交付时 `<result>` 以 `backlog id=<id1>,<id2>,…` 列**本次完成全部 id**
+（必含种子），orch 逐 id 销账；未完成的**不要**列入（留 pending 下轮）。种子受阻照常
+`<blocked>`（组包不连坐）。
 
 ## 技能部署（真本 → 副本）
 
@@ -108,11 +108,13 @@ PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
 
 - commit：cz 规范（feat/fix/docs/refactor/test/chore + scope）；一笔提交一个主题；
 - pre-commit 钩子全过（ruff 自动修复后需重新 add 再 commit——被钩子改写不算失败）；
-- **push**：每次 commit 后尝试一次 `timeout 25 git push origin main`（best-effort，
-  用户裁决 2026-10-10：校园网偶尔可直连 GitHub，不开常驻代理）——忽略一切失败
-  （网络/认证/超时），不重试、不设代理；**超时是硬要求**（挂起会阻塞 drain）；
+- **push**：每次 commit 后尝试一次 `timeout 25 git push origin main`（best-effort，用户
+  裁决 2026-10-10 校园网偶尔可直连 GitHub）——忽略一切失败（网络/认证/超时），不重试、
+  不设代理；**超时是硬要求**（挂起会阻塞 drain）；
 - 禁止 --no-verify；禁止 reset --hard/force 类破坏性操作，除非任务书明确授权；
 - 合并前先 `git status` 检查工作区；发现非本任务的未提交改动，保留并在交付中报告。
+- **状态分储**：registry.json=低频配置（git）/ sessions-runtime.json=会话池运行态
+  （心跳每跳必变，gitignore）。语义见 references/registry-runtime.md。
 
 ## 巡检清单（doctor 之外的人工项）
 
