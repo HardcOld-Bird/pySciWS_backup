@@ -76,8 +76,9 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 ## 归档与成本
 
 - 工作完结且会话不再需要 → `sessions <member> --archive <sid> --distill`；
-- ctx>60% 的会话提示归档；`stats` 看成员耗时占比（BYOK 下 credits 恒 0，以耗时/轮数
-  为准）；成本曲线异常 → 考虑 harness 改进或档位调整。
+- ctx>60% 的会话提示归档；`stats` 看成员耗时占比与成本覆盖率（BYOK 下 credits **依模型**
+  上报：max 档计量、flash 档恒 0，故 stats 标注「覆盖 M/N 跳」，未计量跳以耗时/轮数为准）；
+  成本曲线异常 → 考虑 harness 改进或档位调整。
 
 ## 降级
 
