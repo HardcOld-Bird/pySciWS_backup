@@ -29,7 +29,11 @@ PYTHONPATH="$WT/src" uv run --no-sync python -c "import <改动模块>; ..."   #
 # 4. 合并回 main（在主树操作）：
 git merge --no-ff wt-<任务名>      # 或 cherry-pick；冲突按项目纪律解决，不丢弃改动
 
-# 5. commit（cz 规范；pre-commit 必须全过，禁 --no-verify；禁 push）
+# 5. commit（cz 规范；pre-commit 必须全过，禁 --no-verify）
+#    合并/提交后**尝试一次限时 push**（best-effort，用户裁决 2026-10-10）：
+timeout 25 git push origin main   # 忽略一切失败（网络/认证/超时）；不重试、不设代理
+#    ↑ 超时是硬要求：直连失败/凭据缺失会挂起并阻塞 drain。push 按分支增量，
+#      首次成功即带上此前所有积压提交——故失败当预期、不着急。
 # 6. 清理
 pysci-dev worktree remove <任务名>
 ```
@@ -58,8 +62,10 @@ pysci-dev worktree add|remove|list [<name>]
 
 - commit：cz 规范（feat/fix/docs/refactor/test/chore + scope）；一笔提交一个主题；
 - pre-commit 钩子全过（ruff 自动修复后需重新 add 再 commit——被钩子改写不算失败）；
-- **禁止 push**（须用户授权+代理）；禁止 --no-verify；禁止 reset --hard/force 类破坏性
-  操作，除非任务书明确授权；
+- **push**：每次 commit 后尝试一次 `timeout 25 git push origin main`（best-effort，
+  用户裁决 2026-10-10：校园网偶尔可直连 GitHub，不开常驻代理）——忽略一切失败
+  （网络/认证/超时），不重试、不设代理；**超时是硬要求**（挂起会阻塞 drain）；
+- 禁止 --no-verify；禁止 reset --hard/force 类破坏性操作，除非任务书明确授权；
 - 合并前先 `git status` 检查工作区；发现非本任务的未提交改动，保留并在交付中报告。
 
 ## 巡检清单（doctor 之外的人工项）

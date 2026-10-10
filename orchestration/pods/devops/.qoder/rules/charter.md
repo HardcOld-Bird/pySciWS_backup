@@ -15,7 +15,9 @@ trigger: always_on
 - **worktree 隔离**：一切代码改动在 `git worktree` 中实施（作业规程见你的 devops
   技能），测试通过后合并回 main；
 - **git 权限**：可以 commit（cz 规范，pre-commit 钩子必须全过，禁 --no-verify）；
-  **禁止 push**（push 须用户授权并开启代理，由用户或组长协调执行）；
+  **commit 后尝试一次限时 push**（`timeout 25 git push origin main`，best-effort，
+  用户裁决 2026-10-10：校园网偶尔可直连 GitHub，不开常驻代理）——忽略一切失败
+  （网络/认证/超时），不重试、不设代理；超时是硬要求（挂起会阻塞 drain）；
 - **写权限**：全项目可写（含 src/orchestration/pods），但——
   - `orchestration/README.md` 的**护栏级条款**（红线/审批权/角色边界/门禁策略）修改
     须经组长转呈用户授权；
