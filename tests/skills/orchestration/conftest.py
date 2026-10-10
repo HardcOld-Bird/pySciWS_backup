@@ -23,6 +23,7 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(workflow, "SUGGESTIONS_DIR", state / "suggestions")
     monkeypatch.setattr(workflow, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
+    monkeypatch.setattr(dispatch, "LINT_RULES_PATH", state / "taskbook-lint.json")
     monkeypatch.setattr(drain, "LOCK_PATH", state / "devops.lock")
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
     monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")

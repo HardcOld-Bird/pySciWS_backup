@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "_comment": "任务书轻量 lint 规则表。devops 增补：向 rules 追加 {id, re, hint}——re 为 Python 正则（JSON 内反斜杠需双写），命中任务书正文即打印 hint 告警。告警不阻断派发（组长确认后照常执行）。与 20261009-taskbook-cli-signature（charter/文档侧统一）互补：那里改文档正本，这里在派发口机械拦截错误范式传染。",
+  "rules": [
+    {
+      "id": "figures-two-positional-args",
+      "re": "pysci-figures\\s+(?:build|preview|audit)\\s+\\w+\\s+fig\\w+",
+      "hint": "pysci-figures build/preview/audit 只接受单一位置参数 <figdir>（如 fig1_ep_band），检测到疑似两个位置参数（research + fig）；请改用 `pysci-figures build <figdir>`，研究线由 figdir 所在目录决定。签名以 `pysci-figures <cmd> -h` 为准。"
+    }
+  ]
+}

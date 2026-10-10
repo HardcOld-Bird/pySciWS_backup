@@ -202,7 +202,8 @@ ledger 流水为可再生物不入库。
 （日常经 plan 系统调用，见 §4.2；直接 dispatch 属底层命令，§4.1）：
 
 1. 任务书写入 `pods/<id>/inbox/task-<ts>.md`（自包含：目标、输入路径、交付要求、
-   白名单目录、验收声明要求、所属计划环节、模型档位）；
+   白名单目录、验收声明要求、所属计划环节、模型档位）；落盘前经 `state/taskbook-lint.json`
+   轻量 lint（正则扫已知错误 CLI 范式，命中仅**告警不阻断**，规则表 devops 可增补）；
 2. 组装：`<exe> --cwd orchestration/pods/<id> -p <注入文本> --resume <sid>|
    --session-id <新sid> --name <slug>`；注入文本 = 任务书路径 + 待附送审批回复（§6）+
    交付协议提醒；
