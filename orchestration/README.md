@@ -309,7 +309,8 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
 | `orch plan new <file>` / `--adhoc "<单步任务>"` | 登记计划（§4.2）；计划外事项也应建（单步）计划 | 计划概览 + 首环节派发建议 |
 | `orch plan run <id>` | 推进计划：执行当前环节，交接处暂停 | 环节结果 + **下一环节原文 recall** + 决策选项（一键继续/修改/中止） |
 | `orch plan amend <id>` | 修改未执行环节（增删改、review 旗标、模型档位） | 更新后计划 |
-| `orch approve/reject <reply-id> --note` | 审批 INFRA_SUGGESTION | 通过→入 backlog；审批回复自动附送给提议人 |
+| `orch approve/reject <reply-id> --note` | 审批 INFRA_SUGGESTION | 通过→入 backlog＋自动唤醒 devops＋watch 挂载指令；审批回复自动附送给提议人 |
+| `orch watch [--timeout 4h]` | 阻塞等待后台 drain 事件（§4.5）：以 Bash run_in_background 启动 | **单行**事件（QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP / CRASH）或 TIMEOUT；退出即唤醒组长会话 |
 | `orch consult <问题>` | 快捷咨询副组长（平级协作条款生效） | 副组长意见（含异议） |
 | `orch review <产物>` | 派发 reviewer | VERDICT；FAIL→自动回派返工+复审一次，再 FAIL 升级仲裁 |
 | `orch stats [--plan <id>]` | 统计（§4.4） | 任务/成员/历史三级耗时与 credits |
@@ -429,6 +430,31 @@ Qoder 后台任务完成通知**自动唤醒组长会话** → 组长读取指�
 **组长等待纪律**（写入 orchestration 技能）：派发长任务必须走后台通道；**禁止
 sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）；用户插话优先响应。
 
+**后台 drain 的等待：`orch watch` 事件等待器**（backlog 20261010-orch-watch）。
+detached drain 不被任何前台进程持有，组长交办完即失去观察面——旧状只能靠「组长记得跑
+`orch status`」，属纪律而非保证。硬化理念（用户裁决 2026-10-10：能代码硬保证的不靠 LLM
+纪律；结构上限=唤醒注册只能由组长会话的工具发起，故代码能保证的是**事件判定全在代码 +
+挂载提示在唤醒当刻由代码注入**，残余软点=组长照 [NEXT] 挂一条后台命令，与体系既有最小
+软保证同级）：
+
+- `pysci-orch watch [--timeout S=4h] [--interval S=60]` **阻塞轮询**（只读状态文件 +
+  Python 侧判活，不起 shell 故 MSYS 路径转换问题免疫；间隔硬钳制 ≤60 s），命中即**单行**
+  打印事件并退出 0，超时无事件打印 `TIMEOUT` 退出 0：
+  - `QUEUE-COMPLETE <run>`——新 `.done` 出现且锁已不再跑该 run（drain 在 finally 里先释放
+    锁再写摘要，故二者同批可见）
+  - `NEEDS-LEADER <id>`——backlog 中**新出现**的 needs_leader 条目
+  - `QUOTA-STOP <run>`——额度类全局停止（`.done.stopped`，或 run 日志的 `[Q]` 痕迹——后者
+    早一拍，不必等摘要落盘）
+  - `CRASH <run>`——锁 pid 已死且该 run 无 `.done`
+- **用法**：组长以 Bash `run_in_background` 启动，进程退出即原生完成通知唤醒本会话；一次
+  watch 报一批事件即退，后续按需重挂（输出自带重挂命令）。`approve`（经 `wake_devops`）与
+  `dispatch --from-backlog` 的输出**固定追加挂载指令行**，不靠组长翻文档。
+- **边界**：watch 随组长会话消亡，**不影响 detached drain**；基线快照与心跳落
+  `state/watch.json`（gitignore：纯运行态）。漏挂/会话中断期间的账由下次 `orch status` 的
+  watch 段**一次性补账**（报完即推进基线，重复运行不刷屏；watch 仍在挂载时 status 不抢账，
+  免双份唤醒）。同刻多事件按 CRASH > QUOTA-STOP > NEEDS-LEADER > QUEUE-COMPLETE 取主事件、
+  其余以「同时」附注。**弃 Monitor 工具方案**（会话侧注册更重，且同样要组长发起）。
+
 ---
 
 ## 5. 质量保证：两层
@@ -499,6 +525,10 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
   态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕vs**干净完成
   后锁残留**〔.done 存在〕）、最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
   needs_leader 提醒（组长据此重派/改任务书/上报）
+→ 组长的等待面（代码化，§4.5）：唤醒/采纳/交办三处输出固定附 `orch watch` 挂载指令；
+  watch 后台阻塞轮询 state 文件与锁，命中 QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP /
+  CRASH 即单行退出唤醒会话；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
+  的 watch 段一次性补账
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
 ```
 

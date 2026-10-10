@@ -40,6 +40,9 @@ uv run pysci-orch plan list | plan drop <id>
 uv run pysci-orch suggestions                   # 待审批改进建议
 uv run pysci-orch approve <建议id> --note "..." [--no-wake]
         # 采纳→入 backlog，默认自动唤醒 devops 后台 FIFO 消化；--no-wake 只入队不唤醒
+uv run pysci-orch watch [--timeout 14400]
+        # 后台挂起等 drain 事件（QUEUE-COMPLETE/NEEDS-LEADER/QUOTA-STOP/CRASH）：
+        # run_in_background 启动，命中单行退出即唤醒本会话；漏挂由 status 补账
 uv run pysci-orch reject <建议id> --note "..."   # 否决（仅回复附送，不唤醒）
 uv run pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
 uv run pysci-orch review <产物> --origin <member> [--rubric generic]
@@ -76,6 +79,8 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 - 建议审批：approve 入 backlog 并**自动唤醒 devops 后台消化**（分离进程持锁 FIFO 串行；
   锁忙不重复唤醒，单项失败标 needs_leader 跳过、不阻塞队列），reject 附理由——回复都会
   自动附送提议人；`orch status` 看 devops worker 态 / 最近 run / needs_leader 提醒；
+  交办后照输出 [NEXT] 以 `run_in_background` 挂 `orch watch` 等事件（命中单行退出即唤醒，
+  勿 sleep-轮询 status）；漏挂的账由下次 `orch status` 的 watch 段补账；
   护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：修改任务书重派，或行使最终裁定权
   坚持原派（理由留痕台账）；

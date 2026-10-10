@@ -9,7 +9,9 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
   worker。原子 ``O_CREAT|O_EXCL`` 抢占；持有者进程已死或锁龄超 :data:`LOCK_STALE_S`
   判 stale 并接管（fail-open，防 worker 崩溃后永久死锁）。
 - **唤醒**（:func:`wake_devops`）：approve 成功后调用；锁忙则不重复 spawn（本项由
-  当前 drain 循环接手），空闲则 Popen 分离进程运行内部命令 ``_drain-devops``。
+  当前 drain 循环接手），空闲则 Popen 分离进程运行内部命令 ``_drain-devops``。返回的
+  message 固定附 watch 事件等待器挂载指令（:mod:`watch`，README §4.5）——工作交棒的
+  当刻由代码把「怎么等」交给组长。
 - **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
   worker 遗留，重置 pending），并顺带清理其残留 worktree/branch
   （:func:`cleanup_orphan_worktrees`，worktree 名 = 条目 id，``--force`` 摘除 + ``prune``
@@ -706,10 +708,17 @@ def wake_devops(*, force_dry: bool | None = None) -> tuple[bool, str]:
     Returns:
         ``(spawned, message)``。``spawned=False`` 表示锁忙未唤醒（message 说明本项由
         当前 drain 循环接手）；``True`` 表示已派生分离进程（message 含日志路径）。
+        两种情况的 message 都**固定附带 watch 挂载指令行**（:func:`watch.mount_lines`）：
+        「工作已交办、开始等待」这个时刻由代码把等待方式交给组长，不靠其记得查文档
+        （backlog 20261010-orch-watch，README §4.5）。
     """
     st = lock_status()
     if st["state"] == "running":
-        return False, "devops 正在处理队列，本项将由当前 drain 循环接手（不重复唤醒）。"
+        return (
+            False,
+            "devops 正在处理队列，本项将由当前 drain 循环接手（不重复唤醒）。"
+            + _mount_block(),
+        )
     DEVOPS_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     run_log = new_run_log()
     dry = bool(os.environ.get(DRY_ENV)) if force_dry is None else bool(force_dry)
@@ -719,5 +728,14 @@ def wake_devops(*, force_dry: bool | None = None) -> tuple[bool, str]:
         _spawn_detached(argv, env=env, stdout=logf)
     return True, (
         f"devops 已后台唤醒（日志 {orchestration_rel(run_log)}）；"
-        "结果见 orch status / 该目录 .done 文件。"
+        "结果见 orch status / 该目录 .done 文件。" + _mount_block()
     )
+
+
+def _mount_block() -> str:
+    """唤醒 message 尾部追加的挂载指令块（换行分隔，首行为空 = 与正文自然断行）。"""
+    from .watch import (
+        mount_lines,  # 延迟导入：watch↔drain 环（watch 依赖 drain 的锁/摘要原语）
+    )
+
+    return "\n" + "\n".join(mount_lines(indent="    "))

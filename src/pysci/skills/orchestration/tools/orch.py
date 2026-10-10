@@ -13,6 +13,7 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     ... orch approve|reject <suggestion-id> --note "..."
     ... orch suggestions | stats [--plan/--member/--days] | consult "<问题>"
     ... orch dispatch <member> (--task F | --text T | --from-backlog) [--session ...] [--effort …]
+    ... orch watch [--timeout S=4h] [--interval S=60]   # 后台挂起等 drain 事件（§4.5）
     ... orch sessions <member> [--all|--archive SID [--distill]|--prune SID]
     ... orch ledger [--member --days --stats] | sync [--check]
 
@@ -29,6 +30,7 @@ from . import drain as _drain
 from . import plans as _plans
 from . import sessions as _sessions
 from . import sync as _sync
+from . import watch as _watch
 from . import workflow as _workflow
 from .dispatch import do_dispatch
 from .ledger import (
@@ -161,6 +163,10 @@ def cmd_status(args: argparse.Namespace) -> int:
         for b in needs_leader[:5]:
             print(f"    - {b['id']}: {str(b.get('summary', ''))[:50]}")
 
+    print("== watch（drain 事件等待器）==")
+    for line in _watch.status_lines():
+        print(line)
+
     print("== 台账（近 5 跳）==")
     for e in read_all()[-5:]:
         checks_s = ",".join(c["verdict"] for c in e.checks) or "-"
@@ -232,6 +238,10 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
     if took_backlog_id and outcome.code == 0:
         _workflow.backlog_complete(took_backlog_id, note="orch 自动销账")
         print(f"[√] backlog 条目 {took_backlog_id} 已标记完成")
+    if took_backlog_id:
+        # 代码在「工作已交办」的当刻注入挂载指令，不靠组长记得去读文档（§4.5/§6）
+        for line in _watch.mount_lines(indent="  ", header=False):
+            print(line)
     return outcome.code
 
 
@@ -597,6 +607,26 @@ def main(argv: list[str] | None = None) -> int:
         help="按 --list-models 刷新 registry 模型映射（drain 启动亦自动执行）",
     )
     p.set_defaults(func=cmd_refresh_models)
+
+    p = sub.add_parser(
+        "watch",
+        help="阻塞等待 drain 事件（CRASH/QUOTA-STOP/NEEDS-LEADER/QUEUE-COMPLETE）；"
+        "组长以 Bash run_in_background 启动，退出即唤醒本会话",
+    )
+    p.add_argument(
+        "--timeout",
+        type=int,
+        default=_watch.DEFAULT_TIMEOUT_S,
+        help=f"总等待秒数（默认 {_watch.DEFAULT_TIMEOUT_S}=4h；超时打印 TIMEOUT 退出）",
+    )
+    p.add_argument(
+        "--interval",
+        type=int,
+        default=_watch.DEFAULT_INTERVAL_S,
+        help=f"轮询间隔秒数（钳制到 {_watch.MIN_INTERVAL_S}–{_watch.MAX_INTERVAL_S}，"
+        f"默认 {_watch.DEFAULT_INTERVAL_S}）",
+    )
+    p.set_defaults(func=_watch.cmd_watch)
 
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(

@@ -11,7 +11,14 @@ import json
 
 import pytest
 
-from pysci.skills.orchestration.tools import dispatch, drain, ledger, registry, workflow
+from pysci.skills.orchestration.tools import (
+    dispatch,
+    drain,
+    ledger,
+    registry,
+    watch,
+    workflow,
+)
 from pysci.skills.orchestration.tools import sessions as dispatch_sessions
 
 # 2026-10-10 额度事故原文（会话 jsonl 实测）
@@ -34,6 +41,7 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(drain, "LOCK_PATH", state / "devops.lock")
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
     monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")
+    monkeypatch.setattr(watch, "WATCH_PATH", state / "watch.json")
     # drain 启动的模型映射自愈默认 no-op（防测试真起 exe/写真实 registry；
     # 测刷新行为的用例自行 monkeypatch 覆盖）
     monkeypatch.setattr(
