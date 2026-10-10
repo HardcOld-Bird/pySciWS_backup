@@ -93,7 +93,12 @@ def test_loop_protection_bypasses_everything(pod):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
 def test_unparsable_stdin_fails_open(pod):
-    assert run_gate(pod, stdin="{not json")[0] == 0
+    """fail-open 必须留痕（backlog 20261010-193601-devops）：rc=0 + stderr 打
+    `[delivery-gate fail-open] …`，否则「全绿」不代表在执法——未来 guard 若被
+    重构改回静默 catch，本断言会立即红。"""
+    rc, err = run_gate(pod, stdin="{not json")
+    assert rc == 0
+    assert "[delivery-gate fail-open]" in err
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")

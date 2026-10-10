@@ -100,9 +100,9 @@ PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
 | 真本侧硬闸 | pre-commit `harness-budget`（`guards/budget_check.py`） | 真本 `SKILL.md`/`references/*.md` 与根 `basic.md`·`leader-only.md` 每文件 |
 | 观测 | `pysci-dev doctor` 三档审计 | 全量扫描 + 台账，唯一能看见「会话中途死掉留下的膨胀」的一层 |
 
-改任一层、或处置超限 references 前，先读
-[references/budget-layers.md](references/budget-layers.md)（豁免规则、fail-open 与 ESM
-TDZ 教训、Stop hook 的探针验证法、分册拆分与验证次序）。
+改任一层、加新 guard、或处置超限 references 前，先读
+[budget-layers.md](references/budget-layers.md)（豁免/TDZ 教训/Stop 探针/分册次序）与
+[guards-in-force.md](references/guards-in-force.md)（fail-open 留痕+活体探针+元哨兵）。
 
 ## git 纪律
 

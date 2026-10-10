@@ -90,3 +90,11 @@ charter/AGENTS.md/自建 rules·skills），逐条 `[!]` 并计入退出码 2；
 <hook_id> --files …`，只跑改写类、不越权触发 ruff/budget），逐文件打印 pre/post
 sha256；① 的内容等价性断言以 **post_sha256**（钩子终态）为基准。首提即过、无验证
 过期窗口；`--dry-run` 只报告不改文件。
+
+## 5. guard 面的**在法活体哨兵**（backlog 20261010-193601-devops）
+
+三层机械化（guard 源 `[<name> fail-open]` stderr 留痕 / doctor 的 `guard_probe.py`
+活体探针 / `test_guards_in_force.py` 元哨兵）与 pod-guard 白名单顺序调整（pod 内先
+于系统 tmp），见同目录分册
+[guards-in-force.md](guards-in-force.md)。改 guard、加新 guard、或调试 doctor 探针
+时读那一册；本节只留这条索引。
