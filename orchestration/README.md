@@ -112,10 +112,11 @@ pySciWS/
 │       └── <id>/
 │           ├── .qoder/
 │           │   ├── rules/charter.md #     【只读层】成员规程：交付协议/自检清单/CLI 范式
-│           │   ├── rules/*.md       #     【自维护层】成员自建规则，自由增删改
+│           │   ├── rules/*.md       #     【自维护层】成员自建规则，自由增删改（勿命名 leader-only*，见下）
 │           │   ├── skills/<部署名>/ #     【只读层】manifest 部署副本（sync 再生，成员禁改）
 │           │   ├── skills/<自取名>/ #     【自维护层】成员自建技能，自由增删改
-│           │   ├── settings.json    #     【只读层】pod-guard + delivery-gate 接线
+│           │   ├── settings.json    #     【只读层】hooks 接线 + agentsMdExcludes=["**/leader-only.md"]
+│           │   │                      #     （排除组长专属根规则；新 pod 必带，doctor 巡检此项）
 │           │   └── mcp.json         #     【只读层】成员专属 MCP（devops 维护，不下放）
 │           ├── AGENTS.md            #     【自维护层】成员长期记忆（启动自动加载）
 │           ├── bench/               #     草稿区（gitignored）

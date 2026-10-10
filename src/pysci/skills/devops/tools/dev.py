@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +22,10 @@ from pysci.paths import PODS_ROOT, PROJECT_ROOT
 
 #: worktree 统一放置目录（与 Qoder 原生 --worktree 约定一致，避免两套位置）。
 WORKTREES_ROOT = PROJECT_ROOT / ".qoder" / "worktrees"
+
+#: 组长专属根规则（组员 pod 须经 settings.agentsMdExcludes 排除）与全员公约数（必须可见）。
+LEADER_RULE = "leader-only.md"
+BASIC_RULE = "basic.md"
 
 
 def _run_git(*args: str) -> tuple[int, str]:
@@ -39,6 +45,30 @@ def _run_git(*args: str) -> tuple[int, str]:
 # ---------------------------------------------------------------------------
 # doctor
 # ---------------------------------------------------------------------------
+def exclude_problems(content: str) -> list[str]:
+    """校验 pod settings 的 ``agentsMdExcludes`` 是否恰好排除组长专属根规则。
+
+    两侧都是护栏：缺排除 → 组员注入组长规程（越权面，见 leader-only.md 头注）；
+    glob 过宽连 ``basic.md`` 一起命中 → 组员丢掉全员公约数（8KB 预算、上报纪律等）。
+    按每条 pattern 的**文件名段**做 fnmatch，故 ``**/leader-only.md``、
+    ``**/rules/leader-only.md`` 与裸 ``leader-only.md`` 等价判为已排除。
+    """
+    try:
+        excludes = json.loads(content).get("agentsMdExcludes") or []
+    except (json.JSONDecodeError, AttributeError):
+        return [
+            f"settings.json 无法解析 {LEADER_RULE} 排除项（非法 JSON 或缺顶层对象）"
+        ]
+    pats = [str(e).replace("\\", "/") for e in excludes]
+    names = [Path(p).name for p in pats]
+    if not any(fnmatch.fnmatch(LEADER_RULE, n) for n in names):
+        return [f"leader 规则未排除（缺 agentsMdExcludes：'**/{LEADER_RULE}'）"]
+    wide = next((p for p, n in zip(pats, names) if fnmatch.fnmatch(BASIC_RULE, n)), "")
+    return (
+        [f"agentsMdExcludes 过宽：'{wide}' 会连 {BASIC_RULE} 一并排除"] if wide else []
+    )
+
+
 def _doctor_pod(pod: Path) -> list[str]:
     """巡检单个 pod，返回问题/状态行列表。"""
     lines: list[str] = []
@@ -54,8 +84,15 @@ def _doctor_pod(pod: Path) -> list[str]:
         for hook in ("delivery-gate", "pod-guard"):
             if hook not in content:
                 problems.append(f"{hook} 未接线")
-    if not (pod / ".qoder" / "rules" / "charter.md").exists():
+        problems += exclude_problems(content)
+    rules_dir = pod / ".qoder" / "rules"
+    if not (rules_dir / "charter.md").exists():
         problems.append("charter.md 缺失")
+    clash = sorted(p.name for p in rules_dir.glob(f"{Path(LEADER_RULE).stem}*"))
+    if clash:
+        problems.append(
+            f"pod 自建规则 {clash[0]} 撞名组长规则（leader-only* 命名应避开排除 glob）"
+        )
     agents_md = pod / "AGENTS.md"
     if not agents_md.exists():
         problems.append("AGENTS.md 缺失（记忆层未初始化）")
@@ -82,9 +119,9 @@ def _doctor_pod(pod: Path) -> list[str]:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    """pod 健康巡检：hooks 接线 / charter / AGENTS.md 体量 / 部署漂移 / inbox 积压；
-    外加「部署台账巡检」——联动 ``sync --check``，捕获 skills-deployed.json 记录哈希
-    相对真本的漂移（[*]）与副本漂移（[!]），即 worktree-sync 污染类问题的哨兵。"""
+    """pod 健康巡检：hooks 接线 / leader 规则排除 / charter / AGENTS.md 体量 / 部署漂移 /
+    inbox 积压；外加「部署台账巡检」——联动 ``sync --check``，捕获 skills-deployed.json
+    记录哈希相对真本的漂移（[*]）与副本漂移（[!]），即 worktree-sync 污染类问题的哨兵。"""
     print("== pod 巡检 ==")
     pods = (
         [PODS_ROOT / args.pod]

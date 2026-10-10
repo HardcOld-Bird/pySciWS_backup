@@ -65,10 +65,20 @@ gitignore）；需要真实数据验证时以绝对路径只读引用主树。
 ## pysci-dev 命令面
 
 ```
-pysci-dev doctor [--pod <id>]   # pod 健康巡检：hooks 接线/charter/AGENTS.md 体量/积压 + 部署台账巡检（sync --check 漂移）
+pysci-dev doctor [--pod <id>]   # pod 健康巡检：hooks 接线/leader 规则排除/charter/AGENTS.md 体量/积压 + 部署台账巡检（sync --check 漂移）
 pysci-dev sync [--check]        # 技能部署
 pysci-dev worktree add|remove|list [<name>]
 ```
+
+## 新 pod 脚手架（只读层入库面）
+
+每 pod 仅 5 个文件入 git：`.gitignore`、`.qoder/settings.json`、`.qoder/mcp.json`、
+`.qoder/rules/charter.md`、`AGENTS.md`；`bench/`·`outbox/`·`.qoder/skills/` 被 pod
+`.gitignore` 排除，`inbox/` 空目录不跟踪——后三者须**合并后在 main 上** `mkdir` +
+`sync` 再生。settings.json 模板必带两件事：① 两个 hook 接线（Stop=delivery-gate、
+PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
+`"agentsMdExcludes": ["**/leader-only.md"]` 排除组长专属根规则（缺则组员注入
+`leader-only.md`；glob 写成 `**/*.md` 会连 `basic.md` 公约数一起吞掉，doctor 两项都判 ✗）。
 
 ## git 纪律
 
