@@ -87,6 +87,32 @@ def backlog_take_first() -> dict | None:
     return None
 
 
+def backlog_reclaim_orphans() -> list[str]:
+    """把所有 in_progress 条目重置为 pending（孤儿回收），返回回收的 id 列表。
+
+    in_progress 仅由 :func:`backlog_take_first` 标记，而 take_first 只在持锁的 drain
+    循环内调用。因此**新 drain 成功获锁之时**，任何 in_progress 条目都必然是上一个
+    worker 在 take_first 与 backlog_complete 之间被杀留下的孤儿（锁已判死/超龄才被
+    接管）——不回收则永久卡死（take_first 只找 pending）。
+    """
+    if not BACKLOG_PATH.exists():
+        return []
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    reclaimed = []
+    for item in data.get("items", []):
+        if item.get("status") == "in_progress":
+            item["status"] = "pending"
+            item["note"] = (
+                f"孤儿条目回收（原 started_at={item.pop('started_at', '?')}）"
+            )
+            reclaimed.append(str(item.get("id", "")))
+    if reclaimed:
+        BACKLOG_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    return reclaimed
+
+
 def _backlog_set_status(
     item_id: str, status: str, note: str = "", *, stamp: str = ""
 ) -> None:

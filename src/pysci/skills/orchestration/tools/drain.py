@@ -10,7 +10,8 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
   判 stale 并接管（fail-open，防 worker 崩溃后永久死锁）。
 - **唤醒**（:func:`wake_devops`）：approve 成功后调用；锁忙则不重复 spawn（本项由
   当前 drain 循环接手），空闲则 Popen 分离进程运行内部命令 ``_drain-devops``。
-- **drain 循环**（:func:`drain_backlog`）：``backlog_take_first`` → 任务书 →
+- **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
+  worker 遗留，重置 pending）；``backlog_take_first`` → 任务书 →
   ``do_dispatch("devops")`` → 销账；单项失败（blocked/run_failed）标记 needs_leader
   并**跳过**（一项卡住不阻塞全队列）；run 日志逐行落 ``state/devops-runs/<ts>.log``，
   全部完成写 ``<ts>.done``（JSON 摘要）。
@@ -36,6 +37,7 @@ from .registry import orchestration_rel
 from .workflow import (
     backlog_complete,
     backlog_needs_leader,
+    backlog_reclaim_orphans,
     backlog_take_first,
     backlog_task_text,
 )
@@ -307,6 +309,11 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         "items": [],
     }
     _log(run_log, f"[▶] drain 启动（pid={os.getpid()}, dry={dry}）")
+    # 刚获锁 → 此刻的 in_progress 必是已死 worker 的孤儿，回收为 pending
+    orphans = backlog_reclaim_orphans()
+    if orphans:
+        summary["reclaimed"] = orphans
+        _log(run_log, f"[i] 回收孤儿 in_progress 条目：{', '.join(orphans)}")
     try:
         while True:
             item = backlog_take_first()
