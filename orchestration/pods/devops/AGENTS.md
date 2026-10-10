@@ -58,8 +58,13 @@
 - **delivery-gate 现执法组员自维护层四条预算**（AGENTS.md ≤8192B / 自建 rules 禁
   always_on / 自建 rules·skills 的 description 合计各 ≤8192B / 自建 SKILL.md ≤8192B），
   口径=落盘字节（CRLF 计税）；`PYSCI_DEPLOYED_SKILLS` 缺失时自建技能那一支不执法。
-  细节写进 devops 技能「guards 面」小节。改完任何真本记得 `pysci-dev sync`；本条所属的
-  devops SKILL.md 自己也差点顶破 8192B——新增文档前先 `wc -c` 是省一轮返工的习惯。
+  细节写进 devops 技能「harness 预算三层执法」节 + `references/budget-layers.md`。
+- **三层执法已齐（2026-10-10）**：组员侧=delivery-gate Stop、真本侧=pre-commit
+  `harness-budget`（`orchestration/guards/budget_check.py`，stdlib-only，钩子空 venv 里
+  没装本项目）、观测侧=doctor 三档审计。新钩子用 `language: python` 不用 `system`——
+  后者依赖提交上下文 PATH 里有 python，找不到就堵死一切提交。本条所属 devops SKILL.md
+  当时已 8178B，加内容必超 → 按分册程序把细节移进 `references/budget-layers.md`，
+  SKILL.md 回落到 7713B。改真本前先 `wc -c` 是省一轮返工的习惯。
 - **pod 脚手架的 git 跟踪面**：每 pod 仅 5 个文件入库（`.gitignore`/`.qoder/settings.json`/
   `.qoder/mcp.json`/`.qoder/rules/charter.md`/`AGENTS.md`）；`bench/`·`outbox/`·`.qoder/skills/`
   被 pod `.gitignore` 排除，`inbox/` 空目录 git 不跟踪——三者均须在**合并后于 main 上**用
