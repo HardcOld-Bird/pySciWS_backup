@@ -2,10 +2,10 @@
   "version": 1,
   "skills": {
     "scientific-plotting": {
-      "source_hash": "7d99db796a8bb441a956e77baf47c12fc0c60e0a1fb4c3063aa50d3fd459d889",
+      "source_hash": "9e6b58270122aefba21cd0a40e73d2760a4d4982c69f929885a271148a0af56d",
       "targets": {
-        "orchestration/pods/figure/.qoder/skills/scientific-plotting": "7d99db796a8bb441a956e77baf47c12fc0c60e0a1fb4c3063aa50d3fd459d889",
-        "orchestration/pods/deputy/.qoder/skills/scientific-plotting": "7d99db796a8bb441a956e77baf47c12fc0c60e0a1fb4c3063aa50d3fd459d889"
+        "orchestration/pods/figure/.qoder/skills/scientific-plotting": "9e6b58270122aefba21cd0a40e73d2760a4d4982c69f929885a271148a0af56d",
+        "orchestration/pods/deputy/.qoder/skills/scientific-plotting": "9e6b58270122aefba21cd0a40e73d2760a4d4982c69f929885a271148a0af56d"
       }
     },
     "orchestration": {
