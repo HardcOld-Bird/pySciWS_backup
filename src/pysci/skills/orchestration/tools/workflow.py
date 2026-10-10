@@ -93,6 +93,46 @@ def backlog_take_first() -> dict | None:
     return None
 
 
+def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
+    """取队首 pending 为**种子**（标记 in_progress），收集同 member（提请者）的 pending
+    为**组包**（批量消化，backlog 20261010-batch-digest）。
+
+    启发式：同提请者 ≈ 同模块/同视角（如 figure 的多项常同落 scientific_plotting），
+    合并实施省重复上下文；leader 等较杂的组由 devops 的选取权兜底（可只吃种子）。
+
+    Returns:
+        ``(seed, group)``：无 pending 时 seed 为 None、group 空。group 为与种子同提请者
+        的其余 pending 条目，**保持 pending**（不标 in_progress）——唯种子是本轮承诺单元，
+        组包中未被 devops 选取的项留待下轮，worker 死亡也只种子成孤儿。
+        ``len(group) <= max_batch - 1``（护栏：单批 ≤ max_batch 项，含种子）。
+        member 为空的条目不组包（按单项处理），兼容旧数据与手动入队条目。
+    """
+    if not BACKLOG_PATH.exists():
+        return None, []
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    items = data.get("items", [])
+    seed = next((it for it in items if it.get("status") == "pending"), None)
+    if seed is None:
+        return None, []
+    seed["status"] = "in_progress"
+    seed["started_at"] = _now()
+    seed["worktree"] = str(seed.get("id", ""))
+    member = seed.get("member")
+    group: list[dict] = []
+    if member and max_batch > 1:
+        for it in items:
+            if it is seed or it.get("status") != "pending":
+                continue
+            if it.get("member") == member:
+                group.append(it)
+                if len(group) >= max_batch - 1:
+                    break
+    BACKLOG_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return seed, group
+
+
 def backlog_reclaim_orphans() -> list[str]:
     """把所有 in_progress 条目重置为 pending（孤儿回收），返回回收的 id 列表。
 
@@ -123,9 +163,14 @@ def backlog_reclaim_orphans() -> list[str]:
 
 
 def _backlog_set_status(
-    item_id: str, status: str, note: str = "", *, stamp: str = ""
+    item_id: str,
+    status: str,
+    note: str = "",
+    *,
+    stamp: str = "",
+    extra: dict | None = None,
 ) -> None:
-    """把 backlog 条目置为指定 status（可选写时间戳字段与附注）。"""
+    """把 backlog 条目置为指定 status（可选写时间戳字段、附注与额外字段）。"""
     if not BACKLOG_PATH.exists():
         return
     data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
@@ -136,14 +181,31 @@ def _backlog_set_status(
                 item[stamp] = _now()
             if note:
                 item["note"] = note
+            if extra:
+                item.update(extra)
     BACKLOG_PATH.write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
 
 
-def backlog_complete(item_id: str, note: str = "") -> None:
-    """标记 backlog 条目完成（devops 交付后由组长/orch 调用）。"""
-    _backlog_set_status(item_id, "done", note, stamp="done_at")
+def backlog_complete(
+    item_id: str,
+    note: str = "",
+    *,
+    batch_size: int | None = None,
+    batch_seed: str | None = None,
+) -> None:
+    """标记 backlog 条目完成（devops 交付后由组长/orch 调用）。
+
+    batch_size/batch_seed：批量消化时记录本条目所属批次（同批一起 done 的条目数与
+    种子 id），供 orch stats 批量大小分布与审计；单条消化时留空。
+    """
+    extra: dict = {}
+    if batch_size is not None:
+        extra["batch_size"] = batch_size
+    if batch_seed is not None:
+        extra["batch_seed"] = batch_seed
+    _backlog_set_status(item_id, "done", note, stamp="done_at", extra=extra or None)
 
 
 def backlog_needs_leader(item_id: str, note: str = "") -> None:
@@ -190,6 +252,36 @@ def backlog_task_text(item: dict) -> str:
         f"并注明 backlog id={item['id']} 以便销账。\n\n"
         "合并前 git status 检查——若 main 工作区存在会被本次合并触碰的未提交改动，"
         "交付 <blocked> 说明，等待组长清理；无关的未提交改动可照常合并。"
+    )
+
+
+def backlog_batch_text(seed: dict, group: list[dict], *, max_batch: int = 4) -> str:
+    """批量消化任务书：种子（backlog_task_text）+ 同提请者组包菜单 + 选取/销账指令。
+
+    group 为空时退化为 :func:`backlog_task_text`（单项，向后兼容）。devops 自主选取
+    ≥1 项（**必含种子**），可合并为同一 worktree 实施，交付以 ``backlog id=<id1>,<id2>,…``
+    列出**本次完成的全部 id**，orch 逐 id 销账；未选项留 pending 下轮；单项失败按种子
+    blocked 交付即可（组内其余不连坐）。
+    """
+    base = backlog_task_text(seed)
+    if not group:
+        return base
+    member = seed.get("member", "?")
+    seed_id = seed.get("id", "")
+    menu = "\n".join(
+        f"- `{g.get('id', '')}`：{str(g.get('summary', ''))[:120]}" for g in group
+    )
+    return (
+        f"{base}\n\n---\n\n"
+        f"## 批量菜单（同提请者 `{member}`，自主选题合并实施）\n\n"
+        f"上面是**种子任务**（必做）。以下是同提请者的其余待办，你**可自主选取 ≥0 项**"
+        f"与种子合并实施（含种子单批 ≤ {max_batch} 项）；同提请者≈同模块/同视角，"
+        "合并可省重复上下文。可按需把选中项重写为合并方案/任务书，在**同一 worktree** 实施。\n\n"
+        f"{menu}\n\n"
+        "**选取与销账**：只吃种子也可以（组内其余自动留 pending 下轮）。交付时在 "
+        f"<result> 中以 `backlog id=<id1>,<id2>,…` 列出**本次完成的全部 id**（必含种子 "
+        f"`{seed_id}`），orch 据此逐 id 销账；未完成/未选的**不要**列入。若种子本身受阻，"
+        "照常交付 <blocked>（组内其余不连坐，留 pending）。"
     )
 
 
@@ -292,8 +384,84 @@ def cmd_consult(args) -> int:
     return outcome.code
 
 
+def _fmt_dur(seconds: float) -> str:
+    """秒 → 人类可读时长（h/m/s）。"""
+    if seconds >= 3600:
+        return f"{seconds / 3600:.1f}h"
+    if seconds >= 60:
+        return f"{seconds / 60:.0f}m"
+    return f"{seconds:.0f}s"
+
+
+def backlog_stats() -> dict:
+    """backlog 侧统计：done 条目**等待时长**（proposed→done_at）与**批量大小分布**。
+
+    数据源为 backlog.json（非台账）——proposed/done_at/batch_size 均为 backlog 条目字段
+    （batch_size 由批量消化销账时写入，缺省按 1）。等待时长反映建议从被采纳到落地的时延，
+    批量分布反映 drain 组包消化的实际批大小（backlog 20261010-batch-digest）。
+    """
+    empty = {"done": 0, "pending": 0, "waits_s": [], "batch_dist": {}}
+    if not BACKLOG_PATH.exists():
+        return empty
+    try:
+        data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return empty
+    waits: list[float] = []
+    batch_dist: dict[int, int] = {}
+    done = pending = 0
+    for it in data.get("items", []):
+        st = it.get("status")
+        if st == "pending":
+            pending += 1
+        if st != "done":
+            continue
+        done += 1
+        proposed, done_at = it.get("proposed"), it.get("done_at")
+        if proposed and done_at:
+            try:
+                dt = (
+                    datetime.fromisoformat(str(done_at))
+                    - datetime.fromisoformat(str(proposed))
+                ).total_seconds()
+            except (ValueError, TypeError):
+                dt = -1
+            if dt >= 0:
+                waits.append(dt)
+        try:
+            bs = max(1, int(it.get("batch_size", 1)))
+        except (ValueError, TypeError):
+            bs = 1
+        batch_dist[bs] = batch_dist.get(bs, 0) + 1
+    return {
+        "done": done,
+        "pending": pending,
+        "waits_s": waits,
+        "batch_dist": batch_dist,
+    }
+
+
+def _print_backlog_stats() -> None:
+    """打印 backlog 等待时长 + 批量大小分布（cmd_stats 用；独立于台账数据）。"""
+    bs = backlog_stats()
+    if not bs["done"]:
+        return
+    print("== backlog 消化 ==")
+    waits = sorted(bs["waits_s"])
+    if waits:
+        n = len(waits)
+        median = waits[n // 2] if n % 2 else (waits[n // 2 - 1] + waits[n // 2]) / 2
+        avg = sum(waits) / n
+        print(
+            f"  等待时长（proposed→done）：中位 {_fmt_dur(median)} / 平均 {_fmt_dur(avg)}"
+            f" / 最长 {_fmt_dur(waits[-1])}（n={n}）"
+        )
+    dist = dict(sorted(bs["batch_dist"].items()))
+    print(f"  批量大小分布（done 条目）：{dist}  当前待办={bs['pending']}")
+
+
 def cmd_stats(args) -> int:
-    """三级统计：计划级（--plan）/ 成员级（--member/--days）/ 全体历史。"""
+    """三级统计：计划级（--plan）/ 成员级（--member/--days）/ 全体历史 + backlog 消化。"""
     entries = read_all()
     if args.plan:
         sub = [e for e in entries if e.plan == args.plan]
@@ -311,20 +479,22 @@ def cmd_stats(args) -> int:
     s = summarize(sub)
     if not s["hops"]:
         print(f"{title}：暂无台账数据")
-        return 0
-    print(f"== {title} ==")
-    print(
-        f"  跳数={s['hops']}  总耗时={s['duration_ms'] / 1000:.0f}s  {format_credits(s)}"
-    )
-    for mid, row in sorted(s["by_member"].items()):
+    else:
+        print(f"== {title} ==")
         print(
-            f"  {mid:<10} 跳数={row['hops']:<4} 耗时占比={row['duration_pct']}%  "
-            f"credits占比={row['credits_pct']}%"
+            f"  跳数={s['hops']}  总耗时={s['duration_ms'] / 1000:.0f}s  "
+            f"{format_credits(s)}"
         )
-    kinds: dict[str, int] = {}
-    for e in sub:
-        kinds[e.kind] = kinds.get(e.kind, 0) + 1
-    print(f"  交付分布：{kinds}")
+        for mid, row in sorted(s["by_member"].items()):
+            print(
+                f"  {mid:<10} 跳数={row['hops']:<4} 耗时占比={row['duration_pct']}%  "
+                f"credits占比={row['credits_pct']}%"
+            )
+        kinds: dict[str, int] = {}
+        for e in sub:
+            kinds[e.kind] = kinds.get(e.kind, 0) + 1
+        print(f"  交付分布：{kinds}")
+    _print_backlog_stats()
     return 0
 
 

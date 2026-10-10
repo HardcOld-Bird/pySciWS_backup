@@ -13,9 +13,11 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
 - **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
   worker 遗留，重置 pending），并顺带清理其残留 worktree/branch
   （:func:`cleanup_orphan_worktrees`，worktree 名 = 条目 id，``--force`` 摘除 + ``prune``
-  兜底，只清孤儿名不误删活跃/手动 worktree）；``backlog_take_first`` → 任务书 →
-  ``do_dispatch("devops")`` → 销账；单项失败（blocked/run_failed）标记 needs_leader
-  并**跳过**（一项卡住不阻塞全队列）；额度类失败（quota_exhausted）例外——视为系统性
+  兜底，只清孤儿名不误删活跃/手动 worktree）；``backlog_take_batch`` 取队首为种子 +
+  同提请者组包（≤ :data:`BATCH_MAX` 项）→ 批量任务书（种子必做 + 组包菜单，devops 自主
+  选取合并实施）→ 一次 ``do_dispatch("devops")`` → 解析交付 ``backlog id=<ids>`` 逐 id
+  销账；未选组包项留 pending 下轮；失败（blocked/run_failed）仅**种子** needs_leader、
+  组包不连坐（一项卡住不阻塞全队列）；额度类失败（quota_exhausted）例外——视为系统性
   故障**全局停止**（当前条目复位 pending、剩余保持 pending、.done 注明）；run 日志
   逐行落 ``state/devops-runs/<ts>.log``，全部完成写 ``<ts>.done``（JSON 摘要）。
   ``.done`` 是干净完成信号：stale 锁若缺对应 ``.done`` 即 worker 被中途杀死（崩溃），
@@ -45,13 +47,16 @@ from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from .registry import orchestration_rel
 from .workflow import (
+    backlog_batch_text,
     backlog_complete,
     backlog_needs_leader,
     backlog_reclaim_orphans,
     backlog_requeue,
-    backlog_take_first,
-    backlog_task_text,
+    backlog_take_batch,
 )
+
+#: 单批消化上限（护栏）：种子 + 同提请者组包 ≤ 此数（backlog 20261010-batch-digest）。
+BATCH_MAX: int = 4
 
 #: drain 互斥锁（JSON: pid/started/run_log）；仅 orch 与 devops drain 读写。
 LOCK_PATH: Path = ORCH_STATE_ROOT / "devops.lock"
@@ -69,6 +74,13 @@ DRY_ENV: str = "PYSCI_ORCH_DRAIN_DRY"
 CANCEL_PATH: Path = ORCH_STATE_ROOT / "devops.cancel"
 
 _COMMIT_RE = re.compile(r"commit[^0-9a-f]{0,16}\b([0-9a-f]{7,40})\b", re.IGNORECASE)
+
+#: 交付正文的 ``backlog id=<id1>,<id2>,…`` 清单（批量消化逐 id 销账依据）。id 仅含
+#: 字母数字/-/_，故捕获在遇中文/标点即止；分隔容忍 ``,``/``、``/空白。
+_BACKLOG_IDS_RE = re.compile(
+    r"backlog\s+id\s*[:=]\s*([0-9A-Za-z_\-]+(?:\s*[,、]\s*[0-9A-Za-z_\-]+)*)",
+    re.IGNORECASE,
+)
 
 
 def _now() -> str:
@@ -321,6 +333,20 @@ def _extract_commit(body: str) -> str:
     return m.group(1) if m else ""
 
 
+def _extract_backlog_ids(body: str) -> list[str]:
+    """从交付正文提取 ``backlog id=<id1>,<id2>,…`` 清单（本次完成的 backlog id）。
+
+    多处出现合并去重（保序）；无匹配返回空列表。批量消化据此逐 id 销账。
+    """
+    ids: list[str] = []
+    for m in _BACKLOG_IDS_RE.finditer(body or ""):
+        for tok in re.split(r"[,、]", m.group(1)):
+            tok = tok.strip()
+            if tok and tok not in ids:
+                ids.append(tok)
+    return ids
+
+
 # ---------------------------------------------------------------------------
 # 孤儿 worktree 清理（reclaim 顺带；与 pysci-dev worktree 同布局：.qoder/worktrees/<name> + wt-<name>）
 # ---------------------------------------------------------------------------
@@ -377,22 +403,50 @@ def cleanup_orphan_worktrees(
 # ---------------------------------------------------------------------------
 # drain 循环
 # ---------------------------------------------------------------------------
-def _drain_one(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str, Any]:
-    """消化单个 backlog 条目：派发 devops → 销账（成功）/ needs_leader（失败跳过）/
-    quota_exhausted（系统性故障：复位 pending，调用方据此全局停止）。
+def _drain_batch(
+    seed: dict[str, Any], group: list[dict[str, Any]], run_log: Path, *, dry: bool
+) -> list[dict[str, Any]]:
+    """消化一批（种子 + 同提请者组包菜单）：一次派发 devops → 逐交付 id 销账。
+
+    - **result**（code 0）：解析交付 ``backlog id=<ids>``，与本批取交集逐 id 销账 done
+      （种子必含——必做项，防御性兜底）；组包中未选的项保持 pending 留待下轮；每个 done
+      项记 ``batch_size``/``batch_seed``（供 orch stats 批量分布）。
+    - **blocked/run_failed/parse_error/验收FAIL**：仅**种子** → needs_leader，组包项保持
+      pending（**不连坐**——它们未被承诺、未 in_progress）。
+    - **quota_exhausted**：种子复位 pending、组包项保持 pending，返回 quota 状态由调用方
+      触发全局停止（系统性故障，不逐项 needs_leader）。
 
     Returns:
-        结果字典（写入 .done 的 items 列表）：``{id, status, commit?, kind?, elapsed_s}``。
+        per-id 结果字典列表（写入 .done 的 items）：种子/每个完成组包项各一条
+        ``{id, status, commit?, kind?, batch_size?, batch_seed?, elapsed_s}``。
     """
-    item_id = str(item.get("id", ""))
-    summary = str(item.get("summary", ""))[:60]
-    _log(run_log, f"[→] 消化 {item_id}: {summary}")
+    seed_id = str(seed.get("id", ""))
+    group_ids = [str(g.get("id", "")) for g in group if g.get("id")]
+    batch_ids = [seed_id, *group_ids]
+    label = seed_id if not group_ids else f"{seed_id}(+{len(group_ids)})"
+    _log(run_log, f"[→] 消化批次 {label}: {str(seed.get('summary', ''))[:50]}")
     t0 = time.time()
 
     if dry:
-        backlog_complete(item_id, note="drain --dry 干跑（未实派 devops）")
-        _log(run_log, f"[dry] {item_id} 干跑销账完成")
-        return {"id": item_id, "status": "dry", "elapsed_s": round(time.time() - t0, 1)}
+        # 干跑：模拟 devops 吃下整批（种子+组包），逐 id 销账
+        for bid in batch_ids:
+            backlog_complete(
+                bid,
+                note="drain --dry 干跑（未实派 devops）",
+                batch_size=len(batch_ids),
+                batch_seed=seed_id,
+            )
+        _log(run_log, f"[dry] 批次 {label} 干跑销账 {len(batch_ids)} 项完成")
+        return [
+            {
+                "id": bid,
+                "status": "dry",
+                "batch_size": len(batch_ids),
+                "batch_seed": seed_id,
+                "elapsed_s": round(time.time() - t0, 1),
+            }
+            for bid in batch_ids
+        ]
 
     from .dispatch import (
         do_dispatch,  # 延迟导入：避免 drain↔dispatch 环（dispatch 不依赖 drain）
@@ -400,47 +454,82 @@ def _drain_one(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str, A
 
     outcome = do_dispatch(
         "devops",
-        text=backlog_task_text(item),
-        slug=item_id,
+        text=backlog_batch_text(seed, group, max_batch=BATCH_MAX),
+        slug=seed_id,
         session="latest",
         quiet=True,
     )
     elapsed = round(time.time() - t0, 1)
+
     if outcome.code == 0:
         commit = _extract_commit(outcome.body)
-        backlog_complete(item_id, note=f"drain 自动销账（commit {commit or '未报告'}）")
-        _log(run_log, f"[√] {item_id} 完成（{elapsed}s，commit={commit or '-'}）")
-        return {
-            "id": item_id,
-            "status": "done",
-            "commit": commit,
-            "elapsed_s": elapsed,
-        }
-    # 额度类失败 = 系统性故障：本条目无罪，复位 pending 待渠道恢复（不 needs_leader）；
-    # 由 drain_backlog 据本 status 触发全局停止（剩余条目保持 pending）
+        listed = _extract_backlog_ids(outcome.body)
+        # 只销账本批内的 id；种子必 done（result=成功且种子为必做项，防御漏报）
+        completed = [seed_id]
+        for did in listed:
+            if did in batch_ids and did not in completed:
+                completed.append(did)
+        for cid in completed:
+            backlog_complete(
+                cid,
+                note=f"drain 批量销账（commit {commit or '未报告'}）",
+                batch_size=len(completed),
+                batch_seed=seed_id,
+            )
+        _log(
+            run_log,
+            f"[√] 批次 {label} 完成：销账 {len(completed)} 项（{', '.join(completed)}；"
+            f"{elapsed}s，commit={commit or '-'}）",
+        )
+        return [
+            {
+                "id": cid,
+                "status": "done",
+                "commit": commit,
+                "batch_size": len(completed),
+                "batch_seed": seed_id,
+                "elapsed_s": elapsed,
+            }
+            for cid in completed
+        ]
+
+    # 额度类失败 = 系统性故障：种子无罪复位 pending，组包保持 pending；调用方据此全局停止
     if outcome.kind == "quota_exhausted":
         err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
-        backlog_requeue(item_id, note="额度类全局停止，复位待渠道恢复")
-        _log(run_log, f"[Q] {item_id} 额度耗尽 → 复位回队，触发全局停止：{err[:120]}")
-        return {
-            "id": item_id,
-            "status": "quota_exhausted",
+        backlog_requeue(seed_id, note="额度类全局停止，复位待渠道恢复")
+        _log(
+            run_log,
+            f"[Q] 批次 {label} 额度耗尽 → 种子复位回队，触发全局停止：{err[:120]}",
+        )
+        return [
+            {
+                "id": seed_id,
+                "status": "quota_exhausted",
+                "error": err[:200],
+                "elapsed_s": elapsed,
+            }
+        ]
+
+    # 失败（blocked / run_failed / parse_error / 验收 FAIL）→ 仅种子 needs_leader；
+    # 组包项保持 pending（不连坐：未被承诺、未 in_progress，留待下轮）
+    err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
+    backlog_needs_leader(
+        seed_id, note=f"drain 跳过（交付={outcome.kind}）：{err[:160]}"
+    )
+    _log(
+        run_log,
+        f"[!] 批次 {label} 失败 → 种子 needs_leader（{outcome.kind}），"
+        f"组包 {len(group_ids)} 项保持 pending 不连坐：{err[:120]}",
+    )
+    return [
+        {
+            "id": seed_id,
+            "status": "needs_leader",
+            "kind": outcome.kind,
             "error": err[:200],
             "elapsed_s": elapsed,
         }
-    # 失败（blocked / run_failed / parse_error / 验收 FAIL）→ 跳过并标记 needs_leader
-    err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
-    backlog_needs_leader(
-        item_id, note=f"drain 跳过（交付={outcome.kind}）：{err[:160]}"
-    )
-    _log(run_log, f"[!] {item_id} 跳过→needs_leader（{outcome.kind}）：{err[:120]}")
-    return {
-        "id": item_id,
-        "status": "needs_leader",
-        "kind": outcome.kind,
-        "error": err[:200],
-        "elapsed_s": elapsed,
-    }
+    ]
 
 
 def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
@@ -487,14 +576,14 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                 summary["stopped"] = "cooperative"
                 _log(run_log, "[s] 收到协作停止信号，干净退出（条目间隙，无在途消费）")
                 break
-            item = backlog_take_first()
-            if item is None:
+            seed, group = backlog_take_batch(BATCH_MAX)
+            if seed is None:
                 break
-            res = _drain_one(item, run_log, dry=dry)
-            summary["items"].append(res)
-            if res.get("status") == "quota_exhausted":
-                # 系统性故障 → 全局停止：当前条目已在 _drain_one 内复位 pending，
-                # 剩余条目未取用仍 pending；释放锁与写 .done 由 finally 统一处理
+            results = _drain_batch(seed, group, run_log, dry=dry)
+            summary["items"].extend(results)
+            if any(r.get("status") == "quota_exhausted" for r in results):
+                # 系统性故障 → 全局停止：种子已在 _drain_batch 内复位 pending，
+                # 组包与剩余条目未承诺仍 pending；释放锁与写 .done 由 finally 统一处理
                 summary["stopped"] = "quota_exhausted"
                 summary["error"] = (
                     "系统性故障：模型渠道额度耗尽（quota_exhausted）——全局停止，"

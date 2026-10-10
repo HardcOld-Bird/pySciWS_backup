@@ -47,6 +47,12 @@ gitignore）；需要真实数据验证时以绝对路径只读引用主树。
 `wt-<id>` 名 `git worktree remove --force` + `branch -D` 清理残留（否则重派 `worktree add`
 撞名失败）。手动/组长临时派发可用任意名——不属孤儿、不会被自动清理（防误删并发作业）。
 
+**批量消化任务书**（drain 组包，backlog 20261010-batch-digest）：任务书可能含**种子**（必做）
++ 同提请者**组包菜单**。你**自主选取 ≥1 项**（必含种子；可只吃种子），把选中项合并到
+**同一 worktree**（名 = 种子 id）实施，可按需重写为合并方案。交付时在 `<result>` 以
+`backlog id=<id1>,<id2>,…` 列出**本次完成的全部 id**（必含种子），orch 逐 id 销账；未完成的
+**不要**列入（留 pending 下轮）。种子受阻照常交付 `<blocked>`（组包不连坐）。
+
 ## 技能部署（真本 → 副本）
 
 - 真本：`orchestration/skills/<name>/`（git 跟踪）；manifest：同目录 `manifest.toml`；

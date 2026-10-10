@@ -440,13 +440,16 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
   · `orch drain-stop` 协作式停止：写 state/devops.cancel（指向当前锁持有者 pid），worker
     每项间隙消费→干净退出（释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；
     陈旧信号（pid≠本进程）清除且不误停接棒 worker；锁空闲时 drain-stop 不写信号（no-op）
-→ drain 每项：取队首 → 生成任务书（含合并安全句）→ dispatch devops worktree 实施（§7）
-  → 测试验证 → git 提交（+ `timeout 25 git push origin main` best-effort，失败忽略，
-  用户裁决 2026-10-10）→ 交付
-  · 成功 → backlog 销账（done，记 commit hash）
-  · 失败（blocked/run_failed）→ 标记 needs_leader 并**跳过**（一项卡住不阻塞全队列）
-  · 额度类失败（quota_exhausted）→ **全局停止**：当前条目复位 pending（非 needs_leader）、
-    剩余条目保持 pending、释放锁、.done 注明系统性故障；渠道恢复后下次唤醒自动续消化
+→ drain 每批：取队首为**种子** + 收集同提请者(member) pending 为**组包**（含种子 ≤4 项，
+  同提请者≈同模块/同视角）→ 批量任务书（种子必做 + 组包菜单，devops 自主选取合并实施，
+  单 worktree=种子 id）→ dispatch devops（§7）→ 测试验证 → git 提交（+ `timeout 25 git
+  push origin main` best-effort，失败忽略，用户裁决 2026-10-10）→ 交付列 `backlog id=<ids>`
+  · 成功 → 按交付 id 清单**逐 id 销账**（done，记 commit hash + batch_size/batch_seed）；
+    组包中未选项保持 pending 留待下轮（devops 可只吃种子）
+  · 失败（blocked/run_failed）→ 仅**种子** needs_leader、组包项保持 pending（**不连坐**，
+    一项卡住不阻塞全队列）
+  · 额度类失败（quota_exhausted）→ **全局停止**：种子复位 pending（非 needs_leader）、
+    组包与剩余条目保持 pending、释放锁、.done 注明系统性故障；渠道恢复后下次唤醒自动续消化
 → run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
   态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕vs**干净完成
   后锁残留**〔.done 存在〕）、最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
