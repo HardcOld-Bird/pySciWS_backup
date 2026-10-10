@@ -15,9 +15,9 @@
       }
     },
     "devops": {
-      "source_hash": "b58d62e0deb72f7d96d2d05ff77b3acd0eb2d6133cc31d2baae34db988ceb6ce",
+      "source_hash": "0cb8b2d3b4516fe33aeab85f6e114c0ffb98f90e9299bf0163dbf57bda48a4b2",
       "targets": {
-        "orchestration/pods/devops/.qoder/skills/devops": "b58d62e0deb72f7d96d2d05ff77b3acd0eb2d6133cc31d2baae34db988ceb6ce"
+        "orchestration/pods/devops/.qoder/skills/devops": "0cb8b2d3b4516fe33aeab85f6e114c0ffb98f90e9299bf0163dbf57bda48a4b2"
       }
     },
     "comsol-simulation": {
