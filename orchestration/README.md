@@ -433,6 +433,10 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
   锁 FIFO 串行消化整个 backlog（组长零阻塞、零轮询，对齐 §4.5 等待模型）
   · --no-wake 只入队不唤醒；锁忙（已有 worker）不重复 spawn，本项由当前 drain 接手
   · 锁 stale（持有进程死 / 锁龄 >6h）自动接管，防 worker 崩溃后死锁
+  · 获锁即回收孤儿 in_progress 条目（前任 worker 中途被杀的遗留）重置 pending，并顺带
+    清理其残留 worktree/branch（`git worktree remove --force wt-<id>` + `branch -D` +
+    `prune` 兜底）——worktree 名 = 条目 id（take_first 记录、任务书指定），只清孤儿名、
+    不误删活跃/手动 worktree
   · `orch drain-stop` 协作式停止：写 state/devops.cancel（指向当前锁持有者 pid），worker
     每项间隙消费→干净退出（释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；
     陈旧信号（pid≠本进程）清除且不误停接棒 worker；锁空闲时 drain-stop 不写信号（no-op）
@@ -444,7 +448,8 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
   · 额度类失败（quota_exhausted）→ **全局停止**：当前条目复位 pending（非 needs_leader）、
     剩余条目保持 pending、释放锁、.done 注明系统性故障；渠道恢复后下次唤醒自动续消化
 → run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
-  态（running/idle/stale）、最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
+  态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕vs**干净完成
+  后锁残留**〔.done 存在〕）、最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
   needs_leader 提醒（组长据此重派/改任务书/上报）
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
 ```
