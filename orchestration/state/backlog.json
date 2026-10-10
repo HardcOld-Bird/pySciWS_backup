@@ -77,6 +77,16 @@
       "summary": "orch write_taskbook 写 inbox 任务书不带结尾换行符，触发 pre-commit end-of-file-fixer 拦截含任务书的提交（本笔 Phase 4 提交实测被撞回）",
       "evidence": "复现：dispatch 任意任务后 git add inbox 任务书并 commit → end-of-file-fixer Failed 并改写文件。期望：write_taskbook 落盘文本以 \n 结尾（dispatch.py 两处 write_text）",
       "proposed": "2026-10-10"
+    },
+    {
+      "id": "20261010-orch-auto-wake-devops",
+      "member": "leader",
+      "status": "done",
+      "summary": "orch approve 后自动以分离进程唤醒 devops，FIFO 串行消化 backlog（锁防并发、needs_leader 跳过、run 日志/.done、status 展示）——补齐 README §6 设计意图与实现的缺口",
+      "evidence": "用户问询实锤缺口：backlog 9 项仅 1 项被手动派发消化，approve 无自动唤醒。任务书 orchestration/tmp-task-autowake.md（插队理由：元基础设施，越早落地全队列越早自动化）",
+      "proposed": "2026-10-10",
+      "note": "bfb3754 实施 + 8c7a7d7 合并；组长手动销账（该条目不走 drain 队列）",
+      "done_at": "2026-10-10T08:05:00+08:00"
     }
   ]
 }
