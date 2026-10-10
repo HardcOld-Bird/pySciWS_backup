@@ -173,34 +173,55 @@
     {
       "id": "20261010-devops-push-after-commit",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "summary": "devops worktree 流程：cz commit 后尝试一次限时 push（best-effort，失败即忽略）",
       "evidence": "用户裁决 2026-10-10：本机全程校园网，有时可直连 GitHub；不开常驻代理（带宽低/不稳，意外接管网络反有害）。要求 devops 每次 commit 后尝试一次 push，失败当预期不处理——长期总会有成功的一次，push 本不着急。remote=origin(github backup, https)，无持久代理（已核）。实现：devops 技能 SKILL.md worktree 规程第5步后加 `timeout 25 git push origin main`（或等价限时），忽略一切失败（网络/认证/超时），不重试、不设代理；charter「禁止 push」改为「限时尝试 push、失败忽略」。超时是硬要求（直连失败/凭据缺失会挂起阻塞 drain）。push 按分支增量，首次成功即带上此前所有积压提交。",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T12:11:15+08:00",
+      "done_at": "2026-10-10T12:23:05+08:00",
+      "note": "drain 自动销账（commit 082fb48）"
     },
     {
       "id": "20261010-reclaim-worktree-cleanup",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "summary": "drain 孤儿回收顺带清理死 worker 残留的 worktree/branch；.done 作为干净完成信号 surfaced",
       "evidence": "现状：backlog_reclaim_orphans 只复位 backlog 条目，不清理 worktree。若 devops 在 worktree 内中途死亡，残留 wt-<slug> worktree+branch 会使重派时 `git worktree add -b wt-<slug>` 撞名失败（2026-10-10 一度疑似发生，后证实为误报，但缺口真实存在）。要求：drain 派发时把所用 worktree 名记入 backlog 条目（或 run state），reclaim 孤儿时对该 worktree `git worktree remove --force`+`git branch -D`；兜底 `git worktree prune` 清悬挂管理项；不自动删非孤儿/活跃 worktree（防误删并发手动作业）。另：orch status 明确 surfacing「pid 死但无 .done = 崩溃」vs「.done 存在 = 干净完成」，作为用户判断 devops 状态的依据。",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T12:23:05+08:00",
+      "done_at": "2026-10-10T12:55:52+08:00",
+      "note": "drain 自动销账（commit 12640ac）"
     },
     {
       "id": "20261010-batch-digest",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "summary": "drain 批量消化：按提请者分组，devops 自主选题合并实施，逐 id 销账",
       "evidence": "用户裁决 2026-10-10（细化计划已审）。规格：drain 取队首为种子→收集同 member(提请者) 的全部 pending 为「组包」→任务书呈现种子+组包菜单→devops 自主选取≥1项(必含种子)，可重写为合并方案/任务书，单 worktree 实施→交付列 `backlog id=<id1>,<id2>,…`→orch 逐 id 销账；未选项留 pending 下轮；组内单项失败按项 needs_leader 不连坐；护栏单批≤4项。orch stats 增加等待时长(proposed→done)与批量大小分布。启发式依据：figure 的3项全落 scientific_plotting（同提请者≈同模块/同视角）；leader 组较杂→靠 devops 选取权兜底(可只吃种子)。「文件域不相交才双 worker」的受限并行维持数据触发、不预支。",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T12:55:52+08:00",
+      "done_at": "2026-10-10T13:25:01+08:00",
+      "note": "drain 自动销账（commit 07133ff）"
     },
     {
       "id": "20261010-model-map-refresh",
       "member": "leader",
-      "status": "pending",
+      "status": "done",
       "summary": "drain 启动时解析 --list-models 自动刷新 registry 模型映射 + 手动 refresh-models 命令",
       "evidence": "用户裁决 2026-10-10。关键事实：settings.json 的 model 段只有当前激活模型 UUID(model.name)+preferences，无 name→UUID 目录；人类可读名来自 `--list-models`（账户级查询）。故不能监听 settings.json。规格：orch 在 drain 启动时跑 `--list-models`，正则匹配人类名→UUID（registry 可配名称模式，默认 'Qwen-3.8-Max'→max、'Qwen-3.8-Flash'→flash_fallback、内置无UUID的 'Qwen3.8-Flash'→flash），写回 registry.models；另提供手动 `pysci-orch refresh-models`。重配 BYOK 后下次 drain 自愈，零 daemon。注意：依赖 BYOK 模型命名为 Qwen-3.8-Max/Flash（当前如此），改名则更新 registry 名称模式。当前 registry 已手动绑定正确 UUID（max=982ae403…/flash_fallback=ed6f5996…），本项是让其自动维持。",
-      "proposed": "2026-10-10"
+      "proposed": "2026-10-10",
+      "started_at": "2026-10-10T13:25:01+08:00",
+      "done_at": "2026-10-10T13:39:33+08:00",
+      "note": "drain 自动销账（commit 289d763）"
+    },
+    {
+      "id": "20261010-122305-devops",
+      "member": "devops",
+      "summary": "难用类（文案矛盾，无 bug）：`workflow.backlog_task_text`（src/pysci/skills/orchestration/tools/workflow.py:178，drain 与 dispatch --from-backlog 共用模板）仍向 devops 任务书注入「commit（不 push——push 须用户授权）」，与 charter/SKILL 新规「co",
+      "evidence_file": "orchestration/state/suggestions/approved/20261010-122305-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-10T14:18:24+08:00",
+      "note": "采纳：backlog_task_text 模板的「不 push」旧句与 push-after-commit 新规矛盾，是持续误导源。请改模板句为「commit 后按 charter 的 push 规程执行（限时 best-effort、失败忽略）」，并同步 tests 中 '不 push' in text 断言。一行文案+测试，优先级中。"
     }
   ]
 }

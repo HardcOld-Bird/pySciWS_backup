@@ -35,3 +35,8 @@ __pycache__/
 /orchestration/state/ledger/
 /.qoder/skills/orchestration/
 /orchestration/state/backups/
+# drain 运行态：互斥锁（含 pid，纯运行态）与每次 drain 的审计日志/摘要。
+# 永久审计在 git 提交 + backlog.json（每项 commit hash）+ ledger，故运行态文件不入库
+#（避免污染 git status 与误提交陈旧锁）。采纳 devops 建议 20261010-081857。
+/orchestration/state/devops.lock
+/orchestration/state/devops-runs/
