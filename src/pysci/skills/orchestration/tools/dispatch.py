@@ -71,6 +71,8 @@ class DispatchOutcome:
     session_name: str = ""
     task_file: str = ""
     effort: str = ""  # 本跳实际所用的推理强度档位（""=跟随用户级默认）
+    delta_chars: int = 0  # 本跳会话 jsonl 字符增量（相对用量尺子，见 LedgerEntry）
+    est_tokens: int = 0  # = delta_chars × est_tokens_per_char（启发式估算）
     body: str = ""  # 交付正文（result/blocked 块内容）
     checks: list[dict] = field(default_factory=list)
     infra_suggestion: str = ""
@@ -198,6 +200,10 @@ def do_dispatch(
     标注非法时**硬失败且不派发**（code=2）——exe 收到非法档位会启动即失败（实测 rc=1），
     在本层先拦住才拿得到可读原因，也不白烧一跳、不写无意义台账行。
 
+    相对用量（est_tokens）：本跳进出各测一次会话 jsonl 字符数，增量与换算值入台账，
+    结束水位入 registry 会话条目（双渠道 usage 上报全为 0，绝对精度不可得——用户裁决
+    2026-10-10 改做相对排名，backlog 20261010-ledger-est-tokens）。
+
     Returns:
         DispatchOutcome（code=0 仅当 result 交付且声明的机械验收全过）。
     """
@@ -245,6 +251,22 @@ def do_dispatch(
     if not resume:
         _sessions.register_session(m, sid, slug)
     name = slug if not resume else (m.find_session(sid) or {}).get("name", slug)
+
+    # 相对用量尺子（backlog 20261010-ledger-est-tokens，用户裁决 2026-10-10）：双渠道
+    # usage/credits 上报缺口 → 精确 token 不可得，改测「本跳期间会话 jsonl 长多少」。
+    # 增量基准优先取 registry 会话条目里**上一跳记账的水位**：崩溃跳/手动 resume 造成的
+    # 记账外增长不会凭空蒸发，而是计入同一会话的下一跳（总量守恒 → 成员间排名不被漏记
+    # 扭曲）。水位反而高于实测起点，只可能是文件被重写（压缩/清理），此时以实测起点为准。
+    per_char = reg.est_tokens_per_char
+    chars_start = _sessions.session_chars(m, sid)
+    stored_offset = int((m.find_session(sid) or {}).get("chars_offset", 0) or 0)
+    chars_base = min(stored_offset, chars_start) if stored_offset else chars_start
+
+    def measure_usage() -> tuple[int, int, int]:
+        """返回 ``(delta_chars, est_tokens, 本跳结束时的字符水位)``。"""
+        after = _sessions.session_chars(m, sid)
+        delta = max(0, after - chars_base)
+        return delta, int(round(delta * per_char)), after
 
     taskbook = write_taskbook(m.pod, text=text, task_file=task_file, slug=slug)
     replies_body, reply_files = collect_replies(member_id)
@@ -347,6 +369,7 @@ def do_dispatch(
 
     if failed:
         kind = "quota_exhausted" if quota_hit else "run_failed"
+        delta_chars, est_tokens, chars_after = measure_usage()
         append(
             LedgerEntry(
                 ts="",
@@ -360,6 +383,8 @@ def do_dispatch(
                 credits=env_json.total_credits,
                 model=model,
                 effort=level,
+                delta_chars=delta_chars,
+                est_tokens=est_tokens,
                 ctx_ratio=env_json.context_usage_ratio,
                 permission_denials=len(env_json.permission_denials),
                 plan=plan,
@@ -367,7 +392,7 @@ def do_dispatch(
                 error=(err.strip()[-400:] or env_json.stop_reason),
             )
         )
-        _sessions.touch_session(m, sid)
+        _sessions.touch_session(m, sid, chars_offset=chars_after)
         reg.write_member(m)
         reg.save()
         outcome = DispatchOutcome(
@@ -378,6 +403,8 @@ def do_dispatch(
             session_name=name,
             task_file=orchestration_rel(taskbook),
             effort=level,
+            delta_chars=delta_chars,
+            est_tokens=est_tokens,
             body=env_json.result[:800],
             envelope=env_json,
             error=err.strip()[-400:] or env_json.stop_reason,
@@ -396,6 +423,7 @@ def do_dispatch(
     suggestion_id = ""
     if delivery.infra_suggestion.strip():
         suggestion_id = _persist_suggestion(member_id, delivery.infra_suggestion)
+    delta_chars, est_tokens, chars_after = measure_usage()
     entry = LedgerEntry(
         ts="",
         member=member_id,
@@ -410,6 +438,8 @@ def do_dispatch(
         credits=env_json.total_credits,
         model=model,
         effort=level,
+        delta_chars=delta_chars,
+        est_tokens=est_tokens,
         ctx_ratio=env_json.context_usage_ratio,
         permission_denials=len(env_json.permission_denials),
         plan=plan,
@@ -420,7 +450,7 @@ def do_dispatch(
         sent = p.parent / "sent"
         sent.mkdir(exist_ok=True)
         shutil.move(str(p), str(sent / p.name))
-    _sessions.touch_session(m, sid)
+    _sessions.touch_session(m, sid, chars_offset=chars_after)
     reg.write_member(m)
     reg.save()
 
@@ -434,6 +464,8 @@ def do_dispatch(
         session_name=name,
         task_file=orchestration_rel(taskbook),
         effort=level,
+        delta_chars=delta_chars,
+        est_tokens=est_tokens,
         body=delivery.body,
         checks=check_results,
         infra_suggestion=delivery.infra_suggestion,
@@ -487,8 +519,10 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
     dur = env.duration_ms / 1000 if env else 0
     turns = env.num_turns if env else 0
     ctx = env.context_usage_ratio if env else 0
+    est = f"，est≈{o.est_tokens:,} tok" if o.est_tokens else ""
     print(
-        f"[{icon}] {o.member} 交付类型：{o.kind}（{turns} 轮，{dur:.0f}s，ctx={ctx:.0%}）"
+        f"[{icon}] {o.member} 交付类型：{o.kind}"
+        f"（{turns} 轮，{dur:.0f}s，ctx={ctx:.0%}{est}）"
     )
     print(f"    会话：{o.sid[:8]}（{o.session_name}）")
     print(

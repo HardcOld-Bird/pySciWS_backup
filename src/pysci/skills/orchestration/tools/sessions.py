@@ -38,17 +38,55 @@ def register_session(member: Member, sid: str, name: str) -> None:
     )
 
 
-def touch_session(member: Member, sid: str, *, hops_delta: int = 1) -> None:
-    """一跳完成后更新会话元数据（跳数/最后活跃）。"""
+def touch_session(
+    member: Member,
+    sid: str,
+    *,
+    hops_delta: int = 1,
+    chars_offset: int | None = None,
+) -> None:
+    """一跳完成后更新会话元数据（跳数/最后活跃/字符水位）。
+
+    Args:
+        member: 成员条目（就地改，落盘由调用方 ``Registry.save`` 负责）。
+        sid: 会话 id。
+        hops_delta: 本次计入的跳数增量。
+        chars_offset: 本跳结束时会话 jsonl 的**字符水位**。持久化它是为了：会话 jsonl
+            是唯一能客观反映「这一跳说了多少话」的本地存储，而每跳都在独立进程里跑，
+            必须有跨进程的基准点（backlog 20261010-ledger-est-tokens）。水位与本跳实测
+            起点不一致 = 期间存在 orch 记账外的增长（手动 --resume 等）。
+    """
     member.update_session(sid, last_active=_now())
     for s in member.sessions:
         if s.get("sid") == sid:
             s["hops"] = int(s.get("hops", 0)) + hops_delta
+            if chars_offset is not None:
+                s["chars_offset"] = chars_offset
 
 
 def session_jsonl(member: Member, sid: str) -> Path:
     """会话 jsonl 的磁盘路径（存在性 = 会话可 resume 的物理证据）。"""
     return pod_sessions_dir(member.pod) / f"{sid}.jsonl"
+
+
+def session_chars(member: Member, sid: str) -> int:
+    """会话 jsonl 的**字符数**（est_tokens 相对用量尺子的测量面）。
+
+    双渠道（BYOK / 内置）用同一测法 → 同一把尺子，跨档可比（用户裁决 2026-10-10：
+    envelope 与 jsonl 逐轮 usage 在双渠道实测全为 0，绝对精度不可得，只做相对排名）。
+    中文以原生 UTF-8 落盘（实测 6.28 M 字符仅 6 处 ``\\uXXXX`` 转义），故字符数不被
+    转义膨胀扭曲。全量读+解码实测 23 ms（6.3 M 字符），够用即简单——不做字节寻址。
+
+    Returns:
+        字符数；**fail-open**：文件缺失/读不动 → 0（新会话首跳本就从 0 起算）。
+    """
+    path = session_jsonl(member, sid)
+    if not path.exists():
+        return 0
+    try:
+        return len(path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return 0
 
 
 def format_pool(member: Member, limit: int = 5) -> list[str]:

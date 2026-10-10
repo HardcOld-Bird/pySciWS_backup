@@ -31,7 +31,13 @@ from . import sessions as _sessions
 from . import sync as _sync
 from . import workflow as _workflow
 from .dispatch import do_dispatch
-from .ledger import LEDGER_PATH, format_credits, read_all, summarize
+from .ledger import (
+    LEDGER_PATH,
+    format_credits,
+    format_est_tokens,
+    read_all,
+    summarize,
+)
 from .registry import Registry, orchestration_rel, refresh_models
 from .runner import EFFORT_ALIASES, VALID_EFFORTS
 
@@ -305,12 +311,12 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         s = summarize(entries)
         print(
             f"范围筛选后 {s['hops']} 跳；总耗时 {s['duration_ms'] / 1000:.0f}s；"
-            f"{format_credits(s)}"
+            f"{format_est_tokens(s)}；{format_credits(s)}"
         )
         for mid, mrow in sorted(s["by_member"].items()):
             print(
                 f"  {mid:<10} 跳数={mrow['hops']:<4} 耗时占比={mrow['duration_pct']}%  "
-                f"credits占比={mrow['credits_pct']}%"
+                f"est占比={mrow['est_tokens_pct']}%  credits占比={mrow['credits_pct']}%"
             )
         return 0
     if not entries:
@@ -318,9 +324,11 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         return 0
     for e in entries[-args.tail :]:
         checks_s = ",".join(f"{c['check']}:{c['verdict']}" for c in e.checks) or "-"
+        est_s = f"est={e.est_tokens:,}" if e.est_tokens else "est=—"
         print(
             f"{e.ts}  {e.member:<9} {e.kind:<11} sid={e.session_id[:8]} "
             f"{e.num_turns}轮 {e.duration_ms / 1000:.0f}s ctx={e.ctx_ratio:.0%} "
+            f"{est_s} "
             f"credits={e.credits:g}{f'[{e.model}]' if e.model else ''}"
             f"{f'[effort={e.effort}]' if e.effort else ''} "
             f"验收[{checks_s}]"

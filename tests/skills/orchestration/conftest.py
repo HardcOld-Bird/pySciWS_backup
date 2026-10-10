@@ -12,6 +12,7 @@ import json
 import pytest
 
 from pysci.skills.orchestration.tools import dispatch, drain, ledger, registry, workflow
+from pysci.skills.orchestration.tools import sessions as dispatch_sessions
 
 # 2026-10-10 额度事故原文（会话 jsonl 实测）
 QUOTA_TEXT = (
@@ -114,7 +115,45 @@ def iso_dispatch(tmp_path, monkeypatch):
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(dispatch, "SUGGESTIONS_DIR", state / "suggestions")
     monkeypatch.setattr(dispatch, "LINT_RULES_PATH", state / "taskbook-lint.json")
+    # 会话 jsonl 存储面（est_tokens 的测量对象）改到 ``<state>/sessions``：既隔离 est
+    # 增量断言，也防测试真去读开发者机器上 ~10 MB 级的真实会话文件（sessions 直接
+    # import 该函数，故 patch sessions 命名空间而非 registry）
+    monkeypatch.setattr(
+        dispatch_sessions, "pod_sessions_dir", lambda pod: state / "sessions"
+    )
     return state
+
+
+def grow_session(state, sid: str, text: str) -> int:
+    """往隔离会话 jsonl 追加文本（模拟该跳说了话），返回追加后的字符总数。
+
+    真实会话文件是 append-only 的 JSON 行，而 est_tokens 只看字符增量，故测试只需追加。
+    """
+    p = state / "sessions" / f"{sid}.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as fh:
+        fh.write(text)
+    return len(p.read_text(encoding="utf-8"))
+
+
+def enable_registry_save(monkeypatch, state):
+    """让本用例的 ``Registry.save`` 真写隔离 registry.json（断言会话水位落盘用）。
+
+    默认夹具把 save no-op 掉以防污染真实 state；本函数只在 tmp_path 内重建持久化。
+    """
+    reg_file = state / "registry.json"
+
+    def _save(self):
+        reg_file.write_text(
+            json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    monkeypatch.setattr(registry.Registry, "save", _save)
+
+
+def read_registry(state):
+    """读回隔离 registry.json 的 data dict。"""
+    return json.loads((state / "registry.json").read_text(encoding="utf-8"))
 
 
 def set_models(state, **models):
