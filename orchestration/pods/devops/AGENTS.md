@@ -11,6 +11,15 @@
 
 ## 经验（工作中积累）
 
+- **worktree 内跑测试/CLI 的环境选法（2026-10-10 实测，backlog 20261010-orch-watch）**：
+  在 worktree 里直接 `uv run …` 会在 `<wt>/.venv` **新建空环境**（首次即 `Creating virtual
+  environment`；配 `--no-sync` 时缺 pyyaml 等依赖，import 直接崩）。可靠做法：借用主 venv
+  的解释器 + PYTHONPATH 覆盖代码面——
+  `PYTHONUTF8=1 PYTHONPATH="<wt>/src" "D:/…/pySciWS/.venv/Scripts/python.exe" -m pytest "<wt>/tests" -q`。
+  副作用（可利用也可防）：`pysci.paths.PROJECT_ROOT` 由 paths.py 就近找 `pyproject.toml` 决定，
+  故此法下 ORCH_STATE_ROOT/PODS_ROOT 全部指向 **worktree** 内副本——跑 `orch approve`、
+  `dev sync`、`_drain-devops` 等会改 worktree 的 `state/*.json`（backlog.json 被 git 跟踪！）。
+  实验后必须 `git checkout -- orchestration/state/backlog.json` 之类还原，别把演练队列带进提交。
 - **worktree sync 与 `skills-deployed.json`（已修复 2026-10-10，backlog 20261010-003127-devops）**：
   旧坑——本机 `core.autocrlf=true` 无 `.gitattributes`，worktree 检出把文本真本 smudge 成 CRLF、
   main 是混合行尾，而 `sync.tree_hash` 读**原始字节**，致同一真本两侧哈希不同、合并后 `sync --check`
