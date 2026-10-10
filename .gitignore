@@ -40,3 +40,6 @@ __pycache__/
 #（避免污染 git status 与误提交陈旧锁）。采纳 devops 建议 20261010-081857。
 /orchestration/state/devops.lock
 /orchestration/state/devops-runs/
+# orch watch 的基线快照/心跳（backlog 20261010-orch-watch）：纯运行态观察面，
+# 事件已随 orch status 补账清算，无审计价值
+/orchestration/state/watch.json
