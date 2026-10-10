@@ -2,6 +2,9 @@
   "agentsMdExcludes": [
     "**/leader-only.md"
   ],
+  "mcp": {
+    "lazyLoad": true
+  },
   "hooks": {
     "Stop": [
       {

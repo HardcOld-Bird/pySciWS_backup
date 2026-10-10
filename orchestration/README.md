@@ -82,7 +82,7 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
   经 Bash→headless 达成（实测）；程序化调用必须用原生 exe
   （`~/.qoder-cn/bin/qoderclicn/qoderclicn.exe`，`.cmd` 包装器剥引号）；
 - 设置能力：项目级 `mcp.excluded` 可排除用户级 MCP（组长瘦身无需动用户配置的过渡
-  手段）；`mcp.lazyLoad` 可减 MCP 首轮开销。
+  手段）；`mcp.lazyLoad` 可减 MCP 首轮开销（实测见下）。
 
 **平台注入税**（实测 2026-10-10，backlog `20261010-plugin-tax-probe`；工具
 `pysci-dev skilltax`，实现 `src/pysci/skills/devops/tools/skilltax.py`）：原生 CLI
@@ -109,6 +109,18 @@ A/B 验证：`skills.disabled` 补齐 16 项后 theory `skill_listing` 降至 32
 delivery-gate 决定（经用户认可）。落地：全部 10 pod 的 `settings.skills.disabled`
 由 `pysci-dev skilltax --apply` 补齐，`doctor` 增「平台技能税关停核查」哨兵捕获新
 pod 漏配与平台新增技能的漂移面（`应关未关` 缺口）。
+
+**MCP schema 税与 lazyLoad**（实测 2026-10-10，backlog `20261010-mcp-lazyload-probe`）：
+MCP 工具 schema 默认**全量常驻**——会话首跳把所有已连接 server 的工具定义注入上下文
+（非渐进加载）。关停两键：settings `mcp.lazyLoad`（bool，默认 false，**重启生效**）与
+环境变量 `QODER_MCP_LAZY=1`；**无专用 CLI flag**。启用后 CLI 只暴露三枚元工具
+`mcp_list`/`mcp_get`/`mcp_call`，真实工具经元工具按需加载，并注入
+`critical_system_reminder` 附件告知工具已 deferred（**个别 MCP 工具名不再直接可见**，
+模型须经元工具访问）。lit pod（flash 档；arxiv+paper-search 实连、zotero 未连）实测：
+no-op 首跳 `context_usage_ratio` 0.313 → 0.152（**−51.5%**）；真实 arxiv 检索一跳
+0.323 → 0.162（−50.3%），lazy 态模型 2 轮内经单次 `mcp_call` 命中与关闭态**完全相同**
+的结果（arXiv `1208.1832`）、`is_error=false`——**无损，纯上下文收益**。MCP schema 不
+计入知识预算，本项属上下文优化；落地配置见 §8。
 
 ---
 
@@ -609,6 +621,12 @@ backlog 条目经任务书注入，完成经 outbox 交付。
   裁决），orch 派发时传 `--mcp-config .qoder/mcp.json --strict-mcp-config` → 成员 MCP
   集合完全由 pod 决定。归属：comsol→sim；blender-mcp→model3d、drawing；
   arxiv/zotero/paper-search→lit、reviewer、deputy；
+- **多 MCP pod 启 `mcp.lazyLoad`**（实测 2026-10-10，backlog `20261010-mcp-lazyload-probe`，
+  §1.1）：lit/reviewer/deputy 的 `.qoder/settings.json` 加 `"mcp": {"lazyLoad": true}`，
+  首跳不再注入全量 MCP schema（实测省约 50% 起步上下文、真实 arxiv 检索结果不变）。
+  **成员须知**：lazy 态个别 MCP 工具名不再直接可见，一律经元工具 `mcp_list`/`mcp_get`/
+  `mcp_call` 访问（CLI 会注入 `critical_system_reminder` 提示）；各技能按「server+工具名」
+  描述能力即可，勿写死 `mcp__<server>__<tool>` 直调串。sim/model3d/drawing 未实测，暂不启用；
 - 组长侧：**最终不保留任何末端 MCP**（用户裁决：收尾阶段用户级清零）。过渡期可用根
   settings 的 `mcp.excluded` 屏蔽（§1.1）。组长需要文献/仿真信息一律经组员获取；
 - license 纪律：comsol MCP 依赖 COMSOL 单许可证，sim 组员 charter 保留 mcp ensure
