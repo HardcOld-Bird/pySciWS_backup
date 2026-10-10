@@ -31,7 +31,7 @@ from . import sessions as _sessions
 from . import sync as _sync
 from . import workflow as _workflow
 from .dispatch import do_dispatch
-from .ledger import LEDGER_PATH, read_all, summarize
+from .ledger import LEDGER_PATH, format_credits, read_all, summarize
 from .registry import Registry, orchestration_rel
 
 
@@ -272,7 +272,7 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         s = summarize(entries)
         print(
             f"范围筛选后 {s['hops']} 跳；总耗时 {s['duration_ms'] / 1000:.0f}s；"
-            f"credits {s['credits']}"
+            f"{format_credits(s)}"
         )
         for mid, mrow in sorted(s["by_member"].items()):
             print(
@@ -288,6 +288,7 @@ def cmd_ledger(args: argparse.Namespace) -> int:
         print(
             f"{e.ts}  {e.member:<9} {e.kind:<11} sid={e.session_id[:8]} "
             f"{e.num_turns}轮 {e.duration_ms / 1000:.0f}s ctx={e.ctx_ratio:.0%} "
+            f"credits={e.credits:g}{f'[{e.model}]' if e.model else ''} "
             f"验收[{checks_s}]"
             + (" 建议✓" if e.infra_suggestion else "")
             + (f" 计划={e.plan}/{e.step}" if e.plan else "")

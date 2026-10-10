@@ -39,6 +39,11 @@ class Envelope:
     is_error: bool = False
     stop_reason: str = ""
     duration_ms: int = 0
+    # ADR（2026-10-10，backlog 20261009-byok-cost-accounting）：BYOK 下 total_credits 并非恒 0，
+    # 而是**依模型上报**——实测 max 档（Qwen3.8-Max）正常计量、flash 档（Qwen3.8-Flash）恒 0；
+    # usage.input_tokens/modelUsage.contextWindow 在两档均 0，唯 context_usage_ratio 恒有效。
+    # 用户裁决（2026-10-09）完整计费留待未来，故此处只忠实透传 envelope 原值，不做换算/估算；
+    # 成本可解释性由 ledger 记录 model + format_credits 标注覆盖率解决（见 ledger.py ADR）。
     total_credits: float = 0.0
     context_usage_ratio: float = 0.0
     permission_denials: list[Any] = field(default_factory=list)

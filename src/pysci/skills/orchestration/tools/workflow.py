@@ -14,7 +14,7 @@ from pathlib import Path
 from pysci.paths import ORCH_STATE_ROOT
 
 from .dispatch import REPLIES_DIR, do_dispatch
-from .ledger import read_all, summarize
+from .ledger import format_credits, read_all, summarize
 
 SUGGESTIONS_DIR = ORCH_STATE_ROOT / "suggestions"
 BACKLOG_PATH = ORCH_STATE_ROOT / "backlog.json"
@@ -256,8 +256,7 @@ def cmd_stats(args) -> int:
         return 0
     print(f"== {title} ==")
     print(
-        f"  跳数={s['hops']}  总耗时={s['duration_ms'] / 1000:.0f}s  credits={s['credits']}"
-        f"（BYOK 模式下 credits 暂不上报，以耗时/轮数为准）"
+        f"  跳数={s['hops']}  总耗时={s['duration_ms'] / 1000:.0f}s  {format_credits(s)}"
     )
     for mid, row in sorted(s["by_member"].items()):
         print(
