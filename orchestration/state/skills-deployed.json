@@ -2,10 +2,10 @@
   "version": 1,
   "skills": {
     "scientific-plotting": {
-      "source_hash": "073b7a591e53595f6ee244d9e5b86905f95e3af52faa5fddb4cc932b0e664dad",
+      "source_hash": "0cc41d22f52ae501c0cfe907445fabf2ab8723cdabc4a9e034f405c4ae48841a",
       "targets": {
-        "orchestration/pods/figure/.qoder/skills/scientific-plotting": "073b7a591e53595f6ee244d9e5b86905f95e3af52faa5fddb4cc932b0e664dad",
-        "orchestration/pods/deputy/.qoder/skills/scientific-plotting": "073b7a591e53595f6ee244d9e5b86905f95e3af52faa5fddb4cc932b0e664dad"
+        "orchestration/pods/figure/.qoder/skills/scientific-plotting": "0cc41d22f52ae501c0cfe907445fabf2ab8723cdabc4a9e034f405c4ae48841a",
+        "orchestration/pods/deputy/.qoder/skills/scientific-plotting": "0cc41d22f52ae501c0cfe907445fabf2ab8723cdabc4a9e034f405c4ae48841a"
       }
     },
     "orchestration": {
@@ -15,30 +15,30 @@
       }
     },
     "devops": {
-      "source_hash": "0113a2b7687cd63905fc51b86207b3b905caf8aad9822c04595b6a6f65a3483b",
+      "source_hash": "4bd80013a732b0c1d8714ed590a303c1d4922f36b5109adb17a235d9467fb6ef",
       "targets": {
-        "orchestration/pods/devops/.qoder/skills/devops": "0113a2b7687cd63905fc51b86207b3b905caf8aad9822c04595b6a6f65a3483b"
+        "orchestration/pods/devops/.qoder/skills/devops": "4bd80013a732b0c1d8714ed590a303c1d4922f36b5109adb17a235d9467fb6ef"
       }
     },
     "comsol-simulation": {
-      "source_hash": "b7b7c08d7b3511e825ba9c43f533da21a48aefd4f6f3d168c0b4f1960ef8e36f",
+      "source_hash": "cfde2b7c4f3f292d65dc22066a06749e90cd09ff2947c4b9babcc429e2ea39fc",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/comsol-simulation": "b7b7c08d7b3511e825ba9c43f533da21a48aefd4f6f3d168c0b4f1960ef8e36f",
-        "orchestration/pods/sim/.qoder/skills/comsol-simulation": "b7b7c08d7b3511e825ba9c43f533da21a48aefd4f6f3d168c0b4f1960ef8e36f"
+        "orchestration/pods/deputy/.qoder/skills/comsol-simulation": "cfde2b7c4f3f292d65dc22066a06749e90cd09ff2947c4b9babcc429e2ea39fc",
+        "orchestration/pods/sim/.qoder/skills/comsol-simulation": "cfde2b7c4f3f292d65dc22066a06749e90cd09ff2947c4b9babcc429e2ea39fc"
       }
     },
     "document-writing": {
-      "source_hash": "e43ec523938fc7cceb65fc1dfab0ff60941e3cfec987657b9be01bcd42879046",
+      "source_hash": "20786f9c3f4c2fd26e1639a2919a89afe3d30ab2652c78fe58c8f468e9213cb0",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/document-writing": "e43ec523938fc7cceb65fc1dfab0ff60941e3cfec987657b9be01bcd42879046",
-        "orchestration/pods/writing/.qoder/skills/document-writing": "e43ec523938fc7cceb65fc1dfab0ff60941e3cfec987657b9be01bcd42879046"
+        "orchestration/pods/deputy/.qoder/skills/document-writing": "20786f9c3f4c2fd26e1639a2919a89afe3d30ab2652c78fe58c8f468e9213cb0",
+        "orchestration/pods/writing/.qoder/skills/document-writing": "20786f9c3f4c2fd26e1639a2919a89afe3d30ab2652c78fe58c8f468e9213cb0"
       }
     },
     "literature-research": {
-      "source_hash": "4eabf74c8480cdf2dff7fc9e5fbd4a39fe77f78082193098f26856641055abb9",
+      "source_hash": "3d418556969ecd57d6dbae98c3a80c8341add777ad8bd8d623a587bddd51a894",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/literature-research": "4eabf74c8480cdf2dff7fc9e5fbd4a39fe77f78082193098f26856641055abb9",
-        "orchestration/pods/lit/.qoder/skills/literature-research": "4eabf74c8480cdf2dff7fc9e5fbd4a39fe77f78082193098f26856641055abb9"
+        "orchestration/pods/deputy/.qoder/skills/literature-research": "3d418556969ecd57d6dbae98c3a80c8341add777ad8bd8d623a587bddd51a894",
+        "orchestration/pods/lit/.qoder/skills/literature-research": "3d418556969ecd57d6dbae98c3a80c8341add777ad8bd8d623a587bddd51a894"
       }
     },
     "theoretical-computation": {
@@ -49,10 +49,10 @@
       }
     },
     "ai-drawing": {
-      "source_hash": "dc0966466bcad27b8fea24292dec03e0f69149dcdfa0c5d70c3ebde08a343ca2",
+      "source_hash": "ec22926848af3d7ff1c112d0e616b29d5bde03e44855bcbdb63fdbd756275d5c",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/ai-drawing": "dc0966466bcad27b8fea24292dec03e0f69149dcdfa0c5d70c3ebde08a343ca2",
-        "orchestration/pods/drawing/.qoder/skills/ai-drawing": "dc0966466bcad27b8fea24292dec03e0f69149dcdfa0c5d70c3ebde08a343ca2"
+        "orchestration/pods/deputy/.qoder/skills/ai-drawing": "ec22926848af3d7ff1c112d0e616b29d5bde03e44855bcbdb63fdbd756275d5c",
+        "orchestration/pods/drawing/.qoder/skills/ai-drawing": "ec22926848af3d7ff1c112d0e616b29d5bde03e44855bcbdb63fdbd756275d5c"
       }
     },
     "modeling3d": {

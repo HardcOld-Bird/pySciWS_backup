@@ -12,13 +12,17 @@ from types import SimpleNamespace
 import pytest
 
 import pysci.skills.orchestration.tools.sync as sync_mod
+from pysci.skills.devops.tools import budget as budget_mod
 from pysci.skills.devops.tools import dev
 
 
 @pytest.fixture
 def no_pods(tmp_path, monkeypatch):
-    """PODS_ROOT 指向不存在目录 → pod 列表为空，隔离 pod 巡检。"""
+    """PODS_ROOT 指向不存在目录 → pod 列表为空；预算两根同样隔离，只看 sync 台账段。"""
     monkeypatch.setattr(dev, "PODS_ROOT", tmp_path / "empty-pods")
+    monkeypatch.setattr(budget_mod, "SKILLS_ROOT", tmp_path / "no-skills")
+    monkeypatch.setattr(budget_mod, "RULES_ROOT", tmp_path / "no-rules")
+    monkeypatch.setattr(budget_mod, "PODS_ROOT", tmp_path / "empty-pods")
 
 
 def _fake_sync(report: list[str]):
