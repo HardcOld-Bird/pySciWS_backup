@@ -98,7 +98,9 @@ errors are already parsed to `file:line`; open that line in `main.tex`. Backend 
 
 ## Reference files
 
+（`*`=分册索引，按需读单册）
+
 - [latex.md](references/latex.md) — the LaTeX workflow in depth: templates (revtex / article / **beamer**), engines, the compile→verify loop, bibliography handling, manuscript-quality guidance, lint.
 - [read.md](references/read.md) — reading **and writing** pptx / docx / pdf: backends, caches, what each extractor preserves, Markdown outline conventions.
-- [digest.md](references/digest.md) — the `slides digest` interpretation workflow: per-figure loop, SearchReplace anchors, duplicate-figure reuse, resumable status ledger, batch cadence, narrative-review finish.
-- [maintenance.md](references/maintenance.md) — how the backend works and how to fix or extend it (config, log parsing, adding templates, LibreOffice conversion).
+- [digest.md](references/digest.md) * — the `slides digest` interpretation workflow: per-figure loop, SearchReplace anchors, duplicate-figure reuse, resumable status ledger, batch cadence, narrative-review finish.
+- [maintenance.md](references/maintenance.md) * — how the backend works and how to fix or extend it (config, log parsing, adding templates, LibreOffice conversion).

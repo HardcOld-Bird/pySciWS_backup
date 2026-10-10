@@ -61,11 +61,17 @@ gitignore）；需要真实数据验证时以绝对路径只读引用主树。
   worktree 内 sync 提交的 `skills-deployed.json` 对 main 即正确，无需合并后重跑；doctor
   「部署台账巡检（sync --check）」哨兵记录哈希漂移；
 - 红线：只碰 manifest 声明的部署名；**不删除成员自建技能**；不手改部署副本。
+- **真本 references 超 8KB 的处置**（basic.md §1 按需档）：按 `##` 主题拆成
+  `<stem>-0N-<slug>.md` 分册（逐字搬运、拼回原文须逐字节相等），原名留作**分册索引**
+  （列出各册所含小节与尺寸）；所属 SKILL.md 的索引行标 ``*`` 并在节首加一行
+  「（`*`=分册索引，按需读单册）」——SKILL.md 自身也须 ≤8192B（超限就压缩措辞，
+  细节本就在分册里）。改完跑 `pysci-dev doctor` 的预算审计复测。
 
 ## pysci-dev 命令面
 
 ```
-pysci-dev doctor [--pod <id>]   # pod 健康巡检：hooks 接线/leader 规则排除/charter/AGENTS.md 体量/积压 + 部署台账巡检（sync --check 漂移）
+pysci-dev doctor [--pod <id>]   # pod 健康巡检：hooks 接线/leader 规则排除/charter/AGENTS.md 体量/积压
+                                 # + 部署台账巡检（sync --check 漂移）+ harness 预算三档审计（≤8192B/文件）
 pysci-dev sync [--check]        # 技能部署
 pysci-dev worktree add|remove|list [<name>]
 ```

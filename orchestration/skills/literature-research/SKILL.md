@@ -99,10 +99,12 @@ from: [sources.md](references/sources.md).
 
 ## Reference files
 
-- [search.md](references/search.md) — `search` / `get` / `library` / `journal` / `citegraph`: flags, metrics, screening, shortlist schema, snowballing.
-- [read.md](references/read.md) — `read` / `add` / `citecheck` / `index` / `review`: fetch order, extraction, note-merge contract, note schema, **evaluation rubric**.
+（`*`=分册索引，按需读单册）
+
+- [search.md](references/search.md) * — `search` / `get` / `library` / `journal` / `citegraph`: flags, screening, shortlist schema, snowballing.
+- [read.md](references/read.md) * — `read` / `add` / `citecheck` / `index` / `review`: fetch order, extraction, note-merge contract, note schema, **evaluation rubric**.
 - [citecheck.md](references/citecheck.md) — the citation gate: three sources, severity model, audit modes.
 - [rag.md](references/rag.md) — the local semantic index: cleaning, incremental indexing, cost, `.env` keys.
 - [ingest.md](references/ingest.md) — bulk local-PDF ingestion: manifest ledger, priorities, resumability.
 - [sources.md](references/sources.md) — data sources and their limits, debug backdoors.
-- [maintenance.md](references/maintenance.md) — backend internals; fixing and extending.
+- [maintenance.md](references/maintenance.md) * — backend internals; fixing and extending.
