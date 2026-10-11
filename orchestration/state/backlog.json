@@ -582,12 +582,12 @@
       "kind": "usability",
       "success_criteria": "委托（自主推进，见 §15）。",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-233001-leader.md",
-      "status": "needs_leader",
+      "status": "done",
       "proposed": "2026-10-11T23:33:35+08:00",
-      "note": "drain 跳过（交付=run_failed）：tool_use",
+      "note": "组长手工销账（2026-10-12 00:4x）：run_failed 批次由下一跳会话抢救续完，合并 7008a2e→f772bdf，E1 验收测试 55 passed；needs_leader 为运行时中断非规格障碍",
       "started_at": "2026-10-11T23:33:38+08:00",
       "worktree": "20261011-233001-leader",
-      "needs_leader_at": "2026-10-12T00:04:16+08:00"
+      "commit": "7008a2e"
     },
     {
       "id": "20261011-233002-leader",
@@ -596,11 +596,12 @@
       "kind": "usability",
       "success_criteria": "**护栏级决定登记**：minimum 档经用户裁决创建（REFACTOR §1.1），但型号选择原\n属「专门环节」——委托期内组长决定：**minimum 暂映射内置 Qwen3.8-Flash**\n（现唯一零成本渠道，限时免费；credits 恒 0 已实锤）；档位抽象保持独立，\nE3 SiliconFlow 接入后重估是否引入更廉价的压测渠道。决策已入 preference-journal。",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-233002-leader.md",
-      "status": "in_progress",
+      "status": "pending",
       "proposed": "2026-10-11T23:33:36+08:00",
-      "note": "E2（REFACTOR §3/§1.1）。护栏级决定登记：minimum 暂映射内置免费 flash，已在正文与 journal 留痕，E3 后重估。",
+      "note": "组长裁决（12日00:4x）重排队：E2 本身未开工。注意——E1 已全部入 HEAD（7008a2e），E2 不依赖任何未完项；上次会话因转做 E1 抢救未及 E2。若再 blocked，必须写明卡点+已尝试路径（tags 属性可用，E1 已上线）。",
       "started_at": "2026-10-12T00:04:16+08:00",
-      "worktree": "20261011-233002-leader"
+      "worktree": "20261011-233002-leader",
+      "requeued_at": "2026-10-12T00:45:00+08:00"
     },
     {
       "id": "20261011-233003-leader",
@@ -609,10 +610,12 @@
       "kind": "usability",
       "success_criteria": "**委托期边界**：SiliconFlow API Key 只能由用户本人提供（账号与付费面）——\n本单实装全部代码面与 mock 测试，真实连通做成「环境变量就位即用」，缺 Key\n走明确降级；用户早晨给 Key 后一条命令即可验收。",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-233003-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-11T23:33:36+08:00",
       "note": "E3-prep（REFACTOR §4）。真实连通留用户 Key；边界见 REFACTOR §15。",
-      "effort": "high"
+      "effort": "high",
+      "started_at": "2026-10-12T00:28:57+08:00",
+      "worktree": "20261011-233003-leader"
     },
     {
       "id": "20261011-233248-devops",
@@ -632,9 +635,21 @@
       "kind": "defect",
       "success_criteria": "worktree `git worktree remove .qoder/worktrees/20261011-233001-leader` +\nbranch -D wt-20261011-233001-leader。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-001000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T00:06:57+08:00",
-      "note": "E1 续作单：遗留 worktree 半成品抢救（run_failed 为运行时中断非规格障碍）。supersede 原 233001 的 needs_leader 处置。"
+      "note": "组长手工销账（12日00:4x）：scope 已由 233002 批次会话实际完成（7008a2e→f772bdf），本单不再派发以防重做；worktree 清理随合并完成",
+      "commit": "f772bdf"
+    },
+    {
+      "id": "20261012-002857-devops",
+      "member": "devops",
+      "summary": "**交付协议扩展缺「解析器版本」自适配兜底：合并后的当次派发用新属性交付会被判 parse_error**",
+      "kind": "usability",
+      "success_criteria": "构造旧严格解析器路径喂带 tags 的 blocked → parse_delivery 返回 kind=blocked 且 tags=[quota] 并打「解析器早于协议」告警；原 parse_error 用例行为不变；orch-tests 与全量无回归（详见建议正文）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-002857-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T00:32:06+08:00",
+      "note": ""
     }
   ]
 }
