@@ -24,26 +24,25 @@
   旧坑——本机 `core.autocrlf=true` 无 `.gitattributes`，worktree 检出把文本真本 smudge 成 CRLF、
   main 是混合行尾，而 `sync.tree_hash` 读**原始字节**，致同一真本两侧哈希不同、合并后 `sync --check`
   报假漂移。**修复（方案 b）**：`tree_hash` 哈希前规范化 CRLF→LF（技能真本全为 .md/.toml 文本、无
-  二进制，安全），哈希只反映内容。实测：document-writing 旧 raw-byte 哈希 main=dbac3b85/wtree=f97e5e09
-  （漂移，复现建议原值），规范化后两侧均 e43ec523；九技能全 match。**现状**：worktree 内 sync 提交的
-  `skills-deployed.json` 对 main 即正确，**无需**再「合并后在 main 重跑」；doctor 已增「部署台账巡检
-  （sync --check）」哨兵，捕获记录哈希漂移（[*]）与副本漂移（[!]）。未选方案 a（根 .gitattributes）：
-  需仓库级 renormalize、触碰每个文本文件且与用户本地 autocrlf 交互，blast radius 大。
+  二进制，安全），哈希只反映内容。**现状**：worktree 内 sync 写的 `skills-deployed.json` 台账对
+  main 即正确；但 **pod 内的部署副本是 gitignored、不随合并搬运**，故合并后仍须在 main 跑一次
+  `pysci-dev sync`（2026-10-12 实测：合并后 main 侧 orchestration 副本报 [!] 漂移，重跑 sync
+  后 `sync --check` 全等才收工）；doctor 哨兵 [*]=台账哈希漂移、[!]=副本漂移。未选方案 a
+  （根 .gitattributes）：需全库 renormalize、与本机 autocrlf 交互，blast radius 大。
 - **uvx 型 MCP server 的 mcp 2.x 断供风险（2026-10-10 修，backlog 20261010-paper-search-mcp-down）**：
   mcp Python SDK 2.x 移除了 `mcp.server.fastmcp`（FastMCP 更名 MCPServer），凡上游依赖写
   `mcp>=x` 无上限的 uvx server（如 paper-search-mcp 0.1.4）会在新环境解析到 2.x 而启动即崩、
   pod 侧只见 ✗ Disconnected。**修法**：mcp.json args 前插 `["--with", "mcp<2", ...]` 钉住
   （lit/reviewer/deputy 已修，commit 40058e4）。诊断范式：`echo '' | uvx <pkg>` 直看 stderr
   traceback；修复验证用 initialize 握手（stdin 发 JSON-RPC initialize，见 serverInfo 即通）。
-  其他 uvx server（arxiv-mcp-server、blender-mcp、zotero-mcp）暂正常，同类症状先查此项。
+  其他 uvx server 暂正常，同类症状（✗ Disconnected）先查此项。
 - **任务书轻量 lint 规则表由 devops 维护（2026-10-10 建，backlog 20261010-084105-devops）**：
   `write_taskbook`（dispatch.py，dispatch/plan run/drain 唯一落盘口）落盘前扫正文，命中
   `orchestration/state/taskbook-lint.json`（git 跟踪）里任一规则的正则即**打印告警但不阻断**
   派发。**增补规则**：向该 JSON 的 `rules` 追加 `{id, re, hint}`（re 为 Python 正则、JSON 内
   反斜杠双写）；fail-open（文件缺失/损坏/单条正则非法均跳过），故改坏 JSON 会**静默失效**——
   test_taskbook_lint.py::test_repo_shipped_rules_file_valid 在 CI 钉住「随附规则必须可编译」。
-  首期规则 figures-two-positional-args（build/preview/audit 误跟两个位置参数）。与
-  20261009-taskbook-cli-signature（charter/文档侧改正本）互补，勿重复。
+  首期规则 figures-two-positional-args；与 20261009-taskbook-cli-signature（文档侧改正本）互补。
 - **新增 pod 无需预注册 registry.json**：`orch dispatch` 前调 `ensure_member_defaults`，pod 目录
   存在即自动生成默认成员条目（flash/60轮/7200s/`.qoder/mcp.json`）。`doctor` 按 `PODS_ROOT`
   目录计数、也不依赖 registry。故脚手架新 pod 只建目录+只读层文件，注册留给组长首次派发。
@@ -58,13 +57,11 @@
 - **delivery-gate 现执法组员自维护层四条预算**（AGENTS.md ≤8192B / 自建 rules 禁
   always_on / 自建 rules·skills 的 description 合计各 ≤8192B / 自建 SKILL.md ≤8192B），
   口径=落盘字节（CRLF 计税）；`PYSCI_DEPLOYED_SKILLS` 缺失时自建技能那一支不执法。
-  细节写进 devops 技能「harness 预算三层执法」节 + `references/budget-layers.md`。
 - **三层执法已齐（2026-10-10）**：组员侧=delivery-gate Stop、真本侧=pre-commit
-  `harness-budget`（`orchestration/guards/budget_check.py`，stdlib-only，钩子空 venv 里
-  没装本项目）、观测侧=doctor 三档审计。新钩子用 `language: python` 不用 `system`——
-  后者依赖提交上下文 PATH 里有 python，找不到就堵死一切提交。本条所属 devops SKILL.md
-  当时已 8178B，加内容必超 → 按分册程序把细节移进 `references/budget-layers.md`，
-  SKILL.md 回落到 7713B。改真本前先 `wc -c` 是省一轮返工的习惯。
+  `harness-budget`（`guards/budget_check.py`，stdlib-only）、观测侧=doctor 三档审计。
+  新钩子用 `language: python` 不用 `system`——
+  后者依赖提交上下文 PATH 里有 python，找不到就堵死一切提交。真本超预算时按分册程序把细节
+  移进同目录 `references/*.md`；改真本前先 `wc -c` 是省一轮返工的习惯。
 - **pod 脚手架的 git 跟踪面**：每 pod 仅 5 个文件入库（`.gitignore`/`.qoder/settings.json`/
   `.qoder/mcp.json`/`.qoder/rules/charter.md`/`AGENTS.md`）；`bench/`·`outbox/`·`.qoder/skills/`
   被 pod `.gitignore` 排除，`inbox/` 空目录 git 不跟踪——三者均须在**合并后于 main 上**用
@@ -72,10 +69,13 @@
   两个 hook 接线 + `"agentsMdExcludes": ["**/leader-only.md"]`（组长专属根规则；写 `**/*.md`
   会连 `basic.md` 公约数一起吞掉）。勿把 pod 自建规则命名成 `leader-only*`（撞排除 glob）。
 - **agentsMdExcludes 生效性机械哨兵（2026-10-10 建，backlog 20261010-165408-devops）**：
-  静态 doctor 只验 settings 写了 glob、验不出 CLI 真据此排除。`pysci-dev probe` 在 Temp
-  `git init` 造自足 fixture：两枚 always_on 规则各带不可猜 token（keep/hide），control
-  （不排除）与 withexclude（`**/hide.md`）各跑一跳「列出上下文所有 TOK- 标记」，因果断言
-  （hide 在 control 现 + 在 withexclude 消）才判 ok，不灵敏则 inconclusive（重试、绝不误绿）。
-  结论写**无时间戳**台账 `state/agents-md-excludes-probe.json`（staleness=hash{cli_version,
-  排除面}，仅 CLI 升级或 glob 面变时复测），doctor 读它定三档。与预算审计互补：
-  预算量落盘字节，probe 验实际注入。
+  doctor 验不出 CLI 真按 glob 排除，`pysci-dev probe` 在 Temp 造 fixture：两枚 always_on 规则带
+  不可猜 token，control 与 withexclude 各跑一跳做**因果断言**（不灵敏只报 inconclusive、不误绿）；
+  结论落**无时间戳**台账 `state/agents-md-excludes-probe.json`（staleness=hash{cli_version,排除面}，
+  仅 CLI 升级或排除面变时复测），doctor 读它定三档。预算审计量落盘字节，probe 验实际注入。
+- **交付协议扩展有滚动升级窗口（2026-10-12，E1 tags 实测）**：交付正文由派发进程**启动时
+  import 的** `delivery` 解析器读，合并只对此后新起的进程生效——旧解析器只认字面 `<tag>`，
+  带属性的 `<blocked tags="a,b">` 会被判 parse_error。刚合并扩展的那一跳别用新属性交付。
+- **直跑 guard 探针的假绿坑（2026-10-12）**：载荷要填 `last_assistant_message`（guard 不读
+  transcript_path，只喂 transcript 会空跑全绿）；`PYSCI_PROJECT_ROOT` 须用 `cygpath -w` 形态
+  （`/tmp` 被 node 当 `D:\tmp` → 词表 ENOENT → fail-open 放行）。
