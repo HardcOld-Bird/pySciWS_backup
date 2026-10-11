@@ -14,6 +14,7 @@ import pytest
 from pysci.skills.orchestration.tools import (
     dispatch,
     drain,
+    failure_tags,
     ledger,
     registry,
     watch,
@@ -57,6 +58,9 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(workflow, "BACKLOG_PATH", state / "backlog.json")
     monkeypatch.setattr(workflow, "SUGGESTIONS_DIR", state / "suggestions")
     monkeypatch.setattr(workflow, "REPLIES_DIR", state / "replies")
+    monkeypatch.setattr(workflow, "TIER_A_FILED_PATH", state / "tier-a-filed.json")
+    monkeypatch.setattr(ledger, "LEDGER_PATH", state / "ledger" / "deliveries.jsonl")
+    monkeypatch.setattr(failure_tags, "TAGS_PATH", state / "failure-tags.json")
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(dispatch, "LINT_RULES_PATH", state / "taskbook-lint.json")
     monkeypatch.setattr(drain, "LOCK_PATH", state / "devops.lock")

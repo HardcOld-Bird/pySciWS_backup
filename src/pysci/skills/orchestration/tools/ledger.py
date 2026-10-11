@@ -14,6 +14,8 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT
 
+from .failure_tags import failure_counts
+
 LEDGER_PATH: Path = ORCH_STATE_ROOT / "ledger" / "deliveries.jsonl"
 
 #: ``by_effort`` 桶里代表「未标注 → 跟随用户级默认（中）」的哨兵键。真实档位永不会
@@ -37,6 +39,11 @@ class LedgerEntry:
     # 与 infra_suggestion 布尔并存：后者答「有没有建议」，本字段答「建议属哪一类」，
     # 供台账侧统计提案分布、也随交付落盘一份可追溯记录。
     infra_kind: str = ""
+    # E1（REFACTOR §2）：<blocked tags="a,b"> 解析出的失败标签（受控词表见
+    # state/failure-tags.json）。空列表=未标注（合法缺省）；旧行无此字段→[]。
+    # 本字段是 §2.4 阈值自动立案的唯一原料：标签只在这里落一次盘，统计与立案都读
+    # 台账，不再各自解析交付文本（两处解析迟早漂移）。
+    tags: list[str] = field(default_factory=list)
     num_turns: int = 0
     duration_ms: int = 0
     credits: float = 0.0
@@ -105,7 +112,8 @@ def summarize(entries: list[LedgerEntry]) -> dict[str, Any]:
     Returns:
         ``{"hops", "duration_ms", "credits", "credits_metered_hops", "est_tokens",
         "est_tokens_metered_hops", "by_member": {id: {...占比}},
-        "by_effort": {档: {...占比, avg_turns, fail_pct}}}``。
+        "by_effort": {档: {...占比, avg_turns, fail_pct}},
+        "by_failure": {tag: {member: 次数}}}``。
         ``credits_metered_hops`` 为 credits>0 的跳数——BYOK 下计量依模型而定（见
         Ledger.model 处 ADR），故须与 ``hops`` 并读才知成本覆盖率。
         ``est_tokens_metered_hops`` 同理是 est>0 的跳数：本字段上线前的旧行记 0，
@@ -178,7 +186,50 @@ def summarize(entries: list[LedgerEntry]) -> dict[str, Any]:
         "est_tokens_metered_hops": est_hops,
         "by_member": by_member,
         "by_effort": by_effort,
+        # E1（REFACTOR §2）：标签×成员计数（只数带 tags 的行）。窗口由调用方决定——
+        # stats 用 --days/tier_a 滑窗，立案扫描用 registry 的 tier_a 窗，同一函数两种窗。
+        "by_failure": failure_counts(entries),
     }
+
+
+def format_by_failure(
+    by_failure: dict[str, dict[str, int]],
+    *,
+    threshold: int | None = None,
+    vocab: dict[str, str] | None = None,
+) -> str:
+    """把 summarize 的 ``by_failure`` 渲染成对齐多行文本（Tier A 失败标签面）。
+
+    每标签一行：合计 + 「成员×次数」明细（成员按次数降序、同次数按名字典序），
+    标签之间按合计降序。两个可选标注让读数自解释，免得把「已经被人管过」的标签
+    和「还在攒证据」的标签混着看：
+
+    * ``threshold`` 给出时，达阈值的行首打 ``!``——那正是 §2.4 会自动立案的一类；
+    * ``vocab`` 给出时，不在词表内的标签打 ``[词表外]``（历史行里残留的已删标签
+      必须看得见，不能被统计静默吞掉）。
+
+    Args:
+        by_failure: ``summarize()["by_failure"]``。
+        threshold: 立案阈值（registry ``tier_a.threshold``）；None → 不标注。
+        vocab: 受控词表；None → 不校验标签归属。
+
+    Returns:
+        多行字符串（无末行换行）；空输入 → ``"（无失败标签数据）"``。
+    """
+    if not by_failure:
+        return "（无失败标签数据）"
+    rows = []
+    for tag, members in by_failure.items():
+        total = sum(members.values())
+        detail = ", ".join(
+            f"{m}×{n}"
+            for m, n in sorted(members.items(), key=lambda kv: (-kv[1], kv[0]))
+        )
+        mark = "!" if threshold and total >= threshold else " "
+        off = "" if vocab is None or tag in vocab else "[词表外]"
+        rows.append((-total, tag, f"  {mark} {tag:<18}{off} 合计={total:<4} {detail}"))
+    rows.sort()
+    return "\n".join(r[2] for r in rows)
 
 
 def format_est_tokens(summary: dict[str, Any]) -> str:
