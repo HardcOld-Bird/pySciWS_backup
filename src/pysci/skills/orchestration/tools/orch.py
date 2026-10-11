@@ -94,6 +94,11 @@ def cmd_status(args: argparse.Namespace) -> int:
             f"{latest_s}{pod_mark}"
         )
 
+    # Tier A 阈值扫描（REFACTOR §2.4）在读取待办清单**之前**跑：本次新立的案要立刻
+    # 出现在下面的 [建议] 列表里，否则「机械重算」与「呈现」之间差一拍，组长永远看的是
+    # 上一轮的状态（status 是组长最常敲的命令，正是 §0 设计纪律 1 要的硬依赖入口）。
+    for sid in _workflow.tier_a_sweep():
+        print(f"[!] Tier A 阈值立案（自动）：{sid} —— orch suggestions 待审批")
     sugg = _workflow.pending_suggestions()
     back = _workflow.backlog_pending()
     replies_n = (
@@ -363,6 +368,7 @@ def cmd_ledger(args: argparse.Namespace) -> int:
             f"{f'[effort={e.effort}]' if e.effort else ''} "
             f"验收[{checks_s}]"
             + (" 建议✓" if e.infra_suggestion else "")
+            + (f" 标签[{','.join(e.tags)}]" if e.tags else "")
             + (f" 计划={e.plan}/{e.step}" if e.plan else "")
         )
     return 0

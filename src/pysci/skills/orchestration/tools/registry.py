@@ -89,6 +89,17 @@ _MODEL_LINE_RE = re.compile(
 #: 绝对值对外汇报，先按上面这条对照重新标定，别默认 0.6 是测量值。
 DEFAULT_TOKENS_PER_CHAR = 0.6
 
+#: Tier A 阈值自动立案参数（REFACTOR §2.4，用户裁决 v0.5）：同一 ``(标签, 成员)`` 在
+#: **滑窗内**（``window_days`` 天 或 ``window_hops`` 跳，取并集）失败标签出现
+#: ``threshold`` 次 → orch 在 status/approve 入口自动登记基建提案。设计要点：
+#: 计数、立案全代码完成，人只在强制选择点出现——「组长有空去看」不是机制。
+#: registry.json 顶层 ``tier_a`` 块可逐键覆盖（非法值回落默认，见 :meth:`Registry.tier_a`）。
+DEFAULT_TIER_A: dict[str, int] = {
+    "window_days": 14,
+    "window_hops": 20,
+    "threshold": 3,
+}
+
 
 def resolve_exe(registry: dict[str, Any] | None = None) -> Path:
     """定位 qoderclicn 原生 exe（`.cmd` 包装器剥引号，程序化调用必须直连 exe）。
@@ -374,6 +385,29 @@ class Registry:
     def checks(self) -> dict[str, dict[str, Any]]:
         """check 类型 → {cmd: [...含 {path} 占位], cwd: project|pod}。"""
         return self.data.get("checks", {})
+
+    @property
+    def tier_a(self) -> dict[str, int]:
+        """Tier A 滑窗与阈值（见 :data:`DEFAULT_TIER_A`，REFACTOR §2.4）。
+
+        逐键 fail-open：缺失/非数/非正 → 该键回落默认。统计与自动立案都靠这三个数
+        决定「何时算反复出现」，读不到配置不该让它们停摆——宁可按出厂阈值跑。
+
+        Returns:
+            ``{"window_days": int, "window_hops": int, "threshold": int}``。
+        """
+        out = dict(DEFAULT_TIER_A)
+        raw = self.data.get("tier_a")
+        if not isinstance(raw, dict):
+            return out
+        for key, default in DEFAULT_TIER_A.items():
+            try:
+                value = int(raw.get(key, default))
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                out[key] = value
+        return out
 
     @property
     def est_tokens_per_char(self) -> float:

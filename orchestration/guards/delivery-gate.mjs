@@ -1,6 +1,9 @@
-// delivery-gate：交付协议格式强制 + 组员自维护层 harness 预算硬闸（README §3.4 / §9；basic.md §1 三档裁决）。
-// Stop hook：① 最终回复缺 <result>/<blocked> → exit 2 退回改正；② pod 的 AGENTS.md / 自建 rules /
-// 自建 skills 超预算或违规 always_on → exit 2 + 精确整改指令。两类问题一次全报（合并成一轮整改）。
+// delivery-gate：交付协议格式强制 + 失败标签词表校验 + 组员自维护层 harness 预算硬闸
+//（README §3.4 / §9；basic.md §1 三档裁决；REFACTOR §2 tags）。
+// Stop hook：① 最终回复缺 <result>/<blocked> → exit 2 退回改正；② <infra_suggestion> 的
+// kind、<blocked> 的 tags 若存在必须落在受控词表内 → exit 2 + 精确整改指令；③ pod 的
+// AGENTS.md / 自建 rules / 自建 skills 超预算或违规 always_on → exit 2 + 精确整改指令。
+// 多类问题一次全报（合并成一轮整改）。
 //
 // 防循环：stop_hook_active 为真时放行（避免死循环）。
 // fail-open：stdin 解析失败、或预算段自身异常（缺目录、坏 frontmatter、编码意外）一律放行——
@@ -19,14 +22,23 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const LIMIT = 8192;
 const CHARTER = 'charter.md'; // 只读层，always_on 槽位专属；尺寸由 pysci-dev doctor 审计
-const TAG_RE = /<result>[\s\S]*<\/result>|<blocked>[\s\S]*<\/blocked>/;
+// 交付块允许带属性（E1 的 `<blocked tags="…">`），故标签匹配用 `\b[^>]*` 而非字面 `>`——
+// 写死 `<blocked>` 会让**带属性的合法交付**被判成「缺交付块」，把组员逼成不用标签。
+const TAG_RE =
+  /<result\b[^>]*>[\s\S]*<\/result>|<blocked\b[^>]*>[\s\S]*<\/blocked>/;
 // E0-B（REFACTOR §12 判据 1）：改进提案必须结构化分类。infra_suggestion 块非空时
 // kind 属性必填且须落在词表内——这是后续判决包分流（E5）的地基。
 const INFRA_KINDS = ['defect', 'usability'];
 const INFRA_RE = /<infra_suggestion\b([^>]*)>([\s\S]*?)<\/infra_suggestion>/;
+// E1（REFACTOR §2）：`<blocked tags="a,b">` 的失败标签受控词表。词表**只有一份**，
+// 落在 state/failure-tags.json（Python 侧 failure_tags.load_tags() 读同一文件）——
+// 这里不复制清单，否则两侧口径必然漂移（漂移的后果是组员被拦在两边不同的词表下）。
+const BLOCKED_RE = /<blocked\b([^>]*)>([\s\S]*?)<\/blocked>/;
+const VOCAB_REL = ['orchestration', 'state', 'failure-tags.json'];
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -74,6 +86,32 @@ function run() {
           '）。动作：<infra_suggestion kind="defect">（缺陷，附复现证据）' +
           '或 kind="usability"（难用/体验类）；块正文含 kind: 与 success_criteria 标记行供 approve 解析。'
       );
+    }
+  }
+
+  // E1（REFACTOR §2）：<blocked tags="a,b"> 的失败标签必须落在受控词表内——同一条
+  // 「分类必须结构化」的纪律（上面 kind 那条）之失败侧：没有标签，§2.4 的滑窗统计
+  // 就没有原料，深层结构问题永远藏在单条 blocked 里。缺省不标注**合法**（空列表），
+  // 只有标了才校验标得对不对——否则组员会被「不许沉默」和「不许标错」夹住。
+  const blockedMatch = msg.match(BLOCKED_RE);
+  if (blockedMatch) {
+    const tagsM = (blockedMatch[1] || '').match(/\btags\s*=\s*"([^"]*)"/);
+    const tags = tagsM ? splitTags(tagsM[1]) : [];
+    if (tags.length) {
+      const vocab = readVocab();
+      if (vocab === null) {
+        /* fail-open：词表读不到时无法校验，只能放行（留痕见 failOpen） */
+      } else {
+        const bad = tags.filter((t) => !vocab.includes(t));
+        if (bad.length) {
+          problems.push(
+            `<blocked tags> 含词表外标签 ${bad.map((b) => `"${b}"`).join(', ')}（当前 tags="${tagsM[1]}"）。` +
+              `动作：改用下列受控标签，或删掉 tags 属性（不标注合法）；词表在 ` +
+              `orchestration/state/failure-tags.json，增补须附定义并经 devops 交付：\n` +
+              `    ${vocab.join(', ')}`
+          );
+        }
+      }
     }
   }
 
@@ -167,8 +205,42 @@ function budgetProblems(pod, out) {
   }
 }
 
-function over(file, label, bytes, tier, action, out) {
-  if (bytes <= LIMIT) return;
+// ---------------------------------------------------------------------------
+// 失败标签词表（E1，REFACTOR §2）
+// ---------------------------------------------------------------------------
+
+/** tags 属性值 → 标签数组：分隔符宽容（半/全角逗号、分号、空白）、小写化、去重。
+ *  与 Python 侧 failure_tags.parse_tags() 同语义——两侧不一致会让组员看到
+ *  「gate 放行但统计里查无此标签」的分裂行为。 */
+function splitTags(raw) {
+  const out = [];
+  for (const part of (raw || '').split(/[,，;；\s]+/)) {
+    const t = part.trim().toLowerCase();
+    if (t && !out.includes(t)) out.push(t);
+  }
+  return out;
+}
+
+/** 读受控词表的标签键；读不到或形状不符返回 null（调用方放行 + 留痕）。
+ *  根路径优先取 runner.build_env 注入的 PYSCI_PROJECT_ROOT，缺席时按 guard 自身位置
+ *  回溯（orchestration/guards/ → 项目根），使 pod 外的手工调用也能校验。 */
+function readVocab() {
+  const root =
+    process.env.PYSCI_PROJECT_ROOT ||
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const file = path.join(root, ...VOCAB_REL);
+  try {
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const tags = Object.keys((data && data.tags) || {});
+    return tags.length ? tags : null;
+  } catch (e) {
+    /* fail-open：词表缺失/损坏时**不**拦交付——门禁自身故障不得伪装成组员违规 */
+    failOpen('失败标签词表读取', e);
+    return null;
+  }
+}
+
+function over(file, label, bytes, tier, action, out) {  if (bytes <= LIMIT) return;
   out.push(
     `${file}：${label} 实测 ${bytes}B > ${tier}上限 ${LIMIT}B。动作：${action}。`
   );

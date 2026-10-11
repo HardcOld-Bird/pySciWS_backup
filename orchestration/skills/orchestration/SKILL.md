@@ -80,6 +80,8 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 - `<result>`=成功，`<blocked>`=失败（含卡点）；机械验收 FAIL 按 [NEXT] 回派返工，
   同指纹连败 3 次停止回派升级决策；组员 `<infra_suggestion>` 现须带 `kind="defect|usability"`
   （delivery-gate 强制），approve 会把它连同正文 `success_criteria` 一并写入 backlog 条目；
+- `<blocked tags="a,b">` 失败标签入台账/`orch stats` by_failure；滑窗内同 (tag,member)
+  达 registry `tier_a` 阈值 → status/approve 自动立 source=tier-a 提案（细则 references/tier-a-tags.md）；
 - blocked → 三选一：补充重派 / consult 副组长 / 上报用户；
 - 建议审批：approve 入 backlog 并**自动唤醒 devops 后台消化**（分离进程持锁 FIFO 串行；
   锁忙不重复唤醒，单项失败标 needs_leader 跳过、不阻塞队列），**reject 即 override：必须

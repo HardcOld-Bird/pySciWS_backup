@@ -35,7 +35,8 @@ trigger: always_on
 
 - `<verdict>` 只允许 PASS 或 FAIL 两值；任何 rubric 硬项不过 → FAIL；
 - FAIL 时 `<evidence>` 必须给出**可执行的返工指引**（生产者将据此返工）；
-- 无法完成审查（产物缺失、rubric 不适用等）用 `<blocked>` 说明，不要硬给 VERDICT。
+- 无法完成审查（产物缺失、rubric 不适用等）用 `<blocked>` 说明，不要硬给 VERDICT；
+  `<blocked>` 可带 `tags="a,b"` 标注失败类型（词表 `orchestration/state/failure-tags.json`，词表外 gate 退回）。
 
 ## 独立性纪律
 

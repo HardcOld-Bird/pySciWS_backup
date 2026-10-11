@@ -10,20 +10,24 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import journal
 from .delivery import parse_suggestion_fields
 from .dispatch import REPLIES_DIR, do_dispatch
+from .failure_tags import TAGS_PATH, failure_counts, load_tags, within_window
 from .ledger import (
+    LEDGER_PATH,
     format_by_effort,
+    format_by_failure,
     format_credits,
     format_est_tokens,
     read_all,
     summarize,
 )
-from .registry import orchestration_rel
+from .registry import Registry, orchestration_rel
 from .runner import normalize_effort
 
 SUGGESTIONS_DIR = ORCH_STATE_ROOT / "suggestions"
@@ -332,6 +336,8 @@ def cmd_suggestions(args) -> int:
 
 def cmd_approve(args) -> int:
     """采纳建议：入 backlog FIFO + 写审批回复（下次派发自动附送）。"""
+    # Tier A 阈值扫描（REFACTOR §2.4）：每次审批入口机械重算，把越限的失败标签立成案。
+    tier_a_sweep()
     sugg = _find_suggestion(args.suggestion_id)
     if sugg is None:
         print(f"[!] 未找到待审批建议 '{args.suggestion_id}'（orch suggestions 查看）")
@@ -378,14 +384,29 @@ def cmd_approve(args) -> int:
         "proposed": _now(),
         "note": args.note or "",
     }
+    # 提案来源标记（Tier A 自动立案写 `source: tier-a`）随条目入队，让 drain 与人工
+    # 复盘都能看出这条是「统计机制立的案」还是「组员自己提的建议」。
+    source = next(
+        (
+            ln.split(":", 1)[1].strip()
+            for ln in body.splitlines()
+            if ln.strip().lower().startswith("source:")
+        ),
+        "",
+    )
+    if source:
+        entry["source"] = source
     # effort 是**入队时**的组长判断（推理密集项标 high，机械项不标=默认中）；drain 消化
     # 时透传给该跳（见 drain._drain_batch）。getattr 同 no_wake：程序化调用方常建 partial 参数。
     level = normalize_effort(getattr(args, "effort", None))
     if level:
         entry["effort"] = level
     n = _backlog_append(entry)
-    REPLIES_DIR.joinpath(member).mkdir(parents=True, exist_ok=True)
-    (REPLIES_DIR / member / f"{sugg.stem}.md").write_text(
+    # 审批回复的收件人：自动立案没有「提请成员」可回话（member=tier-a 不是真成员，
+    # 回复永远不会被附送），而基建修复的承接方按角色边界就是 devops——归它，回执才落地。
+    reply_member = "devops" if entry.get("source") == "tier-a" else member
+    REPLIES_DIR.joinpath(reply_member).mkdir(parents=True, exist_ok=True)
+    (REPLIES_DIR / reply_member / f"{sugg.stem}.md").write_text(
         f"# 组长审批：采纳（{_now()}）\n\n{args.note or '（无附注）'}\n\n"
         f"已入 backlog（第 {n} 位），devops 将按 FIFO 处理；完成后你会在后续任务中获知。\n",
         encoding="utf-8",
@@ -395,7 +416,7 @@ def cmd_approve(args) -> int:
     sugg.rename(approved / sugg.name)
     print(
         f"[√] 已采纳 {sugg.stem}（kind={kind}）→ backlog 第 {n} 位；"
-        f"审批回复将在下次派发 {member} 时附送。"
+        f"审批回复将在下次派发 {reply_member} 时附送。"
     )
     # 自动唤醒 devops 后台 FIFO 消化 backlog（README §6）；--no-wake 跳过。
     if not getattr(args, "no_wake", False):
@@ -558,6 +579,244 @@ def _print_backlog_stats() -> None:
     print(f"  批量大小分布（done 条目）：{dist}  当前待办={bs['pending']}")
 
 
+#: 立案指纹台账（运行态，gitignore）：``{"version":1,"filed":{fp: 立案时刻}}``。
+TIER_A_FILED_PATH = ORCH_STATE_ROOT / "tier-a-filed.json"
+#: 同一立案指纹的重复抑制窗（REFACTOR §2.4「同指纹 24h 内不重复立案」）。
+TIER_A_DEDUP_HOURS = 24
+
+
+def _load_fingerprints(path: Path) -> dict[str, str]:
+    """读立案指纹台账 ``{fp: 立案时刻 ISO}``；缺失/损坏 → 空（fail-open）。
+
+    读不到只会失去一次去重（可能重复立案一条提案），不会丢数据——提案本体在
+    ``suggestions/`` 里，台账只是「最近立过哪些」的记忆。
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    filed = data.get("filed") if isinstance(data, dict) else None
+    if not isinstance(filed, dict):
+        return {}
+    return {str(k): str(v) for k, v in filed.items() if isinstance(v, str)}
+
+
+def _save_fingerprints(path: Path, fps: dict[str, str]) -> None:
+    """写立案指纹台账（带 ``{fp: ts}`` 原始映射，供人工核对何时立过案）。
+
+    只保留最近 500 个指纹（插入序淘汰）：指纹键含窗口桶，桶随时间单调推进，旧键永不再
+    命中，留着只是让文件无界增长。
+    """
+    keep = dict(list(fps.items())[-500:])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"version": 1, "filed": keep}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _recent_cutoff() -> datetime:
+    """重复抑制窗的起点（现在 − :data:`TIER_A_DEDUP_HOURS` 小时）。"""
+    return datetime.now().astimezone() - timedelta(hours=TIER_A_DEDUP_HOURS)
+
+
+def tier_a_sweep(
+    *,
+    entries: list | None = None,
+    tier: dict[str, int] | None = None,
+    filed_path: Path | None = None,
+) -> list[str]:
+    """§2.4 阈值自动立案：同一 ``(标签, 成员)`` 在滑窗内达阈值 → 登记基建提案。
+
+    在 ``orch status`` / ``orch approve`` 入口机械调用（REFACTOR §0 设计纪律 1：统计必须
+    被流程硬性依赖，不靠「组长有空去看」）。产出的是**待审批提案**
+    ``suggestions/<ts>-tier-a.md``（``kind: defect`` + 正文 ``kind:``/``success_criteria``
+    标记行齐备，故直接走现行 approve 面），而不是直接写 backlog——§5.1 把「是否接受
+    这份判决」设为强制选择点，代码负责把案立到人眼前，人负责点头或 override。
+
+    Args:
+        entries: 台账行（缺省现场 ``read_all()``；测试注入用）。
+        tier: 窗口与阈值参数（缺省读 registry ``tier_a``）。
+        filed_path: 立案指纹台账路径（测试注入用）。
+
+    Returns:
+        本次新立案的提案 id（文件名 stem）列表，按标签名排序；无新案 → ``[]``。
+    """
+    rows = read_all() if entries is None else entries
+    params = tier if tier is not None else Registry.load().tier_a
+    win = within_window(rows, days=params["window_days"], hops=params["window_hops"])
+    counts = failure_counts(win)
+    path = filed_path or TIER_A_FILED_PATH
+    fps = _load_fingerprints(path)
+    cutoff = _recent_cutoff().isoformat(timespec="seconds")
+    vocab = load_tags()
+    open_keys = _open_tier_a_keys()
+    filed: list[str] = []
+    for tag in sorted(counts):
+        for member in sorted(counts[tag]):
+            total = counts[tag][member]
+            if total < params["threshold"]:
+                continue
+            # 窗口桶 = 窗内该 (标签, 成员) 最新一条台账行的日期：同一天内重跑必落同一桶
+            # （幂等），跨天才可能换桶。
+            hit = [r for r in win if _row_has_tag(r, tag, member)]
+            newest = max((_row_ts(r) for r in hit), default="")
+            fp = f"{tag}|{member}|{newest[:10]}"
+            if fps.get(fp, "") >= cutoff:
+                continue  # 同指纹 24h 内立过（§2.4 的去重窗）
+            if f"{tag}|{member}" in open_keys:
+                # 旧案仍在待审批面（既没 approve 也没 reject）→ 不重立。缺这一道，
+                # 窗口桶每天前进就会把「同一个没修好的问题」每天再立一次。
+                continue
+            SUGGESTIONS_DIR.mkdir(parents=True, exist_ok=True)
+            sid = f"{_filed_ts()}-tier-a"
+            n = 0
+            while (SUGGESTIONS_DIR / f"{sid}.md").exists():
+                # 秒级 id 会同名（E4 引出的同类缺陷在 backlog 20261011-233248-devops）：
+                # 一次扫描里立多个案子必须各占一文件，否则后写的把先写的静默覆盖。
+                n += 1
+                sid = f"{_filed_ts()}.{n}-tier-a"
+            body = _tier_a_proposal(
+                tag=tag,
+                member=member,
+                total=total,
+                params=params,
+                rows=hit,
+                definition=vocab.get(tag, ""),
+                fingerprint=fp,
+            )
+            (SUGGESTIONS_DIR / f"{sid}.md").write_text(body, encoding="utf-8")
+            open_keys.add(f"{tag}|{member}")
+            fps[fp] = _now()
+            filed.append(sid)
+    if filed:
+        _save_fingerprints(path, fps)
+    return filed
+
+
+def _open_tier_a_keys() -> set[str]:
+    """仍在待审批面的自动立案键 ``{"tag|member"}``（读提案正文的 ``fingerprint:`` 标记）。
+
+    靠文件内容而非文件名识别来源：提案文件名里只有一个信息位（成员），留给了
+    ``tier-a`` 这个来源标记，具体标签与被立案成员在正文里。
+    """
+    out: set[str] = set()
+    for p in pending_suggestions():
+        try:
+            lines = p.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        if not any(ln.strip().lower() == "source: tier-a" for ln in lines):
+            continue
+        for ln in lines:
+            s = ln.strip()
+            if s.startswith("fingerprint:"):
+                parts = s.split(":", 1)[1].strip().split("|")
+                if len(parts) >= 2:
+                    out.add(f"{parts[0]}|{parts[1]}")
+    return out
+
+
+def _filed_ts() -> str:
+    """提案文件名时间戳（与 dispatch 的 ``_ts()`` 同法：``YYYYMMDD-HHMMSS``）。"""
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def _row_has_tag(row: Any, tag: str, member: str) -> bool:
+    """台账行是否属该成员且带该标签（sweep 取证用，dataclass 与 dict 两种形态都认）。"""
+    if _cell(row, "member", "") != member:
+        return False
+    return tag in (_cell(row, "tags", []) or [])
+
+
+def _row_ts(row: Any) -> str:
+    """台账行的 ``ts``（缺失 → 空串，字典序排最前，不抛）。"""
+    return str(_cell(row, "ts", ""))
+
+
+def _cell(row: Any, name: str, default: Any) -> Any:
+    """属性或字典键两种形态都认（与 :func:`failure_tags._field` 同法，本地不引私有函数）。"""
+    if isinstance(row, dict):
+        return row.get(name, default)
+    return getattr(row, name, default)
+
+
+def _tier_a_proposal(
+    *,
+    tag: str,
+    member: str,
+    total: int,
+    params: dict[str, int],
+    rows: list,
+    definition: str,
+    fingerprint: str,
+) -> str:
+    """自动生成提案正文（approve 面要求的标记行齐备：``kind:`` / ``success_criteria``）。
+
+    行序有讲究：``cmd_approve`` 取「标题+空行+``kind:`` 行之后第一个非空行」当 backlog
+    摘要，故摘要行必须紧跟在 ``kind:`` 行之后、其余 ``source:``/``fingerprint:`` 标记之前。
+
+    证据取台账行引用（最多 8 行，附台账文件相对路径）——立案不靠模型回忆，
+    靠可复核的时间戳与任务书。
+    """
+    refs = "\n".join(
+        f"- {_cell(r, 'ts', '')} {_cell(r, 'kind', '')} "
+        f"tags={','.join(_cell(r, 'tags', []) or [])} "
+        f"任务书={_cell(r, 'task_file', '')}"
+        for r in rows[-8:]
+    )
+    tail = "" if len(rows) <= 8 else f"\n- …（窗内共 {len(rows)} 行，仅列最近 8 行）"
+    return (
+        f"# Tier A 自动立案（{member} × {tag}，待审批）\n\n"
+        f"kind: defect\n"
+        f"**{member} 的 `{tag}` 类失败在 {params['window_days']} 天 / "
+        f"{params['window_hops']} 跳滑窗内累计 {total} 次**"
+        f"（阈值 {params['threshold']}，REFACTOR §2.4 自动立案）\n\n"
+        f"source: tier-a\n"
+        f"fingerprint: {fingerprint}\n\n"
+        f"标签定义（词表 {orchestration_rel(TAGS_PATH)}）："
+        f"{definition or '（词表无定义）'}\n\n"
+        f"## 证据（台账行引用，台账 {orchestration_rel(LEDGER_PATH)}）\n\n"
+        f"{refs}{tail}\n\n"
+        f"## 待判定\n\n"
+        f"- 设施缺陷（补能力/修工具）、流程缺口（改任务书写法或增补词表），"
+        f"还是成员用法问题（回派纠正）？\n"
+        f"- 复核：``orch ledger --member {member} --days {params['window_days']}``\n\n"
+        f"success_criteria:\n"
+        f"- 同一 `(标签={tag}, 成员={member})` 在下一个 {params['window_days']} 天 / "
+        f"{params['window_hops']} 跳滑窗内的计数低于阈值 {params['threshold']}"
+        f"（``orch stats`` 的 by_failure 段可复核）。\n"
+    )
+
+
+def format_failure_section(entries: list, *, tier: dict[str, int] | None = None) -> str:
+    """Tier A 失败标签段（REFACTOR §2）：滑窗计数 + 阈值标注，渲染成可打印多行文本。
+
+    窗口与阈值都取自 registry ``tier_a``（:meth:`Registry.tier_a`），与 :func:`tier_a_sweep`
+    的立案判定同一把尺——统计上看着达标的标签，立案逻辑必须同样够得着，两侧不许各算各的。
+
+    Args:
+        entries: 台账行（已按 --plan/--member/--days 过滤过的那批）。
+        tier: 覆盖窗口参数（测试注入用）；缺省现场读 registry。
+
+    Returns:
+        以标题行开头的多行文本（无末行换行）。
+    """
+    params = tier if tier is not None else Registry.load().tier_a
+    win = within_window(entries, days=params["window_days"], hops=params["window_hops"])
+    counts = failure_counts(win)
+    head = (
+        f"  失败标签 by_failure（窗口 {params['window_days']}天 或 最近"
+        f"{params['window_hops']}跳，阈值 {params['threshold']}，! = 达阈值将自动立案）："
+    )
+    return "\n".join(
+        [
+            head,
+            format_by_failure(counts, threshold=params["threshold"], vocab=load_tags()),
+        ]
+    )
+
+
 def cmd_stats(args) -> int:
     """三级统计：计划级（--plan）/ 成员级（--member/--days）/ 全体历史 + backlog 消化。"""
     entries = read_all()
@@ -598,6 +857,7 @@ def cmd_stats(args) -> int:
         for e in sub:
             kinds[e.kind] = kinds.get(e.kind, 0) + 1
         print(f"  交付分布：{kinds}")
+        print(format_failure_section(sub))
     _print_backlog_stats()
     return 0
 

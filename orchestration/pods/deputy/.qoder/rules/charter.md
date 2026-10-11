@@ -40,6 +40,7 @@ trigger: always_on
 ## 其余通用条款
 
 交付协议（<result>/<blocked> 互斥 + 可选 <infra_suggestion kind="defect|usability">，
-块非空时 kind 必填、正文含 kind: 与 success_criteria 标记行，delivery-gate 强制）、
+块非空时 kind 必填、正文含 kind: 与 success_criteria 标记行，delivery-gate 强制；
+<blocked> 可带 tags="a,b" 标注失败类型，词表外 gate 退回、不标注合法）、
 CLI 范式（裸命令首选/uv run fallback/禁重试循环）、记忆自维护层（AGENTS.md +
 自建 rules/skills，轻量笔记原则）：同全体组员。

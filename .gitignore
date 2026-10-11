@@ -45,6 +45,10 @@ __pycache__/
 # orch watch 的基线快照/心跳（backlog 20261010-orch-watch）：纯运行态观察面，
 # 事件已随 orch status 补账清算，无审计价值
 /orchestration/state/watch.json
+# Tier A 自动立案的指纹去重台账（REFACTOR §2.4，backlog 20261011-233001-leader）：
+# 每次 status/approve 都可能改写，纯运行态记忆（「同指纹 24h 内不重复立案」）。
+# 立案这件事本身记在 suggestions/ 与 backlog.json 里，审计价值在那两侧，故本文件不入库。
+/orchestration/state/tier-a-filed.json
 # 会话池运行态（backlog 20261010-registry-runtime-split）：registry.json 每派发一跳
 # 就改写 sessions/hops/last_active/chars_offset——留在配置面会让 main 工作区必 dirty、
 # 碰 registry 的 worktree 交付 merge 前被心跳 dirty 拦（163347/220711 同构阻塞）。迁到

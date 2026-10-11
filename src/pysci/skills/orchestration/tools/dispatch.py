@@ -77,6 +77,7 @@ class DispatchOutcome:
     checks: list[dict] = field(default_factory=list)
     infra_suggestion: str = ""
     infra_kind: str = ""  # E0-B：交付 XML 上的 kind 属性（defect/usability/""）
+    tags: list[str] = field(default_factory=list)  # E1：<blocked tags="a,b"> 失败标签
     suggestion_id: str = ""
     envelope: Envelope | None = None
     error: str = ""
@@ -445,6 +446,7 @@ def do_dispatch(
         checks=check_results,
         infra_suggestion=bool(delivery.infra_suggestion),
         infra_kind=delivery.infra_kind,
+        tags=delivery.tags,
         num_turns=env_json.num_turns,
         duration_ms=env_json.duration_ms,
         credits=env_json.total_credits,
@@ -482,6 +484,7 @@ def do_dispatch(
         checks=check_results,
         infra_suggestion=delivery.infra_suggestion,
         infra_kind=delivery.infra_kind,
+        tags=delivery.tags,
         suggestion_id=suggestion_id,
         envelope=env_json,
     )
@@ -538,6 +541,8 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
         f"（{turns} 轮，{dur:.0f}s，ctx={ctx:.0%}{est}）"
     )
     print(f"    会话：{o.sid[:8]}（{o.session_name}）")
+    if o.tags:
+        print(f"    失败标签：{', '.join(o.tags)}")
     print(
         f"---- 交付正文（前 800 字）----\n{o.body[:800]}\n----------------------------"
     )
