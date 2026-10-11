@@ -3,7 +3,9 @@
 **状态**：v2.2 设计定稿；**Phase 0–4 已基本完成**（§12：验证冲刺、orch 骨架+figure
 纵切面、plan/改进循环/devops、reviewer+副组长、六 pod 脚手架+MCP 清零+basic.md 重写
 均实战验收）。**体系进入常态运行**：剩余事项 = 各 pod 随首个真实任务逐个战备验收、
-跨域双路径对比（随首个真实跨域任务）、可选加固项。本文档是编排体系的**唯一权威**：
+跨域双路径对比（随首个真实跨域任务）、可选加固项。**另线进行中**：评价驱动的
+自改进体系 REFACTOR v1.0 已定稿（2026-10-11 用户终审，E0–E7 实施中，权威文档
+`orchestration/REFACTOR.md`；完成后其生效机制并入本文）。本文档是编排体系的**唯一权威**：
 架构、目录契约、协议、阶段计划与裁决记录以本文为准。护栏级条款（红线、审批权、
 角色边界、门禁策略）的修改须用户明确授权；其余条款由组长（主代理）会同 devops
 组员修订并向用户报告。**阶段完成须当轮登记本文件**（Phase 3 咨询中副组长指出的
@@ -913,6 +915,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-10 | **修正 2026-10-09「credits 恒 0 根因=BYOK」判断**：实测 14 跳台账证明 BYOK 下 credits **依模型上报**——max 档（Qwen3.8-Max）正常计量（devops/reviewer/deputy 跳 13~1142 credits），flash 档（Qwen3.8-Flash）恒 0（figure/lit 跳）；usage tokens 两档均 0、唯 context_usage_ratio 恒有效。台账新增 `model` 字段 + `stats` 标注成本覆盖率（`format_credits`），使部分计量数据可解释。完整 token/账单核算仍按用户 2026-10-09 裁决留待未来（backlog 20261009-byok-cost-accounting 据此销账） | devops 实测（backlog 20261009-byok-cost-accounting） |
 | 2026-10-10 | **review 任务书嵌入目标陈述**（G2 独立性）：`orch review` 增 `--goal-from <原生产任务书>`/`--goal <文本>`，把组长撰写的目标陈述摘录嵌入审查任务书并登记进 review 记录（`goal_source`/`goal_excerpt`），使 reviewer 的 G2「与任务书目标一致」据组长原意独立核验、不再依赖生产者 notes.md 自述（消除与 charter 独立性纪律的张力）；缺省告警不中断。采纳 reviewer 建议 20261009-231455-reviewer | 组长采纳 + devops 实施（backlog 20261009-231455-reviewer） |
 | 2026-10-10 | **Harness 预算三层制 + 执法 + 身份锚定**：全量注入档每文件 ≤8 KB（charter/AGENTS.md）、常驻暴露档每类 description 合计 ≤8 KB、按需档单文件 ≤8 KB 总量不限；组员自建 rules 必须条件式（always_on 槽位只留 charter）。执法=delivery-gate 预算校验（组员侧）+ pre-commit（真本侧）+ doctor（巡检），条款入 basic.md §1、§3.1。既有 10 个超限 references 文件严格拆分一劳永逸（用户裁决「严格执行」）。插件 description 税与 MCP lazyLoad 列实测探索项。leader-only.md 增「身份锚定」条款加固新会话组长自我认知。MCP schema 不计入知识预算（属工具面）。全部基建改动入 backlog 六项（refs-split-8kb / budget-delivery-gate / budget-precommit / budget-doctor / plugin-tax-probe / mcp-lazyload-probe）交 devops | 用户三点裁决 + 组长实施 |
+| 2026-10-11 | **REFACTOR v1.0 定稿：评价驱动的自改进体系**（七轮迭代，用户终审通过；权威文档 `orchestration/REFACTOR.md`，E0–E7 分阶段实施）。核心裁决：① 目标优先级=客观优质>用户审美（审美为 tiebreaker/廉价替代）；② 不新增抽象层级、允许新增要素，改进管道自覆盖（豁口：inspector 不自巡其 CLI；twin 不自改权重）；③ 硬代码优先（教训：consult 软选项从不被使用）；④ 判决包连带决策：审批强制选 J（实施前仲裁：SiliconFlow 直连、非 Qwen 家族、阻塞≈1min、双序多数、材料撰写者侧组装）/M（基线捕获+实施后 bencher 副本 A/B 实测）/J+M（实测覆盖仲裁）/不选=override 留痕；「仅涉自身基建直通」原则移入 jury-brief（组长主观豁免取消）；⑤ 交付后核验零新裁决点、只实测不再仲裁、未改善自动立案纠正；⑥ 新成员 inspector（巡检找茬，「与用户视角相同但知识不同」，设计审查 rubric=社区优先/反冗余/LLM 直觉友好；双队列迟滞节流+全局开关；发现不经组长自行判决；无 override 权）、bencher（harness 实测，FIFO 非常驻，套件与基线区完全写权）、twin（审美孪生：冷启动无记忆、PREFERENCE.md 置 pod 内只读；客观通道模棱两可时回退终裁不给平局；吸收语料后免阈值直接上线，代理原需用户裁决事项——先决策后问责，上线/下线宣告权归用户；最终交付验收不代理）；⑦ 决策形式统一二选一，多选拆分为依序二元对局；⑧ Tier A 失败标签硬性接入（阈值自动立案，不指望组长有空）；⑨ 一成员一技能一 CLI，共享逻辑做库不做新 CLI（pysci-jury 撤销）；CLI 人体工学范本=Qoder CLI/commitizen；⑩ mirror 控制台（status 全景=用户唯一关注入口+注册纪律；review 盲审即训练→偏差报告绿色通道；journal 机械分流：偏好陈述→语料/行动指令→强制派发不得 override）；⑪ deputy/reviewer 降档 flash、新增 minimum 压测档（型号待选）；⑫ 每阶段自带可证伪成功判据，组件连续两 Phase 无改变决策的读数即退役 | 用户（七轮裁决）+ 组长起草 |
 
 ## 14. 已知代价与风险
 

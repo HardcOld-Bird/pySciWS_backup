@@ -465,6 +465,36 @@
       "done_at": "2026-10-10T22:52:25+08:00",
       "batch_size": 1,
       "batch_seed": "20261010-worktree-merge-cp"
+    },
+    {
+      "id": "20261011-210316-leader",
+      "member": "leader",
+      "summary": "**（E0-A，REFACTOR v1.0 §12）决策日志启动 + reject 强制 override 留痕**",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-210316-leader.md",
+      "status": "in_progress",
+      "proposed": "2026-10-11T21:05:57+08:00",
+      "note": "REFACTOR v1.0 E0-A（用户定稿批准 2026-10-11）。决策日志+reject override 留痕，判据见建议正文 success_criteria 段。",
+      "started_at": "2026-10-11T21:05:59+08:00",
+      "worktree": "20261011-210316-leader"
+    },
+    {
+      "id": "20261011-210317-leader",
+      "member": "leader",
+      "summary": "**（E0-B，REFACTOR v1.0 §12）提案 kind 结构化 + backlog success_criteria 字段 + gate 校验**",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-210317-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-11T21:05:57+08:00",
+      "note": "REFACTOR v1.0 E0-B（用户定稿批准）。guards 面改动，阳性用例强制（fail-open 教训）。判据见正文。",
+      "effort": "high"
+    },
+    {
+      "id": "20261011-210318-leader",
+      "member": "leader",
+      "summary": "**（E0-C，REFACTOR v1.0 §1.1/§12）deputy/reviewer 默认档 max→flash 降档**",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-210318-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-11T21:05:57+08:00",
+      "note": "REFACTOR v1.0 E0-C（用户定稿批准，护栏级授权依据见正文）。判据见正文。"
     }
   ]
 }
