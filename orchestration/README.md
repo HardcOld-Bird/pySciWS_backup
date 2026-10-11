@@ -519,8 +519,11 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
 - `pysci-orch watch [--timeout S=4h] [--interval S=60]` **阻塞轮询**（只读状态文件 +
   Python 侧判活，不起 shell 故 MSYS 路径转换问题免疫；间隔硬钳制 ≤60 s），命中即**单行**
   打印事件并退出 0，超时无事件打印 `TIMEOUT` 退出 0：
-  - `QUEUE-COMPLETE <run>`——新 `.done` 出现且锁已不再跑该 run（drain 在 finally 里先释放
-    锁再写摘要，故二者同批可见）
+  - `QUEUE-COMPLETE <run>`——完成身份三元组 **(run 名, completed, count)** 相对基线变化
+    （同 run 的 `.done` 被重写也能再报）。**收尾事实优先于锁的自称**：`.done` 由 drain 在
+    `release_lock` 之后写出，摘要存在即已收尾，此刻锁仍显示 running 只可能是 unlink 失败
+    残留 + 判活误真（Windows pid 回收/tasklist 超时保守判活）——旧判定让锁把事件压制后
+    又无条件推进基线，导致 210557 那场 `fired=[]` 且补账同哑（backlog 20261011-220622-leader）
   - `NEEDS-LEADER <id>`——backlog 中**新出现**的 needs_leader 条目
   - `QUOTA-STOP <run>`——额度类全局停止（`.done.stopped`，或 run 日志的 `[Q]` 痕迹——后者
     早一拍，不必等摘要落盘）
@@ -529,10 +532,14 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   watch 报一批事件即退，后续按需重挂（输出自带重挂命令）。`approve`（经 `wake_devops`）与
   `dispatch --from-backlog` 的输出**固定追加挂载指令行**，不靠组长翻文档。
 - **边界**：watch 随组长会话消亡，**不影响 detached drain**；基线快照与心跳落
-  `state/watch.json`（gitignore：纯运行态）。漏挂/会话中断期间的账由下次 `orch status` 的
-  watch 段**一次性补账**（报完即推进基线，重复运行不刷屏；watch 仍在挂载时 status 不抢账，
-  免双份唤醒）。同刻多事件按 CRASH > QUOTA-STOP > NEEDS-LEADER > QUEUE-COMPLETE 取主事件、
-  其余以「同时」附注。**弃 Monitor 工具方案**（会话侧注册更重，且同样要组长发起）。
+  `state/watch.json`（gitignore：纯运行态）。**抑制帧与瞬态空值（`.done` 半写等）不推进
+  基线**——被压住/读不出的身份保持原值，下一帧继续比较，绝不把账吞死。每帧现场（ts、
+  锁态、锁 run、done 身份、抑制原因）进 `recent` 环形缓冲，命中/超时写 `exit_reason`；
+  被外部杀死的那任没有退出记录，下次挂载或 `orch status` 会读出这条「遗言」。漏挂/会话
+  中断期间的账由下次 `orch status` 的 watch 段**一次性补账**（报完即推进基线，重复运行不
+  刷屏；watch 仍在挂载时 status 不抢账，免双份唤醒）。同刻多事件按 CRASH > QUOTA-STOP >
+  NEEDS-LEADER > QUEUE-COMPLETE 取主事件、其余以「同时」附注。**弃 Monitor 工具方案**
+  （会话侧注册更重，且同样要组长发起）。
 
 ---
 
