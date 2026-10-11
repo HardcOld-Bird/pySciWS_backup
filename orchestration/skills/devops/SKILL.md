@@ -44,9 +44,9 @@ pysci-dev worktree remove <任务名>
 **worktree 命名约定**：drain/backlog 派发用**条目 id** 作 `<任务名>`（take_first 记
 `worktree=id`）。会话中途死亡的孤儿条目，下次 drain 回收据 `wt-<id>` 名
 `git worktree remove --force` + `branch -D` 清理（否则重派 `worktree add` 撞名）。手动/
-临时派发可用任意名——不属孤儿、不自动清理（防误删并发作业）。
+临时派发可用任意名（不属孤儿、不自动清理，防误删并发作业）。
 
-**批量消化任务书**（drain 组包，backlog 20261010-batch-digest）：任务书可能含**种子**（必做）
+**批量消化任务书**（drain 组包）：任务书可能含**种子**（必做）
 + **组包菜单**。**自主选取 ≥1 项**（必含种子，可只吃种子），合并到**同一 worktree**（名
 = 种子 id）实施。交付时 `<result>` 以 `backlog id=<id1>,<id2>,…` 列**本次完成全部 id**
 （必含种子），orch 逐 id 销账；未完成的**不要**列入（留 pending 下轮）。种子受阻照常
@@ -56,13 +56,12 @@ pysci-dev worktree remove <任务名>
 
 - 真本：`orchestration/skills/<name>/`（git 跟踪）；manifest：同目录 `manifest.toml`；
 - 改完真本执行 `pysci-dev sync`（与 pysci-orch sync 同引擎）；`sync --check` 查漂移；
-- `tree_hash` **行尾无关**（哈希前 CRLF→LF，2026-10-10 修）：worktree 内 sync 提交的
+- `tree_hash` **行尾无关**（哈希前 CRLF→LF）：worktree 内 sync 提交的
   `skills-deployed.json` 对 main 即正确，无需合并后重跑；
 - 红线：只碰 manifest 声明的部署名；**不删除成员自建技能**；不手改部署副本。
 - **真本 references 超 8KB 的处置**：按 `##` 主题拆 `<stem>-0N-<slug>.md` 分册（逐字
   搬运、原名留分册索引），所属 SKILL.md 索引行标 ``*`` + 节首加图例行。机械拆分与验证
-  次序（含 pre-commit 会先改写文件的坑）见
-  [references/budget-layers.md](references/budget-layers.md) §4。
+  次序（含 pre-commit 会先改写文件的坑）见 `references/budget-layers.md` §4。
 - **机械生成/改写 markdown 的 EOF 窗口**：`pysci-dev mdgen-check <paths…>` 提前把
   pre-commit（trailing-ws + end-of-file-fixer）改写**做完**并打印 pre/post sha256；
   内容等价性断言以 **post_sha256**（钩子终态）为基准，非生成前字节。首提必过。
@@ -100,16 +99,14 @@ PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
 | 观测 | `pysci-dev doctor` 三档审计 | 全量扫描 + 台账，唯一能看见「会话中途死掉留下的膨胀」的一层 |
 
 改任一层、加新 guard、或处置超限 references 前，先读
-[budget-layers.md](references/budget-layers.md)（豁免/TDZ 教训/Stop 探针/分册次序）与
-[guards-in-force.md](references/guards-in-force.md)（fail-open 留痕+活体探针+元哨兵）。
+`references/budget-layers.md`（豁免/TDZ 教训/Stop 探针/分册次序）与
+`references/guards-in-force.md`（fail-open 留痕+活体探针+元哨兵）。
 
 ## git 纪律
 
 - commit：cz 规范（feat/fix/docs/refactor/test/chore + scope）；一笔提交一个主题；
 - pre-commit 钩子全过（ruff 自动修复后需重新 add 再 commit——被钩子改写不算失败）；
-- **push**：每次 commit 后尝试一次 `timeout 25 git push origin main`（best-effort，用户
-  裁决 2026-10-10 校园网偶尔可直连 GitHub）——忽略一切失败（网络/认证/超时），不重试、
-  不设代理；**超时是硬要求**（挂起会阻塞 drain）；
+- **push**：见上 worktree 规程第 5 步（一次、限时、忽略失败、不重试、不设代理）；
 - 禁止 --no-verify；禁止 reset --hard/force 类破坏性操作，除非任务书明确授权；
 - 合并前先 `git status` 检查工作区；发现非本任务的未提交改动，保留并在交付中报告。
 - **状态分储**：registry.json=低频配置（git）/ sessions-runtime.json=会话池运行态
@@ -119,6 +116,9 @@ PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
 
 - 台账：`orchestration/state/ledger/deliveries.jsonl` 中 ctx_ratio 持续 >60% 的成员
   → 提请组长归档轮换；
+- **Tier B 压测案卷**（`state/evals/harness/*.md`）与 checks 注册表归 devops 维护：
+  动了 harness 面（dispatch/runner/guards/档位）就请组长跑 `orch eval run --all`，
+  取二元判决+before/after；案卷格式见 orchestration 技能 `references/harness-eval.md`。
 - transcript 抽查：pod 键目录（`~/.qoder-cn/projects/<pod键>/`）会话 jsonl 中检索
   pod-guard 拦截记录，核对其后有无 Bash 绕行迹象（诚实条款审计端）；
 - AGENTS.md 体量：>8KB 的成员提请其自行精简（蒸馏纪律）。

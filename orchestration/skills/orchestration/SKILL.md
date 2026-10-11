@@ -5,7 +5,7 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
 
 # 编排操作规程（组长技能 v2）
 
-权威设计：`orchestration/README.md`。本技能只放**操作面**；架构疑问读 README。
+权威设计：`orchestration/README.md`；本技能只放**操作面**。
 
 ## 铁律
 
@@ -22,10 +22,9 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
 5. 任务书**延迟书写**：计划阶段只写环节粗描述（brief），推进到该环节时才写完整任务书
    （自包含：目标/输入路径/交付要求/白名单/验收预期——组员看不到你的会话上下文）。
 6. **判断 drain/后台 worker 状态只用 `uv run pysci-orch status`**，禁止手敲 `tasklist`
-   等原始命令——Git Bash 下 `/FI` 被 MSYS 转成路径产生**假阴性**（2026-10-10 实测：
-   曾据此把正常运行的 drain 误报为「崩溃」）。信号互相冲突时（如进程查不到但日志/
-   worktree 显示在工作），报告「状态不确定，需可靠工具复核」，**不得升格为「崩溃」
-   结论**（basic.md §2 上报纪律：只报告有证据的问题）。
+   等原始命令——Git Bash 下 `/FI` 被 MSYS 转成路径产生**假阴性**。信号互相冲突时
+   （如进程查不到但日志/worktree 显示在工作），报告「状态不确定，需可靠工具复核」，
+   **不得升格为「崩溃」结论**（basic.md §2 上报纪律：只报告有证据的问题）。
 
 ## 命令面
 
@@ -53,6 +52,8 @@ uv run pysci-orch review <产物> --origin <member> [--rubric generic]
         # 「与任务书目标一致」据此独立核验，不再依赖生产者 notes.md 自述（强烈建议带上）
 uv run pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（非 Qwen 双序对局，
         # 阻塞出裁决；不可达降级入队 rc=1）；案卷格式见 references/jury-panel.md
+uv run pysci-orch eval run (--case <id>|--all) [--label L]
+        # Tier B 压测：minimum 档真派发→通过|失败；案卷与基线见 references/harness-eval.md
 uv run pysci-orch stats [--plan id|--member m|--days N]
 # —— 底层命令面（降级/调试）——
 uv run pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
@@ -102,7 +103,7 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 
 - 工作完结且会话不再需要 → `sessions <member> --archive <sid> --distill`；
 - ctx>60% 的会话提示归档；`stats` 看成员耗时占比与成本覆盖率（BYOK 下 credits **依模型**
-  上报：max 档计量、flash 档恒 0，故 stats 标注「覆盖 M/N 跳」，未计量跳以耗时/轮数为准）；
+  上报：max 档计量、flash 档恒 0，故 stats 标注「覆盖 M/N 跳」）；
   成本曲线异常 → 考虑 harness 改进或档位调整。
 
 ## 降级

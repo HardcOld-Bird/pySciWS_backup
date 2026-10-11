@@ -202,8 +202,13 @@ def do_dispatch(
     no_checks: bool = False,
     no_retry: bool = False,
     quiet: bool = False,
+    attach_replies: bool = True,
 ) -> DispatchOutcome:
     """执行一跳派发（完整链路）。参数语义与 ``orch dispatch`` 一致。
+
+    ``attach_replies=False``：不把组长的审批回复附进提示词、也不归档 ``sent/``
+    （REFACTOR §3：harness 压测跳必须与「生产跳」隔离，否则回复里的上下文会让
+    压测结果不可比——``orch eval run`` 走这一支）。
 
     推理强度（``effort``）来源优先级：**调用方覆盖**（CLI ``--effort``、plan 环节、
     backlog 条目）> **registry 成员级** ``effort`` > 不传（跟随用户级默认=中）。
@@ -279,7 +284,9 @@ def do_dispatch(
         return delta, int(round(delta * per_char)), after
 
     taskbook = write_taskbook(m.pod, text=text, task_file=task_file, slug=slug)
-    replies_body, reply_files = collect_replies(member_id)
+    replies_body, reply_files = (
+        collect_replies(member_id) if attach_replies else ("", [])
+    )
     parts = [
         f"你的任务书（必读，位于你的 pod 内）：{taskbook.name}",
         f"绝对路径：{taskbook}",

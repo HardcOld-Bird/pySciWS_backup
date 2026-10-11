@@ -28,6 +28,7 @@ import argparse
 import sys
 
 from . import drain as _drain
+from . import eval as _eval
 from . import jury as _jury
 from . import plans as _plans
 from . import sessions as _sessions
@@ -483,7 +484,7 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--task", help="当前环节任务书文件")
     q.add_argument("--name", help="会话 slug 覆盖（默认 <plan>-<step>）")
     q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
-    q.add_argument("--model-tier", choices=["max", "flash"])
+    q.add_argument("--model-tier", choices=["max", "flash", "minimum"])
     q.add_argument(
         "--effort",
         choices=EFFORT_CHOICES,
@@ -510,7 +511,7 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--text")
     g.add_argument("--task")
     q.add_argument("--dirs")
-    q.add_argument("--model-tier", choices=["max", "flash"])
+    q.add_argument("--model-tier", choices=["max", "flash", "minimum"])
     q.add_argument(
         "--effort",
         choices=EFFORT_CHOICES,
@@ -603,7 +604,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--session", default="latest")
     p.add_argument("--name")
-    p.add_argument("--model-tier", choices=["max", "flash"])
+    p.add_argument("--model-tier", choices=["max", "flash", "minimum"])
     p.add_argument(
         "--effort",
         choices=EFFORT_CHOICES,
@@ -686,6 +687,32 @@ def main(argv: list[str] | None = None) -> int:
         help="整体等待上限秒数（覆盖 registry.jury.deadline_s，默认 300=5 min）",
     )
     p.set_defaults(func=_jury.cmd_jury)
+
+    # ---- eval：Tier B harness 压测套件（REFACTOR §3 / E2）----
+    p = sub.add_parser(
+        "eval",
+        help="Tier B harness 压测套件：最小成本档跑案卷 → 二元判决 + 基线对照",
+    )
+    ep = p.add_subparsers(dest="eval_action", required=True)
+    pe = ep.add_parser(
+        "run", help="跑一案/全套 → 通过|失败 + 指标行 + before/after 对照"
+    )
+    pg = pe.add_mutually_exclusive_group(required=True)
+    pg.add_argument("--case", help="案卷 id（state/evals/harness/<id>.md 去后缀）")
+    pg.add_argument("--all", action="store_true", help="按文件名序跑全部案卷")
+    pe.add_argument(
+        "--model-tier",
+        choices=["max", "flash", "minimum"],
+        help="覆盖案内档位（默认案卷的 tier:，缺省 minimum=压测最低成本档）",
+    )
+    pe.add_argument(
+        "--label",
+        help="本轮标签（如 before / after-<commit>）；入台账供 set-baseline 与分组对照",
+    )
+    pe.set_defaults(func=_eval.cmd_eval_run)
+    pb = ep.add_parser("set-baseline", help="把最近一轮压测行回填为 baseline.json")
+    pb.add_argument("--label", help="只取该标签的最近一轮（默认：每案最近一行）")
+    pb.set_defaults(func=_eval.cmd_eval_set_baseline)
 
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(

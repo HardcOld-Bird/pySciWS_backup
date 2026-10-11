@@ -18,6 +18,10 @@ __pycache__/
 /data/research/**/figures/*/out/*.svg
 /data/research/**/figures/*/cache_*.npz
 
+# harness 压测产物区（orch eval run 每次真派发都重新生成）：入库会把测量噪声
+# 变成 git status 脏面，进而挡住下一次合并前检查（E2，backlog 20261011-233002-leader）。
+/data/research/eval_scratch/
+
 # Build artifacts
 *.egg-info/
 
