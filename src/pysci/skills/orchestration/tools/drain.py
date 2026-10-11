@@ -7,7 +7,9 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
 
 - **锁**（``state/devops.lock``，JSON: pid/started/run_log）：同刻至多一个 drain
   worker。原子 ``O_CREAT|O_EXCL`` 抢占；持有者进程已死或锁龄超 :data:`LOCK_STALE_S`
-  判 stale 并接管（fail-open，防 worker 崩溃后永久死锁）。
+  判 stale 并接管（fail-open，防 worker 崩溃后永久死锁）。释放时 unlink 删不掉（Windows
+  共享句柄）则改写为 ``released`` **墓碑**并在 run 日志留 ``[!]``——残骸不再被当作活锁，
+  后续 drain 就地接管，队列不会被一把删不掉的锁阻塞 6 h（:func:`release_lock`）。
 - **唤醒**（:func:`wake_devops`）：approve 成功后调用；锁忙则不重复 spawn（本项由
   当前 drain 循环接手），空闲则 Popen 分离进程运行内部命令 ``_drain-devops``。返回的
   message 固定附 watch 事件等待器挂载指令（:mod:`watch`，README §4.5）——工作交棒的
@@ -75,6 +77,13 @@ DRY_ENV: str = "PYSCI_ORCH_DRAIN_DRY"
 
 #: 协作式停止信号（JSON: pid/requested_at）；orch drain-stop 写，drain 消费自删。
 CANCEL_PATH: Path = ORCH_STATE_ROOT / "devops.cancel"
+
+#: 锁记录的「已释放」标记键：unlink 删不掉锁时把锁改写为该标记的**墓碑**——
+#: 残骸不再是互斥依据（:func:`_lock_live` 认它为非活锁）。backlog 20261011-225933-devops。
+RELEASED_KEY: str = "released"
+
+#: acquire 抢锁重试轮数（竞态窗口 + 残骸清除）。
+ACQUIRE_RETRIES: int = 3
 
 _COMMIT_RE = re.compile(r"commit[^0-9a-f]{0,16}\b([0-9a-f]{7,40})\b", re.IGNORECASE)
 
@@ -145,9 +154,41 @@ def _lock_age_s(data: dict[str, Any]) -> float:
     return (datetime.now().astimezone() - started).total_seconds()
 
 
+def _lock_released(data: dict[str, Any] | None) -> bool:
+    """锁记录是否为「已释放却删不掉」的墓碑（残骸，不作互斥依据）。"""
+    return bool(data) and bool(data.get(RELEASED_KEY))
+
+
+def _overwrite_lock(payload: str) -> bool:
+    """就地改写锁文件内容（先原子 replace，兜底截断重写）。
+
+    用于「文件删不掉」的 Windows 共享句柄场景：能改写就能标记墓碑 / 接管残骸。
+    全失败返回 False（调用方留痕，不静默）。
+    """
+    tmp = LOCK_PATH.with_name(LOCK_PATH.name + ".tmp")
+    try:
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(payload, encoding="utf-8")
+        os.replace(str(tmp), str(LOCK_PATH))
+        return True
+    except OSError:
+        pass
+    finally:
+        try:
+            if tmp.exists():
+                os.unlink(str(tmp))
+        except OSError:
+            pass
+    try:
+        LOCK_PATH.write_text(payload, encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
 def _lock_live(data: dict[str, Any] | None) -> bool:
-    """锁是否有效：持有者进程存活且锁龄未超上限。"""
-    if not data:
+    """锁是否有效：未被标记释放、持有者进程存活且锁龄未超上限。"""
+    if not data or _lock_released(data):
         return False
     age = _lock_age_s(data)
     if age > LOCK_STALE_S:
@@ -163,12 +204,14 @@ def acquire_lock(run_log: str) -> dict[str, Any] | None:
 
     Returns:
         成功获取时返回锁记录 ``{pid, started, run_log}``；已被存活 worker 持有时
-        返回 ``None``（调用方应优雅退出，不重复消费）。stale 锁（进程死/超龄）被接管。
+        返回 ``None``（调用方应优雅退出，不重复消费）。stale 锁（进程死/超龄）或
+        ``released`` 墓碑被接管——删不掉就地改写接管（残骸不得挡路，
+        backlog 20261011-225933-devops）。
     """
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     record = {"pid": os.getpid(), "started": _now(), "run_log": run_log}
     payload = json.dumps(record, ensure_ascii=False, indent=2) + "\n"
-    for _ in range(3):
+    for _ in range(ACQUIRE_RETRIES):
         if _lock_live(read_lock()):
             return None
         try:
@@ -179,9 +222,15 @@ def acquire_lock(run_log: str) -> dict[str, Any] | None:
                 return None
             try:
                 os.unlink(str(LOCK_PATH))
+                continue
             except OSError:
-                pass
-            continue
+                # 残骸删不掉（共享句柄）：就地改写接管；改写后回读确认 pid 是自己的
+                # 才算到手（他方同期改写则让位，保持单 worker 互斥）。
+                if _overwrite_lock(payload):
+                    held = read_lock() or {}
+                    if int(held.get("pid", 0) or 0) == os.getpid():
+                        return record
+                continue
         except OSError:
             return None
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -190,14 +239,62 @@ def acquire_lock(run_log: str) -> dict[str, Any] | None:
     return None
 
 
-def release_lock() -> None:
-    """释放锁——**仅当持有者是本进程**（防未获取到锁的进程误删他人锁）。"""
+def release_lock(run_log: Path | str | None = None) -> bool:
+    """释放锁——**仅当持有者是本进程**（防未获取到锁的进程误删他人锁）。
+
+    Args:
+        run_log: 本次 run 日志；删除失败时在其中留一行 ``[!]`` 警示（None = 只标记、
+            不留痕，供非 drain 调用方使用）。
+
+    Returns:
+        True = 锁已不占位（删除成功，或本来无锁）；False = 未删掉（删除失败已改写为
+        :data:`RELEASED_KEY` 墓碑，或该锁不是本进程的）。
+
+    **失败不可静默**：Windows 上他方仍持该文件句柄时 DeleteFile 报共享冲突，旧实现的
+    ``except OSError: pass`` 把失败吞成「锁仍在、pid 仍活」的假 running——``_lock_live``
+    遂把残骸判为活锁，下一任 drain 被 ``skipped=lock_busy`` 挡掉，最长阻塞到
+    :data:`LOCK_STALE_S`（6h）超龄才解套（backlog 20261011-225933-devops，与
+    20261011-220622-leader 的 watch 吞事件同源）。墓碑令锁面与观察面同说一席话。
+    """
     data = read_lock()
-    if data and int(data.get("pid", 0) or 0) == os.getpid():
-        try:
-            os.unlink(str(LOCK_PATH))
-        except OSError:
-            pass
+    if not data:
+        return True
+    if int(data.get("pid", 0) or 0) != os.getpid():
+        return False  # 非自持锁：绝不改动（含墓碑——清除归下一任 acquire）
+    try:
+        os.unlink(str(LOCK_PATH))
+        return True
+    except OSError as exc:
+        marked = _mark_released(data)
+        _note_release_failure(run_log, exc, marked=marked)
+        return False
+
+
+def _mark_released(data: dict[str, Any]) -> bool:
+    """把锁记录改写为 released 墓碑（保留 pid/run_log 供 status 溯源）。"""
+    tombstone = {
+        RELEASED_KEY: True,
+        "pid": int(data.get("pid", 0) or 0),
+        "started": data.get("started", ""),
+        "run_log": data.get("run_log", ""),
+        "released_at": _now(),
+    }
+    return _overwrite_lock(json.dumps(tombstone, ensure_ascii=False, indent=2) + "\n")
+
+
+def _note_release_failure(
+    run_log: Path | str | None, exc: OSError, *, marked: bool
+) -> None:
+    """把释放失败写进 run 日志（无人值守的后台进程必须留痕；无 run_log 则只能沉默）。"""
+    if run_log is None:
+        return
+    path = Path(run_log)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    tail = (
+        "已写 released 标记" if marked else "released 标记亦写入失败（残骸待超龄解套）"
+    )
+    _log(path, f"[!] 锁释放失败（共享句柄），{tail}：{exc}")
 
 
 def lock_status() -> dict[str, Any]:
@@ -205,21 +302,32 @@ def lock_status() -> dict[str, Any]:
 
     stale 时附 ``crashed`` 字段：该 run 无对应 ``.done`` = worker 被中途杀死（崩溃）；
     有 ``.done`` = 上一次干净完成但锁残留（release 未及/异常）。供 orch status surfacing。
+
+    released 墓碑单列：``state=stale`` + ``released=True`` + ``crashed=False``——worker
+    已宣告收尾（崩溃者走不到 release），只是文件删不掉，故既非 running 也非崩溃。
     """
     data = read_lock()
     if not data:
         return {"state": "idle"}
     pid = int(data.get("pid", 0) or 0)
     age = _lock_age_s(data)
-    alive = _pid_alive(pid)
-    state = "running" if (alive and 0 <= age <= LOCK_STALE_S) else "stale"
-    out: dict[str, Any] = {
-        "state": state,
+    base = {
         "pid": pid,
         "started": data.get("started", ""),
         "run_log": data.get("run_log", ""),
         "age_s": round(age, 1) if age >= 0 else -1,
     }
+    if _lock_released(data):
+        return {
+            "state": "stale",
+            "released": True,
+            "released_at": data.get("released_at", ""),
+            "crashed": False,
+            **base,
+        }
+    alive = _pid_alive(pid)
+    state = "running" if (alive and 0 <= age <= LOCK_STALE_S) else "stale"
+    out: dict[str, Any] = {"state": state, **base}
     if state == "stale":
         out["crashed"] = _stale_run_crashed(data)
     return out
@@ -671,7 +779,7 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         summary["count"] = len(summary["items"])
         summary["completed"] = _now()
         summary["elapsed_s"] = round(time.time() - t0, 1)
-        release_lock()
+        release_lock(run_log)
         try:
             done_path.parent.mkdir(parents=True, exist_ok=True)
             done_path.write_text(
