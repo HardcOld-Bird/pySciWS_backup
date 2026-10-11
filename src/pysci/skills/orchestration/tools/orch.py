@@ -119,7 +119,13 @@ def cmd_status(args: argparse.Namespace) -> int:
             f"日志 {lst['run_log']}）"
         )
     elif lst["state"] == "stale":
-        if lst.get("crashed"):
+        if lst.get("released"):
+            print(
+                f"  ⊘ 残留已标记（pid {lst['pid']} 的 run 已宣告收尾于 "
+                f"{lst.get('released_at', '?')}，但锁文件删不掉〔Windows 共享句柄〕——"
+                "released 墓碑不作互斥，下次 drain 就地接管，不占队列）"
+            )
+        elif lst.get("crashed"):
             print(
                 f"  ⊘ 崩溃（pid {lst['pid']} 已死且该 run 无 .done）——worker 被中途杀死；"
                 "下次 approve/drain 自动接管并回收孤儿条目 + 清理残留 worktree"

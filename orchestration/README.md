@@ -523,7 +523,9 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
     （同 run 的 `.done` 被重写也能再报）。**收尾事实优先于锁的自称**：`.done` 由 drain 在
     `release_lock` 之后写出，摘要存在即已收尾，此刻锁仍显示 running 只可能是 unlink 失败
     残留 + 判活误真（Windows pid 回收/tasklist 超时保守判活）——旧判定让锁把事件压制后
-    又无条件推进基线，导致 210557 那场 `fired=[]` 且补账同哑（backlog 20261011-220622-leader）
+    又无条件推进基线，导致 210557 那场 `fired=[]` 且补账同哑（backlog 20261011-220622-leader）。
+    锁面同因已由 released 墓碑自愈（§6），但观察面的「读穿谎话」仍是必要防线：残骸可来自
+    旧版锁、也可来自墓碑自身写不进的极端情形
   - `NEEDS-LEADER <id>`——backlog 中**新出现**的 needs_leader 条目
   - `QUOTA-STOP <run>`——额度类全局停止（`.done.stopped`，或 run 日志的 `[Q]` 痕迹——后者
     早一拍，不必等摘要落盘）
@@ -591,6 +593,10 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   锁 FIFO 串行消化整个 backlog（组长零阻塞、零轮询，对齐 §4.5 等待模型）
   · --no-wake 只入队不唤醒；锁忙（已有 worker）不重复 spawn，本项由当前 drain 接手
   · 锁 stale（持有进程死 / 锁龄 >6h）自动接管，防 worker 崩溃后死锁
+  · 释放锁时 unlink 删不掉（Windows 他方持句柄 → 共享冲突）**不得静默**：锁记录改写为
+    `released` **墓碑** + run 日志留一行 `[!]`。墓碑不作互斥（`_lock_live` 判非活、
+    `lock_status` 报 stale 且非 crashed），下一任 drain 就地改写接管——否则「删不掉的残骸
+    + 判活误真」会把队列挡成假 running，最长阻塞到 6h 超龄才解（backlog 20261011-225933-devops）
   · 获锁即回收孤儿 in_progress 条目（前任 worker 中途被杀的遗留）重置 pending，并顺带
     清理其残留 worktree/branch（`git worktree remove --force wt-<id>` + `branch -D` +
     `prune` 兜底）——worktree 名 = 条目 id（take_first 记录、任务书指定），只清孤儿名、
@@ -610,8 +616,9 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   · 额度类失败（quota_exhausted）→ **全局停止**：种子复位 pending（非 needs_leader）、
     组包与剩余条目保持 pending、释放锁、.done 注明系统性故障；渠道恢复后下次唤醒自动续消化
 → run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
-  态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕vs**干净完成
-  后锁残留**〔.done 存在〕）、最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
+  态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕、**干净完成
+  后锁残留**〔.done 存在〕与**残留已标记**〔released 墓碑：已宣告收尾但文件删不掉〕）、
+  最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
   needs_leader 提醒（组长据此重派/改任务书/上报）
 → 组长的等待面（代码化，§4.5）：唤醒/采纳/交办三处输出固定附 `orch watch` 挂载指令；
   watch 后台阻塞轮询 state 文件与锁，命中 QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP /
