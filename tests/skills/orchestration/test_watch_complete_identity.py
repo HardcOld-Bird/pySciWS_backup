@@ -37,10 +37,14 @@ def test_pid_reuse_illusion_still_reports(iso_state, monkeypatch):
 
     锁面自 20261011-231237-devops 起自己也认这条收尾证据（不再报 running），观察面据此
     不再需要看穿谎话——但完成事实仍由摘要作证，与锁的读数无关。
+
+    时间戳取同一个 ``now``（同秒自收尾）：233248 的时序闸会让「摘要早于本锁诞生」的
+    撞名残骸不再算作收尾证据，用例必须造时间上自洽的残骸才算到这条否决支。
     """
     monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
-    _seed_done(iso_state, "r1", {"completed": "2026-10-11T21:42:41+08:00", "count": 3})
-    _seed_lock(iso_state, "r1")
+    now = drain._now()
+    _seed_done(iso_state, "r1", {"completed": now, "count": 3})
+    _seed_lock(iso_state, "r1", started=now)
     cur = watch.snapshot()
     assert cur["lock_state"] == "stale" and cur["lock_done"]  # 谎锁已被锁面自己否决
     assert drain.lock_status()["residue"] == "done-exists"
@@ -74,7 +78,7 @@ def test_concluded_frame_reports_without_waiting_for_release(iso_state, monkeypa
     base = watch.snapshot()  # 进行中：没有完成事实可报
     assert base["lock_state"] == "running"
     assert watch.detect_events(base, base) == []
-    _seed_done(iso_state, "rC", {"completed": "2026-10-11T21:00:00+08:00", "count": 2})
+    _seed_done(iso_state, "rC", {"completed": drain._now(), "count": 2})
     cur = watch.snapshot()
     assert cur["lock_state"] == "stale"  # 收尾证据否决了锁的自称
     assert [e["event"] for e in watch.detect_events(base, cur)] == ["QUEUE-COMPLETE"]

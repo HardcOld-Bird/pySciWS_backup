@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timedelta
 
 from pysci.skills.orchestration.tools import drain, orch
 
@@ -45,12 +46,18 @@ def _writes_blockable(monkeypatch) -> dict:
 
 
 def _seed_done_for(run_log, *, declared=None, **body):
-    """落该 run 的 ``.done`` 收尾摘要；``declared`` 可伪造摘要自证的 run_log 身份。"""
+    """落该 run 的 ``.done`` 收尾摘要；``declared`` 可伪造摘要自证的 run_log 身份。
+
+    时刻默认取「现在」而非历史字面量：判活的时序闸（:func:`drain._done_predates_lock`）
+    要求摘要**不早于**本锁诞生才算它自己的收尾，而夹具里的锁 ``started`` 就是现在——
+    写死旧时刻会让用例因为「摘要属于上一任」而被放行，测不到想测的那条否决。
+    """
     done = run_log.with_suffix(".done")
     done.parent.mkdir(parents=True, exist_ok=True)
+    now = drain._now()
     payload = {
-        "started": "2026-10-11T23:00:00+08:00",
-        "completed": "2026-10-11T23:30:00+08:00",
+        "started": now,
+        "completed": now,
         "count": 1,
         "elapsed_s": 60.0,
         "items": [],
@@ -317,3 +324,162 @@ def test_orch_status_shows_concluded_residue(
     out = capsys.readouterr().out
     assert "残骸已收尾" in out
     assert "▶ running" not in out and "⊘ 崩溃" not in out and "已死/超龄" not in out
+
+
+# ---------------------------------------------------------------------------
+# run 身份命名查重 + 收尾证据的时序闸（backlog 20261011-233248-devops）
+#
+# E4 把「该 run 已有 ``.done``」请进判活后，``.done`` 的**文件名**成了否决依据，而旧
+# ``new_run_log()`` 只精确到秒且不查重：空队列 run 在同一秒内写出 ``.done``，紧随其后
+# 的 drain 拿到**同名** run_log —— 它的锁新鲜、pid 存活、正在干活，却被上一任的摘要判成
+# 已收尾残骸：``lock_status`` 谎报 ``stale/done-exists``，``acquire_lock`` 对它放行 →
+# 两个 worker 同时自认持锁，README §6 单 worker 互斥击穿。
+# ---------------------------------------------------------------------------
+def _past(seconds: int) -> str:
+    """N 秒前的 ISO 时刻（带本地时区，与 :func:`drain._now` 同形）。"""
+    return (datetime.now().astimezone() - timedelta(seconds=seconds)).isoformat(
+        timespec="seconds"
+    )
+
+
+#: 冻结用的「现在」：今天 09:00:00（带本机时区，与 :func:`drain._now` 同形）。同秒撞名
+#: 场景必须消除时钟漂移，否则用例会在跨秒那一瞬假失败。
+FROZEN = datetime.now().astimezone().replace(hour=9, minute=0, second=0, microsecond=0)
+FROZEN_STAMP = FROZEN.strftime("%Y%m%d-%H%M%S")
+
+
+def _freeze_clock(monkeypatch) -> None:
+    """把 :mod:`drain` 看到的 ``datetime`` 换成 ``now()`` 恒为 :data:`FROZEN` 的子类。
+
+    只换 ``now``，``fromisoformat`` 等原样继承——时序闸的比较逻辑仍走真实实现。
+    """
+
+    class _Fixed(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return FROZEN if tz is None else FROZEN.astimezone(tz)
+
+    monkeypatch.setattr(drain, "datetime", _Fixed)
+
+
+def _sep(n: int) -> str:
+    """第 n 个顺延名的后缀串（与 :func:`drain.new_run_log` 的构造保持一致）。"""
+    return f"{drain.RUN_LOG_SEP}{n:0{drain.RUN_LOG_PAD}}"
+
+
+def test_same_second_new_run_log_never_reuses_name(iso_state, monkeypatch):
+    """修复面 3-①：同一秒内连调 ``new_run_log()`` 五次必得五个异名。"""
+    _freeze_clock(monkeypatch)
+    names = [drain.new_run_log() for _ in range(5)]
+    assert [p.stem for p in names] == [FROZEN_STAMP] + [
+        f"{FROZEN_STAMP}{_sep(n)}" for n in range(2, 6)
+    ], f"同秒顺延形状不符：{[p.name for p in names]}"
+
+
+def test_dedup_counts_occupied_stems_including_done(iso_state, monkeypatch):
+    """顺延只看「名字被占」：``<ts>.log`` 或 ``<ts>.done`` 任一存在即让位。
+
+    ``.done`` 存在而 ``.log`` 从未写过正是真实形状（上一任只写了摘要，日志被清理或
+    从未落盘），而**摘要侧才是否决依据**，故查重必须同时查这两个后缀。
+    """
+    _freeze_clock(monkeypatch)
+    runs = iso_state / "devops-runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / f"{FROZEN_STAMP}.done").write_text("{}", encoding="utf-8")
+
+    got = drain.new_run_log()
+
+    assert got == runs / f"{FROZEN_STAMP}{_sep(2)}.log"
+    got.touch()
+    assert drain.new_run_log() == runs / f"{FROZEN_STAMP}{_sep(3)}.log"
+
+
+def test_dedup_names_sort_after_the_occupied_done(iso_state, monkeypatch):
+    """排序面：顺延名必须**晚于**被占的 ``<ts>.done``，否则 ``latest_done`` 把旧摘要当最新。
+
+    这正是分隔符不能取 ``-`` 的原因（``-`` 码位 0x2D 低于 ``.`` 的 0x2E）。
+    """
+    _freeze_clock(monkeypatch)
+    runs = iso_state / "devops-runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    old = runs / f"{FROZEN_STAMP}.done"
+    old.write_text(json.dumps({"completed": FROZEN.isoformat(), "count": 1}), "utf-8")
+    fresh = drain.new_run_log()
+    assert "-" not in fresh.stem[len(FROZEN_STAMP) :], fresh.name
+    fresh.with_suffix(".done").write_text(
+        json.dumps({"completed": FROZEN.isoformat(), "count": 2}), "utf-8"
+    )
+
+    assert drain.latest_done()["name"] == fresh.stem
+    assert drain.latest_done()["count"] == 2
+
+
+def test_generated_name_never_collides_with_written_pair(iso_state):
+    """生成的名字当场占位：拿它 ``acquire_lock`` 后不会因前任摘要被否决（互斥不破）。"""
+    first = drain.new_run_log()
+    assert first.exists(), "new_run_log 必须当场占位，否则同秒连调仍会同名"
+    assert drain.acquire_lock(str(first)) is not None
+    # 模拟第一个 run 干净收尾：写出 <ts>.done 且释放锁
+    _seed_done_for(first)
+    assert drain.release_lock(first) is True
+
+    second = drain.new_run_log()
+    assert second != first
+    assert drain.acquire_lock(str(second)) is not None
+    st = drain.lock_status()
+    assert st["state"] == "running", f"第二个 run 的活锁被误判残骸：{st}"
+    assert st["pid"] == os.getpid()
+    # 第三个 worker 必须被挡在门外（README §6）
+    assert drain.acquire_lock(str(drain.new_run_log())) is None
+
+
+def test_live_lock_with_same_named_old_done_still_running(iso_state, monkeypatch):
+    """repro 钉成回归用例：先落 ``<ts>.done``（上一任的尾），再以**同名**生成锁。
+
+    这是「绕过命名护栏」的极端形状（手工/异常路径拿到同名 run_log）。时序闸必须单独
+    顶住：摘要早于本锁诞生 → 不是本锁的收尾 → 活锁照判 ``running``、``acquire_lock``
+    照拒抢。``_pid_alive`` 桩成真值，复现 pid 回收/保守判活的谎话面。
+    """
+    monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
+    run_log = drain.new_run_log()
+    _seed_done_for(run_log, completed=_past(3600))  # 同名，但收的是 1 h 前那一任的尾
+
+    assert drain.acquire_lock(str(run_log)) is not None
+    assert drain._run_concluded(drain.read_lock()) is False
+    st = drain.lock_status()
+    assert st["state"] == "running" and "residue" not in st, st
+    assert drain.acquire_lock(str(drain.new_run_log())) is None
+
+
+def test_same_second_self_conclusion_still_vetoed(iso_state, monkeypatch):
+    """对照：同秒空跑的自收尾合法——闸取「严格早于」，不得把 E4 那条救援挡回来。"""
+    monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
+    now = drain._now()
+    run_log = drain.new_run_log()
+    _seed_done_for(run_log, started=now, completed=now)
+
+    assert drain.acquire_lock(str(run_log)) is not None
+
+    assert drain._run_concluded(drain.read_lock()) is True
+    st = drain.lock_status()
+    assert st["state"] == "stale" and st["residue"] == "done-exists"
+
+
+def test_done_predates_lock_time_gate_unit():
+    """:func:`drain._done_predates_lock` 的边界：严格早于否决；同刻/更晚/读不出都放行。"""
+    started = "2026-10-12T09:00:00+08:00"
+    lock = {"started": started}
+    assert drain._done_predates_lock({"completed": "2026-10-12T08:59:59+08:00"}, lock)
+    assert not drain._done_predates_lock({"completed": started}, lock)
+    assert not drain._done_predates_lock(
+        {"completed": "2026-10-12T09:00:01+08:00"}, lock
+    )
+    # 不确定就不否决：缺字段、非 ISO、锁侧读不出、时区一侧缺失（TypeError 路径）
+    for body in ({}, {"completed": ""}, {"completed": "T1"}, "not-a-dict"):
+        assert drain._done_predates_lock(body, lock) is False, body
+    naive = {"completed": "2026-10-12T08:00:00"}  # 无时区 → 不可比 → 放行
+    assert drain._done_predates_lock(naive, lock) is False
+    no_started = {"completed": "2026-10-12T08:00:00+08:00"}
+    assert (
+        drain._done_predates_lock(no_started, {}) is False
+    )  # 锁侧无 started → 无从比较

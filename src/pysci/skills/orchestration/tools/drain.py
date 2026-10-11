@@ -26,7 +26,8 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
   ``unresolved``，不留空串）；未选组包项留 pending 下轮；失败（blocked/run_failed）仅**种子** needs_leader、
   组包不连坐（一项卡住不阻塞全队列）；额度类失败（quota_exhausted）例外——视为系统性
   故障**全局停止**（当前条目复位 pending、剩余保持 pending、.done 注明）；run 日志
-  逐行落 ``state/devops-runs/<ts>.log``，全部完成写 ``<ts>.done``（JSON 摘要）。
+  逐行落 ``state/devops-runs/<ts>.log``，全部完成写 ``<ts>.done``（JSON 摘要）。run 名是
+  身份而非标签：同秒撞名时 :func:`new_run_log` 顺延为 ``<ts>_002``…并当场占位。
   ``.done`` 是干净完成信号：stale 锁若缺对应 ``.done`` 即 worker 被中途杀死（崩溃），
   :func:`lock_status` 据此置 ``crashed``，orch status surfacing 供用户判断 devops 状态。
 
@@ -70,6 +71,17 @@ LOCK_PATH: Path = ORCH_STATE_ROOT / "devops.lock"
 
 #: run 日志与 .done 摘要目录。
 DEVOPS_RUNS_DIR: Path = ORCH_STATE_ROOT / "devops-runs"
+
+#: :func:`new_run_log` 同秒顺延上限（正常同秒并发 ≤ 2，留足余量给时钟回拨）。
+RUN_LOG_MAX_TRIES: int = 100
+
+#: 顺延分隔符与计数位宽。用 ``_`` 而**不是** ``-``：``-`` 的码位（0x2D）低于 ``.``
+#: （0x2E），``<ts>-2.done`` 会排在 ``<ts>.done`` **之前**，:func:`latest_done` 的
+#: ``sorted()[-1]`` 就退回读旧摘要——建议书示例名 ``<ts>-2.log`` 满足不了它自己附带的
+#: 「``latest_done()`` 排序语义不变」要求，故此处按该要求取零填充的 ``_<n>``（backlog
+#: 20261011-233248-devops）。位宽对齐上限 ``100`` 才使 ``_10 < _100`` 与 ``_2 < _10``。
+RUN_LOG_SEP: str = "_"
+RUN_LOG_PAD: int = len(str(RUN_LOG_MAX_TRIES))
 
 #: 锁龄上限（秒）——超过即判 stale 接管（worker 崩溃兜底）。6h 覆盖最长 devops 任务。
 LOCK_STALE_S: int = 6 * 3600
@@ -172,6 +184,30 @@ def _run_done_path(data: dict[str, Any] | None) -> Path | None:
     return path.with_suffix(".done")
 
 
+def _done_predates_lock(body: Any, data: dict[str, Any]) -> bool:
+    """``.done`` 的 ``completed`` **严格早于**锁的 ``started``（⇒ 不是本锁的收尾）。
+
+    同一 run 的因果次序固定是「起锁 → 干活 → 释放 → 写摘要」，摘要若早于本锁诞生，
+    它收的就是上一任的尾。取「严格早」而不是「不晚于」：秒级时间戳下同秒空跑（起锁与
+    收尾落在同一秒）是合法的自收尾，判成未收尾就把 E4 要解的假 running 又挡回来了
+    （:func:`_run_concluded` 与本函数是两道独立闸：前者认身份，后者认时序；命名面由
+    :func:`new_run_log` 查重兜住——backlog 20261011-233248-devops）。
+
+    任一时刻读不出（字段缺失/格式非 ISO）时返回 False——不确定就不否决。
+    """
+    completed = str(body.get("completed", "")) if isinstance(body, dict) else ""
+    started = str(data.get("started", ""))
+    if not completed or not started:
+        return False
+    try:
+        done_at = datetime.fromisoformat(completed)
+        lock_at = datetime.fromisoformat(started)
+        return done_at < lock_at
+    except (ValueError, TypeError):
+        # TypeError：一侧带时区一侧不带（手写/迁移期的摘要）——比较不了就不否决
+        return False
+
+
 def _run_concluded(data: dict[str, Any] | None) -> bool:
     """锁自称在跑的 run 是否**已写出 ``.done``**——收尾硬证据（README §4.5）。
 
@@ -180,11 +216,12 @@ def _run_concluded(data: dict[str, Any] | None) -> bool:
     残骸（他方连写都不共享）就会把队列挡成假 running 直到 6 h 超龄（backlog
     20261011-231237-devops，收尾 E3 未竟格）。
 
-    摘要读得出时要求它**自证身份**（``run_log`` 同名）：万一是别的 run 的摘要落到了这个
-    文件名，不能被当作本锁的收尾证据而误抢活锁。残余已知风险：``new_run_log()`` 只到秒，
-    同秒起的两个 run 共享文件名时本否决可能偏早（要同时满足「其一已在同一秒内写出
-    ``.done``」）——彻底消除需给 run 名加进程内 nonce，会改 ``.done`` 命名面与排序语义，
-    不在本次批准面内，留作观察项。
+    摘要读得出时先过两道独立闸：**身份自证**（``run_log`` 同名——万一是别的 run 的摘要
+    落到这个文件名，不能被当作本锁的收尾证据而误抢活锁）与**时序核对**
+    （:func:`_done_predates_lock`——摘要早于本锁诞生就收不了本锁的尾）。命名面另有护栏：
+    :func:`new_run_log` 同秒顺延，run 身份不再撞名（backlog 20261011-233248-devops；
+    此前秒级同名会让「同秒续跑的活锁」被上一任的 ``.done`` 判成残骸并被抢走，单 worker
+    互斥击穿）。
     """
     done = _run_done_path(data)
     if done is None or not done.exists():
@@ -193,6 +230,8 @@ def _run_concluded(data: dict[str, Any] | None) -> bool:
         body = json.loads(done.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return True  # 半写/损坏：文件已在即已收尾（写它在释放锁之后）
+    if _done_predates_lock(body, data):
+        return False
     declared = (
         str(body.get("run_log", "")) if isinstance(body, dict) else ""
     )  # 摘要未记身份 → 无更反的证据，按存在为准
@@ -472,8 +511,39 @@ def _log(run_log: Path, line: str) -> None:
 
 
 def new_run_log() -> Path:
-    """生成本次 run 的日志路径 ``devops-runs/<ts>.log``（不落盘）。"""
-    return DEVOPS_RUNS_DIR / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+    """生成本次 run 的日志路径 ``devops-runs/<ts>.log``，**撞名则补位顺延并当场占位**。
+
+    run 名不只是日志文件名：``.done`` 判活（:func:`_run_concluded`）与 watch 的完成身份
+    三元组都按名字取证。秒级时间戳在同秒两次调用时**同名**，于是快速收尾的上一任（空队列
+    /仅 lock_busy，同秒就写出 ``.done``）会让紧随其后的活锁——锁新鲜、pid 存活、正在干活
+    ——被判成 ``stale/done-exists`` 残骸并被人抢走：README §6 的单 worker 互斥就此击穿
+    （backlog 20261011-233248-devops，建议书点 ①）。
+
+    两道护栏的分工：**命名面**（本函数）保证 run 身份唯一，**时序面**
+    （:func:`_done_predates_lock`）保证即便有人手工拿到同名锁、上一任的摘要也收不了本锁的
+    尾。顺延名用 :data:`RUN_LOG_SEP` 补位（字典序仍晚于被占名，``latest_done`` 读的才是
+    最新摘要）；占位用 ``O_CREAT|O_EXCL`` 原子创建空 ``.log``——只查存在不占位，同秒两个
+    进程仍会同时选中同名（:func:`_log` 与 ``wake_devops`` 都以 append 打开，先建空文件
+    无害）。顺延用尽（同秒撞满 :data:`RUN_LOG_MAX_TRIES`，实际只在时钟回拨时出现）或目录
+    不可建时退到 pid 后缀名（fail-open：命名护栏不得挡住 drain 开工）。
+    """
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    fallback = DEVOPS_RUNS_DIR / f"{stamp}{RUN_LOG_SEP}p{os.getpid()}.log"
+    try:
+        DEVOPS_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return fallback
+    for n in range(1, RUN_LOG_MAX_TRIES + 1):
+        stem = stamp if n == 1 else f"{stamp}{RUN_LOG_SEP}{n:0{RUN_LOG_PAD}}"
+        cand = DEVOPS_RUNS_DIR / f"{stem}.log"
+        if cand.with_suffix(".done").exists():
+            continue
+        try:
+            os.close(os.open(str(cand), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        except OSError:
+            continue  # 名字被占（含并发他方刚创建）：顺延下一个
+        return cand
+    return fallback
 
 
 def latest_done() -> dict[str, Any] | None:
