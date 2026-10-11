@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -15,6 +16,7 @@ from pysci.skills.orchestration.tools import (
     dispatch,
     drain,
     failure_tags,
+    jury,
     ledger,
     registry,
     watch,
@@ -67,6 +69,11 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
     monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")
     monkeypatch.setattr(watch, "WATCH_PATH", state / "watch.json")
+    # E3-prep（仲裁团）：裁决留痕/降级队列/冻结简报三份状态同归 tmp——不 patch 会让
+    # mock 测试真往 orchestration/state/evals/ 写案卷（与真实提案混在一起）。
+    monkeypatch.setattr(jury, "JURY_DIR", state / "evals" / "jury")
+    monkeypatch.setattr(jury, "JURY_QUEUE_DIR", state / "evals" / "jury-queue")
+    monkeypatch.setattr(jury, "JURY_BRIEF_PATH", state / "evals" / "jury-brief.md")
     # drain 启动的模型映射自愈默认 no-op（防测试真起 exe/写真实 registry；
     # 测刷新行为的用例自行 monkeypatch 覆盖）
     monkeypatch.setattr(
@@ -262,3 +269,108 @@ def envelope(result, *, is_error=True, stop="stop_sequence", rc=1):
 def cmd_model(cmd):
     """从 argv 提取 ``-m`` 后的模型串（无 -m 时返回 ''，代表走用户级默认）。"""
     return cmd[cmd.index("-m") + 1] if "-m" in cmd else ""
+
+
+# ---------------------------------------------------------------------------
+# E3-prep 仲裁团夹具（jury 全链路 mock：不起网络、不碰真实 state/evals）
+# ---------------------------------------------------------------------------
+CASE_BODY = """targets: guards/target.txt
+
+## 问题
+是否采纳该基建改动？
+
+## 选项 A
+实施改动：{a}
+
+## 选项 B
+维持现状：{b}
+
+## 证据
+台账与 diff 见自动附着材料段。
+"""
+
+
+@pytest.fixture
+def iso_jury(tmp_path, monkeypatch, iso_state, iso_registry):
+    """隔离仲裁团三面（留痕/队列/简报）+ 假项目根 + 桩 git，返回 state 目录。
+
+    ``PROJECT_ROOT`` 改到 tmp：``file_reading`` 的涉事文件读数与 ``read_key`` 的
+    ``.env`` 回落都在 tmp 里发生，测试自造文件即可，不受真实仓库工作区状态影响。
+    """
+    monkeypatch.setattr(jury, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(jury, "run_git", lambda *a: "stub-git-output")
+    monkeypatch.delenv(jury.KEY_ENV, raising=False)
+    (tmp_path / "state" / "evals").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "guards").mkdir(parents=True, exist_ok=True)
+    # write_bytes 而非 write_text：Windows 下文本写会 smudge 成 CRLF，
+    # 「涉事文件字节读数」断言的字节数就随平台漂移
+    (tmp_path / "guards" / "target.txt").write_bytes(b"line1\nline2\n")
+    return iso_state
+
+
+def seed_case(state, *, case_id="case-1", a="实施改动，收益是机械可验收", b="维持现状"):
+    """落一份合规范案卷（两选项内容默认可区分，供双序映射断言），返回其路径。"""
+    d = state / "evals" / "cases"
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f"{case_id}.md"
+    p.write_text(CASE_BODY.format(a=a, b=b), encoding="utf-8")
+    return p
+
+
+def set_jury_panel(reg_file, panel, **extra):
+    """写隔离 registry.json 的 jury 块（panel=型号清单；extra 覆盖 deadline/pricing 等）。"""
+    data = {"version": 1, "exe": None, "models": {}, "members": {}, "checks": {}}
+    data["jury"] = {"panel": list(panel), **extra}
+    reg_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def ai_reply(choice, *, reason="理由", confidence=0.8, tokens=(100, 50)):
+    """OpenAI 兼容响应体（choices/usage），供 transport 桩返回。"""
+    return {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {"choice": choice, "reason": reason, "confidence": confidence},
+                        ensure_ascii=False,
+                    )
+                }
+            }
+        ],
+        "usage": {
+            "prompt_tokens": tokens[0],
+            "completion_tokens": tokens[1],
+            "total_tokens": sum(tokens),
+        },
+    }
+
+
+def display_label_for_liked(messages, liked_text):
+    """案卷里 ``liked_text`` 落在哪个显示标签下（双序对局里 A/B 会互换）。
+
+    裁判「按内容判决」的正确模拟：不是记住 A 或 B，而是认出自己偏好的那段文字
+    当前挂在哪个标签上——这样 BA 局的原始答案必然翻转，映射回真实选项后才可比。
+    """
+    user = messages[-1]["content"]
+    block_a = re.search(r"## 选项 A\n(.*?)\n\n## 选项 B", user, re.S).group(1)
+    return "A" if liked_text in block_a else "B"
+
+
+def prefer_juror(liked_text, **kw):
+    """内容驱动型裁判桩：永远投给它偏好的那段内容（双序两局都判同一真实选项）。"""
+
+    def transport(model, messages, *, base_url, key, timeout_s):
+        del model, base_url, key, timeout_s
+        return ai_reply(display_label_for_liked(messages, liked_text), **kw)
+
+    return transport
+
+
+def biased_first_juror(**kw):
+    """位置偏好型裁判桩：永远投标签 A —— BA 局映射后与 AB 局矛盾 → inconclusive。"""
+
+    def transport(model, messages, *, base_url, key, timeout_s):
+        del model, messages, base_url, key, timeout_s
+        return ai_reply("A", **kw)
+
+    return transport

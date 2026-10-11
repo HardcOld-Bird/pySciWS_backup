@@ -56,9 +56,8 @@ pysci-dev worktree remove <任务名>
 
 - 真本：`orchestration/skills/<name>/`（git 跟踪）；manifest：同目录 `manifest.toml`；
 - 改完真本执行 `pysci-dev sync`（与 pysci-orch sync 同引擎）；`sync --check` 查漂移；
-- `tree_hash` **行尾无关**（哈希前 CRLF→LF，2026-10-10 修 backlog 20261010-003127-devops）：
-  worktree 内 sync 提交的 `skills-deployed.json` 对 main 即正确，无需合并后重跑；doctor
-  「部署台账巡检（sync --check）」哨兵记录哈希漂移；
+- `tree_hash` **行尾无关**（哈希前 CRLF→LF，2026-10-10 修）：worktree 内 sync 提交的
+  `skills-deployed.json` 对 main 即正确，无需合并后重跑；
 - 红线：只碰 manifest 声明的部署名；**不删除成员自建技能**；不手改部署副本。
 - **真本 references 超 8KB 的处置**：按 `##` 主题拆 `<stem>-0N-<slug>.md` 分册（逐字
   搬运、原名留分册索引），所属 SKILL.md 索引行标 ``*`` + 节首加图例行。机械拆分与验证
@@ -73,6 +72,7 @@ pysci-dev worktree remove <任务名>
 ```
 pysci-dev doctor [--pod <id>]   # pod 巡检：hooks/leader 排除/charter/AGENTS 体量/积压
                                  # + 部署台账（sync --check）+ 预算三档（≤8192B/文件）
+                                 # + API Key 泄漏哨兵（只扫 git 跟踪文件，tests/ 豁免）
 pysci-dev sync [--check]        # 技能部署
 pysci-dev worktree add|merge|remove|list [<name>]   # merge=搬运行态+--no-ff+会话数自检
 pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写、打印终态哈希
