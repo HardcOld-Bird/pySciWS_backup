@@ -713,6 +713,40 @@
       "status": "pending",
       "proposed": "2026-10-12T07:42:43+08:00",
       "note": "defect 实锤复现（静默截断比 parse_error 更隐蔽），引号感知解析批准。"
+    },
+    {
+      "id": "20261012-023430-devops",
+      "member": "devops",
+      "summary": "**主题**：harness 压测验收要求 devops 使用组长专属工具 `pysci-orch`，charter 边界与批准面长期冲突（每次验收都靠临时例外）",
+      "kind": "usability",
+      "success_criteria": "orch eval run/set-baseline 划入 devops 可调用面（README §角色边界或 charter 一处写死，含保留边界：不得触碰 approve/dispatch/drain 队列侧），注明 E4 bencher 上线后本条款退役；此后 E 系列验收交付不再出现引用批准面豁免 charter 的自我论证段",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-023430-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T07:50:13+08:00",
+      "note": "用户裁决（2026-10-12）=方案 a：devops 获 eval 面，组长不亲执行守铁律；过渡条款+E4 退役注记。"
+    },
+    {
+      "id": "20261012-075200-leader",
+      "member": "leader",
+      "summary": "**（E2 再派，原 20261011-233002 腰斩重试）minimum 档 + harness 套件 + orch eval run（eval 边界已由 #55 用户裁决铺平）**",
+      "kind": "usability",
+      "success_criteria": "一次真实 harness 改动 before/after 二元判决；evals.jsonl 字段齐备；全量无回归。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-075200-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T07:51:19+08:00",
+      "note": "E2 再派（P0/#55 铺平前置）。判据见正文。",
+      "effort": "high"
+    },
+    {
+      "id": "20261012-075201-leader",
+      "member": "leader",
+      "summary": "**（E6-prep 续作，原 20261012-005900 腰斩）在既有 worktree 内续完 twin 脚手架（PREFERENCE.md 草案仍标待确认）**",
+      "kind": "defect",
+      "success_criteria": "派发实锤；PREFERENCE.md 只读拦截阳性；mirror status/journal 分流落点正确；\nv1 草案落盘标注待确认；全量无回归；合并后清理续作 worktree。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-075201-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T07:51:19+08:00",
+      "note": "E6-prep 续作（worktree 半成品抢救，防重做）。生效面留用户确认。"
     }
   ]
 }
