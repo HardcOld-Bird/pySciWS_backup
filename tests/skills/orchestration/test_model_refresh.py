@@ -63,6 +63,7 @@ def iso_registry(tmp_path, monkeypatch):
                     "max": "old-max-uuid",
                     "flash": "Qwen3.8-Flash",
                     "flash_fallback": "",
+                    "minimum": "Qwen3.8-Flash",
                 },
                 "members": {},
                 "checks": {},
@@ -107,6 +108,7 @@ def test_refresh_all_current_no_save(iso_registry, monkeypatch):
         "max": MAX_UUID,
         "flash": "Qwen3.8-Flash",
         "flash_fallback": FB_UUID,
+        "minimum": "Qwen3.8-Flash",
     }
     reg_file.write_text(json.dumps(data), encoding="utf-8")
     _fake_output(monkeypatch)

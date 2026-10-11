@@ -53,9 +53,16 @@ BACKUP_NAME: str = "registry.presplit.json"
 #: - ``<tier>_fallback`` = 该档额度耗尽时的备用渠道（do_dispatch 自动换档重试一次）。
 #:   BYOK modelID 账号相关，出厂默认为空=无回退；实际值由组长在 registry.json 配置
 #:   （flash_fallback=BYOK Qwen-3.8-Flash，护栏级、须经用户）。
+#: - ``minimum`` = harness 压测专用最低成本档（REFACTOR §1.1，驱动 ``orch eval run``）。
+#:   ``registry.models`` 改动属护栏级：本档的**设立**经用户裁决（§1.1），而**型号选择**
+#:   原属专门环节，委托期内由组长代决（§9.4）——暂映射内置 ``Qwen3.8-Flash``（现唯一
+#:   零成本渠道，credits 恒 0 已实锤；决策已入 state/preference-journal.jsonl）。
+#:   **重估条件**：E3 SiliconFlow 接入后，若拿到更廉价的压测渠道即改这里或写 registry.json
+#:   的 ``models.minimum``（registry 覆盖优先）；档位抽象与本型号解耦，套件案不写死型号。
 DEFAULT_MODELS: dict[str, str] = {
     "max": "",
     "flash": "Qwen3.8-Flash",
+    "minimum": "Qwen3.8-Flash",
     "flash_fallback": "",
 }
 
@@ -67,6 +74,7 @@ DEFAULT_MODEL_PATTERNS: dict[str, str] = {
     "max": "Qwen-3.8-Max",
     "flash_fallback": "Qwen-3.8-Flash",
     "flash": "Qwen3.8-Flash",
+    "minimum": "Qwen3.8-Flash",
 }
 
 #: --list-models 的 BYOK 行：``人类名 (uuid)``；内置行为裸名（无 UUID）。
