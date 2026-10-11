@@ -740,6 +740,10 @@ def _drain_batch(
         quiet=True,
     )
     elapsed = round(time.time() - t0, 1)
+    if outcome.warning:
+        # 交付是被宽松兜底面救回的（解析器版本落后于协议）：不改变判读，但必须进 run
+        # 日志——组长侧看得到「这一跳的交付格式是兜底读出来的」，据此决定要不要重跑
+        _log(run_log, f"[!] {outcome.warning}（{seed_id}）")
 
     if outcome.code == 0:
         listed = _extract_backlog_ids(outcome.body)

@@ -73,9 +73,9 @@
   不可猜 token，control 与 withexclude 各跑一跳做**因果断言**（不灵敏只报 inconclusive、不误绿）；
   结论落**无时间戳**台账 `state/agents-md-excludes-probe.json`（staleness=hash{cli_version,排除面}，
   仅 CLI 升级或排除面变时复测），doctor 读它定三档。预算审计量落盘字节，probe 验实际注入。
-- **交付协议扩展有滚动升级窗口（2026-10-12，E1 tags 实测）**：交付正文由派发进程**启动时
-  import 的** `delivery` 解析器读，合并只对此后新起的进程生效——旧解析器只认字面 `<tag>`，
-  带属性的 `<blocked tags="a,b">` 会被判 parse_error。刚合并扩展的那一跳别用新属性交付。
+- **交付协议滚动升级窗口（2026-10-12 E1 实测 → backlog 002857 已修）**：解析器按派发进程
+  启动时 import 的快照读交付，旧解析器只认字面 `<tag>`；现 parse_delivery 有宽松兜底面救回
+  带属性交付并附「解析器早于协议」告警（进 outcome/run 日志）——见告警就重跑本单确认。
 - **直跑 guard 探针的假绿坑（2026-10-12）**：载荷要填 `last_assistant_message`（guard 不读
   transcript_path，只喂 transcript 会空跑全绿）；`PYSCI_PROJECT_ROOT` 须用 `cygpath -w` 形态
   （`/tmp` 被 node 当 `D:\tmp` → 词表 ENOENT → fail-open 放行）。
