@@ -19,17 +19,36 @@ sessions/hops/chars_offset 是**心跳**——每派发必变。留在 registry.
 220711 是同一形状的两笔阻塞，故把运行态迁到 gitignore 文件，registry.json 只承载低频
 配置——碰它的交付不再被心跳 dirty 拦。
 
-## 迁移机制（`Registry` 内部，读写方无感）
+## 读写契约（`Registry` 内部，读写方照此调用）
 
-- 读写方只经 `reg.member(id) → m.sessions → reg.write_member(m) → reg.save()`；会话池
-  在 `member()` 从运行态载入、`write_member()` 写回运行态，配置面永不含 `sessions`。
+- 记账一跳：`reg.member(id) → m.sessions → reg.write_sessions(m) → reg.save()`。
+  `write_sessions()` **只写运行态**并声明「本进程拥有该成员的会话池」；它不再回写配置面
+  （旧名 `write_member` 会顺手把内存 Member 的 model_tier/pod/参数模板抄进
+  registry.json——见下节事故）。
+- 机器改配置面**只剩声明这一条通路**：`reg.declare_config(models={tier: val, ...})`
+  （改档位映射/checks 等顶层键，值=改动子集）与 `ensure_member_defaults()`（新增成员，
+  仅当磁盘也无该成员才落）。
+- **`save()` 是读-改-写按键合并，不是整体回写**：落盘前重读两份文件，配置面以磁盘为
+  权威——无声明则一个字节不写；有声明只把声明的键叠加上去。运行态只动声明过的成员，
+  其会话池按 `sid` 合并（同 sid 本进程为准，磁盘独有 sid 保留）。
 - **首次 `Registry.load()` 自动迁移**：若配置内嵌 sessions 且运行态文件缺席，即抬高
   sessions→运行态、从配置剥离、备份原文到 `registry.presplit.json`（已存在则不覆盖），
-  两份原子落盘。第二次 load 天然跳过（幂等）。`save()` 恒**双写**（配置面防御性剥离任何
-  残留 sessions + 运行态）。
+  两份原子落盘。第二次 load 天然跳过（幂等）；这是唯一被许可的全量写（数据即本次 load
+  刚读的磁盘内容，窗口毫秒级）。
 - `runtime_path`/`backup_path` 随 `Registry.path` 的父目录移动 → 测试 patch 一处
   `REGISTRY_PATH` 即两面隔离。`load()` 显式以模块级 `REGISTRY_PATH` 绑 `path`（非
   dataclass 默认值——后者在类定义时已绑真实路径，无视 monkeypatch）。
+
+## 为什么配置面必须磁盘权威（backlog 20261011-220621-leader）
+
+分储只搬走了心跳，没搬走「整体回写内存副本」这个坏习惯。实测首战：21:05:57 drain worker
+启动并 `Registry.load()`（deputy/reviewer=max）→ 21:42:41 E0-C 批次合并降档 flash → 22:04
+`git diff HEAD -- registry.json` 显示工作树**回退为 max、tier_note 消失**。长驻进程收尾时
+把启动快照整个 `save()` 回去，后写覆盖——用户已裁决的配置改动在运行态被无声撤销。
+
+护栏形状：**任何进程都不得用陈旧全量副本覆盖 state 配置面**。故 save 前必重读磁盘、
+只覆盖本进程负责的键；纯记账的派发路径根本不该产生配置文件写入（`git diff HEAD` 应为空
+是 drain run 的事后判据）。
 
 ## 排查提示
 
@@ -42,3 +61,5 @@ sessions/hops/chars_offset 是**心跳**——每派发必变。留在 registry.
   与本就在盘的正常态都不响。
 - 改 sessions 读写逻辑后须同步 `tests/skills/orchestration/conftest.py` 的 `iso_dispatch`
   （预置运行态文件）与 `read_runtime`/`write_runtime`——est_tokens 系列断言读的是运行态。
+- 默认夹具把 `Registry.save` no-op 掉以防污染真实 state；要断言落盘（含按键合并语义）
+  用 `enable_registry_save(monkeypatch)` 还原真实 save。

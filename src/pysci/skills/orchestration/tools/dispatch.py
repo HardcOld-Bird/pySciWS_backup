@@ -402,7 +402,7 @@ def do_dispatch(
             )
         )
         _sessions.touch_session(m, sid, chars_offset=chars_after)
-        reg.write_member(m)
+        reg.write_sessions(m)
         reg.save()
         outcome = DispatchOutcome(
             code=2,
@@ -463,7 +463,7 @@ def do_dispatch(
         sent.mkdir(exist_ok=True)
         shutil.move(str(p), str(sent / p.name))
     _sessions.touch_session(m, sid, chars_offset=chars_after)
-    reg.write_member(m)
+    reg.write_sessions(m)
     reg.save()
 
     failed_checks = [c for c in check_results if c["verdict"] == "fail"]

@@ -24,11 +24,29 @@ from pysci.skills.orchestration.tools import sessions as dispatch_sessions
 #: 运行态文件名（与 registry.RUNTIME_NAME 同步；夹具直接落盘用，不 import 常量以免耦合）。
 RUNTIME_FILE = "sessions-runtime.json"
 
+#: 真实 ``Registry.save``——模块导入时捕获。默认夹具为防污染把它 no-op 掉，
+#: 需要断言落盘（读-改-写合并语义）的用例用本引用还原。
+REAL_REGISTRY_SAVE = registry.Registry.save
+
 # 2026-10-10 额度事故原文（会话 jsonl 实测）
 QUOTA_TEXT = (
     "You've reached your credit usage limit. Please upgrade your "
     "subscription plan to get more resources. Report Issue (input /feedback)"
 )
+
+
+@pytest.fixture
+def iso_registry(tmp_path, monkeypatch):
+    """把 ``REGISTRY_PATH`` 指向 tmp，返回 (reg_file, runtime_file, backup_file)。
+
+    配置面/运行态/迁移备份三份同目录，随 patch 一起隔离；``Registry.load`` 显式读模块级
+    ``REGISTRY_PATH``，``save`` 写 ``self.path`` 及其父目录，故 patch 一处即两面生效。
+    """
+    reg_file = tmp_path / "registry.json"
+    runtime_file = tmp_path / registry.RUNTIME_NAME
+    backup_file = tmp_path / registry.BACKUP_NAME
+    monkeypatch.setattr(registry, "REGISTRY_PATH", reg_file)
+    return reg_file, runtime_file, backup_file
 
 
 @pytest.fixture
@@ -167,22 +185,14 @@ def grow_session(state, sid: str, text: str) -> int:
     return len(p.read_text(encoding="utf-8"))
 
 
-def enable_registry_save(monkeypatch, state):
-    """让本用例的 ``Registry.save`` 真写隔离配置面 + 运行态两份（断言会话水位落盘用）。
+def enable_registry_save(monkeypatch):
+    """还原真实 ``Registry.save``（默认夹具为防污染把它 no-op 掉了）。
 
-    默认夹具把 save no-op 掉以防污染真实 state；本函数只在 tmp_path 内重建持久化。
-    写 ``self.path``/``self.runtime_path``（load 已把二者绑到 state 目录，随 monkeypatch 移动）。
+    真实 save 是**读-改-写按键合并**：配置面磁盘权威（未声明改动则一字不写），运行态
+    按成员/按 sid 合并。落点随 load 绑定的 ``self.path`` 移动，本夹具已把 REGISTRY_PATH
+    指到 state 目录，故只写隔离副本、不碰真实 registry.json。
     """
-
-    def _save(self):
-        (state / "registry.json").write_text(
-            json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        (state / RUNTIME_FILE).write_text(
-            json.dumps(self.runtime, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-
-    monkeypatch.setattr(registry.Registry, "save", _save)
+    monkeypatch.setattr(registry.Registry, "save", REAL_REGISTRY_SAVE)
 
 
 def read_registry(state):

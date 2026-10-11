@@ -18,7 +18,8 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
   兜底，只清孤儿名不误删活跃/手动 worktree）；``backlog_take_batch`` 取队首为种子 +
   同提请者组包（≤ :data:`BATCH_MAX` 项）→ 批量任务书（种子必做 + 组包菜单，devops 自主
   选取合并实施）→ 一次 ``do_dispatch("devops")`` → 解析交付 ``backlog id=<ids>`` 逐 id
-  销账；未选组包项留 pending 下轮；失败（blocked/run_failed）仅**种子** needs_leader、
+  销账（commit 字段三级定位：正文提取 → 按 ``wt-<id>`` 分支回溯 merge commit → 注记
+  ``unresolved``，不留空串）；未选组包项留 pending 下轮；失败（blocked/run_failed）仅**种子** needs_leader、
   组包不连坐（一项卡住不阻塞全队列）；额度类失败（quota_exhausted）例外——视为系统性
   故障**全局停止**（当前条目复位 pending、剩余保持 pending、.done 注明）；run 日志
   逐行落 ``state/devops-runs/<ts>.log``，全部完成写 ``<ts>.done``（JSON 摘要）。
@@ -335,6 +336,42 @@ def _extract_commit(body: str) -> str:
     return m.group(1) if m else ""
 
 
+#: 正文提取与分支查询双双失败时写进 ``.done`` 的 commit 字段注记（不留空串——空串读起来
+#: 像「没提交」，而实际多半是「报了但没被抓到」，backlog 20261011-220621-leader 要求 4）。
+COMMIT_UNRESOLVED = "unresolved"
+
+
+def merge_commit_of(worktree_name: str) -> str:
+    """按 worktree/分支名回溯其并入 main 的 merge commit（短哈希）；查不到返回空串。
+
+    ``wt-<backlog-id>`` 是任务书纪律（条目 id 即 worktree 名），``pysci-dev worktree
+    merge`` 走 ``git merge --no-ff`` 产生默认消息 ``Merge branch 'wt-<id>'``，故 ``--grep``
+    回溯即可定位——分支即便已被 ``worktree remove`` 删掉也照样查得到。
+    """
+    if not worktree_name:
+        return ""
+    rc, out = _run_git(
+        "log", "--merges", "-n", "1", "--format=%h", f"--grep=wt-{worktree_name}"
+    )
+    if rc != 0:
+        return ""
+    for line in out.splitlines():
+        token = line.strip()
+        if re.fullmatch(r"[0-9a-f]{7,40}", token):
+            return token
+    return ""
+
+
+def resolve_commit(body: str, worktree_name: str) -> str:
+    """交付正文抓 hash → 抓不到按 ``wt-<id>`` 分支查 merge commit → 再查不到写注记。
+
+    实锤失配形状（E0-B 条目）：正文写 ``合并 commit hash：f2e0840``，而 "hash" 里的 a 是
+    十六进制字母，:data:`_COMMIT_RE` 的间隔类 ``[^0-9a-f]{0,16}`` 跨不过去 → 正则整体
+    失配、账上留下 ``commit=""``（merge commit 其实一直在 ``git log`` 里可查）。
+    """
+    return _extract_commit(body) or merge_commit_of(worktree_name) or COMMIT_UNRESOLVED
+
+
 def _extract_backlog_ids(body: str) -> list[str]:
     """从交付正文提取 ``backlog id=<id1>,<id2>,…`` 清单（本次完成的 backlog id）。
 
@@ -473,30 +510,33 @@ def _drain_batch(
     elapsed = round(time.time() - t0, 1)
 
     if outcome.code == 0:
-        commit = _extract_commit(outcome.body)
         listed = _extract_backlog_ids(outcome.body)
         # 只销账本批内的 id；种子必 done（result=成功且种子为必做项，防御漏报）
         completed = [seed_id]
         for did in listed:
             if did in batch_ids and did not in completed:
                 completed.append(did)
+        # commit 逐 id 定位：正文抓得到就用抓到的，抓不到按 wt-<id> 分支回溯 merge
+        # commit（worktree 名 = 条目 id 的任务书纪律），再查不到才落注记
+        commits = {cid: resolve_commit(outcome.body, cid) for cid in completed}
         for cid in completed:
             backlog_complete(
                 cid,
-                note=f"drain 批量销账（commit {commit or '未报告'}）",
+                note=f"drain 批量销账（commit {commits[cid]}）",
                 batch_size=len(completed),
                 batch_seed=seed_id,
             )
         _log(
             run_log,
             f"[√] 批次 {label} 完成：销账 {len(completed)} 项（{', '.join(completed)}；"
-            f"{elapsed}s，commit={commit or '-'}）",
+            f"{elapsed}s，"
+            f"commit={', '.join(f'{cid}:{commits[cid]}' for cid in completed)}）",
         )
         return [
             {
                 "id": cid,
                 "status": "done",
-                "commit": commit,
+                "commit": commits[cid],
                 "batch_size": len(completed),
                 "batch_seed": seed_id,
                 "elapsed_s": elapsed,

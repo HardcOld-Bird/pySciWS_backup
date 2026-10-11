@@ -7,17 +7,10 @@
 
 from __future__ import annotations
 
+import copy
 import json
 
-import pytest
-
-from pysci.skills.orchestration.tools import registry as reg_mod
-from pysci.skills.orchestration.tools.registry import (
-    BACKUP_NAME,
-    RUNTIME_NAME,
-    Member,
-    Registry,
-)
+from pysci.skills.orchestration.tools.registry import Member, Registry
 
 
 def _legacy_data(*, with_sessions: bool = True) -> dict:
@@ -42,16 +35,6 @@ def _legacy_data(*, with_sessions: bool = True) -> dict:
         "members": {"devops": entry},
         "checks": {"orch-tests": {"cmd": ["uv", "run", "pytest", "-q"]}},
     }
-
-
-@pytest.fixture
-def iso_registry(tmp_path, monkeypatch):
-    """把 REGISTRY_PATH 指向 tmp，返回 (reg_file, runtime_file, backup_file)。"""
-    reg_file = tmp_path / "registry.json"
-    runtime_file = tmp_path / RUNTIME_NAME
-    backup_file = tmp_path / BACKUP_NAME
-    monkeypatch.setattr(reg_mod, "REGISTRY_PATH", reg_file)
-    return reg_file, runtime_file, backup_file
 
 
 def test_first_load_migrates_sessions_to_runtime(iso_registry):
@@ -153,8 +136,8 @@ def test_no_cutover_for_fresh_registry_without_sessions(iso_registry):
     assert not runtime_file.exists()
 
 
-def test_write_member_and_save_route_sessions_to_runtime(iso_registry):
-    """write_member 把会话写进运行态、配置面永不含 sessions（save 原子双写）。"""
+def test_write_sessions_and_save_route_sessions_to_runtime(iso_registry):
+    """write_sessions 把会话写进运行态、配置面永不含 sessions（运行态是唯一会话落点）。"""
     reg_file, runtime_file, backup_file = iso_registry
     reg_file.write_text(
         json.dumps(_legacy_data(), ensure_ascii=False), encoding="utf-8"
@@ -165,7 +148,7 @@ def test_write_member_and_save_route_sessions_to_runtime(iso_registry):
     m.sessions.append(
         {"sid": "bbbb2222", "name": "任务B", "hops": 0, "status": "active"}
     )
-    reg.write_member(m)
+    reg.write_sessions(m)
     reg.save()
 
     cfg = json.loads(reg_file.read_text(encoding="utf-8"))
@@ -175,19 +158,23 @@ def test_write_member_and_save_route_sessions_to_runtime(iso_registry):
     assert sids == ["aaaa1111", "bbbb2222"]
 
 
-def test_save_strips_any_embedded_sessions(iso_registry):
-    """即便内存里配置仍带旧内嵌 sessions，save 也会剥离（护栏：配置面永不携带运行态）。"""
+def test_save_without_declared_config_change_never_writes_config(iso_registry):
+    """内存里配置仍带旧内嵌 sessions：无声明的 save 根本不碰配置文件（磁盘权威）。
+
+    护栏升级自原「save 剥离内嵌 sessions」——不再靠写时清洗，而是切断「整体回写内存
+    快照」这条通路本身（backlog 20261011-220621-leader）。
+    """
     reg_file, runtime_file, _backup = iso_registry
-    reg_file.write_text(
-        json.dumps(_legacy_data(), ensure_ascii=False), encoding="utf-8"
-    )
+    legacy = _legacy_data()
+    reg_file.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    before = reg_file.read_text(encoding="utf-8")
     # 手工构造带内嵌 sessions 的 data + 空运行态，绕过 load 迁移
     reg = Registry(
-        data=_legacy_data(), runtime={"version": 1, "members": {}}, path=reg_file
+        data=copy.deepcopy(legacy), runtime={"version": 1, "members": {}}, path=reg_file
     )
     reg.save()
-    cfg = json.loads(reg_file.read_text(encoding="utf-8"))
-    assert "sessions" not in cfg["members"]["devops"]
+    assert reg_file.read_text(encoding="utf-8") == before, "未声明改动 → 配置面一字不写"
+    assert not runtime_file.exists(), "未声明会话池所有权 → 运行态也不写"
 
 
 def test_ensure_member_defaults_seeds_runtime_not_config(iso_registry):

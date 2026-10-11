@@ -166,7 +166,7 @@ def test_preexisting_session_does_not_inherit_history(iso_dispatch, monkeypatch)
 
 def test_offset_continuity_across_two_hops(iso_dispatch, monkeypatch):
     """第二跳只计本跳增量；水位与跳数随派发前进（跨进程基准必须落 registry）。"""
-    enable_registry_save(monkeypatch, iso_dispatch)
+    enable_registry_save(monkeypatch)
     dispatch_one(iso_dispatch, monkeypatch, "a" * 100)
     sess = read_runtime(iso_dispatch)["members"]["quotamember"]["sessions"][0]
     assert sess["chars_offset"] == 100
@@ -199,7 +199,7 @@ def test_rewritten_session_file_clamps_not_negative(iso_dispatch, monkeypatch):
 
 def test_failed_hop_still_measured(iso_dispatch, monkeypatch):
     """运行失败跳同样计量（它真烧了 token），水位照记。"""
-    enable_registry_save(monkeypatch, iso_dispatch)
+    enable_registry_save(monkeypatch)
     seed_session(iso_dispatch)
 
     def responder(n, cmd):
