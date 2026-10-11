@@ -523,3 +523,10 @@ backlog 条目入队（附各自 success_criteria，自举 §6 纪律）→ devo
 - 待用户早晨处理：① SiliconFlow Key 提供（E3 真实连通前置）；② 用户 prompt
   语料文件路径（E6 twin 原料）；③ PREFERENCE.md v1 确认与 twin 上线宣告
   （E6/E7，届时呈「待确认」包）；④ 本委托期内全部护栏级决定的追溯清单。
+
+**委托期夜航日志**：
+- 23:33 run 起（45-48 位）：E1+E2 组包批次于 00:04 `run_failed(tool_use)`——
+  运行时中断非规格障碍，E1 worktree 留大量未提交半成品；处置=E1 标
+  needs_leader（superseded 留档），另立 **001 续作单**（20261012-001000）授权
+  devops 在遗留 worktree 内续完（不重做）；E2 已转独立批次于 00:04 起消化；
+- 队列余量：233003（E3-prep,high）、233248（#48 互斥修复）、001（E1 续作）。
