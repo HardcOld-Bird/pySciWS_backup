@@ -250,6 +250,17 @@ def do_dispatch(
         return DispatchOutcome(
             code=2, kind="run_failed", member=member_id, error="pod 不存在"
         )
+    # 无记忆纪律（REFACTOR §9：twin 每次判断必须冷启动）：会话复用在此硬拦。写成
+    # 「charter 里劝一句」就必然被忘——纪律要落成 exit（§0.3 硬代码优先）。
+    if m.raw.get("cold_start") and session != "new":
+        if not quiet:
+            print(f"[!] {member_id} 冷启动纪律：拒绝复用会话（session={session!r}）")
+        return DispatchOutcome(
+            code=2,
+            kind="run_failed",
+            member=member_id,
+            error=f"cold_start 成员只允许 session='new'（收到 {session!r}）",
+        )
     tier = model_tier or m.model_tier
     model = reg.models.get(tier, "")
     slug = slug or (Path(task_file).stem if task_file else f"adhoc-{_ts()}")

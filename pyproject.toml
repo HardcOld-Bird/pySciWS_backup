@@ -111,6 +111,9 @@ pysci-model3d = "pysci.skills.modeling3d.tools.model3d:main"
 pysci-orch = "pysci.skills.orchestration.tools.orch:main"
 # devops 组员工具（worktree/部署/巡检）：与 orch 严格分离——orch 服务组长，dev 服务 devops 组员。
 pysci-dev = "pysci.skills.devops.tools.dev:main"
+# 用户控制台（REFACTOR §10）：mirror 是**用户**侧入口（全景概览 + 口述分流），
+# 与 orch（组长）/dev（devops）分离；实现复用 orchestration 包内库（§0.9 共享逻辑做库）。
+pysci-mirror = "pysci.skills.orchestration.tools.mirror:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra

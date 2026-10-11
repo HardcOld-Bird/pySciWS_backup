@@ -48,12 +48,14 @@ uv run pysci-orch consult "<问题>"               # 咨询副组长（平级：
 uv run pysci-orch review <产物> --origin <member> [--rubric generic]
         [--goal-from <原生产任务书> | --goal "<目标陈述>"]
         # 审查链：VERDICT → FAIL 自动回派返工 → 复审一次 → 二次 FAIL 升级你仲裁
-        # 带 --goal-from/--goal：把组长撰写的目标陈述嵌入审查任务书，reviewer 的 G2
-        # 「与任务书目标一致」据此独立核验，不再依赖生产者 notes.md 自述（强烈建议带上）
+        # 带 --goal-from/--goal：组长目标陈述进审查任务书，reviewer G2「与任务书目标
+        # 一致」据此独立核验，不依赖生产者 notes.md 自述（强烈建议带上）
 uv run pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（非 Qwen 双序对局，
         # 阻塞出裁决；不可达降级入队 rc=1）；案卷格式见 references/jury-panel.md
 uv run pysci-orch eval run (--case <id>|--all) [--label L]
         # Tier B 压测：minimum 档真派发→通过|失败；案卷与基线见 references/harness-eval.md
+uv run pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（§9）：宪章注入+冷启动单跳；
+        # 未生效（taste_enabled=false）即拒派发；细则 references/twin-taste-mirror.md
 uv run pysci-orch stats [--plan id|--member m|--days N]
 # —— 底层命令面（降级/调试）——
 uv run pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
@@ -84,16 +86,14 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 - `<blocked tags="a,b">` 失败标签入台账/`orch stats` by_failure；滑窗内同 (tag,member)
   达 registry `tier_a` 阈值 → status/approve 自动立 source=tier-a 提案（细则 references/tier-a-tags.md）；
 - blocked → 三选一：补充重派 / consult 副组长 / 上报用户；
-- 建议审批：approve 入 backlog 并**自动唤醒 devops 后台消化**（分离进程持锁 FIFO 串行；
-  锁忙不重复唤醒，单项失败标 needs_leader 跳过、不阻塞队列），**reject 即 override：必须
+- 建议审批：approve 入 backlog 并**自动唤醒 devops 后台 FIFO 串行**（锁忙不重复唤醒，
+  单项失败标 needs_leader 跳过、不阻塞队列），**reject 即 override：必须
   `--override "<依据>"`，落决策日志 `state/preference-journal.jsonl` 计入 override 率**（无
-  依据的否决被代码拒绝）——回复都会
-  自动附送提议人；`orch status` 看 devops worker 态 / 最近 run / needs_leader 提醒；
-  交办后照输出 [NEXT] 以 `run_in_background` 挂 `orch watch` 等事件（命中单行退出即唤醒，
-  勿 sleep-轮询 status）；漏挂的账由下次 `orch status` 的 watch 段补账；**测试/诊断性挂载
-  前须确认无 live 挂载或先停**——`arm()` 全局覆写 `state/watch.json`，会抹掉在等那任的心跳
-  与黑匣子；`watch.json` 的 `recent`/`exit_reason` 是脱靶复盘现场，`orch status` 会读出
-  「上一任无退出记录」（被外部杀死）及其末帧；
+  依据的否决被代码拒绝）——审批回复自动附送提议人；`orch status` 看 devops worker 态 /
+  最近 run / needs_leader 提醒；交办后照 [NEXT] 以 `run_in_background` 挂 `orch watch`
+  等事件（命中单行退出即唤醒，勿 sleep-轮询），漏挂的账由下次 status 的 watch 段补账；
+  **测试/诊断性挂载前须确认无 live 挂载或先停**——`arm()` 覆写 `state/watch.json` 会抹掉
+  在等那任的心跳与黑匣子（`recent`/`exit_reason` 是脱靶复盘现场，status 读出其末帧）；
   护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：修改任务书重派，或行使最终裁定权
   坚持原派（理由留痕台账）；
@@ -103,8 +103,7 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 
 - 工作完结且会话不再需要 → `sessions <member> --archive <sid> --distill`；
 - ctx>60% 的会话提示归档；`stats` 看成员耗时占比与成本覆盖率（BYOK 下 credits **依模型**
-  上报：max 档计量、flash 档恒 0，故 stats 标注「覆盖 M/N 跳」）；
-  成本曲线异常 → 考虑 harness 改进或档位调整。
+  上报：max 档计量、flash 档恒 0，故 stats 标注「覆盖 M/N 跳」）。
 
 ## 降级
 
