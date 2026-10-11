@@ -516,6 +516,12 @@ def main(argv: list[str] | None = None) -> int:
         help="按项标注该待办的推理强度（写入 backlog 条目，drain 消化时透传；"
         "不标=跟随用户级默认=中）",
     )
+    p.add_argument(
+        "--criteria",
+        default="",
+        help="补录成功判据（E0-B 判据 3：backlog 条目须带可证伪 success_criteria；"
+        "建议正文缺 `success_criteria` 标记行时用此参数补，仍缺则拒绝入队）",
+    )
     p.set_defaults(func=_workflow.cmd_approve)
 
     p = sub.add_parser("reject", help="否决建议 → 须 --override 留痕（入决策日志）")

@@ -23,6 +23,10 @@ import path from 'node:path';
 const LIMIT = 8192;
 const CHARTER = 'charter.md'; // 只读层，always_on 槽位专属；尺寸由 pysci-dev doctor 审计
 const TAG_RE = /<result>[\s\S]*<\/result>|<blocked>[\s\S]*<\/blocked>/;
+// E0-B（REFACTOR §12 判据 1）：改进提案必须结构化分类。infra_suggestion 块非空时
+// kind 属性必填且须落在词表内——这是后续判决包分流（E5）的地基。
+const INFRA_KINDS = ['defect', 'usability'];
+const INFRA_RE = /<infra_suggestion\b([^>]*)>([\s\S]*?)<\/infra_suggestion>/;
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -55,6 +59,22 @@ function run() {
         '可选 <infra_suggestion>...</infra_suggestion>；产物用 <artifact check="类型|none" reason="...">路径</artifact> 声明。' +
         '请按 charter 交付协议重新组织最终回复（工作内容不必重做）。'
     );
+  }
+
+  // E0-B（REFACTOR §12 判据 1）：非空 <infra_suggestion> 必须带合法 kind 属性——
+  // 结构化分类是后续判决包分流（E5）的地基。块为空则不执法（无建议可分类）。
+  const infraMatch = msg.match(INFRA_RE);
+  if (infraMatch && infraMatch[2].trim()) {
+    const kindM = (infraMatch[1] || '').match(/\bkind\s*=\s*"([^"]*)"/);
+    const kind = kindM ? kindM[1] : '';
+    if (!INFRA_KINDS.includes(kind)) {
+      problems.push(
+        '<infra_suggestion> 必须带 kind 属性且取值 defect 或 usability（当前' +
+          (kindM ? ' kind="' + kind + '"' : '缺 kind') +
+          '）。动作：<infra_suggestion kind="defect">（缺陷，附复现证据）' +
+          '或 kind="usability"（难用/体验类）；块正文含 kind: 与 success_criteria 标记行供 approve 解析。'
+      );
+    }
   }
 
   try {

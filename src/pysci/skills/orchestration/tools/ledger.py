@@ -33,6 +33,10 @@ class LedgerEntry:
     kind: str = ""  # result | blocked | parse_error | run_failed
     checks: list[dict[str, Any]] = field(default_factory=list)
     infra_suggestion: bool = False
+    # E0-B（判据 2）：非空 infra_suggestion 的 kind（defect/usability/""）——旧行无此字段→""。
+    # 与 infra_suggestion 布尔并存：后者答「有没有建议」，本字段答「建议属哪一类」，
+    # 供台账侧统计提案分布、也随交付落盘一份可追溯记录。
+    infra_kind: str = ""
     num_turns: int = 0
     duration_ms: int = 0
     credits: float = 0.0

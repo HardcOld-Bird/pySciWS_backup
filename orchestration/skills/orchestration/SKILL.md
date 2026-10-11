@@ -38,8 +38,11 @@ uv run pysci-orch plan amend <id>               # 直接编辑 plan YAML 后校�
 uv run pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步
 uv run pysci-orch plan list | plan drop <id>
 uv run pysci-orch suggestions                   # 待审批改进建议
-uv run pysci-orch approve <建议id> --note "..." [--no-wake]
-        # 采纳→入 backlog，默认自动唤醒 devops 后台 FIFO 消化；--no-wake 只入队不唤醒
+uv run pysci-orch approve <建议id> --note "..." [--no-wake] [--criteria "<判据>"]
+        # 采纳→入 backlog，默认自动唤醒 devops 后台 FIFO 消化；--no-wake 只入队不唤醒。
+        # E0-B：backlog 条目须带非空 kind 与 success_criteria——approve 从建议正文解析
+        # `kind:`/`success_criteria` 标记行；缺 kind 或缺判据即**拒绝入队**（非零退出+提示），
+        # 判据可用 --criteria "<文本>" 补录
 uv run pysci-orch watch [--timeout 14400]
         # 后台挂起等 drain 事件（QUEUE-COMPLETE/NEEDS-LEADER/QUOTA-STOP/CRASH）：
         # run_in_background 启动，命中单行退出即唤醒本会话；漏挂由 status 补账
@@ -75,7 +78,8 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 ## 交付判读与决策点
 
 - `<result>`=成功，`<blocked>`=失败（含卡点）；机械验收 FAIL 按 [NEXT] 回派返工，
-  同指纹连败 3 次停止回派升级决策；
+  同指纹连败 3 次停止回派升级决策；组员 `<infra_suggestion>` 现须带 `kind="defect|usability"`
+  （delivery-gate 强制），approve 会把它连同正文 `success_criteria` 一并写入 backlog 条目；
 - blocked → 三选一：补充重派 / consult 副组长 / 上报用户；
 - 建议审批：approve 入 backlog 并**自动唤醒 devops 后台消化**（分离进程持锁 FIFO 串行；
   锁忙不重复唤醒，单项失败标 needs_leader 跳过、不阻塞队列），**reject 即 override：必须

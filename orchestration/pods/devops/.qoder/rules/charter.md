@@ -33,7 +33,8 @@ trigger: always_on
   必变，gitignore）**：sessions/hops/chars_offset 等写走运行态；首次 `Registry.load()`
   自动一次性迁移；细节见 `orchestration/skills/devops/references/registry-runtime.md`
   （backlog 20261010-registry-runtime-split）；
-- **交付协议**：与全体组员相同（<result>/<blocked> 互斥 + 可选 <infra_suggestion>，
+- **交付协议**：与全体组员相同（<result>/<blocked> 互斥 + 可选 <infra_suggestion
+  kind="defect|usability">，块非空时 kind 必填、正文含 kind: 与 success_criteria 标记行，
   delivery-gate 强制）。代码类交付的 result 中必须包含：改动清单（文件+要点）、
   测试/验证证据（命令+输出摘要）、合并后的 commit hash；backlog 任务须注明
   「backlog id=<id>」以便组长销账。
