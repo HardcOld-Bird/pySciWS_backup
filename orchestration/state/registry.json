@@ -27,23 +27,25 @@
     },
     "reviewer": {
       "pod": "orchestration\\pods\\reviewer",
-      "model_tier": "max",
+      "model_tier": "flash",
       "max_turns": 40,
       "timeout_s": 7200,
       "mcp_config": ".qoder/mcp.json",
       "readonly_extra": [
         "rubrics"
-      ]
+      ],
+      "tier_note": "2026-10-11 REFACTOR v1.0 §1.1 定稿降档 flash（全项目 flash 主力，二者几乎无台账存量随时可改）；架构/推理敏感项由组长派发时 --model-tier max 升档；台账观察失败率/返工率，质量下滑即回调"
     },
     "deputy": {
       "pod": "orchestration\\pods\\deputy",
-      "model_tier": "max",
+      "model_tier": "flash",
       "max_turns": 60,
       "timeout_s": 10800,
       "mcp_config": ".qoder/mcp.json",
       "extra_dirs": [
         "."
-      ]
+      ],
+      "tier_note": "2026-10-11 REFACTOR v1.0 §1.1 定稿降档 flash（全项目 flash 主力，二者几乎无台账存量随时可改）；架构/推理敏感项由组长派发时 --model-tier max 升档；台账观察失败率/返工率，质量下滑即回调"
     },
     "lit": {
       "pod": "orchestration\\pods\\lit",

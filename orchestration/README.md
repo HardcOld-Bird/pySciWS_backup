@@ -339,10 +339,12 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
   可覆盖）刷新 registry.models，重配 BYOK 后下次 drain 自愈、零 daemon；手动 `orch
   refresh-models` 同逻辑。**未命中档保持现值不清空**（宁旧勿空）；刷新只更新既有档的
   UUID/名，**不改变哪个名对应哪个档**——那仍是护栏级（下方教训登记），改名须更新模式表；
-- 默认档位：组长（TUI）/deputy/reviewer = **max**；7 专职组员 + **devops** = **flash**
-  （devops 于 2026-10-10 经用户裁决降档：其工作为「规格已审定的末端实现」，Flash+强
-  harness 匹配；架构敏感项由组长派发时显式 `--model-tier max` 升档；降档后以台账
-  数据观察 2~3 周失败率/返工率，质量下滑即回调）；计划环节可覆盖（`steps[].model`）；
+- 默认档位：组长（TUI）= **max**；**deputy/reviewer** + 7 专职组员 + **devops** = **flash**
+  （deputy/reviewer 于 2026-10-11 经 REFACTOR v1.0 §1.1 定稿降档 flash——「全项目降档，flash
+  主力、无组员常驻 max」；二者几乎无台账存量，任何时候改动都不阻碍观察（用户确认）。devops
+  于 2026-10-10 经用户裁决降档：其工作为「规格已审定的末端实现」，Flash+强 harness 匹配。
+  架构/推理敏感项由组长派发时显式 `--model-tier max` 升档（通道保留）；降档后以台账数据观察
+  失败率/返工率，质量下滑即回调）；计划环节可覆盖（`steps[].model`）；
 - **推理强度按项标注**（用户裁决 2026-10-10，backlog 20261010-orch-effort-per-item）：
   双档默认「中」，**不做全局 high**——由组长对推理密集项（并发/状态机/跨模块语义）
   逐项标 `high`，机械项留默认。四来源逐层覆盖，最终解析出一个跳级档位后透传原生旗标
