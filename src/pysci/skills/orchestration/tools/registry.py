@@ -13,10 +13,20 @@
 首次 :meth:`Registry.load` 检测到旧配置内嵌 ``sessions`` 且运行态文件缺席，即一次性
 迁移：备份原文件（``registry.presplit.json``，已存在则不覆盖）→ 抬高会话池到运行态 →
 从配置剥离，两份原子落盘。全部为可读 JSON（fail-open 红线，README §4.3）。
+
+**配置面磁盘权威**（backlog 20261011-220621-leader，lost-update 修复）：分储只搬走了心跳，
+没搬走「整体回写内存副本」这个坏习惯——长驻 drain worker 收尾时仍把启动时加载的
+registry.json 快照原样写回，后写覆盖，抹掉了运行期间合并进来的配置改动。故
+:meth:`Registry.save` 改为**读-改-写按键合并**：落盘前重读磁盘，配置面只叠加本进程
+*显式声明*过的改动（:meth:`Registry.declare_config` 改 models/checks，
+:meth:`Registry.ensure_member_defaults` 新增成员），其余键一律以磁盘为准；无任何声明时
+配置文件**一个字节都不写**。会话池经 :meth:`Registry.write_sessions` 按成员、按 sid
+合并进运行态。机器写配置面因此只剩「声明」这一条通路。
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -158,11 +168,47 @@ def _empty_runtime() -> dict[str, Any]:
     return {"version": 1, "members": {}}
 
 
+def _blank_config() -> dict[str, Any]:
+    """配置面骨架（文件缺席时的合并底本，与 :meth:`Registry.load` 的首次形状一致）。"""
+    return {
+        "version": 1,
+        "exe": None,
+        "models": dict(DEFAULT_MODELS),
+        "members": {},
+        "checks": {},
+    }
+
+
 def _runtime_member(runtime: dict[str, Any], member_id: str) -> dict[str, Any]:
     """取/建运行态里某成员的条目（含 sessions 列表）。"""
     entry = runtime.setdefault("members", {}).setdefault(member_id, {})
     entry.setdefault("sessions", [])
     return entry
+
+
+def _read_for_merge(path: Path, blank: dict[str, Any]) -> dict[str, Any]:
+    """读盘作为合并底本：文件缺席→``blank`` 深拷贝；损坏→照原样抛。
+
+    损坏不静默兜底成骨架：那等于用空数据覆盖一份「可能还能救」的 state 文件，正是本
+    次要根治的 lost-update 的反面（与 :meth:`Registry.load` 同纪律——坏 JSON 硬失败）。
+    """
+    if not path.exists():
+        return copy.deepcopy(blank)
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _merge_sessions(
+    disk: list[dict[str, Any]], ours: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """会话池按键（sid）合并：本进程条目为准，磁盘独有 sid 保留（顺序=本进程原序+磁盘补尾）。
+
+    两个进程各自持有同一成员会话池的副本（组长派发 + drain worker 并发时可能）：整体
+    覆盖会让后写者抹掉先写者的新会话，按键合并至少不丢条目。
+    """
+    merged = list(ours)
+    known = {str(s.get("sid", "")) for s in merged}
+    merged.extend(s for s in disk if str(s.get("sid", "")) not in known)
+    return merged
 
 
 def _warn_missing_runtime(config_data: dict[str, Any], runtime_file: Path) -> None:
@@ -195,6 +241,13 @@ class Registry:
     data: dict[str, Any]
     runtime: dict[str, Any] = field(default_factory=_empty_runtime)
     path: Path = REGISTRY_PATH
+    #: 本进程**声明**要写回配置面的顶层改动（models/checks…）；:meth:`save` 按键叠加到
+    #: 磁盘当前内容之上。未声明的键一律以磁盘为准（磁盘权威，lost-update 修复）。
+    cfg_overlay: dict[str, Any] = field(default_factory=dict)
+    #: 本进程声明「新增」的成员条目；:meth:`save` 仅当磁盘也无该成员时才写入。
+    cfg_add_members: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: 本进程拥有会话池的成员 id（:meth:`save` 按 sid 键合并进运行态这些成员的池）。
+    rt_members: set[str] = field(default_factory=set)
 
     @property
     def runtime_path(self) -> Path:
@@ -217,13 +270,7 @@ class Registry:
         if REGISTRY_PATH.exists():
             data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
         else:
-            data = {
-                "version": 1,
-                "exe": None,
-                "models": dict(DEFAULT_MODELS),
-                "members": {},
-                "checks": {},
-            }
+            data = _blank_config()
         runtime_file = REGISTRY_PATH.parent / RUNTIME_NAME
         if runtime_file.exists():
             runtime = json.loads(runtime_file.read_text(encoding="utf-8"))
@@ -256,16 +303,67 @@ class Registry:
         for mid, sessions in embedded.items():
             _runtime_member(self.runtime, mid)["sessions"] = sessions
             members[mid].pop("sessions", None)
+        # 全量写是这里的特例：数据就是本次 load 刚读到的磁盘内容（同一毫秒级窗口），
+        # 且一次性触发后即永不再走（幂等）。常规持久化一律走 save() 的按键合并。
         _atomic_write(self.path, self.data)
         _atomic_write(runtime_file, self.runtime)
 
+    def declare_config(self, **overlay: Any) -> None:
+        """声明本进程对配置面的改动（同时写进内存副本）——机器写配置面的唯一通路。
+
+        Args:
+            **overlay: 键 = 顶层配置键（``models``/``checks``…），值 = 该键的**改动子集**。
+                dict 值按键合并，故 :meth:`save` 只把这几个键叠到磁盘当前内容之上，
+                同键下他人改过的兄弟项不受牵连。
+        """
+        for key, value in overlay.items():
+            declared = self.cfg_overlay.get(key)
+            if isinstance(value, dict) and isinstance(declared, dict):
+                declared.update(value)
+            else:
+                self.cfg_overlay[key] = value
+            memory = self.data.get(key)
+            if isinstance(value, dict) and isinstance(memory, dict):
+                memory.update(value)
+            else:
+                self.data[key] = value
+
     def save(self) -> None:
-        """原子写回配置面与运行态两份（配置剥离任何内嵌 sessions，运行态为唯一权威）。"""
-        for raw in self.data.get("members", {}).values():
-            if isinstance(raw, dict):
-                raw.pop("sessions", None)
-        _atomic_write(self.path, self.data)
-        _atomic_write(self.runtime_path, self.runtime)
+        """读-改-写落盘：配置面**磁盘权威**，只叠加本进程声明过的改动。
+
+        落盘前重读磁盘，绝不把内存副本整体写回。长驻进程（drain worker）的内存是启动
+        时的快照，整体回写会抹掉运行期间合并进来的配置裁决——backlog 20261011-220621-leader
+        首战实锤：21:05 起 worker，21:42 合并的 deputy/reviewer 降档在收尾时被回退成 max。
+
+        - 配置面：无声明 → 一个字节不写；有声明 → 磁盘为底，:attr:`cfg_overlay` 顶层键
+          覆盖（dict 值按键合并），:attr:`cfg_add_members` 仅补磁盘缺席的成员。
+        - 运行态：只动 :attr:`rt_members` 声明过的成员，会话池按 sid 合并；其余成员、
+          其余字段原样保留。
+        """
+        if self.cfg_overlay or self.cfg_add_members:
+            base = _read_for_merge(self.path, self.data)
+            members = base.setdefault("members", {})
+            for key, value in self.cfg_overlay.items():
+                if isinstance(value, dict) and isinstance(base.get(key), dict):
+                    base[key].update(value)
+                else:
+                    base[key] = value
+            for mid, entry in self.cfg_add_members.items():
+                members.setdefault(mid, copy.deepcopy(entry))
+            _atomic_write(self.path, base)
+        if not self.rt_members:
+            return
+        rt = _read_for_merge(self.runtime_path, _empty_runtime())
+        rt_members = rt.setdefault("members", {})
+        for mid in self.rt_members:
+            target = rt_members.setdefault(mid, {})
+            target["sessions"] = _merge_sessions(
+                list(target.get("sessions") or []),
+                list(
+                    self.runtime.get("members", {}).get(mid, {}).get("sessions") or []
+                ),
+            )
+        _atomic_write(self.runtime_path, rt)
 
     @property
     def models(self) -> dict[str, str]:
@@ -316,42 +414,39 @@ class Registry:
             raw=raw,
         )
 
-    def write_member(self, m: Member) -> None:
-        """把 Member 的可变状态写回底层 dict（配置面去 sessions，会话池进运行态；save() 前调用）。"""
-        entry = self.data.setdefault("members", {}).setdefault(m.member_id, {})
-        entry.update(
-            {
-                "pod": str(m.pod.relative_to(PROJECT_ROOT))
-                if m.pod.is_relative_to(PROJECT_ROOT)
-                else str(m.pod),
-                "model_tier": m.model_tier,
-                "max_turns": m.max_turns,
-                "timeout_s": m.timeout_s,
-                "mcp_config": m.mcp_config,
-            }
-        )
-        entry.pop("sessions", None)
-        # effort 是**可选**标注：非空才落键，空则移除——registry 里少一个恒为 "" 的
-        # 噪声键，且组长手改清空后不会残留旧档位。
-        if m.effort:
-            entry["effort"] = m.effort
-        else:
-            entry.pop("effort", None)
+    def write_sessions(self, m: Member) -> None:
+        """把 Member 的会话池写进运行态并声明该成员的会话池所有权（**不碰配置面**）。
+
+        派发一跳要记账的是心跳（hops/last_active/chars_offset/status），配置面
+        （model_tier/pod 路径/参数模板/effort/tier_note）是人手与代码评审的领地。旧名
+        ``write_member`` 顺手把内存 Member 的配置字段整体抄回 registry.json——长驻 worker
+        因此会在收尾时用自己的启动快照覆盖掉期间合并进来的降档裁决（backlog
+        20261011-220621-leader）。改此只写运行态，配置面回写通路就此消失。
+        """
         _runtime_member(self.runtime, m.member_id)["sessions"] = m.sessions
+        self.rt_members.add(m.member_id)
 
     def ensure_member_defaults(self, member_id: str) -> None:
-        """为尚未注册的成员生成默认条目（pod 目录存在时才可用，dispatch 前调用）。"""
+        """为尚未注册的成员生成默认条目（pod 目录存在时才可用，dispatch 前调用）。
+
+        新成员条目按「新增」声明（:attr:`cfg_add_members`）：save 时仅当磁盘也无该成员
+        才落，故不会用默认值盖掉同窗口内他人注册的真条目。
+        """
         members = self.data.setdefault("members", {})
-        if member_id not in members:
-            pod = PODS_ROOT / member_id
-            members[member_id] = {
-                "pod": str(pod.relative_to(PROJECT_ROOT)),
-                "model_tier": "flash",
-                "max_turns": 60,
-                "timeout_s": 7200,
-                "mcp_config": ".qoder/mcp.json",
-            }
-            _runtime_member(self.runtime, member_id)
+        if member_id in members:
+            return
+        pod = PODS_ROOT / member_id
+        entry = {
+            "pod": str(pod.relative_to(PROJECT_ROOT)),
+            "model_tier": "flash",
+            "max_turns": 60,
+            "timeout_s": 7200,
+            "mcp_config": ".qoder/mcp.json",
+        }
+        members[member_id] = entry
+        _runtime_member(self.runtime, member_id)
+        self.cfg_add_members[member_id] = entry
+        self.rt_members.add(member_id)
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +511,7 @@ def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
         raise ValueError("--list-models 输出解析为空目录（格式变化或 exe 异常？）")
     reg = Registry.load()
     patterns = {**DEFAULT_MODEL_PATTERNS, **reg.data.get("model_patterns", {})}
-    models = reg.data.setdefault("models", {})
+    models = reg.data.get("models", {})
     changed: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     for tier, name in patterns.items():
@@ -426,9 +521,11 @@ def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
         new = catalog[name]
         old = models.get(tier)
         if old != new:
-            models[tier] = new
             changed[tier] = {"old": old, "new": new}
     if changed:
+        # 只声明变更的档位：save 时这些键叠加到磁盘当前 models 之上，同期他人改过的
+        # 兄弟档（如手工配的 flash_fallback）不被本进程的旧值盖掉
+        reg.declare_config(models={t: d["new"] for t, d in changed.items()})
         reg.save()
     return {"changed": changed, "missing": missing, "catalog_size": len(catalog)}
 

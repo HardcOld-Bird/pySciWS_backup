@@ -260,7 +260,7 @@ def cmd_sessions(args: argparse.Namespace) -> int:
             print(f"[!] 未找到会话 {args.prune}")
             return 2
         print(_sessions.prune(m, sess["sid"]))
-        reg.write_member(m)
+        reg.write_sessions(m)
         reg.save()
         return 0
     if args.archive:
@@ -296,7 +296,7 @@ def cmd_sessions(args: argparse.Namespace) -> int:
                 print("[!] 蒸馏跳失败，未归档（可去掉 --distill 强制归档）。")
                 return 2
         print(_sessions.archive(m, sid))
-        reg.write_member(m)
+        reg.write_sessions(m)
         reg.save()
         return 0
     print(f"成员 {args.member}（pod: {orchestration_rel(m.pod)}）")
