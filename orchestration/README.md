@@ -600,9 +600,13 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
     + 判活误真」会把队列挡成假 running，最长阻塞到 6h 超龄才解（backlog 20261011-225933-devops）
   · 墓碑也写不进（他方连写都不共享）时仍有**第二道收尾证据**：判活采纳「该 run 已有
     `.done`」即非活（`_run_concluded`；`.done` 在 `release_lock` 之后才可能出现，故与墓碑
-    同为收尾宣告，且摘要须自证 run_log 同名才算数，防同秒撞名误抢活锁）。`lock_status`
-    对此报 `residue="done-exists"`，`orch status` 呈现**残骸已收尾**（backlog
-    20261011-231237-devops，与 §4.5「收尾事实优先于锁的自称」同一纪律）
+    同为收尾宣告）。该证据须过**两道闸**：摘要自证 `run_log` 同名（身份）+ 摘要
+    `completed` 不早于锁 `started`（时序，`_done_predates_lock`）——否则上一任的尾会把
+    同秒续跑的活锁判成残骸并被抢走，单 worker 互斥击穿。命名面同时查重：`new_run_log()`
+    以 `O_CREAT|O_EXCL` 当场占位，撞名顺延 `<ts>_002`…（分隔符取 `_` 不取 `-`，否则顺延名
+    字典序早于被占名，`latest_done` 会读旧摘要）（backlog 20261011-231237-devops +
+    20261011-233248-devops，与 §4.5「收尾事实优先于锁的自称」同一纪律）。`lock_status`
+    对这类残骸报 `residue="done-exists"`，`orch status` 呈现**残骸已收尾**
   · 获锁即回收孤儿 in_progress 条目（前任 worker 中途被杀的遗留）重置 pending，并顺带
     清理其残留 worktree/branch（`git worktree remove --force wt-<id>` + `branch -D` +
     `prune` 兜底）——worktree 名 = 条目 id（take_first 记录、任务书指定），只清孤儿名、
