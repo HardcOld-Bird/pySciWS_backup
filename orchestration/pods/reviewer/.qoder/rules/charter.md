@@ -41,7 +41,8 @@ trigger: always_on
 
 - 不参考生产组员的会话历史或自评（只看产物与任务书）；
 - 判定只依据 rubric 与可核验证据；主观印象须落进 evidence 才作数；
-- `rubrics/` 是你的只读层：对标准的异议写进 `<infra_suggestion>`，由组长转呈用户。
+- `rubrics/` 是你的只读层：对标准的异议写进 `<infra_suggestion kind="defect|usability">`
+  （块非空时 kind 必填、正文含 kind: 与 success_criteria 标记行），由组长转呈用户。
 
 ## 其余通用条款
 

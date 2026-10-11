@@ -69,13 +69,29 @@ def read_backlog(state):
 
 
 def seed_suggestion(state, member="devops", sid=None):
-    """在 suggestions/ 落一条待审批建议文件，返回其 id（文件名 stem）。"""
+    """在 suggestions/ 落一条**合规**待审批建议文件，返回其 id（文件名 stem）。
+
+    E0-B 后 cmd_approve 强制条目带非空 kind 与 success_criteria，故默认正文含这两枚
+    标记行（约定见 delivery.parse_suggestion_fields）；要测「缺字段拒绝入队」的用例
+    自行覆写文件正文。
+    """
     d = state / "suggestions"
     d.mkdir(parents=True, exist_ok=True)
     sid = sid or f"20261010-120000-{member}"
     (d / f"{sid}.md").write_text(
-        f"# 改进建议（{member}，待审批）\n\n建议正文首行。\n", encoding="utf-8"
+        f"# 改进建议（{member}，待审批）\n\nkind: usability\n建议正文首行。\n\n"
+        "success_criteria：\n- 默认判据（可证伪）\n",
+        encoding="utf-8",
     )
+    return sid
+
+
+def seed_raw_suggestion(state, body: str, member="devops", sid=None):
+    """落一条**任意正文**的待审批建议（测 kind/success_criteria 缺失拒绝路径用）。"""
+    d = state / "suggestions"
+    d.mkdir(parents=True, exist_ok=True)
+    sid = sid or f"20261010-120000-{member}"
+    (d / f"{sid}.md").write_text(body, encoding="utf-8")
     return sid
 
 

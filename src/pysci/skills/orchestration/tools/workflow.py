@@ -14,6 +14,7 @@ from pathlib import Path
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import journal
+from .delivery import parse_suggestion_fields
 from .dispatch import REPLIES_DIR, do_dispatch
 from .ledger import (
     format_by_effort,
@@ -337,11 +338,41 @@ def cmd_approve(args) -> int:
         return 2
     member = _member_of(sugg)
     body = sugg.read_text(encoding="utf-8")
-    first = next((ln.strip() for ln in body.splitlines()[2:] if ln.strip()), sugg.stem)
+    # 摘要行：跳过标题+空行，并跳过 dispatch 头部注入的 `kind:` 标记行（否则会被误当摘要）。
+    first = sugg.stem
+    for ln in body.splitlines()[2:]:
+        s = ln.strip()
+        if not s or s.lower().startswith("kind:"):
+            continue
+        first = s
+        break
+    # E0-B（REFACTOR §12 判据 2/3）：backlog 条目须带结构化 kind 与可证伪 success_criteria。
+    # 从建议正文解析（约定标记行），success_criteria 可由 --criteria 补录；缺任一 → 拒绝入队。
+    kind, criteria = parse_suggestion_fields(body)
+    cli_criteria = (getattr(args, "criteria", "") or "").strip()
+    if cli_criteria:
+        criteria = cli_criteria
+    if not kind:
+        print(
+            f"[!] 建议 '{sugg.stem}' 缺 kind 分类，拒绝入队。请在建议正文补一行"
+            "  `kind: defect`（缺陷，附复现证据）或 `kind: usability`（难用/体验类）。\n"
+            '    （交付侧本应带 <infra_suggestion kind="...">；此处缺失说明来源早于 E0-B。）'
+        )
+        return 2
+    if not criteria:
+        print(
+            f"[!] 建议 '{sugg.stem}'（kind={kind}）缺可证伪成功判据，拒绝入队。\n"
+            "    补写其一：① 在建议正文加 `success_criteria` 标记行 + 其后要点；"
+            '② 或本次 approve 追加 --criteria "<做完后如何机械验证算成功>"。'
+            "（REFACTOR §12 判据 3：无判据的提案不可证伪，不进队。）"
+        )
+        return 2
     entry = {
         "id": sugg.stem,
         "member": member,
         "summary": first[:200],
+        "kind": kind,
+        "success_criteria": criteria,
         "evidence_file": f"orchestration/state/suggestions/approved/{sugg.name}",
         "status": "pending",
         "proposed": _now(),
@@ -363,7 +394,8 @@ def cmd_approve(args) -> int:
     approved.mkdir(exist_ok=True)
     sugg.rename(approved / sugg.name)
     print(
-        f"[√] 已采纳 {sugg.stem} → backlog 第 {n} 位；审批回复将在下次派发 {member} 时附送。"
+        f"[√] 已采纳 {sugg.stem}（kind={kind}）→ backlog 第 {n} 位；"
+        f"审批回复将在下次派发 {member} 时附送。"
     )
     # 自动唤醒 devops 后台 FIFO 消化 backlog（README §6）；--no-wake 跳过。
     if not getattr(args, "no_wake", False):

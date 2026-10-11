@@ -337,6 +337,71 @@ def test_skill_dir_without_skill_md_is_ignored(pod):
 
 
 # ===========================================================================
+#  ⑤ E0-B：非空 <infra_suggestion> 的 kind 属性硬闸（REFACTOR §12 判据 1）
+#  阳性用例：缺 kind / 非法 kind 必须被真 guard 拦截——fail-open 教训
+#  20261010-193601 要求「违规必拦截」用 node 直跑真 guard 锁死，不接受模拟。
+# ===========================================================================
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
+@pytest.mark.parametrize("kind", ["defect", "usability"])
+def test_valid_kind_passes(pod, kind: str):
+    msg = (
+        "结论。<result>已交付</result>"
+        f'<infra_suggestion kind="{kind}">改进正文</infra_suggestion>'
+    )
+    assert run_gate(pod, msg=msg) == (0, "")
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
+def test_missing_kind_is_blocked_with_correction(pod):
+    """任务书判据 1：缺 kind 的非空 infra_suggestion → exit 2 + stderr 含精确改正指令。"""
+    msg = "结论。<result>已交付</result><infra_suggestion>改进正文</infra_suggestion>"
+
+    rc, err = run_gate(pod, msg=msg)
+
+    assert rc == 2
+    assert "必须带 kind 属性" in err
+    assert "缺 kind" in err
+    assert "defect" in err and "usability" in err  # 词表写进提示供自改
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
+def test_invalid_kind_is_blocked_reporting_actual_value(pod):
+    msg = (
+        "结论。<result>已交付</result>"
+        '<infra_suggestion kind="bogus">改进正文</infra_suggestion>'
+    )
+
+    rc, err = run_gate(pod, msg=msg)
+
+    assert rc == 2
+    assert 'kind="bogus"' in err  # 回显实际取值，非泛泛「缺 kind」
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
+def test_empty_infra_block_is_not_a_violation(pod):
+    """块非空才执法：空 <infra_suggestion></infra_suggestion> 无可分类内容，放行。"""
+    msg = "结论。<result>已交付</result><infra_suggestion>   </infra_suggestion>"
+    assert run_gate(pod, msg=msg) == (0, "")
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
+def test_no_infra_block_is_unaffected(pod):
+    """无 infra_suggestion 的普通交付不受本闸影响（回归护栏）。"""
+    assert run_gate(pod, msg=OK) == (0, "")
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
+def test_kind_check_combines_with_format_problem_in_one_round(pod):
+    """缺 result 标签 + 缺 kind 两类违规合并成一轮整改，格式退回不吃掉 kind 拦截。"""
+    msg = "我做完了。<infra_suggestion>改进正文</infra_suggestion>"
+
+    rc, err = run_gate(pod, msg=msg)
+
+    assert rc == 2
+    assert "交付格式不合规" in err and "必须带 kind 属性" in err
+
+
+# ===========================================================================
 #  真实仓库现状：每个 pod 都应通过（哨兵，防未来漂移）
 # ===========================================================================
 @pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")

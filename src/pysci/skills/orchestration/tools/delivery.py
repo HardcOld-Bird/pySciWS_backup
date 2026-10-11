@@ -14,6 +14,16 @@ _ARTIFACT_RE = re.compile(
     r"<artifact\b(?P<attrs>[^>]*)>(?P<path>.*?)</artifact>", re.DOTALL
 )
 _ATTR_RE = re.compile(r'(?P<key>\w+)\s*=\s*"(?P<val>[^"]*)"')
+# E0-B：infra_suggestion 现在可带 kind 属性，通用 _extract（`<tag>` 字面量）匹配不到
+# 属性形式，故单列一条属性感知的正则（与 delivery-gate 的 INFRA_RE 同语义）。
+_INFRA_RE = re.compile(
+    r"<infra_suggestion\b(?P<attrs>[^>]*)>(?P<body>.*?)</infra_suggestion>",
+    re.DOTALL,
+)
+# 建议正文里的结构化标记行（本批 leader 建议自身即样例）：`kind: defect`、
+# `success_criteria：` 后紧跟要点行。
+_KIND_LINE_RE = re.compile(r"^\s*kind[:：]\s*([A-Za-z_]+)\s*$", re.MULTILINE)
+_SC_HEADER_RE = re.compile(r"^\s*success_criteria", re.IGNORECASE)
 
 
 @dataclass
@@ -33,6 +43,9 @@ class Delivery:
     body: str = ""
     artifacts: list[Artifact] = field(default_factory=list)
     infra_suggestion: str = ""
+    infra_kind: str = (
+        ""  # E0-B：非空 infra_suggestion 的 kind 属性（defect/usability/""）
+    )
     raw: str = ""
 
     @property
@@ -59,7 +72,13 @@ def parse_delivery(result_text: str) -> Delivery:
     """
     result_body = _extract(result_text, "result")
     blocked_body = _extract(result_text, "blocked")
-    infra = _extract(result_text, "infra_suggestion") or ""
+    infra = ""
+    infra_kind = ""
+    im = _INFRA_RE.search(result_text)
+    if im:
+        infra = im.group("body").strip()
+        attrs = {k: v for k, v in _ATTR_RE.findall(im.group("attrs"))}
+        infra_kind = attrs.get("kind", "")
 
     if result_body is not None and blocked_body is None:
         kind, body = "result", result_body
@@ -86,5 +105,37 @@ def parse_delivery(result_text: str) -> Delivery:
         body=body,
         artifacts=artifacts,
         infra_suggestion=infra,
+        infra_kind=infra_kind,
         raw=result_text,
     )
+
+
+def parse_suggestion_fields(body: str) -> tuple[str, str]:
+    """从建议正文解析结构化字段 kind 与 success_criteria（E0-B 判据 2/3 的解析端）。
+
+    约定：正文含独立一行 ``kind: defect``（或 ``kind：usability``），以及
+    ``success_criteria`` 标记行——其后紧跟的要点行（直到空行）即判据正文。
+    样例见本批 leader 建议自身（state/suggestions/approved/20261011-210317-leader.md）。
+
+    Args:
+        body: infra_suggestion 块正文（或 suggestion 文件全文）。
+
+    Returns:
+        ``(kind, success_criteria)``：任一缺失即返回空串。kind 取标记行值（小写规范化），
+        success_criteria 取标记行后连续非空行的拼接（保留 ``- `` 要点前缀供人读）。
+    """
+    kind = ""
+    m = _KIND_LINE_RE.search(body)
+    if m:
+        kind = m.group(1).lower()
+
+    criteria: list[str] = []
+    lines = body.splitlines()
+    for i, ln in enumerate(lines):
+        if _SC_HEADER_RE.match(ln):
+            for follow in lines[i + 1 :]:
+                if not follow.strip():
+                    break
+                criteria.append(follow.strip())
+            break
+    return kind, "\n".join(criteria)

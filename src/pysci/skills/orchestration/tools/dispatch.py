@@ -76,6 +76,7 @@ class DispatchOutcome:
     body: str = ""  # 交付正文（result/blocked 块内容）
     checks: list[dict] = field(default_factory=list)
     infra_suggestion: str = ""
+    infra_kind: str = ""  # E0-B：交付 XML 上的 kind 属性（defect/usability/""）
     suggestion_id: str = ""
     envelope: Envelope | None = None
     error: str = ""
@@ -166,12 +167,20 @@ def write_taskbook(
     return dest
 
 
-def _persist_suggestion(member_id: str, body: str) -> str:
-    """把 infra_suggestion 持久化为待审批条目，返回建议 id（文件名 stem）。"""
+def _persist_suggestion(member_id: str, body: str, kind: str = "") -> str:
+    """把 infra_suggestion 持久化为待审批条目，返回建议 id（文件名 stem）。
+
+    E0-B（判据 2）：把交付 XML 上解析出的 kind 写进文件头部标记行，使 approve 侧
+    ``parse_suggestion_fields`` 无论建议正文是否自带 ``kind:`` 行都能读到权威分类
+    （正文若自带则以头部这条为准——它来自被 gate 校验过的属性）。
+    """
     SUGGESTIONS_DIR.mkdir(parents=True, exist_ok=True)
     sid = f"{_ts()}-{member_id}"
     p = SUGGESTIONS_DIR / f"{sid}.md"
-    p.write_text(f"# 改进建议（{member_id}，待审批）\n\n{body}\n", encoding="utf-8")
+    head = f"# 改进建议（{member_id}，待审批）\n\n"
+    if kind:
+        head += f"kind: {kind}\n\n"
+    p.write_text(head + body + "\n", encoding="utf-8")
     return sid
 
 
@@ -422,7 +431,9 @@ def do_dispatch(
     )
     suggestion_id = ""
     if delivery.infra_suggestion.strip():
-        suggestion_id = _persist_suggestion(member_id, delivery.infra_suggestion)
+        suggestion_id = _persist_suggestion(
+            member_id, delivery.infra_suggestion, delivery.infra_kind
+        )
     delta_chars, est_tokens, chars_after = measure_usage()
     entry = LedgerEntry(
         ts="",
@@ -433,6 +444,7 @@ def do_dispatch(
         kind=delivery.kind,
         checks=check_results,
         infra_suggestion=bool(delivery.infra_suggestion),
+        infra_kind=delivery.infra_kind,
         num_turns=env_json.num_turns,
         duration_ms=env_json.duration_ms,
         credits=env_json.total_credits,
@@ -469,6 +481,7 @@ def do_dispatch(
         body=delivery.body,
         checks=check_results,
         infra_suggestion=delivery.infra_suggestion,
+        infra_kind=delivery.infra_kind,
         suggestion_id=suggestion_id,
         envelope=env_json,
     )
