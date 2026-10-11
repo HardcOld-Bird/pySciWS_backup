@@ -1,8 +1,8 @@
 """改进循环与统计命令：approve/reject/suggestions/consult/stats（README §4.4/§6）。
 
 审批链：dispatch 把 infra_suggestion 持久化到 ``state/suggestions/<id>.md``（pending）
-→ 组长 approve（入 backlog + 写审批回复）/ reject（写回复）→ 回复在下次派发该成员时
-自动附送（闭环告知）。护栏级建议不得自行 approve（须转呈用户）——由组长规程软性约束。
+→ 组长 approve（入 backlog + 写审批回复）/ reject（**须 --override 留痕**，写回复 + 落决策日志）
+→ 回复在下次派发该成员时自动附送（闭环告知）。护栏级建议不得自行 approve（须转呈用户）——由组长规程软性约束。
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from pathlib import Path
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
+from . import journal
 from .dispatch import REPLIES_DIR, do_dispatch
 from .ledger import (
     format_by_effort,
@@ -322,7 +323,8 @@ def cmd_suggestions(args) -> int:
         print(f"  {p.stem}  [{_member_of(p)}]  {first[:70]}")
     print()
     print(
-        '[NEXT] 审批：uv run pysci-orch approve <id> --note "..."；否决：reject 同构。'
+        '[NEXT] 审批：uv run pysci-orch approve <id> --note "..."；'
+        '否决：uv run pysci-orch reject <id> --override "<判决依据>"（必填，留痕入决策日志）。'
     )
     return 0
 
@@ -375,21 +377,57 @@ def cmd_approve(args) -> int:
 
 
 def cmd_reject(args) -> int:
-    """否决建议：仅写回复（附理由），不入 backlog。"""
+    """否决建议：**必须附 ``--override`` 判决依据**（留痕入决策日志），否则非零退出。
+
+    REFACTOR v1.0 §5.1/E0——组长对组员基建提案的否决 = override（有判决依据的 reject
+    才算 override；无依据的否决不合规）。当前 approve 侧判决包（J/M/J+M）E5 才实装，
+    故 E0 阶段一切 reject 均属 override，强制留痕。缺失 → 非零退出 + 可读提示；
+    提供 → 正常否决（写回复 + 移入 rejected/）并自动追加 journal 行
+    （``source=override``、``situation``=建议摘要、``reason``=override 理由）。
+    """
+    override = (getattr(args, "override", "") or "").strip()
+    if not override:
+        print(
+            "[!] 否决必须附判决依据（override 留痕）：orch reject <id> --override "
+            '"<详细理由>"\n'
+            "    无 --override 的否决不合规（REFACTOR §5.1/E0：reject=override，须计入 "
+            "override 率并落决策日志供审计回放）。"
+        )
+        return 2
     sugg = _find_suggestion(args.suggestion_id)
     if sugg is None:
         print(f"[!] 未找到待审批建议 '{args.suggestion_id}'")
         return 2
     member = _member_of(sugg)
-    REPLIES_DIR.joinpath(member).mkdir(parents=True, exist_ok=True)
-    (REPLIES_DIR / member / f"{sugg.stem}.md").write_text(
-        f"# 组长审批：暂不采纳（{_now()}）\n\n{args.note or '（未附理由——建议补充）'}\n",
-        encoding="utf-8",
+    body = sugg.read_text(encoding="utf-8")
+    first = next((ln.strip() for ln in body.splitlines()[2:] if ln.strip()), sugg.stem)
+    # 先落审计原料（journal），再改建议状态——journal 写失败即中止，不留下「已否决却无留痕」。
+    journal.append(
+        {
+            "ts": _now(),
+            "situation": first[:200],
+            "options": "",
+            "choice": "reject",
+            "reason": override,
+            "source": "override",
+            "kind": "override",
+            "suggestion_id": sugg.stem,
+            "member": member,
+        }
     )
+    note = (args.note or "").strip()
+    reply = f"# 组长审批：暂不采纳（{_now()}）\n\n否决依据（override）：{override}\n"
+    if note:
+        reply += f"\n附注：{note}\n"
+    REPLIES_DIR.joinpath(member).mkdir(parents=True, exist_ok=True)
+    (REPLIES_DIR / member / f"{sugg.stem}.md").write_text(reply, encoding="utf-8")
     rejected = SUGGESTIONS_DIR / "rejected"
     rejected.mkdir(exist_ok=True)
     sugg.rename(rejected / sugg.name)
-    print(f"[√] 已否决 {sugg.stem}；理由将在下次派发 {member} 时附送。")
+    print(
+        f"[√] 已否决 {sugg.stem}（override 留痕入决策日志）；"
+        f"理由将在下次派发 {member} 时附送。"
+    )
     return 0
 
 

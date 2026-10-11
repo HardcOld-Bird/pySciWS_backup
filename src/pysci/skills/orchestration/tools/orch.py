@@ -10,7 +10,7 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     uv run pysci-orch status
     ... orch plan new <file> | run <id> [--text/--task ...] | amend <id> | drop <id> | list
     ... orch plan adhoc <member> --text "..."        # 计划外事项的正确姿势
-    ... orch approve|reject <suggestion-id> --note "..."
+    ... orch approve <suggestion-id> --note "..." | reject <suggestion-id> --override "<依据>"
     ... orch suggestions | stats [--plan/--member/--days] | consult "<问题>"
     ... orch dispatch <member> (--task F | --text T | --from-backlog) [--session ...] [--effort …]
     ... orch watch [--timeout S=4h] [--interval S=60]   # 后台挂起等 drain 事件（§4.5）
@@ -518,9 +518,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=_workflow.cmd_approve)
 
-    p = sub.add_parser("reject", help="否决建议 → 仅回复附送")
+    p = sub.add_parser("reject", help="否决建议 → 须 --override 留痕（入决策日志）")
     p.add_argument("suggestion_id")
-    p.add_argument("--note", default="")
+    p.add_argument("--note", default="", help="附送给成员的补充说明（可选）")
+    p.add_argument(
+        "--override",
+        default="",
+        help="否决判决依据（必填）：REFACTOR §5.1/E0 一切 reject 即 override，"
+        "缺失则拒绝执行并非零退出；提供则写回复、移入 rejected/ 并追加 journal 行",
+    )
     p.set_defaults(func=_workflow.cmd_reject)
 
     p = sub.add_parser("consult", help="咨询副组长（平级协作：异议义务提醒自动注入）")
