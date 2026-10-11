@@ -565,12 +565,62 @@
       "kind": "defect",
       "success_criteria": "- 新增阳性测试：`os.unlink` 与 `_overwrite_lock` 双双失败 + 该 run 存在 `.done` → `lock_status()[\"state\"] != \"running\"` 且 `acquire_lock` 成功接管；\n- 现有 E2 watch 全套（含 transition 帧用例）在新语义下重述后全绿，全量套件无回归；\n- 真实 drain 收尾一次：`orch status` 与 `git status` 均不出现「锁 running 而该 run 已有 `.done`」矛盾态（即 E3 未竟的那条判据被代码面而非运气封死）。",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-231237-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-11T23:13:41+08:00",
-      "note": "defect 附实锤 repro，收尾 E3 未竟格（收尾硬证据进判活）。第 3 点契约冲突裁定：授权一并重述 220622 观察面用例（transition 帧语义按新判活规则改写），判据以本条 success_criteria 为准。",
+      "note": "drain 批量销账（commit a513bbd）",
       "effort": "high",
       "started_at": "2026-10-11T23:13:42+08:00",
-      "worktree": "20261011-231237-devops"
+      "worktree": "20261011-231237-devops",
+      "done_at": "2026-10-11T23:32:48+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261011-231237-devops"
+    },
+    {
+      "id": "20261011-233001-leader",
+      "member": "leader",
+      "summary": "**（E1，REFACTOR v1.0 §2/§2.4）Tier A 失败标签全链：词表+tags 解析+by_failure 统计+阈值自动立案**",
+      "kind": "usability",
+      "success_criteria": "委托（自主推进，见 §15）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-233001-leader.md",
+      "status": "in_progress",
+      "proposed": "2026-10-11T23:33:35+08:00",
+      "note": "E1（REFACTOR §2/§2.4，用户定稿+委托 §15）。判据见正文。",
+      "started_at": "2026-10-11T23:33:38+08:00",
+      "worktree": "20261011-233001-leader"
+    },
+    {
+      "id": "20261011-233002-leader",
+      "member": "leader",
+      "summary": "**（E2，REFACTOR v1.0 §3/§1.1）minimum 档设立 + harness 测试套件骨架 + orch eval run**",
+      "kind": "usability",
+      "success_criteria": "**护栏级决定登记**：minimum 档经用户裁决创建（REFACTOR §1.1），但型号选择原\n属「专门环节」——委托期内组长决定：**minimum 暂映射内置 Qwen3.8-Flash**\n（现唯一零成本渠道，限时免费；credits 恒 0 已实锤）；档位抽象保持独立，\nE3 SiliconFlow 接入后重估是否引入更廉价的压测渠道。决策已入 preference-journal。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-233002-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-11T23:33:36+08:00",
+      "note": "E2（REFACTOR §3/§1.1）。护栏级决定登记：minimum 暂映射内置免费 flash，已在正文与 journal 留痕，E3 后重估。"
+    },
+    {
+      "id": "20261011-233003-leader",
+      "member": "leader",
+      "summary": "**（E3-prep，REFACTOR v1.0 §4）仲裁团代码面先行：jury 共享库 + orch 封装 + jury-brief 草案（mock 全覆盖，真实连通留用户 Key）**",
+      "kind": "usability",
+      "success_criteria": "**委托期边界**：SiliconFlow API Key 只能由用户本人提供（账号与付费面）——\n本单实装全部代码面与 mock 测试，真实连通做成「环境变量就位即用」，缺 Key\n走明确降级；用户早晨给 Key 后一条命令即可验收。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-233003-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-11T23:33:36+08:00",
+      "note": "E3-prep（REFACTOR §4）。真实连通留用户 Key；边界见 REFACTOR §15。",
+      "effort": "high"
+    },
+    {
+      "id": "20261011-233248-devops",
+      "member": "devops",
+      "summary": "**（缺陷类）`new_run_log()` 秒级命名可撞名，撞名时「真的活锁」会被 E4 新否决支误判为已收尾残骸**",
+      "kind": "defect",
+      "success_criteria": "- 上述 repro 在新代码下反转：`lock_status()[\"state\"] == \"running\"` 且第二个 `acquire_lock` 返回 `None`；\n- 新增阳性测试全绿，E2/E3/E4 全套（含 `test_watch_complete_identity.py`）无回归；\n- 真实 drain 连跑两轮后 `devops-runs/` 不出现同秒同名（`.log`/`.done` 配对唯一）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-233248-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-11T23:33:36+08:00",
+      "note": "defect 附实锤复现，E4 引出的互斥击穿——批准查重命名修复。"
     }
   ]
 }
