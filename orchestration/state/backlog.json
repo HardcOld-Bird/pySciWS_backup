@@ -471,30 +471,68 @@
       "member": "leader",
       "summary": "**（E0-A，REFACTOR v1.0 §12）决策日志启动 + reject 强制 override 留痕**",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-210316-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-11T21:05:57+08:00",
-      "note": "REFACTOR v1.0 E0-A（用户定稿批准 2026-10-11）。决策日志+reject override 留痕，判据见建议正文 success_criteria 段。",
+      "note": "drain 批量销账（commit afff18a）",
       "started_at": "2026-10-11T21:05:59+08:00",
-      "worktree": "20261011-210316-leader"
+      "worktree": "20261011-210316-leader",
+      "done_at": "2026-10-11T21:19:03+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261011-210316-leader"
     },
     {
       "id": "20261011-210317-leader",
       "member": "leader",
       "summary": "**（E0-B，REFACTOR v1.0 §12）提案 kind 结构化 + backlog success_criteria 字段 + gate 校验**",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-210317-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-11T21:05:57+08:00",
-      "note": "REFACTOR v1.0 E0-B（用户定稿批准）。guards 面改动，阳性用例强制（fail-open 教训）。判据见正文。",
-      "effort": "high"
+      "note": "drain 批量销账（commit 未报告）",
+      "effort": "high",
+      "started_at": "2026-10-11T21:19:03+08:00",
+      "worktree": "20261011-210317-leader",
+      "done_at": "2026-10-11T21:37:21+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261011-210317-leader"
     },
     {
       "id": "20261011-210318-leader",
       "member": "leader",
       "summary": "**（E0-C，REFACTOR v1.0 §1.1/§12）deputy/reviewer 默认档 max→flash 降档**",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-210318-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-11T21:05:57+08:00",
-      "note": "REFACTOR v1.0 E0-C（用户定稿批准，护栏级授权依据见正文）。判据见正文。"
+      "note": "drain 批量销账（commit 07a3cf4）",
+      "started_at": "2026-10-11T21:37:21+08:00",
+      "worktree": "20261011-210318-leader",
+      "done_at": "2026-10-11T21:42:41+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261011-210318-leader"
+    },
+    {
+      "id": "20261011-220621-leader",
+      "member": "leader",
+      "summary": "**（缺陷类，附证据）drain 长驻进程回写陈旧 registry 快照，lost-update 抹掉运行中合并的配置改动**",
+      "kind": "defect",
+      "success_criteria": "- 新构造同序列的单测通过（断言配置面不被回退）；\n- 下一次 drain 多批次 run 中，若批次合并改过 registry 配置，run 结束后\n`git diff HEAD -- orchestration/state/registry.json` 为空；\n- 后续 run 的 .done 里 done 条目 commit 字段非空（提取成功或有明确查不到注记）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-220621-leader.md",
+      "status": "in_progress",
+      "proposed": "2026-10-11T22:07:02+08:00",
+      "note": "REFACTOR 首战缺陷（组长现场取证，证据见正文）。lost-update 修复。",
+      "started_at": "2026-10-11T22:07:04+08:00",
+      "worktree": "20261011-220621-leader"
+    },
+    {
+      "id": "20261011-220622-leader",
+      "member": "leader",
+      "summary": "**（缺陷类，附证据）watch QUEUE-COMPLETE 对 run 完成事件脱靶，且基线推进把账吞死（status 补账同哑）**",
+      "kind": "defect",
+      "success_criteria": "- 上述 5 类单测全绿（tests/skills/orchestration/test_watch_*.py）；\n- 一次真实多批次 drain run：watch 命中 QUEUE-COMPLETE 单行唤醒 + 组长收到\n后台任务通知；若再脱靶，黑匣子 recent 足以定位抑制帧原因。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-220622-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-11T22:07:02+08:00",
+      "note": "REFACTOR 首战缺陷（watch 脱靶+吞账，候选机制与修复面已列明）。本条入队即唤醒 drain。",
+      "effort": "high"
     }
   ]
 }
