@@ -101,6 +101,28 @@ DEFAULT_TIER_A: dict[str, int] = {
 }
 
 
+#: Tier C 仲裁团配置（REFACTOR §4，E3-prep）。**panel 默认空**：选型权归用户
+#: （SiliconFlow 账号与付费面是用户的），代码只负责一条硬规则——型号串含 ``qwen``
+#: 即拒开庭（排除同族自恋偏差），不做模型能力判断也不内置候选清单。空 panel 的语义
+#: 是「尚未选型」，``orch jury`` 据此降级入队而不是报错。
+#: registry.json 顶层 ``jury`` 块逐键覆盖（非法值回落默认，见 :meth:`Registry.jury`）：
+#:
+#: .. code-block:: json
+#:
+#:    {"jury": {"panel": ["deepseek-ai/DeepSeek-V3", "moonshotai/Kimi-K2-Instruct"],
+#:              "pricing": {"deepseek-ai/DeepSeek-V3": {"input": 2.0, "output": 8.0}}}}
+#:
+#: ``pricing`` 单位 = 元/百万 token（SiliconFlow 刊例按型号而定）；缺席 → 记录里
+#: ``cost.amount`` 为 null 并附 note，**不猜价**——成本数字要能对外负责。
+DEFAULT_JURY: dict[str, Any] = {
+    "panel": [],
+    "base_url": "https://api.siliconflow.cn/v1",
+    "call_timeout_s": 120,
+    "deadline_s": 300,
+    "pricing": {},
+}
+
+
 def resolve_exe(registry: dict[str, Any] | None = None) -> Path:
     """定位 qoderclicn 原生 exe（`.cmd` 包装器剥引号，程序化调用必须直连 exe）。
 
@@ -410,6 +432,44 @@ class Registry:
         return out
 
     @property
+    def jury(self) -> dict[str, Any]:
+        """Tier C 仲裁团配置（见 :data:`DEFAULT_JURY`，REFACTOR §4）。
+
+        逐键 fail-open：类型不符 → 该键回落默认（宁按出厂值跑，不让配置笔误停摆）。
+        ``panel`` 只保证「字符串列表」这一形状，**不在此处过滤 Qwen**——硬规则的违约
+        必须被看见（``orch jury`` 拒开庭并点名型号），静默剔除会让用户以为评审团里
+        真有那个模型。
+
+        Returns:
+            ``{"panel": [str…], "base_url": str, "call_timeout_s": int,
+            "deadline_s": int, "pricing": {model: {"input": x, "output": y}}}``。
+        """
+        out: dict[str, Any] = {
+            "panel": list(DEFAULT_JURY["panel"]),
+            "base_url": str(DEFAULT_JURY["base_url"]),
+            "call_timeout_s": int(DEFAULT_JURY["call_timeout_s"]),
+            "deadline_s": int(DEFAULT_JURY["deadline_s"]),
+            "pricing": dict(DEFAULT_JURY["pricing"]),
+        }
+        raw = self.data.get("jury")
+        if not isinstance(raw, dict):
+            return out
+        if isinstance(raw.get("panel"), list):
+            out["panel"] = [str(m).strip() for m in raw["panel"] if str(m).strip()]
+        if isinstance(raw.get("base_url"), str) and raw["base_url"].strip():
+            out["base_url"] = raw["base_url"].strip()
+        for key in ("call_timeout_s", "deadline_s"):
+            try:
+                value = int(raw.get(key, out[key]))
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                out[key] = value
+        if isinstance(raw.get("pricing"), dict):
+            out["pricing"] = raw["pricing"]
+        return out
+
+    @property
     def est_tokens_per_char(self) -> float:
         """est_tokens 换算系数（见 :data:`DEFAULT_TOKENS_PER_CHAR`，registry 可配）。
 
@@ -593,6 +653,7 @@ def orchestration_rel(path: Path) -> str:
 #: 便于 doctest/调试的常量再导出。
 __all__ = [
     "BACKUP_NAME",
+    "DEFAULT_JURY",
     "DEFAULT_MODELS",
     "DEFAULT_TOKENS_PER_CHAR",
     "Member",

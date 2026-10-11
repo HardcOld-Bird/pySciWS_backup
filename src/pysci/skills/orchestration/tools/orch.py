@@ -16,6 +16,7 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     ... orch watch [--timeout S=4h] [--interval S=60]   # 后台挂起等 drain 事件（§4.5）
     ... orch sessions <member> [--all|--archive SID [--distill]|--prune SID]
     ... orch ledger [--member --days --stats] | sync [--check]
+    ... orch jury <case-file> [--dry] [--timeout S]   # Tier C 仲裁团（REFACTOR §4）
 
 长任务纪律：dispatch / plan run 应以 Bash 工具的 run_in_background 启动（README §4.5
 等待模型）；orch 自身同步阻塞等待组员进程属预期（进程级等待，零 token）。
@@ -27,6 +28,7 @@ import argparse
 import sys
 
 from . import drain as _drain
+from . import jury as _jury
 from . import plans as _plans
 from . import sessions as _sessions
 from . import sync as _sync
@@ -665,6 +667,25 @@ def main(argv: list[str] | None = None) -> int:
         f"默认 {_watch.DEFAULT_INTERVAL_S}）",
     )
     p.set_defaults(func=_watch.cmd_watch)
+
+    p = sub.add_parser(
+        "jury",
+        help="Tier C 仲裁团（REFACTOR §4）：案卷送家族外评审团双序对局，阻塞出裁决",
+    )
+    p.add_argument(
+        "case_file", help="案卷文件（## 问题 / ## 选项 A / ## 选项 B [+ ## 证据]）"
+    )
+    p.add_argument(
+        "--dry",
+        action="store_true",
+        help="只组装并打印案卷（含自动附着材料与哈希），不调 API",
+    )
+    p.add_argument(
+        "--timeout",
+        type=int,
+        help="整体等待上限秒数（覆盖 registry.jury.deadline_s，默认 300=5 min）",
+    )
+    p.set_defaults(func=_jury.cmd_jury)
 
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(
