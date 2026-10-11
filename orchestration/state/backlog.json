@@ -650,6 +650,17 @@
       "status": "pending",
       "proposed": "2026-10-12T00:32:06+08:00",
       "note": ""
+    },
+    {
+      "id": "20261012-005900-leader",
+      "member": "leader",
+      "summary": "**（E6-prep，REFACTOR v1.0 §8/§9）twin pod 脚手架 + PREFERENCE.md v1 草案（readonly_extra 只读、冷启动纪律；代理裁决不启用）**",
+      "kind": "usability",
+      "success_criteria": "doctor 十一 pod 全绿；taste_enabled=false 拒绝派发实锤；PREFERENCE.md 只读拦截阳性用例；mirror status/journal 分流落点正确；v1 草案落盘标注待确认；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-005900-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T00:33:52+08:00",
+      "note": "E6-prep（委托 §15）：机械面先行，生效确认与上线宣告留用户。"
     }
   ]
 }
