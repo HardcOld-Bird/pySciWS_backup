@@ -516,11 +516,14 @@
       "kind": "defect",
       "success_criteria": "- 新构造同序列的单测通过（断言配置面不被回退）；\n- 下一次 drain 多批次 run 中，若批次合并改过 registry 配置，run 结束后\n`git diff HEAD -- orchestration/state/registry.json` 为空；\n- 后续 run 的 .done 里 done 条目 commit 字段非空（提取成功或有明确查不到注记）。",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-220621-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-11T22:07:02+08:00",
-      "note": "REFACTOR 首战缺陷（组长现场取证，证据见正文）。lost-update 修复。",
+      "note": "drain 批量销账（commit 99b2186）",
       "started_at": "2026-10-11T22:07:04+08:00",
-      "worktree": "20261011-220621-leader"
+      "worktree": "20261011-220621-leader",
+      "done_at": "2026-10-11T22:36:15+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261011-220621-leader"
     },
     {
       "id": "20261011-220622-leader",
@@ -529,10 +532,45 @@
       "kind": "defect",
       "success_criteria": "- 上述 5 类单测全绿（tests/skills/orchestration/test_watch_*.py）；\n- 一次真实多批次 drain run：watch 命中 QUEUE-COMPLETE 单行唤醒 + 组长收到\n后台任务通知；若再脱靶，黑匣子 recent 足以定位抑制帧原因。",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-220622-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-11T22:07:02+08:00",
-      "note": "REFACTOR 首战缺陷（watch 脱靶+吞账，候选机制与修复面已列明）。本条入队即唤醒 drain。",
-      "effort": "high"
+      "note": "drain 批量销账（commit a12c6e1）",
+      "effort": "high",
+      "started_at": "2026-10-11T22:36:15+08:00",
+      "worktree": "20261011-220622-leader",
+      "done_at": "2026-10-11T22:59:33+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261011-220622-leader"
+    },
+    {
+      "id": "20261011-225933-devops",
+      "member": "devops",
+      "summary": "**（缺陷类）`release_lock` 的 unlink 失败被静默吞掉，锁残骸能把队列阻塞 6 小时**",
+      "kind": "defect",
+      "success_criteria": "- 上述三条阳性测试全绿；一次真实 drain 收尾后 `git status` 与 `orch status` 不再出现「锁显示 running 而该 run 已有 .done」的矛盾态；后续 run 不因残骸被 lock_busy 跳过。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-225933-devops.md",
+      "status": "done",
+      "proposed": "2026-10-11T23:01:01+08:00",
+      "note": "drain 批量销账（commit 7640d13）",
+      "started_at": "2026-10-11T23:01:04+08:00",
+      "worktree": "20261011-225933-devops",
+      "done_at": "2026-10-11T23:12:37+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261011-225933-devops"
+    },
+    {
+      "id": "20261011-231237-devops",
+      "member": "devops",
+      "summary": "**（缺陷类）墓碑自身也写不进时，锁面仍报假 running——判活未采纳「该 run 已有 `.done`」这条收尾硬证据**",
+      "kind": "defect",
+      "success_criteria": "- 新增阳性测试：`os.unlink` 与 `_overwrite_lock` 双双失败 + 该 run 存在 `.done` → `lock_status()[\"state\"] != \"running\"` 且 `acquire_lock` 成功接管；\n- 现有 E2 watch 全套（含 transition 帧用例）在新语义下重述后全绿，全量套件无回归；\n- 真实 drain 收尾一次：`orch status` 与 `git status` 均不出现「锁 running 而该 run 已有 `.done`」矛盾态（即 E3 未竟的那条判据被代码面而非运气封死）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261011-231237-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-11T23:13:41+08:00",
+      "note": "defect 附实锤 repro，收尾 E3 未竟格（收尾硬证据进判活）。第 3 点契约冲突裁定：授权一并重述 220622 观察面用例（transition 帧语义按新判活规则改写），判据以本条 success_criteria 为准。",
+      "effort": "high",
+      "started_at": "2026-10-11T23:13:42+08:00",
+      "worktree": "20261011-231237-devops"
     }
   ]
 }
