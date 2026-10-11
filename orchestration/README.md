@@ -524,8 +524,9 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
     `release_lock` 之后写出，摘要存在即已收尾，此刻锁仍显示 running 只可能是 unlink 失败
     残留 + 判活误真（Windows pid 回收/tasklist 超时保守判活）——旧判定让锁把事件压制后
     又无条件推进基线，导致 210557 那场 `fired=[]` 且补账同哑（backlog 20261011-220622-leader）。
-    锁面同因已由 released 墓碑自愈（§6），但观察面的「读穿谎话」仍是必要防线：残骸可来自
-    旧版锁、也可来自墓碑自身写不进的极端情形
+    同一条「收尾事实优先」现已在**锁面**同样执法（§6：released 墓碑 + 「该 run 已有
+    `.done`」判活否决），新代码不再产生谎锁帧；观察面的 `_in_progress` 抑制支与转移帧兜底
+    因此退为保险——护升级前残留的旧基线，也顶住 `.done` 半写这类读不出证据的瞬态
   - `NEEDS-LEADER <id>`——backlog 中**新出现**的 needs_leader 条目
   - `QUOTA-STOP <run>`——额度类全局停止（`.done.stopped`，或 run 日志的 `[Q]` 痕迹——后者
     早一拍，不必等摘要落盘）
@@ -597,6 +598,11 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
     `released` **墓碑** + run 日志留一行 `[!]`。墓碑不作互斥（`_lock_live` 判非活、
     `lock_status` 报 stale 且非 crashed），下一任 drain 就地改写接管——否则「删不掉的残骸
     + 判活误真」会把队列挡成假 running，最长阻塞到 6h 超龄才解（backlog 20261011-225933-devops）
+  · 墓碑也写不进（他方连写都不共享）时仍有**第二道收尾证据**：判活采纳「该 run 已有
+    `.done`」即非活（`_run_concluded`；`.done` 在 `release_lock` 之后才可能出现，故与墓碑
+    同为收尾宣告，且摘要须自证 run_log 同名才算数，防同秒撞名误抢活锁）。`lock_status`
+    对此报 `residue="done-exists"`，`orch status` 呈现**残骸已收尾**（backlog
+    20261011-231237-devops，与 §4.5「收尾事实优先于锁的自称」同一纪律）
   · 获锁即回收孤儿 in_progress 条目（前任 worker 中途被杀的遗留）重置 pending，并顺带
     清理其残留 worktree/branch（`git worktree remove --force wt-<id>` + `branch -D` +
     `prune` 兜底）——worktree 名 = 条目 id（take_first 记录、任务书指定），只清孤儿名、
@@ -616,8 +622,9 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   · 额度类失败（quota_exhausted）→ **全局停止**：种子复位 pending（非 needs_leader）、
     组包与剩余条目保持 pending、释放锁、.done 注明系统性故障；渠道恢复后下次唤醒自动续消化
 → run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
-  态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕、**干净完成
-  后锁残留**〔.done 存在〕与**残留已标记**〔released 墓碑：已宣告收尾但文件删不掉〕）、
+  态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕、**残留已标记**
+  〔released 墓碑：已宣告收尾但文件删不掉〕与**残骸已收尾**〔该 run 已有 .done，连墓碑都写
+  不进的极端残骸；pid 不作判活依据〕）、
   最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
   needs_leader 提醒（组长据此重派/改任务书/上报）
 → 组长的等待面（代码化，§4.5）：唤醒/采纳/交办三处输出固定附 `orch watch` 挂载指令；

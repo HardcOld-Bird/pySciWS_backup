@@ -125,6 +125,12 @@ def cmd_status(args: argparse.Namespace) -> int:
                 f"{lst.get('released_at', '?')}，但锁文件删不掉〔Windows 共享句柄〕——"
                 "released 墓碑不作互斥，下次 drain 就地接管，不占队列）"
             )
+        elif lst.get("residue") == "done-exists":
+            print(
+                f"  ⊘ 残骸已收尾（该 run 已写出 .done，锁自称在跑纯属删不掉——连 released "
+                f"墓碑都写不进的极端情形；pid {lst['pid']} 不做判活依据）——"
+                "下次 approve/drain 就地接管，不占队列"
+            )
         elif lst.get("crashed"):
             print(
                 f"  ⊘ 崩溃（pid {lst['pid']} 已死且该 run 无 .done）——worker 被中途杀死；"
@@ -132,8 +138,9 @@ def cmd_status(args: argparse.Namespace) -> int:
             )
         else:
             print(
-                f"  ⊘ stale 锁（pid {lst['pid']} 已死/超龄，但该 run 有 .done = 干净完成，"
-                "锁残留；下次 approve 或 drain 自动接管）"
+                f"  ⊘ stale 锁（pid {lst['pid']} 已死/超龄，无崩溃证据；"
+                "该 run 的 .done 若声明了别的 run 则不按「已收尾」认定——"
+                "下次 approve 或 drain 自动接管）"
             )
     else:
         print("  idle（无 drain worker 运行）")
