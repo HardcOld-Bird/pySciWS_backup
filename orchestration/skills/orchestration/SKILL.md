@@ -87,7 +87,10 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
   依据的否决被代码拒绝）——回复都会
   自动附送提议人；`orch status` 看 devops worker 态 / 最近 run / needs_leader 提醒；
   交办后照输出 [NEXT] 以 `run_in_background` 挂 `orch watch` 等事件（命中单行退出即唤醒，
-  勿 sleep-轮询 status）；漏挂的账由下次 `orch status` 的 watch 段补账；
+  勿 sleep-轮询 status）；漏挂的账由下次 `orch status` 的 watch 段补账；**测试/诊断性挂载
+  前须确认无 live 挂载或先停**——`arm()` 全局覆写 `state/watch.json`，会抹掉在等那任的心跳
+  与黑匣子；`watch.json` 的 `recent`/`exit_reason` 是脱靶复盘现场，`orch status` 会读出
+  「上一任无退出记录」（被外部杀死）及其末帧；
   护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：修改任务书重派，或行使最终裁定权
   坚持原派（理由留痕台账）；
