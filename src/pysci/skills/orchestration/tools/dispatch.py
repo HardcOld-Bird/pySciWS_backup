@@ -78,6 +78,10 @@ class DispatchOutcome:
     infra_suggestion: str = ""
     infra_kind: str = ""  # E0-B：交付 XML 上的 kind 属性（defect/usability/""）
     tags: list[str] = field(default_factory=list)  # E1：<blocked tags="a,b"> 失败标签
+    #: 解析器版本错位告警（delivery.parse：严格面全缺、宽松面救回时非空）。判读照常，
+    #: 但组长/drain 必须看见这一行——交付是在「旧解析器读新协议」的窗口里被兜底救下的
+    #: （backlog 20261012-002857-devops）。空串=解析器与协议同版。
+    warning: str = ""
     suggestion_id: str = ""
     envelope: Envelope | None = None
     error: str = ""
@@ -500,6 +504,7 @@ def do_dispatch(
         infra_suggestion=delivery.infra_suggestion,
         infra_kind=delivery.infra_kind,
         tags=delivery.tags,
+        warning=delivery.warning,
         suggestion_id=suggestion_id,
         envelope=env_json,
     )
@@ -556,6 +561,9 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
         f"（{turns} 轮，{dur:.0f}s，ctx={ctx:.0%}{est}）"
     )
     print(f"    会话：{o.sid[:8]}（{o.session_name}）")
+    if o.warning:
+        # 协议扩展的滚动升级窗口：本跳交付由宽松兜底面救回，判读可用但不可当正常路径
+        print(f"    [!] {o.warning}")
     if o.tags:
         print(f"    失败标签：{', '.join(o.tags)}")
     print(
