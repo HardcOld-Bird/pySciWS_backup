@@ -7,8 +7,11 @@
 自称看得比 ``.done`` 这块收尾硬证据更重。
 
 本文件按建议书要求 5 逐类钉住：pid 复用假象、``.done`` 半写、同 run ``.done`` 重写、
-running→idle 转移帧、抑制/空值帧不推进基线；外加黑匣子 ``recent``/``exit_reason`` 与
+收尾/转移帧、抑制/空值帧不推进基线；外加黑匣子 ``recent``/``exit_reason`` 与
 「上一任遗言」的可诊断面。
+
+锁面自 20261011-231237-devops 把「该 run 已有 ``.done``」请进判活，谎锁帧不再由新代码
+产生：涉及真实锁读数的用例按新语义断言 ``stale``，转移帧保留为旧基线保险。
 """
 
 from __future__ import annotations
@@ -30,12 +33,17 @@ from .test_watch import (
 # 要求 2：完成事实优先于锁的自称（脱靶主因）
 # ---------------------------------------------------------------------------
 def test_pid_reuse_illusion_still_reports(iso_state, monkeypatch):
-    """锁残留 + 判活为真（pid 回收/tasklist 超时保守判活）+ ``.done`` 已在 → 必须报。"""
+    """锁残留 + 判活为真（pid 回收/tasklist 超时保守判活）+ ``.done`` 已在 → 必须报。
+
+    锁面自 20261011-231237-devops 起自己也认这条收尾证据（不再报 running），观察面据此
+    不再需要看穿谎话——但完成事实仍由摘要作证，与锁的读数无关。
+    """
     monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
     _seed_done(iso_state, "r1", {"completed": "2026-10-11T21:42:41+08:00", "count": 3})
     _seed_lock(iso_state, "r1")
     cur = watch.snapshot()
-    assert cur["lock_state"] == "running" and cur["lock_done"]  # 锁在说谎，摘要在作证
+    assert cur["lock_state"] == "stale" and cur["lock_done"]  # 谎锁已被锁面自己否决
+    assert drain.lock_status()["residue"] == "done-exists"
     ev = watch.detect_events(_snap(), cur)
     assert [e["event"] for e in ev] == ["QUEUE-COMPLETE"]
     assert ev[0]["subject"] == "r1"
@@ -52,16 +60,23 @@ def test_genuinely_running_run_is_not_reported(iso_state, monkeypatch):
     assert watch.detect_events(base, cur) == []
 
 
-def test_running_to_idle_transition_reports_completion(iso_state, monkeypatch):
-    """两场帧：arm 时锁真在跑 rC（尚无摘要）→ 收尾时 unlink 失败、锁自称仍在跑 →
-    该帧照报；锁随后真释放的转移帧也不会把这笔账漏掉（要求 2）。"""
+def test_concluded_frame_reports_without_waiting_for_release(iso_state, monkeypatch):
+    """收尾帧即报（不必等转移帧）：arm 时锁真在跑 rC（尚无摘要）→ 摘要落盘的同一帧
+    锁已被自己的判活否决（released 墓碑写不进的残骸也走这条路）→ 该帧报完成。
+
+    原用例（backlog 20261011-220622-leader 要求 2）的前提是「锁残留 + 判活说谎仍自称
+    running」；自 20261011-231237-devops 把收尾事实请进判活，那帧读数改为 stale——事件
+    来得更早一拍，锁释放后的转移帧 consequently 不再重复报。转移帧本身作为旧基线保险
+    仍由 :func:`test_transition_frame_reports_never_reported_run` 钉住。
+    """
     monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
     _seed_lock(iso_state, "rC")
     base = watch.snapshot()  # 进行中：没有完成事实可报
+    assert base["lock_state"] == "running"
     assert watch.detect_events(base, base) == []
     _seed_done(iso_state, "rC", {"completed": "2026-10-11T21:00:00+08:00", "count": 2})
     cur = watch.snapshot()
-    assert cur["lock_state"] == "running"  # 锁残留 + 判活说谎，仍在自称
+    assert cur["lock_state"] == "stale"  # 收尾证据否决了锁的自称
     assert [e["event"] for e in watch.detect_events(base, cur)] == ["QUEUE-COMPLETE"]
     (iso_state / "devops.lock").unlink()
     idle = watch.snapshot()

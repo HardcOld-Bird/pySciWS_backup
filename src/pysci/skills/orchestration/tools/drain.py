@@ -7,9 +7,11 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
 
 - **锁**（``state/devops.lock``，JSON: pid/started/run_log）：同刻至多一个 drain
   worker。原子 ``O_CREAT|O_EXCL`` 抢占；持有者进程已死或锁龄超 :data:`LOCK_STALE_S`
-  判 stale 并接管（fail-open，防 worker 崩溃后永久死锁）。释放时 unlink 删不掉（Windows
-  共享句柄）则改写为 ``released`` **墓碑**并在 run 日志留 ``[!]``——残骸不再被当作活锁，
-  后续 drain 就地接管，队列不会被一把删不掉的锁阻塞 6 h（:func:`release_lock`）。
+  判 stale 并接管（fail-open，防 worker 崩溃后永久死锁）。**收尾事实优先于锁的自称**：
+  释放时 unlink 删不掉（Windows 共享句柄）则改写为 ``released`` **墓碑**并在 run 日志留
+  ``[!]``；连墓碑都写不进时，「该 run 已有 ``.done``」仍单独把残骸判为非活
+  （:func:`_run_concluded`）——两条判活否决合起来，队列不会被一把删不掉的锁阻塞 6 h
+  （:func:`release_lock`，backlog 20261011-225933-devops + 20261011-231237-devops）。
 - **唤醒**（:func:`wake_devops`）：approve 成功后调用；锁忙则不重复 spawn（本项由
   当前 drain 循环接手），空闲则 Popen 分离进程运行内部命令 ``_drain-devops``。返回的
   message 固定附 watch 事件等待器挂载指令（:mod:`watch`，README §4.5）——工作交棒的
@@ -159,6 +161,46 @@ def _lock_released(data: dict[str, Any] | None) -> bool:
     return bool(data) and bool(data.get(RELEASED_KEY))
 
 
+def _run_done_path(data: dict[str, Any] | None) -> Path | None:
+    """锁记录里那个 run 对应的 ``.done`` 路径（无法定位时 None）。"""
+    run_log = str((data or {}).get("run_log", ""))
+    if not run_log:
+        return None
+    path = Path(run_log)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path.with_suffix(".done")
+
+
+def _run_concluded(data: dict[str, Any] | None) -> bool:
+    """锁自称在跑的 run 是否**已写出 ``.done``**——收尾硬证据（README §4.5）。
+
+    ``.done`` 由 drain 在 :func:`release_lock` **之后**写出，故摘要存在即该 run 不可能
+    还在跑，锁只剩「删不掉的残骸」这一种解释。判活若不采纳这条，墓碑也写不进的极端
+    残骸（他方连写都不共享）就会把队列挡成假 running 直到 6 h 超龄（backlog
+    20261011-231237-devops，收尾 E3 未竟格）。
+
+    摘要读得出时要求它**自证身份**（``run_log`` 同名）：万一是别的 run 的摘要落到了这个
+    文件名，不能被当作本锁的收尾证据而误抢活锁。残余已知风险：``new_run_log()`` 只到秒，
+    同秒起的两个 run 共享文件名时本否决可能偏早（要同时满足「其一已在同一秒内写出
+    ``.done``」）——彻底消除需给 run 名加进程内 nonce，会改 ``.done`` 命名面与排序语义，
+    不在本次批准面内，留作观察项。
+    """
+    done = _run_done_path(data)
+    if done is None or not done.exists():
+        return False
+    try:
+        body = json.loads(done.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return True  # 半写/损坏：文件已在即已收尾（写它在释放锁之后）
+    declared = (
+        str(body.get("run_log", "")) if isinstance(body, dict) else ""
+    )  # 摘要未记身份 → 无更反的证据，按存在为准
+    if not declared:
+        return True
+    return Path(declared).name == Path(str(data.get("run_log", ""))).name
+
+
 def _overwrite_lock(payload: str) -> bool:
     """就地改写锁文件内容（先原子 replace，兜底截断重写）。
 
@@ -187,8 +229,12 @@ def _overwrite_lock(payload: str) -> bool:
 
 
 def _lock_live(data: dict[str, Any] | None) -> bool:
-    """锁是否有效：未被标记释放、持有者进程存活且锁龄未超上限。"""
-    if not data or _lock_released(data):
+    """锁是否有效：未宣告收尾、持有者进程存活且锁龄未超上限。
+
+    两条**收尾宣告**都优先于 pid 判活（判活本身可能说谎：pid 回收、tasklist 超时保守
+    判活）：``released`` 墓碑，以及该 run 已有 ``.done`` 摘要（:func:`_run_concluded`）。
+    """
+    if not data or _lock_released(data) or _run_concluded(data):
         return False
     age = _lock_age_s(data)
     if age > LOCK_STALE_S:
@@ -204,9 +250,9 @@ def acquire_lock(run_log: str) -> dict[str, Any] | None:
 
     Returns:
         成功获取时返回锁记录 ``{pid, started, run_log}``；已被存活 worker 持有时
-        返回 ``None``（调用方应优雅退出，不重复消费）。stale 锁（进程死/超龄）或
-        ``released`` 墓碑被接管——删不掉就地改写接管（残骸不得挡路，
-        backlog 20261011-225933-devops）。
+        返回 ``None``（调用方应优雅退出，不重复消费）。残骸一律接管：进程死/超龄的
+        stale 锁、``released`` 墓碑、以及「该 run 已有 ``.done``」的已收尾残骸——删不掉
+        就地改写接管（残骸不得挡路，backlog 20261011-225933-devops + 20261011-231237-devops）。
     """
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     record = {"pid": os.getpid(), "started": _now(), "run_log": run_log}
@@ -254,7 +300,9 @@ def release_lock(run_log: Path | str | None = None) -> bool:
     ``except OSError: pass`` 把失败吞成「锁仍在、pid 仍活」的假 running——``_lock_live``
     遂把残骸判为活锁，下一任 drain 被 ``skipped=lock_busy`` 挡掉，最长阻塞到
     :data:`LOCK_STALE_S`（6h）超龄才解套（backlog 20261011-225933-devops，与
-    20261011-220622-leader 的 watch 吞事件同源）。墓碑令锁面与观察面同说一席话。
+    20261011-220622-leader 的 watch 吞事件同源）。墓碑令锁面与观察面同说一席话；连墓碑
+    都写不进（他方连写都不共享）时仍不挡路——紧随其后写出的 ``.done`` 会被判活单独当作
+    收尾证据（:func:`_run_concluded`，backlog 20261011-231237-devops）。
     """
     data = read_lock()
     if not data:
@@ -303,8 +351,10 @@ def lock_status() -> dict[str, Any]:
     stale 时附 ``crashed`` 字段：该 run 无对应 ``.done`` = worker 被中途杀死（崩溃）；
     有 ``.done`` = 上一次干净完成但锁残留（release 未及/异常）。供 orch status surfacing。
 
-    released 墓碑单列：``state=stale`` + ``released=True`` + ``crashed=False``——worker
-    已宣告收尾（崩溃者走不到 release），只是文件删不掉，故既非 running 也非崩溃。
+    released 墓碑与「该 run 已有 ``.done``」是两种**已宣告收尾的残骸**，各自单列读数且
+    一律 ``crashed=False``（崩溃者走不到 release、也写不出 ``.done``）：前者锁面自己标了
+    记号，后者连标号都写不进（backlog 20261011-231237-devops）——两者都不占队列，下一任
+    drain 就地接管。
     """
     data = read_lock()
     if not data:
@@ -325,6 +375,13 @@ def lock_status() -> dict[str, Any]:
             "crashed": False,
             **base,
         }
+    if _run_concluded(data):
+        return {
+            "state": "stale",
+            "residue": "done-exists",
+            "crashed": False,
+            **base,
+        }
     alive = _pid_alive(pid)
     state = "running" if (alive and 0 <= age <= LOCK_STALE_S) else "stale"
     out: dict[str, Any] = {"state": state, **base}
@@ -340,11 +397,8 @@ def _stale_run_crashed(data: dict[str, Any]) -> bool:
     跑到了收尾（干净完成），缺失即代表进程被中途杀死（OS 关机 / kill -9）没机会收尾。
     run_log 无法定位时保守判为崩溃。
     """
-    run_log_rel = str(data.get("run_log", ""))
-    if not run_log_rel:
-        return True
-    done = (PROJECT_ROOT / run_log_rel).with_suffix(".done")
-    return not done.exists()
+    done = _run_done_path(data)
+    return True if done is None else not done.exists()
 
 
 # ---------------------------------------------------------------------------

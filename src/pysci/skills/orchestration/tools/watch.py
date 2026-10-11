@@ -29,6 +29,11 @@ running 只可能是 unlink 失败残留 + 判活说谎（pid 回收 / tasklist 
 完成身份是 **(run 名, completed 时刻, count) 三元组**，且**抑制帧 / 瞬态空值一律
 不得推进基线**（:func:`advance_base`）——否则被吞掉的事实永不参与下次比较，watch
 与 status 补账会同时哑掉。判读所需现场每帧写进 ``recent``。
+
+同一条纪律现已在**锁面**同样执法（backlog 20261011-225933-devops 的 released 墓碑 +
+20261011-231237-devops 的 ``_run_concluded`` 判活否决），新代码不再产生「谎锁压事件」
+的帧；本模块 :func:`_in_progress` 的抑制支与转移帧兜底因此退为**保险**：既护升级瞬间
+残留的旧基线，也顶住 ``.done`` 半写这类读不出证据的瞬态。
 """
 
 from __future__ import annotations
@@ -224,6 +229,10 @@ def _in_progress(s: dict[str, Any]) -> bool:
     ``.done`` 由 drain 在 ``release_lock`` 之后写出，所以「锁还在、摘要已存在」只能是
     释放失败残留 + 判活误真（pid 被 Windows 回收 / tasklist 超时保守判活）——210557 那场
     QUEUE-COMPLETE 就是被这种假「进行中」抑制后又被推进基线而永久吞掉的。
+
+    锁面自 20261011-231237-devops 起把「该 run 已有 ``.done``」直接判为非活，故本支只
+    可能在两种情况下为真：旧代码写下的锁/基线仍在场，或 ``.done`` 半写到读不出证据。
+    保留它 = 观察面对锁面的不信任仍是防线，不是冗余。
     """
     return (
         s.get("lock_state") == "running"
@@ -250,7 +259,9 @@ def detect(
     - **QUEUE-COMPLETE**：完成身份三元组（名, completed, count）变化，且该 run 不是
       「锁自称在跑且尚无 ``.done``」的真进行中 run。**收尾事实优先于锁的自称**。
     - **转移帧兜底**（要求 2）：基线里那个自称在跑的 run 已留下 ``.done``，而本帧锁已
-      不在它身上、其身份又从未报出（``.done`` 名额被更晚的 run 占了）→ 照报。
+      不在它身上、其身份又从未报出（``.done`` 名额被更晚的 run 占了）→ 照报。锁面采纳
+      收尾否决后新基线不会再带 ``lock_state=running`` + ``lock_done`` 的矛盾帧，此支转为
+      护升级前旧基线的保险。
 
     瞬态空值（``.done`` 半写、latest_done 读不到）与抑制帧都走 ``hold``：身份保持
     基线原值，下一帧继续比较——这是 210557 那场「 fired=[] 且补账同哑」的反制。
