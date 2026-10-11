@@ -286,7 +286,7 @@ def judge(
 
 
 def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True) -> Row:
-    """跑一案：全新会话 + 固定档位 + 不附审批回复 → 机械判据 → 台账行。
+    """跑一案：全新会话 + 固定档位 + 不附审批回复 + 不进生产台账 → 判据 → 台账行。
 
     Args:
         case: :func:`parse_case` 的产物。
@@ -309,6 +309,7 @@ def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True)
         dirs=list(case.dirs),
         no_checks=True,
         attach_replies=False,
+        eval_hop=True,
         quiet=quiet,
     )
     reg = Registry.load()

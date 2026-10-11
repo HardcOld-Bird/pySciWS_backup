@@ -411,12 +411,55 @@ def test_run_case_ledger_row_fields(iso_eval, monkeypatch):
 
 def test_run_case_does_not_write_member_ledger(iso_eval, monkeypatch):
     """压测行只进 evals.jsonl：混进 deliveries.jsonl 会把测量跳算进成员排名。"""
-    capture_dispatch(monkeypatch)
+    seen = capture_dispatch(monkeypatch)
     patch_reg(monkeypatch, iso_eval)
     ev.run_case(ev.parse_case(seed_case(iso_eval, "member: figure\n" + BODY)))
     assert ev.EVAL_LEDGER_PATH.exists()
+    assert seen["eval_hop"] is True, (
+        "压测跳必须声明 eval_hop，否则生产台账/建议队列被污染"
+    )
     assert ledgermod.LEDGER_PATH == Path(iso_eval) / "state" / "ledger.jsonl"
     assert not ledgermod.LEDGER_PATH.exists(), "生产台账不得被压测跳写入"
+
+
+def _eval_dispatch(iso_dispatch, monkeypatch, **kw):
+    set_models(iso_dispatch, minimum="Qwen3.8-Flash")
+    fake_headless(
+        monkeypatch,
+        lambda i, cmd: envelope(
+            '<result>done。</result>\n<infra_suggestion kind="usability">'
+            "案卷太难读</infra_suggestion>",
+            is_error=False,
+            rc=0,
+        ),
+    )
+    return dispatch.do_dispatch(
+        "quotamember",
+        text="压测正文",
+        slug="eval-y",
+        session="new",
+        model_tier="minimum",
+        max_turns=3,
+        timeout=5,
+        no_checks=True,
+        quiet=True,
+        **kw,
+    )
+
+
+def test_eval_hop_suppresses_production_side_effects(iso_dispatch, monkeypatch):
+    """真实链路（假 exe）下 eval_hop=True：生产台账零行、建议队列零文件。"""
+    out = _eval_dispatch(iso_dispatch, monkeypatch, eval_hop=True)
+    assert out.kind == "result"
+    assert ledgermod.read_all() == [], "压测跳不得写成员生产台账"
+    assert out.suggestion_id == "", "压测跳不得往建议队列塞合成条目"
+
+
+def test_production_hop_records_ledger_and_suggestion(iso_dispatch, monkeypatch):
+    """对照：生产跳照旧记账并落建议——开关不得把正常链路一起关掉。"""
+    out = _eval_dispatch(iso_dispatch, monkeypatch)
+    assert len(ledgermod.read_all()) == 1
+    assert out.suggestion_id, "生产跳的 <infra_suggestion> 必须入队"
 
 
 # ---------------------------------------------------------------------------

@@ -46,10 +46,10 @@ check 类型未注册（`unrouted` 也算失败——套件要的是确定性）
 
 ## 隔离性（为什么压测跳不进生产账）
 
-压测派发固定 `session=new` + `attach_replies=False`：全新会话保证可比；不吃审批回复
-也不移档 `sent/`（组长的批复留在原位，下一跳生产照常生效）。指标行落
-`state/ledger/evals.jsonl`（独立台账），不写成员 ledger，故压测成本与轮数**不污染**
-`orch stats` 的成员排名与耗时画像。
+压测派发固定 `session=new` + `attach_replies=False` + `eval_hop=True`：全新会话保证可比；
+不吃审批回复也不移档 `sent/`（组长的批复留在原位，下一跳生产照常生效）；`eval_hop` 令
+这一跳**不写成员生产台账、不落建议队列**。指标行落 `state/ledger/evals.jsonl`（独立台账），
+故压测成本与轮数**不污染** `orch stats` 的成员排名与耗时画像。
 
 ## 基线对照
 

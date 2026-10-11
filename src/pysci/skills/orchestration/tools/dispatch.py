@@ -203,12 +203,18 @@ def do_dispatch(
     no_retry: bool = False,
     quiet: bool = False,
     attach_replies: bool = True,
+    eval_hop: bool = False,
 ) -> DispatchOutcome:
     """执行一跳派发（完整链路）。参数语义与 ``orch dispatch`` 一致。
 
     ``attach_replies=False``：不把组长的审批回复附进提示词、也不归档 ``sent/``
     （REFACTOR §3：harness 压测跳必须与「生产跳」隔离，否则回复里的上下文会让
     压测结果不可比——``orch eval run`` 走这一支）。
+
+    ``eval_hop=True``（``orch eval run`` 的压测跳）：不写成员生产台账
+    （``state/ledger/deliveries.jsonl``）、不把 <infra_suggestion> 落进建议队列——
+    压测的成本/轮数/ctx 只进 ``state/ledger/evals.jsonl``，否则合成案卷的读数会
+    被 ``orch stats`` 计到组员头上、每轮跑还会往队列塞假建议。
 
     推理强度（``effort``）来源优先级：**调用方覆盖**（CLI ``--effort``、plan 环节、
     backlog 条目）> **registry 成员级** ``effort`` > 不传（跟随用户级默认=中）。
@@ -387,28 +393,29 @@ def do_dispatch(
     if failed:
         kind = "quota_exhausted" if quota_hit else "run_failed"
         delta_chars, est_tokens, chars_after = measure_usage()
-        append(
-            LedgerEntry(
-                ts="",
-                member=member_id,
-                session_id=sid,
-                session_name=name,
-                task_file=orchestration_rel(taskbook),
-                kind=kind,
-                num_turns=env_json.num_turns,
-                duration_ms=env_json.duration_ms,
-                credits=env_json.total_credits,
-                model=model,
-                effort=level,
-                delta_chars=delta_chars,
-                est_tokens=est_tokens,
-                ctx_ratio=env_json.context_usage_ratio,
-                permission_denials=len(env_json.permission_denials),
-                plan=plan,
-                step=step,
-                error=(err.strip()[-400:] or env_json.stop_reason),
+        if not eval_hop:
+            append(
+                LedgerEntry(
+                    ts="",
+                    member=member_id,
+                    session_id=sid,
+                    session_name=name,
+                    task_file=orchestration_rel(taskbook),
+                    kind=kind,
+                    num_turns=env_json.num_turns,
+                    duration_ms=env_json.duration_ms,
+                    credits=env_json.total_credits,
+                    model=model,
+                    effort=level,
+                    delta_chars=delta_chars,
+                    est_tokens=est_tokens,
+                    ctx_ratio=env_json.context_usage_ratio,
+                    permission_denials=len(env_json.permission_denials),
+                    plan=plan,
+                    step=step,
+                    error=(err.strip()[-400:] or env_json.stop_reason),
+                )
             )
-        )
         _sessions.touch_session(m, sid, chars_offset=chars_after)
         reg.write_sessions(m)
         reg.save()
@@ -438,7 +445,7 @@ def do_dispatch(
         [] if no_checks else run_checks(delivery.artifacts, reg, member_pod=m.pod)
     )
     suggestion_id = ""
-    if delivery.infra_suggestion.strip():
+    if delivery.infra_suggestion.strip() and not eval_hop:
         suggestion_id = _persist_suggestion(
             member_id, delivery.infra_suggestion, delivery.infra_kind
         )
@@ -466,7 +473,8 @@ def do_dispatch(
         plan=plan,
         step=step,
     )
-    append(entry)
+    if not eval_hop:
+        append(entry)
     for p in reply_files:  # 审批回复已附送 → 归档 sent/
         sent = p.parent / "sent"
         sent.mkdir(exist_ok=True)
