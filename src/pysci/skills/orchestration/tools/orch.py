@@ -467,7 +467,13 @@ def cmd_ledger(args: argparse.Namespace) -> int:
             f"credits={e.credits:g}{f'[{e.model}]' if e.model else ''}"
             f"{f'[effort={e.effort}]' if e.effort else ''} "
             f"验收[{checks_s}]"
-            + (" 建议✓" if e.infra_suggestion else "")
+            + (
+                " 建议✓"
+                if e.infra_suggestion
+                else " 建议✗未入库"
+                if e.infra_kind
+                else ""
+            )
             + (f" 标签[{','.join(e.tags)}]" if e.tags else "")
             + (f" 计划={e.plan}/{e.step}" if e.plan else "")
         )

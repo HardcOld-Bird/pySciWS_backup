@@ -529,7 +529,12 @@ def do_dispatch(
         task_file=orchestration_rel(taskbook),
         kind=delivery.kind,
         checks=check_results,
-        infra_suggestion=bool(delivery.infra_suggestion),
+        # 口径合一（backlog 20261012-132138-devops）：本字段答的是**「队列里有没有这条
+        # 建议」**，不是**「交付文本里有没有那个块」**。此前写的是后者，于是非法 kind 被
+        # :func:`_persist_suggestion` 拒之门外的那一跳，台账仍打「建议✓」——组长照读数
+        # 去找提案，`orch suggestions` 里却什么都没有（#62 同源：读数面与入库面分裂）。
+        # 未入库这件事仍可见：呈现面按 infra_kind 非空而本字段为假打「建议✗未入库」。
+        infra_suggestion=bool(suggestion_id),
         infra_kind=delivery.infra_kind,
         tags=delivery.tags,
         num_turns=env_json.num_turns,
