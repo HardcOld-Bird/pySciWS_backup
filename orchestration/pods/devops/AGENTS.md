@@ -6,80 +6,73 @@
 
 - pySci 编排体系 devops 组员（基础设施维护专员），charter 见 `.qoder/rules/charter.md`。
 - 专属工具：`pysci-dev`（doctor/sync/worktree）；实现于 `src/pysci/skills/devops/`。
-- 作业方式：worktree 隔离 + cz commit + commit 后限时 best-effort push（规程全文在 charter，
-  超时是硬要求——挂起会阻塞 drain）。
+- 作业方式：worktree 隔离 + cz commit + commit 后限时 best-effort push（超时是硬要求——
+  挂起会阻塞 drain）。
 
 ## 经验（工作中积累）
 
-- **worktree 内跑测试/CLI 的环境选法（2026-10-12 定型，backlog 20261012-023430-devops）**：
-  `PYTHONPATH="<wt>/src" uv run --no-sync pytest "<wt>/tests" -q` 复用主 `.venv`，**前提
-  =cwd 在 worktree 之外**——cd 进去时 uv 就地新建空 `<wt>/.venv`，缺 pyyaml 即 import 崩；
-  配方与兜底法见技能 `references/worktree-merge.md` §1。副作用：`pysci.paths.PROJECT_ROOT`
-  就近找 `pyproject.toml`，故 state/PODS 指向 **worktree** 副本——跑 sync/drain 改的是其
-  `state/*.json`（backlog.json 被跟踪！），实验后 `git checkout -- orchestration/state/…`
-  还原。工具已承认此副作用（backlog 20261012-094646-devops）：跨树自检放行该配方
-  （`PROJECT_ROOT` 在脚下树内且 `.git` 是文件），免 `--force`；mdgen-check 相对入参锚
-  `PROJECT_ROOT`。
-- **档位映射自愈写运行态、不写跟踪面（2026-10-12，backlog 20261012-080410-devops）**：
-  `refresh_models` 落 `sessions-runtime.json` 的 `models_resolved`，读取按「跟踪 > 运行态 >
-  出厂默认」回退，跟踪值遮蔽解析值时只报不写。细则与脏跟踪面哨兵见技能
-  `references/registry-runtime.md`。
-- **worktree sync 与 `skills-deployed.json`（行尾敏感已修 2026-10-10）**：`tree_hash` 哈希前
-  CRLF→LF 归一，故 worktree 内 sync 写的台账对 main 即正确；但 **pod 内部署副本是 gitignored、
-  不随合并搬运**，合并后仍须在 main 跑 `pysci-dev sync` 至 `sync --check` 全等；
-  doctor 哨兵 [*]=台账哈希漂移、[!]=副本漂移。
-- **uvx 型 MCP server 的 mcp 2.x 断供（2026-10-10 修，backlog 20261010-paper-search-mcp-down）**：
-  SDK 2.x 移了 `mcp.server.fastmcp`，上游 `mcp>=x` 无上限的 uvx server 解析到 2.x 即启动崩、pod 侧
-  只见 ✗ Disconnected。**修法**：mcp.json args 前插 `["--with", "mcp<2", ...]` 钉住；诊断
-  `echo '' | uvx <pkg>` 看 traceback，验证=握手见 serverInfo。
-- **主树 `uv sync` 一律走 `pysci-dev venv-sync`（2026-10-12 固化，backlog 20261012-114239-devops）**：
-  uv 撞运行中 exe（典型=组长 orch watch）会**先删光其余入口**再报 os error 5。工具=让路→sync→
-  **让回原地**→核对入口（缺即 rc=2）；**原名缺失时 `.locked-*` 就是唯一原件，删前先查**。坑：
-  `uv run pysci-X` 的**隐式 sync** 会让工具本体都跑不起来，自救走
-  `.venv/Scripts/python.exe -m pysci.skills.devops.tools.dev venv-sync`；别 kill 组长进程；
-  锁判据与三态处置见技能 `references/uv-venv-sync.md`。
-- **任务书轻量 lint 规则表由 devops 维护（2026-10-10）**：`write_taskbook` 落盘前扫正文，命中
-  `state/taskbook-lint.json`（git 跟踪）任一规则正则即**告警但不阻断**；增补=`rules` 追加
-  `{id, re, hint}`（re 为 Python 正则、JSON 内反斜杠双写）。fail-open，改坏 JSON 会**静默失效**
-  （test_taskbook_lint.py 钉住「随附规则必须可编译」）。
+- **worktree 内跑测试/CLI（2026-10-12 定型）**：`PYTHONPATH="<wt>/src" uv run --no-sync pytest
+  "<wt>/tests" -q` 复用主 `.venv`，**前提=cwd 在 worktree 之外**（cd 进去 uv 就地新建空 venv，
+  缺 pyyaml 即崩）。副作用：`PROJECT_ROOT` 就近认 `pyproject.toml` ⇒ state 写进 worktree 副本
+  （backlog.json 被跟踪），实验后 `git checkout -- orchestration/state/…` 还原。配方与兜底
+  见技能 `references/worktree-merge.md` §1。
+- **判决包流（2026-10-12 E5b）**：`tools/verdict.py`=共享库（§0.9 组员复用，不另起 CLI）。
+  approve 必带 `--jury`/`--bench`/`--override` 之一；例外通道=defect×当跳 blocked，判据读落盘
+  固化的 `delivery:` 行（事后反查台账会失效）。J 出 B 自动驳回且**不计 override 率**——账只有
+  一本=`preference-journal.jsonl` 的 `channel`。M 路审批锚 HEAD，`backlog_complete` 自动排 A/B
+  三态落地（改善→销账／未改善→立案 `source=post-verify`／不可判→`escalate=twin` 待组长终裁）。
+  归档必须碰撞安全（重名覆盖=销毁审计原文）。细则见 `references/verdict-package.md`。
+- **档位映射自愈写运行态、不写跟踪面（2026-10-12）**：`refresh_models` 落
+  `sessions-runtime.json` 的 `models_resolved`，读取按「跟踪 > 运行态 > 出厂默认」回退，跟踪值
+  遮蔽解析值时只报不写。细则见 `references/registry-runtime.md`。
+- **worktree sync 与 `skills-deployed.json`**：`tree_hash` 哈希前 CRLF→LF 归一，故 worktree 内
+  sync 的台账对 main 即正确；但 **pod 内副本 gitignored、不随合并搬运**，合并后须在 main 跑到
+  `sync --check` 全等。doctor 哨兵 [*]=台账漂移、[!]=副本漂移。
+- **uvx 型 MCP server 的 mcp 2.x 断供（2026-10-10 修）**：上游 `mcp>=x` 无上限解析到 2.x 即启动崩
+  （SDK 移了 `mcp.server.fastmcp`）、pod 侧只见 ✗ Disconnected。修法=mcp.json args 前插
+  `["--with", "mcp<2", ...]`；诊断 `echo '' | uvx <pkg>`，验证=握手见 serverInfo。
+- **主树 `uv sync` 一律走 `pysci-dev venv-sync`（2026-10-12 固化）**：uv 撞运行中 exe（典型=组长
+  orch watch）会**先删光其余入口**再报 os error 5；工具=让路→sync→让回原地→核对入口。**原名
+  缺失时 `.locked-*` 就是唯一原件，删前先查**；别 kill 组长进程。隐式 sync 坑与三态处置见
+  `references/uv-venv-sync.md`。
+- **任务书轻量 lint 表由 devops 维护（2026-10-10）**：`write_taskbook` 落盘前扫正文，命中
+  `state/taskbook-lint.json`（跟踪）任一正则即**告警不阻断**；增补=`rules` 追加
+  `{id, re, hint}`（JSON 内反斜杠双写）。fail-open⇒改坏 JSON 静默失效。
 - **新增 pod 无需预注册 registry.json**（零技能 pod 也不进 `manifest.toml` targets，reviewer/twin
-  先例，同一测试钉住）：脚手架只建目录+只读层文件，注册留给组长首次派发。
-- **改 guard（Node Stop/PreToolUse hook）的两条硬教训（2026-10-10）**：① guard 的 fail-open
-  （异常即放行）会**静默吞掉 guard 自身的 bug**（执行流写在 ESM 顶层 `const` 之前→TDZ 被 catch，
-  13 例违规全绿；只有 pytest 直接 `node` 跑真 guard 才暴露），故 `run()` 调用放文件末尾。
-  ② Stop hook 验证别只看 exit code：看**违规文件是否被会话自己改掉**+`num_turns`，再从
-  `~/.qoder-cn/projects/<pod键>/<sid>.jsonl` 取注入回会话的 stderr 原文核对提示。
+  先例）：脚手架只建目录+只读层，注册留给组长首次派发。
+- **改 guard（Node Stop/PreToolUse hook）两条硬教训（2026-10-10）**：① fail-open 会**静默吞掉
+  guard 自身的 bug**（执行流写在 ESM 顶层 `const` 前→TDZ 被 catch，13 例违规全绿；只有 pytest
+  直接 `node` 跑真 guard 才暴露），故 `run()` 放文件末尾。② 验证别只看 exit code：看违规文件是否
+  被会话自己改掉＋`num_turns`，再从 `~/.qoder-cn/projects/<pod键>/<sid>.jsonl` 取注入的 stderr 原文。
 - **eval 压测跳的隔离面已内建（2026-10-12 E2）**：`run_case` 两头夹——任务书附 `EVAL_HOP_NOTE`
-  禁改自维护层 + 前后拍该 pod 跟踪脏面快照，只还原本跳新增者（进台账 `reverted`）。
-  口径见技能 `references/harness-eval.md`「隔离性」段。
-- **harness 预算三层执法（2026-10-10 齐）**：组员侧=delivery-gate Stop（AGENTS.md／自建 rules
-  description 合计／自建 skills description 合计／自建 SKILL.md 各 ≤8192B 落盘字节，自建 rules 禁
-  always_on，`PYSCI_DEPLOYED_SKILLS` 缺失时自建技能那一支不执法）、真本侧=pre-commit
-  `harness-budget`（`guards/budget_check.py`，stdlib-only）、观测侧=doctor 三档。新钩子用
-  `language: python` 不用 `system`（后者依赖提交上下文 PATH 里有 python，找不到就堵死一切提交）。
-- **pod 脚手架的 git 跟踪面**：每 pod 仅 5 个文件入库；`bench/`·`outbox/`·`.qoder/skills/` 被 pod
-  `.gitignore` 排除、`inbox/` 空目录不跟踪，四者均须在**合并后于 main 上** `mkdir` + `sync`
-  再生。settings 模板两件事必带：两个 hook 接线 + `"agentsMdExcludes": ["**/leader-only.md"]`
-  （写 `**/*.md` 会连 `basic.md` 公约数一起吞掉；勿把 pod 自建规则命名成 `leader-only*`）。
-  其余细则（零技能 pod 裁定、注册面）见技能 `references/pod-scaffold.md`。
-- **agentsMdExcludes 生效性机械哨兵（2026-10-10）**：doctor 验不出 CLI 真按 glob 排除，
-  `pysci-dev probe` 在 Temp 造带不可猜 token 的 fixture 跑两跳做**因果断言**（不灵敏只报
-  inconclusive、不误绿）；结论落无时间戳台账 `state/agents-md-excludes-probe.json`
-  （staleness=hash{cli_version,排除面}），doctor 读它定三档。
-- **交付协议滚动升级窗口（2026-10-12 E1 → backlog 002857 已修）**：派发进程 import 的解析器快照
-  可能早于协议（旧版只认字面 `<tag>`）；现 parse_delivery 宽松兜底救回带属性交付并附
-  「解析器早于协议」告警（进 outcome/run 日志）——见告警就重跑本单确认。
-- **协议词表三面执法（2026-10-12，backlog 20261012-120001-leader）**：`<blocked tags>` 与
-  `<infra_suggestion kind>` 词表只有一份=`state/failure-tags.json`（`tags`/`infra_kinds` 两段，
-  Python `failure_tags.load_*()` 与 Node gate 同读，增补改文件不改代码）。kind 三面缺一即漏网：
-  gate **逐块**校验并拦多块交付（解析器只取第一块，其余静默丢弃）、dispatch 落盘前复核（非法不
-  入库）、approve 入队前复核；`orch suggestions` 标 `[!] 空壳建议`。**提案前问：还有第四面吗。**
+  禁改自维护层＋前后拍 pod 跟踪脏面快照，只还原本跳新增者（进台账 `reverted`）。口径见
+  `references/harness-eval.md`。
+- **harness 预算三层执法（2026-10-10 齐）**：组员侧=delivery-gate Stop（AGENTS.md／自建 rules・
+  skills 的 description 合计／自建 SKILL.md 各 ≤8192B 落盘字节，自建 rules 禁 always_on，
+  `PYSCI_DEPLOYED_SKILLS` 缺失时自建技能那一支不执法）、真本侧=pre-commit `harness-budget`、
+  观测侧=doctor 三档。新钩子用 `language: python` 不用 `system`（后者 PATH 缺 python 就堵死一切提交）。
+- **pod 脚手架的 git 跟踪面**：每 pod 仅 5 个文件入库；`bench/`·`outbox/`·`.qoder/skills/` 被排除、
+  `inbox/` 空目录不跟踪，四者均须**合并后于 main 上** `mkdir`+`sync` 再生。settings 模板必带两个
+  hook 接线 + `"agentsMdExcludes": ["**/leader-only.md"]`（写 `**/*.md` 会连 `basic.md` 一起吞掉；
+  勿把 pod 自建规则命名成 `leader-only*`）。其余见 `references/pod-scaffold.md`。
+- **agentsMdExcludes 生效性机械哨兵（2026-10-10）**：doctor 验不出 CLI 真按 glob 排除，`pysci-dev
+  probe` 造带不可猜 token 的 fixture 跑两跳做**因果断言**（不灵敏只报 inconclusive、不误绿）；
+  结论落 `state/agents-md-excludes-probe.json`（staleness={cli_version,排除面}）。
+- **交付协议滚动升级窗口（2026-10-12 E1）**：派发进程 import 的解析器快照可能早于协议；
+  parse_delivery 宽松兜底救回带属性交付并附「解析器早于协议」告警——见告警就重跑本单。
+- **协议词表三面执法＋双源漂移（2026-10-12）**：`<blocked tags>` 与 `<infra_suggestion kind>`
+  词表只有一份=`state/failure-tags.json`（Python `failure_tags.load_*()` 与 Node gate 同读，增补
+  改文件不改代码）。kind 三面缺一即漏网：gate **逐块**校验并拦多块交付（解析器只取第一块）、
+  dispatch 落盘前复核、approve 入队前复核。**双源漂移同族坑**：approve 用块内解析器（跳首空行前
+  扫 `kind:`）、入库用全文扫描器 ⇒ 正文以空行开头的提案判据取空即被拒（回显 `kind=` 空即此症）。
+  **提案前问：还有第四面吗。**
 - **直跑 guard 探针的假绿坑（2026-10-12 两度踩）**：env 名是 **`PYSCI_POD`**（不是 PYSCI_POD_DIR），
-  写错名⇒只读层形同虚设，拦截与对照都 exit 0；载荷要填 `last_assistant_message`（guard 不读
-  transcript_path，只喂 transcript 会空跑全绿）；`PYSCI_PROJECT_ROOT` 须用 `cygpath -w` 形态
-  （`/tmp` 被 node 当 `D:\tmp` → 词表 ENOENT → fail-open 放行）。
-- **判位格式须吃未裁剪输出；合并前交集判据（2026-10-12，backlog 20261012-082932-devops）**：
-  `_run_git` 返回 strip 后的输出，而 porcelain 首行的**前导空格是判位符**（`" M a"`→`"M a"`）
-  ⇒ 解析器静默漏首项；mock 单测全绿，只有真 git 集成测试暴露，读定长格式须走 `_git_proc`。
-  「本次合并触碰哪些文件」按 merge-base 起算（`main..HEAD` 在分支落后时把别人的提交也算进来，
-  据此误交过一次 blocked）——已内建进 `pysci-dev worktree merge`，勿手算。
+  写错名⇒只读层形同虚设，拦截与对照都 exit 0；载荷填 `last_assistant_message`（guard 不读
+  transcript_path）；`PYSCI_PROJECT_ROOT` 须 `cygpath -w` 形态（`/tmp` 被 node 当 `D:\tmp`→ENOENT→
+  fail-open 放行）。
+- **判位格式须吃未裁剪输出；合并前交集判据（2026-10-12）**：`_run_git` 返回 strip 后输出，而
+  porcelain 首行的**前导空格是判位符**（`" M a"`→`"M a"`）⇒解析器静默漏首项；mock 全绿，只有真
+  git 集成测试暴露，读定长格式须走 `_git_proc`。「本次合并触碰哪些文件」按 merge-base 起算
+  （`main..HEAD` 在分支落后时把别人提交也算进来，据此误交过一次 blocked）——已内建，勿手算。
+- **取 rc 别经管道（2026-10-12 两度误判）**：`orch … | grep -v …` 后 `${PIPESTATUS[0]}` 是 grep 的
+  rc；同名建议归档后重跑必 rc=2「找不到」。取证=裸命令＋独立夹具副本。
