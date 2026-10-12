@@ -874,13 +874,13 @@
       "kind": "usability",
       "success_criteria": "见单内 success_criteria（十三 pod/自主发现全程组长介入=0/迟滞闸双态实测/无 override 面核验）",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120003-leader.md",
-      "status": "in_progress",
+      "status": "needs_leader",
       "proposed": "2026-10-12T12:26:23+08:00",
-      "note": "组长再排：E4 前置已合并（8192235），十三 pod 与验收面可达；要求 solo 执行勿组包（E5b 在途，二者同改 orch.py/approve 面，组包将再触顶+必冲突）",
+      "note": "drain 跳过（交付=run_failed）：tool_use",
       "effort": "high",
       "started_at": "2026-10-12T15:44:43+08:00",
       "worktree": "20261012-120003-leader",
-      "needs_leader_at": "2026-10-12T14:45:20+08:00"
+      "needs_leader_at": "2026-10-12T17:00:15+08:00"
     },
     {
       "id": "20261012-120004-leader",
@@ -906,9 +906,11 @@
       "kind": "defect",
       "success_criteria": "非法 kind 交付的台账行不再显示建议✓（改为未入库标注）；suggestions 计数与 ledger 读数一致性阳性用例钉住同真同假；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-132138-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T14:30:38+08:00",
-      "note": "defect：读数面与入库面口径分裂，与 #62 同源收尾。本批不唤醒，由在途 drain 接手。"
+      "note": "defect：读数面与入库面口径分裂，与 #62 同源收尾。本批不唤醒，由在途 drain 接手。",
+      "started_at": "2026-10-12T17:00:15+08:00",
+      "worktree": "20261012-132138-devops"
     },
     {
       "id": "20261012-125455-devops",
@@ -953,6 +955,29 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170000-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T16:58:42+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261012-170300-leader",
+      "member": "leader",
+      "summary": "**（E5a 续作 + 里程碑提交纪律）在既有 worktree 内续完 inspector 并固化「长任务分段提交」规程**",
+      "kind": "defect",
+      "success_criteria": "仍触 max_turns=150 腰斩（run_failed tool_use），worktree\n`.qoder/worktrees/20261012-120003-leader` 留 **20 个未提交文件**（inspector pod\n全套、skills 真本、inspectd/workq 引擎、mirror.py 改动、测试）——半成品在险\n态：会话被杀即全损（E1 同款形状，两次实锤）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-170300-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T17:02:34+08:00",
+      "note": "",
+      "effort": "xhigh"
+    },
+    {
+      "id": "20261012-170301-leader",
+      "member": "leader",
+      "summary": "**（缺陷类）drain 组包不看任务尺寸：多张大单并入同批必触 max_turns，腰斩已成模式（E4+E5a 连坏）**",
+      "kind": "defect",
+      "success_criteria": "- 122624 run：批次 120002(+2)=E4+E5a+E5b 三张大单同会话 → 触顶 150；\n- 同 run：批次 120003(+1)=E5a+E5b → 又触顶（E5a 二次腰斩，20 未提交文件险全损）；\n- 前夜 233336 run：E2(+1) 同形状。组包只按「同提请者+同 effort」聚类，\n完全不估任务体量——聚类维度与风险维度错位。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-170301-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T17:02:34+08:00",
       "note": ""
     }
   ]
