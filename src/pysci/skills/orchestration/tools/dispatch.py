@@ -18,6 +18,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import channels as _channels
+from . import presets
 from . import sessions as _sessions
 from . import sync as _sync
 from .checks import run_checks
@@ -404,9 +405,38 @@ def do_dispatch(
             member=member_id,
             error=f"cold_start 成员只允许 session='new'（收到 {session!r}）",
         )
-    tier = model_tier or m.model_tier
-    # 席位选择（用户裁决 2026-10-12 21:1x：档 → **有序回退链**，首席在前）：链里落在
-    # 降级粘滞窗内的席本跳不探测（省跳数），但仍要逐席打出来——故障可查性不能换成安静。
+    # 角色解析（档位模式退役，用户裁决 2026-10-12 22:4x）：覆盖（--model-tier / plan YAML
+    # 的 model: / 案卷 tier:，旧档名 flash/max 归一）> 预设 pro 名单 > main。非法覆盖在此
+    # 硬拦（code=2 不派发）——静默回落会把这一跳烧到用户没点名的档上去。
+    try:
+        role = presets.resolve_role(member_id, model_tier)
+    except ValueError as exc:
+        if not quiet:
+            print(f"[!] 角色/档位无效，未派发：{exc}")
+        return DispatchOutcome(
+            code=2, kind="run_failed", member=member_id, error=str(exc)
+        )
+    active = presets.active()
+    if role != "minimum" and not active.available:
+        # 过渡期预设（席表未配置，如 deepseek 待回填 BYOK）：**拒绝激活**而不是悄悄落回
+        # 上一个预设——静默回落会让台账烧的是别的渠道，而用户以为切换已经生效。
+        if not quiet:
+            print(f"[!] 预设 {active.name} 未激活：{active.unavailable_reason}")
+            print(
+                "    处置：改 data/pysci_settings.toml 的 [model] preset（合法串见该文件注释）。"
+            )
+        return DispatchOutcome(
+            code=2,
+            kind="run_failed",
+            member=member_id,
+            error=f"预设 {active.name} 未激活：{active.unavailable_reason}",
+        )
+    if not quiet:
+        for warn in active.warnings:  # 非法/缺配置回落出厂预设时必须出声
+            print(f"[!] {warn}")
+    tier = role
+    # 席位选择（沿 #80：角色 → **有序回退链**，首席在前）：链里落在降级粘滞窗内的席本跳
+    # 不探测（省跳数），但仍要逐席打出来——故障可查性不能换成安静。
     plan = _channels.plan_seats(reg, tier)
     chain = list(plan.usable)
     model = chain[0] if chain else str(reg.models.get(tier, ""))

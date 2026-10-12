@@ -102,7 +102,9 @@ def test_registry_registers_bencher_with_eval_writeface():
     """registry：默认档 flash、写白名单只有 state/evals（extra_dirs 即 pod-guard 白名单）。"""
     data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     m = data["members"]["bencher"]
-    assert m["model_tier"] == "flash", "组员身份档必须是 flash（被测档位由案卷决定）"
+    assert "model_tier" not in m, (
+        "档位退役：被测档位由案卷 tier: 决定，成员身份不再自带档位"
+    )
     assert m["extra_dirs"] == ["orchestration/state/evals"], (
         "extra_dirs 是写白名单：多给一项就越权，少给一项则案卷/基线写不进"
     )

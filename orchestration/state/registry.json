@@ -3,16 +3,6 @@
   "exe": null,
   "taste_enabled": false,
   "models": {
-    "max": [
-      "99127e47-626d-421f-b0cb-02ffdbf1ada7",
-      "982ae403-bc5e-4f74-996d-04a9cd66f933",
-      ""
-    ],
-    "flash": [
-      "017036af-b630-498a-bfea-883a20c67e33",
-      "ed6f5996-0992-479f-86a8-3f29ce0e794c",
-      "Qwen3.8-Flash"
-    ],
     "minimum": [
       "017036af-b630-498a-bfea-883a20c67e33",
       "Qwen3.8-Flash"
@@ -21,14 +11,12 @@
   "members": {
     "figure": {
       "pod": "orchestration\\pods\\figure",
-      "model_tier": "flash",
       "max_turns": 60,
       "timeout_s": 7200,
       "mcp_config": ".qoder/mcp.json"
     },
     "devops": {
       "pod": "orchestration\\pods\\devops",
-      "model_tier": "flash",
       "max_turns": 150,
       "timeout_s": 10800,
       "mcp_config": ".qoder/mcp.json",
@@ -40,7 +28,6 @@
     },
     "reviewer": {
       "pod": "orchestration\\pods\\reviewer",
-      "model_tier": "flash",
       "max_turns": 40,
       "timeout_s": 7200,
       "mcp_config": ".qoder/mcp.json",
@@ -51,7 +38,6 @@
     },
     "deputy": {
       "pod": "orchestration\\pods\\deputy",
-      "model_tier": "flash",
       "max_turns": 60,
       "timeout_s": 10800,
       "mcp_config": ".qoder/mcp.json",
@@ -62,14 +48,12 @@
     },
     "lit": {
       "pod": "orchestration\\pods\\lit",
-      "model_tier": "flash",
       "max_turns": 60,
       "timeout_s": 7200,
       "mcp_config": ".qoder/mcp.json"
     },
     "twin": {
       "pod": "orchestration\\pods\\twin",
-      "model_tier": "flash",
       "max_turns": 8,
       "timeout_s": 900,
       "mcp_config": ".qoder/mcp.json",
@@ -82,7 +66,6 @@
     },
     "bencher": {
       "pod": "orchestration\\pods\\bencher",
-      "model_tier": "flash",
       "max_turns": 120,
       "timeout_s": 10800,
       "mcp_config": ".qoder/mcp.json",
@@ -93,7 +76,6 @@
     },
     "inspector": {
       "pod": "orchestration\\pods\\inspector",
-      "model_tier": "flash",
       "max_turns": 50,
       "timeout_s": 1200,
       "mcp_config": ".qoder/mcp.json",
@@ -192,13 +174,41 @@
     }
   },
   "model_chains": {
-    "max": ["Mimo-V2.6-Pro", "Qwen-3.8-Max", ""],
-    "flash": ["Mimo-V2.6-Flash", "Qwen-3.8-Flash", "Qwen3.8-Flash"],
-    "minimum": ["Mimo-V2.6-Flash", "Qwen3.8-Flash"]
+    "minimum": [
+      "Mimo-V2.6-Flash",
+      "Qwen3.8-Flash"
+    ]
   },
   "model_fallback": {
     "skip_window_s": 3600,
     "event_tail": 5
   },
-  "channel_note": "用户裁决 2026-10-12 21:1x（backlog 20261012-211500-leader）：Mimo-V2.6 双档转主力，models 每档升级为**有序回退链**（首席不可用即自动下探一席）；BYOK Qwen 渠道余额暂停充值、将持续不可用，故降级带**粘滞跳过窗**（model_fallback.skip_window_s，窗内不重复探测，过期自愈）。model_patterns（旧名→档倒表）由 model_chains（档→名链模板）取代，供 refresh-models 自愈解析；观察期纪律：组员一律 flash 档，max 链只供 deputy/reviewer 按需升档与组长侧。"
+  "channel_note": "用户裁决 2026-10-12 22:4x（backlog 20261012-225500-leader）：档位模式（max/flash）退役，改**提供商预设**——data/pysci_settings.toml [model] preset 一键切换，预设打包 main/pro 席位表与仲裁团构成；观察期默认 mimo（组员主力=Mimo-V2.6-Flash，pro 席四人组）。席位不可用沿 #80 有序回退链粘滞降级（跳过故障席→内置默认，调用者+mirror 双面告警）；minimum 压测档独立不随预设走（E3-live 实测火山方舟不可行，维持 Mimo-Flash→内置）。上一轮注记（2026-10-12 21:1x 三级链）的机制被本单直接复用，未推翻。",
+  "presets": {
+    "_note": "提供商预设的席位表（用户裁决 2026-10-12 22:4x，backlog 20261012-225500-leader）：data/pysci_settings.toml [model] preset 选预设（qwen/mimo/deepseek），本块给该预设的 main/pro 席位链（UUID=账号级 BYOK，选型权归用户，整链覆盖代码出厂表 presets.PRESETS）。仲裁团构成（glm/kimi/mimo|qwen 家族）与 pro 成员名单在代码出厂表，随预设整体换血；席的端点/型号在 registry.jury.seats。deepseek 空链=过渡期未回填 BYOK、预设不可激活；minimum 压测档独立（models/model_chains），不随预设走。",
+    "qwen": {
+      "main": [
+        "ed6f5996-0992-479f-86a8-3f29ce0e794c",
+        "Qwen3.8-Flash"
+      ],
+      "pro": [
+        "982ae403-bc5e-4f74-996d-04a9cd66f933",
+        "Qwen3.8-Flash"
+      ]
+    },
+    "mimo": {
+      "main": [
+        "017036af-b630-498a-bfea-883a20c67e33",
+        "Qwen3.8-Flash"
+      ],
+      "pro": [
+        "99127e47-626d-421f-b0cb-02ffdbf1ada7",
+        "Qwen3.8-Flash"
+      ]
+    },
+    "deepseek": {
+      "main": [],
+      "pro": []
+    }
+  }
 }

@@ -7,7 +7,7 @@
 
 四类闸门（都在 :func:`activation_gate` 一处收口，任何入口都绕不过）：
 
-1. **全局开关** ``state/inspector.enabled``（:func:`enabled`）：**文件缺失=开启**（§7
+1. **全局开关** 真源 ``data/pysci_settings.toml [inspector] enabled``（:func:`enabled`，legacy ``state/inspector.enabled`` 只在 toml 缺席时回落）：**缺席=开启**（§7
    「默认开启」），``orch inspector-off`` 写 ``false`` 后所有拉起逻辑 no-op——关比开容易
    生效是刻意的（成本失控时用户要一键止住，而不是去猜默认值）。
 2. **激活预算**（registry ``inspector.max_hops`` / ``wallclock_s``）：单次激活派给
@@ -42,6 +42,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT
 
+from . import settings as _settings
 from . import workq
 from .drain import (
     DRY_ENV as _DRY_ENV,
@@ -197,7 +198,15 @@ PATROL_BY_ID: dict[str, dict[str, Any]] = {e["id"]: e for e in PATROL_MENU}
 # 全局开关与参数
 # ---------------------------------------------------------------------------
 def enabled() -> bool:
-    """巡检引擎是否允许被拉起（§7 全局开关：文件缺席=开启）。"""
+    """巡检引擎是否允许被拉起（§7 全局开关：缺席=开启）。
+
+    真源 = ``data/pysci_settings.toml`` 的 ``[inspector] enabled``（用户裁决 2026-10-12
+    22:4x：原 ``state/inspector.enabled`` 迁至该文件，`orch inspector-on/off` 改写它）。
+    toml 缺席 / 键缺席才回落 legacy 文件——迁移期两处并存时 toml 恒优先（真源唯一）。
+    """
+    flag = _settings.inspector_flag()
+    if flag is not None:
+        return flag
     if not ENABLE_PATH.exists():
         return True
     try:
@@ -210,10 +219,17 @@ def enabled() -> bool:
 
 
 def set_enabled(on: bool) -> str:
-    """写开关（``orch inspector-on/off``），返回落盘值。"""
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    ENABLE_PATH.write_text("true\n" if on else "false\n", encoding="utf-8")
-    return "true" if on else "false"
+    """写开关（``orch inspector-on/off``），返回**实际落盘**的字面值。
+
+    优先外科式改写真源 toml（只动 ``enabled =`` 一行、注释逐字保留）；toml 不可写
+    （文件缺席/只读）才回落 legacy 文件——便利入口保留，真源仍只有一处被更新。
+    """
+    try:
+        return _settings.set_inspector_enabled(on)
+    except OSError:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        ENABLE_PATH.write_text("true\n" if on else "false\n", encoding="utf-8")
+        return "true" if on else "false"
 
 
 def params() -> dict[str, Any]:
@@ -1030,7 +1046,8 @@ def inspect_drain(
             if not enabled():
                 summary["stopped"] = "switch_off"
                 _log(
-                    run_log, "[o] 全局开关已关闭（state/inspector.enabled=false），自停"
+                    run_log,
+                    "[o] 全局开关已关闭（state/inspector.enabled=false / pysci_settings.toml [inspector] enabled=false），自停",
                 )
                 break
             if time.time() - t0 > int(par["wallclock_s"]):
@@ -1139,7 +1156,7 @@ def wake_inspector(
     if not enabled():
         return (
             False,
-            "inspector 全局开关已关闭（state/inspector.enabled=false），不拉起。",
+            "inspector 全局开关已关闭（state/inspector.enabled=false 或 pysci_settings.toml [inspector] enabled=false），不拉起。",
         )
     st = lock_status(INSPECT_PATHS)
     if st["state"] == "running":

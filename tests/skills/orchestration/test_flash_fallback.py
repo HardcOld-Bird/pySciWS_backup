@@ -28,12 +28,13 @@ OK_BODY = "<result>出图完成，commit eee5555 已合并。</result>"
 
 
 def test_default_models_new_channel_strategy():
-    """出厂默认（三级回退的最后一级）：max=''（走用户级默认 BYOK，禁内置烧 credit）、
-    flash=内置免费、flash_fallback=''（无默认回退）。**互换落在跟踪面与模式表**，
-    出厂值保守取内置名是有意为之——BYOK modelID 是账号级 UUID，不写进代码。"""
-    assert registry.DEFAULT_MODELS["max"] == ""
-    assert registry.DEFAULT_MODELS["flash"] == "Qwen3.8-Flash"
-    assert registry.DEFAULT_MODELS["flash_fallback"] == ""
+    """出厂默认（三级回退的最后一级）：main/pro 空串（席位随预设，真值在跟踪 presets 块
+    与代码出厂表，出厂层不猜账号级 UUID/人名）、minimum=内置免费。**出厂值保守取内置名是
+    有意为之**——BYOK modelID 是账号级 UUID，不写进代码。"""
+    assert registry.DEFAULT_MODELS["main"] == ""
+    assert registry.DEFAULT_MODELS["pro"] == ""
+    assert registry.DEFAULT_MODELS["minimum"] == "Qwen3.8-Flash"
+    assert set(registry.DEFAULT_MODELS) == {"main", "pro", "minimum"}, "档位键已退役"
 
 
 def test_quota_fallback_switches_channel_and_succeeds(iso_dispatch, monkeypatch):
@@ -118,7 +119,7 @@ def test_fallback_switch_printed_and_final_report(iso_dispatch, monkeypatch, cap
     fake_headless(monkeypatch, lambda n, cmd: envelope(QUOTA_TEXT))
     dispatch.do_dispatch("quotamember", text="出图", quiet=False)
     out = capsys.readouterr().out
-    assert "[!] 档位回退：flash 席" in out and "已切换" in out, (
+    assert "[!] 档位回退：main 席" in out and "已切换" in out, (
         "换席必须在调用者面留一行告警（用户裁决 2026-10-12 21:1x 规格 4a）"
     )
     assert FB in out and BUILTIN in out, "告警要点名原席与新席"

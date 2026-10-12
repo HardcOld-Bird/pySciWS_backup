@@ -192,7 +192,7 @@ def test_ensure_member_defaults_seeds_runtime_not_config(iso_registry):
 
     cfg = json.loads(reg_file.read_text(encoding="utf-8"))
     assert "sessions" not in cfg["members"]["newpod"]
-    assert cfg["members"]["newpod"]["model_tier"] == "flash"
+    assert "model_tier" not in cfg["members"]["newpod"], "档位字段退役"
     rt = json.loads(runtime_file.read_text(encoding="utf-8"))
     assert rt["members"]["newpod"]["sessions"] == []
 

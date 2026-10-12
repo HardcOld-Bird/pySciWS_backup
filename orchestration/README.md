@@ -169,7 +169,7 @@ pySciWS/
 │   │   ├── orchestration/           #     组长技能：orch 使用规程、plan 编写、审批纪律
 │   │   └── devops/                  #     devops 技能：worktree 作业、部署、巡检规程
 │   ├── state/                       #   orch 机器状态（全部可读 JSON/MD/YAML，无私有格式）
-│   │   ├── registry.json            #     成员注册表：pod 路径、模型档位、参数模板、会话池索引
+│   │   ├── registry.json            #     成员注册表：pod 路径、参数模板、预设席位表、会话池索引
 │   │   ├── plans/                   #     计划文件与执行状态（§4.2）
 │   │   ├── backlog.json             #     基建改进待办（FIFO）
 │   │   ├── replies/                 #     待附送审批回复（<member>/<id>.md）
@@ -279,12 +279,12 @@ ledger 流水、`state/devops.{lock,cancel}` / `state/devops-runs/` / `state/wat
 （日常经 plan 系统调用，见 §4.2；直接 dispatch 属底层命令，§4.1）：
 
 1. 任务书写入 `pods/<id>/inbox/task-<ts>.md`（自包含：目标、输入路径、交付要求、
-   白名单目录、验收声明要求、所属计划环节、模型档位）；落盘前经 `state/taskbook-lint.json`
+   白名单目录、验收声明要求、所属计划环节、模型角色 tier）；落盘前经 `state/taskbook-lint.json`
    轻量 lint（正则扫已知错误 CLI 范式，命中仅**告警不阻断**，规则表 devops 可增补）；
 2. 组装：`<exe> --cwd orchestration/pods/<id> -p <注入文本> --resume <sid>|
    --session-id <新sid> --name <slug>`；注入文本 = 任务书路径 + 待附送审批回复（§6）+
    交付协议提醒；
-3. 参数模板存 registry：模型档位（§3.5）、推理强度（§3.5 按项标注，可选 `effort`）、
+3. 参数模板存 registry：模型角色（§3.5 预设路由）、推理强度（§3.5 按项标注，可选 `effort`）、
    `--max-turns`、`--mcp-config .qoder/mcp.json
    --strict-mcp-config`（§8）；权限依赖用户级 yolo 默认（用户已设），orch 不显式传参
    （registry 留覆盖项备用）；
@@ -343,56 +343,68 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
 parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即可使用新属性**，不必等下一跳，
 但兜底读出的交付应当复跑一次以确认严格面也能判读。
 
-### 3.5 模型档位路由（用户裁决，2026-10-10 渠道策略；2026-10-12 21:1x 升级为有序回退链）
+### 3.5 模型预设路由（用户裁决 2026-10-12 22:4x：档位模式 max/flash 退役，改提供商预设）
 
-- registry 维护档位抽象：组长只见「max/flash/minimum」三档，orch 内部路由具体席位；
-- **每档是一串有序回退链**（`registry.models.<tier>` 写成数组、首席在前；**旧的单值写法
-  照样能读**，等价于只有一席的链）。渠道策略（用户裁决 2026-10-12 21:1x：Mimo 转主力、
-  Qwen 转回退、内置兜底）：
-  - `max` = **Mimo-V2.6-Pro**（用户新增自定义模型，1M 上下文）→ BYOK `Qwen-3.8-Max`
-    → 不传 `-m`（用户级默认）。**内置同名 Qwen3.8-Max 永不入链**——烧订阅 credit 且
-    envelope 低报为 0，2026-10-10 实战烧穿过额度；
-  - `flash` = **Mimo-V2.6-Flash** → BYOK `Qwen-3.8-Flash`（按量）→ 内置 `Qwen3.8-Flash`
-    （限时免费、限速，只作兜底位）；旧 `flash_fallback` 键**并入本链**（兼容读，新写走链）；
-  - `minimum`（压测最低成本档）= **Mimo-V2.6-Flash** → 内置 `Qwen3.8-Flash`；Qwen BYOK
-    不进链——按量额度宝贵，压测烧的是量不是质量；
-- **回退触发**：当前席不可用（`quota_exhausted` / `channel_error` / **启动即失败**）
-  → 自动沿链换下一席，**一席一跳**；全链耗尽 → 沿用该系统性 kind，drain **全局停止**
-  （§3.3 与 §6，别再逐单空烧）。非系统性失败仍是**同席**重试一次（故障不在渠道，
-  换席白烧）；机制源流：backlog 20261010-flash-fallback → 20261012-211500-leader 链化；
-- **回退必告警**（用户裁决 2026-10-12 21:1x，双面，缺一面就等于「静默降级」）：
-  a. **调用者面**——dispatch 输出与 drain run 日志逐条打
-  `[!] 档位回退：<tier> 席<名>不可用 → 已切换 <新席>（原因 …）`；
-  b. **观察面**——事件流落 `state/channel-events.jsonl`（gitignored 过程态），
-  `pysci-mirror status` 概览项「回退」与 `orch status` 判决包健康段报「近 7 日 N 起」
-  加最近几条（时刻/档位/原席→新席/原因）；
-- **降级粘滞窗**：某席探测失败后进窗（`registry.model_fallback.skip_window_s`，默认
-  3600s），窗内同档直接落到下一席、不再重复探测它，但每次派发仍打一行「席 X 跳过中
-  （故障时刻/原因）」——省跳数不丢可查性。窗口过期自动恢复探测，充值/修好后第一次
-  成功即销窗（**自愈，无需改代码**）；全链都在窗内时不停摆：按最先到期的一席再探一次。
-  此语义针对现状：用户 2026-10-12 21:3x 明示 BYOK Qwen 渠道**暂不充值、将持续不可用**。
+- **真源 = `data/pysci_settings.toml` 的 `[model] preset`**（精确串 `qwen`/`mimo`/`deepseek`，
+  大小写敏感）：手改一行即在**下一次派发生效**，在途会话不受影响；`orch status` 的
+  「模型预设」段显示当前预设与各席解析值。预设**打包三件事**——main 席位链、pro 席位链
+  与 pro 成员名单、仲裁团构成（出厂表在 `src/pysci/skills/orchestration/tools/presets.py`，
+  逐串说明见该 toml 的注释）：
+  - `qwen`：main = BYOK `Qwen-3.8-Flash` → 内置 `Qwen3.8-Flash`；pro 席**仅 twin**
+    （BYOK `Qwen-3.8-Max` → 内置；Qwen pro 贵、刻意不规模化）；仲裁团 = GLM+KIMI+**MIMO**
+    （官网直调，排除 Qwen 同族）；
+  - `mimo`（观察期默认）：main = BYOK `Mimo-V2.6-Flash` → 内置 `Qwen3.8-Flash`；pro 席 =
+    BYOK `Mimo-V2.6-Pro` → 内置，四人组 reviewer/deputy/inspector/twin；仲裁团 =
+    GLM+KIMI+**Qwen**（排除 Mimo 同族）。**两预设 pro 席不对称是有意设计**
+    （用户 2026-10-12 确认），不是漏配；
+  - `deepseek`：**过渡期不可激活**——BYOK 精确名待回填（toml 注释标 ⚠，`--list-models`
+    现无此条目）。派发拒发、drain 拒绝开工、status 出声，**不静默落回别的预设**烧错渠道；
+    回填席位表后即自动可选。
+- **成员默认角色 = pro 名单内取 pro 席，其余取 main 席**；`--model-tier pro|main` 逐跳覆盖
+  （旧档名 `flash`→`main`、`max`→`pro` 自动归一，plan YAML/老案卷的旧值照常读；非法值在
+  argparse 拒绝 rc=2）。**组长默认 = 预设 main 席**（与大部分组员同源；TUI 现场 `/model`
+  管理优先于预设）。`minimum`（压测最低成本档）**独立、不随预设走** = BYOK
+  `Mimo-V2.6-Flash` → 内置 `Qwen3.8-Flash`（Qwen BYOK 不进链——按量额度宝贵，压测烧的是量
+  不是质量；火山方舟 doubao 经 E3-live 实测不可行，见 `suggestions/approved/
+  20261012-164600-leader.md` 回填段）；
+- **席位表落点**：跟踪 `registry.json` 的 `presets.<预设>.{main,pro}` 写**账号级 UUID 链**
+  （整链覆盖代码出厂表；选型权归用户，机器不插席）。每条链是**有序回退链**、首席在前
+  （旧的单值写法照样能读）：
+  - **回退触发**：当前席不可用（`quota_exhausted` / `channel_error` / **启动即失败**）
+    → 自动沿链换下一席，**一席一跳**；全链耗尽 → 沿用该系统性 kind，drain **全局停止**
+    （§3.3 与 §6，别再逐单空烧）。非系统性失败仍是**同席**重试一次（故障不在渠道，
+    换席白烧）；机制源流：20261010-flash-fallback → 20261012-211500-leader 链化 →
+    20261012-225500-leader 挂到预设（机制不推翻，只换席位表来源）；
+  - **回退必告警**（双面，缺一面就等于「静默降级」）：a. **调用者面**——dispatch 输出与
+    drain run 日志逐条打
+    `[!] 档位回退：<角色> 席<名>不可用 → 已切换 <新席>（原因 …）`；
+    b. **观察面**——事件流落 `state/channel-events.jsonl`（gitignored 过程态），
+    `pysci-mirror status` 概览项「回退」与 `orch status` 判决包健康段报「近 7 日 N 起」
+    加最近几条（时刻/角色/原席→新席/原因）；
+  - **降级粘滞窗**：某席探测失败后进窗（`registry.model_fallback.skip_window_s`，默认
+    3600s），窗内不再重复探测它、直接落到下一席，但每次派发仍打一行「席 X 跳过中
+    （故障时刻/原因）」——省跳数不丢可查性。窗口过期自动恢复探测，充值/修好后第一次
+    成功即销窗（**自愈，无需改代码**）；全链都在窗内时不停摆：按**最先到期**的一席再探
+    一次。此语义针对现状：用户 2026-10-12 21:3x 明示 BYOK Qwen 渠道**暂不充值、持续不可用**；
+- **仲裁团构成随预设换血、排除同族**：面板 = 预设点名的三家族（qwen→glm+kimi+mimo、
+  mimo→glm+kimi+qwen、deepseek→glm+kimi+mimo），配置里其余席**不入面板**但留痕报数
+  （读数行「预设外未入面板：…」），面板缺席的家族点名让用户去补 `registry.jury.seats`
+  （「[!] 面板缺席：…」）；面板型号命中**当前预设同族** → 拒开庭（§4 硬规则已相对化自旧的
+  「绝对排除 Qwen」——mimo 预设的 Qwen 席是合法面板，qwen 预设的才拒）。席的端点/型号/Key
+  变量仍全在 `registry.jury.seats`（选型权归用户，代码不内置候选清单）；
 - **模型映射自动刷新**（用户裁决 2026-10-10）：BYOK/自定义模型的人类名→UUID 目录只来自
-  `--list-models`（账户级；settings.json 仅存当前激活 UUID、无法监听），故 orch 在
-  **drain 启动时**跑 `--list-models`，按**链模板**（`DEFAULT_MODEL_CHAINS`：max=Mimo-V2.6-Pro
-  →Qwen-3.8-Max→默认、flash=Mimo-V2.6-Flash→Qwen-3.8-Flash→Qwen3.8-Flash、minimum=
-  Mimo-V2.6-Flash→Qwen3.8-Flash；`registry.model_chains` 可覆盖，取代旧的 `model_patterns`
-  倒表）逐席解析并刷新 registry 的**运行态面**（`sessions-runtime.json` 的 `models_resolved`，
-  gitignored——跟踪面 `registry.json` 自愈一个字节都不写，理由见技能
-  `references/registry-runtime.md`），重配 BYOK 后下次 drain 自愈、零 daemon；手动
-  `orch refresh-models` 同逻辑。**未命中的席跳过、该档保持现值不清空**（宁旧勿空）；跟踪面
-  写了该档则**整条链**由人值优先、机器只在 `shadowed` 里报差异（要换档由人决定）。
-  刷新只解析既有模板里的名字，**不改变哪个名属于哪个档**——那仍是护栏级（下方教训登记），
-  改名/换档须同步更新链模板与名→档规则：**2026-10-12 的 Mimo 入档就是这一条的正例**——
-  链模板里补上 Mimo-V2.6-Pro/Flash（首席）而非只改 registry.json，否则下一次 drain 自愈
-  就把映射刷回旧渠道（快照断言见 `tests/skills/orchestration/test_flash_channel_swap.py`）；
-- 默认档位：组长（TUI）= **max**；**deputy/reviewer** + 7 专职组员 + **devops** = **flash**
-  （deputy/reviewer 于 2026-10-11 经 REFACTOR v1.0 §1.1 定稿降档 flash——「全项目降档，flash
-  主力、无组员常驻 max」；二者几乎无台账存量，任何时候改动都不阻碍观察（用户确认）。devops
-  于 2026-10-10 经用户裁决降档：其工作为「规格已审定的末端实现」，Flash+强 harness 匹配。
-  架构/推理敏感项由组长派发时显式 `--model-tier max` 升档（通道保留）；降档后以台账数据观察
-  失败率/返工率，质量下滑即回调）；计划环节可覆盖（`steps[].model`）。
-  **观察期注记（用户明示 2026-10-12 21:1x）**：Mimo 入档后组员**全部保持 flash**、暂不升档，
-  `max` 链仅供 deputy/reviewer 按需升档与组长侧使用；台账 `model` 字段即升档与否的证据；
+  `--list-models`（账户级），故 orch 在 **drain 启动时**跑 `--list-models`，按**链模板**
+  （档位退役后模板只剩 `minimum`：`DEFAULT_MODEL_CHAINS`，`registry.model_chains` 可覆盖；
+  预设席位表是人写的 UUID、本就无需解析）逐席解析并刷新 registry 的**运行态面**
+  （`sessions-runtime.json` 的 `models_resolved`，gitignored——跟踪面自愈一个字节都不写，
+  理由见技能 `references/registry-runtime.md`），顺带把 `presets` 块里的 UUID 反查成人类名
+  写进 `model_seat_names`（告警面报人名而非裸 UUID）。**未命中的席跳过、该档保持现值不清空**
+  （宁旧勿空）；跟踪面写了该档则**整条链**由人值优先、机器只在 `shadowed` 里报差异。
+  刷新只解析既有模板里的名字，**不改变哪个名属于哪个角色**——那仍是护栏级（下方教训登记）；
+- 默认角色：**组员与组长一律 main**（观察期纪律；pro 名单随预设——mimo 下
+  reviewer/deputy/inspector/twin 取 pro、qwen 下仅 twin 取 pro）。架构/推理敏感项由组长派发
+  时显式 `--model-tier pro` 升档（通道保留）；台账 `model` 字段即所用席位的证据。计划环节
+  可覆盖（`steps[].model`，旧值 `flash`/`max` 自动归一）。
 - **推理强度按项标注**（用户裁决 2026-10-10，backlog 20261010-orch-effort-per-item）：
   双档默认「中」，**不做全局 high**——由组长对推理密集项（并发/状态机/跨模块语义）
   逐项标 `high`，机械项留默认。四来源逐层覆盖，最终解析出一个跳级档位后透传原生旗标
@@ -428,7 +440,7 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 | `orch status` | 全景：进行中计划、成员会话池摘要、backlog、待审批回复 | 需关注事项清单 |
 | `orch plan new <file>` / `--adhoc "<单步任务>"` | 登记计划（§4.2）；计划外事项也应建（单步）计划 | 计划概览 + 首环节派发建议 |
 | `orch plan run <id>` | 推进计划：执行当前环节，交接处暂停 | 环节结果 + **下一环节原文 recall** + 决策选项（一键继续/修改/中止） |
-| `orch plan amend <id>` | 修改未执行环节（增删改、review 旗标、模型档位） | 更新后计划 |
+| `orch plan amend <id>` | 修改未执行环节（增删改、review 旗标、模型角色） | 更新后计划 |
 | `orch approve/reject <reply-id> --note` | 审批 INFRA_SUGGESTION | 通过→入 backlog＋自动唤醒 devops＋watch 挂载指令；审批回复自动附送给提议人 |
 | `orch watch [--timeout 4h]` | 阻塞等待后台 drain 事件（§4.5）：以 Bash run_in_background 启动 | **单行**事件（QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP / CHANNEL-STOP / CRASH）或 TIMEOUT；退出即唤醒组长会话 |
 | `orch consult <问题>` | 快捷咨询副组长（平级协作条款生效） | 副组长意见（含异议） |
@@ -462,7 +474,7 @@ steps:
     member: sim
     brief: 粗粒度描述：扫频仿真 X 参数，产出场数据（任务书执行时再写）
     dirs: [data/research/1_gain_ep/simulation]   # 白名单
-    model: flash            # 可覆盖默认档位（§3.5）
+    model: main             # 可覆盖默认角色（§3.5；main/pro/minimum，旧 flash/max 自动归一）
     effort: high            # 可选：本环节推理强度（§3.5 按项标注；不写=默认中）
     review: false           # true 时环节完成后自动 orch review
   - id: s2
@@ -497,7 +509,7 @@ steps:
   各成员有史以来累计占比；
 - `orch stats` 独立入口随时查询；
 - 用途：组长监测编排系统健康度——哪位成员更耗时/耗 credits（更需要优化，或在本项目
-  中承担更重角色），为 harness 改进与模型档位调整提供数据。
+  中承担更重角色），为 harness 改进与模型预设调整提供数据。
 
 **est_tokens 是相对用量尺子**（用户裁决 2026-10-10，backlog 20261010-ledger-est-tokens：
 采纳估算做相对排名、放弃绝对精度）。精确 token 计量当前不可得——调研实锤：Qoder envelope
@@ -787,7 +799,7 @@ worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专
 
 ```
 用户需求（可能含多环节）
-→ 组长拆解 → orch plan new <计划文件>（环节粗描述、成员、白名单、review 旗标、模型档位）
+→ 组长拆解 → orch plan new <计划文件>（环节粗描述、成员、白名单、review 旗标、模型角色）
 → orch plan run：
    ① [决策] 组长书写**当前环节**任务书（延迟书写，§4.2）→ [自动] 派发组员
       （任务书+审批回复+交接物路径注入；会话选择按 §3.2 默认策略呈报组长确认）

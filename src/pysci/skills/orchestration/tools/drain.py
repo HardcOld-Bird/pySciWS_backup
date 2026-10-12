@@ -59,7 +59,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import channels as _channels
-from . import procs, workflow
+from . import presets, procs, workflow
 from .registry import Registry, note_hop_pid, orchestration_rel, refresh_models
 from .workflow import (
     backlog_batch_text,
@@ -1135,6 +1135,24 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         ``stopped=<kind>``（``quota_exhausted`` / ``channel_error``）与 ``error`` 说明。
     """
     done_path = run_log.with_suffix(".done")
+    # 预设未激活即拒绝开工（用户裁决 2026-10-12 22:4x：deepseek 过渡期不可选）：逐单派发
+    # 只会把整队列标成失败，让「改一行 toml」的真处置淹没在重复失败读数里。此门在拿锁之前。
+    act = presets.active()
+    if not act.available:
+        reason = f"预设 {act.name} 未激活：{act.unavailable_reason}"
+        _log(
+            run_log,
+            f"[!] {reason}——drain 拒绝开工（改 data/pysci_settings.toml [model] preset 后重跑）",
+        )
+        print(f"[!] {reason}")
+        print(
+            "    处置：改 data/pysci_settings.toml 的 [model] preset（合法串见该文件注释）。"
+        )
+        return {
+            "skipped": "preset_unavailable",
+            "error": reason,
+            "run_log": orchestration_rel(run_log),
+        }
     lock = acquire_lock(orchestration_rel(run_log))
     if lock is None:
         _log(run_log, "[i] 另一 drain worker 持锁运行中，本进程退出（不重复消费）。")

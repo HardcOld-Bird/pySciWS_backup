@@ -23,7 +23,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT
 
-from .registry import Registry, normalize_seats
+from .registry import LEGACY_TIER_ALIASES, Registry, normalize_seats
 
 #: 渠道回退事件流（gitignored：每跳都可能新增，落跟踪面会堵死一切碰 state 的单）。
 EVENTS_PATH: Path = ORCH_STATE_ROOT / "channel-events.jsonl"
@@ -53,7 +53,8 @@ def plan_seats(reg: Registry, tier: str, *, now: float | None = None) -> SeatPla
 
     Args:
         reg: 已加载的注册表（读链与运行态故障窗）。
-        tier: 档位名（``max``/``flash``/``minimum``…）。
+        tier: 角色键（``main``/``pro``/``minimum``）；旧档名 ``flash``/``max`` 归一到
+            main/pro（:data:`~.registry.LEGACY_TIER_ALIASES`）。
         now: 注入的当前时刻（epoch 秒），单测用；缺省取系统时间。
 
     Returns:
@@ -61,6 +62,8 @@ def plan_seats(reg: Registry, tier: str, *, now: float | None = None) -> SeatPla
     """
     moment = time.time() if now is None else float(now)
     window = int(reg.fallback_policy.get("skip_window_s", 0) or 0)
+    # 旧档名（flash/max）归一到角色：故障窗的读面已按角色归一，键不对齐会让窗全部失明。
+    tier = LEGACY_TIER_ALIASES.get(tier, tier)
     chain = reg.model_chain(tier)
     fails = reg.seat_failures.get(tier, {}) if window else {}
 

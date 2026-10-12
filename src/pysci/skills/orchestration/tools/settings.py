@@ -1,0 +1,153 @@
+"""人机运行时配置真源 ``data/pysci_settings.toml`` 的读写面。
+
+用户裁决 2026-10-12 22:4x（backlog 20261012-225500-leader）：运行时旋钮收敛到本文件，
+**手改一行即在下一次派发生效**，在途会话不受影响。本模块只承担两件事：
+
+- **读侧 fail-open**：文件缺席 / 键缺席 / 解析失败一律回落出厂值，并把原因作为警告
+  带回调用方——一个人工配置文件不该能把生产阻塞死；
+- **写侧外科式**：机器只改 ``[inspector] enabled`` 一行，其余内容（含用户写的全部
+  注释——注释即规格）逐字保留。不做 TOML round-trip 序列化：那会把注释整篇吃掉。
+"""
+
+from __future__ import annotations
+
+import re
+import tomllib
+from pathlib import Path
+from typing import Any
+
+from pysci.paths import DATA_ROOT
+
+SETTINGS_PATH: Path = DATA_ROOT / "pysci_settings.toml"
+
+#: ``[model] preset`` 合法值（精确串，全小写；大小写敏感是 toml 注释里的原话）。
+PRESET_NAMES: tuple[str, ...] = ("qwen", "mimo", "deepseek")
+
+#: 文件缺席 / 键缺席 / 非法值时的出厂预设（= 当前观察期主力，改它属护栏级）。
+DEFAULT_PRESET: str = "mimo"
+
+
+def read_settings(path: Path | None = None) -> dict[str, Any]:
+    """读整份配置；任何异常都返回 ``{}``（读侧 fail-open，警告由消费方按需补）。"""
+    target = path or SETTINGS_PATH
+    try:
+        with target.open("rb") as fh:
+            return tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError, ValueError):
+        return {}
+
+
+def preset_name(data: dict[str, Any] | None = None) -> tuple[str, list[str]]:
+    """当前预设名。
+
+    Args:
+        data: 已读到的配置；``None`` 时自己读盘。
+
+    Returns:
+        ``(预设名, 警告列表)``。键缺席 / 值非法 / 文件读不出 → 出厂预设 + 一条警告
+        （警告要指明「改哪一行、合法串是什么」，否则用户只能靠猜）。
+    """
+    if data is None:
+        data = read_settings()
+    raw = None
+    try:
+        raw = data.get("model", {}).get("preset")
+    except AttributeError:
+        raw = None
+    if raw is None:
+        return DEFAULT_PRESET, [
+            f"[model] preset 未配置（或 {SETTINGS_PATH.name} 读不出）→ 出厂预设 {DEFAULT_PRESET!r}"
+        ]
+    name = str(raw).strip()
+    if name not in PRESET_NAMES:
+        return DEFAULT_PRESET, [
+            f"[model] preset = {raw!r} 不是合法预设（合法串：{'/'.join(PRESET_NAMES)}，"
+            f"全小写）→ 回落 {DEFAULT_PRESET!r}"
+        ]
+    return name, []
+
+
+def inspector_flag(data: dict[str, Any] | None = None) -> bool | None:
+    """``[inspector] enabled`` 的读数；键/文件缺席返回 ``None``（调用方回落 legacy 文件）。
+
+    显式写 ``false``/``0``/``off``/``no`` 视为关，其余非空串视为开（与旧
+    ``state/inspector.enabled`` 的宽容读法同口径）。
+    """
+    if data is None:
+        data = read_settings()
+    try:
+        raw = data.get("inspector", {}).get("enabled")
+    except AttributeError:
+        return None
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() not in ("false", "0", "off", "no", "")
+
+
+def _detect_eol(text: str) -> str:
+    """取文件主导换行（新插入的行必须与既有行同制式，否则整文件被改脏）。"""
+    match = re.search(r"\r\n|\n", text)
+    return match.group(0) if match else "\n"
+
+
+def set_inspector_enabled(on: bool, path: Path | None = None) -> str:
+    """外科式改写 ``[inspector] enabled``，返回写入的字面值（``"true"``/``"false"``）。
+
+    只动目标行：定位 ``[inspector]`` 段 → 替换段内首个 ``enabled =`` 行的值（行尾注释
+    保留）；段在而键缺席 → 在段首后插入一行；段本身缺席 → 文件尾追加新段。文件读写
+    异常向上抛，由调用方决定回落面（``inspectd`` 回落 legacy 开关文件）。
+    """
+    target = path or SETTINGS_PATH
+    value = "true" if on else "false"
+    with target.open("r", encoding="utf-8", newline="") as fh:
+        text = fh.read()
+    eol = _detect_eol(text)
+    lines = text.splitlines(keepends=True)
+
+    section = -1
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("["):
+            head = line.split("#", 1)[0].strip()
+            if head == "[inspector]":
+                section = i
+                break
+
+    if section == -1:
+        # 段缺席：文件尾补一段（保持与既有内容空一行的排版）。
+        if text and not text.endswith(("\n", "\r")):
+            lines.append(eol)
+        if lines and lines[-1].strip():
+            lines.append(eol)
+        lines.append(f"[inspector]{eol}")
+        lines.append(f"enabled = {value}{eol}")
+        section = len(lines) - 2
+    else:
+        end = len(lines)
+        for j in range(section + 1, len(lines)):
+            if lines[j].lstrip().startswith("["):
+                end = j
+                break
+        for j in range(section + 1, end):
+            stripped = lines[j].lstrip()
+            if stripped.startswith("#") or not stripped:
+                continue
+            if re.match(r"^enabled\s*=", stripped):
+                indent = lines[j][: len(lines[j]) - len(stripped)]
+                key = stripped.split("#", 1)[0].split("=", 1)[0].rstrip()
+                tail = stripped.split("#", 1)
+                comment = (
+                    f"  # {tail[1].strip()}"
+                    if len(tail) > 1 and tail[1].strip()
+                    else ""
+                )
+                lines[j] = f"{indent}{key} = {value}{comment}{eol}"
+                break
+        else:
+            # 段内无 enabled 键：紧接段头插入（头行的行尾注释不动）。
+            lines.insert(section + 1, f"enabled = {value}{eol}")
+
+    with target.open("w", encoding="utf-8", newline="") as fh:
+        fh.write("".join(lines))
+    return value

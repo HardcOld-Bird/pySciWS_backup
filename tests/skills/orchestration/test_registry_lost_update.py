@@ -184,7 +184,9 @@ def test_new_member_default_lands_when_disk_also_absent(iso_registry):
     worker.save()
 
     cfg = json.loads(reg_file.read_text(encoding="utf-8"))
-    assert cfg["members"]["newpod"]["model_tier"] == "flash"
+    assert "model_tier" not in cfg["members"]["newpod"], (
+        "档位字段已退役（2026-10-12 22:4x）：新成员默认条目不再播种旧档"
+    )
     assert "sessions" not in cfg["members"]["newpod"]
     assert cfg["members"]["devops"] == _cfg()["members"]["devops"]
     rt = json.loads(runtime_file.read_text(encoding="utf-8"))
@@ -213,7 +215,9 @@ def test_declare_config_overlays_only_declared_keys(iso_registry):
         "flash_fallback": "",
     }
     assert cfg["members"]["deputy"]["model_tier"] == "flash"
-    assert worker.models["max"] == MAX_NEW, "内存副本同步（同进程后续读一致）"
+    assert worker.models["pro"] == MAX_NEW, (
+        "内存副本同步（同进程后续读一致）；旧 max 键归一进 pro 角色"
+    )
 
 
 def test_refresh_models_from_stale_snapshot_never_touches_tracked_config(
@@ -265,11 +269,11 @@ def test_refresh_models_from_stale_snapshot_never_touches_tracked_config(
     assert res["changed"] == {
         "minimum": {"old": None, "new": [MIMO_FLASH, "Qwen3.8-Flash"]}
     }
-    assert res["shadowed"]["max"] == {
-        "tracked": MAX_OLD,
-        "resolved": [MIMO_PRO, MAX_NEW, ""],
-    }, "跟踪值优先，解析值只点名不顶掉"
-    assert "flash←Qwen-3.8-Flash" in res["missing"]
+    assert res["shadowed"] == {}, (
+        "档位退役后模板只剩 minimum（跟踪面未 pin 它）→ 无遮蔽可报；"
+        "旧 max/flash 键不再被刷新代管，人写的值原样留在跟踪面"
+    )
+    assert res["missing"] == [], res["missing"]
 
 
 def test_corrupt_config_file_fails_loud_not_overwritten(iso_registry):

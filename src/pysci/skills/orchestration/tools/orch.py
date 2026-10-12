@@ -41,6 +41,7 @@ from . import inspectd as _inspectd
 from . import jury as _jury
 from . import mirror as _mirror
 from . import plans as _plans
+from . import presets as _presets
 from . import sessions as _sessions
 from . import sync as _sync
 from . import taste as _taste
@@ -93,6 +94,9 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  ▶ {pid}  {done}/{total}（当前环节 {cur}）  {goal}")
     if not live:
         print("  （无进行中计划）")
+
+    for line in _presets.status_lines(Registry.load()):
+        print(line)
 
     print("== 成员 ==")
     reg = Registry.load()
@@ -402,7 +406,7 @@ def cmd_sessions(args: argparse.Namespace) -> int:
             from .dispatch import deployed_skills_for
             from .runner import Envelope, build_command, build_env, run_headless
 
-            model = reg.models.get(m.model_tier, "")
+            model = reg.models.get(_presets.resolve_role(m.member_id), "")
             prompt = (
                 "归档前蒸馏：把本会话中值得跨会话复用的经验、约定、教训写入你的 "
                 "AGENTS.md（只记稳定事实，控制体量；临时状态不要写）。完成后以 "
@@ -617,7 +621,11 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--task", help="当前环节任务书文件")
     q.add_argument("--name", help="会话 slug 覆盖（默认 <plan>-<step>）")
     q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
-    q.add_argument("--model-tier", choices=["max", "flash", "minimum"])
+    q.add_argument(
+        "--model-tier",
+        type=_presets.normalize_role,
+        choices=list(_presets.ROLE_CHOICES),
+    )
     q.add_argument(
         "--effort",
         choices=EFFORT_CHOICES,
@@ -644,7 +652,11 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--text")
     g.add_argument("--task")
     q.add_argument("--dirs")
-    q.add_argument("--model-tier", choices=["max", "flash", "minimum"])
+    q.add_argument(
+        "--model-tier",
+        type=_presets.normalize_role,
+        choices=list(_presets.ROLE_CHOICES),
+    )
     q.add_argument(
         "--effort",
         choices=EFFORT_CHOICES,
@@ -763,7 +775,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--session", default="latest")
     p.add_argument("--name")
-    p.add_argument("--model-tier", choices=["max", "flash", "minimum"])
+    p.add_argument(
+        "--model-tier",
+        type=_presets.normalize_role,
+        choices=list(_presets.ROLE_CHOICES),
+    )
     p.add_argument(
         "--effort",
         choices=EFFORT_CHOICES,
@@ -865,7 +881,8 @@ def main(argv: list[str] | None = None) -> int:
     pg.add_argument("--all", action="store_true", help="按文件名序跑全部案卷")
     pe.add_argument(
         "--model-tier",
-        choices=["max", "flash", "minimum"],
+        type=_presets.normalize_role,
+        choices=list(_presets.ROLE_CHOICES),
         help="覆盖案内档位（默认案卷的 tier:，缺省 minimum=压测最低成本档）",
     )
     pe.add_argument(
@@ -892,7 +909,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--label", help="本轮标签（进台账供对照/基线回填）")
     p.add_argument(
         "--tier",
-        choices=["max", "flash", "minimum"],
+        type=_presets.normalize_role,
+        choices=list(_presets.ROLE_CHOICES),
         help="覆盖案内档位（缺省=案内 tier，再缺省 minimum）",
     )
     p.add_argument("--ref", help="capture：被测 ref（默认 HEAD）")

@@ -49,6 +49,8 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, ORCHESTRATION_ROOT, PODS_ROOT, PROJECT_ROOT
 
+from . import presets
+
 REGISTRY_PATH: Path = ORCH_STATE_ROOT / "registry.json"
 
 #: 运行态会话池文件名（落在 registry.json 同目录；gitignore，见模块 docstring）。
@@ -78,45 +80,31 @@ DEFAULT_MODEL_FALLBACK: dict[str, int] = {"skip_window_s": 3600, "event_tail": 5
 #: 脏跟踪面哨兵扫描的相对路径（见 :func:`dirty_tracked_state`）。
 STATE_REL_PATH: str = "orchestration/state"
 
-#: 档位 → **有序回退链**（README §3.5）；registry.json 的 models 块覆盖这里的出厂默认。
-#: 渠道策略演化（用户裁决 2026-10-10 credit 耗尽事故 → 2026-10-12 flash 渠道互换 →
-#: **2026-10-12 21:1x Mimo 主力 + 三级有序回退**，backlog 20261012-211500-leader）：
-#: - 一档多席：首席优先，**当前席系统性故障 / 启动即失败 → 自动换下一席**（每席只试一次，
-#:   全链耗尽才按系统性故障全局停止，见 ``dispatch`` 与 ``channels``）；
-#: - 值可写成 ``["a", "b"]``（链，新写形态）或 ``"a"``（单值，**旧写兼容读** = 一席链）；
-#:   旧 ``<tier>_fallback`` 键并入该档链尾（只兼容读，新写不再产生该键）；
-#: - ``""`` 是链里一席**合法读数**＝不传 ``-m``（走用户级默认渠道，max 档既成裁决），
-#:   归一时不许把它当空值过滤掉；
-#: - ``max`` 末席写 ``""`` 而非内置 ``Qwen3.8-Max`` 名：**禁用内置同名模型**——烧订阅
-#:   credit 且 envelope 低报为 0（2026-10-10 实战烧穿额度）；
-#: - BYOK modelID 是账号级 UUID、写不进代码，故出厂值保守取内置免费名——**宁慢不烧 credit**；
-#:   ``minimum`` = harness 压测专用最低成本档（REFACTOR §1.1，驱动 ``orch eval run``），
-#:   型号选择属护栏级：档位抽象与本型号解耦，套件案不写死型号。
+#: 角色 → 出厂首席型号（平读面 :attr:`Registry.models` 的保守底）。main/pro 的真实席位链
+#: **随预设**（:mod:`presets` 与跟踪 registry 的 ``presets`` 块），这里两个空串只在
+#: 「预设不可激活」时兜底——空 = 不传 ``-m``，宁窄不猜（未解析的人名当默认会让 exe 启动即失败）。
+#: ``minimum`` = harness 压测专用最低成本档（REFACTOR §1.1），**独立链、不随预设走**。
 DEFAULT_MODELS: dict[str, str] = {
-    "max": "",
-    "flash": "Qwen3.8-Flash",
+    "main": "",
+    "pro": "",
     "minimum": "Qwen3.8-Flash",
-    "flash_fallback": "",
 }
 
-#: 档 → **有序人类名模板**（用户裁决 2026-10-12 21:1x：Mimo 主力双档 + Qwen 回退 + 内置兜底）。
-#: ``--list-models`` 把名解析成席位（BYOK→UUID、内置→名自身），解析落点见 :func:`refresh_models`。
-#: 这张表同时是「哪个名属于哪个档」的**唯一机器可读口径**——链序即规则，反读见
-#: :func:`model_tier_rules`。**换档/增席只改这里或 registry.json 的 ``model_chains``**：模式表
-#: 不改，:func:`refresh_models` 就按旧表解析、把跟踪面报成漂移（#74 教训的镜像面，快照断言见
-#: ``tests/skills/orchestration/test_flash_channel_swap.py``）。
-#:
-#: 观察期注记（用户明示 2026-10-12）：组员全部 flash 档**暂不升档**，``max`` 链只服务组长侧
-#: 与 deputy/reviewer 的按需升档。``minimum`` 链**不含 Qwen BYOK**——BYOK 额度宝贵，压测走
-#: 最低成本席（Mimo-Flash → 内置）。
+#: 档 → **有序人类名模板**：档位模式退役（用户裁决 2026-10-12 22:4x，backlog
+#: 20261012-225500-leader）后本表**只承载 minimum**——它的型号选择属护栏级且与预设解耦
+#: （E3-live 实测火山方舟不可行，维持「Mimo-Flash → 内置」）。``main``/``pro`` 的模板随
+#: 预设（``presets.PRESETS``），:func:`refresh_models` 不再代它解析。
 DEFAULT_MODEL_CHAINS: dict[str, tuple[str, ...]] = {
-    "max": ("Mimo-V2.6-Pro", "Qwen-3.8-Max", ""),
-    "flash": ("Mimo-V2.6-Flash", "Qwen-3.8-Flash", "Qwen3.8-Flash"),
     "minimum": ("Mimo-V2.6-Flash", "Qwen3.8-Flash"),
 }
 
-#: 名 → 档 的规则表（由 :data:`DEFAULT_MODEL_CHAINS` 反读，``registry.model_patterns`` 可补充）。
-TIER_KEYS: tuple[str, ...] = ("max", "flash", "minimum")
+#: 角色键（与 ``presets.ROLE_CHOICES`` 同源：main=预设主力席、pro=预设 pro 席、
+#: minimum=独立压测档）。
+TIER_KEYS: tuple[str, ...] = ("main", "pro", "minimum")
+
+#: 旧档名 → 角色（跟踪面 / 运行态 / plan YAML ``model:`` / 老案卷的兼容读：flash 当年是
+#: 主力、max 是升档席）。读路统一过这张表，写路不再产生旧键。
+LEGACY_TIER_ALIASES: dict[str, str] = {"flash": "main", "max": "pro"}
 
 
 def normalize_seats(value: Any) -> list[str]:
@@ -328,11 +316,14 @@ def resolve_exe(registry: dict[str, Any] | None = None) -> Path:
 
 @dataclass
 class Member:
-    """一个组员（pod + 会话池 + 参数模板）的注册表条目。"""
+    """一个组员（pod + 会话池 + 参数模板）的注册表条目。
+
+    模型席位**不在成员身上**（档位模式已退役，用户裁决 2026-10-12 22:4x）：本跳用哪个席
+    由「预设的席位表 + 成员是否在 pro 名单」解析，见 :func:`presets.resolve_role`。
+    """
 
     member_id: str
     pod: Path
-    model_tier: str = "flash"
     max_turns: int = 60
     timeout_s: int = 7200
     mcp_config: str | None = ".qoder/mcp.json"
@@ -625,8 +616,10 @@ class Registry:
     def _merged_model_faces(self) -> dict[str, list[str]]:
         """逐键取「跟踪 > 运行态 > 出厂」中**最高优先且存在该键**的那一面的链。
 
-        合并粒度是**整条链**（不是逐席）：跟踪面写了 ``flash`` 就是人对这一档的完整裁决，
+        合并粒度是**整条链**（不是逐席）：跟踪面写了 ``minimum`` 就是人对这一档的完整裁决，
         运行态解析值不得往中间插席——那正是 #74「机器静默顶掉裁决」的链形态版本。
+        ``main``/``pro`` 的真值**不走这条合并**（随预设，见 :meth:`_preset_chain`），本函数
+        只在预设缺席/不可激活时给它们出厂空位兜底。
         """
         faces = (
             {
@@ -642,24 +635,63 @@ class Registry:
                 merged.setdefault(tier, seats)
         return merged
 
+    def _preset_chain(self, role: str) -> list[str]:
+        """``main``/``pro`` 的席位链（跟随当前预设）。
+
+        三级：跟踪 ``presets.<预设>.<role>`` **整链覆盖**（账号级 BYOK UUID 落这里，选型权
+        归用户）← 出厂预设表 ``presets.PRESETS``（人类名）。跟踪面**没有** ``presets`` 块的
+        旧部署读 ``models.flash``/``models.max`` 兼容（旧档=当年的主力/升档席，本仓库迁移
+        后走新块，此路径只服务回退/异机）。
+        """
+        active = presets.active()
+        tracked_presets = self.data.get("presets")
+        if isinstance(tracked_presets, dict):
+            table = tracked_presets.get(active.name)
+            if isinstance(table, dict) and role in table:
+                return dedupe_seats(normalize_seats(table[role]))
+        else:
+            key = "flash" if role == "main" else "max"
+            models_face = self.data.get("models") or {}
+            legacy = models_face.get(key)
+            if legacy is not None:
+                seats = normalize_seats(legacy)
+                for seat in normalize_seats(models_face.get(f"{key}_fallback")):
+                    if seat and seat not in seats:
+                        seats.append(seat)
+                return dedupe_seats(seats)
+        return dedupe_seats(active.chain(role))
+
     @property
     def models(self) -> dict[str, str]:
-        """档位 → 具体型号的**平读面**（首席）：三级回退 + 旧 ``<tier>_fallback`` 键原样可见。
+        """角色 → 具体型号的**平读面**（首席）。
 
-        保留这个视图是为了不惊动既有消费方（``eval``/``orch`` 蒸馏跳/大量断言），它们要的
-        就是「这一档现在用哪个渠道」。需要回退链的代码请走 :meth:`model_chain`。
+        ``main``/``pro`` 首席随当前预设（:meth:`_preset_chain`），``minimum`` 与旧档键走
+        :meth:`_merged_model_faces` 的三级回退。保留这个视图是为了不惊动既有消费方
+        （``eval``/``orch`` 蒸馏跳/大量断言），它们要的就是「这一角色现在用哪个渠道」。
+        需要回退链的代码请走 :meth:`model_chain`。
         """
         merged = self._merged_model_faces()
-        return {tier: (seats or [""])[0] for tier, seats in merged.items()}
+        out = {tier: (seats or [""])[0] for tier, seats in merged.items()}
+        # 角色是读数面的正名：旧档键（flash/max）归一进 main/pro 后从平读面摘掉，
+        # 免得消费方同时看到两把钥匙、哪把是真值全靠猜。
+        for role, legacy in (("main", "flash"), ("pro", "max")):
+            chain = self._preset_chain(role)
+            out[role] = chain[0] if chain else ""
+            out.pop(legacy, None)
+        return out
 
     def model_chain(self, tier: str) -> list[str]:
-        """该档的有序回退链（首席在前）；旧 ``<tier>_fallback`` 键**并入链尾**（兼容读）。
+        """该角色的有序回退链（首席在前）；``tier`` 接受旧档名（flash/max 别名到 main/pro）。
 
-        至少返回一席：链为空时回落到 ``[""]``＝不传 ``-m``（走用户级默认渠道），与
-        :data:`DEFAULT_MODELS` 里 ``max=""`` 的既成裁决同一口径。
+        ``main``/``pro`` 跟随预设（:meth:`_preset_chain`）；``minimum`` 及其余键走三级回退
+        且旧 ``<tier>_fallback`` 键**并入链尾**（兼容读）。至少返回一席：链为空时回落
+        ``[""]``＝不传 ``-m``（走用户级默认渠道）。
         """
+        role = LEGACY_TIER_ALIASES.get(tier, tier)
+        if role in ("main", "pro"):
+            return self._preset_chain(role) or [""]
         merged = self._merged_model_faces()
-        seats = list(merged.get(tier) or [""])
+        seats = list(merged.get(tier) or merged.get(role) or [""])
         legacy = merged.get(f"{tier}_fallback") or []
         for seat in legacy:
             if seat and seat not in seats:
@@ -701,18 +733,24 @@ class Registry:
 
     @property
     def seat_failures(self) -> dict[str, dict[str, dict[str, Any]]]:
-        """席位故障粘滞窗（``model_seat_fail``）：``{档: {席: {"ts":…, "kind":…, "member":…}}}``。"""
+        """席位故障粘滞窗（``model_seat_fail``）：``{角色: {席: {"ts":…, "kind":…, "member":…}}}``。
+
+        旧键（``flash``/``max``）读时归一到角色，免得档位退役后在途的窗变成孤儿。
+        """
         raw = self.runtime.get(RUNTIME_SEAT_FAIL_KEY)
         if not isinstance(raw, dict):
             return {}
         out: dict[str, dict[str, dict[str, Any]]] = {}
         for tier, seats in raw.items():
             if isinstance(seats, dict):
-                out[str(tier)] = {
-                    str(seat): info
-                    for seat, info in seats.items()
-                    if isinstance(info, dict)
-                }
+                key = LEGACY_TIER_ALIASES.get(str(tier), str(tier))
+                out.setdefault(key, {}).update(
+                    {
+                        str(seat): info
+                        for seat, info in seats.items()
+                        if isinstance(info, dict)
+                    }
+                )
         return out
 
     def note_seat_failure(
@@ -725,6 +763,7 @@ class Registry:
         now: float | None = None,
     ) -> None:
         """记一次席位探测失败（粘滞窗起点）；读-改-写与会话池同纪律，只动这一格。"""
+        tier = LEGACY_TIER_ALIASES.get(tier, tier)
         rt = _read_for_merge(self.runtime_path, _empty_runtime())
         face = rt.get(RUNTIME_SEAT_FAIL_KEY)
         face = dict(face) if isinstance(face, dict) else {}
@@ -741,6 +780,7 @@ class Registry:
 
     def note_seat_success(self, tier: str, seat: str) -> None:
         """该席跑通即销故障记录（充值/修好后自愈的落点：下一次成功就不再有跳过窗）。"""
+        tier = LEGACY_TIER_ALIASES.get(tier, tier)
         rt = _read_for_merge(self.runtime_path, _empty_runtime())
         face = rt.get(RUNTIME_SEAT_FAIL_KEY)
         if not isinstance(face, dict):
@@ -969,7 +1009,6 @@ class Registry:
         return Member(
             member_id=member_id,
             pod=pod,
-            model_tier=raw.get("model_tier", "flash"),
             max_turns=int(raw.get("max_turns", 60)),
             timeout_s=int(raw.get("timeout_s", 7200)),
             mcp_config=raw.get("mcp_config", ".qoder/mcp.json"),
@@ -982,7 +1021,7 @@ class Registry:
         """把 Member 的会话池写进运行态并声明该成员的会话池所有权（**不碰配置面**）。
 
         派发一跳要记账的是心跳（hops/last_active/chars_offset/status），配置面
-        （model_tier/pod 路径/参数模板/effort/tier_note）是人手与代码评审的领地。旧名
+        （pod 路径/参数模板/effort/tier_note）是人手与代码评审的领地。旧名
         ``write_member`` 顺手把内存 Member 的配置字段整体抄回 registry.json——长驻 worker
         因此会在收尾时用自己的启动快照覆盖掉期间合并进来的降档裁决（backlog
         20261011-220621-leader）。改此只写运行态，配置面回写通路就此消失。
@@ -1002,7 +1041,6 @@ class Registry:
         pod = PODS_ROOT / member_id
         entry = {
             "pod": str(pod.relative_to(PROJECT_ROOT)),
-            "model_tier": "flash",
             "max_turns": 60,
             "timeout_s": 7200,
             "mcp_config": ".qoder/mcp.json",
@@ -1070,7 +1108,12 @@ def split_model_tables(
         ``(templates, rules)``：templates 已含 :data:`DEFAULT_MODEL_CHAINS` 打底，
         rules 是补充的 名→档 断言（供 :func:`refresh_models` 查串档冲突）。
     """
-    known = set(TIER_KEYS) | {f"{tier}_fallback" for tier in TIER_KEYS}
+    known = (
+        set(TIER_KEYS)
+        | set(LEGACY_TIER_ALIASES)
+        | {f"{tier}_fallback" for tier in TIER_KEYS}
+        | {f"{tier}_fallback" for tier in LEGACY_TIER_ALIASES}
+    )
     templates: dict[str, list[str]] = {
         tier: list(names) for tier, names in DEFAULT_MODEL_CHAINS.items()
     }
@@ -1168,6 +1211,16 @@ def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
         if members and tier not in members:
             conflicts.append(f"{name}∈{'、'.join(sorted(members))}，规则说 {tier}")
     changed = reg.merge_runtime_models(machine) if machine else {}
+    # 预设席位（跟踪 presets 块，常为账号级 UUID）也进「席 → 人类名」表：告警面与
+    # status 要报人名，而不是让用户对着 UUID 找是哪一席。
+    by_id = {sid: name for name, sid in catalog.items()}
+    for table in (reg.data.get("presets") or {}).values():
+        if not isinstance(table, dict):
+            continue
+        for role in ("main", "pro"):
+            for seat in normalize_seats(table.get(role)):
+                if seat and seat not in seat_names and seat in by_id:
+                    seat_names[seat] = by_id[seat]
     reg.merge_runtime_seat_names(seat_names)
     return {
         "changed": changed,

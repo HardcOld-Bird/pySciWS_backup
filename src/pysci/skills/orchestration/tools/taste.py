@@ -28,6 +28,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
+from . import presets
 from .dispatch import DispatchOutcome, do_dispatch
 from .jury import Case, parse_case
 from .registry import Registry
@@ -205,7 +206,7 @@ def judge(
         "case_file": str(case.path or case_file),
         "dossier_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16],
         "member": member_id,
-        "model_tier": model_tier or reg.member(member_id).model_tier,
+        "model_tier": presets.resolve_role(member_id, model_tier),
         "code": outcome.code,
         "kind": outcome.kind,
         "sid": outcome.sid,
@@ -282,6 +283,9 @@ def _add_parser(sub: Any) -> None:
     )
     p.add_argument("--member", default="twin", help="判断成员 id（默认 twin）")
     p.add_argument(
-        "--model-tier", choices=["max", "flash", "minimum"], help="覆盖成员档位"
+        "--model-tier",
+        type=presets.normalize_role,
+        choices=list(presets.ROLE_CHOICES),
+        help="覆盖成员档位（main/pro/minimum，旧档名 flash/max 自动归一）",
     )
     p.set_defaults(func=cmd_taste)
