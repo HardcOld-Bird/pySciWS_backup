@@ -2,7 +2,22 @@
 
 Tier A（tier-a-tags.md）是**被动**故障统计，Tier B 是**主动**压测：拿一组固定案卷，
 以最低成本档真派发，测「这套 harness 现在能不能干活、比上一轮好还是坏」。设计出处
-`REFACTOR.md` §3/§1.1（E2 面）；A/B 副本对照与 bencher 自有权属属 E4。
+`REFACTOR.md` §3/§1.1；A/B 副本与套件归属见下（E4）。
+
+## 通道归属（E4 移交后必读）
+
+| 面 | 归属 | 命令 | 台账 `runner` |
+|---|---|---|---|
+| 组长**抽检** | 组长 | `orch eval run` / `eval set-baseline` | `leader` |
+| 套件本体（案卷/基线/A/B/判决口径） | **bencher** | `orch bench-add`/`bench-up` → `pysci-bench` | `bencher` |
+
+- 两条通道写**同一个** `state/ledger/evals.jsonl`，靠 `runner` 字段分开；E2 前的旧行无此
+  字段，读法按 `leader` 回退（不是缺陷）。对照/回填基线时**必须带 `--runner`**，否则判决
+  成了两条通道的平均数。
+- devops 侧的 `orch eval` 过渡授权（用户裁决 2026-10-12）已随 E4 退役：devops 只维护
+  checks 注册表与本文件的机械部分，不再自跑压测。
+- 基线捕获与副本 A/B 的机制、污染闸、清理纪律：bencher 技能 `references/bench-ops.md`；
+  组长侧入队要领：`references/drain-watch.md` §3。
 
 ## 命令面
 
@@ -11,7 +26,8 @@ uv run pysci-orch eval run --case <id>        # 跑一案
 uv run pysci-orch eval run --all              # 跑全套（按文件名序）
         [--model-tier max|flash|minimum]      # 覆盖案卷档位（默认案卷里的 minimum）
         [--label <轮次名>]                     # 本轮打标，供 set-baseline 精确回取
-uv run pysci-orch eval set-baseline [--label <轮次名>]  # 以最近（或指定）一轮回填基线
+uv run pysci-orch eval set-baseline [--label <轮次名>] [--runner leader|bencher]
+        # 以最近（或指定）一轮回填基线；E4 后不带 --runner 就是混合通道（慎用）
 ```
 
 **退出码**：`0`=本轮全部通过；`1`=有案失败；`2`=案卷读不到（目录缺失/指定案不存在/
@@ -73,15 +89,15 @@ figure 自己的 `AGENTS.md`——git 跟踪面，于是测量噪声变成合并
 **本次进程调用**的读数，而 `do_dispatch` 在首跳崩溃/额度耗尽后会 `resume=True` 再跑一跳——
 直接取末跳会把轮数、耗时、credits 和 pod-guard 拒绝次数一起做低（实测某案末跳报
 turns=2、transcript 里 50+ 条 assistant 消息）。`dispatch._accumulate_hop` 已把各跳
-累计成整任务读数，故台账 turns 与 transcript 可直接对账；复核时用
-`~/.qoder-cn/projects/<pod键>/<sid>.jsonl` 的 assistant 条数核。
+累计成整任务读数，故台账 turns 与 transcript 可直接对账（取
+`~/.qoder-cn/projects/<pod键>/<sid>.jsonl` 的 assistant 条数核）。
 
 ## 案卷设计要点（避坑）
 
 - 判据必须**可由组员正常达成**：把历史上的 blocked 案改编成正向断言（结果合规 +
   不出现该失败标签 + 零权限拒绝），而不是造一个只能失败的案。
-- 产物一律落在 gitignored 面（pod `bench/`、`data/research/eval_scratch/`——根
-  `.gitignore` 已排除），否则反复跑会把测量噪声变成 `git status` 脏面，挡住合并前检查。
+- 产物一律落在 gitignored 面（pod `bench/`、`data/research/eval_scratch/`），否则反复跑会把
+  测量噪声变成 `git status` 脏面，挡住合并前检查。
   **但 gitignored 不等于每轮全新**：残留产物会让组员「复核现成的」而不是「生产」，
   测出来的轮数是复核成本（E2 实测 fig-basic 第二轮起 2 轮即过，因为
   `eval_scratch/fig-basic/eval_band` 还在盘上）。取数前先清 `dirs:` 指向的目录。

@@ -69,6 +69,17 @@
         "AGENTS.md"
       ],
       "tier_note": "REFACTOR §9：twin=审美孪生，单跳判断，flash 起步（成本敏感=免费档优先）；max_turns 8/timeout 900 是「冷启动单跳、不做多轮探索」的代码化；cold_start 使 dispatch 拒绝任何非 new 会话（无记忆纪律，硬代码优先）；readonly_extra 保护宪章与笔记面（AGENTS.md 按 charter 不得积累）；**项目根只读=不配 extra_dirs**（extra_dirs 是 pod-guard 的写白名单，给了即可写；--add-dir 未用于成员面）"
+    },
+    "bencher": {
+      "pod": "orchestration\\pods\\bencher",
+      "model_tier": "flash",
+      "max_turns": 120,
+      "timeout_s": 10800,
+      "mcp_config": ".qoder/mcp.json",
+      "extra_dirs": [
+        "orchestration/state/evals"
+      ],
+      "tier_note": "REFACTOR §8/E4：harness 实测专职工。flash 是**组员身份**的档位（被组长指派核查跑时用）；压测跑的被测档位由案卷 tier:/任务参数决定（默认 minimum），与本行无关。extra_dirs 只给 state/evals——案卷、基线、判决产物是它唯一的项目内常设写面（charter 权限面），src/guards/其他 pod 零写权：设施缺陷走 <infra_suggestion> 交 devops，不自己修。max_turns 120：A/B 副本一轮含两腿多案，比 devops 单跑轻但比 twin 单跳重。"
     }
   },
   "checks": {

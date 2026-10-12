@@ -7,8 +7,7 @@ description: devops 组员的作业规程：worktree 隔离实施、PYTHONPATH �
 
 角色边界与红线见 charter（`.qoder/rules/charter.md`）；本文放**操作知识**。
 专属 CLI：`pysci-dev`（doctor / sync / venv-sync / worktree / probe …）。
-不使用 pysci-orch——唯一例外是
-**eval 面**（`eval run`/`eval set-baseline`，边界与退役条件见 README §1）。
+不使用 pysci-orch（组长专属；E2 期的 eval 面过渡例外已随 E4 bencher 上线退役）。
 
 ## worktree 作业规程（一切代码改动）
 
@@ -118,10 +117,9 @@ pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写、�
 
 - 台账：`orchestration/state/ledger/deliveries.jsonl` 中 ctx_ratio 持续 >60% 的成员
   → 提请组长归档轮换；
-- **Tier B 压测案卷**（`state/evals/harness/*.md`）与 checks 注册表归 devops 维护：
-  动了 harness 面（dispatch/runner/guards/档位）就**自跑** `pysci-orch eval run --all`
-  （队列侧 approve/dispatch/drain 仍组长专属；E4 上线后此面交 bencher），取二元判决
-  +before/after；案卷格式见 orchestration 技能 `references/harness-eval.md`。
+- **压测面已移交 bencher**（E4）：案卷与基线区归他，你只维护 checks 注册表与
+  `orch eval run` 抽检面；动了 harness 面后不自跑压测，交付里写明「需复测/重取基线」，
+  由组长 `orch bench-add` 入队（分界全文见 charter）。
 - transcript 抽查（诚实条款审计端）：`~/.qoder-cn/projects/<pod键>/*.jsonl` 里检索
   pod-guard 拦截记录，核对其后有无 Bash 绕行迹象；
 - AGENTS.md 体量：>8KB 的成员提请其自行精简（蒸馏纪律）。

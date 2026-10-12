@@ -180,6 +180,12 @@ def build_command(
     return cmd
 
 
+def _default_venv_scripts(root: Path) -> Path:
+    """某树 venv 的命令目录：Windows ``Scripts``，POSIX ``bin``（都不存在时返 ``Scripts``）。"""
+    win = root / ".venv" / "Scripts"
+    return win if win.exists() else root / ".venv" / "bin"
+
+
 def build_env(
     member: Member,
     task_dirs: list[str],
@@ -203,7 +209,12 @@ def build_env(
     env["PYTHONUTF8"] = "1"
     # 组员裸 pysci-X 命令可用性不依赖组长会话环境快照的时效：显式注入 venv Scripts
     # （旧会话快照可能早于 ~/.bashrc 的 PATH 追加；charter 的 uv run fallback 仍保留兜底）
-    scripts_dir = str(PROJECT_ROOT / ".venv" / "Scripts")
+    # PYSCI_VENV_SCRIPTS 是 E4 副本 A/B 的旋钮：测量副本树**没有** .venv（gitignored），
+    # 不覆盖就会让副本里的组员裸命令全灭、退化成 `uv run` 就地新建空 venv（已知坑）。
+    # 脚本来自被指定的 venv、代码由 PYTHONPATH 决定——「脚本来自主 venv、代码来自副本」。
+    scripts_dir = os.environ.get("PYSCI_VENV_SCRIPTS") or str(
+        _default_venv_scripts(PROJECT_ROOT)
+    )
     env["PATH"] = scripts_dir + os.pathsep + env.get("PATH", "")
     env["PYSCI_TASK_DIRS"] = ";".join(
         task_dirs

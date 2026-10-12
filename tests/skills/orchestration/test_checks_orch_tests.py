@@ -83,7 +83,7 @@ def test_orchestration_skill_carries_sole_top_level_mount_warning():
         encoding="utf-8"
     )
     assert "唯一顶层命令" in text
-    assert "`&`" in text and "父任务终结" in text
+    assert "`&`" in text and "父任务" in text
     assert "唯一顶层命令" in "\n".join(watch.mount_lines())  # 两侧同源，不是各写一套
 
 

@@ -47,6 +47,7 @@ import re
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -113,6 +114,34 @@ def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+@dataclass
+class WorkerPaths:
+    """一套 worker 生命周期落点（锁 / run 目录 / 协作停止信号 / 锁龄上限）。
+
+    为什么要把它做成参数（REFACTOR §0.9「共享逻辑做库，不复制实现」）：本模块的锁语义
+    是被三次事故打磨出来的——墓碑（删不掉的锁不得挡路）、``.done`` 收尾证据（谎报在跑的
+    残骸不得被当活锁）、run 名同秒顺延（撞名会让活锁被上一任的摘要判成残骸）。bencher
+    的 FIFO worker（:mod:`benchd`，REFACTOR §8）需要的正是同一套判活规则；复制一份等于
+    把这些教训重踩一遍。
+    """
+
+    lock: Path
+    runs: Path
+    cancel: Path
+    stale_s: int = LOCK_STALE_S
+
+
+def _devops_paths() -> WorkerPaths:
+    """devops drain 的默认落点。
+
+    **每次调用现读模块常量**而不是在 import 期固化：测试用 ``monkeypatch.setattr(drain,
+    "LOCK_PATH", tmp)`` 换隔离面，固化快照会让那些补丁打不中（锁语义的用例全部失效）。
+    """
+    return WorkerPaths(
+        lock=LOCK_PATH, runs=DEVOPS_RUNS_DIR, cancel=CANCEL_PATH, stale_s=LOCK_STALE_S
+    )
+
+
 # ---------------------------------------------------------------------------
 # 锁
 # ---------------------------------------------------------------------------
@@ -148,12 +177,13 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def read_lock() -> dict[str, Any] | None:
+def read_lock(paths: WorkerPaths | None = None) -> dict[str, Any] | None:
     """读取锁记录；不存在或损坏返回 None（损坏锁将由 acquire 覆盖）。"""
-    if not LOCK_PATH.exists():
+    lock = (paths or _devops_paths()).lock
+    if not lock.exists():
         return None
     try:
-        data = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+        data = json.loads(lock.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
     return data if isinstance(data, dict) else None
@@ -240,17 +270,18 @@ def _run_concluded(data: dict[str, Any] | None) -> bool:
     return Path(declared).name == Path(str(data.get("run_log", ""))).name
 
 
-def _overwrite_lock(payload: str) -> bool:
+def _overwrite_lock(payload: str, paths: WorkerPaths | None = None) -> bool:
     """就地改写锁文件内容（先原子 replace，兜底截断重写）。
 
     用于「文件删不掉」的 Windows 共享句柄场景：能改写就能标记墓碑 / 接管残骸。
     全失败返回 False（调用方留痕，不静默）。
     """
-    tmp = LOCK_PATH.with_name(LOCK_PATH.name + ".tmp")
+    lock = (paths or _devops_paths()).lock
+    tmp = lock.with_name(lock.name + ".tmp")
     try:
         tmp.parent.mkdir(parents=True, exist_ok=True)
         tmp.write_text(payload, encoding="utf-8")
-        os.replace(str(tmp), str(LOCK_PATH))
+        os.replace(str(tmp), str(lock))
         return True
     except OSError:
         pass
@@ -261,13 +292,13 @@ def _overwrite_lock(payload: str) -> bool:
         except OSError:
             pass
     try:
-        LOCK_PATH.write_text(payload, encoding="utf-8")
+        lock.write_text(payload, encoding="utf-8")
         return True
     except OSError:
         return False
 
 
-def _lock_live(data: dict[str, Any] | None) -> bool:
+def _lock_live(data: dict[str, Any] | None, paths: WorkerPaths | None = None) -> bool:
     """锁是否有效：未宣告收尾、持有者进程存活且锁龄未超上限。
 
     两条**收尾宣告**都优先于 pid 判活（判活本身可能说谎：pid 回收、tasklist 超时保守
@@ -275,17 +306,22 @@ def _lock_live(data: dict[str, Any] | None) -> bool:
     """
     if not data or _lock_released(data) or _run_concluded(data):
         return False
+    p = paths or _devops_paths()
     age = _lock_age_s(data)
-    if age > LOCK_STALE_S:
+    if age > p.stale_s:
         return False
     return _pid_alive(int(data.get("pid", 0) or 0))
 
 
-def acquire_lock(run_log: str) -> dict[str, Any] | None:
-    """尝试获取 drain 锁。
+def acquire_lock(
+    run_log: str, paths: WorkerPaths | None = None
+) -> dict[str, Any] | None:
+    """尝试获取 worker 锁。
 
     Args:
         run_log: 本次 run 的日志相对路径（写入锁记录供 status 展示）。
+        paths: 生命周期落点；缺省=devops drain（:func:`_devops_paths`），bencher worker
+            传 :data:`benchd.BENCH_PATHS` 复用同一套判活/墓碑/收尾语义。
 
     Returns:
         成功获取时返回锁记录 ``{pid, started, run_log}``；已被存活 worker 持有时
@@ -293,26 +329,27 @@ def acquire_lock(run_log: str) -> dict[str, Any] | None:
         stale 锁、``released`` 墓碑、以及「该 run 已有 ``.done``」的已收尾残骸——删不掉
         就地改写接管（残骸不得挡路，backlog 20261011-225933-devops + 20261011-231237-devops）。
     """
-    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    p = paths or _devops_paths()
+    p.lock.parent.mkdir(parents=True, exist_ok=True)
     record = {"pid": os.getpid(), "started": _now(), "run_log": run_log}
     payload = json.dumps(record, ensure_ascii=False, indent=2) + "\n"
     for _ in range(ACQUIRE_RETRIES):
-        if _lock_live(read_lock()):
+        if _lock_live(read_lock(p), p):
             return None
         try:
-            fd = os.open(str(LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            fd = os.open(str(p.lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
             # 竞态：他方刚抢占。若其存活则退出；若仍是 stale 残留则清除后重试。
-            if _lock_live(read_lock()):
+            if _lock_live(read_lock(p), p):
                 return None
             try:
-                os.unlink(str(LOCK_PATH))
+                os.unlink(str(p.lock))
                 continue
             except OSError:
                 # 残骸删不掉（共享句柄）：就地改写接管；改写后回读确认 pid 是自己的
                 # 才算到手（他方同期改写则让位，保持单 worker 互斥）。
-                if _overwrite_lock(payload):
-                    held = read_lock() or {}
+                if _overwrite_lock(payload, p):
+                    held = read_lock(p) or {}
                     if int(held.get("pid", 0) or 0) == os.getpid():
                         return record
                 continue
@@ -324,12 +361,15 @@ def acquire_lock(run_log: str) -> dict[str, Any] | None:
     return None
 
 
-def release_lock(run_log: Path | str | None = None) -> bool:
+def release_lock(
+    run_log: Path | str | None = None, paths: WorkerPaths | None = None
+) -> bool:
     """释放锁——**仅当持有者是本进程**（防未获取到锁的进程误删他人锁）。
 
     Args:
         run_log: 本次 run 日志；删除失败时在其中留一行 ``[!]`` 警示（None = 只标记、
             不留痕，供非 drain 调用方使用）。
+        paths: 生命周期落点；缺省=devops drain。
 
     Returns:
         True = 锁已不占位（删除成功，或本来无锁）；False = 未删掉（删除失败已改写为
@@ -343,21 +383,21 @@ def release_lock(run_log: Path | str | None = None) -> bool:
     都写不进（他方连写都不共享）时仍不挡路——紧随其后写出的 ``.done`` 会被判活单独当作
     收尾证据（:func:`_run_concluded`，backlog 20261011-231237-devops）。
     """
-    data = read_lock()
+    data = read_lock(paths)
     if not data:
         return True
     if int(data.get("pid", 0) or 0) != os.getpid():
         return False  # 非自持锁：绝不改动（含墓碑——清除归下一任 acquire）
     try:
-        os.unlink(str(LOCK_PATH))
+        os.unlink(str((paths or _devops_paths()).lock))
         return True
     except OSError as exc:
-        marked = _mark_released(data)
+        marked = _mark_released(data, paths)
         _note_release_failure(run_log, exc, marked=marked)
         return False
 
 
-def _mark_released(data: dict[str, Any]) -> bool:
+def _mark_released(data: dict[str, Any], paths: WorkerPaths | None = None) -> bool:
     """把锁记录改写为 released 墓碑（保留 pid/run_log 供 status 溯源）。"""
     tombstone = {
         RELEASED_KEY: True,
@@ -366,7 +406,9 @@ def _mark_released(data: dict[str, Any]) -> bool:
         "run_log": data.get("run_log", ""),
         "released_at": _now(),
     }
-    return _overwrite_lock(json.dumps(tombstone, ensure_ascii=False, indent=2) + "\n")
+    return _overwrite_lock(
+        json.dumps(tombstone, ensure_ascii=False, indent=2) + "\n", paths
+    )
 
 
 def _note_release_failure(
@@ -384,7 +426,7 @@ def _note_release_failure(
     _log(path, f"[!] 锁释放失败（共享句柄），{tail}：{exc}")
 
 
-def lock_status() -> dict[str, Any]:
+def lock_status(paths: WorkerPaths | None = None) -> dict[str, Any]:
     """status 命令用的锁态摘要：``{state: idle|running|stale, pid, started, ...}``。
 
     stale 时附 ``crashed`` 字段：该 run 无对应 ``.done`` = worker 被中途杀死（崩溃）；
@@ -395,7 +437,8 @@ def lock_status() -> dict[str, Any]:
     记号，后者连标号都写不进（backlog 20261011-231237-devops）——两者都不占队列，下一任
     drain 就地接管。
     """
-    data = read_lock()
+    p = paths or _devops_paths()
+    data = read_lock(p)
     if not data:
         return {"state": "idle"}
     pid = int(data.get("pid", 0) or 0)
@@ -422,7 +465,7 @@ def lock_status() -> dict[str, Any]:
             **base,
         }
     alive = _pid_alive(pid)
-    state = "running" if (alive and 0 <= age <= LOCK_STALE_S) else "stale"
+    state = "running" if (alive and 0 <= age <= p.stale_s) else "stale"
     out: dict[str, Any] = {"state": state, **base}
     if state == "stale":
         out["crashed"] = _stale_run_crashed(data)
@@ -443,18 +486,19 @@ def _stale_run_crashed(data: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 # 协作式停止（orch drain-stop ↔ drain 循环间隙消费）
 # ---------------------------------------------------------------------------
-def request_stop() -> tuple[bool, str]:
+def request_stop(paths: WorkerPaths | None = None) -> tuple[bool, str]:
     """写协作停止信号，目标为当前持锁 worker。供 ``orch drain-stop`` 调用。
 
     Returns:
         ``(ok, message)``。无运行中 worker 时**不写信号**（返回 False——空闲队列
         不需要停，残留信号还会危及下一个 worker）。
     """
-    st = lock_status()
+    p = paths or _devops_paths()
+    st = lock_status(p)
     if st["state"] != "running":
         return False, "无运行中的 drain worker（锁空闲），无需停止。"
-    CANCEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CANCEL_PATH.write_text(
+    p.cancel.parent.mkdir(parents=True, exist_ok=True)
+    p.cancel.write_text(
         json.dumps(
             {"pid": st["pid"], "requested_at": _now()}, ensure_ascii=False, indent=2
         )
@@ -463,35 +507,37 @@ def request_stop() -> tuple[bool, str]:
     )
     return True, (
         f"已请求协作停止（目标 pid {st['pid']}）：worker 将于下一条目间隙干净退出"
-        f"（释放锁、写部分 .done），信号文件 {orchestration_rel(CANCEL_PATH)} 消费后自删。"
+        f"（释放锁、写部分 .done），信号文件 {orchestration_rel(p.cancel)} 消费后自删。"
     )
 
 
-def cancel_status() -> dict[str, Any] | None:
+def cancel_status(paths: WorkerPaths | None = None) -> dict[str, Any] | None:
     """status 展示用：待消费的停止信号（无/损坏则 None）。"""
-    if not CANCEL_PATH.exists():
+    cancel = (paths or _devops_paths()).cancel
+    if not cancel.exists():
         return None
     try:
-        data = json.loads(CANCEL_PATH.read_text(encoding="utf-8"))
+        data = json.loads(cancel.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
     return data if isinstance(data, dict) else None
 
 
-def _consume_stop_request() -> bool:
+def _consume_stop_request(paths: WorkerPaths | None = None) -> bool:
     """drain 循环检查：停止信号是否指向本进程；无论指向与否信号文件均被删除。
 
     陈旧信号（pid≠本进程——被 kill 的 worker 未及消费而留下的）顺手清除并返回
     False，绝不误停接棒的下一个 worker。
     """
-    if not CANCEL_PATH.exists():
+    cancel = (paths or _devops_paths()).cancel
+    if not cancel.exists():
         return False
     try:
-        pid = int(json.loads(CANCEL_PATH.read_text(encoding="utf-8")).get("pid", 0))
+        pid = int(json.loads(cancel.read_text(encoding="utf-8")).get("pid", 0))
     except (json.JSONDecodeError, OSError, ValueError, TypeError):
         pid = 0
     try:
-        CANCEL_PATH.unlink()
+        cancel.unlink()
     except OSError:
         pass
     return pid == os.getpid()
@@ -510,8 +556,8 @@ def _log(run_log: Path, line: str) -> None:
         pass
 
 
-def new_run_log() -> Path:
-    """生成本次 run 的日志路径 ``devops-runs/<ts>.log``，**撞名则补位顺延并当场占位**。
+def new_run_log(paths: WorkerPaths | None = None) -> Path:
+    """生成本次 run 的日志路径 ``<runs>/<ts>.log``，**撞名则补位顺延并当场占位**。
 
     run 名不只是日志文件名：``.done`` 判活（:func:`_run_concluded`）与 watch 的完成身份
     三元组都按名字取证。秒级时间戳在同秒两次调用时**同名**，于是快速收尾的上一任（空队列
@@ -528,14 +574,15 @@ def new_run_log() -> Path:
     不可建时退到 pid 后缀名（fail-open：命名护栏不得挡住 drain 开工）。
     """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    fallback = DEVOPS_RUNS_DIR / f"{stamp}{RUN_LOG_SEP}p{os.getpid()}.log"
+    runs = (paths or _devops_paths()).runs
+    fallback = runs / f"{stamp}{RUN_LOG_SEP}p{os.getpid()}.log"
     try:
-        DEVOPS_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+        runs.mkdir(parents=True, exist_ok=True)
     except OSError:
         return fallback
     for n in range(1, RUN_LOG_MAX_TRIES + 1):
         stem = stamp if n == 1 else f"{stamp}{RUN_LOG_SEP}{n:0{RUN_LOG_PAD}}"
-        cand = DEVOPS_RUNS_DIR / f"{stem}.log"
+        cand = runs / f"{stem}.log"
         if cand.with_suffix(".done").exists():
             continue
         try:
@@ -546,11 +593,12 @@ def new_run_log() -> Path:
     return fallback
 
 
-def latest_done() -> dict[str, Any] | None:
+def latest_done(paths: WorkerPaths | None = None) -> dict[str, Any] | None:
     """最近一次 run 的 .done 摘要（无则 None）；附 ``name`` 字段。"""
-    if not DEVOPS_RUNS_DIR.exists():
+    runs = (paths or _devops_paths()).runs
+    if not runs.exists():
         return None
-    dones = sorted(DEVOPS_RUNS_DIR.glob("*.done"))
+    dones = sorted(runs.glob("*.done"))
     if not dones:
         return None
     try:
@@ -573,7 +621,9 @@ FAILED_ITEM_STATUSES: tuple[str, ...] = (
 )
 
 
-def failure_counts(*, limit: int = 0) -> dict[str, int]:
+def failure_counts(
+    *, limit: int = 0, paths: WorkerPaths | None = None
+) -> dict[str, int]:
     """按 backlog 条目 id 汇总 run 摘要中的失败次数（坏文件/坏行跳过，观察面 fail-soft）。
 
     ``limit>0`` 只看最近 N 份 ``.done``。重派前的关键读数：同一条目累计失败 ≥2 次时，
@@ -581,9 +631,10 @@ def failure_counts(*, limit: int = 0) -> dict[str, int]:
     20261012-073700-leader 要求 4，源于夜航三次 run_failed 期间 status 只报
     needs_leader 不带次数）。
     """
-    if not DEVOPS_RUNS_DIR.exists():
+    runs = (paths or _devops_paths()).runs
+    if not runs.exists():
         return {}
-    dones = sorted(DEVOPS_RUNS_DIR.glob("*.done"))
+    dones = sorted(runs.glob("*.done"))
     if limit > 0:
         dones = dones[-limit:]
     out: dict[str, int] = {}
