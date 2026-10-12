@@ -27,8 +27,9 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
   选取合并实施）→ 一次 ``do_dispatch("devops")`` → 解析交付 ``backlog id=<ids>`` 逐 id
   销账（commit 字段三级定位：正文提取 → 按 ``wt-<id>`` 分支回溯 merge commit → 注记
   ``unresolved``，不留空串）；未选组包项留 pending 下轮；失败（blocked/run_failed）仅**种子** needs_leader、
-  组包不连坐（一项卡住不阻塞全队列）；额度类失败（quota_exhausted）例外——视为系统性
-  故障**全局停止**（当前条目复位 pending、剩余保持 pending、.done 注明）；run 日志
+  组包不连坐（一项卡住不阻塞全队列）；系统性故障（额度耗尽 ``quota_exhausted`` /
+  渠道级故障 ``channel_error``）例外——渠道坏了不是任务书坏了，**全局停止**（当前条目
+  复位 pending、剩余保持 pending、.done 记 ``stopped=<kind>`` 与说明）；run 日志
   逐行落 ``state/devops-runs/<ts>.log``，全部完成写 ``<ts>.done``（JSON 摘要）。run 名是
   身份而非标签：同秒撞名时 :func:`new_run_log` 顺延为 ``<ts>_002``…并当场占位。
   ``.done`` 是干净完成信号：stale 锁若缺对应 ``.done`` 即 worker 被中途杀死（崩溃），
@@ -621,8 +622,9 @@ def latest_done(paths: WorkerPaths | None = None) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-#: run 摘要 items 里「这一条目这次尝试失败」的状态读数。``quota_exhausted`` **不在**
-#: 此列：那是渠道级系统性故障、条目无罪复位，计入会把「额度没了」误读成「任务书写坏了」。
+#: run 摘要 items 里「这一条目这次尝试失败」的状态读数。系统性故障（额度耗尽 /
+#: 渠道级故障）**不在**此列：那是渠道坏了、条目无罪复位，计入会把「渠道坏了」误读成
+#: 「任务书写坏了」（并污染 §2.4 的重复失败阈值立案）。
 FAILED_ITEM_STATUSES: tuple[str, ...] = (
     "needs_leader",
     "blocked",
@@ -630,6 +632,38 @@ FAILED_ITEM_STATUSES: tuple[str, ...] = (
     "parse_error",
     "check_fail",
 )
+
+
+def _systemic_kinds() -> tuple[str, ...]:
+    """系统性故障 kind 清单（唯一真源在 dispatch 的模式表旁，此处延迟取免导入环）。"""
+    from .dispatch import (  # 延迟导入：drain↔dispatch 互为上下游，只在用时取常量
+        SYSTEMIC_KINDS,
+    )
+
+    return SYSTEMIC_KINDS
+
+
+def _systemic_headline(kind: str) -> str:
+    """系统性故障短标题（note 文案）：额度类失败 / 渠道级失败。"""
+    from .dispatch import SYSTEMIC_TEXT
+
+    return SYSTEMIC_TEXT.get(kind, (kind, kind))[0]
+
+
+def _systemic_error_text(kind: str) -> str:
+    """``.done`` 的 ``error`` 句——三个 worker 面（drain/bench/inspect）同文同调。"""
+    from .dispatch import systemic_error_text
+
+    return systemic_error_text(kind)
+
+
+def _systemic_mark(kind: str) -> str:
+    """run 日志行首标记：``[Q]``=额度、``[C]``=渠道。
+
+    watch 的日志判据读的是 kind 串本身（不认标记），标记只为复盘时一眼分清这次是
+    「该充值」还是「该等渠道恢复」——两类混成一个字母，黑匣子就白写了。
+    """
+    return "C" if kind == "channel_error" else "Q"
 
 
 def failure_counts(
@@ -941,8 +975,8 @@ def _drain_batch(
       项记 ``batch_size``/``batch_seed``（供 orch stats 批量分布）。
     - **blocked/run_failed/parse_error/验收FAIL**：仅**种子** → needs_leader，组包项保持
       pending（**不连坐**——它们未被承诺、未 in_progress）。
-    - **quota_exhausted**：种子复位 pending、组包项保持 pending，返回 quota 状态由调用方
-      触发全局停止（系统性故障，不逐项 needs_leader）。
+    - **系统性故障（``quota_exhausted`` / ``channel_error``）**：种子复位 pending、组包项
+      保持 pending，返回该 kind 由调用方触发全局停止（渠道坏了，不逐项 needs_leader）。
 
     Returns:
         per-id 结果字典列表（写入 .done 的 items）：种子/每个完成组包项各一条
@@ -1039,18 +1073,22 @@ def _drain_batch(
             for cid in completed
         ]
 
-    # 额度类失败 = 系统性故障：种子无罪复位 pending，组包保持 pending；调用方据此全局停止
-    if outcome.kind == "quota_exhausted":
+    # 系统性故障（额度耗尽 / 渠道级故障）：渠道坏了、不是任务书坏了 → 种子无罪复位
+    # pending，组包保持 pending；调用方据此全局停止（不再逐单烧下一项）
+    if outcome.kind in _systemic_kinds():
+        kind = outcome.kind
+        headline = _systemic_headline(kind)
         err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
-        backlog_requeue(seed_id, note="额度类全局停止，复位待渠道恢复")
+        backlog_requeue(seed_id, note=f"{headline}全局停止，复位待渠道恢复")
         _log(
             run_log,
-            f"[Q] 批次 {label} 额度耗尽 → 种子复位回队，触发全局停止：{err[:120]}",
+            f"[{_systemic_mark(kind)}] 批次 {label} {kind} → 种子复位回队，"
+            f"触发全局停止：{err[:120]}",
         )
         return [
             {
                 "id": seed_id,
-                "status": "quota_exhausted",
+                "status": kind,
                 "error": err[:200],
                 "elapsed_s": elapsed,
             }
@@ -1087,8 +1125,8 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
 
     Returns:
         .done 摘要字典：``{started, completed, count, elapsed_s, items, run_log}``；
-        协作停止时附 ``stopped="cooperative"``；额度类全局停止时附
-        ``stopped="quota_exhausted"`` 与 ``error``（系统性故障说明）。
+        协作停止时附 ``stopped="cooperative"``；系统性故障全局停止时附
+        ``stopped=<kind>``（``quota_exhausted`` / ``channel_error``）与 ``error`` 说明。
     """
     done_path = run_log.with_suffix(".done")
     lock = acquire_lock(orchestration_rel(run_log))
@@ -1175,15 +1213,20 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                 break
             results = _drain_batch(seed, group, run_log, dry=dry)
             summary["items"].extend(results)
-            if any(r.get("status") == "quota_exhausted" for r in results):
+            stopped = next(
+                (r["status"] for r in results if r.get("status") in _systemic_kinds()),
+                "",
+            )
+            if stopped:
                 # 系统性故障 → 全局停止：种子已在 _drain_batch 内复位 pending，
                 # 组包与剩余条目未承诺仍 pending；释放锁与写 .done 由 finally 统一处理
-                summary["stopped"] = "quota_exhausted"
-                summary["error"] = (
-                    "系统性故障：模型渠道额度耗尽（quota_exhausted）——全局停止，"
-                    "全部条目保持 pending 待渠道恢复"
+                summary["stopped"] = stopped
+                summary["error"] = _systemic_error_text(stopped)
+                _log(
+                    run_log,
+                    f"[{_systemic_mark(stopped)}] 全局停止：{stopped}，"
+                    "剩余条目保持 pending，释放锁",
                 )
-                _log(run_log, "[Q] 全局停止：额度耗尽，剩余条目保持 pending，释放锁")
                 break
     except Exception as exc:  # 记录后仍写 .done（后台进程无人值守，不留黑洞）
         summary["error"] = f"{type(exc).__name__}: {exc}"

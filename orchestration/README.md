@@ -293,10 +293,12 @@ ledger 流水、`state/devops.{lock,cancel}` / `state/devops-runs/` / `state/wat
    回复中直接给出下一步**（决策选项，或已自动完成的机械接力说明）。
 
 失败处理：超时/非零退出 → 自动重试一次（同会话 resume，注入错误上下文）；再失败 →
-呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。**例外**：额度类失败
-（envelope/stderr 含『credit usage limit』类文案）→ 不做**同渠道**重试；若该档配置了
-`<tier>_fallback`（如 flash→BYOK flash）则**换档重试一次**，仍耗尽 → `kind=quota_exhausted`
-（drain 据此全局停止），[NEXT] 提示检查 registry models 渠道绑定 / 等待额度重置。
+呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。**例外**：系统性故障
+（`dispatch.SYSTEMIC_KINDS`）→ 不做**同渠道**重试；若该档配置了 `<tier>_fallback`（如
+flash→BYOK flash）则**换档重试一次**，仍失败 → 该 kind（drain 据此全局停止）：
+额度类（`quota_exhausted`，envelope/stderr 含『credit usage limit』类文案）[NEXT] 提示
+检查 registry models 渠道绑定 / 等待额度重置；渠道级（`channel_error`，固定文案 **∧** 会话档
+末轮合成故障形状合取，backlog 20261012-194500-leader）等渠道恢复即可，不必充值。
 
 ### 3.4 交付协议（XML 标记块 + delivery-gate 强制）
 
@@ -383,7 +385,9 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
   --stats` 的 by_effort 段，§4.4，backlog 20261010-153041-devops）；
 - **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射改动属护栏级（影响全体
   成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止**已实现**（backlog
-  20261010-orch-quota-awareness，见 §3.3 失败处理与 §6）。
+  20261010-orch-quota-awareness，见 §3.3 失败处理与 §6）；渠道级故障（`channel_error`）
+  同族识别于 2026-10-12 补齐——判据须**文案 ∧ 会话档末轮形状**合取，因为那句话也会出现在
+  复盘它的任务书正文里。
 
 ---
 
@@ -403,7 +407,7 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 | `orch plan run <id>` | 推进计划：执行当前环节，交接处暂停 | 环节结果 + **下一环节原文 recall** + 决策选项（一键继续/修改/中止） |
 | `orch plan amend <id>` | 修改未执行环节（增删改、review 旗标、模型档位） | 更新后计划 |
 | `orch approve/reject <reply-id> --note` | 审批 INFRA_SUGGESTION | 通过→入 backlog＋自动唤醒 devops＋watch 挂载指令；审批回复自动附送给提议人 |
-| `orch watch [--timeout 4h]` | 阻塞等待后台 drain 事件（§4.5）：以 Bash run_in_background 启动 | **单行**事件（QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP / CRASH）或 TIMEOUT；退出即唤醒组长会话 |
+| `orch watch [--timeout 4h]` | 阻塞等待后台 drain 事件（§4.5）：以 Bash run_in_background 启动 | **单行**事件（QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP / CHANNEL-STOP / CRASH）或 TIMEOUT；退出即唤醒组长会话 |
 | `orch consult <问题>` | 快捷咨询副组长（平级协作条款生效） | 副组长意见（含异议） |
 | `orch review <产物>` | 派发 reviewer | VERDICT；FAIL→自动回派返工+复审一次，再 FAIL 升级仲裁 |
 | `orch stats [--plan <id>]` | 统计（§4.4） | 任务/成员/历史三级耗时与 credits |
@@ -553,6 +557,8 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   - `NEEDS-LEADER <id>`——backlog 中**新出现**的 needs_leader 条目
   - `QUOTA-STOP <run>`——额度类全局停止（`.done.stopped`，或 run 日志的 `[Q]` 痕迹——后者
     早一拍，不必等摘要落盘）
+  - `CHANNEL-STOP <run>`——渠道级故障全局停止（同上，run 日志的 `[C]` 痕迹早一拍）：
+    两类停止动作相同、恢复动作不同（充值/换渠道 vs 等渠道恢复），故分列两个事件
   - `CRASH <run>`——锁 pid 已死且该 run 无 `.done`
 - **用法**：组长以 Bash `run_in_background` 启动，进程退出即原生完成通知唤醒本会话；一次
   watch 报一批事件即退，后续按需重挂（输出自带重挂命令）。`approve`（经 `wake_devops`）与
@@ -564,7 +570,7 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   被外部杀死的那任没有退出记录，下次挂载或 `orch status` 会读出这条「遗言」。漏挂/会话
   中断期间的账由下次 `orch status` 的 watch 段**一次性补账**（报完即推进基线，重复运行不
   刷屏；watch 仍在挂载时 status 不抢账，免双份唤醒）。同刻多事件按 CRASH > QUOTA-STOP >
-  NEEDS-LEADER > QUEUE-COMPLETE 取主事件、其余以「同时」附注。**弃 Monitor 工具方案**
+  CHANNEL-STOP > NEEDS-LEADER > QUEUE-COMPLETE 取主事件、其余以「同时」附注。**弃 Monitor 工具方案**
   （会话侧注册更重，且同样要组长发起）。
 
 ---
@@ -646,17 +652,18 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
     组包中未选项保持 pending 留待下轮（devops 可只吃种子）
   · 失败（blocked/run_failed）→ 仅**种子** needs_leader、组包项保持 pending（**不连坐**，
     一项卡住不阻塞全队列）
-  · 额度类失败（quota_exhausted）→ **全局停止**：种子复位 pending（非 needs_leader）、
-    组包与剩余条目保持 pending、释放锁、.done 注明系统性故障；渠道恢复后下次唤醒自动续消化
+  · 系统性故障（`quota_exhausted` 额度耗尽 / `channel_error` 渠道级故障）→ **全局停止**：
+    种子复位 pending（非 needs_leader）、组包与剩余条目保持 pending、释放锁、.done 注明
+    停止类别；恢复后下次唤醒自动续消化（两类只恢复动作不同：充值/换渠道 vs 等渠道恢复）
 → run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
   态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕、**残留已标记**
   〔released 墓碑：已宣告收尾但文件删不掉〕与**残骸已收尾**〔该 run 已有 .done，连墓碑都写
   不进的极端残骸；pid 不作判活依据〕）、
-  最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/异常中断）、
+  最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/渠道级故障/异常中断）、
   needs_leader 提醒（组长据此重派/改任务书/上报）
 → 组长的等待面（代码化，§4.5）：唤醒/采纳/交办三处输出固定附 `orch watch` 挂载指令；
   watch 后台阻塞轮询 state 文件与锁，命中 QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP /
-  CRASH 即单行退出唤醒会话；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
+  CHANNEL-STOP / CRASH 即单行退出唤醒会话；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
   的 watch 段一次性补账
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
 ```

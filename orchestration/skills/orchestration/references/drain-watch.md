@@ -35,7 +35,8 @@ argv 里的 sid** 两道闸都过才 `taskkill /T /F`。判不准（pid 已被�
   不等于「事件丢了」。
 - **测试/诊断性挂载前须确认无 live 挂载或先停**：`arm()` 覆写 `state/watch.json`，会抹掉
   在等那任的心跳与黑匣子；`recent`/`exit_reason` 是脱靶复盘的现场，status 读出其末帧。
-- 事件类型：`QUEUE-COMPLETE` / `NEEDS-LEADER` / `QUOTA-STOP` / `CRASH`。
+- 事件类型（五类）：`QUEUE-COMPLETE` / `NEEDS-LEADER` / `QUOTA-STOP` / `CHANNEL-STOP` /
+  `CRASH`。两类 STOP 都是**系统性故障全局停止**，只是恢复动作不同（充值 vs 等渠道恢复）。
   `BENCH-DONE <run>` 属**可选挂载、默认不挂**——§5.1-B 明写测量完成不该即时打断组长。
 
 ## 3. bench-* 使用要领（组长侧）
@@ -57,8 +58,14 @@ uv run --no-sync pysci-orch bench-stop           # 协作停止：条目间隙�
 - `inconclusive` 恒带 `escalate=twin`：它不是平局，是「测量不可信」。此时先看污染提交
   列表（`pollution`），要么换 ref 对，要么把混杂提交并入被测面，**不要**用 `--force`
   把不可信的因果当成结论。
-- 额度耗尽（`quota_exhausted`）是系统性故障：worker 全局停止、剩余条目保持 pending，
-  `.done` 附 `stopped="quota_exhausted"`；渠道恢复后 `bench-up` 续跑。
+- **系统性故障**（`dispatch.SYSTEMIC_KINDS`，drain/bench/inspect 三条通道同族处置）：worker
+  全局停止、剩余条目保持 pending 不烧账，`.done` 附 `stopped=<kind>` 与分列说明，两类
+  **恢复动作不同**——`quota_exhausted`=额度耗尽须充值或换渠道；`channel_error`=渠道服务面
+  故障，等渠道恢复即可（2026-10-12 实测：BYOK 渠道坏了 CLI 不报 credit 文案，而是合成一条
+  `model="<synthetic>"` 的 assistant 回合说 "Custom model service error…"，故判据取**固定
+  文案 ∧ 会话档末轮形状**合取，文案单特征会误伤复述该句的复盘任务）。有 `<tier>_fallback`
+  时先换档重试一次，两档都坏才停。恢复后条目照常 FIFO 续跑（drain 由下一次 `approve` 自动
+  接管，压测队列由 `bench-up`）。
 - `approve` 时选 **M**（基线捕获 + 实施后副本 A/B）的判决包接口：E5a/E5b 未实施，
   目前由组长手动 `bench-add capture`/`bench-add ab` 完成同一效果（E4 只交付运行职责）。
 

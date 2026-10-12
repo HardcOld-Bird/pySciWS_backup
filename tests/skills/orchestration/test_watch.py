@@ -1,6 +1,6 @@
 """orch watch 事件等待器（backlog 20261010-orch-watch）。
 
-覆盖四类事件的**代码判定**（差分规则 + 去重身份）、阻塞轮询的命中/超时两条出口、
+覆盖五类事件的**代码判定**（差分规则 + 去重身份）、阻塞轮询的命中/超时两条出口、
 ``state/watch.json`` 基线与心跳、``orch status`` 补账的一次性清算语义，以及三处
 [NEXT] 挂载指令注入（wake_devops / approve / dispatch --from-backlog）。
 
@@ -23,7 +23,7 @@ from .conftest import read_backlog, seed_backlog, seed_suggestion
 # 构造观察面（快照字段与 watch.snapshot 输出同构）
 # ---------------------------------------------------------------------------
 def _snap(**over) -> dict:
-    """中性快照基座：空闲锁、无摘要、无 needs_leader、无额度。"""
+    """中性快照基座：空闲锁、无摘要、无 needs_leader、无系统性故障停止。"""
     base = {
         "ts": watch._now(),
         "lock_state": "idle",
@@ -39,6 +39,7 @@ def _snap(**over) -> dict:
         "needs_leader": [],
         "pending": 0,
         "quota_run": "",
+        "channel_run": "",
     }
     base.update(over)
     return base
@@ -211,6 +212,72 @@ def test_quota_re_only_matches_quota_signals(iso_state, monkeypatch):
     _seed_run_log(iso_state, "r6", "[16:00:00] [!] 批次 x 失败 → 种子 needs_leader\n")
     _seed_lock(iso_state, "r6")
     assert watch.snapshot()["quota_run"] == ""
+
+
+# ---------------------------------------------------------------------------
+# CHANNEL-STOP：渠道级故障（backlog 20261012-194500-leader，与 QUOTA-STOP 同族）
+# ---------------------------------------------------------------------------
+def test_detect_channel_stop_from_done_summary(iso_state):
+    cur = _snap(channel_run="r3", done="r3", done_stopped="channel_error")
+    ev = watch.detect_events(_snap(), cur)
+    chan = [e for e in ev if e["event"] == "CHANNEL-STOP"]
+    assert len(chan) == 1 and chan[0]["subject"] == "r3"
+    assert "渠道" in chan[0]["detail"]
+    assert not [e for e in ev if e["event"] == "QUOTA-STOP"], (
+        "两类系统性故障的判据必须互不串台：额度行报 CHANNEL 或反之都会误导处置"
+    )
+    assert watch.detect_events(cur, cur) == [], "同一 run 已入基线 → 不重复打扰"
+
+
+def test_detect_channel_stop_from_run_log_before_done(iso_state, monkeypatch):
+    """drain 先打 ``[C]`` 行、后写 .done → watch 早一拍唤醒（判据与额度面同构）。"""
+    monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
+    _seed_run_log(
+        iso_state,
+        "r9",
+        "[16:00:00] [C] 批次 x channel_error → 种子复位回队，触发全局停止\n",
+    )
+    assert watch.snapshot()["channel_run"] == "", "无锁无从归属，陈旧日志不误报"
+    _seed_lock(iso_state, "r9")
+    s = watch.snapshot()
+    assert s["channel_run"] == "r9" and s["quota_run"] == ""
+    assert watch.detect_events(_snap(), s)[0]["event"] == "CHANNEL-STOP"
+
+
+def test_systemic_faces_are_complete_and_disjoint():
+    """:data:`SYSTEMIC_FACES` 的自我约束：事件名进得了优先级表、身份字段各占一格。
+
+    加第三族时这张表是唯一落点——事件名漏出 :data:`watch.PRIORITY` 会被排到队尾当
+    「未知事件」，字段撞车则两族共用一个身份、其中一族永不再报。两者都不会让当轮用例
+    变红，只会静默丢唤醒，故在此钉死。
+    """
+    events = [event for _k, _f, event, _rx, _r in watch.SYSTEMIC_FACES]
+    fields = [field for _k, field, _e, _rx, _r in watch.SYSTEMIC_FACES]
+    kinds = [kind for kind, _f, _e, _rx, _r in watch.SYSTEMIC_FACES]
+    assert set(events) <= set(watch.PRIORITY)
+    assert len(events) == len(set(events))
+    assert len(fields) == len(set(fields)) <= len(set(_snap()))
+    assert len(kinds) == len(set(kinds)), "kind 是 .done 的 stopped 值，不能两族同名"
+
+
+def test_advance_base_holds_channel_run_identity():
+    """抑制帧同样保住 ``channel_run`` 身份：瞬态空读不该让同一 run 再报一次。
+
+    ``hold`` 的保护名单由 :data:`SYSTEMIC_FACES` 派生（曾硬编码 quota 一支，新族一落地
+    就会在这里漏掉——停止事件重复 firing 会把组长吵醒两次，且第二次看起来像「又坏了」）。
+    """
+    base = _snap(channel_run="r4")
+    blank = _snap(channel_run="")
+    held = watch.advance_base(base, blank, hold={"channel_run"})
+    assert held["channel_run"] == "r4"
+    assert watch.advance_base(base, blank)["channel_run"] == ""
+
+
+def test_mount_lines_announces_every_priority_event():
+    """挂载文案必须列全事件名——组长按提示挂上后，看不见的事件等于没有。"""
+    text = "\n".join(watch.mount_lines())
+    for name in watch.PRIORITY:
+        assert name in text, f"mount_lines 漏列 {name}"
 
 
 def test_detect_priority_crash_beats_rest(iso_state):

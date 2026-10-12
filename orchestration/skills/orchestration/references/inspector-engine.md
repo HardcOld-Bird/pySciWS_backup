@@ -44,7 +44,7 @@ SKILL.md 的命令面只留一行索引；本文放**为什么这样设计**与*
 | `budget_hops` / `budget_wallclock` | 跳数 / 墙钟预算到顶（**成本硬上限，到顶自停**） |
 | `yield` | 让路：生产侧正忙，本轮收束 |
 | `throttled` | 迟滞暂停：积压超阈，停止产出 |
-| `quota_exhausted` | 系统性故障：模型额度耗尽（与 devops drain 同口径，立即释放锁） |
+| `quota_exhausted` / `channel_error` | 系统性故障：额度耗尽 / 渠道级故障（与 devops drain 同口径，立即释放锁；`error` 面分列两类） |
 
 队列空**不自毁**：抽一项菜单继续做（§7 的工作循环）。这是与 bencher worker 的关键差别
 ——bencher 队列空即收摊，inspector 的活是巡检本身。

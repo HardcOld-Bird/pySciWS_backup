@@ -188,8 +188,12 @@ def cmd_status(args: argparse.Namespace) -> int:
         how = (
             "协作停止（drain-stop）"
             if stopped == "cooperative"
-            else "额度耗尽全局停止（剩余条目保持 pending，待渠道恢复）"
+            # 两类系统性故障分列读数（backlog 20261012-194500-leader 要求 3）：处置动作
+            # 不同——额度要充值/换渠道，渠道故障等恢复即可，混成一行就丢了这个信息
+            else "额度耗尽全局停止（剩余条目保持 pending，待充值或换渠道）"
             if stopped == "quota_exhausted"
+            else "渠道级故障全局停止（剩余条目保持 pending，待渠道恢复）"
+            if stopped == "channel_error"
             else "异常中断"
             if done.get("error")
             else "自然跑完"
@@ -801,7 +805,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "watch",
-        help="阻塞等待 drain 事件（CRASH/QUOTA-STOP/NEEDS-LEADER/QUEUE-COMPLETE）；"
+        help="阻塞等待 drain 事件（CRASH/QUOTA-STOP/CHANNEL-STOP/NEEDS-LEADER/"
+        "QUEUE-COMPLETE）；"
         "组长以 Bash run_in_background 启动，退出即唤醒本会话",
     )
     p.add_argument(

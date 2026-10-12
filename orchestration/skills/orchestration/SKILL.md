@@ -38,7 +38,7 @@ pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<�
         # ×该跳 blocked）：J 出 B 自动驳回；M 锚基线、销账时自动排 A/B。缺 kind/
         # success_criteria 亦拒入队。规程 references/verdict-package.md
 pysci-orch watch [--timeout 14400]
-        # 等 drain 事件（QUEUE-COMPLETE/NEEDS-LEADER/QUOTA-STOP/CRASH）；
+        # 等 drain 五类事件（QUEUE-COMPLETE/NEEDS-LEADER/QUOTA/CHANNEL-STOP/CRASH）；
         # run_in_background 挂起，漏挂由 status 补账
 pysci-orch reject <建议id> --override "<判决依据>"   # 自裁否决：必填依据、留痕（J/M 判决的驳回不计 override）
 pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）

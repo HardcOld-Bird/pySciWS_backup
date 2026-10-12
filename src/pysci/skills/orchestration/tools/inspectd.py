@@ -52,6 +52,9 @@ from .drain import (
     _log,
     _now,
     _spawn_detached,
+    _systemic_error_text,
+    _systemic_kinds,
+    _systemic_mark,
     acquire_lock,
     cancel_status,
     latest_done,
@@ -877,7 +880,7 @@ def _run_patrol(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str, 
         "delivery": out.kind,
         "code": out.code,
         "body": (out.body or "")[:2000],
-        "quota_exhausted": out.kind == "quota_exhausted",
+        "systemic": out.kind if out.kind in _systemic_kinds() else "",
     }
 
 
@@ -1003,10 +1006,13 @@ def inspect_drain(
                     "elapsed_s": result.get("elapsed_s"),
                 }
             )
-            if result.get("quota_exhausted"):
-                summary["stopped"] = "quota_exhausted"
-                summary["error"] = "系统性故障：模型渠道额度耗尽（quota_exhausted）"
-                _log(run_log, "[Q] 全局停止：额度耗尽，释放锁")
+            if stopped := str(result.get("systemic") or ""):
+                summary["stopped"] = stopped
+                summary["error"] = _systemic_error_text(stopped)
+                _log(
+                    run_log,
+                    f"[{_systemic_mark(stopped)}] 全局停止：{stopped}，释放锁",
+                )
                 break
     except Exception as exc:  # noqa: BLE001 — 记录后仍写 .done（不留黑洞）
         summary["error"] = f"{type(exc).__name__}: {exc}"

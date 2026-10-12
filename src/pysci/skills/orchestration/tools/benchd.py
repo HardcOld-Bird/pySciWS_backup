@@ -49,6 +49,9 @@ from .drain import (
     _log,
     _now,
     _spawn_detached,
+    _systemic_error_text,
+    _systemic_kinds,
+    _systemic_mark,
     acquire_lock,
     cancel_status,
     lock_status,
@@ -221,7 +224,7 @@ def _run_kind_run(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str
         if missing:
             raise ValueError(f"案卷不存在：{missing}")
     rows: dict[str, Any] = {}
-    quota = False
+    systemic = ""
     for case in cases:
         if dry:
             rows[case.case_id] = {"verdict": "dry", "num_turns": 0}
@@ -234,7 +237,7 @@ def _run_kind_run(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str
             runner=_eval.RUNNER_BENCHER,
         )
         body = " ".join(row.reasons)
-        quota = quota or "quota_exhausted" in body
+        systemic = systemic or next((k for k in _systemic_kinds() if k in body), "")
         rows[row.case] = {
             "verdict": row.verdict,
             "num_turns": row.num_turns,
@@ -247,7 +250,7 @@ def _run_kind_run(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str
             f"[{'√' if row.verdict == 'pass' else '✗'}] {row.case}: {row.verdict} "
             f"turns={row.num_turns}/{row.max_turns} dur={row.duration_ms / 1000:.0f}s",
         )
-    return {"cases": rows, "quota_exhausted": quota}
+    return {"cases": rows, "systemic": systemic}
 
 
 def _run_kind_capture(
@@ -330,7 +333,7 @@ def _run_kind_check(
         "delivery": out.kind,
         "code": out.code,
         "body": (out.body or "")[:4000],
-        "quota_exhausted": out.kind == "quota_exhausted",
+        "systemic": out.kind if out.kind in _systemic_kinds() else "",
     }
 
 
@@ -401,7 +404,8 @@ def bench_drain(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
     Returns:
         ``.done`` 摘要：``{started, completed, count, elapsed_s, items, run_log}``；
         锁忙附 ``skipped="lock_busy"``；协作停止附 ``stopped="cooperative"``；
-        额度类系统性故障附 ``stopped="quota_exhausted"``。
+        系统性故障附 ``stopped=<kind>``（``quota_exhausted`` / ``channel_error``，
+        kind 串与 dispatch 的 SYSTEMIC_KINDS 同源）。
     """
     done_path = run_log.with_suffix(".done")
     lock = acquire_lock(orchestration_rel(run_log), BENCH_PATHS)
@@ -440,13 +444,14 @@ def bench_drain(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                     "elapsed_s": result.get("elapsed_s"),
                 }
             )
-            if result.get("quota_exhausted"):
-                summary["stopped"] = "quota_exhausted"
-                summary["error"] = (
-                    "系统性故障：模型渠道额度耗尽（quota_exhausted）——全局停止，"
-                    "剩余条目保持 pending 待渠道恢复"
+            if stopped := str(result.get("systemic") or ""):
+                summary["stopped"] = stopped
+                summary["error"] = _systemic_error_text(stopped)
+                _log(
+                    run_log,
+                    f"[{_systemic_mark(stopped)}] 全局停止：{stopped}，"
+                    "剩余条目保持 pending，释放锁",
                 )
-                _log(run_log, "[Q] 全局停止：额度耗尽，剩余条目保持 pending，释放锁")
                 break
     except Exception as exc:  # noqa: BLE001 — 记录后仍写 .done（不留黑洞）
         summary["error"] = f"{type(exc).__name__}: {exc}"

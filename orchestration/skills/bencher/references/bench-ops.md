@@ -22,8 +22,8 @@ SKILL.md 放决策与命令面；本文放**为什么这样设计**与**坏了�
   共用 `WorkerPaths`（`drain.py`），不另写一套事故硬化的锁逻辑。
 - 完成项**不即时唤醒组长**（REFACTOR §5.1-B 择机查看）：终态条目留在「待查看」面，
   watch 事件 `BENCH-DONE <run>` 属可选挂载，默认不挂。
-- 额度耗尽（`quota_exhausted`）是系统性故障：全局停止、剩余条目保持 pending，
-  `.done` 附 `stopped="quota_exhausted"`。
+- **系统性故障**（`quota_exhausted` 额度耗尽 / `channel_error` 渠道级故障）：全局停止、剩余
+  条目保持 pending，`.done` 附 `stopped=<kind>` 与分列说明（两类处置相同、恢复动作不同）。
 
 ## 2. 副本重锚的因果链（改这里前先读）
 

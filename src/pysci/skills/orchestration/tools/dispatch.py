@@ -22,7 +22,7 @@ from .checks import run_checks
 from .delivery import parse_delivery
 from .failure_tags import load_infra_kinds
 from .ledger import LedgerEntry, append
-from .registry import Registry, note_hop_pid, orchestration_rel
+from .registry import Member, Registry, note_hop_pid, orchestration_rel
 from .runner import (
     PROTOCOL_REMINDER,
     Envelope,
@@ -47,6 +47,31 @@ QUOTA_ERROR_RE = re.compile(
     r"credit usage limit|out of credits?|insufficient credits?", re.IGNORECASE
 )
 
+#: 渠道级失败的固定句（2026-10-12 实测：BYOK 渠道 token-plan 月额度耗尽 / 传输层故障时，
+#: CLI 不写 credit 文案、也不给非零退出码，而是合成一条 assistant 回合说这句话）。
+#: 与 quota 文案**分列**：两类故障的恢复动作不同（充值 vs 等待/换渠道），台账读数须可辨。
+CHANNEL_ERROR_RE = re.compile(
+    r"custom model service error|retry later or switch to another model",
+    re.IGNORECASE,
+)
+
+#: 系统性故障 kind 族——「不是任务书坏了，是渠道坏了」。三处消费面（drain / benchd /
+#: inspectd 的全局停止、watch 的事件、orch status 的提醒行）按这一份清单判，别各写各的。
+SYSTEMIC_KINDS: tuple[str, ...] = ("quota_exhausted", "channel_error")
+
+#: kind → （报告面短标题, 长说明）。文案单一源：drain/bench/inspect 的 ``.done`` error、
+#: orch status、dispatch 报告面共读，避免「同一故障三副面孔」。
+SYSTEMIC_TEXT: dict[str, tuple[str, str]] = {
+    "quota_exhausted": ("额度类失败", "模型渠道额度耗尽（quota_exhausted）"),
+    "channel_error": ("渠道级失败", "模型渠道级故障（channel_error）"),
+}
+
+
+def systemic_error_text(kind: str) -> str:
+    """全局停止的说明句（``.done`` 的 ``error`` 字段，三个 worker 面同文）。"""
+    label = SYSTEMIC_TEXT.get(kind, (kind, kind))[1]
+    return f"系统性故障：{label}——全局停止，全部条目保持 pending 待渠道恢复"
+
 
 def _detect_quota_exhaustion(env: Envelope, out: str, err: str) -> bool:
     """识别额度类失败：文案可能出现在 envelope.result / stderr / stdout 全文。
@@ -57,6 +82,39 @@ def _detect_quota_exhaustion(env: Envelope, out: str, err: str) -> bool:
     return any(QUOTA_ERROR_RE.search(s) for s in (env.result, err, out) if s)
 
 
+def _detect_channel_exhaustion(
+    env: Envelope, out: str, err: str, *, member: Member, sid: str
+) -> bool:
+    """识别渠道级系统性故障：固定文案 ∧ 会话档末轮合成故障形状，**两支合取**。
+
+    为什么不能只看文案（2026-10-10 宽匹配教训的延续）：那句话也会出现在组员正文里
+    （复盘本故障的任务书就是活样本），而把它误读成系统性故障的代价是**整条队列停下**。
+    形状支读 :func:`sessions.channel_failure_turn`——真实模型回合的 ``model`` 是渠道名，
+    故障回合才是 ``<synthetic>``＋自称停在 stop_sequence 却给出空序列。
+
+    会话档读不出（缺失/半写/窗口无 assistant 记录）时采信文案单特征：漏判的代价是队列
+    再逐单空烧一轮，正是本单要修的缺陷（backlog 20261012-194500-leader 证据段）。
+    """
+    text_hit = any(CHANNEL_ERROR_RE.search(s) for s in (env.result, err, out) if s)
+    shape = _sessions.channel_failure_turn(member, sid, text_re=CHANNEL_ERROR_RE)
+    return bool(text_hit) if shape is None else shape
+
+
+def _detect_systemic(
+    env: Envelope, out: str, err: str, *, member: Member, sid: str
+) -> str:
+    """失败跳的系统性故障归类，非系统性故障返回空串。
+
+    额度面先判：credit 文案更特异且是「必须充值」的硬事实；渠道面需要读会话档，留给
+    额度未命中的场合（同一跳两者同现时，取额度=更保守的停止理由，处置本就相同）。
+    """
+    if _detect_quota_exhaustion(env, out, err):
+        return "quota_exhausted"
+    if _detect_channel_exhaustion(env, out, err, member=member, sid=sid):
+        return "channel_error"
+    return ""
+
+
 def _ts() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -65,8 +123,10 @@ def _ts() -> str:
 class DispatchOutcome:
     """一次派发（一跳）的结构化结果。"""
 
-    code: int  # 0=成功交付；2=blocked/parse_error/run_failed/quota_exhausted/验收FAIL
-    kind: str  # result | blocked | parse_error | run_failed | quota_exhausted
+    code: int  # 0=成功交付；2=blocked/parse_error/run_failed/系统性故障/验收FAIL
+    #: result | blocked | parse_error | run_failed | SYSTEMIC_KINDS 之一
+    #: （quota_exhausted / channel_error——渠道级系统性故障，drain 据此全局停止）
+    kind: str
     member: str = ""
     sid: str = ""
     session_name: str = ""
@@ -403,11 +463,12 @@ def do_dispatch(
     )
     env_json = acc_env = Envelope.parse(out)
     failed = rc != 0 or env_json.is_error
-    # 额度类失败不做**同渠道**重试——重试只会再烧一跳；若配置了 <tier>_fallback
-    # 则走下方的换档重试（2026-10-10 事故 + 用户裁决的 flash 回退机制）
-    quota_hit = failed and _detect_quota_exhaustion(env_json, out, err)
+    # 系统性故障（额度耗尽 / 渠道级故障）不做**同渠道**重试——重试只会再烧一跳；
+    # 若配置了 <tier>_fallback 则走下方的换档重试（2026-10-10 事故 + 用户裁决的 flash
+    # 回退机制；渠道级故障同族处置，backlog 20261012-194500-leader）
+    systemic = _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
 
-    if failed and not no_retry and not quota_hit:
+    if failed and not no_retry and not systemic:
         if not quiet:
             print(
                 f"[!] 首跑失败（rc={rc}, stop={env_json.stop_reason}），自动重试一次…"
@@ -434,24 +495,23 @@ def do_dispatch(
         )
         env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
         failed = rc != 0 or env_json.is_error
-        quota_hit = quota_hit or (
-            failed and _detect_quota_exhaustion(env_json, out, err)
+        systemic = systemic or (
+            _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
         )
 
-    # 额度耗尽且该档配置了备用渠道（<tier>_fallback 非空且异于当前型号）→ 换档重试一次
+    # 系统性故障且该档配置了备用渠道（<tier>_fallback 非空且异于当前型号）→ 换档重试一次
     # （机制定於 2026-10-10；渠道地位 2026-10-12 互换后背用渠道自然变成内置免费档——
     #   本段代码不感知谁主谁备，只看 registry models 的 <tier>_fallback；
-    #   fallback 为空=不回退，仍按 quota_exhausted 处理）
-    if quota_hit and not no_retry:
+    #   fallback 为空=不回退，仍按该系统性 kind 处理）
+    if systemic and not no_retry:
         fallback = str(reg.models.get(f"{tier}_fallback") or "")
         if fallback and fallback != model:
+            label = SYSTEMIC_TEXT[systemic][1]
             if not quiet:
-                print(
-                    f"[!] {tier} 档渠道额度耗尽，切换备用渠道重试一次（{tier}_fallback）…"
-                )
+                print(f"[!] {tier} 档{label}，切换备用渠道重试一次（{tier}_fallback）…")
             model = fallback  # 台账/后续报告记实际所用渠道
             fallback_prompt = (
-                f"上一次运行因模型渠道额度耗尽而中断（rc={rc}）。已切换备用渠道，"
+                f"上一次运行因{label}而中断（rc={rc}）。已切换备用渠道，"
                 f"请继续完成任务书 {taskbook}，按交付协议收尾。\n\n{PROTOCOL_REMINDER}"
             )
             cmd3 = build_command(
@@ -472,12 +532,21 @@ def do_dispatch(
             )
             env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
             failed = rc != 0 or env_json.is_error
-            # 备用渠道的结果即最终结果：再耗尽 → quota_exhausted（drain 全局停止）；
+            # 备用渠道的结果即最终结果：再犯同类系统性故障 → 该 kind（drain 全局停止）；
             # 普通失败 → run_failed；成功 → 落入正常交付解析
-            quota_hit = failed and _detect_quota_exhaustion(env_json, out, err)
+            systemic = (
+                _detect_systemic(env_json, out, err, member=m, sid=sid)
+                if failed
+                else ""
+            )
 
     if failed:
-        kind = "quota_exhausted" if quota_hit else "run_failed"
+        kind = systemic or "run_failed"
+        err_text = (err.strip()[-400:] or env_json.stop_reason).strip()
+        if systemic:
+            # 台账 error 面须分辨两类系统性故障（backlog 20261012-194500-leader 要求 3）：
+            # 两类的原始读数可能完全相同（渠道故障常只报 stop_sequence），不带 kind 就分不开
+            err_text = f"{SYSTEMIC_TEXT[systemic][1]}｜{err_text}"
         delta_chars, est_tokens, chars_after = measure_usage()
         if not eval_hop:
             append(
@@ -499,7 +568,7 @@ def do_dispatch(
                     permission_denials=len(env_json.permission_denials),
                     plan=plan,
                     step=step,
-                    error=(err.strip()[-400:] or env_json.stop_reason),
+                    error=err_text,
                 )
             )
         _sessions.touch_session(m, sid, chars_offset=chars_after)
@@ -517,11 +586,11 @@ def do_dispatch(
             est_tokens=est_tokens,
             body=env_json.result[:800],
             envelope=env_json,
-            error=err.strip()[-400:] or env_json.stop_reason,
+            error=err_text,
         )
         if not quiet:
-            if quota_hit:
-                _report_quota(outcome)
+            if systemic:
+                _report_systemic(outcome)
             else:
                 _report_failure(outcome)
         return outcome
@@ -626,12 +695,20 @@ def _report_failure(o: DispatchOutcome) -> None:
     )
 
 
-def _report_quota(o: DispatchOutcome) -> None:
-    print(f"[✗] 额度类失败（quota_exhausted）：{(o.error or o.body)[:160]}")
+def _report_systemic(o: DispatchOutcome) -> None:
+    """系统性故障报告面：两类故障的**处置**相同（换档/停止）、**成因**不同（文案分列）。"""
+    headline = SYSTEMIC_TEXT.get(o.kind, (o.kind, o.kind))[0]
+    print(f"[✗] {headline}（{o.kind}）：{(o.error or o.body)[:160]}")
     print(f"    envelope.result 原文（前 400 字）：\n{o.body[:400]}")
+    cause = (
+        "模型渠道额度耗尽——充值或换渠道才恢复"
+        if o.kind == "quota_exhausted"
+        else "模型渠道级故障（服务面/限速）——等渠道恢复或换渠道，"
+        "同渠道逐单重试只会连排空烧"
+    )
     _print_next(
         [
-            "系统性故障（模型渠道额度耗尽）——非任务本身问题，勿逐跳重试再烧：",
+            f"系统性故障（{cause}）——非任务本身问题，勿逐跳重试再烧：",
             "  1) 检查 registry models 档位→渠道绑定（2026-10-12 起 max/flash 均 BYOK 优先、"
             "内置免费档作 flash_fallback，README §3.5；models 属护栏级，改动须经用户）",
             "  2) 或等待额度重置 / 请用户切换渠道后重派",
