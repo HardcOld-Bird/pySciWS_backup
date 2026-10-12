@@ -235,24 +235,37 @@ def test_cmd_venv_sync_survives_locked_entry(tree, monkeypatch, capsys):
         proc.wait()
 
 
-def test_sweep_removes_stale_residue(tmp_path):
-    """往次让路的 `.exe.locked-*` 该被清；删不动的（还被人占着）静默留着。"""
-    (tmp_path / "pysci-dev.exe.locked-20260101000000").write_bytes(b"old")
-    (tmp_path / "pysci-orch.exe.locked-20260101000001").write_bytes(b"held")
-    # 目录占位：unlink 必抛 IsADirectoryError（跨平台的「删不动」造法）
-    (tmp_path / "pysci-mirror.exe.locked-20260101000002").mkdir()
-    (tmp_path / "pysci-dev.exe").write_bytes(b"keep-me")  # 不是残留，不许碰
+def test_recycle_residue_copy_vs_orphan(tmp_path):
+    """原名在盘 ⇒ 残留只是多余副本，删；原名缺失 ⇒ 残留是唯一原件，改回原名。
 
-    assert dev._sweep_aside_residue(tmp_path) == 2
+    反了就会吞掉入口：无 pyproject 变更的 `uv sync` 判定无事可做，**不会**重建被让路的
+    exe（2026-10-12 main 实测），此时残留就是那个入口的全部家当。
+    """
+    (tmp_path / "pysci-dev.exe").write_bytes(b"live")
+    (tmp_path / "pysci-dev.exe.locked-20260101000000").write_bytes(b"copy")
+    (tmp_path / "pysci-orch.exe.locked-20260101000001").write_bytes(b"only-copy")
+
+    assert dev._recycle_aside_residue(tmp_path) == (1, 1)
     assert not (tmp_path / "pysci-dev.exe.locked-20260101000000").exists()
-    assert (tmp_path / "pysci-mirror.exe.locked-20260101000002").exists()
-    assert (tmp_path / "pysci-dev.exe").read_bytes() == b"keep-me"
+    assert (tmp_path / "pysci-dev.exe").read_bytes() == b"live"
+    assert (tmp_path / "pysci-orch.exe").read_bytes() == b"only-copy"
 
 
-def test_cmd_venv_sync_sweeps_stale_residue(tree, monkeypatch, capsys):
-    """命令面第一步就腾旧垃圾：让路造的是新名字，不会与往次残留撞车。"""
+def test_recycle_residue_tolerates_still_held(tmp_path, monkeypatch):
+    """占用进程没退 ⇒ 删不动也不还原（原名在盘），静默留给下一次。"""
+    (tmp_path / "pysci-dev.exe").write_bytes(b"live")
+    (tmp_path / "pysci-dev.exe.locked-1").write_bytes(b"held")
+    monkeypatch.setattr(
+        dev.os, "unlink", lambda *a, **k: (_ for _ in ()).throw(OSError("still held"))
+    )
+    assert dev._recycle_aside_residue(tmp_path) == (0, 0)
+    assert (tmp_path / "pysci-dev.exe.locked-1").exists()
+
+
+def test_cmd_venv_sync_recycles_stale_residue(tree, monkeypatch, capsys):
+    """命令面第一步就回收垃圾：让路造的是带本次 ts 的新名字，不会与往次残留撞车。"""
     root, scripts = tree
-    stale = scripts / "pysci-orch.exe.locked-20260101000000"
+    stale = scripts / "pysci-dev.exe.locked-20260101000000"
     stale.write_bytes(b"old")
     monkeypatch.setattr(
         dev,
@@ -261,8 +274,32 @@ def test_cmd_venv_sync_sweeps_stale_residue(tree, monkeypatch, capsys):
     )
     assert dev.cmd_venv_sync(_Args(uv_args=[])) == 0
     out = capsys.readouterr().out
-    assert "清理往次让路残留 1 个" in out
+    assert "回收往次让路：删副本 1 个，还原原件 0 个" in out
     assert not stale.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="让路分支只在 Windows exe 锁形态下走")
+def test_cmd_venv_sync_puts_back_when_uv_skips_rebuild(tree, monkeypatch, capsys):
+    """让了路而 uv 没重建 ⇒ 自己把原件改回原名，别让解药变成肇事者。"""
+    root, scripts = tree
+    for n in ("pysci-orch", "pysci-mirror"):  # 本例模拟「入口都在盘、uv 无事可做」
+        (scripts / f"{n}.exe").write_bytes(b"MZ-old")
+
+    def fake_aside(exe, ts):
+        if exe.name != "pysci-dev.exe":
+            return ""
+        os.replace(exe, exe.with_name(f"{exe.name}.locked-{ts}"))
+        return "moved"
+
+    monkeypatch.setattr(dev, "_move_aside_locked", fake_aside)
+    monkeypatch.setattr(dev, "_locked_holder", lambda exe: "占用者=PC PID 1")
+    monkeypatch.setattr(dev, "run_uv_sync", lambda extra: (0, "Checked 206 packages"))
+    assert dev.cmd_venv_sync(_Args(uv_args=[])) == 0
+    out = capsys.readouterr().out
+    assert "uv 未重建 ['pysci-dev.exe']" in out and "入口齐备" in out
+    assert "仍被占用" not in out  # 让回原地的不是残留，别报假提示
+    assert (scripts / "pysci-dev.exe").read_bytes() == b"MZ-old"
+    assert not list(scripts.glob("*.locked-*"))
 
 
 def test_run_uv_sync_uses_project_root(tmp_path, monkeypatch):
