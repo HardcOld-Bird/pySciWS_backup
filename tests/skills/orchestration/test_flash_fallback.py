@@ -1,11 +1,13 @@
-"""flash 档额度回退（backlog 20261010-flash-fallback）。
+"""额度类失败的**换席**通路（backlog 20261010-flash-fallback → 20261012-211500-leader 链化）。
 
-机制与档位无关：额度耗尽且 registry models 配置了非空 ``<tier>_fallback``（异于当前
-型号）时，do_dispatch 自动换档重试一次；备用渠道也耗尽 → 仍归类 quota_exhausted
-（drain 全局停止语义不变）。**渠道地位 2026-10-12 互换**（backlog 20261012-173500-leader，
-用户裁决）：flash 主档=BYOK Qwen-3.8-Flash、``flash_fallback``=内置免费档，于是自然语义
-变成「按量耗尽 → 限时免费兜底」；回退代码一行未动，互换只落在 registry.json 与模式表
-（同源断言见 ``test_flash_channel_swap.py``）。本组单测用占位 modelID 覆盖逻辑。
+机制与档位无关：当前席不可用时沿该档的**有序回退链**一席一跳换下去。本组用例写的是链化
+**之后**的实现（``dispatch`` 不再读 ``<tier>_fallback`` 单值，改读 ``model_chain(tier)``），
+但断言面刻意保持**旧写形态**（``flash`` 单值 + ``flash_fallback`` 键）——那是兼容读的判据：
+老 registry 不改一个字节，链化后照样能换席。真链形态的用例见 ``test_model_fallback_chain.py``。
+
+全链耗尽 → 仍归类原系统性 kind（quota_exhausted/channel_error），drain 全局停止语义不变
+（#77）。告警文案单一口径 ``[!] 档位回退：<tier> 席<名>不可用 → 已切换 <新席>（原因 …）``
+由 :mod:`channels` 出，观察面（事件流）同源。
 """
 
 from __future__ import annotations
@@ -116,5 +118,8 @@ def test_fallback_switch_printed_and_final_report(iso_dispatch, monkeypatch, cap
     fake_headless(monkeypatch, lambda n, cmd: envelope(QUOTA_TEXT))
     dispatch.do_dispatch("quotamember", text="出图", quiet=False)
     out = capsys.readouterr().out
-    assert "切换备用渠道重试一次" in out
+    assert "[!] 档位回退：flash 席" in out and "已切换" in out, (
+        "换席必须在调用者面留一行告警（用户裁决 2026-10-12 21:1x 规格 4a）"
+    )
+    assert FB in out and BUILTIN in out, "告警要点名原席与新席"
     assert "额度类失败（quota_exhausted）" in out, "备用渠道也耗尽→最终仍报额度面"

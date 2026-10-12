@@ -3,10 +3,20 @@
   "exe": null,
   "taste_enabled": false,
   "models": {
-    "max": "982ae403-bc5e-4f74-996d-04a9cd66f933",
-    "flash": "Qwen3.8-Flash",
-    "flash_fallback": "ed6f5996-0992-479f-86a8-3f29ce0e794c",
-    "minimum": "Qwen3.8-Flash"
+    "max": [
+      "99127e47-626d-421f-b0cb-02ffdbf1ada7",
+      "982ae403-bc5e-4f74-996d-04a9cd66f933",
+      ""
+    ],
+    "flash": [
+      "017036af-b630-498a-bfea-883a20c67e33",
+      "ed6f5996-0992-479f-86a8-3f29ce0e794c",
+      "Qwen3.8-Flash"
+    ],
+    "minimum": [
+      "017036af-b630-498a-bfea-883a20c67e33",
+      "Qwen3.8-Flash"
+    ]
   },
   "members": {
     "figure": {
@@ -181,10 +191,14 @@
       ]
     }
   },
-  "model_patterns": {
-    "Qwen3.8-Flash": "flash",
-    "Qwen-3.8-Flash": "flash_fallback",
-    "Qwen-3.8-Max": "max"
+  "model_chains": {
+    "max": ["Mimo-V2.6-Pro", "Qwen-3.8-Max", ""],
+    "flash": ["Mimo-V2.6-Flash", "Qwen-3.8-Flash", "Qwen3.8-Flash"],
+    "minimum": ["Mimo-V2.6-Flash", "Qwen3.8-Flash"]
   },
-  "channel_note": "2026-10-12 19:4x BYOK 渠道故障（Custom model service error，疑余额耗尽）：组长临时把 flash 换回内置、BYOK 降回退（model_patterns 同步防自愈翻转）。用户充值/确认后按 #74 裁决换回：flash=BYOK 优先。"
+  "model_fallback": {
+    "skip_window_s": 3600,
+    "event_tail": 5
+  },
+  "channel_note": "用户裁决 2026-10-12 21:1x（backlog 20261012-211500-leader）：Mimo-V2.6 双档转主力，models 每档升级为**有序回退链**（首席不可用即自动下探一席）；BYOK Qwen 渠道余额暂停充值、将持续不可用，故降级带**粘滞跳过窗**（model_fallback.skip_window_s，窗内不重复探测，过期自愈）。model_patterns（旧名→档倒表）由 model_chains（档→名链模板）取代，供 refresh-models 自愈解析；观察期纪律：组员一律 flash 档，max 链只供 deputy/reviewer 按需升档与组长侧。"
 }

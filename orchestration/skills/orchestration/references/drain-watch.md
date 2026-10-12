@@ -63,9 +63,17 @@ uv run --no-sync pysci-orch bench-stop           # 协作停止：条目间隙�
   **恢复动作不同**——`quota_exhausted`=额度耗尽须充值或换渠道；`channel_error`=渠道服务面
   故障，等渠道恢复即可（2026-10-12 实测：BYOK 渠道坏了 CLI 不报 credit 文案，而是合成一条
   `model="<synthetic>"` 的 assistant 回合说 "Custom model service error…"，故判据取**固定
-  文案 ∧ 会话档末轮形状**合取，文案单特征会误伤复述该句的复盘任务）。有 `<tier>_fallback`
-  时先换档重试一次，两档都坏才停。恢复后条目照常 FIFO 续跑（drain 由下一次 `approve` 自动
-  接管，压测队列由 `bench-up`）。
+  文案 ∧ 会话档末轮形状**合取，文案单特征会误伤复述该句的复盘任务）。恢复后条目照常 FIFO
+  续跑（drain 由下一次 `approve` 自动接管，压测队列由 `bench-up`）。
+- **档位回退链**（用户裁决 2026-10-12 21:1x，README §3.5）：每档是**有序链**，当前席不可用
+  （额度 / 渠道 / 启动即失败）→ 沿链一席一跳自动降级；**全链耗尽**才保留系统性 kind 并全局
+  停止。非系统性失败仍是同席重试（故障不在渠道，换席白烧）。两条面都必须看得见：调用者面逐条
+  `[!] 档位回退：<tier> 席<名>不可用 → 已切换 <新席>（原因 …）`（dispatch 输出 + run 日志），
+  观察面 `state/channel-events.jsonl`（mirror 概览项「回退」/`orch status` 健康段报计数与最近
+  几条）。**降级粘滞窗**（`registry.model_fallback.skip_window_s`，默认 3600s）：坏席进窗后
+  窗内不再探测它（每次派发仍打一行「席 X 跳过中」），过期自动恢复探测，跑通即销窗；全链都在
+  窗内时按**失败最早**（=最先到期）的一席强探一次，不停摆。换席后想知道实际用了哪个渠道：看
+  台账 `model` 字段（记的是**实际所用席位**，不是配置里的首席）。
 - `approve` 时选 **M**（基线捕获 + 实施后副本 A/B）的判决包接口：E5a/E5b 未实施，
   目前由组长手动 `bench-add capture`/`bench-add ab` 完成同一效果（E4 只交付运行职责）。
 

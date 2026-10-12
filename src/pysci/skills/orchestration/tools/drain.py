@@ -58,6 +58,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
+from . import channels as _channels
 from . import procs, workflow
 from .registry import Registry, note_hop_pid, orchestration_rel, refresh_models
 from .workflow import (
@@ -1028,6 +1029,11 @@ def _drain_batch(
         quiet=True,
     )
     elapsed = round(time.time() - t0, 1)
+    # 规格 4a「run 日志」面：do_dispatch 走 quiet 通路，换席告警不会自己打到屏幕上，
+    # 于是降级跑完的批次在日志里看起来就像「首席好好的」——回退必须进日志，否则
+    # 组长据此判断渠道健康，实际整批都在兜底档上跑。
+    for event in outcome.fallbacks:
+        _log(run_log, f"{_channels.alert_line(event)}（批次 {label}）")
     if outcome.warning:
         # 交付是被宽松兜底面救回的（解析器版本落后于协议）：不改变判读，但必须进 run
         # 日志——组长侧看得到「这一跳的交付格式是兜底读出来的」，据此决定要不要重跑
@@ -1150,25 +1156,32 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         res = refresh_models()
         if res["changed"]:
             detail = "; ".join(
-                f"{t}: {c['old'] or '(空)'} → {c['new']}"
+                f"{t}: {c['old'] or '(空)'} → {_channels.chain_text(c['new'])}"
                 for t, c in res["changed"].items()
             )
             summary["models_refreshed"] = res["changed"]
             _log(run_log, f"[i] 模型映射已刷新（运行态面）：{detail}")
         if res.get("shadowed"):
             detail = "; ".join(
-                f"{t}: 跟踪={s['tracked'] or '(空)'} 遮蔽解析值={s['resolved'] or '(空)'}"
+                f"{t}: 跟踪={_channels.chain_text(s['tracked'])} "
+                f"遮蔽解析值={_channels.chain_text(s['resolved'])}"
                 for t, s in sorted(res["shadowed"].items())
             )
             _log(
                 run_log,
                 f"[i] 模型映射跟踪面遮蔽解析值（人不写则不换）：{detail}",
             )
+        if res.get("conflicts"):
+            _log(
+                run_log,
+                "[!] 档位链与名→档规则冲突（串档，须人裁决）："
+                + "; ".join(res["conflicts"]),
+            )
         if res["missing"]:
             _log(
                 run_log,
                 f"[i] 模型映射未命中（保持现值）：{', '.join(res['missing'])}"
-                "——BYOK 改名则更新 registry.model_patterns",
+                "——BYOK/Mimo 改名则更新 registry.model_chains",
             )
     except Exception as exc:
         _log(

@@ -18,6 +18,8 @@ from pysci.skills.orchestration.tools.registry import Registry
 
 MAX_OLD = "OLD-MAX-UUID"
 MAX_NEW = "982ae403-bc5e-4f74-996d-04a9cd66f933"
+MIMO_PRO = "99127e47-626d-421f-b0cb-02ffdbf1ada7"
+MIMO_FLASH = "017036af-b630-498a-bfea-883a20c67e33"
 
 
 def _cfg() -> dict:
@@ -241,7 +243,13 @@ def test_refresh_models_from_stale_snapshot_never_touches_tracked_config(
     tracked_after_merge = reg_file.read_bytes()
 
     monkeypatch.setattr(Registry, "load", classmethod(lambda cls, *a, **k: stale))
-    catalog = f"Qwen-3.8-Max ({MAX_NEW})\nQwen3.8-Flash\n"
+    catalog = (
+        "MODEL\n"
+        f"Mimo-V2.6-Pro ({MIMO_PRO})\n"
+        f"Mimo-V2.6-Flash ({MIMO_FLASH})\n"
+        f"Qwen-3.8-Max ({MAX_NEW})\n"
+        "Qwen3.8-Flash\n"
+    )
     monkeypatch.setattr(reg_mod, "list_models_output", lambda *a, **k: catalog)
 
     res = reg_mod.refresh_models()
@@ -251,13 +259,16 @@ def test_refresh_models_from_stale_snapshot_never_touches_tracked_config(
         "自愈不写跟踪面：期间合并的成员/checks 天然不会被陈旧副本回退"
     )
     rt = json.loads(runtime_file.read_text(encoding="utf-8"))
-    assert rt["models_resolved"] == {"minimum": "Qwen3.8-Flash"}, (
-        "跟踪面未 pin 的档 → 解析值落运行态面"
+    assert rt["models_resolved"] == {"minimum": [MIMO_FLASH, "Qwen3.8-Flash"]}, (
+        f"跟踪面未 pin 的档 → 整条解析链落运行态面：{rt['models_resolved']}"
     )
-    assert res["changed"] == {"minimum": {"old": None, "new": "Qwen3.8-Flash"}}
-    assert res["shadowed"]["max"] == {"tracked": MAX_OLD, "resolved": MAX_NEW}, (
-        "跟踪值优先，解析值只点名不顶掉"
-    )
+    assert res["changed"] == {
+        "minimum": {"old": None, "new": [MIMO_FLASH, "Qwen3.8-Flash"]}
+    }
+    assert res["shadowed"]["max"] == {
+        "tracked": MAX_OLD,
+        "resolved": [MIMO_PRO, MAX_NEW, ""],
+    }, "跟踪值优先，解析值只点名不顶掉"
     assert "flash←Qwen-3.8-Flash" in res["missing"]
 
 

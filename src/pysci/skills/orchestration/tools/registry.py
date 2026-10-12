@@ -15,10 +15,13 @@
 从配置剥离，两份原子落盘。全部为可读 JSON（fail-open 红线，README §4.3）。
 
 运行态文件里除会话池外还有 **``models_resolved`` 档位面**（:func:`refresh_models` 的
-落点）：模型映射自愈是机器行为，写进 git 跟踪的 ``models`` 会把跟踪配置周期改脏（每
+落点）、**``model_seat_fail`` 席位故障粘滞窗**与 **``model_seat_names`` 席→名反查表**：
+模型映射自愈是机器行为，写进 git 跟踪的 ``models`` 会把跟踪配置周期改脏（每
 drain 必现 `` M registry.json``，堵死一切碰 registry 的单，backlog 20261012-080410-devops），
 而 ``models`` 按 charter 属护栏级——机器静默改写它本身就越权。故读取按
-「跟踪值 → 运行态解析值 → 出厂默认」三级回退（:attr:`Registry.models`），跟踪面只留人写的覆盖。
+「跟踪值 → 运行态解析值 → 出厂默认」三级回退（:attr:`Registry.models` /
+:meth:`Registry.model_chain`），跟踪面只留人写的覆盖。档位值自 2026-10-12 21:1x 起是
+**有序回退链**（一档多席，用户裁决 backlog 20261012-211500-leader），旧单值写兼容读。
 
 **配置面磁盘权威**（backlog 20261011-220621-leader，lost-update 修复）：分储只搬走了心跳，
 没搬走「整体回写内存副本」这个坏习惯——长驻 drain worker 收尾时仍把启动时加载的
@@ -39,6 +42,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -53,29 +57,41 @@ RUNTIME_NAME: str = "sessions-runtime.json"
 #: 一次性迁移的原文备份文件名（首次 cutover 时创建，已存在则不覆盖——保留真·pre-split 快照）。
 BACKUP_NAME: str = "registry.presplit.json"
 
-#: 运行态文件里的档位映射键（:func:`refresh_models` 唯一的写点；gitignored）。
+#: 运行态文件里的档位映射键（:func:`refresh_models` 的写点；gitignored）。
 RUNTIME_MODELS_KEY: str = "models_resolved"
+
+#: 运行态文件里的**席位故障粘滞窗**键（``{档: {席: {"ts":…, "kind":…, "member":…}}}``）。
+#: 用户裁决 2026-10-12 21:3x：BYOK Qwen 渠道暂不充值、将持续不可用 → 探测失败的席在短窗内
+#: 直接跳过（省探测跳数），窗口过期自动恢复探测（充值/修好后自愈，无需改代码）。
+#: 落运行态而非跟踪面同一纪律：心跳每跳必变的机器事实不往 git 跟踪配置里写（免堵合并）。
+RUNTIME_SEAT_FAIL_KEY: str = "model_seat_fail"
+
+#: 运行态文件里的 **席 → 人类名** 反查表（:func:`refresh_models` 顺带落点；mirror/status
+#: 告警行要给人看名字而不是 UUID）。
+RUNTIME_SEAT_NAMES_KEY: str = "model_seat_names"
+
+#: 回退策略默认参数（``registry.json`` 顶层 ``model_fallback`` 块可逐键覆盖）。
+#: ``skip_window_s``：某席探测失败后跳过重试的时长（0=禁用粘滞跳过，每跳都重新探测）。
+#: ``event_tail``：mirror/status 面「最近 N 条」的 N。
+DEFAULT_MODEL_FALLBACK: dict[str, int] = {"skip_window_s": 3600, "event_tail": 5}
 
 #: 脏跟踪面哨兵扫描的相对路径（见 :func:`dirty_tracked_state`）。
 STATE_REL_PATH: str = "orchestration/state"
 
-#: 档位 → 具体型号映射（README §3.5）；registry.json 的 models 块覆盖这里的出厂默认。
-#: 渠道策略（用户裁决 2026-10-10 credit 耗尽事故复盘；**2026-10-12 flash 渠道互换**）：
-#: - ``max`` = ''（不传 -m → 走用户级默认 BYOK；**禁用内置同名模型**——烧订阅 credit）；
-#: - ``flash`` = **BYOK Qwen-3.8-Flash 优先**，内置 ``Qwen3.8-Flash`` 降为
-#:   ``flash_fallback``（用户原话：内置免费但限速、响应慢影响效率）。互换落在**跟踪面**
-#:   （registry.json models）与**模式表**（:data:`DEFAULT_MODEL_PATTERNS`）；本常量只是
-#:   三级回退的最后一级（跟踪 > 运行态解析 > 出厂，见 :meth:`Registry.models`），BYOK
-#:   modelID 是账号级 UUID、写不进代码，故出厂值保守取内置免费名——**宁慢不烧 credit**。
-#: - ``<tier>_fallback`` = 该档**系统性故障**（额度耗尽 / 渠道级故障，见
-#:   ``dispatch.SYSTEMIC_KINDS``）时的备用渠道（do_dispatch 自动换档重试一次，两类同族
-#:   处置；逻辑不动：互换后其语义自然变成「BYOK 按量耗尽 → 内置限时免费兜底」）。
-#: - ``minimum`` = harness 压测专用最低成本档（REFACTOR §1.1，驱动 ``orch eval run``）。
-#:   ``registry.models`` 改动属护栏级：本档的**设立**经用户裁决（§1.1），而**型号选择**
-#:   原属专门环节，委托期内由组长代决（§9.4）——暂映射内置 ``Qwen3.8-Flash``（现唯一
-#:   零成本渠道，credits 恒 0 已实锤；决策已入 state/preference-journal.jsonl）。
-#:   **重估条件**：E3 SiliconFlow 接入后，若拿到更廉价的压测渠道即改这里或写 registry.json
-#:   的 ``models.minimum``（registry 覆盖优先）；档位抽象与本型号解耦，套件案不写死型号。
+#: 档位 → **有序回退链**（README §3.5）；registry.json 的 models 块覆盖这里的出厂默认。
+#: 渠道策略演化（用户裁决 2026-10-10 credit 耗尽事故 → 2026-10-12 flash 渠道互换 →
+#: **2026-10-12 21:1x Mimo 主力 + 三级有序回退**，backlog 20261012-211500-leader）：
+#: - 一档多席：首席优先，**当前席系统性故障 / 启动即失败 → 自动换下一席**（每席只试一次，
+#:   全链耗尽才按系统性故障全局停止，见 ``dispatch`` 与 ``channels``）；
+#: - 值可写成 ``["a", "b"]``（链，新写形态）或 ``"a"``（单值，**旧写兼容读** = 一席链）；
+#:   旧 ``<tier>_fallback`` 键并入该档链尾（只兼容读，新写不再产生该键）；
+#: - ``""`` 是链里一席**合法读数**＝不传 ``-m``（走用户级默认渠道，max 档既成裁决），
+#:   归一时不许把它当空值过滤掉；
+#: - ``max`` 末席写 ``""`` 而非内置 ``Qwen3.8-Max`` 名：**禁用内置同名模型**——烧订阅
+#:   credit 且 envelope 低报为 0（2026-10-10 实战烧穿额度）；
+#: - BYOK modelID 是账号级 UUID、写不进代码，故出厂值保守取内置免费名——**宁慢不烧 credit**；
+#:   ``minimum`` = harness 压测专用最低成本档（REFACTOR §1.1，驱动 ``orch eval run``），
+#:   型号选择属护栏级：档位抽象与本型号解耦，套件案不写死型号。
 DEFAULT_MODELS: dict[str, str] = {
     "max": "",
     "flash": "Qwen3.8-Flash",
@@ -83,22 +99,72 @@ DEFAULT_MODELS: dict[str, str] = {
     "flash_fallback": "",
 }
 
-#: 档位 → ``--list-models`` 人类名精确匹配表（用户裁决 2026-10-10，模型映射自动刷新；
-#: **2026-10-12 与 models 同步互换**）；registry.json 的 ``model_patterns`` 块可逐档覆盖。
-#: BYOK 命名是账号级配置（当前 Qwen-3.8-Max/Flash），改名后更新这里或 registry——
-#: **精确匹配**是硬要求：内置 ``Qwen3.8-Flash`` 与 BYOK ``Qwen-3.8-Flash`` 仅差一个连字符，
-#: 模糊匹配必串档。
+#: 档 → **有序人类名模板**（用户裁决 2026-10-12 21:1x：Mimo 主力双档 + Qwen 回退 + 内置兜底）。
+#: ``--list-models`` 把名解析成席位（BYOK→UUID、内置→名自身），解析落点见 :func:`refresh_models`。
+#: 这张表同时是「哪个名属于哪个档」的**唯一机器可读口径**——链序即规则，反读见
+#: :func:`model_tier_rules`。**换档/增席只改这里或 registry.json 的 ``model_chains``**：模式表
+#: 不改，:func:`refresh_models` 就按旧表解析、把跟踪面报成漂移（#74 教训的镜像面，快照断言见
+#: ``tests/skills/orchestration/test_flash_channel_swap.py``）。
 #:
-#: 这张表是「哪个名对应哪个档」的**唯一机器可读口径**：drain 每次启动都跑
-#: :func:`refresh_models`，跟踪面缺哪一档就按本表补哪一档。所以换档/互换**只改
-#: registry.json 是不够的**——模式表不改，自愈就把映射刷回旧渠道（README §3.5 护栏教训
-#: 的镜像场景）。快照断言见 ``tests/skills/orchestration/test_flash_channel_swap.py``。
-DEFAULT_MODEL_PATTERNS: dict[str, str] = {
-    "max": "Qwen-3.8-Max",
-    "flash": "Qwen-3.8-Flash",
-    "flash_fallback": "Qwen3.8-Flash",
-    "minimum": "Qwen3.8-Flash",
+#: 观察期注记（用户明示 2026-10-12）：组员全部 flash 档**暂不升档**，``max`` 链只服务组长侧
+#: 与 deputy/reviewer 的按需升档。``minimum`` 链**不含 Qwen BYOK**——BYOK 额度宝贵，压测走
+#: 最低成本席（Mimo-Flash → 内置）。
+DEFAULT_MODEL_CHAINS: dict[str, tuple[str, ...]] = {
+    "max": ("Mimo-V2.6-Pro", "Qwen-3.8-Max", ""),
+    "flash": ("Mimo-V2.6-Flash", "Qwen-3.8-Flash", "Qwen3.8-Flash"),
+    "minimum": ("Mimo-V2.6-Flash", "Qwen3.8-Flash"),
 }
+
+#: 名 → 档 的规则表（由 :data:`DEFAULT_MODEL_CHAINS` 反读，``registry.model_patterns`` 可补充）。
+TIER_KEYS: tuple[str, ...] = ("max", "flash", "minimum")
+
+
+def normalize_seats(value: Any) -> list[str]:
+    """单值 / 链 / None → 席位列表（旧写 ``"a"`` 与新写 ``["a","b"]`` 同一条读路）。
+
+    ``""`` 保留（＝不传 ``-m`` 的合法席位裁决）；``None`` 丢弃（JSON null 容错）。
+    非列表标量按单席处理；其它类型（数字等）串化后当一席——读侧宽容，写侧只有链。
+    """
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value if item is not None]
+    return [str(value)]
+
+
+def dedupe_seats(seats: list[str]) -> list[str]:
+    """保序去重（同一席在链里出现两次只会白烧一跳）。"""
+    seen: set[str] = set()
+    out: list[str] = []
+    for seat in seats:
+        if seat not in seen:
+            seen.add(seat)
+            out.append(seat)
+    return out
+
+
+def model_tier_rules(
+    chains: dict[str, Any] | None = None, extra: dict[str, Any] | None = None
+) -> dict[str, set[str]]:
+    """反读「名 → 属于哪些档」的规则表（防自愈把某个名塞进错误的档）。
+
+    Args:
+        chains: 档 → 名链；缺省用 :data:`DEFAULT_MODEL_CHAINS`。
+        extra: 追加的 名→档 规则（``registry.model_patterns`` 的历史倒表形态）。
+
+    Returns:
+        ``{人类名: {档, …}}``；一名的规则互相合并，供 :func:`refresh_models` 比对。
+    """
+    rules: dict[str, set[str]] = {}
+    for tier, names in (chains or DEFAULT_MODEL_CHAINS).items():
+        for name in normalize_seats(names):
+            if name:
+                rules.setdefault(name, set()).add(str(tier))
+    for name, tier in (extra or {}).items():
+        if name and tier:
+            rules.setdefault(str(name), set()).add(str(tier))
+    return rules
+
 
 #: --list-models 的 BYOK 行：``人类名 (uuid)``；内置行为裸名（无 UUID）。
 _MODEL_LINE_RE = re.compile(
@@ -537,60 +603,207 @@ class Registry:
         _atomic_write(self.runtime_path, rt)
 
     @property
-    def runtime_models(self) -> dict[str, str]:
-        """运行态档位映射（``models_resolved``，gitignored）——机器自愈的唯一落点。
+    def runtime_model_chains(self) -> dict[str, list[str]]:
+        """运行态档位链（``models_resolved``，gitignored）——机器自愈的唯一落点。
 
-        面缺失/被手工写坏成非字典 → 空 dict（读侧自然回退到出厂默认，不抛）。
+        面缺失/被手工写坏成非字典 → 空 dict（读侧自然回退到出厂默认，不抛）。值兼容
+        两种历史形态：单值字符串（旧写）与席位列表（链）。
         """
         raw = self.runtime.get(RUNTIME_MODELS_KEY)
         if not isinstance(raw, dict):
             return {}
-        return {str(k): str(v) for k, v in raw.items()}
+        return {str(k): normalize_seats(v) for k, v in raw.items()}
+
+    @property
+    def runtime_models(self) -> dict[str, str]:
+        """运行态档位的**首席平读面**（向后兼容读法：消费方仍拿到一个字符串）。"""
+        return {
+            tier: (seats or [""])[0]
+            for tier, seats in self.runtime_model_chains.items()
+        }
+
+    def _merged_model_faces(self) -> dict[str, list[str]]:
+        """逐键取「跟踪 > 运行态 > 出厂」中**最高优先且存在该键**的那一面的链。
+
+        合并粒度是**整条链**（不是逐席）：跟踪面写了 ``flash`` 就是人对这一档的完整裁决，
+        运行态解析值不得往中间插席——那正是 #74「机器静默顶掉裁决」的链形态版本。
+        """
+        faces = (
+            {
+                str(k): normalize_seats(v)
+                for k, v in (self.data.get("models") or {}).items()
+            },
+            self.runtime_model_chains,
+            {k: normalize_seats(v) for k, v in DEFAULT_MODELS.items()},
+        )
+        merged: dict[str, list[str]] = {}
+        for face in faces:
+            for tier, seats in face.items():
+                merged.setdefault(tier, seats)
+        return merged
 
     @property
     def models(self) -> dict[str, str]:
-        """档位 → 具体型号：**跟踪值 > 运行态解析值 > 出厂默认**（三级回退）。
+        """档位 → 具体型号的**平读面**（首席）：三级回退 + 旧 ``<tier>_fallback`` 键原样可见。
 
-        跟踪面（registry.json 的 ``models``）是人写的覆盖，优先级最高——包括有意写成
-        ``""`` 的档（如 ``max=''`` 表示不传 ``-m`` 走用户级默认渠道），空值也是裁决，
-        不能被运行态解析值顶掉。
+        保留这个视图是为了不惊动既有消费方（``eval``/``orch`` 蒸馏跳/大量断言），它们要的
+        就是「这一档现在用哪个渠道」。需要回退链的代码请走 :meth:`model_chain`。
         """
-        return {
-            **DEFAULT_MODELS,
-            **self.runtime_models,
-            **self.data.get("models", {}),
+        merged = self._merged_model_faces()
+        return {tier: (seats or [""])[0] for tier, seats in merged.items()}
+
+    def model_chain(self, tier: str) -> list[str]:
+        """该档的有序回退链（首席在前）；旧 ``<tier>_fallback`` 键**并入链尾**（兼容读）。
+
+        至少返回一席：链为空时回落到 ``[""]``＝不传 ``-m``（走用户级默认渠道），与
+        :data:`DEFAULT_MODELS` 里 ``max=""`` 的既成裁决同一口径。
+        """
+        merged = self._merged_model_faces()
+        seats = list(merged.get(tier) or [""])
+        legacy = merged.get(f"{tier}_fallback") or []
+        for seat in legacy:
+            if seat and seat not in seats:
+                seats.append(seat)
+        return dedupe_seats(seats) or [""]
+
+    @property
+    def seat_names(self) -> dict[str, str]:
+        """席（UUID 或内置名）→ 人类名反查表（``model_seat_names``，告警面可读性用）。"""
+        raw = self.runtime.get(RUNTIME_SEAT_NAMES_KEY)
+        if not isinstance(raw, dict):
+            return {}
+        return {str(k): str(v) for k, v in raw.items()}
+
+    def seat_label(self, seat: str) -> str:
+        """席位的显示名（反查不到就原样返回，告警面绝不因缺表而空转）。"""
+        if not seat:
+            return "(用户级默认)"
+        return self.seat_names.get(seat, seat)
+
+    @property
+    def fallback_policy(self) -> dict[str, int]:
+        """回退策略参数（``registry.json`` 顶层 ``model_fallback`` 可覆盖，逐键 fail-open）。
+
+        口径同 :meth:`tier_a`：读不到/非法值 → 回落出厂默认，不让参数把派发面卡死。
+        """
+        raw = self.data.get("model_fallback") or {}
+        out = dict(DEFAULT_MODEL_FALLBACK)
+        if not isinstance(raw, dict):
+            return out
+        for key in DEFAULT_MODEL_FALLBACK:
+            try:
+                number = int(raw.get(key))
+            except (TypeError, ValueError):
+                continue
+            if number >= 0:
+                out[key] = number
+        return out
+
+    @property
+    def seat_failures(self) -> dict[str, dict[str, dict[str, Any]]]:
+        """席位故障粘滞窗（``model_seat_fail``）：``{档: {席: {"ts":…, "kind":…, "member":…}}}``。"""
+        raw = self.runtime.get(RUNTIME_SEAT_FAIL_KEY)
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, dict[str, dict[str, Any]]] = {}
+        for tier, seats in raw.items():
+            if isinstance(seats, dict):
+                out[str(tier)] = {
+                    str(seat): info
+                    for seat, info in seats.items()
+                    if isinstance(info, dict)
+                }
+        return out
+
+    def note_seat_failure(
+        self,
+        tier: str,
+        seat: str,
+        *,
+        kind: str,
+        member: str = "",
+        now: float | None = None,
+    ) -> None:
+        """记一次席位探测失败（粘滞窗起点）；读-改-写与会话池同纪律，只动这一格。"""
+        rt = _read_for_merge(self.runtime_path, _empty_runtime())
+        face = rt.get(RUNTIME_SEAT_FAIL_KEY)
+        face = dict(face) if isinstance(face, dict) else {}
+        seats = dict(face.get(tier) or {})
+        seats[seat] = {
+            "ts": float(now if now is not None else time.time()),
+            "kind": kind,
+            "member": member,
         }
+        face[tier] = seats
+        rt[RUNTIME_SEAT_FAIL_KEY] = face
+        _atomic_write(self.runtime_path, rt)
+        self.runtime[RUNTIME_SEAT_FAIL_KEY] = face
+
+    def note_seat_success(self, tier: str, seat: str) -> None:
+        """该席跑通即销故障记录（充值/修好后自愈的落点：下一次成功就不再有跳过窗）。"""
+        rt = _read_for_merge(self.runtime_path, _empty_runtime())
+        face = rt.get(RUNTIME_SEAT_FAIL_KEY)
+        if not isinstance(face, dict):
+            return
+        seats = face.get(tier)
+        if not isinstance(seats, dict) or seat not in seats:
+            return
+        rest = {k: v for k, v in seats.items() if k != seat}
+        face = dict(face)
+        if rest:
+            face[tier] = rest
+        else:
+            face.pop(tier, None)
+        rt[RUNTIME_SEAT_FAIL_KEY] = face
+        _atomic_write(self.runtime_path, rt)
+        self.runtime[RUNTIME_SEAT_FAIL_KEY] = face
 
     def merge_runtime_models(
-        self, resolved: dict[str, str]
+        self, resolved: dict[str, Any]
     ) -> dict[str, dict[str, Any]]:
-        """把解析出的档位映射合并写进**运行态**文件（跟踪配置一个字节不碰）。
+        """把解析出的档位链合并写进**运行态**文件（跟踪配置一个字节不碰）。
 
         读-改-写与 :meth:`save` 同纪律：落盘前重读磁盘，只更新 ``models_resolved`` 里
         出现的档，其余档与会话池原样保留（会话池每跳都在被别的进程改写）。
 
         Args:
-            resolved: 档 → 型号（本次 --list-models 解析出的值）。
+            resolved: 档 → 席位链（本次 --list-models 解析出的值；单值写也归一成链）。
 
         Returns:
-            ``{tier: {"old": 运行态旧值|None, "new": 新值}}``，只含**确实变了**的档；
-            无变化时不写盘并返回 ``{}``（免 churn）。
+            ``{tier: {"old": 运行态旧值|None, "new": 新链}}``，只含**确实变了**的档；
+            无变化时不写盘并返回 ``{}``（免 churn）。比较按**归一后的链**做，免得
+            ``"a"`` 与 ``["a"]`` 被当成两回变化。
         """
         rt = _read_for_merge(self.runtime_path, _empty_runtime())
         face = rt.get(RUNTIME_MODELS_KEY)
         face = dict(face) if isinstance(face, dict) else {}
+        normalized = {tier: normalize_seats(value) for tier, value in resolved.items()}
         changed = {
-            tier: {"old": face.get(tier), "new": value}
-            for tier, value in sorted(resolved.items())
-            if face.get(tier) != value
+            tier: {"old": face.get(tier), "new": seats}
+            for tier, seats in sorted(normalized.items())
+            if normalize_seats(face.get(tier)) != seats
         }
         if not changed:
             return {}
-        face.update({tier: resolved[tier] for tier in changed})
+        face.update({tier: normalized[tier] for tier in changed})
         rt[RUNTIME_MODELS_KEY] = face
         _atomic_write(self.runtime_path, rt)
         self.runtime[RUNTIME_MODELS_KEY] = face
         return changed
+
+    def merge_runtime_seat_names(self, names: dict[str, str]) -> None:
+        """把「席 → 人类名」反查表并进运行态（只增不删，UUID 稳定无须清理）。"""
+        if not names:
+            return
+        rt = _read_for_merge(self.runtime_path, _empty_runtime())
+        face = rt.get(RUNTIME_SEAT_NAMES_KEY)
+        face = dict(face) if isinstance(face, dict) else {}
+        if all(face.get(seat) == name for seat, name in names.items()):
+            return
+        face.update(names)
+        rt[RUNTIME_SEAT_NAMES_KEY] = face
+        _atomic_write(self.runtime_path, rt)
+        self.runtime[RUNTIME_SEAT_NAMES_KEY] = face
 
     @property
     def checks(self) -> dict[str, dict[str, Any]]:
@@ -842,25 +1055,62 @@ def parse_model_catalog(output: str) -> dict[str, str]:
     return catalog
 
 
-def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
-    """按 --list-models 刷新档位映射的**运行态面**（跟踪 registry.json 一个字节不写）。
+def split_model_tables(
+    raw_chains: dict[str, Any] | None, raw_patterns: dict[str, Any] | None
+) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """把配置面的档位模板拆成（档 → 人类名链, 名 → 档规则）。
 
-    以 model_patterns（registry.json 可覆盖 :data:`DEFAULT_MODEL_PATTERNS`）**精确匹配**
-    人类名；命中且该档在跟踪面**无人写值**时，解析值合并进 sessions-runtime.json 的
-    ``models_resolved``（gitignored，见 :meth:`Registry.merge_runtime_models`）。
+    ``model_patterns`` 历史上**两种写法并存**（backlog 20261012-211500-leader 收口）：真实
+    ``registry.json`` 写的是**名→档**倒表（``{"Qwen3.8-Flash": "flash"}``），文档与单测却按
+    **档→名**模板用它（``{"max": "Qwen3.8-Flash"}``）。旧实现把两张表直接 merge 成一张，
+    倒表的键被当成档位名 ⇒ 每个 drain 都报一堆 ``Qwen3.8-Flash←flash`` 的假「未命中」。
+    分流判据：值是**已知档名** ⇒ 名→档规则；否则 ⇒ 档→名模板（单值或链皆可）。
+
+    Returns:
+        ``(templates, rules)``：templates 已含 :data:`DEFAULT_MODEL_CHAINS` 打底，
+        rules 是补充的 名→档 断言（供 :func:`refresh_models` 查串档冲突）。
+    """
+    known = set(TIER_KEYS) | {f"{tier}_fallback" for tier in TIER_KEYS}
+    templates: dict[str, list[str]] = {
+        tier: list(names) for tier, names in DEFAULT_MODEL_CHAINS.items()
+    }
+    for tier, names in (raw_chains or {}).items():
+        templates[str(tier)] = normalize_seats(names)
+        known.add(str(tier))
+    rules: dict[str, str] = {}
+    for key, value in (raw_patterns or {}).items():
+        name = str(key)
+        if not isinstance(value, (list, tuple)) and str(value) in known:
+            rules[name] = str(value)  # 名→档（历史倒表）
+            continue
+        templates[name] = normalize_seats(value)  # 档→名（模板写法）
+        known.add(name)
+    return templates, rules
+
+
+def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
+    """按 --list-models 刷新档位**回退链**的运行态面（跟踪 registry.json 一个字节不写）。
+
+    以链模板（:data:`DEFAULT_MODEL_CHAINS`，``registry.json`` 的 ``model_chains``/
+    ``model_patterns`` 可覆盖）**精确匹配**人类名，逐席解析成 UUID/内置名；该档在跟踪面
+    **无人写值**时，解析出的整条链合并进 sessions-runtime.json 的 ``models_resolved``
+    （gitignored，见 :meth:`Registry.merge_runtime_models`）。顺带把「席→人类名」写进
+    ``model_seat_names``，让告警面能报名字而不是裸 UUID。
 
     为什么不写跟踪面（backlog 20261012-080410-devops 方案 A）：自愈每个 drain 都跑，写
     registry.json 就把 main 工作区周期改脏——任何碰 registry 的 worktree 交付在 merge
     前检查即被拦（本单自身即受害者），且 ``models`` 按 charter 属护栏级、机器静默改写
     本身越权。故跟踪值优先遮蔽解析值，遮蔽情况报进返回值 ``shadowed``（要换档由人决定：
-    改跟踪值，或删掉该键让机器接管）。
+    改跟踪值，或删掉该键让机器接管）。合并粒度是**整条链**，运行态值不会往人写的链中间插席。
 
-    未命中的档**保持现值不清空**——目录缺名多为账户瞬时状态，宁旧勿空（清空 max 会
-    静默改变计费渠道）。
+    目录里缺的名**跳过该席、其余照旧**（未命中的档保持现值不清空——目录缺名多为账户瞬时
+    状态，宁旧勿空；清空 max 会静默改变计费渠道）。因此「跟踪链含账户已摘除的席」只报
+    ``missing``、不报 ``shadowed``（那不是人能改的漂移，报了反而淹没真信号）。
 
     Returns:
         ``{"changed": {tier: {"old":…, "new":…}}, "missing": ["tier←名"…],
-        "shadowed": {tier: {"tracked":…, "resolved":…}}, "catalog_size": n}``。
+        "shadowed": {tier: {"tracked":…, "resolved":…}},
+        "conflicts": ["名∈档A，规则说档B"…], "catalog_size": n}``。
 
     Raises:
         ValueError: 目录解析为空（输出格式变化/exe 异常）；
@@ -870,27 +1120,60 @@ def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
     if not catalog:
         raise ValueError("--list-models 输出解析为空目录（格式变化或 exe 异常？）")
     reg = Registry.load()
-    patterns = {**DEFAULT_MODEL_PATTERNS, **reg.data.get("model_patterns", {})}
-    tracked = reg.data.get("models", {})
+    templates, rules = split_model_tables(
+        reg.data.get("model_chains"), reg.data.get("model_patterns")
+    )
+    tracked = reg.data.get("models") or {}
     missing: list[str] = []
     shadowed: dict[str, dict[str, Any]] = {}
-    machine: dict[str, str] = {}
-    for tier, name in patterns.items():
-        if name not in catalog:
-            missing.append(f"{tier}←{name}")
+    machine: dict[str, list[str]] = {}
+    seat_names: dict[str, str] = {}
+    resolved_names: dict[str, set[str]] = {}
+    for tier, names in sorted(templates.items()):
+        seats: list[str] = []
+        tier_names: set[str] = set()
+        dropped = False
+        for name in names:
+            if not name:
+                seats.append("")  # 不传 -m 的裁决席：目录里没有它，原样占一席
+                continue
+            tier_names.add(name)
+            if name not in catalog:
+                missing.append(f"{tier}←{name}")
+                dropped = True
+                continue
+            seats.append(catalog[name])
+            seat_names[catalog[name]] = name
+        resolved_names[tier] = tier_names
+        if not seats:
             continue
-        value = catalog[name]
+        if dropped and not any(seats):
+            # 链里的真名**一个都没**在目录里命中，只剩「不传 -m」的占位席。那不是解析结果，
+            # 写成运行态等于替人裁决这一档（且每个 drain 都在无意义 churn）→ 保持现值。
+            continue
+        seats = dedupe_seats(seats)
         if tier in tracked:
-            # 人写的覆盖优先，机器不碰；值不同只在 shadowed 里点名（别静默顶掉裁决）
-            if tracked[tier] != value:
-                shadowed[tier] = {"tracked": tracked[tier], "resolved": value}
+            # 人写的覆盖优先，机器不碰；只在**账户席齐全**时才比对，否则差异来自缺名而非漂移
+            human = normalize_seats(tracked[tier])
+            if not dropped and human != seats:
+                shadowed[tier] = {"tracked": tracked[tier], "resolved": seats}
             continue
-        machine[tier] = value
+        machine[tier] = seats
+    # 名→档 规则与模板链互相矛盾 = 串档（#74 教训的正牌哨兵：Mimo 被塞进 minimum 之外之类）。
+    # 一席在同档的多条链里出现（Qwen3.8-Flash 同时在 flash 与 minimum）不算矛盾：规则说的
+    # 档**属于**它出现的档集就是自洽的，否则历史倒表每跑一次都刷一遍假警报。
+    conflicts: list[str] = []
+    for name, tier in sorted(rules.items()):
+        members = {other for other, names in resolved_names.items() if name in names}
+        if members and tier not in members:
+            conflicts.append(f"{name}∈{'、'.join(sorted(members))}，规则说 {tier}")
     changed = reg.merge_runtime_models(machine) if machine else {}
+    reg.merge_runtime_seat_names(seat_names)
     return {
         "changed": changed,
         "missing": missing,
         "shadowed": shadowed,
+        "conflicts": conflicts,
         "catalog_size": len(catalog),
     }
 
@@ -979,19 +1262,29 @@ __all__ = [
     "BACKUP_NAME",
     "DEFAULT_JURY",
     "DEFAULT_MODELS",
+    "DEFAULT_MODEL_CHAINS",
+    "DEFAULT_MODEL_FALLBACK",
     "DEFAULT_TOKENS_PER_CHAR",
     "Member",
     "ORCHESTRATION_ROOT",
     "REGISTRY_PATH",
     "RUNTIME_MODELS_KEY",
     "RUNTIME_NAME",
+    "RUNTIME_SEAT_FAIL_KEY",
+    "RUNTIME_SEAT_NAMES_KEY",
     "Registry",
     "SEAT_REQUIRED_KEYS",
     "STATE_REL_PATH",
+    "TIER_KEYS",
+    "dedupe_seats",
     "dirty_tracked_state",
+    "model_tier_rules",
     "normalize_seat",
+    "normalize_seats",
     "orchestration_rel",
     "pod_session_key",
     "pod_sessions_dir",
+    "refresh_models",
     "resolve_exe",
+    "split_model_tables",
 ]
