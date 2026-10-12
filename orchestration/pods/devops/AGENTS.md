@@ -13,13 +13,13 @@
 
 - **worktree 内跑测试/CLI 的环境选法（2026-10-12 定型，backlog 20261012-023430-devops）**：
   `PYTHONPATH="<wt>/src" uv run --no-sync pytest "<wt>/tests" -q` 复用主 `.venv`，**前提
-  =cwd 在 worktree 之外**——cd 进去时 uv 就地新建空 `<wt>/.venv`，缺 pyyaml 即 import 崩
-  （曾被误记成「此法必崩」）；配方与兜底法见技能 `references/worktree-merge.md` §1。副作用：
-  `pysci.paths.PROJECT_ROOT` 就近找 `pyproject.toml`，故 state/PODS 指向 **worktree** 副本——
-  跑 sync/drain 会改其 `state/*.json`（backlog.json 被跟踪！），实验后
-  `git checkout -- orchestration/state/…` 还原。工具已承认此副作用（backlog
-  20261012-094646-devops）：跨树自检放行该配方（`PROJECT_ROOT` 在脚下树内且 `.git` 是文件），
-  免 `--force`；mdgen-check 相对入参按 `PROJECT_ROOT` 解析。
+  =cwd 在 worktree 之外**——cd 进去时 uv 就地新建空 `<wt>/.venv`，缺 pyyaml 即 import 崩；
+  配方与兜底法见技能 `references/worktree-merge.md` §1。副作用：`pysci.paths.PROJECT_ROOT`
+  就近找 `pyproject.toml`，故 state/PODS 指向 **worktree** 副本——跑 sync/drain 改的是其
+  `state/*.json`（backlog.json 被跟踪！），实验后 `git checkout -- orchestration/state/…`
+  还原。工具已承认此副作用（backlog 20261012-094646-devops）：跨树自检放行该配方
+  （`PROJECT_ROOT` 在脚下树内且 `.git` 是文件），免 `--force`；mdgen-check 相对入参锚
+  `PROJECT_ROOT`。
 - **档位映射自愈写运行态、不写跟踪面（2026-10-12，backlog 20261012-080410-devops）**：
   `refresh_models` 落 `sessions-runtime.json` 的 `models_resolved`，读取按「跟踪 > 运行态 >
   出厂默认」回退，跟踪值遮蔽解析值时只报不写。细则与脏跟踪面哨兵见技能
@@ -29,15 +29,15 @@
   对 main 即正确；但 **pod 内部署副本是 gitignored、不随合并搬运**，合并后仍须在 main 跑
   `pysci-dev sync` 至 `sync --check` 全等；doctor 哨兵 [*]=台账哈希漂移、[!]=副本漂移。
 - **uvx 型 MCP server 的 mcp 2.x 断供（2026-10-10 修，backlog 20261010-paper-search-mcp-down）**：
-  SDK 2.x 移除了 `mcp.server.fastmcp`，上游依赖写 `mcp>=x` 无上限的 uvx server 解析到 2.x 即启动崩、
-  pod 侧只见 ✗ Disconnected。**修法**：mcp.json args 前插 `["--with", "mcp<2", ...]` 钉住
-  （lit/reviewer/deputy，commit 40058e4）。诊断 `echo '' | uvx <pkg>` 看 traceback；
-  验证=initialize 握手见 serverInfo 即通。
-- **`uv sync` 遇运行中 exe 锁：重命名占用者，勿杀进程（2026-10-12）**：Windows 能重命名运行中的
-  exe 但不能删——sync 报「拒绝访问 (os error 5)」时**已先把其余入口删掉**（裸命令集体 MISSING）。
-  `wmic process where ProcessId=N get CommandLine` 找占用者（本次=组长 `orch watch`）→
-  `mv .venv/Scripts/pysci-orch.exe{,.x}` → sync 即成、入口全数重建。别 kill 组长进程
-  （越权且阻塞 drain）。
+  SDK 2.x 移了 `mcp.server.fastmcp`，上游 `mcp>=x` 无上限的 uvx server 解析到 2.x 即启动崩、pod 侧
+  只见 ✗ Disconnected。**修法**：mcp.json args 前插 `["--with", "mcp<2", ...]` 钉住（lit/reviewer/
+  deputy，commit 40058e4）；诊断 `echo '' | uvx <pkg>` 看 traceback，验证=握手见 serverInfo。
+- **主树 `uv sync` 一律走 `pysci-dev venv-sync`（2026-10-12 固化，backlog 20261012-114239-devops）**：
+  uv 撞运行中 exe（典型=组长 orch watch）会**先删光其余入口**再报 os error 5。工具=让路→sync→
+  **让回原地**→核对入口（缺即 rc=2）；**原名缺失时 `.locked-*` 就是唯一原件，删前先查**。坑：
+  `uv run pysci-X` 的**隐式 sync** 会让工具本体都跑不起来，自救走
+  `.venv/Scripts/python.exe -m pysci.skills.devops.tools.dev venv-sync`；别 kill 组长进程；
+  锁判据与三态处置见技能 `references/uv-venv-sync.md`。
 - **任务书轻量 lint 规则表由 devops 维护（2026-10-10 建，backlog 20261010-084105-devops）**：
   `write_taskbook` 落盘前扫正文，命中 `state/taskbook-lint.json`（git 跟踪）里任一规则正则即
   **告警但不阻断**；增补=往 `rules` 追加 `{id, re, hint}`（re 为 Python 正则、JSON 内反斜杠
@@ -68,10 +68,9 @@
   （写 `**/*.md` 会连 `basic.md` 公约数一起吞掉；勿把 pod 自建规则命名成 `leader-only*`）。
   其余细则（零技能 pod 裁定、注册面）见技能 `references/pod-scaffold.md`。
 - **agentsMdExcludes 生效性机械哨兵（2026-10-10 建，backlog 20261010-165408-devops）**：
-  doctor 验不出 CLI 真按 glob 排除，`pysci-dev probe` 在 Temp 造 fixture：两枚 always_on 规则带
-  不可猜 token，control 与 withexclude 各跑一跳做**因果断言**（不灵敏只报 inconclusive、不误绿）；
-  结论落**无时间戳**台账 `state/agents-md-excludes-probe.json`（staleness=hash{cli_version,排除面}，
-  仅 CLI 升级或排除面变时复测），doctor 读它定三档。
+  doctor 验不出 CLI 真按 glob 排除，`pysci-dev probe` 在 Temp 造带不可猜 token 的 fixture，control 与
+  withexclude 各跑一跳做**因果断言**（不灵敏只报 inconclusive、不误绿）；结论落**无时间戳**台账
+  `state/agents-md-excludes-probe.json`（staleness=hash{cli_version,排除面}），doctor 读它定三档。
 - **交付协议滚动升级窗口（2026-10-12 E1 → backlog 002857 已修）**：派发进程 import 的解析器快照
   可能早于协议（旧版只认字面 `<tag>`）；现 parse_delivery 宽松兜底救回带属性交付并附
   「解析器早于协议」告警（进 outcome/run 日志）——见告警就重跑本单确认。
