@@ -17,6 +17,7 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     ... orch sessions <member> [--all|--archive SID [--distill]|--prune SID]
     ... orch ledger [--member --days --stats] | sync [--check]
     ... orch jury <case-file> [--dry] [--timeout S]   # Tier C 仲裁团（REFACTOR §4）
+    ... orch taste <case-file> [--dry]        # twin 审美判断通道（宪章生效后可用，§9）
 
 长任务纪律：dispatch / plan run 应以 Bash 工具的 run_in_background 启动（README §4.5
 等待模型）；orch 自身同步阻塞等待组员进程属预期（进程级等待，零 token）。
@@ -30,9 +31,11 @@ import sys
 from . import drain as _drain
 from . import eval as _eval
 from . import jury as _jury
+from . import mirror as _mirror
 from . import plans as _plans
 from . import sessions as _sessions
 from . import sync as _sync
+from . import taste as _taste
 from . import watch as _watch
 from . import workflow as _workflow
 from .dispatch import do_dispatch
@@ -118,6 +121,14 @@ def cmd_status(args: argparse.Namespace) -> int:
         f"== 队列 == 待审批建议={len(sugg)}  backlog待办={len(back)}  "
         f"待附送回复={replies_n}"
     )
+    # 用户经 pysci-mirror 口述的**行动指令**：与偏差报告「纠正现有结果」同类，
+    # 必须写任务书派 devops、不得 override（REFACTOR §5.4/§10）。不入本视野就等于
+    # 没有队列——组长侧可见性是这条强制链的唯一执法点。
+    pend = _mirror.pending_directives()
+    if pend:
+        print(f"  [!] mirror 行动指令待派发={len(pend)}（强制，不得 override）")
+        for r in pend[:5]:
+            print(f"    [指令] {r['ts']} {str(r.get('text', ''))[:60]}")
     for p in sugg:
         print(f"  [建议] {p.stem}")
     for b in back[:5]:
@@ -735,6 +746,9 @@ def main(argv: list[str] | None = None) -> int:
         help="整体等待上限秒数（覆盖 registry.jury.deadline_s，默认 300=5 min）",
     )
     p.set_defaults(func=_jury.cmd_jury)
+
+    # ---- taste：twin 审美判断通道（REFACTOR §9 / E6-prep）----
+    _taste._add_parser(sub)
 
     # ---- eval：Tier B harness 压测套件（REFACTOR §3 / E2）----
     p = sub.add_parser(
