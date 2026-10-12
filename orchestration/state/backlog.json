@@ -972,11 +972,14 @@
       "kind": "defect",
       "success_criteria": "孤儿会话场景单测双路径绿；真实接管出现第四面回收或异名重建行；既有机制不回归；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-184000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T18:37:16+08:00",
-      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
-      "started_at": "2026-10-12T18:58:38+08:00",
-      "worktree": "20261012-184000-leader"
+      "note": "drain 批量销账（commit 899b8b2）",
+      "started_at": "2026-10-13T05:41:17+08:00",
+      "worktree": "20261012-184000-leader",
+      "done_at": "2026-10-13T06:37:40+08:00",
+      "batch_size": 2,
+      "batch_seed": "20261012-184000-leader"
     },
     {
       "id": "20261012-164601-leader",
@@ -985,12 +988,15 @@
       "kind": "usability",
       "success_criteria": "解析三例阳性；journal 行数对账；v2 草案落盘且生效面未动 taste_enabled=false；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-164601-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T16:46:41+08:00",
-      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
+      "note": "drain 批量销账（commit 4b60aea）",
       "effort": "high",
-      "started_at": "2026-10-12T19:32:11+08:00",
-      "worktree": "20261012-164601-leader"
+      "started_at": "2026-10-13T06:37:40+08:00",
+      "worktree": "20261012-164601-leader",
+      "done_at": "2026-10-13T07:17:59+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-164601-leader"
     },
     {
       "id": "20261012-170000-leader",
@@ -999,11 +1005,11 @@
       "kind": "defect",
       "success_criteria": "- 真实重跑「fig-basic A/B（相邻提交对 b2e5b358→89a93c3）」→ 两副本各真跑\n（台账各新增一行 runner=bencher kind=ab 读数）→ 输出二元判决或\ninconclusive+窗口证据，二者必居其一，绝无 1.3s-done-无判决形状；\n- done-无证据→failed 的机械判据单测全绿；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170000-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T16:58:42+08:00",
       "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
       "effort": "medium",
-      "started_at": "2026-10-12T19:21:19+08:00",
+      "started_at": "2026-10-13T07:17:59+08:00",
       "worktree": "20261012-170000-leader"
     },
     {
@@ -1076,11 +1082,14 @@
       "kind": "defect",
       "success_criteria": "synthetic 三特征阳性用例四段绿；真实故障表现为一次 CHANNEL-STOP 非逐单烧账；quota 不回归；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-194500-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T19:44:58+08:00",
-      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
+      "note": "drain 批量销账（commit 05335c4）",
       "started_at": "2026-10-12T20:04:32+08:00",
-      "worktree": "20261012-194500-leader"
+      "worktree": "20261012-194500-leader",
+      "done_at": "2026-10-13T06:37:40+08:00",
+      "batch_size": 2,
+      "batch_seed": "20261012-184000-leader"
     },
     {
       "id": "20261012-191512-devops",
@@ -1310,6 +1319,17 @@
       "done_at": "2026-10-13T05:07:35+08:00",
       "batch_size": 2,
       "batch_seed": "insp-20261013-045553-mechanical"
+    },
+    {
+      "id": "20261013-060000-leader",
+      "member": "leader",
+      "summary": "**（循环改进，用户 2026-10-13 05:5x 审查裁决）修复形状分流 + 回退 ctx 水位闸**",
+      "kind": "defect",
+      "success_criteria": "65% 会话续用实测；remedy_shape 双类阳性用例；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-060000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T07:25:28+08:00",
+      "note": ""
     }
   ]
 }
