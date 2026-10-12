@@ -3,7 +3,7 @@
 对 ``tools/`` 下各模块（config/check/blender/tripo_client）做薄编排，
 用一条命令驱动双管线闭环的每一步::
 
-    uv run pysci-model3d doctor
+    uv run --no-sync pysci-model3d doctor
     ... model3d new gain_ep sample_holder --kind print
     ... model3d build src/pysci/research/gain_ep/models/sample_holder.py --strict-volume
     ... model3d check data/research/1_gain_ep/models/sample_holder/stl/sample_holder.stl --expect-bbox 40,20,8
@@ -159,11 +159,13 @@ def cmd_new(args: argparse.Namespace) -> int:
     print("\n下一步：")
     if args.kind == "print":
         print(f"  1) 编辑 {script_path}（填入设计参数与几何，单位毫米）")
-        print(f"  2) uv run pysci-model3d build '{script_path}' --strict-volume")
+        print(
+            f"  2) uv run --no-sync pysci-model3d build '{script_path}' --strict-volume"
+        )
         print("  3) build 会自动串跑验收门；通过后再 `render --mesh` 出概念图")
     else:
         print(f"  1) 编辑 {script_path}（Blender 场景脚本：材质/灯光/相机）")
-        print(f"  2) uv run pysci-model3d render '{script_path}'")
+        print(f"  2) uv run --no-sync pysci-model3d render '{script_path}'")
     return 0
 
 
@@ -361,8 +363,12 @@ def cmd_tripo(args: argparse.Namespace) -> int:
     print(
         "下一步（打印用途须过验收门，云生成网格通常**非流形**，需 Blender 重拓/修网格）："
     )
-    print(f"  uv run pysci-model3d check '{glb}' --no-watertight   # 渲染用途仅体检")
-    print(f"  uv run pysci-model3d render --mesh '{glb}'            # 快速预览")
+    print(
+        f"  uv run --no-sync pysci-model3d check '{glb}' --no-watertight   # 渲染用途仅体检"
+    )
+    print(
+        f"  uv run --no-sync pysci-model3d render --mesh '{glb}'            # 快速预览"
+    )
     return 0
 
 

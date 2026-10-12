@@ -22,7 +22,7 @@ hands you a skeleton plus a spec. You (or the Agent) fill in the real numbers.
 ## What `imagine bridge` does
 
 ```powershell
-uv run pysci-imagine bridge --ref <reference.png> --research <line> --slug <figN_name> `
+uv run --no-sync pysci-imagine bridge --ref <reference.png> --research <line> --slug <figN_name> `
     [--style aps|nature] [--width single|double] [--template single|multi_panel|concept_plus_data] `
     [--n 6] [--palette-name NAME] [--no-copy-ref] [--overwrite]
 ```
@@ -56,7 +56,7 @@ next steps.
 When you just want the hexes (no scaffolding), or to sanity-check a reference first:
 
 ```powershell
-uv run pysci-imagine palette --src <reference.png> --n 6
+uv run --no-sync pysci-imagine palette --src <reference.png> --n 6
 ```
 
 Prints dimensions/orientation/brightness and the dominant hex palette. Pure Pillow, offline, no key,
@@ -101,21 +101,21 @@ palette.color(0, "my-ref")  # by index into the registered palette
 #    --size takes 1K/2K/3K/4K or an explicit WxH. No --seed here on purpose: Ark does **not**
 #    guarantee the same image from the same prompt+seed, so a seed is not a reproduction handle —
 #    curating the winner into gallery/ is (see SKILL.md “Cost rule”).
-uv run pysci-imagine gen --prompt 'elegant journal cover: chiral edge states, glowing arcs, deep navy, minimalist, no text' --size 2K --research gain_ep --slug ref_cover
+uv run --no-sync pysci-imagine gen --prompt 'elegant journal cover: chiral edge states, glowing arcs, deep navy, minimalist, no text' --size 2K --research gain_ep --slug ref_cover
 
 # 2. LOOK at it (visual check) — Read the PNG the command printed
 
 # 3. Peek at its palette (optional)
-uv run pysci-imagine palette --src data/research/1_gain_ep/article/artwork/ref_cover.png --n 6
+uv run --no-sync pysci-imagine palette --src data/research/1_gain_ep/article/artwork/ref_cover.png --n 6
 
 # 4. Bridge it into a real figure pipeline
-uv run pysci-imagine bridge --ref data/research/1_gain_ep/article/artwork/ref_cover.png --research gain_ep --slug fig1_cover --palette-name gain-cover --style aps --width double
+uv run --no-sync pysci-imagine bridge --ref data/research/1_gain_ep/article/artwork/ref_cover.png --research gain_ep --slug fig1_cover --palette-name gain-cover --style aps --width double
 
 # 5. Fill in REAL data: edit src/pysci/research/gain_ep/article/figures/fig1_cover.py
 #    (design_spec.md in the figure dir tells you the hexes + layout to aim for)
 
 # 6. Build + Read the preview, compare against _reference.png, iterate
-uv run pysci-figures build data/research/1_gain_ep/article/figures/fig1_cover
+uv run --no-sync pysci-figures build data/research/1_gain_ep/article/figures/fig1_cover
 #    → Read data/research/1_gain_ep/article/figures/fig1_cover/out/fig1_cover_preview.png
 ```
 

@@ -63,8 +63,8 @@ alwaysApply: true
 ## 5. 环境与代码约定
 
 - **Python 3.13.15**（`.python-version` 与 `requires-python` 锁定），**uv** 管理唯一 `.venv`，
-  `pysci` 以 editable 方式装入。运行统一用 `uv run python ...` / `uv run pytest`；
-  增删依赖改 `pyproject.toml` 后 `uv sync`。
+  `pysci` 以 editable 方式装入。运行统一用 `uv run --no-sync python ...` / `uv run --no-sync pytest`
+  （口径同 §3）；增删依赖改 `pyproject.toml` 后走 `pysci-dev venv-sync`（§3 的入口锁坑）。
 - ❌ 禁止 `sys.path.insert(...)` hack 与脆弱的 `Path(__file__).parents[N]` 层级硬编码。
   资产路径统一走 `pysci.paths`：`PROJECT_ROOT` / `ASSET_ROOT` / `research_asset_dir(name)` /
   `research_fig_dir·theory_dir·artwork_dir·model_dir` / `ORCHESTRATION_ROOT` /

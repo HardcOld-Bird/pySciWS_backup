@@ -48,15 +48,24 @@ def _fake_run(monkeypatch, rc: int = 0, out: str = "253 passed"):
 
 
 def test_repo_shipped_registry_has_orch_tests_check():
-    """随附 registry.json 必含 orch-tests，cmd 为 uv run pytest tests/skills/orchestration -q。
+    """随附 registry.json 必含 orch-tests，cmd 为 uv run --no-sync pytest tests/skills/orchestration -q。
 
     护栏：devops 类交付声明 check="orch-tests" 时若随附注册缺失，run_checks 会走
-    unrouted 分支静默放行——本测试在 CI 层面钉住「随附必须真注册」。
+    unrouted 分支静默放行——本测试在 CI 层面钉住「随附必须真注册」。--no-sync 是
+    纪律面：机械验收由派发进程逐跳执行，裸 uv run 的隐式 sync 在 Windows 上会撞
+    运行中 exe 的锁并先删光其余入口（backlog 20261012-125455-devops）。
     """
     data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     spec = data.get("checks", {}).get("orch-tests")
     assert spec is not None, "随附 registry.json 应注册 orch-tests"
-    assert spec["cmd"] == ["uv", "run", "pytest", "tests/skills/orchestration", "-q"]
+    assert spec["cmd"] == [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest",
+        "tests/skills/orchestration",
+        "-q",
+    ]
 
 
 def test_repo_shipped_registry_keeps_figure_audit_check():
@@ -102,6 +111,7 @@ def test_run_checks_routes_orch_tests_without_path_placeholder(monkeypatch):
     assert calls[0]["argv"] == [
         "uv",
         "run",
+        "--no-sync",
         "pytest",
         "tests/skills/orchestration",
         "-q",
@@ -135,6 +145,7 @@ def test_registry_load_save_roundtrip_preserves_orch_tests(tmp_path, monkeypatch
     assert after["checks"]["orch-tests"]["cmd"] == [
         "uv",
         "run",
+        "--no-sync",
         "pytest",
         "tests/skills/orchestration",
         "-q",

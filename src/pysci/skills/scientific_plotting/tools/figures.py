@@ -3,7 +3,7 @@
 对 ``tools/`` 下各模块（config/style/palette/layout/export/runner/audit/scaffold）做薄编排，
 让我（Agent）与用户都能用一条命令驱动出版级插图的闭环::
 
-    uv run pysci-figures doctor
+    uv run --no-sync pysci-figures doctor
     ... figures styles
     ... figures new gain_ep fig1_ep_band --style aps --width double
     ... figures build data/research/1_gain_ep/article/figures/fig1_ep_band
@@ -136,7 +136,7 @@ def cmd_new(args: argparse.Namespace) -> int:
     )
     print("\n下一步：")
     print(f"  1) 编辑 {pipeline} 里的 build_figure()（替换示例数据为真实数据）")
-    print(f"  2) uv run pysci-figures build '{figdir}'")
+    print(f"  2) uv run --no-sync pysci-figures build '{figdir}'")
     print(
         f"  3) Read 产出的 {figdir / 'out' / (args.slug + '_preview.png')} 做视觉校验"
     )

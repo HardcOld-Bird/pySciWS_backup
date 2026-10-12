@@ -773,7 +773,7 @@ worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专
 
 ## 11. CLI 调用范式（全员统一）
 
-实测（2026-10-07）：三种范式同速可用（裸 exe 路径 / `uv run pysci-X` /
+实测（2026-10-07）：三种范式同速可用（裸 exe 路径 / `uv run --no-sync pysci-X` /
 `uv run --no-sync`，0.6~0.75 s）；裸关键字此前失败仅因 `.venv/Scripts` 不在 PATH。
 
 **已实施（用户授权的全局改动）**：`~/.bashrc` 追加一行
@@ -781,12 +781,14 @@ worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专
 （Git Bash 自动补建了 `~/.bash_profile` 加载链）——**新开的 Qoder 会话**（含 headless
 pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 
-配套纪律（写入 charter 与组长技能）：
-- 首选裸 `pysci-X <子命令>`；命令不存在时 fallback `uv run pysci-X`（**裸名只试一次，
+配套纪律（写入 basic.md §3、charter 与技能真本——**四面同口径**）：
+- 首选裸 `pysci-X <子命令>`；命令不存在时 fallback `uv run --no-sync pysci-X`（**裸名只试一次，
   禁止反复重试**——历史重试的根因即裸名失败循环与 PowerShell 陷阱）；
-- orch/dev 内部子进程调用统一用 `uv run pysci-X`（不依赖会话环境快照，最稳健）；
-- 组员 Bash 即 Git Bash，避免 PowerShell（basic.md §3 的引号/编码陷阱）；
-- 旧会话环境快照不含新 PATH——迁移期（Phase 1 前）以 `uv run` 为准。
+- orch/dev 内部子进程调用统一 `uv run --no-sync pysci-X`（不依赖会话环境快照，最稳健）；
+- **改 `pyproject.toml`（含新增 console script/依赖）后必须先 `pysci-dev venv-sync`**：不带
+  `--no-sync` 的裸 `uv run` 会先隐式 sync，Windows 上撞运行中 exe 的锁并**先删光其余入口**，
+  造成工具面集体失联（2026-10-12 实测；细则与自救配方 `orchestration/skills/devops/references/uv-venv-sync.md`）；
+- 组员 Bash 即 Git Bash，避免 PowerShell（basic.md §3 的引号/编码陷阱）。
 
 ---
 
@@ -856,8 +858,8 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 - [x] `orchestration/pods/devops/`：charter（worktree/git 纪律/巡检职责）、devops 技能
       真本+部署、`src/pysci/skills/devops/` + `pysci-dev`（doctor/sync/worktree）；
       registry 注册（max 档 + extra_dirs=项目根）
-- [x] worktree venv 策略**实测定型：PYTHONPATH 覆盖法**——`PYTHONPATH=<wt>/src uv run
-      --no-sync pytest <wt>/tests`（复用主 .venv，worktree 代码优先；1452 项收集 7.5 s，
+- [x] worktree venv 策略**实测定型：PYTHONPATH 覆盖法**——
+      `PYTHONPATH=<wt>/src uv run --no-sync pytest <wt>/tests`（复用主 .venv，worktree 代码优先；1452 项收集 7.5 s，
       全量 45 s）；worktree 内裸 uv run 不可用（无环境）；仅依赖变更时才 `uv sync
       --project <wt>`（重）。已写入 devops 技能
 - [x] **首个完整改进循环实战**：backlog 队首（figures new 路径打印缺陷）→ orch
@@ -1003,11 +1005,11 @@ POD="orchestration/pods/figure"
 
 --- 交付协议：最终回复须含 <result> 或 <blocked>（互斥），可附 <infra_suggestion>；
 产物用 <artifact check=...> 声明。" \
-  --session-id "$(uv run python -c 'import uuid;print(uuid.uuid4())')" \
+  --session-id "$(uv run --no-sync python -c 'import uuid;print(uuid.uuid4())')" \
   --name "任务slug" -m <型号> --max-turns 50 -o json > /tmp/envelope.json 2>&1
-uv run python -c "import json;print(json.load(open('/tmp/envelope.json'))['result'])"
+uv run --no-sync python -c "import json;print(json.load(open('/tmp/envelope.json'))['result'])"
 ```
 
 审批回复附送：把 `orchestration/state/replies/<member>/*.md` 内容拼进 -p 文本。
-机械验收手动运行：按 check 类型对应各 CLI 审计子命令（如 `uv run pysci-figures audit
+机械验收手动运行：按 check 类型对应各 CLI 审计子命令（如 `uv run --no-sync pysci-figures audit
 <产物>`）。台账手工补记（credits/耗时见 envelope 字段，Phase 0 确认字段名）。

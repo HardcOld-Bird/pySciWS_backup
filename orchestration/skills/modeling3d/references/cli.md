@@ -1,6 +1,6 @@
 # modeling3d CLI 全量参考
 
-`uv run pysci-model3d <cmd> -h` 永远是最新真值源；本文件补充语义与排障。
+`uv run --no-sync pysci-model3d <cmd> -h` 永远是最新真值源；本文件补充语义与排障。
 
 ## 命令全表
 

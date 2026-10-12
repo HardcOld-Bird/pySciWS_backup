@@ -13,7 +13,7 @@ license 场景下这带来两个决定性好处：
 代价：Qoder 不再替你拉起服务端（URL 型注册只负责连接），必须有人保证它在跑。本模块把这件事
 收口成一个**幂等**命令::
 
-    uv run pysci-simulation mcp ensure
+    uv run --no-sync pysci-simulation mcp ensure
 
 不在跑就脱离终端派生一个，在跑就直接复用并回报状态。SKILL.md 把它固化为"调用任何 comsol MCP
 工具之前的第 0 步"，于是 LLM 无需理解 transport / license / 派生细节即可安全使用。

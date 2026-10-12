@@ -1,7 +1,7 @@
 """smoke_model3d/test_part — 端到端冒烟测试件（build123d）。
 
 单位：毫米（mm）。几何：40×20×5 底板 + 双 φ3 通孔 + 中央 φ10×3 凸台（φ4 通孔）+ 竖边 0.8 倒角。
-执行：uv run pysci-model3d build 本文件 --strict-volume --expect-bbox 40,20,8
+执行：uv run --no-sync pysci-model3d build 本文件 --strict-volume --expect-bbox 40,20,8
 """
 
 from pathlib import Path

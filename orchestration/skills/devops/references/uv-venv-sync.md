@@ -78,9 +78,9 @@ pysci-dev venv-sync [--offline 等转发给 uv sync 的参数]
 
 ## 5. 谁能把它跑起来（半坏态自救的关键一环）
 
-`uv run pysci-X` 会**先隐式 sync 项目环境**再执行。所以 pyproject 一变，这条隐式 sync
-自己就撞同一把锁——而且**工具本体根本没被跑起来**（2026-10-12 main 实测：
-`uv run pysci-dev venv-sync` 只吐出 uv 的一行 `failed to remove file ... pysci-orch.exe:
+**不带 `--no-sync` 的裸 `uv run`** 会**先隐式 sync 项目环境**再执行。所以 pyproject 一变，这条隐式 sync
+自己就撞同一把锁——而且**工具本体根本没被跑起来**（2026-10-12 main 实测：裸 `uv run` 敲
+`pysci-dev venv-sync`，只吐出 uv 的一行 `failed to remove file ... pysci-orch.exe:
 拒绝访问 (os error 5)`，rc=2，`.venv/Scripts` 当场少掉 6 个入口）。入口被删光时
 `pysci-dev.exe` 自己也在被删之列，于是「用新工具救火」这条路的正确走法是**绕开 uv**：
 

@@ -5,7 +5,7 @@
 
 ## Tests
 
-`uv run pytest tests/skills/document_writing -q` (53 tests; the TeX-degradation test skips when TeX
+`uv run --no-sync pytest tests/skills/document_writing -q` (53 tests; the TeX-degradation test skips when TeX
 **is** installed, the LibreOffice-degradation test skips when LibreOffice is, and the
 `test_pandoc_convert` roundtrips skip when Pandoc is missing — so the pass/skip split shifts with the
 environment). They build throwaway

@@ -20,7 +20,7 @@ headless are not duplicate implementations.
 
 ## Invocation
 
-From the **project root**: `uv run pysci-model3d <command>` (fallback: `uv run --no-sync python -m
+From the **project root**: `uv run --no-sync pysci-model3d <command>` (fallback: `uv run --no-sync python -m
 pysci.skills.modeling3d.tools.model3d`). Prints Chinese — apply `.qoder/rules/basic.md` §3 or read
 mojibake. Config: `MODELING3D_BLENDER` + `TRIPO_API_KEY` in project-root `.env`; `doctor` probes
 everything (Blender exe/version, addon, libs, key validity).

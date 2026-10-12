@@ -30,7 +30,7 @@ Under path C **Qoder only connects to a URL; it no longer starts the server.** O
 owns that — run it first, always:
 
 ```
-uv run pysci-simulation mcp ensure
+uv run --no-sync pysci-simulation mcp ensure
 ```
 
 Already running → reuses it; otherwise spawns one **detached through WMI**, waits for the endpoint,
@@ -54,7 +54,7 @@ first** — each cost a license-holding round trip to learn.
 
 ## Invocation
 
-From the **project root**: `uv run pysci-simulation <command> [options]`, abbreviated below to
+From the **project root**: `uv run --no-sync pysci-simulation <command> [options]`, abbreviated below to
 `simulation …`. (Not installed? `python -m pysci.skills.comsol_simulation.tools.simulation`.)
 
 > **PowerShell:** this CLI prints Chinese — apply `.qoder/rules/basic.md` §3 or you read mojibake.

@@ -3,7 +3,7 @@
 对 ``tools/`` 下各模块（config/cas/numerical/eigen/topology/visualize/session）做薄编排，
 让我（Agent）与用户都能用一条命令驱动理论计算闭环的每一步::
 
-    uv run pysci-theory doctor
+    uv run --no-sync pysci-theory doctor
     ... theory new gain_ep ep_band_analysis
     ... theory run src/pysci/research/gain_ep/theory/ep_band_analysis.py --session ep_band_analysis
     ... theory plot data/research/1_gain_ep/theory/ep_band_analysis/results/data.npz
@@ -177,7 +177,7 @@ def cmd_new(args: argparse.Namespace) -> int:
     print(f"  计算日志 : {notes_path}")
     print("\n下一步：")
     print(f"  1) 编辑 {script_path}（填入物理模型与计算逻辑）")
-    print(f"  2) uv run pysci-theory run '{script_path}' --session {slug}")
+    print(f"  2) uv run --no-sync pysci-theory run '{script_path}' --session {slug}")
     print("  3) Read 产出的 plots/*.png 做视觉校验")
     return 0
 

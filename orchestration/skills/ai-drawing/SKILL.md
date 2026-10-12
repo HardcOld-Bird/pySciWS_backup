@@ -17,9 +17,9 @@ to bring an orchestrator back: [backends.md](references/backends.md). The backen
 
 ## Invocation
 
-From the **project root**: `uv run pysci-imagine <command> [options]`, below `imagine …` (fallback:
+From the **project root**: `uv run --no-sync pysci-imagine <command> [options]`, below `imagine …` (fallback:
 `uv run --no-sync python -m pysci.skills.ai_drawing.tools.imagine …`). This CLI prints Chinese — apply
-`.qoder/rules/basic.md` §3 or you read mojibake. Setup: `ARK_API_KEY=<key>` in the project-root `.env`
+`.qoder/rules/basic.md` §3 or read mojibake. Setup: `ARK_API_KEY=<key>` in project-root `.env`
 ([walkthrough](references/backends-02-provider-options-pluggable.md)); OpenCV / scikit-image operators also
 need `uv pip install -e ".[imaging]"`.
 
@@ -40,8 +40,8 @@ need `uv pip install -e ".[imaging]"`.
   marker-driven editing, layer decomposition. On **this account** only 5.0-flash (default) and 5.0-pro
   are live; coherent groups and direct PNG need delisted tiers. **Never guess capabilities:**
   `imagine models` prints the matrix, `models --live` the catalog (**catalog ≠ activation**).
-- Everything else is **pure Python, offline, keyless** except these seven, which need the `imaging`
-  extra: `fuse` `inpaint` `mask` `morph` `warp` `measure` `align`.
+- Everything else is **pure Python, offline, keyless** except these seven (need the `imaging`
+  extra): `fuse` `inpaint` `mask` `morph` `warp` `measure` `align`.
 
 ## Commands
 

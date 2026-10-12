@@ -4,7 +4,7 @@
 做薄编排，让我（Agent）与用户都能用一条命令驱动
 "云端出图 → 入库记账 → 位图加工 → 视觉校验 → 桥接数据复现"的闭环::
 
-    uv run pysci-imagine doctor
+    uv run --no-sync pysci-imagine doctor
     ... imagine gen --prompt "..." --research gain_ep --slug cover
     ... imagine i2i --image ref.png --prompt "..." --slug v2
     ... imagine mark --src cover.jpg --rect 120,80,400,300 --arrow 900,200,700,400
@@ -1002,7 +1002,7 @@ def cmd_bridge(args: argparse.Namespace) -> int:
         print(f"  已注册调色板：{res['palette_name']}（已绑定图目录 STYLE.yaml）")
     print("\n下一步（视觉闭环）：")
     print(f"  1. 编辑管线填真实数据：{res['pipeline']}")
-    print(f"  2. uv run pysci-figures build '{res['figdir']}'")
+    print(f"  2. uv run --no-sync pysci-figures build '{res['figdir']}'")
     print(f"  3. Read 预览对照范本迭代：{res['figdir']}/out/{args.slug}_preview.png")
     return 0
 
