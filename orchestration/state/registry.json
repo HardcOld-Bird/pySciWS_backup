@@ -4,8 +4,8 @@
   "taste_enabled": false,
   "models": {
     "max": "982ae403-bc5e-4f74-996d-04a9cd66f933",
-    "flash": "ed6f5996-0992-479f-86a8-3f29ce0e794c",
-    "flash_fallback": "Qwen3.8-Flash",
+    "flash": "Qwen3.8-Flash",
+    "flash_fallback": "ed6f5996-0992-479f-86a8-3f29ce0e794c",
     "minimum": "Qwen3.8-Flash"
   },
   "members": {
@@ -180,5 +180,11 @@
         "-q"
       ]
     }
-  }
+  },
+  "model_patterns": {
+    "Qwen3.8-Flash": "flash",
+    "Qwen-3.8-Flash": "flash_fallback",
+    "Qwen-3.8-Max": "max"
+  },
+  "channel_note": "2026-10-12 19:4x BYOK 渠道故障（Custom model service error，疑余额耗尽）：组长临时把 flash 换回内置、BYOK 降回退（model_patterns 同步防自愈翻转）。用户充值/确认后按 #74 裁决换回：flash=BYOK 优先。"
 }

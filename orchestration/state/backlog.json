@@ -972,11 +972,12 @@
       "kind": "defect",
       "success_criteria": "孤儿会话场景单测双路径绿；真实接管出现第四面回收或异名重建行；既有机制不回归；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-184000-leader.md",
-      "status": "in_progress",
+      "status": "needs_leader",
       "proposed": "2026-10-12T18:37:16+08:00",
-      "note": "",
+      "note": "drain 跳过（交付=run_failed）：stop_sequence",
       "started_at": "2026-10-12T18:58:38+08:00",
-      "worktree": "20261012-184000-leader"
+      "worktree": "20261012-184000-leader",
+      "needs_leader_at": "2026-10-12T19:39:30+08:00"
     },
     {
       "id": "20261012-164601-leader",
@@ -985,13 +986,13 @@
       "kind": "usability",
       "success_criteria": "解析三例阳性；journal 行数对账；v2 草案落盘且生效面未动 taste_enabled=false；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-164601-leader.md",
-      "status": "pending",
+      "status": "needs_leader",
       "proposed": "2026-10-12T16:46:41+08:00",
-      "note": "组长再排：blocked 系会话双占用（#76 范围已扩至会话池面），#76 落地后自动消解；devops 明示未开工未销账，原文证据见其交付",
+      "note": "drain 跳过（交付=run_failed）：stop_sequence",
       "effort": "high",
-      "started_at": "2026-10-12T19:15:12+08:00",
+      "started_at": "2026-10-12T19:32:11+08:00",
       "worktree": "20261012-164601-leader",
-      "needs_leader_at": "2026-10-12T19:21:19+08:00"
+      "needs_leader_at": "2026-10-12T19:38:54+08:00"
     },
     {
       "id": "20261012-170000-leader",
@@ -1000,12 +1001,13 @@
       "kind": "defect",
       "success_criteria": "- 真实重跑「fig-basic A/B（相邻提交对 b2e5b358→89a93c3）」→ 两副本各真跑\n（台账各新增一行 runner=bencher kind=ab 读数）→ 输出二元判决或\ninconclusive+窗口证据，二者必居其一，绝无 1.3s-done-无判决形状；\n- done-无证据→failed 的机械判据单测全绿；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170000-leader.md",
-      "status": "in_progress",
+      "status": "needs_leader",
       "proposed": "2026-10-12T16:58:42+08:00",
-      "note": "",
+      "note": "drain 跳过（交付=parse_error）：",
       "effort": "medium",
       "started_at": "2026-10-12T19:21:19+08:00",
-      "worktree": "20261012-170000-leader"
+      "worktree": "20261012-170000-leader",
+      "needs_leader_at": "2026-10-12T19:32:11+08:00"
     },
     {
       "id": "20261012-170300-leader",
@@ -1014,10 +1016,13 @@
       "kind": "defect",
       "success_criteria": "仍触 max_turns=150 腰斩（run_failed tool_use），worktree\n`.qoder/worktrees/20261012-120003-leader` 留 **20 个未提交文件**（inspector pod\n全套、skills 真本、inspectd/workq 引擎、mirror.py 改动、测试）——半成品在险\n态：会话被杀即全损（E1 同款形状，两次实锤）。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170300-leader.md",
-      "status": "pending",
+      "status": "needs_leader",
       "proposed": "2026-10-12T17:02:34+08:00",
-      "note": "",
-      "effort": "xhigh"
+      "note": "drain 跳过（交付=run_failed）：stop_sequence",
+      "effort": "xhigh",
+      "started_at": "2026-10-12T19:38:54+08:00",
+      "worktree": "20261012-170300-leader",
+      "needs_leader_at": "2026-10-12T19:45:17+08:00"
     },
     {
       "id": "20261012-170301-leader",
@@ -1026,10 +1031,13 @@
       "kind": "defect",
       "success_criteria": "- 122624 run：批次 120002(+2)=E4+E5a+E5b 三张大单同会话 → 触顶 150；\n- 同 run：批次 120003(+1)=E5a+E5b → 又触顶（E5a 二次腰斩，20 未提交文件险全损）；\n- 前夜 233336 run：E2(+1) 同形状。组包只按「同提请者+同 effort」聚类，\n完全不估任务体量——聚类维度与风险维度错位。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170301-leader.md",
-      "status": "pending",
+      "status": "needs_leader",
       "proposed": "2026-10-12T17:02:34+08:00",
-      "note": "",
-      "effort": "max"
+      "note": "drain 跳过（交付=run_failed）：stop_sequence",
+      "effort": "max",
+      "started_at": "2026-10-12T19:39:30+08:00",
+      "worktree": "20261012-170301-leader",
+      "needs_leader_at": "2026-10-12T19:45:43+08:00"
     },
     {
       "id": "20261012-171200-leader",
@@ -1038,10 +1046,12 @@
       "kind": "usability",
       "success_criteria": "- 构造/等待一次真实护栏级事项：全程无「等待用户」阻塞，twin 裁决落\ntaste 目录+mirror 可查+执行继续（时间戳对比证明不阻塞）；\n- jury 平票案（E3-prep 判据四留档的挂起案）自动被 twin 终裁收敛到 A/B；\n- `mirror review` 列出上述两案且支持盲审交互（先隐答案）；\n- 最终交付验收点核验仍呈用户（反向用例）；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-171200-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T17:48:36+08:00",
       "note": "",
-      "effort": "ultracode"
+      "effort": "ultracode",
+      "started_at": "2026-10-12T19:45:17+08:00",
+      "worktree": "20261012-171200-leader"
     },
     {
       "id": "20261012-174114-devops",
@@ -1050,10 +1060,34 @@
       "kind": "defect",
       "success_criteria": "三条派生路径（drain/benchd/inspectd）worker stdout/stderr 改 DEVNULL 或 <run>.out 分文件，run 日志仅 _log() 追加语义；阳性断言「worker stdout 非 run 日志 fd」；0463ee2 既有修复不回归；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-174114-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T18:28:08+08:00",
       "note": "",
-      "effort": "medium"
+      "effort": "medium",
+      "started_at": "2026-10-12T19:45:43+08:00",
+      "worktree": "20261012-174114-devops"
+    },
+    {
+      "id": "20261012-194500-leader",
+      "member": "leader",
+      "summary": "**（缺陷类）BYOK 渠道级故障（\"Custom model service error\"）不在系统性失败识别面：不触发回退换档与全局停止，队列连续空烧**",
+      "kind": "defect",
+      "success_criteria": "synthetic 三特征阳性用例四段绿；真实故障表现为一次 CHANNEL-STOP 非逐单烧账；quota 不回归；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-194500-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T19:44:58+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261012-191512-devops",
+      "member": "devops",
+      "summary": "success_criteria: `pysci-dev worktree merge` 的 cp 运行态面不再搬运 `orchestration/state/*.lock`（只搬 `sessions-runtime.json` 等状态文件），且全量 pytest 在 worktree 内不再真派生 inspector worker——判据：merge 输出中不出现 `inspector.lock",
+      "kind": "defect",
+      "success_criteria": "worktree merge 运行态 cp 面不再搬 *.lock（merge 输出无 inspector.lock 行）；pytest tests -q 后 CIM 查无 run_log 落 worktree 树的 _inspect-worker 残留进程；相关单测阳性；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-191512-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T19:46:02+08:00",
+      "note": ""
     }
   ]
 }
