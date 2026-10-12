@@ -229,11 +229,37 @@ def test_main_dry_run_reports_changes_without_touching(tmp_path, monkeypatch, ca
     original = b"cli   \n\n"
     p.write_bytes(original)
 
-    monkeypatch.chdir(tmp_path)
-    rc = mdgen.main(["--dry-run", str(p)])
+    monkeypatch.setattr(mdgen, "PROJECT_ROOT", tmp_path)
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    rc = mdgen.main(["--dry-run", "cli.md"])
 
     assert rc == 0
     assert p.read_bytes() == original
+
+
+def test_main_anchors_relative_paths_to_project_root(tmp_path, monkeypatch, capsys):
+    """跨树配方（cwd 停在主仓、代码面指 worktree）下，相对入参必须按 PROJECT_ROOT 解析。
+
+    否则报的是**脚下那棵树**的字节与 post_sha256——本工具的全部价值（「以钩子终态哈希为
+    内容等价性基准」）当场换成过期树的假基准，且毫无告警。
+    """
+    _patch_run_hook(monkeypatch, lambda h, f: 0)
+    main = tmp_path / "main"
+    wt = tmp_path / "wt"
+    for root, body in ((main, b"MAIN TREE OLD\n"), (wt, b"WT TREE NEW\n")):
+        (root / "docs").mkdir(parents=True)
+        (root / "docs" / "x.md").write_bytes(body)
+
+    monkeypatch.setattr(mdgen, "PROJECT_ROOT", wt)
+    monkeypatch.chdir(main)
+    assert mdgen.main(["docs/x.md"]) == 0
+
+    out = capsys.readouterr().out
+    assert str(wt / "docs" / "x.md") in out, "校验对象必须是代码面那棵树"
+    assert _sha(b"WT TREE NEW\n")[:16] in out
+    assert _sha(b"MAIN TREE OLD\n")[:16] not in out, "不得拿脚下树的哈希冒充基准"
 
 
 def test_main_runtime_error_maps_to_rc_2(tmp_path, monkeypatch, capsys):
@@ -243,6 +269,8 @@ def test_main_runtime_error_maps_to_rc_2(tmp_path, monkeypatch, capsys):
     _patch_run_hook(monkeypatch, side)
     p = tmp_path / "e.md"
     p.write_bytes(b"a\n")
+
+    monkeypatch.setattr(mdgen, "PROJECT_ROOT", tmp_path)
     monkeypatch.chdir(tmp_path)
 
     rc = mdgen.main([str(p)])

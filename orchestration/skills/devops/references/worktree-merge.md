@@ -18,6 +18,11 @@ PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
 - **副作用（可防亦可用）**：`pysci.paths.PROJECT_ROOT` 就近找 `pyproject.toml`，故在 worktree
   内跑 sync/drain 等，读写的是**worktree** 的 `orchestration/state/*.json`（backlog.json 被
   git 跟踪！）。实验后 `git checkout -- orchestration/state/…` 还原，别把无关脏面带进交付。
+- **跨树自检认得这个配方**（backlog 20261012-094646-devops）：护栏拦的是「脚下在 worktree、
+  代码面指外层 main」的事故形状；配方是反方向（脚下主仓、代码面指其下 linked worktree），
+  判据 = `PROJECT_ROOT` 在脚下树之内 **且** `PROJECT_ROOT/.git` 是**文件** → 放行，**不再需要
+  `--force`**。同理 `pysci-dev mdgen-check` 的相对入参与 pre-commit 的 cwd 一律按
+  `PROJECT_ROOT` 解析——按 cwd 解析会拿**另一棵树**的字节当「钩子终态基准」（静默假基准）。
 - 仅当 pyproject 依赖变更才 `uv sync --project "$WT"`（分钟级），之后改用 `$WT/.venv`。
 
 ## 2. 合并前交集检查（backlog 20261012-082932-devops）
