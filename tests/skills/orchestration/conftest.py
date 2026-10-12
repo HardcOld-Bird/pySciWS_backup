@@ -17,6 +17,7 @@ from pysci.skills.orchestration.tools import (
     dispatch,
     drain,
     failure_tags,
+    inspectd,
     journal,
     jury,
     ledger,
@@ -93,6 +94,26 @@ def iso_state(tmp_path, monkeypatch):
     # 脏跟踪面哨兵默认「干净」：不 patch 则 orch status 用例会真跑 ``git status`` 读
     # 开发者工作区，输出随仓库脏净而变（backlog 20261012-080410-devops 方案 C）。
     monkeypatch.setattr(orch, "dirty_tracked_state", lambda **kw: [])
+    # E5a：巡检引擎**内嵌**在 status/approve/dispatch 入口（§7「生命周期由代码保证」），
+    # 所以凡是跑到这三个入口的用例都会试着拉起 worker。默认 no-op 派生 + 六面状态重定向：
+    # 不 patch 就是每个此类用例真起一个后台进程，并把发现台账/迟滞态/开关写进仓库 state。
+    monkeypatch.setattr(inspectd, "_spawn_detached", lambda argv, **kw: None)
+    insp = state / "inspector"
+    monkeypatch.setattr(inspectd, "STATE_DIR", insp)
+    monkeypatch.setattr(inspectd, "FINDINGS_PATH", insp / "findings.jsonl")
+    monkeypatch.setattr(inspectd, "THROTTLE_PATH", insp / "throttle.json")
+    monkeypatch.setattr(inspectd, "QUEUE_PATH", insp / "queue.json")
+    monkeypatch.setattr(inspectd, "EVIDENCE_DIR", insp / "evidence")
+    monkeypatch.setattr(inspectd, "ENABLE_PATH", state / "inspector.enabled")
+    monkeypatch.setattr(
+        inspectd,
+        "INSPECT_PATHS",
+        drain.WorkerPaths(
+            lock=state / "inspector.lock",
+            runs=state / "inspector-runs",
+            cancel=state / "inspector.cancel",
+        ),
+    )
     return state
 
 
@@ -123,6 +144,24 @@ def iso_bench(tmp_path, monkeypatch, iso_state):
 
 def _boom_run_case(*a, **k):
     raise AssertionError("测试不该真跑 eval.run_case（请 patch benchd._eval.run_case）")
+
+
+@pytest.fixture
+def iso_inspect(iso_state, monkeypatch):
+    """巡检引擎用例的基座：在 :func:`iso_state` 的隔离面之上把**让路判定**钉成确定值。
+
+    ``busy_surfaces`` 默认读真实 devops/bencher 锁与 ``plans/*.state.json``——开发者机器
+    上恰好有一个 drain 在跑，测试就会看到 ``stopped=yield`` 而不是预期的 ``budget_hops``。
+    闸门语义本身有专测（patch 到指定 busy 值），其余用例只关心「全闲时引擎该干什么」，
+    故这里默认清空 busy，并让 ``plan_run_active`` 恒假。
+    """
+    monkeypatch.setattr(inspectd, "busy_surfaces", lambda **kw: [])
+    return iso_state
+
+
+def set_inspect_busy(monkeypatch, busy):
+    """把让路面钉成给定清单（测「生产侧忙 → 只读巡检」的闸门语义）。"""
+    monkeypatch.setattr(inspectd, "busy_surfaces", lambda **kw: list(busy))
 
 
 def seed_backlog(state, items):

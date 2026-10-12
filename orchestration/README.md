@@ -39,6 +39,7 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 | **reviewer** | `orchestration/pods/reviewer/` + headless | 会话池 | 期刊审稿人式**主观质量审查**（规范性/美观度/创新性），可执行昂贵文献对比；输出结构化 VERDICT | **默认不启用**——用户点名或组长主动（默认判断为不需要）时才派发 |
 | **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送；**src 测试**（`tests/`、CI、工具实现正确性） | **不使用 orch**（组长专属；REFACTOR §8 授权的 E2 过渡期例外 `orch eval run`/`eval set-baseline` 已随 E4 bencher 上线**退役**，harness 压测职责移交 bencher）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
 | **bencher** | `orchestration/pods/bencher/` + headless | 队列驱动非常驻（§8，`orch bench-*`） | **harness 实测专职工**（REFACTOR §3 Tier B/§8）：套件案卷与基线区所有权、套件运行、基线捕获、副本 A/B、组长/inspector 指派的核查跑；输出二元判决（通过/失败、改善/未改善）与污染识别 | 写权仅 `orchestration/state/evals/**`（案卷/基线/判决），**外部代码树零写权**（设施缺陷提 `<infra_suggestion>` 交 devops，不自己修）；harness 只读层与部署副本不可改；不使用 orch/pysci-dev；完成项走 `orch status` 待查看面，**不即时唤醒组长**；专属 CLI `pysci-bench` |
+| **inspector** | `orchestration/pods/inspector/` + headless | 闲时自主激活（REFACTOR §7，`orch inspector-*`；全局开关默认开、生产活跃时让路） | **闲时巡检员**：按引擎下发的巡检菜单抽查全域（doctor 全域 / transcript 诚实条款 / 自维护层 / 代码走查 / 改进管道自覆盖 / 设计意图一致性 / 设计审查 rubric / 基线缺口），产出 finding 并按类别分流——**机械证据类免判决**晋升 backlog（`source=inspector`）、**判断类必经 J 仲裁**；双队列迟滞节流（§5.2） | 全项目**只读**（代码树零写权；产出只落 `state/inspector/` 与 `state/evals/jury-cases/`）；**无 override 面**（§5.2：CLI 参数表里不存在该项，是代码事实而非纪律条款）；不使用 orch，也不用 pysci-dev 写面（doctor 只读可用）；专属 CLI `pysci-inspect`；**豁口**：`pysci-inspect` 自身不在巡检范围（§0.2）|
 
 **副组长平级协作条款（用户裁决）**：副组长与组长接近平级，不是从属关系。
 - 副组长**有权拒绝**派发任务（须附理由，典型情形：组长对复杂度估计误判）；拒绝经
@@ -47,14 +48,17 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 - 硬性决策上组长保留最终裁定权——本条款目的是扩展组长视野，不是制造对抗。
 
 组员 id：`sim` `figure` `writing` `theory` `lit` `drawing` `model3d`（专职 ×7，一一对应
-7 大技能）；`deputy` `reviewer` `devops` `bencher` `twin`（特殊组员）。
+7 大技能）；`deputy` `reviewer` `devops` `bencher` `twin` `inspector`（特殊组员）。
 
 **「一成员一技能一 CLI」组织模式（用户裁决）**：除副组长与 reviewer 外，每个成员有
 专属技能真本与专属 CLI——7 专职 ↔ 现有 7 个 `pysci-*` CLI；组长 ↔ `orchestration`
 技能 ↔ `pysci-orch`；devops ↔ `devops` 技能 ↔ `pysci-dev`；bencher ↔ `bencher` 技能
 ↔ `pysci-bench`（E4；共享逻辑做库不做新 CLI，故压测/副本机械住在
-`orchestration/tools/{eval,replica,benchd}.py`，`pysci-bench` 只是它的组员侧门面）。
-全部 10 个技能真本统一存 `orchestration/skills/`（§2），按 manifest 部署（部署目标含
+`orchestration/tools/{eval,replica,benchd}.py`，`pysci-bench` 只是它的组员侧门面）；
+inspector ↔ `inspector` 技能 ↔ `pysci-inspect`（E5a；同样共享逻辑做库——巡检引擎、
+闸门与发现管道住在 `orchestration/tools/{inspectd,workq,verdict,jury}.py`，
+`pysci-inspect` 只是组员侧门面）。
+全部 11 个技能真本统一存 `orchestration/skills/`（§2），按 manifest 部署（部署目标含
 项目根与各 pod）。
 
 **拓扑**：星形。组长是唯一调度枢纽，组员间不直接通信（跨域协作由计划接力或副组长

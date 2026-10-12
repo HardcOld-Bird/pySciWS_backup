@@ -53,6 +53,15 @@ __pycache__/
 /orchestration/state/bencher.lock
 /orchestration/state/bencher-runs/
 /orchestration/state/bencher.cancel
+# inspector 巡检引擎运行态（REFACTOR §7/E5a，同一套 git 策略）：巡检队列、发现台账、
+# 迟滞闸当前态、晋升证据正文、互斥锁、run 日志与 .done、协作取消信号。发现要留下的
+# 永久痕迹都已外溢到 backlog.json + preference-journal.jsonl + ledger（晋升面），
+# findings.jsonl 本身是「本轮巡检的过程态」，入库会让 main 工作区每次自主巡检必 dirty。
+/orchestration/state/inspector/
+/orchestration/state/inspector.enabled
+/orchestration/state/inspector.lock
+/orchestration/state/inspector-runs/
+/orchestration/state/inspector.cancel
 # 基线捕获的物理归档（§13 待决 2 的 E4 定案）：manifest.json 入库（=「当时依赖什么」的
 # 答案），pods/ 下的 gitignored 面副本不入库——它随时可由 git + 清单再生。
 /orchestration/state/evals/baselines/*/pods/

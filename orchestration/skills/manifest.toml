@@ -61,3 +61,8 @@ targets = ["orchestration/pods/devops/.qoder/skills"]
 name = "bencher"
 source = "orchestration/skills/bencher"
 targets = ["orchestration/pods/bencher/.qoder/skills"]
+
+[[skills]]
+name = "inspector"
+source = "orchestration/skills/inspector"
+targets = ["orchestration/pods/inspector/.qoder/skills"]

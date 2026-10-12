@@ -149,6 +149,31 @@ DEFAULT_JURY: dict[str, Any] = {
 #: 值非布尔（笔误/字符串）→ 回落 False：这条通道宁可不开，不可误开。
 DEFAULT_TASTE_ENABLED = False
 
+#: inspector 闲时巡检引擎参数（REFACTOR §7/§5.2，E5a）。设计纪律同 :data:`DEFAULT_TIER_A`：
+#: 节流与预算是**成本控制机制**，读不到配置就按出厂值跑（fail-open），不许因笔误停摆。
+#: registry.json 顶层 ``inspector`` 块逐键覆盖。
+#:
+#: - ``max_hops`` / ``wallclock_s`` —— 单次激活的硬预算：到顶自停（§7「预算硬上限」）。
+#: - ``cooldown_s`` —— 两次激活的最小间隔（读最近一次 ``.done``）。没有这一条，组长每敲
+#:   一次 ``orch status`` 都会在内嵌拉起里重新激活一轮，成本按敲击次数放大。
+#: - ``yield_window_s`` —— 「plan run 活跃」的判定窗：计划 ``.state.json`` 的 mtime 距今
+#:   小于此值即认定生产侧在派跳，本轮只跑只读巡检（§7 让路）。
+#: - ``pause_*`` / ``resume_*`` —— 双队列迟滞闸（§5.2 用户裁决 v0.5）：backlog pending 或
+#:   bencher 队列长度**超过** pause 值 → 暂停产出；两者**回落到 resume 值及以下** → 恢复。
+#:   恢复阈值必须严格低于暂停阈值（迟滞防振荡），否则这四键整体回落出厂值并在
+#:   :meth:`Registry.inspector` 的 ``hysteresis_valid`` 里报假 —— 把闸配成 ``pause<=resume``
+#:   等于配了一个每轮都翻转的开关，那不是节流。
+DEFAULT_INSPECTOR: dict[str, Any] = {
+    "max_hops": 3,
+    "wallclock_s": 1800,
+    "cooldown_s": 3600,
+    "yield_window_s": 900,
+    "pause_backlog": 12,
+    "pause_bench": 6,
+    "resume_backlog": 8,
+    "resume_bench": 4,
+}
+
 
 def resolve_exe(registry: dict[str, Any] | None = None) -> Path:
     """定位 qoderclicn 原生 exe（`.cmd` 包装器剥引号，程序化调用必须直连 exe）。
@@ -555,6 +580,56 @@ class Registry:
         就以「用户的声音」对外服务，读错方向必须是关闭而非猜测。
         """
         return self.data.get("taste_enabled") is True
+
+    @property
+    def inspector(self) -> dict[str, Any]:
+        """inspector 巡检引擎参数（见 :data:`DEFAULT_INSPECTOR`，REFACTOR §7/§5.2）。
+
+        逐键 fail-open（非数/非正 → 该键回落默认），但迟滞四键是**成对校验**：
+        ``resume_*`` 必须严格小于 ``pause_*``，否则整对回落出厂值——配成 ``pause<=resume``
+        的闸会在「暂停/恢复」之间每轮翻转，那不再是节流而是抖动。
+
+        Returns:
+            :data:`DEFAULT_INSPECTOR` 的形状，外加 ``hysteresis_valid``（迟滞配置是否成立）。
+        """
+        out: dict[str, Any] = dict(DEFAULT_INSPECTOR)
+        raw = self.data.get("inspector")
+        if not isinstance(raw, dict):
+            raw = {}
+        for key in DEFAULT_INSPECTOR:
+            if key in (
+                "pause_backlog",
+                "pause_bench",
+                "resume_backlog",
+                "resume_bench",
+            ):
+                continue
+            try:
+                value = int(raw.get(key, out[key]))
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                out[key] = value
+        for key in ("pause_backlog", "pause_bench", "resume_backlog", "resume_bench"):
+            try:
+                value = int(raw.get(key, out[key]))
+            except (TypeError, ValueError):
+                continue
+            if value >= 0:
+                out[key] = value
+        out["hysteresis_valid"] = (
+            out["resume_backlog"] < out["pause_backlog"]
+            and out["resume_bench"] < out["pause_bench"]
+        )
+        if not out["hysteresis_valid"]:
+            for key in (
+                "pause_backlog",
+                "pause_bench",
+                "resume_backlog",
+                "resume_bench",
+            ):
+                out[key] = DEFAULT_INSPECTOR[key]
+        return out
 
     @property
     def est_tokens_per_char(self) -> float:

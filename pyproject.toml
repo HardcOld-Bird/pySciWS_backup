@@ -117,6 +117,10 @@ pysci-mirror = "pysci.skills.orchestration.tools.mirror:main"
 # bencher 组员工具（REFACTOR §8，E4）：harness 测量面——跑案/捕获基线/副本 A/B/读数表。
 # 与 dev 一样是「组员自己的 CLI」，复用 orchestration 的 eval/replica 库，不复制判据。
 pysci-bench = "pysci.skills.bencher.tools.bench:main"
+# inspector 组员工具（REFACTOR §7，E5a）：发现登记与分流面——findings 台账读写、
+# 机械证据类免判决晋升、判断类必经 J 仲裁。**没有 override 参数**（§5.2 无自裁面的
+# 代码事实）。队列/预算/让路/迟滞等生命周期闸门在 orch 侧（inspectd），组员碰不到。
+pysci-inspect = "pysci.skills.inspector.tools.inspect:main"
 
 # ------------------------------------------------------------
 # 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra

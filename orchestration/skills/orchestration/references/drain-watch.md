@@ -8,11 +8,14 @@ SKILL.md 的命令面只留一行索引；本文放**为什么**与**踩过的�
 |---|---|---|---|
 | devops drain | `state/backlog.json` | `devops.lock` / `devops-runs/` / `devops.cancel` | `approve` 自动派生 + `orch watch` 事件即时唤醒 |
 | bencher worker（REFACTOR §8/E4） | `state/bencher/queue.json` | `bencher.lock` / `bencher-runs/` / `bencher.cancel` | **择机查看**：终态进 `orch status` 的「待查看」面，不即时打断 |
+| inspector worker（REFACTOR §7/E5a） | `state/inspector/queue.json` | `inspector.lock` / `inspector-runs/` / `inspector.cancel` | **不需要唤醒**：闲时自主激活，拉起内嵌在 status/approve/dispatch |
 
-两者共用 `drain.WorkerPaths`（锁判活、stale 回收、released 墓碑、`.done` 身份三元组、
+三条通道共用 `drain.WorkerPaths`（锁判活、stale 回收、released 墓碑、`.done` 身份三元组、
 协作停止信号）——单 worker 互斥由锁保证，所以获锁一刻仍在 `in_progress` 的条目必是上一任
 被杀死时留下的孤儿，`reset_orphans()`/`reset_orphan_backlog()` 就地复位。
-**新通道不再另写一套事故硬化逻辑**（这是 E4 的实现约束，也是 `WorkerPaths` 存在的全部理由）。
+**新通道不再另写一套事故硬化逻辑**（这是 E4 的实现约束，也是 `WorkerPaths` 存在的全部理由）；
+队列面同理——三套队列的增删/取项/孤儿复位/裁剪都在 `workq.py` 一处（E5a 把 benchd 的
+自研队列改为委派，避免双源漂移）。
 
 ## 2. watch 挂载纪律（2026-10-12 夜航停摆 6h 的教训）
 

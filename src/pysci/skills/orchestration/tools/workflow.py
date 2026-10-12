@@ -651,6 +651,13 @@ def cmd_approve(args) -> int:
 
         _, msg = wake_devops()
         print(f"    {msg}")
+    # 巡检内嵌拉起之三（REFACTOR §7）：审批是组长「把一批工作交出去」的时刻，交完之后的
+    # 空闲正是 inspector 的窗口。让路/迟滞由引擎判定，这里只负责「想起来要试」。
+    from .inspectd import (
+        ensure_inspector,  # 延迟导入：inspectd↔workflow 成环（晋升管道要写 backlog）
+    )
+
+    ensure_inspector()
     return 0
 
 
