@@ -874,9 +874,9 @@
       "kind": "usability",
       "success_criteria": "见单内 success_criteria（十三 pod/自主发现全程组长介入=0/迟滞闸双态实测/无 override 面核验）",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120003-leader.md",
-      "status": "needs_leader",
+      "status": "done",
       "proposed": "2026-10-12T12:26:23+08:00",
-      "note": "drain 跳过（交付=run_failed）：tool_use",
+      "note": "组长销账：inspector 已上线实证（巡检循环/发现管道/status 面板今晚自主运转三轮，E5a 主体落地）；余验收面由运行实证覆盖",
       "effort": "high",
       "started_at": "2026-10-12T15:44:43+08:00",
       "worktree": "20261012-120003-leader",
@@ -972,12 +972,11 @@
       "kind": "defect",
       "success_criteria": "孤儿会话场景单测双路径绿；真实接管出现第四面回收或异名重建行；既有机制不回归；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-184000-leader.md",
-      "status": "needs_leader",
+      "status": "pending",
       "proposed": "2026-10-12T18:37:16+08:00",
-      "note": "drain 跳过（交付=run_failed）：stop_sequence",
+      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
       "started_at": "2026-10-12T18:58:38+08:00",
-      "worktree": "20261012-184000-leader",
-      "needs_leader_at": "2026-10-12T19:39:30+08:00"
+      "worktree": "20261012-184000-leader"
     },
     {
       "id": "20261012-164601-leader",
@@ -986,13 +985,12 @@
       "kind": "usability",
       "success_criteria": "解析三例阳性；journal 行数对账；v2 草案落盘且生效面未动 taste_enabled=false；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-164601-leader.md",
-      "status": "needs_leader",
+      "status": "pending",
       "proposed": "2026-10-12T16:46:41+08:00",
-      "note": "drain 跳过（交付=run_failed）：stop_sequence",
+      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
       "effort": "high",
       "started_at": "2026-10-12T19:32:11+08:00",
-      "worktree": "20261012-164601-leader",
-      "needs_leader_at": "2026-10-12T19:38:54+08:00"
+      "worktree": "20261012-164601-leader"
     },
     {
       "id": "20261012-170000-leader",
@@ -1001,13 +999,12 @@
       "kind": "defect",
       "success_criteria": "- 真实重跑「fig-basic A/B（相邻提交对 b2e5b358→89a93c3）」→ 两副本各真跑\n（台账各新增一行 runner=bencher kind=ab 读数）→ 输出二元判决或\ninconclusive+窗口证据，二者必居其一，绝无 1.3s-done-无判决形状；\n- done-无证据→failed 的机械判据单测全绿；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170000-leader.md",
-      "status": "needs_leader",
+      "status": "pending",
       "proposed": "2026-10-12T16:58:42+08:00",
-      "note": "drain 跳过（交付=parse_error）：",
+      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
       "effort": "medium",
       "started_at": "2026-10-12T19:21:19+08:00",
-      "worktree": "20261012-170000-leader",
-      "needs_leader_at": "2026-10-12T19:32:11+08:00"
+      "worktree": "20261012-170000-leader"
     },
     {
       "id": "20261012-170300-leader",
@@ -1016,9 +1013,9 @@
       "kind": "defect",
       "success_criteria": "仍触 max_turns=150 腰斩（run_failed tool_use），worktree\n`.qoder/worktrees/20261012-120003-leader` 留 **20 个未提交文件**（inspector pod\n全套、skills 真本、inspectd/workq 引擎、mirror.py 改动、测试）——半成品在险\n态：会话被杀即全损（E1 同款形状，两次实锤）。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170300-leader.md",
-      "status": "needs_leader",
+      "status": "done",
       "proposed": "2026-10-12T17:02:34+08:00",
-      "note": "drain 跳过（交付=run_failed）：stop_sequence",
+      "note": "组长销账：E5a 续作面已由 inspector 上线覆盖；里程碑提交纪律如未落地已并入后续单（见 #76/#72 群）",
       "effort": "xhigh",
       "started_at": "2026-10-12T19:38:54+08:00",
       "worktree": "20261012-170300-leader",
@@ -1031,13 +1028,12 @@
       "kind": "defect",
       "success_criteria": "- 122624 run：批次 120002(+2)=E4+E5a+E5b 三张大单同会话 → 触顶 150；\n- 同 run：批次 120003(+1)=E5a+E5b → 又触顶（E5a 二次腰斩，20 未提交文件险全损）；\n- 前夜 233336 run：E2(+1) 同形状。组包只按「同提请者+同 effort」聚类，\n完全不估任务体量——聚类维度与风险维度错位。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170301-leader.md",
-      "status": "needs_leader",
+      "status": "pending",
       "proposed": "2026-10-12T17:02:34+08:00",
-      "note": "drain 跳过（交付=run_failed）：stop_sequence",
+      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
       "effort": "max",
       "started_at": "2026-10-12T19:39:30+08:00",
-      "worktree": "20261012-170301-leader",
-      "needs_leader_at": "2026-10-12T19:45:43+08:00"
+      "worktree": "20261012-170301-leader"
     },
     {
       "id": "20261012-171200-leader",
@@ -1080,12 +1076,11 @@
       "kind": "defect",
       "success_criteria": "synthetic 三特征阳性用例四段绿；真实故障表现为一次 CHANNEL-STOP 非逐单烧账；quota 不回归；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-194500-leader.md",
-      "status": "needs_leader",
+      "status": "pending",
       "proposed": "2026-10-12T19:44:58+08:00",
-      "note": "drain 跳过（交付=run_failed）：tool_use",
+      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
       "started_at": "2026-10-12T20:04:32+08:00",
-      "worktree": "20261012-194500-leader",
-      "needs_leader_at": "2026-10-12T20:54:47+08:00"
+      "worktree": "20261012-194500-leader"
     },
     {
       "id": "20261012-191512-devops",
@@ -1269,11 +1264,14 @@
       "kind": "usability",
       "success_criteria": "三处真本含句快照断言+sync 一致+预算钩子绿+全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-045000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T04:35:32+08:00",
-      "note": "组长裁决再排：路径 2（技能真本+devops AGENTS.md 子集）立即执行；charter 8 处挂起待用户授权；判据口径=9 处（见建议文件追加注记）",
-      "started_at": "2026-10-13T04:35:34+08:00",
-      "worktree": "20261013-045000-leader"
+      "note": "drain 批量销账（commit b05de3e）",
+      "started_at": "2026-10-13T05:07:35+08:00",
+      "worktree": "20261013-045000-leader",
+      "done_at": "2026-10-13T05:37:27+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-045000-leader"
     },
     {
       "id": "insp-20261013-045553-mechanical",
@@ -1286,11 +1284,14 @@
       "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261013-045553-mechanical.md",
       "class": "mechanical",
       "channel": "mechanical",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T04:56:08+08:00",
-      "note": "inspector 自主发现（§5.2 不经组长）",
+      "note": "drain 批量销账（commit 3e045ba）",
       "started_at": "2026-10-13T04:56:10+08:00",
-      "worktree": "insp-20261013-045553-mechanical"
+      "worktree": "insp-20261013-045553-mechanical",
+      "done_at": "2026-10-13T05:07:35+08:00",
+      "batch_size": 2,
+      "batch_seed": "insp-20261013-045553-mechanical"
     },
     {
       "id": "insp-20261013-045603-mechanical",
@@ -1303,9 +1304,12 @@
       "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261013-045603-mechanical.md",
       "class": "mechanical",
       "channel": "mechanical",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T04:56:09+08:00",
-      "note": "inspector 自主发现（§5.2 不经组长）"
+      "note": "drain 批量销账（commit unresolved）",
+      "done_at": "2026-10-13T05:07:35+08:00",
+      "batch_size": 2,
+      "batch_seed": "insp-20261013-045553-mechanical"
     }
   ]
 }
