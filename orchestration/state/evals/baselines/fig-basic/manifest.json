@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "case": "fig-basic",
+  "ref": "HEAD",
+  "commit": "c814a1b2399e79de61881e72ce914f15db06a4bc",
+  "captured_at": "2026-10-12T16:47:30+08:00",
+  "pods": [
+    "figure"
+  ],
+  "files": [
+    {
+      "path": "orchestration/pods/figure/.qoder/skills/scientific-plotting/SKILL.md",
+      "bytes": 8161,
+      "sha256": "27ca731632a7f218"
+    },
+    {
+      "path": "orchestration/pods/figure/.qoder/skills/scientific-plotting/references/plotting-01-overview.md",
+      "bytes": 7837,
+      "sha256": "2f421b994ccf42b6"
+    },
+    {
+      "path": "orchestration/pods/figure/.qoder/skills/scientific-plotting/references/plotting-02-cli-argument-forms-avoid-the-n.md",
+      "bytes": 1286,
+      "sha256": "bdc5009f6ef5806d"
+    },
+    {
+      "path": "orchestration/pods/figure/.qoder/skills/scientific-plotting/references/plotting.md",
+      "bytes": 746,
+      "sha256": "ba9b967386590fba"
+    }
+  ],
+  "archive_tracked": false
+}

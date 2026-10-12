@@ -860,7 +860,7 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120002-leader.md",
       "status": "done",
       "proposed": "2026-10-12T12:26:23+08:00",
-      "note": "drain 跳过（交付=run_failed）：tool_use…｜组长代收官：会话触 150 轮上限未合并，代码完整零交集，合并+sync+doctor+队列生命周期实测+runner 字段实锤；A/B 实测进行中",
+      "note": "drain 跳过（交付=run_failed）：tool_use…｜组长代收官：会话触 150 轮上限未合并，代码完整零交集，合并+sync+doctor+队列生命周期实测+runner 字段实锤；A/B 实测进行中｜更正：判据四 A/B 未达（副本空壳完成，见 #70 缺陷单立案销账）——判据一/二/三仍实锤",
       "effort": "high",
       "started_at": "2026-10-12T13:21:39+08:00",
       "worktree": "20261012-120002-leader",
@@ -943,6 +943,17 @@
       "proposed": "2026-10-12T16:46:41+08:00",
       "note": "",
       "effort": "high"
+    },
+    {
+      "id": "20261012-170000-leader",
+      "member": "leader",
+      "summary": "**（缺陷类）bencher 副本 A/B 空壳完成：副本就绪后未派发案运行即标 done，无二元判决落账**",
+      "kind": "defect",
+      "success_criteria": "- 真实重跑「fig-basic A/B（相邻提交对 b2e5b358→89a93c3）」→ 两副本各真跑\n（台账各新增一行 runner=bencher kind=ab 读数）→ 输出二元判决或\ninconclusive+窗口证据，二者必居其一，绝无 1.3s-done-无判决形状；\n- done-无证据→failed 的机械判据单测全绿；全量无回归。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-170000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T16:58:42+08:00",
+      "note": ""
     }
   ]
 }
