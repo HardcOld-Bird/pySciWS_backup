@@ -60,12 +60,13 @@
   结论落 `state/agents-md-excludes-probe.json`（staleness={cli_version,排除面}）。
 - **交付协议滚动升级窗口（2026-10-12 E1）**：派发进程 import 的解析器快照可能早于协议；
   parse_delivery 宽松兜底救回带属性交付并附「解析器早于协议」告警——见告警就重跑本单。
-- **协议词表三面执法＋双源漂移（2026-10-12）**：`<blocked tags>` 与 `<infra_suggestion kind>`
+- **协议词表四面执法＋双源漂移（2026-10-12）**：`<blocked tags>` 与 `<infra_suggestion kind>`
   词表只有一份=`state/failure-tags.json`（Python `failure_tags.load_*()` 与 Node gate 同读，增补
-  改文件不改代码）。kind 三面缺一即漏网：gate **逐块**校验并拦多块交付（解析器只取第一块）、
-  dispatch 落盘前复核、approve 入队前复核。**双源漂移同族坑**：approve 用块内解析器（跳首空行前
+  改文件不改代码）。kind 四面缺一即漏网：gate **逐块**校验并拦多块交付（解析器只取第一块）、
+  dispatch 落盘前复核、approve 入队前复核、**读数面 ledger**（backlog 20261012-132138-devops：
+  `infra_suggestion` 判「已入库」而非「文本里有块」，被词表闸拦下的跳行尾打 `建议✗未入库`——
+  分裂要可见，不是静默抹掉）。**双源漂移同族坑**：approve 用块内解析器（跳首空行前
   扫 `kind:`）、入库用全文扫描器 ⇒ 正文以空行开头的提案判据取空即被拒（回显 `kind=` 空即此症）。
-  **提案前问：还有第四面吗。**
 - **直跑 guard 探针的假绿坑（2026-10-12 两度踩）**：env 名是 **`PYSCI_POD`**（不是 PYSCI_POD_DIR），
   写错名⇒只读层形同虚设，拦截与对照都 exit 0；载荷填 `last_assistant_message`（guard 不读
   transcript_path）；`PYSCI_PROJECT_ROOT` 须 `cygpath -w` 形态（`/tmp` 被 node 当 `D:\tmp`→ENOENT→

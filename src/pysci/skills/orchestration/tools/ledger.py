@@ -35,9 +35,11 @@ class LedgerEntry:
     kind: str = ""  # result | blocked | parse_error | run_failed
     checks: list[dict[str, Any]] = field(default_factory=list)
     infra_suggestion: bool = False
-    # E0-B（判据 2）：非空 infra_suggestion 的 kind（defect/usability/""）——旧行无此字段→""。
-    # 与 infra_suggestion 布尔并存：后者答「有没有建议」，本字段答「建议属哪一类」，
-    # 供台账侧统计提案分布、也随交付落盘一份可追溯记录。
+    # 本字段=**已入库**（审批队列里有对应条目），不是「交付文本里出现过那个块」；
+    # 非法/缺失 kind 的块会被 dispatch._persist_suggestion 挡在队列外，此时本字段为假。
+    # E0-B（判据 2）：本行建议的 kind 属性原值（defect/usability/非法串/""）——旧行无此
+    # 字段→""。两字段合起来才读得全：kind 非空而未入库=被词表闸拒掉的那一跳，呈现面据此
+    # 打「建议✗未入库」。供台账侧统计提案分布、也随交付落盘一份可追溯记录。
     infra_kind: str = ""
     # E1（REFACTOR §2）：<blocked tags="a,b"> 解析出的失败标签（受控词表见
     # state/failure-tags.json）。空列表=未标注（合法缺省）；旧行无此字段→[]。

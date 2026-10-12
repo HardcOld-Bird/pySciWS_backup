@@ -25,13 +25,19 @@ from pathlib import Path
 import pytest
 
 from pysci.paths import ORCH_STATE_ROOT, ORCHESTRATION_ROOT
-from pysci.skills.orchestration.tools import dispatch, failure_tags, workflow
+from pysci.skills.orchestration.tools import (
+    dispatch,
+    failure_tags,
+    ledger,
+    orch,
+    workflow,
+)
 from pysci.skills.orchestration.tools.failure_tags import (
     DEFAULT_INFRA_KINDS,
     load_infra_kinds,
 )
 
-from .conftest import seed_raw_suggestion
+from .conftest import envelope, fake_headless, seed_raw_suggestion
 
 GUARD = ORCHESTRATION_ROOT / "guards" / "delivery-gate.mjs"
 VOCAB_FILE = ORCH_STATE_ROOT / "failure-tags.json"
@@ -272,3 +278,81 @@ def test_suggestions_flags_shell_even_with_valid_kind(iso_state):
     assert "[!] 空壳建议" in workflow.suggestion_marks(
         (iso_state / "suggestions" / f"{sid}.md").read_text(encoding="utf-8")
     )
+
+
+# ---------------------------------------------------------------------------
+# ⑥ 读数面：台账「建议✓」⟺ 审批队列里有这一条（backlog 20261012-132138-devops）
+# ---------------------------------------------------------------------------
+BAD_BLOCK = (
+    '<infra_suggestion kind="defusability-placeholder">placeholder</infra_suggestion>'
+)
+GOOD_BLOCK = (
+    '<infra_suggestion kind="defect">修复面：台账建议字段改判「已入库」，'
+    "与审批队列同真同假，组长照读数找提案不会落空。</infra_suggestion>"
+)
+NO_BLOCK = "<result>交付正文，本跳没提提案。</result>"
+
+
+@pytest.fixture
+def hop_reads(iso_dispatch, monkeypatch, capsys):
+    """真跑一跳，返回三个各自独立的读数：台账字段 / 队列文件 / 两个 CLI 的打印。
+
+    断言走**呈现面**而不是私有函数——口径分裂正是在呈现面上伤人的：组长读
+    ``orch ledger`` 见「建议✓」再去 ``orch suggestions`` 找，找不到就以为设施丢了件。
+    """
+    queue = iso_dispatch / "suggestions"
+    monkeypatch.setattr(workflow, "SUGGESTIONS_DIR", queue)
+
+    def read(body: str) -> dict:
+        fake_headless(
+            monkeypatch,
+            lambda n, cmd: envelope(body, is_error=False, stop="end_turn", rc=0),
+        )
+        dispatch.do_dispatch("quotamember", text="提案", quiet=True, no_checks=True)
+        capsys.readouterr()
+        orch.cmd_ledger(argparse.Namespace(member=None, days=0, stats=False, tail=5))
+        ledger_out = capsys.readouterr().out
+        workflow.cmd_suggestions(argparse.Namespace())
+        sugg_out = capsys.readouterr().out
+        return {
+            "row": ledger.read_all()[-1],
+            "queue": sorted(p.stem for p in queue.glob("*.md")),
+            "ledger_out": ledger_out,
+            "sugg_out": sugg_out,
+        }
+
+    return read
+
+
+def test_illegal_kind_hop_shows_no_suggestion_on_either_face(hop_reads):
+    r = hop_reads(NO_BLOCK + BAD_BLOCK)
+    assert r["row"].infra_suggestion is False, "未入库的块不得点亮台账建议字段"
+    assert r["row"].infra_kind == "defusability-placeholder", (
+        "分类原值仍要留档（可追溯）"
+    )
+    assert r["queue"] == []
+    assert "建议✓" not in r["ledger_out"]
+    assert "建议✗未入库" in r["ledger_out"], "分裂要可见，不是静默抹掉那一跳提过案"
+    assert "无待审批建议" in r["sugg_out"]
+
+
+def test_filed_kind_hop_shows_suggestion_on_both_faces(hop_reads):
+    r = hop_reads(NO_BLOCK + GOOD_BLOCK)
+    assert r["row"].infra_suggestion is True
+    assert len(r["queue"]) == 1
+    assert "建议✓" in r["ledger_out"] and "✗" not in r["ledger_out"]
+    assert r["queue"][0] in r["sugg_out"], "两个读数面要指向同一条提案"
+
+
+@pytest.mark.parametrize("block", [BAD_BLOCK, GOOD_BLOCK], ids=["未入库", "已入库"])
+def test_ledger_field_and_queue_entry_are_same_truth_value(hop_reads, block):
+    """§12 判据要求的不变量本身：台账建议字段 ⟺ 队列存在条目，同真同假。"""
+    r = hop_reads(NO_BLOCK + block)
+    assert bool(r["row"].infra_suggestion) == bool(r["queue"])
+
+
+def test_hop_without_suggestion_is_not_marked(hop_reads):
+    """没提提案的跳：既不显示 ✓ 也不显示 ✗——「未入库」只属于真的提过却被闸拦下的跳。"""
+    r = hop_reads(NO_BLOCK)
+    assert r["row"].infra_suggestion is False and r["row"].infra_kind == ""
+    assert "建议" not in r["ledger_out"]
