@@ -97,8 +97,8 @@ bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
   非空须立即终裁；入 backlog 后**自动唤醒 devops FIFO**（锁忙不重复唤醒，单项失败标
   needs_leader 跳过）；护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
 - **挂 `orch watch` 等事件**（照 [NEXT]，`run_in_background`）：watch 必须是该后台调用的
-  **唯一顶层命令**（嵌进 `&`/`&&`/管道会被父任务连坐杀死，2026-10-12 夜航停摆 6h）；
-  挂载纪律与 `bench-*` 要领见 `references/drain-watch.md`；
+  **唯一顶层命令**（嵌进 `&`/`&&`/管道会被父任务连坐杀死）；
+  挂载纪律与 `bench-*` 见 references/drain-watch.md、salvage-reclaim.md（抢救面）；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：修改任务书重派，或行使最终裁定权
   坚持原派（理由留痕台账）；
 - 交接处决策：一键继续 / plan amend 改后续 / drop 中止。

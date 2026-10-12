@@ -6,8 +6,8 @@
 工具发起**（外部进程无法向 TUI 注入通知），故硬化到能硬的那一层：
 
 - **事件判定全在代码**（本模块）：读状态文件 + Python 侧 ``_pid_alive``（不起 shell，
-  故 MSYS 路径转换问题免疫），五类事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
-  NEEDS-LEADER / QUEUE-COMPLETE。
+  故 MSYS 路径转换问题免疫），六类事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
+  NEEDS-LEADER / QUEUE-COMPLETE / SALVAGE。
 - **挂载提示由代码在唤醒当刻注入**：``wake_devops`` / ``approve`` / ``--from-backlog``
   的输出固定追加 :func:`mount_lines`，组长在需要等待的那一刻被明确告知挂什么命令。
 
@@ -65,13 +65,15 @@ MIN_INTERVAL_S: int = 1
 HEARTBEAT_GRACE_FACTOR: int = 3
 HEARTBEAT_GRACE_S: int = 60
 
-#: 事件优先级（同刻多事件时取首个为主事件，其余以「同时」附注）。
+#: 事件优先级（同刻多事件时取首个为主事件，其余以「同时」附注）。SALVAGE 排最后：
+#: 它是「进度已保住、队列已自动接上」的知会，不要求组长动手，不该盖住真要处理的信号。
 PRIORITY: tuple[str, ...] = (
     "CRASH",
     "QUOTA-STOP",
     "CHANNEL-STOP",
     "NEEDS-LEADER",
     "QUEUE-COMPLETE",
+    "SALVAGE",
 )
 
 #: run 日志里的额度类全局停止痕迹（drain 在触发全局停止前打 ``[Q]`` 行）。日志判定
@@ -172,11 +174,11 @@ def _systemic_runs(
 
 
 def snapshot() -> dict[str, Any]:
-    """当前 drain 观察面快照（五类事件的判据原料）。
+    """当前 drain 观察面快照（六类事件的判据原料）。
 
     字段全部为「身份 + 状态」，供 :func:`detect` 做**基线差分**：崩溃与系统性故障以
     run 名为身份（同一 run 不重复报，新 run 再报），完成以 (名, completed, count)
-    三元组为身份，needs_leader 以条目 id 集合为身份。
+    三元组为身份，needs_leader 与抢救续作分别以条目 id 集合为身份。
     """
     lock = _drain.lock_status()
     done = _drain.latest_done()
@@ -189,6 +191,9 @@ def snapshot() -> dict[str, Any]:
             for i in _workflow.backlog_by_status("needs_leader")
             if i.get("id")
         }
+    )
+    salvaged = sorted(
+        {str(i.get("id", "")) for i in _workflow.backlog_salvage() if i.get("id")}
     )
     systemic = _systemic_runs(lock_run, done_name, done)
     return {
@@ -204,6 +209,7 @@ def snapshot() -> dict[str, Any]:
         "done_count": int((done or {}).get("count", 0) or 0),
         "done_elapsed_s": (done or {}).get("elapsed_s", "?"),
         "needs_leader": needs,
+        "salvage": salvaged,
         "pending": len(_workflow.backlog_pending()),
         "quota_run": systemic.get("quota_exhausted", ""),
         "channel_run": systemic.get("channel_error", ""),
@@ -366,6 +372,20 @@ def detect(
                     "subject": bid,
                     "detail": "drain 判定该条目须组长处理（已跳过，不阻塞队列）",
                     "action": "查 state/backlog.json 的 note 后重派 / 改任务书 / 上报用户",
+                }
+            )
+
+    # 抢救知会（backlog 20261012-234000-leader）：上次尝试的未收尾进度已被机器保住并
+    # 自动接上了——这是「不必动手」的知会，报一次即可，队列自己在续完。
+    seen_salvage = set(base.get("salvage") or [])
+    for bid in cur.get("salvage") or []:
+        if bid not in seen_salvage:
+            out.append(
+                {
+                    "event": "SALVAGE",
+                    "subject": bid,
+                    "detail": "上次尝试的未收尾进度已抢救为提交，续作已自动接上（零手动）",
+                    "action": "无需处置；想核实现场：orch status 的抢救段 / state/backlog.json",
                 }
             )
 
@@ -660,7 +680,7 @@ def mount_lines(*, indent: str = "", header: bool = True) -> list[str]:
         first,
         f"  {watch_argv()}",
         "  命中单行退出：CRASH / QUOTA-STOP / CHANNEL-STOP / NEEDS-LEADER <id> / "
-        "QUEUE-COMPLETE；超时无事件打印 TIMEOUT。",
+        "QUEUE-COMPLETE / SALVAGE <id>；超时无事件打印 TIMEOUT。",
         "  ⚠ 必须作为后台 Bash 调用的**唯一顶层命令**——禁止用 `&`/`&&`/管道把它嵌进"
         "其他命令：父任务终结会连坐杀死等待器，事件命中也没有唤醒通道"
         "（2026-10-12 夜航停摆 6h 的直接成因）。",

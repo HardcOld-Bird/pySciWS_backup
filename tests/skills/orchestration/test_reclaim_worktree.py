@@ -1,9 +1,13 @@
 """孤儿 worktree 清理 + 崩溃信号（backlog 20261010-reclaim-worktree-cleanup）。
 
 死 worker 在 worktree 内中途被杀 → 残留 wt-<id> worktree+branch，重派 worktree add 撞名
-失败。本组钉住：take_first 记 worktree 名入条目；reclaim 孤儿后 drain 顺带 force-remove
-worktree + branch -D + prune 兜底（只清孤儿名，不碰活跃/手动 worktree）；lock_status 据
-「stale 锁有无对应 .done」置 crashed，供 orch status 区分崩溃 vs 干净完成。
+失败。本组钉住：take_first 记 worktree 名入条目；reclaim 孤儿后 drain **先判脏再收尾**
+（backlog 20261012-234000-leader）：确认干净的原样 force-remove + branch -D + prune 兜底，
+没能确认干净的先打抢救提交、面与分支都不删（抢救单测见 test_salvage_recovery.py）；
+lock_status 据「stale 锁有无对应 .done」置 crashed，供 orch status 区分崩溃 vs 干净完成。
+
+git 读数一律走 :class:`conftest.GitFaces`（按面台账自洽应答）——全绿桩会把每一面都判成
+「证据未知 → 保守不删」，那样「干净面照旧销毁」这一支根本测不到。
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ import json
 from pysci.skills.orchestration.tools import dispatch, drain, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import read_backlog, seed_backlog
+from .conftest import GitFaces, read_backlog, seed_backlog
 
 
 # ---------------------------------------------------------------------------
@@ -34,33 +38,36 @@ def test_task_text_instructs_worktree_name():
 
 
 # ---------------------------------------------------------------------------
-# cleanup_orphan_worktrees（mock _run_git，不触真实 git）
+# cleanup_orphan_worktrees 的「干净」通路（不回归）
 # ---------------------------------------------------------------------------
-def test_cleanup_removes_each_name_and_prunes(iso_state, monkeypatch):
-    calls = []
-    monkeypatch.setattr(drain, "_run_git", lambda *a: calls.append(a) or (0, ""))
+def test_cleanup_removes_each_name_and_prunes(iso_state, monkeypatch, tmp_path):
+    """两面都**确认干净**（无未提交、不领先 main）→ 逐字沿用旧的销毁行为。"""
+    git = GitFaces(tmp_path / "worktrees").patch(monkeypatch)
+    git.face("a1").face("a2")
     cleaned = drain.cleanup_orphan_worktrees(["a1", "a2"])
     assert cleaned == ["a1", "a2"]
-    assert ("branch", "-D", "wt-a1") in calls
-    assert ("branch", "-D", "wt-a2") in calls
-    removes = [c for c in calls if c[:3] == ("worktree", "remove", "--force")]
+    assert ("branch", "-D", "wt-a1") in git.calls
+    assert ("branch", "-D", "wt-a2") in git.calls
+    removes = [c for c in git.calls if c[:3] == ("worktree", "remove", "--force")]
     assert len(removes) == 2
     assert all(r[3].replace("\\", "/").endswith(("/a1", "/a2")) for r in removes)
-    assert ("worktree", "prune") in calls  # 兜底清悬挂管理项
+    assert ("worktree", "prune") in git.calls  # 兜底清悬挂管理项
+    assert git.commits == [], "干净面不该被打成抢救提交"
 
 
-def test_cleanup_fail_open_when_nothing_removed(iso_state, monkeypatch):
+def test_cleanup_fail_open_when_nothing_removed(iso_state, monkeypatch, tmp_path):
     """worktree 与 branch 都不存在（git 全非零）→ 不计入 cleaned、不抛。"""
-    monkeypatch.setattr(drain, "_run_git", lambda *a: (1, "fatal: not a worktree"))
+    git = GitFaces(tmp_path / "worktrees").patch(monkeypatch)
     assert drain.cleanup_orphan_worktrees(["ghost"]) == []
+    assert git.commits == []
 
 
-def test_cleanup_skips_empty_names(iso_state, monkeypatch):
-    calls = []
-    monkeypatch.setattr(drain, "_run_git", lambda *a: calls.append(a) or (0, ""))
+def test_cleanup_skips_empty_names(iso_state, monkeypatch, tmp_path):
+    git = GitFaces(tmp_path / "worktrees").patch(monkeypatch)
+    git.face("x")
     assert drain.cleanup_orphan_worktrees(["", "x"]) == ["x"]
-    assert ("branch", "-D", "wt-x") in calls
-    assert not any(c == ("branch", "-D", "wt-") for c in calls)  # 空名被跳过
+    assert ("branch", "-D", "wt-x") in git.calls
+    assert not any(c == ("branch", "-D", "wt-") for c in git.calls)  # 空名被跳过
 
 
 def test_run_git_fail_open_on_oserror(monkeypatch):
@@ -75,12 +82,12 @@ def test_run_git_fail_open_on_oserror(monkeypatch):
 # ---------------------------------------------------------------------------
 # drain 集成：非 dry 清理、dry 跳过
 # ---------------------------------------------------------------------------
-def test_drain_non_dry_cleans_orphan_worktrees(iso_state, monkeypatch):
+def test_drain_non_dry_cleans_orphan_worktrees(iso_state, monkeypatch, tmp_path):
     seed_backlog(
         iso_state, [{"id": "orph", "status": "in_progress", "started_at": "x"}]
     )
-    git_calls = []
-    monkeypatch.setattr(drain, "_run_git", lambda *a: git_calls.append(a) or (0, ""))
+    git = GitFaces(tmp_path / "worktrees").patch(monkeypatch)
+    git.face("orph")  # 确认干净的孤儿面
     monkeypatch.setattr(
         dispatch,
         "do_dispatch",
@@ -91,20 +98,20 @@ def test_drain_non_dry_cleans_orphan_worktrees(iso_state, monkeypatch):
     summary = drain.drain_backlog(drain.new_run_log())  # 非 dry
     assert summary["reclaimed"] == ["orph"]
     assert summary["worktrees_cleaned"] == ["orph"]
-    assert ("branch", "-D", "wt-orph") in git_calls
-    assert ("worktree", "prune") in git_calls
+    assert "worktrees_salvaged" not in summary
+    assert ("branch", "-D", "wt-orph") in git.calls
+    assert ("worktree", "prune") in git.calls
 
 
-def test_drain_dry_skips_worktree_cleanup(iso_state, monkeypatch):
+def test_drain_dry_skips_worktree_cleanup(iso_state, monkeypatch, tmp_path):
     seed_backlog(
         iso_state, [{"id": "orph", "status": "in_progress", "started_at": "x"}]
     )
-    git_calls = []
-    monkeypatch.setattr(drain, "_run_git", lambda *a: git_calls.append(a) or (0, ""))
+    git = GitFaces(tmp_path / "worktrees").patch(monkeypatch)
     summary = drain.drain_backlog(drain.new_run_log(), dry=True)
     assert summary["reclaimed"] == ["orph"]
     assert "worktrees_cleaned" not in summary
-    assert git_calls == []  # dry 演练不触碰 git
+    assert git.calls == []  # dry 演练不触碰 git
 
 
 # ---------------------------------------------------------------------------

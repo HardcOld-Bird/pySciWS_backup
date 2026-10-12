@@ -1,6 +1,6 @@
 """orch watch 事件等待器（backlog 20261010-orch-watch）。
 
-覆盖五类事件的**代码判定**（差分规则 + 去重身份）、阻塞轮询的命中/超时两条出口、
+覆盖六类事件的**代码判定**（差分规则 + 去重身份）、阻塞轮询的命中/超时两条出口、
 ``state/watch.json`` 基线与心跳、``orch status`` 补账的一次性清算语义，以及三处
 [NEXT] 挂载指令注入（wake_devops / approve / dispatch --from-backlog）。
 
@@ -37,6 +37,7 @@ def _snap(**over) -> dict:
         "done_count": 0,
         "done_elapsed_s": "?",
         "needs_leader": [],
+        "salvage": [],
         "pending": 0,
         "quota_run": "",
         "channel_run": "",

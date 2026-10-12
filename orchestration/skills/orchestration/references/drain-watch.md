@@ -13,19 +13,24 @@ SKILL.md 的命令面只留一行索引；本文放**为什么**与**踩过的�
 三条通道共用 `drain.WorkerPaths`（锁判活、stale 回收、released 墓碑、`.done` 身份三元组、
 协作停止信号）——单 worker 互斥由锁保证，所以获锁一刻仍在 `in_progress` 的条目必是上一任
 被杀死时留下的孤儿，`reset_orphans()`/`reset_orphan_backlog()` 就地复位。
-**新通道不再另写一套事故硬化逻辑**（这是 E4 的实现约束，也是 `WorkerPaths` 存在的全部理由）；
+**新通道不再另写一套事故硬化逻辑**（E4 的约束，也是 `WorkerPaths` 存在的全部理由）；
 队列面同理——三套队列的增删/取项/孤儿复位/裁剪都在 `workq.py` 一处（E5a 把 benchd 的
 自研队列改为委派，避免双源漂移）。
 
-**孤儿复位管四面**（backlog 20261012-184000-leader）：锁、条目状态、worktree 名之外还有
-**进程**——worker 被杀不等于它派生的 headless 会话被杀（独立进程树），那个会话还在往原
+**孤儿复位管五面**（进程面 20261012-184000-leader，抢救面 20261012-234000-leader）：锁、条目、
+worktree 名、进程之外还有**进度**——回收不再默认销毁半成品：脏面（未合并/证据不足同理）→ 落
+`wip(salvage)` 提交并保面保分支、队列自动接线续作；确认干净才 `remove --force` + `branch -D`。
+判据与形状见 `salvage-reclaim.md`。
+
+第四面**进程**：worker 被杀不等于它派生的 headless 会话被杀（独立进程树），那个会话还在往原
 worktree 写，重派同名就是双写。`dispatch` 在派生瞬间把会话 pid 记进运行态会话池（`pid` 键
-的存活期恰好等于该跳的在途期），drain 回收时按任务书名把孤儿条目对上 pid，**判活 + 核对
+的存活期=该跳在途期），drain 回收时按任务书名把孤儿条目对上 pid，**判活 + 核对
 argv 里的 sid** 两道闸都过才 `taskkill /T /F`。判不准（pid 已被系统复用、杀完复查仍活着、
 `remove --force` rc=0 但目录还在）就**绝不对旧 pid 动手**，条目升一代 `<id>-r<N>` 换隔离面，
 新一代名直接写进重派的任务书。run 日志里的痕迹：`第四面回收：终止孤儿会话进程` /
 `已不是会话…不动手` / `旧隔离面无法确认干净 → 异名重建`；`.done` 摘要对应
-`worktrees_cleaned` 与 `worktrees_regenerated` 两个键。`--dry` 演练一条都不执行。
+`worktrees_cleaned`、`worktrees_regenerated` 与 `worktrees_salvaged` 三个键。`--dry` 演练
+一条都不执行。
 
 ## 2. watch 挂载纪律（2026-10-12 夜航停摆 6h 的教训）
 
@@ -35,8 +40,9 @@ argv 里的 sid** 两道闸都过才 `taskkill /T /F`。判不准（pid 已被�
   不等于「事件丢了」。
 - **测试/诊断性挂载前须确认无 live 挂载或先停**：`arm()` 覆写 `state/watch.json`，会抹掉
   在等那任的心跳与黑匣子；`recent`/`exit_reason` 是脱靶复盘的现场，status 读出其末帧。
-- 事件类型（五类）：`QUEUE-COMPLETE` / `NEEDS-LEADER` / `QUOTA-STOP` / `CHANNEL-STOP` /
-  `CRASH`。两类 STOP 都是**系统性故障全局停止**，只是恢复动作不同（充值 vs 等渠道恢复）。
+- 事件类型（六类）：`QUEUE-COMPLETE` / `NEEDS-LEADER` / `QUOTA-STOP` / `CHANNEL-STOP` /
+  `CRASH` / `SALVAGE`（抢救知会，不处置）。两类 STOP 都是**系统性故障全局停止**，
+  恢复动作不同（充值 vs 等渠道）。
   `BENCH-DONE <run>` 属**可选挂载、默认不挂**——§5.1-B 明写测量完成不该即时打断组长。
 
 ## 3. bench-* 使用要领（组长侧）
