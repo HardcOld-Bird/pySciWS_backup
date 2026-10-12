@@ -338,25 +338,30 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
 parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即可使用新属性**，不必等下一跳，
 但兜底读出的交付应当复跑一次以确认严格面也能判读。
 
-### 3.5 模型双档路由（用户裁决，2026-10-10 渠道策略修订）
+### 3.5 模型双档路由（用户裁决，2026-10-10 渠道策略修订；2026-10-12 flash 渠道互换）
 
 - registry 维护档位抽象：组长只见「max/flash」两档，orch 内部路由具体渠道；
-- **渠道策略（用户裁决，源于 credit 耗尽事故）**：
+- **渠道策略（用户裁决，源于 credit 耗尽事故；flash 两渠道地位 2026-10-12 互换）**：
   - `max` = **不传 `-m`**，走用户级默认的 **BYOK Qwen-3.8-Max**（Token Plan 额度大且
     实惠；**禁用内置同名模型**——烧订阅 credit 且 envelope 低报为 0，2026-10-10 实战
     烧穿额度）；
-  - `flash` = 内置 `Qwen3.8-Flash`（**限时免费**，零额度消耗）；
-  - `flash_fallback` = BYOK Qwen-3.8-Flash 的 modelID（免费期结束后的回退；渠道待
-    用户开通）。**回退逻辑已实现**（backlog 20261010-flash-fallback）：do_dispatch
-    遇 quota_exhausted 且该档配了非空 `<tier>_fallback`（异于当前型号）→ 换备用渠道
-    重试一次；仍耗尽才归类 quota_exhausted 触发 drain 全局停止（见 §3.3 失败处理）；
+  - `flash` = **BYOK Qwen-3.8-Flash 的 modelID**（按量小额、不限速）。用户裁决
+    2026-10-12：内置渠道虽免费但限速、响应慢拖累效率，flash 档**永久**改指 BYOK 优先；
+  - `flash_fallback` = 内置 `Qwen3.8-Flash`（**限时免费**，零额度消耗，降为兜底位）。
+    **回退逻辑不动**（backlog 20261010-flash-fallback）：do_dispatch 遇 quota_exhausted
+    且该档配了非空 `<tier>_fallback`（异于当前型号）→ 换备用渠道重试一次；仍耗尽才归类
+    quota_exhausted 触发 drain 全局停止（见 §3.3 失败处理）——互换后其语义自然变成
+    「BYOK 按量耗尽 → 内置免费兜底」，比互换前更省；
 - **模型映射自动刷新**（用户裁决 2026-10-10）：BYOK 模型的人类名→UUID 目录只来自
   `--list-models`（账户级；settings.json 仅存当前激活 UUID、无法监听），故 orch 在
   **drain 启动时**跑 `--list-models` 按名称模式（`DEFAULT_MODEL_PATTERNS`：Qwen-3.8-Max→max、
-  Qwen-3.8-Flash→flash_fallback、内置无 UUID 的 Qwen3.8-Flash→flash；registry.model_patterns
-  可覆盖）刷新 registry.models，重配 BYOK 后下次 drain 自愈、零 daemon；手动 `orch
-  refresh-models` 同逻辑。**未命中档保持现值不清空**（宁旧勿空）；刷新只更新既有档的
-  UUID/名，**不改变哪个名对应哪个档**——那仍是护栏级（下方教训登记），改名须更新模式表；
+  Qwen-3.8-Flash→flash、内置无 UUID 的 Qwen3.8-Flash→flash_fallback 与 minimum；
+  registry.model_patterns 可覆盖）刷新 registry.models，重配 BYOK 后下次 drain 自愈、零
+  daemon；手动 `orch refresh-models` 同逻辑。**未命中档保持现值不清空**（宁旧勿空）；
+  刷新只更新既有档的 UUID/名，**不改变哪个名对应哪个档**——那仍是护栏级（下方教训登记），
+  改名/换档须同步更新模式表：**2026-10-12 的互换就是这一条的镜像用例**——只改
+  registry.json 而不动模式表，下一次 drain 自愈就把映射刷回旧渠道（快照断言见
+  `tests/skills/orchestration/test_flash_channel_swap.py`）；
 - 默认档位：组长（TUI）= **max**；**deputy/reviewer** + 7 专职组员 + **devops** = **flash**
   （deputy/reviewer 于 2026-10-11 经 REFACTOR v1.0 §1.1 定稿降档 flash——「全项目降档，flash
   主力、无组员常驻 max」；二者几乎无台账存量，任何时候改动都不阻碍观察（用户确认）。devops
