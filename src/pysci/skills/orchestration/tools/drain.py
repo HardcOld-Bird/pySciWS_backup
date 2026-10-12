@@ -1282,8 +1282,31 @@ def _drain_argv(run_log: Path, *, dry: bool) -> list[str]:
     return argv
 
 
+#: 测试进程的判据：pytest 跑每个用例时注入 ``PYTEST_CURRENT_TEST``、收集期注入
+#: ``PYTEST_VERSION``，两者都被子进程继承——用例里真起 CLI 子命令的派生同样挡得住。
+TEST_PROCESS_ENV: tuple[str, ...] = ("PYTEST_CURRENT_TEST", "PYTEST_VERSION")
+
+
+def in_test_process() -> bool:
+    """当前进程是不是 pytest 测试进程（含测试派生的子进程）。"""
+    return any(os.environ.get(name) for name in TEST_PROCESS_ENV)
+
+
 def _spawn_detached(argv: list[str], *, env: dict[str, str], stdout: Any) -> None:
-    """以分离后台进程启动 argv（Windows: DETACHED_PROCESS；POSIX: 新会话）。"""
+    """以分离后台进程启动 argv（Windows: DETACHED_PROCESS；POSIX: 新会话）。
+
+    **测试进程在这里停住**。三入口（status/approve/dispatch）内嵌的拉起是「代码保证」的
+    生命周期面，逐用例 patch :data:`inspectd._spawn_detached` 挡不住没挂 ``iso_state`` 的
+    漏网用例——实测两个用例真起了 ``_inspect-worker``，run_log 落在当时所在的 worktree
+    树里，紧跟着被 ``worktree merge`` 的 cp 面拖进 main（backlog 20261012-191512-devops）。
+    判据取「我是测试进程」而非「我在哪棵树」：在主树里跑套件同样不该点着巡检队列。
+    确需真 Popen 的用例自行清掉 :data:`TEST_PROCESS_ENV`（`test_drain_wake.py` 有反例，
+    防这道闸被焊死后静默废掉生产面而 mock 全绿看不见）。注意闸在**派生面**不在判定面，
+    故测试进程里 ``wake_*`` 返回的 ``spawned=True`` 只是空话——要断言派生 argv 的用例
+    一律 patch 本函数（现有用例都这么做）。
+    """
+    if in_test_process():
+        return
     kwargs: dict[str, Any] = {
         "stdin": subprocess.DEVNULL,
         "stdout": stdout,

@@ -71,9 +71,14 @@ def iso_registry(tmp_path, monkeypatch):
 
 @pytest.fixture
 def iso_state(tmp_path, monkeypatch):
-    """重定向编排状态路径到 ``tmp_path/state``，返回该 state 目录。"""
+    """重定向编排状态路径到 ``tmp_path/state``，返回该 state 目录。
+
+    ``exist_ok`` 而非裸 ``mkdir()``：与 :func:`iso_dispatch` 同锚 ``tmp_path/state``，
+    而 dispatch 入口内嵌巡检拉起，用例须同时挂两者才把面隔离干净（漏挂 iso_state 的
+    dispatch 用例真起过 ``_inspect-worker``——backlog 20261012-191512-devops）。
+    """
     state = tmp_path / "state"
-    state.mkdir()
+    state.mkdir(exist_ok=True)
     monkeypatch.setattr(workflow, "BACKLOG_PATH", state / "backlog.json")
     monkeypatch.setattr(workflow, "SUGGESTIONS_DIR", state / "suggestions")
     monkeypatch.setattr(workflow, "REPLIES_DIR", state / "replies")
@@ -109,6 +114,8 @@ def iso_state(tmp_path, monkeypatch):
     # E5a：巡检引擎**内嵌**在 status/approve/dispatch 入口（§7「生命周期由代码保证」），
     # 所以凡是跑到这三个入口的用例都会试着拉起 worker。默认 no-op 派生 + 六面状态重定向：
     # 不 patch 就是每个此类用例真起一个后台进程，并把发现台账/迟滞态/开关写进仓库 state。
+    # 这是**用例面**的 patch；系统性的最后一道在 drain._spawn_detached（认测试进程即停），
+    # 漏挂本夹具的用例由此兜住，但要跑真 Popen 面的用例得自己清 TEST_PROCESS_ENV。
     monkeypatch.setattr(inspectd, "_spawn_detached", lambda argv, **kw: None)
     insp = state / "inspector"
     monkeypatch.setattr(inspectd, "STATE_DIR", insp)
@@ -227,7 +234,7 @@ def iso_dispatch(tmp_path, monkeypatch):
     改档位映射。成员 ``quotamember`` 默认 model_tier=flash。返回 state 目录。
     """
     state = tmp_path / "state"
-    state.mkdir()
+    state.mkdir(exist_ok=True)  # 与 iso_state 同锚，组合挂载时不互撞
     pod = tmp_path / "pods" / "quotamember"
     (pod / "inbox").mkdir(parents=True)
     reg_file = state / "registry.json"

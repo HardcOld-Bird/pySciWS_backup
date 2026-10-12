@@ -468,7 +468,8 @@ def _capture_orch_dispatch(monkeypatch, outcome=None):
     return seen
 
 
-def test_cli_dispatch_flag_reaches_dispatch(monkeypatch):
+def test_cli_dispatch_flag_reaches_dispatch(iso_state, monkeypatch):
+    """挂 iso_state：dispatch 入口内嵌巡检拉起，不挂就会真起 ``_inspect-worker``。"""
     seen = _capture_orch_dispatch(monkeypatch)
     rc = orch.main(["dispatch", "devops", "--text", "t", "--effort", "high"])
     assert rc == 0 and seen["effort"] == "high"

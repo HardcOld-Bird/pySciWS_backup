@@ -130,9 +130,13 @@ def test_minimum_tier_is_free_channel():
     assert registry.DEFAULT_MODEL_PATTERNS["minimum"] == "Qwen3.8-Flash"
 
 
-def test_orch_cli_accepts_minimum_tier(iso_dispatch, monkeypatch):
+def test_orch_cli_accepts_minimum_tier(iso_state, iso_dispatch, monkeypatch):
     """三处 --model-tier choices 都要认 minimum：argparse 是档位的唯一校验点
-    （do_dispatch 自己不拒未知档），漏改一处就等于该面无法显式压测。"""
+    （do_dispatch 自己不拒未知档），漏改一处就等于该面无法显式压测。
+
+    两面都挂：iso_dispatch 给成员/registry，iso_state 挡 dispatch 入口内嵌的巡检拉起
+    （只挂前者时本用例真起过 ``_inspect-worker``）。
+    """
     from pysci.skills.orchestration.tools import orch, plans
 
     seen = {}
