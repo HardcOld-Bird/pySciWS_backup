@@ -43,18 +43,19 @@
   派发。**增补规则**：向该 JSON 的 `rules` 追加 `{id, re, hint}`（re 为 Python 正则、JSON 内
   反斜杠双写）；fail-open（文件缺失/损坏/单条正则非法均跳过），故改坏 JSON 会**静默失效**——
   test_taskbook_lint.py::test_repo_shipped_rules_file_valid 在 CI 钉住「随附规则必须可编译」。
-  首期规则 figures-two-positional-args；与 20261009-taskbook-cli-signature（文档侧改正本）互补。
 - **新增 pod 无需预注册 registry.json**：`orch dispatch` 前调 `ensure_member_defaults`，pod 目录
   存在即自动生成默认成员条目（flash/60轮/7200s/`.qoder/mcp.json`）。`doctor` 按 `PODS_ROOT`
   目录计数、也不依赖 registry。故脚手架新 pod 只建目录+只读层文件，注册留给组长首次派发。
-- **改 guard（Node Stop/PreToolUse hook）的两条硬教训（2026-10-10，backlog 20261010-budget-delivery-gate）**：
-  ① guard 的 fail-open（异常即放行）会**静默吞掉 guard 自身的 bug**——首版把执行流写在
-  ESM 顶层 `const` 辅助函数之前，TDZ ReferenceError 被 catch 掉，13 例违规全绿通过；只有
-  用 pytest 直接 `node` 跑真 guard（`tests/skills/orchestration/test_delivery_gate_budget.py`）
-  才暴露。故 `run()` 调用必须放文件末尾。② Stop hook 的验证别只看 exit code：探针法=在
-  Temp 造 pod（settings.json 把 Stop 接到 worktree 里的绝对路径 guard），headless 跑完看
-  **违规文件是否被会话自己改掉** + `num_turns`（bad 12000B→12B/3 轮 vs ok 200B 不动/1 轮），
-  再从 `~/.qoder-cn/projects/<pod键>/<sid>.jsonl` 里取注入回会话的 stderr 原文核对提示是否准确。
+- **改 guard（Node Stop/PreToolUse hook）的两条硬教训（2026-10-10）**：① guard 的
+  fail-open（异常即放行）会**静默吞掉 guard 自身的 bug**（执行流写在 ESM 顶层 `const`
+  辅助函数之前→TDZ 被 catch，13 例违规全绿；只有 pytest 直接 `node` 跑真 guard 才暴露），
+  故 `run()` 调用放文件末尾。② Stop hook 验证别只看 exit code：Temp 造 pod 把 Stop 接到
+  worktree 绝对路径 guard，跑完看**违规文件是否被会话自己改掉**+`num_turns`，再从
+  `~/.qoder-cn/projects/<pod键>/<sid>.jsonl` 取注入回会话的 stderr 原文核对提示。
+- **eval 压测跳的隔离面已内建（2026-10-12 E2 验收）**：压测跳会把「这一跳学到的东西」写进
+  组员自己的 `AGENTS.md`（跟踪面）→ 合并前检查出现无关脏面。`run_case` 现已两头夹：任务书
+  附 `EVAL_HOP_NOTE` 禁改自维护层 + 前后各拍该 pod 的跟踪脏面快照，只还原本跳新增者，
+  路径进台账 `reverted` 字段。判据口径见技能 `references/harness-eval.md`「隔离性」段。
 - **delivery-gate 现执法组员自维护层四条预算**（AGENTS.md ≤8192B / 自建 rules 禁
   always_on / 自建 rules·skills 的 description 合计各 ≤8192B / 自建 SKILL.md ≤8192B），
   口径=落盘字节（CRLF 计税）；`PYSCI_DEPLOYED_SKILLS` 缺失时自建技能那一支不执法。
