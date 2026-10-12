@@ -37,7 +37,7 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 | **专职组员** ×7 | `orchestration/pods/<id>/` + headless | 会话池（orch 管理，§3.2） | 各自领域的生产；自检属分内职责；交付时声明机械验收；积极提改进建议；**自维护记忆与轻量笔记型 harness**（§3.1） | 写权限见 §2 矩阵；禁改只读层（charter 规程、部署技能、settings/mcp） |
 | **副组长**（deputy） | `orchestration/pods/deputy/` + headless | 会话池 | ① 跨领域**简单**任务单体执行；② 组长的**技术顾问与平级协作者**；③ 全项目编辑权 | 持全部 7 技能（部署副本）；白名单宽（全项目，orchestration/** 与自身只读层除外） |
 | **reviewer** | `orchestration/pods/reviewer/` + headless | 会话池 | 期刊审稿人式**主观质量审查**（规范性/美观度/创新性），可执行昂贵文献对比；输出结构化 VERDICT | **默认不启用**——用户点名或组长主动（默认判断为不需要）时才派发 |
-| **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送 | **不使用 orch**（组长专属）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
+| **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送；**E 系列 harness 压测验收**（REFACTOR §3 Tier B） | **不使用 orch**（组长专属），**唯一例外=`orch eval run`/`eval set-baseline`**（用户裁决 2026-10-12：devops 获 eval 面，组长不亲执行守「严禁亲自执行末端工作」铁律；**保留边界**——队列侧 `approve`/`reject`/`dispatch`/`plan`/`drain`/锁仍组长专属，eval 复用 `do_dispatch` 只打一跳、不入队不销账；**E4 bencher 上线后本条款退役**（REFACTOR §8），回归「不使用 orch」）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
 
 **副组长平级协作条款（用户裁决）**：副组长与组长接近平级，不是从属关系。
 - 副组长**有权拒绝**派发任务（须附理由，典型情形：组长对复杂度估计误判）；拒绝经
@@ -663,16 +663,19 @@ orchestration 技能软性约束「提议→告知用户→入 backlog」的默�
 
 **harness 隔离**：devops 会话 cwd 永远是**自己的 pod**（加载自己的 charter/devops
 技能/MCP），worktree 只是**作业对象**（绝对路径或 `--add-dir` 访问）——绝不以
-worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专属；devops 不用：
-backlog 条目经任务书注入，完成经 outbox 交付。
+worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专属；devops 不用（唯一
+例外=`orch eval` 压测面，边界与退役条件见 §1 角色边界行）：backlog 条目经任务书注入，
+完成经 outbox 交付。
 
 - worktree 事实（实测）：`data/` 磁盘 1.4 GB 但 git 仅跟踪 16 MB；worktree 共享
   `.git` 对象库，每份仅检出 ≈30 MB——容量顾虑不成立。worktree 不含未跟踪重数据，
   需要时以绝对路径只读引用主树；
 - 作业流：领任务 → `git worktree add` → 实施 → 完整测试 → 合并回 main → commit+push
   （用户已授权为其职责）→ 交付；
-- worktree 内 venv 策略（editable 安装指向主树 src）：候选 `uv run --project <worktree>`
-  或 worktree 内 `uv sync`——Phase 2 实测定型，写入 devops 技能；
+- worktree 内 venv 策略（editable 安装指向主树 src）：**实测定型=PYTHONPATH 覆盖法**
+  （`PYTHONPATH=<wt>/src uv run --no-sync …`，复用主 `.venv`；**前提=cwd 在 worktree
+  之外**，cd 进去时 uv 会就地新建空 `<wt>/.venv` 缺依赖即崩，2026-10-12 实测复现）——
+  细则见 devops 技能「worktree 作业规程」与 §12 Phase 2；
 - devops 专属 CLI `pysci-dev`（`src/pysci/skills/devops/`）：收纳其机械性作业
   （skills sync 的执行端、部署校验、巡检脚本入口等；与 orch 严格分离，服务对象是
   devops 自己）；

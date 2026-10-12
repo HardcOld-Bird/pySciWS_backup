@@ -11,24 +11,25 @@
 
 ## 经验（工作中积累）
 
-- **worktree 内跑测试/CLI 的环境选法（2026-10-10 实测，backlog 20261010-orch-watch）**：
-  在 worktree 里直接 `uv run …` 会在 `<wt>/.venv` **新建空环境**（首次即 `Creating virtual
-  environment`；配 `--no-sync` 时缺 pyyaml 等依赖，import 直接崩）。可靠做法：借用主 venv
-  的解释器 + PYTHONPATH 覆盖代码面——
-  `PYTHONUTF8=1 PYTHONPATH="<wt>/src" "D:/…/pySciWS/.venv/Scripts/python.exe" -m pytest "<wt>/tests" -q`。
-  副作用（可利用也可防）：`pysci.paths.PROJECT_ROOT` 由 paths.py 就近找 `pyproject.toml` 决定，
-  故此法下 ORCH_STATE_ROOT/PODS_ROOT 全部指向 **worktree** 内副本——跑 `orch approve`、
-  `dev sync`、`_drain-devops` 等会改 worktree 的 `state/*.json`（backlog.json 被 git 跟踪！）。
-  实验后必须 `git checkout -- orchestration/state/backlog.json` 之类还原，别把演练队列带进提交。
-- **worktree sync 与 `skills-deployed.json`（已修复 2026-10-10，backlog 20261010-003127-devops）**：
-  旧坑——本机 `core.autocrlf=true` 无 `.gitattributes`，worktree 检出把文本真本 smudge 成 CRLF、
-  main 是混合行尾，而 `sync.tree_hash` 读**原始字节**，致同一真本两侧哈希不同、合并后 `sync --check`
-  报假漂移。**修复（方案 b）**：`tree_hash` 哈希前规范化 CRLF→LF（技能真本全为 .md/.toml 文本、无
-  二进制，安全），哈希只反映内容。**现状**：worktree 内 sync 写的 `skills-deployed.json` 台账对
-  main 即正确；但 **pod 内的部署副本是 gitignored、不随合并搬运**，故合并后仍须在 main 跑一次
-  `pysci-dev sync`（2026-10-12 实测：合并后 main 侧 orchestration 副本报 [!] 漂移，重跑 sync
-  后 `sync --check` 全等才收工）；doctor 哨兵 [*]=台账哈希漂移、[!]=副本漂移。未选方案 a
-  （根 .gitattributes）：需全库 renormalize、与本机 autocrlf 交互，blast radius 大。
+- **worktree 内跑测试/CLI 的环境选法（2026-10-12 定型，backlog 20261012-023430-devops）**：
+  `PYTHONPATH="<wt>/src" uv run --no-sync pytest "<wt>/tests" -q` 复用主 `.venv`，**前提
+  =cwd 在 worktree 之外**——cd 进去时 uv 就地新建空 `<wt>/.venv`，缺 pyyaml 即 import 崩
+  （曾被误记成「此法必崩」）。兜底法（不依赖 cwd）：`PYTHONUTF8=1 PYTHONPATH="<wt>/src"
+  "<main>/.venv/Scripts/python.exe" -m pytest "<wt>/tests" -q`。副作用（可利用也可防）：
+  `pysci.paths.PROJECT_ROOT` 就近找 `pyproject.toml`，故 ORCH_STATE_ROOT/PODS_ROOT 指向
+  **worktree** 副本——跑 `dev sync`、`_drain-devops` 等会改 worktree 的 `state/*.json`
+  （backlog.json 被 git 跟踪！）。实验后必须 `git checkout -- orchestration/state/…` 还原。
+- **档位映射自愈写运行态、不写跟踪面（2026-10-12，backlog 20261012-080410-devops）**：
+  `refresh_models` 落 `sessions-runtime.json` 的 `models_resolved`，读取按「跟踪 >
+  运行态 > 出厂默认」回退，跟踪值遮蔽解析值时只报不写。细则与脏跟踪面哨兵
+  （`git status -- orchestration/state`，doctor/orch status 各一段，advisory）见
+  技能 `references/registry-runtime.md`。
+- **worktree sync 与 `skills-deployed.json`（行尾敏感已修 2026-10-10，backlog
+  20261010-003127-devops）**：`tree_hash` 哈希前 CRLF→LF 归一，故 worktree 内 sync 写的台账
+  对 main 即正确、`sync --check` 不再因行尾报假漂移；但 **pod 内的部署副本是 gitignored、
+  不随合并搬运**，合并后仍须在 main 跑一次 `pysci-dev sync`（2026-10-12 实测：main 侧
+  orchestration 副本报 [!] 漂移，重跑后 `sync --check` 全等才收工）；doctor 哨兵
+  [*]=台账哈希漂移、[!]=副本漂移。
 - **uvx 型 MCP server 的 mcp 2.x 断供风险（2026-10-10 修，backlog 20261010-paper-search-mcp-down）**：
   mcp Python SDK 2.x 移除了 `mcp.server.fastmcp`（FastMCP 更名 MCPServer），凡上游依赖写
   `mcp>=x` 无上限的 uvx server（如 paper-search-mcp 0.1.4）会在新环境解析到 2.x 而启动即崩、

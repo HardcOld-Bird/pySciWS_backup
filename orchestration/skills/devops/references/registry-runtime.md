@@ -25,9 +25,9 @@ sessions/hops/chars_offset 是**心跳**——每派发必变。留在 registry.
   `write_sessions()` **只写运行态**并声明「本进程拥有该成员的会话池」；它不再回写配置面
   （旧名 `write_member` 会顺手把内存 Member 的 model_tier/pod/参数模板抄进
   registry.json——见下节事故）。
-- 机器改配置面**只剩声明这一条通路**：`reg.declare_config(models={tier: val, ...})`
-  （改档位映射/checks 等顶层键，值=改动子集）与 `ensure_member_defaults()`（新增成员，
-  仅当磁盘也无该成员才落）。
+- 机器改配置面**只剩声明这一条通路**：`reg.declare_config(checks={...})`
+  （改顶层键，值=改动子集）与 `ensure_member_defaults()`（新增成员，仅当磁盘也无该成员才落）。
+  档位映射自愈**不走这条路**，见下节。
 - **`save()` 是读-改-写按键合并，不是整体回写**：落盘前重读两份文件，配置面以磁盘为
   权威——无声明则一个字节不写；有声明只把声明的键叠加上去。运行态只动声明过的成员，
   其会话池按 `sid` 合并（同 sid 本进程为准，磁盘独有 sid 保留）。
@@ -49,6 +49,32 @@ sessions/hops/chars_offset 是**心跳**——每派发必变。留在 registry.
 护栏形状：**任何进程都不得用陈旧全量副本覆盖 state 配置面**。故 save 前必重读磁盘、
 只覆盖本进程负责的键；纯记账的派发路径根本不该产生配置文件写入（`git diff HEAD` 应为空
 是 drain run 的事后判据）。
+
+## 档位映射：三级回退与运行态面（backlog 20261012-080410-devops）
+
+`models`（档位 → 具体型号）里混着两种来源：人写的覆盖与机器从 CLI 目录解析出的自愈值
+（`refresh_models`，drain 启动时跑一次）。自愈值若写进跟踪的 `registry.json`，每轮 drain
+都留下 ` M registry.json`——把「碰 registry 的交付」重新堵成心跳那样的周期墙；且
+`models` 按 charter 属护栏级，机器静默改写本身就越权。故：
+
+- **读取三级回退**：`Registry.models` = 出厂默认 ← 运行态 `models_resolved` ← 跟踪
+  `data["models"]`，**跟踪值优先**（含 `""`——空值是人的裁决「该档不指定，交 CLI 默认」，
+  不是待填的空位）；
+- **机器只写运行态**：`merge_runtime_models()` 落 `sessions-runtime.json` 的
+  `models_resolved` 键（gitignored），跟踪面一个字节不碰；`refresh_models()` 里
+  `save()`/`declare_config()` 全不存在；
+- **遮蔽要出声**：跟踪值与解析值不一致时该档记入 `res["shadowed"]`（人不写则不换），
+  drain 日志与 `orch refresh-models` 都打印——否则「为什么我刷新了却没换档」只能靠猜。
+  要换档就改 `registry.json` 的 `models.<档>`（护栏级，经用户授权），或删掉该键让机器接管。
+
+## 脏跟踪面哨兵（同上）
+
+`registry.dirty_tracked_state()` = `git status --porcelain --untracked-files=no --
+orchestration/state`，返回相对路径列表；非仓库/git 缺失/超时/race≠0 一律 `[]`（fail-open，
+哨兵失灵不该影响主流程）。消费面两处，都是 **advisory（不计失败）**：`orch status` 的
+「跟踪 state 脏面」段 + `[NEXT]` 提示，`pysci-dev doctor` 的同名段。脏跟踪 state 常常正是
+组长在飞的改动或本单自己要提交的文件，硬失败会把正常作业挡成事故；真正要盯的信号是
+「无人操作却自己变脏」——那说明某个自愈路径又在写跟踪面了。
 
 ## 排查提示
 

@@ -14,14 +14,21 @@
 迁移：备份原文件（``registry.presplit.json``，已存在则不覆盖）→ 抬高会话池到运行态 →
 从配置剥离，两份原子落盘。全部为可读 JSON（fail-open 红线，README §4.3）。
 
+运行态文件里除会话池外还有 **``models_resolved`` 档位面**（:func:`refresh_models` 的
+落点）：模型映射自愈是机器行为，写进 git 跟踪的 ``models`` 会把跟踪配置周期改脏（每
+drain 必现 `` M registry.json``，堵死一切碰 registry 的单，backlog 20261012-080410-devops），
+而 ``models`` 按 charter 属护栏级——机器静默改写它本身就越权。故读取按
+「跟踪值 → 运行态解析值 → 出厂默认」三级回退（:attr:`Registry.models`），跟踪面只留人写的覆盖。
+
 **配置面磁盘权威**（backlog 20261011-220621-leader，lost-update 修复）：分储只搬走了心跳，
 没搬走「整体回写内存副本」这个坏习惯——长驻 drain worker 收尾时仍把启动时加载的
 registry.json 快照原样写回，后写覆盖，抹掉了运行期间合并进来的配置改动。故
 :meth:`Registry.save` 改为**读-改-写按键合并**：落盘前重读磁盘，配置面只叠加本进程
-*显式声明*过的改动（:meth:`Registry.declare_config` 改 models/checks，
+*显式声明*过的改动（:meth:`Registry.declare_config` 改声明过的顶层键、
 :meth:`Registry.ensure_member_defaults` 新增成员），其余键一律以磁盘为准；无任何声明时
 配置文件**一个字节都不写**。会话池经 :meth:`Registry.write_sessions` 按成员、按 sid
-合并进运行态。机器写配置面因此只剩「声明」这一条通路。
+合并进运行态。机器写配置面因此只剩「声明」这一条通路——而档位映射自愈**不走它**
+（见上文 ``models_resolved``）。
 """
 
 from __future__ import annotations
@@ -45,6 +52,12 @@ RUNTIME_NAME: str = "sessions-runtime.json"
 
 #: 一次性迁移的原文备份文件名（首次 cutover 时创建，已存在则不覆盖——保留真·pre-split 快照）。
 BACKUP_NAME: str = "registry.presplit.json"
+
+#: 运行态文件里的档位映射键（:func:`refresh_models` 唯一的写点；gitignored）。
+RUNTIME_MODELS_KEY: str = "models_resolved"
+
+#: 脏跟踪面哨兵扫描的相对路径（见 :func:`dirty_tracked_state`）。
+STATE_REL_PATH: str = "orchestration/state"
 
 #: 档位 → 具体型号映射（README §3.5）；registry.json 的 models 块覆盖这里的出厂默认。
 #: 渠道策略（用户裁决 2026-10-10，credit 耗尽事故复盘）：
@@ -407,9 +420,60 @@ class Registry:
         _atomic_write(self.runtime_path, rt)
 
     @property
+    def runtime_models(self) -> dict[str, str]:
+        """运行态档位映射（``models_resolved``，gitignored）——机器自愈的唯一落点。
+
+        面缺失/被手工写坏成非字典 → 空 dict（读侧自然回退到出厂默认，不抛）。
+        """
+        raw = self.runtime.get(RUNTIME_MODELS_KEY)
+        if not isinstance(raw, dict):
+            return {}
+        return {str(k): str(v) for k, v in raw.items()}
+
+    @property
     def models(self) -> dict[str, str]:
-        """双档 → 具体型号映射。"""
-        return {**DEFAULT_MODELS, **self.data.get("models", {})}
+        """档位 → 具体型号：**跟踪值 > 运行态解析值 > 出厂默认**（三级回退）。
+
+        跟踪面（registry.json 的 ``models``）是人写的覆盖，优先级最高——包括有意写成
+        ``""`` 的档（如 ``max=''`` 表示不传 ``-m`` 走用户级默认渠道），空值也是裁决，
+        不能被运行态解析值顶掉。
+        """
+        return {
+            **DEFAULT_MODELS,
+            **self.runtime_models,
+            **self.data.get("models", {}),
+        }
+
+    def merge_runtime_models(
+        self, resolved: dict[str, str]
+    ) -> dict[str, dict[str, Any]]:
+        """把解析出的档位映射合并写进**运行态**文件（跟踪配置一个字节不碰）。
+
+        读-改-写与 :meth:`save` 同纪律：落盘前重读磁盘，只更新 ``models_resolved`` 里
+        出现的档，其余档与会话池原样保留（会话池每跳都在被别的进程改写）。
+
+        Args:
+            resolved: 档 → 型号（本次 --list-models 解析出的值）。
+
+        Returns:
+            ``{tier: {"old": 运行态旧值|None, "new": 新值}}``，只含**确实变了**的档；
+            无变化时不写盘并返回 ``{}``（免 churn）。
+        """
+        rt = _read_for_merge(self.runtime_path, _empty_runtime())
+        face = rt.get(RUNTIME_MODELS_KEY)
+        face = dict(face) if isinstance(face, dict) else {}
+        changed = {
+            tier: {"old": face.get(tier), "new": value}
+            for tier, value in sorted(resolved.items())
+            if face.get(tier) != value
+        }
+        if not changed:
+            return {}
+        face.update({tier: resolved[tier] for tier in changed})
+        rt[RUNTIME_MODELS_KEY] = face
+        _atomic_write(self.runtime_path, rt)
+        self.runtime[RUNTIME_MODELS_KEY] = face
+        return changed
 
     @property
     def checks(self) -> dict[str, dict[str, Any]]:
@@ -594,15 +658,24 @@ def parse_model_catalog(output: str) -> dict[str, str]:
 
 
 def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
-    """按 --list-models 刷新 registry.models（drain 启动自愈 + 手动 refresh-models）。
+    """按 --list-models 刷新档位映射的**运行态面**（跟踪 registry.json 一个字节不写）。
 
     以 model_patterns（registry.json 可覆盖 :data:`DEFAULT_MODEL_PATTERNS`）**精确匹配**
-    人类名；命中且与现值不同 → 写回 registry。未命中的档**保持现值不清空**——目录缺名
-    多为账户瞬时状态，宁旧勿空（清空 max 会静默改变计费渠道）。
+    人类名；命中且该档在跟踪面**无人写值**时，解析值合并进 sessions-runtime.json 的
+    ``models_resolved``（gitignored，见 :meth:`Registry.merge_runtime_models`）。
+
+    为什么不写跟踪面（backlog 20261012-080410-devops 方案 A）：自愈每个 drain 都跑，写
+    registry.json 就把 main 工作区周期改脏——任何碰 registry 的 worktree 交付在 merge
+    前检查即被拦（本单自身即受害者），且 ``models`` 按 charter 属护栏级、机器静默改写
+    本身越权。故跟踪值优先遮蔽解析值，遮蔽情况报进返回值 ``shadowed``（要换档由人决定：
+    改跟踪值，或删掉该键让机器接管）。
+
+    未命中的档**保持现值不清空**——目录缺名多为账户瞬时状态，宁旧勿空（清空 max 会
+    静默改变计费渠道）。
 
     Returns:
         ``{"changed": {tier: {"old":…, "new":…}}, "missing": ["tier←名"…],
-        "catalog_size": n}``。
+        "shadowed": {tier: {"tracked":…, "resolved":…}}, "catalog_size": n}``。
 
     Raises:
         ValueError: 目录解析为空（输出格式变化/exe 异常）；
@@ -613,23 +686,77 @@ def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
         raise ValueError("--list-models 输出解析为空目录（格式变化或 exe 异常？）")
     reg = Registry.load()
     patterns = {**DEFAULT_MODEL_PATTERNS, **reg.data.get("model_patterns", {})}
-    models = reg.data.get("models", {})
-    changed: dict[str, dict[str, Any]] = {}
+    tracked = reg.data.get("models", {})
     missing: list[str] = []
+    shadowed: dict[str, dict[str, Any]] = {}
+    machine: dict[str, str] = {}
     for tier, name in patterns.items():
         if name not in catalog:
             missing.append(f"{tier}←{name}")
             continue
-        new = catalog[name]
-        old = models.get(tier)
-        if old != new:
-            changed[tier] = {"old": old, "new": new}
-    if changed:
-        # 只声明变更的档位：save 时这些键叠加到磁盘当前 models 之上，同期他人改过的
-        # 兄弟档（如手工配的 flash_fallback）不被本进程的旧值盖掉
-        reg.declare_config(models={t: d["new"] for t, d in changed.items()})
-        reg.save()
-    return {"changed": changed, "missing": missing, "catalog_size": len(catalog)}
+        value = catalog[name]
+        if tier in tracked:
+            # 人写的覆盖优先，机器不碰；值不同只在 shadowed 里点名（别静默顶掉裁决）
+            if tracked[tier] != value:
+                shadowed[tier] = {"tracked": tracked[tier], "resolved": value}
+            continue
+        machine[tier] = value
+    changed = reg.merge_runtime_models(machine) if machine else {}
+    return {
+        "changed": changed,
+        "missing": missing,
+        "shadowed": shadowed,
+        "catalog_size": len(catalog),
+    }
+
+
+def dirty_tracked_state(*, timeout_s: int = 10) -> list[str]:
+    """git 跟踪的 ``orchestration/state/**`` 中有未提交改动的文件路径（观测用）。
+
+    为什么要哨兵（backlog 20261012-080410-devops 方案 C）：运行时自愈把跟踪配置改脏时，
+    组长只在组员交上来的 ``<blocked>`` 里才发现——「本次合并会触碰的脏面」已经变成了
+    周期墙。此函数把同一事实搬到观测面（``pysci-dev doctor`` / ``orch status``）。
+
+    **advisory，不判失败**：脏跟踪 state 常常正是组长在飞的改动或本单自己要改的文件，
+    硬失败会把正常作业挡成事故。
+
+    Args:
+        timeout_s: git 调用上限（挂起即放弃）。
+
+    Returns:
+        相对项目根的路径列表，如 ``["orchestration/state/registry.json"]``；干净或
+        **查不到**（非仓库/git 缺失/超时/任何异常）一律返回 ``[]``——哨兵失灵不该
+        影响主流程（fail-open，README §4.3）。
+    """
+    try:
+        proc = subprocess.run(
+            [
+                "git",
+                "status",
+                "--porcelain",
+                "--untracked-files=no",
+                "--",
+                STATE_REL_PATH,
+            ],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout_s,
+            check=False,
+        )
+    except Exception:
+        return []
+    if proc.returncode != 0:
+        return []
+    paths: list[str] = []
+    for line in proc.stdout.splitlines():
+        if len(line) <= 3:
+            continue
+        # XY<空格>路径；重命名形如 ``old -> new`` 取箭头后（新面才是现存文件）
+        target = line[3:].strip().strip('"')
+        paths.append(target.split(" -> ")[-1].strip('"'))
+    return paths
 
 
 def pod_session_key(pod: Path) -> str:
@@ -667,8 +794,11 @@ __all__ = [
     "Member",
     "ORCHESTRATION_ROOT",
     "REGISTRY_PATH",
+    "RUNTIME_MODELS_KEY",
     "RUNTIME_NAME",
     "Registry",
+    "STATE_REL_PATH",
+    "dirty_tracked_state",
     "orchestration_rel",
     "pod_session_key",
     "pod_sessions_dir",

@@ -889,8 +889,10 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         "items": [],
     }
     _log(run_log, f"[▶] drain 启动（pid={os.getpid()}, dry={dry}）")
-    # 模型映射自愈（用户裁决 2026-10-10）：--list-models 刷新 registry.models——
-    # 重配 BYOK 后下次 drain 即恢复正确 UUID。任何失败仅告警不阻塞（宁旧勿空）。
+    # 模型映射自愈（用户裁决 2026-10-10）：--list-models 刷新档位映射的**运行态面**
+    # （重配 BYOK 后下次 drain 即恢复正确 UUID）；跟踪 registry.json 不被写——写它会把
+    # main 工作区每 drain 改脏并堵死碰 registry 的单（backlog 20261012-080410-devops）。
+    # 任何失败仅告警不阻塞（宁旧勿空）。
     try:
         res = refresh_models()
         if res["changed"]:
@@ -899,7 +901,16 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                 for t, c in res["changed"].items()
             )
             summary["models_refreshed"] = res["changed"]
-            _log(run_log, f"[i] 模型映射已刷新：{detail}")
+            _log(run_log, f"[i] 模型映射已刷新（运行态面）：{detail}")
+        if res.get("shadowed"):
+            detail = "; ".join(
+                f"{t}: 跟踪={s['tracked'] or '(空)'} 遮蔽解析值={s['resolved'] or '(空)'}"
+                for t, s in sorted(res["shadowed"].items())
+            )
+            _log(
+                run_log,
+                f"[i] 模型映射跟踪面遮蔽解析值（人不写则不换）：{detail}",
+            )
         if res["missing"]:
             _log(
                 run_log,
