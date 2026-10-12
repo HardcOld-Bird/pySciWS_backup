@@ -69,15 +69,15 @@ ENOENT→fail-open 放行）。
 组员侧=delivery-gate Stop（AGENTS.md／自建 rules·skills 的 description 合计／自建 SKILL.md
 各 ≤8192B **落盘字节**，自建 rules 禁 always_on，`PYSCI_DEPLOYED_SKILLS` 缺失时自建技能那一支
 不执法）、真本侧=pre-commit `harness-budget`、观测侧=doctor 三档。新钩子用 `language: python`
-不用 `system`（后者 PATH 缺 python 就堵死一切提交）。pod 脚手架跟踪面：每 pod 仅 5 个文件入库，
-`bench/`·`outbox/`·`.qoder/skills/` 被排除、`inbox/` 空目录不跟踪，四者均须**合并后于 main 上**
-`mkdir`+`sync` 再生；settings 模板必带两个 hook 接线 + `"agentsMdExcludes":
-["**/leader-only.md"]`（写 `**/*.md` 会连 `basic.md` 一起吞掉；勿把 pod 自建规则命名成
-`leader-only*`）。agentsMdExcludes 的**生效性** doctor 验不出，用 `pysci-dev probe` 造带不可猜
-token 的 fixture 跑两跳做因果断言（不灵敏只报 inconclusive、不误绿），结论落
-`state/agents-md-excludes-probe.json`。eval 压测跳的隔离面已内建（2026-10-12 E2）：`run_case`
-两头夹——任务书附 `EVAL_HOP_NOTE` 禁改自维护层＋前后拍 pod 跟踪脏面快照，只还原本跳新增者
-（进台账 `reverted`）。
+不用 `system`（后者 PATH 缺 python 就堵死一切提交）。
+
+**钩子计税口径的缺口（本分册自曝）**：`harness-budget` 量的是**索引字节**（LF），而 basic.md §1
+的口径是**落盘字节**（CRLF 计税）——110 行的文件能过钩子却在 main 上超 8192B（本文件初稿
+8084→检出 8194 即此坑）。写完长 references 后须在合并**之后**于 main 复核
+`find orchestration/skills -name "*.md" -size +8192c`，别只信钩子绿。
+
+脚手架 5 文件入库面、agentsMdExcludes 写法坑与 probe 因果断言见 `pod-scaffold.md`；分册次序与
+豁免见 `budget-layers.md`；eval 压测跳的 `EVAL_HOP_NOTE` 与脏面还原见 `harness-eval.md`。
 
 ## 10. 交付协议两面（2026-10-12 E1 + 132138）
 
