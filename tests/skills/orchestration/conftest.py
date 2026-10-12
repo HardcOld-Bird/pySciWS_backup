@@ -13,6 +13,7 @@ import re
 import pytest
 
 from pysci.skills.orchestration.tools import (
+    benchd,
     dispatch,
     drain,
     failure_tags,
@@ -86,6 +87,35 @@ def iso_state(tmp_path, monkeypatch):
     # 开发者工作区，输出随仓库脏净而变（backlog 20261012-080410-devops 方案 C）。
     monkeypatch.setattr(orch, "dirty_tracked_state", lambda **kw: [])
     return state
+
+
+@pytest.fixture
+def iso_bench(tmp_path, monkeypatch, iso_state):
+    """重定向 bencher 测量队列四面（队列/锁/run/取消）到 ``iso_state`` 目录下。
+
+    E4 的 worker 生命周期落点与 devops drain **同构但不同名**（复用同一套锁原语，
+    落点各一套）：不 patch 就会真写 ``orchestration/state/bencher*``。默认把
+    ``_spawn_detached`` 与 ``run_case`` 都桩掉——前者防测试真起后台进程，后者防外呼。
+    """
+    state = iso_state
+    monkeypatch.setattr(benchd, "QUEUE_PATH", state / "bencher" / "queue.json")
+    monkeypatch.setattr(
+        benchd,
+        "BENCH_PATHS",
+        drain.WorkerPaths(
+            lock=state / "bencher.lock",
+            runs=state / "bencher-runs",
+            cancel=state / "bencher.cancel",
+        ),
+    )
+    # 派生默认 no-op（测 argv 的用例自行覆盖）；eval 真派发一律禁起
+    monkeypatch.setattr(benchd, "_spawn_detached", lambda argv, **kw: None)
+    monkeypatch.setattr(benchd._eval, "run_case", _boom_run_case)
+    return state
+
+
+def _boom_run_case(*a, **k):
+    raise AssertionError("测试不该真跑 eval.run_case（请 patch benchd._eval.run_case）")
 
 
 def seed_backlog(state, items):

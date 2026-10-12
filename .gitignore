@@ -46,6 +46,16 @@ __pycache__/
 /orchestration/state/devops.lock
 /orchestration/state/devops-runs/
 /orchestration/state/devops.cancel
+# bencher 测量 worker 运行态（REFACTOR §8/E4，同一套 git 策略）：FIFO 队列本体、
+# 互斥锁、run 日志与 .done、协作取消信号。永久审计在 git 提交 + ledger + A/B 判决文档，
+# 队列只是「还没消化完的工作」，随跑随变，入库会让 main 工作区每跳必 dirty。
+/orchestration/state/bencher/
+/orchestration/state/bencher.lock
+/orchestration/state/bencher-runs/
+/orchestration/state/bencher.cancel
+# 基线捕获的物理归档（§13 待决 2 的 E4 定案）：manifest.json 入库（=「当时依赖什么」的
+# 答案），pods/ 下的 gitignored 面副本不入库——它随时可由 git + 清单再生。
+/orchestration/state/evals/baselines/*/pods/
 # orch watch 的基线快照/心跳（backlog 20261010-orch-watch）：纯运行态观察面，
 # 事件已随 orch status 补账清算，无审计价值
 /orchestration/state/watch.json

@@ -37,7 +37,8 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 | **专职组员** ×7 | `orchestration/pods/<id>/` + headless | 会话池（orch 管理，§3.2） | 各自领域的生产；自检属分内职责；交付时声明机械验收；积极提改进建议；**自维护记忆与轻量笔记型 harness**（§3.1） | 写权限见 §2 矩阵；禁改只读层（charter 规程、部署技能、settings/mcp） |
 | **副组长**（deputy） | `orchestration/pods/deputy/` + headless | 会话池 | ① 跨领域**简单**任务单体执行；② 组长的**技术顾问与平级协作者**；③ 全项目编辑权 | 持全部 7 技能（部署副本）；白名单宽（全项目，orchestration/** 与自身只读层除外） |
 | **reviewer** | `orchestration/pods/reviewer/` + headless | 会话池 | 期刊审稿人式**主观质量审查**（规范性/美观度/创新性），可执行昂贵文献对比；输出结构化 VERDICT | **默认不启用**——用户点名或组长主动（默认判断为不需要）时才派发 |
-| **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送；**E 系列 harness 压测验收**（REFACTOR §3 Tier B） | **不使用 orch**（组长专属），**唯一例外=`orch eval run`/`eval set-baseline`**（用户裁决 2026-10-12：devops 获 eval 面，组长不亲执行守「严禁亲自执行末端工作」铁律；**保留边界**——队列侧 `approve`/`reject`/`dispatch`/`plan`/`drain`/锁仍组长专属，eval 复用 `do_dispatch` 只打一跳、不入队不销账；**E4 bencher 上线后本条款退役**（REFACTOR §8），回归「不使用 orch」）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
+| **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送；**src 测试**（`tests/`、CI、工具实现正确性） | **不使用 orch**（组长专属；REFACTOR §8 授权的 E2 过渡期例外 `orch eval run`/`eval set-baseline` 已随 E4 bencher 上线**退役**，harness 压测职责移交 bencher）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
+| **bencher** | `orchestration/pods/bencher/` + headless | 队列驱动非常驻（§8，`orch bench-*`） | **harness 实测专职工**（REFACTOR §3 Tier B/§8）：套件案卷与基线区所有权、套件运行、基线捕获、副本 A/B、组长/inspector 指派的核查跑；输出二元判决（通过/失败、改善/未改善）与污染识别 | 写权仅 `orchestration/state/evals/**`（案卷/基线/判决），**外部代码树零写权**（设施缺陷提 `<infra_suggestion>` 交 devops，不自己修）；harness 只读层与部署副本不可改；不使用 orch/pysci-dev；完成项走 `orch status` 待查看面，**不即时唤醒组长**；专属 CLI `pysci-bench` |
 
 **副组长平级协作条款（用户裁决）**：副组长与组长接近平级，不是从属关系。
 - 副组长**有权拒绝**派发任务（须附理由，典型情形：组长对复杂度估计误判）；拒绝经
@@ -46,12 +47,15 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 - 硬性决策上组长保留最终裁定权——本条款目的是扩展组长视野，不是制造对抗。
 
 组员 id：`sim` `figure` `writing` `theory` `lit` `drawing` `model3d`（专职 ×7，一一对应
-7 大技能）；`deputy` `reviewer` `devops`（特殊组员）。
+7 大技能）；`deputy` `reviewer` `devops` `bencher` `twin`（特殊组员）。
 
 **「一成员一技能一 CLI」组织模式（用户裁决）**：除副组长与 reviewer 外，每个成员有
 专属技能真本与专属 CLI——7 专职 ↔ 现有 7 个 `pysci-*` CLI；组长 ↔ `orchestration`
-技能 ↔ `pysci-orch`；devops ↔ `devops` 技能 ↔ `pysci-dev`。全部 9 个技能真本统一存
-`orchestration/skills/`（§2），按 manifest 部署（部署目标含项目根与各 pod）。
+技能 ↔ `pysci-orch`；devops ↔ `devops` 技能 ↔ `pysci-dev`；bencher ↔ `bencher` 技能
+↔ `pysci-bench`（E4；共享逻辑做库不做新 CLI，故压测/副本机械住在
+`orchestration/tools/{eval,replica,benchd}.py`，`pysci-bench` 只是它的组员侧门面）。
+全部 10 个技能真本统一存 `orchestration/skills/`（§2），按 manifest 部署（部署目标含
+项目根与各 pod）。
 
 **拓扑**：星形。组长是唯一调度枢纽，组员间不直接通信（跨域协作由计划接力或副组长
 单体承担）。
@@ -663,8 +667,8 @@ orchestration 技能软性约束「提议→告知用户→入 backlog」的默�
 
 **harness 隔离**：devops 会话 cwd 永远是**自己的 pod**（加载自己的 charter/devops
 技能/MCP），worktree 只是**作业对象**（绝对路径或 `--add-dir` 访问）——绝不以
-worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专属；devops 不用（唯一
-例外=`orch eval` 压测面，边界与退役条件见 §1 角色边界行）：backlog 条目经任务书注入，
+worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专属，devops 不用（E2 期
+的 `orch eval` 过渡例外已随 E4 bencher 上线退役，见 §1 角色边界行）：backlog 条目经任务书注入，
 完成经 outbox 交付。
 
 - worktree 事实（实测）：`data/` 磁盘 1.4 GB 但 git 仅跟踪 16 MB；worktree 共享

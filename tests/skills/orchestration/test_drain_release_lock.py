@@ -38,8 +38,8 @@ def _writes_blockable(monkeypatch) -> dict:
     gate = {"blocked": False}
     real = drain._overwrite_lock
 
-    def gated(payload: str) -> bool:
-        return False if gate["blocked"] else real(payload)
+    def gated(payload: str, paths=None) -> bool:
+        return False if gate["blocked"] else real(payload, paths)
 
     monkeypatch.setattr(drain, "_overwrite_lock", gated)
     return gate
@@ -192,7 +192,7 @@ def test_marker_write_failure_is_also_logged(iso_state, monkeypatch):
     drain.acquire_lock("orchestration/state/devops-runs/t.log")
     run_log = iso_state / "devops-runs" / "t.log"
     _unlink_fails(monkeypatch)
-    monkeypatch.setattr(drain, "_overwrite_lock", lambda payload: False)
+    monkeypatch.setattr(drain, "_overwrite_lock", lambda payload, paths=None: False)
 
     assert drain.release_lock(run_log) is False
     assert "released 标记亦写入失败" in run_log.read_text(encoding="utf-8")

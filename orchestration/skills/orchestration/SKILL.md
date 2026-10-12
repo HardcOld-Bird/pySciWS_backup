@@ -22,9 +22,8 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
 5. 任务书**延迟书写**：计划阶段只写环节粗描述（brief），推进到该环节时才写完整任务书
    （自包含：目标/输入路径/交付要求/白名单/验收预期——组员看不到你的会话上下文）。
 6. **判断 drain/后台 worker 状态只用 `uv run pysci-orch status`**，禁止手敲 `tasklist`
-   等原始命令——Git Bash 下 `/FI` 被 MSYS 转成路径产生**假阴性**。信号互相冲突时
-   （如进程查不到但日志/worktree 显示在工作），报告「状态不确定，需可靠工具复核」，
-   **不得升格为「崩溃」结论**（basic.md §2 上报纪律：只报告有证据的问题）。
+   等原始命令——Git Bash 下 `/FI` 被 MSYS 转成路径产生**假阴性**。信号互相冲突时报告
+   「状态不确定，需可靠工具复核」，**不得升格为「崩溃」结论**（basic.md §2）。
 
 ## 命令面
 
@@ -52,7 +51,13 @@ uv run pysci-orch review <产物> --origin <member> [--rubric generic]
 uv run pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（非 Qwen 双序对局，
         # 阻塞出裁决；不可达降级入队 rc=1，案卷格式 references/jury-panel.md）
 uv run pysci-orch eval run (--case <id>|--all) [--label L]
-        # Tier B 压测：minimum 档真派发→通过|失败（references/harness-eval.md）
+        # Tier B 压测**抽检面**（runner=leader）；套件本体归 bencher
+uv run pysci-orch bench-add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]
+        [--label L] [--tier minimum] [--brief T] [--start]  # 测量任务入队（不阻塞）
+uv run pysci-orch bench-up [--dry] | bench-queue [--all] | bench-seen <id> | bench-stop
+        # bencher worker 生命周期（FIFO 非常驻）；判决进 status「待查看」面，
+        # 不即时唤醒（REFACTOR §5.1-B）。要领/harness 案卷格式：
+        # references/drain-watch.md + references/harness-eval.md
 uv run pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（§9 冷启动+宪章注入；
         # taste_enabled 未生效即拒派发，references/twin-taste-mirror.md）
 uv run pysci-orch stats [--plan id|--member m|--days N]
@@ -63,7 +68,7 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 ```
 
 成员 id：`sim` `figure` `writing` `theory` `lit` `drawing` `model3d`（专职）；
-`deputy` `reviewer` `devops`。已就绪 pod 以 `orch status` 为准。
+`deputy` `reviewer` `devops` `bencher` `twin`（特殊）。已就绪 pod 以 `orch status` 为准。
 
 ## 派发要领
 
@@ -71,31 +76,27 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
   续更早会话先 `sessions` 查池再显式指定；
 - **白名单最小化**：`--dirs` 只给任务需要的目录；生产型组员涉代码镜像时加
   `src/pysci/research/<线>/`（任务级授权例外，README §2 脚注）；
-- **模型档位**：专职组员默认 flash；复杂环节/连续 blocked 升 `--model-tier max`；
-  deputy/reviewer/devops 默认 max；
+- **模型档位**：registry 里全部成员默认 **flash**；复杂环节/连续 blocked 升
+  `--model-tier max`，压测按案卷降 `minimum`；
 - **devops 派发**：`dispatch devops --from-backlog`（自动取队首+交付后销账）；
 - **review 默认不发起**：用户点名审查或计划环节 review:true 时才用（重炮）。
 
 ## 交付判读与决策点
 
-- `<result>`=成功，`<blocked>`=失败（含卡点）；机械验收 FAIL 按 [NEXT] 回派返工，
-  同指纹连败 3 次停止回派升级决策；组员 `<infra_suggestion>` 现须带 `kind="defect|usability"`
-  （delivery-gate 强制），approve 会把它连同正文 `success_criteria` 一并写入 backlog 条目；
-  拿不准的送 `orch jury`（仲裁，references/jury-panel.md）；
+- `<result>`=成功，`<blocked>`=失败（含卡点）；机械验收 FAIL 按 [NEXT] 回派返工，同指纹
+  连败 3 次停止回派升级决策；`<infra_suggestion>` 须带 `kind="defect|usability"`
+  （delivery-gate 强制），approve 把它与正文 `success_criteria` 一并写入 backlog；
+  拿不准的送 `orch jury`（references/jury-panel.md）；
 - `<blocked tags="a,b">` 失败标签入台账/`orch stats` by_failure；滑窗内同 (tag,member)
   达 registry `tier_a` 阈值 → status/approve 自动立 source=tier-a 提案（references/tier-a-tags.md）；
 - blocked → 三选一：补充重派 / consult 副组长 / 上报用户；
 - 建议审批：approve 入 backlog 并**自动唤醒 devops 后台 FIFO 串行**（锁忙不重复唤醒，
-  单项失败标 needs_leader 跳过、不阻塞队列），**reject 即 override：必须
-  `--override "<依据>"`，落决策日志 `state/preference-journal.jsonl` 计入 override 率**（无
-  依据的否决被代码拒绝）——审批回复自动附送提议人；`orch status` 看 devops worker 态 /
-  最近 run / needs_leader 提醒；交办后照 [NEXT] 以 `run_in_background` 挂 `orch watch`
-  等事件；**watch 必须是该后台调用的唯一顶层命令**——用 `&`/`&&`/管道把它嵌进别的命令，
-  父任务终结会连坐杀死等待器，事件命中也无唤醒通道（2026-10-12 夜航停摆 6h）；
-  漏挂/断唤的账由下次 `orch status` 补账（fired 未确认逐条列明细）；
-  **测试/诊断性挂载前须确认无 live 挂载或先停**——`arm()` 覆写 `state/watch.json` 会抹掉
-  在等那任的心跳与黑匣子（`recent`/`exit_reason` 是脱靶复盘现场，status 读出其末帧）；
-  护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
+  单项失败标 needs_leader 跳过、不阻塞队列），审批回复自动附送提议人；**reject 即
+  override：必须 `--override "<依据>"`**，落 `state/preference-journal.jsonl` 计入 override
+  率（无依据的否决被代码拒绝）；护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
+- **挂 `orch watch` 等事件**（照 [NEXT]，`run_in_background`）：watch 必须是该后台调用的
+  **唯一顶层命令**（嵌进 `&`/`&&`/管道会被父任务连坐杀死，2026-10-12 夜航停摆 6h）；
+  挂载纪律与 `bench-*` 要领见 `references/drain-watch.md`；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：修改任务书重派，或行使最终裁定权
   坚持原派（理由留痕台账）；
 - 交接处决策：一键继续 / plan amend 改后续 / drop 中止。

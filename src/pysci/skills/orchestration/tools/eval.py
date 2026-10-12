@@ -42,6 +42,11 @@ BASELINE_PATH: Path = ORCH_STATE_ROOT / "evals" / "baseline.json"
 
 #: 压测默认档（§1.1：harness 压测走成本最低档；案卷可用 ``tier:`` 行覆盖）。
 DEFAULT_TIER: str = "minimum"
+#: 台账行的发起方取值（E4 所有权移交的审计面）：组长抽检 vs bencher 专测。
+RUNNER_LEADER: str = "leader"
+RUNNER_BENCHER: str = "bencher"
+#: 旧行无 ``runner`` 字段时的读法——移交前只有组长这一条通道。
+RUNNER_DEFAULT: str = RUNNER_LEADER
 #: 案卷缺省预算（压测要**便宜且可重跑**：轮次上限小、超时短，跑不起的套件等于没有）。
 DEFAULT_MAX_TURNS: int = 12
 DEFAULT_TIMEOUT_S: int = 900
@@ -116,6 +121,10 @@ class Row:
     #: 本跳污染了组员跟踪面（如自己的 ``AGENTS.md``）并被还原的路径——非空即说明该轮的
     #: 「组员自维护层」被压测跳过，噪声已隔离但要在台账可见。
     reverted: list[str] = field(default_factory=list)
+    #: 谁发起的这次测量（E4 所有权移交的审计面）：``leader``=组长抽检 ``orch eval run``，
+    #: ``bencher``=bencher 经 ``pysci-bench``。旧行无该字段读作 ``leader``（缺席即移交前
+    #: 的历史数据，不必回填——回填等于伪造当时的发起方）。
+    runner: str = "leader"
 
 
 # ---------------------------------------------------------------------------
@@ -347,7 +356,14 @@ def revert_new_dirt(member_id: str, before: set[str]) -> list[str]:
     return fresh if proc.returncode == 0 else []
 
 
-def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True) -> Row:
+def run_case(
+    case: Case,
+    *,
+    tier: str = "",
+    label: str = "",
+    quiet: bool = True,
+    runner: str = "leader",
+) -> Row:
     """跑一案：全新会话 + 固定档位 + 不附审批回复 + 不进生产台账 → 判据 → 台账行。
 
     隔离面：任务书后附 :data:`EVAL_HOP_NOTE`（禁止本跳写组员自维护层），并用
@@ -359,6 +375,9 @@ def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True)
         tier: 覆盖案卷档位（CLI ``--model-tier``）；空则用案卷的 ``tier:``。
         label: 本轮标签（如 ``before``/``after-<commit>``），入台账供分组对照。
         quiet: 抑制 do_dispatch 的面向组长报告（压测要的是行，不是 [NEXT] 提示）。
+        runner: 发起方（``leader``/``bencher``），入台账作审计面——E4 后套件运行职责
+            归 bencher，组长的 ``orch eval run`` 只是抽检通道；两条通道的读数必须能
+            在台账里分开（否则「谁测的」这一事实随移交一起消失）。
 
     Returns:
         :class:`Row`（同时已 append 进 ``evals.jsonl``）。
@@ -403,6 +422,7 @@ def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True)
         label=label,
         max_turns=case.max_turns,
         reverted=reverted,
+        runner=runner,
     )
     append_row(row)
     return row
@@ -436,20 +456,27 @@ def read_rows() -> list[dict[str, Any]]:
     return out
 
 
-def latest_rows(label: str = "") -> dict[str, dict[str, Any]]:
-    """每案取最近一行（可选按 ``label`` 过滤）——基线与本轮对照都用这个口径。"""
+def latest_rows(label: str = "", runner: str = "") -> dict[str, dict[str, Any]]:
+    """每案取最近一行（可选按 ``label``/``runner`` 过滤）——基线与本轮对照都用这个口径。
+
+    ``runner`` 过滤是 E4 移交后的必要读法：组长抽检与 bencher 专测混在同一台账里，
+    对照时把别人的读数算进本轮，判决就成了两条通道的平均数。旧行无 ``runner`` 字段，
+    按 :data:`RUNNER_DEFAULT` 读（缺席=移交前由组长侧发起）。
+    """
     out: dict[str, dict[str, Any]] = {}
     for r in read_rows():
         if label and r.get("label", "") != label:
+            continue
+        if runner and str(r.get("runner") or RUNNER_DEFAULT) != runner:
             continue
         if r.get("case"):
             out[str(r["case"])] = r
     return out
 
 
-def write_baseline(label: str = "") -> dict[str, Any]:
-    """以最近一轮回填 ``baseline.json``，返回写入内容。"""
-    rows = latest_rows(label)
+def write_baseline(label: str = "", runner: str = "") -> dict[str, Any]:
+    """以最近一轮（可按 ``label``/``runner`` 选）回填 ``baseline.json``，返回写入内容。"""
+    rows = latest_rows(label, runner)
     if not rows:
         raise ValueError(
             "evals.jsonl 无可回填的压测行——先跑 `orch eval run --all`（或 --case）"
@@ -640,9 +667,9 @@ def cmd_eval_run(args: argparse.Namespace) -> int:
 
 
 def cmd_eval_set_baseline(args: argparse.Namespace) -> int:
-    """``orch eval set-baseline``：把最近一轮（可按 ``--label`` 选）回填为基线快照。"""
+    """``orch eval set-baseline``：把最近一轮（可按 ``--label``/``--runner`` 选）回填为基线快照。"""
     try:
-        doc = write_baseline(args.label or "")
+        doc = write_baseline(args.label or "", getattr(args, "runner", "") or "")
     except ValueError as exc:
         print(f"[✗] {exc}")
         return 2

@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from . import benchd as _benchd
 from . import drain as _drain
 from . import eval as _eval
 from . import jury as _jury
@@ -207,6 +208,36 @@ def cmd_status(args: argparse.Namespace) -> int:
             print(
                 f"    - {b['id']}: {str(b.get('summary', ''))[:50]}"
                 + (f"（累计失败 {n} 次，勿原样重派）" if n else "")
+            )
+
+    bst = _benchd.bench_status()
+    print("== bencher worker（harness 专测队列，REFACTOR §8）==")
+    block = bst["lock"]
+    if block["state"] == "running":
+        print(f"  ▶ running（pid {block['pid']}，启动 {block['started']}）")
+    elif block["state"] == "stale":
+        print(
+            f"  ⊘ stale 锁（pid {block['pid']}）——下次 bench-up 自动接管并回收孤儿条目"
+        )
+    else:
+        print("  idle（worker 非常驻：队列非空才派生，消化完即自毁）")
+    if bst["cancel"]:
+        print(
+            f"  [s] 停止信号待消费（请求于 {bst['cancel'].get('requested_at', '?')}）"
+        )
+    print(f"  队列计数：{bst['counts'] or '（空）'}")
+    review = bst["review"]
+    if review:
+        print(
+            f"  [待查看结果] {len(review)} 项（择机查看，不即时打断；"
+            "查详情 `pysci-orch bench-queue`，看完 `bench-seen <id>`）"
+        )
+        for it in review[:5]:
+            res = it.get("result") or {}
+            line = res.get("headline") or str(res.get("error") or "")
+            print(
+                f"    - {it['id']}  [{it.get('status')}·{it.get('kind')}] "
+                f"{str(line)[:70]}"
             )
 
     dirty = dirty_tracked_state()
@@ -774,7 +805,60 @@ def main(argv: list[str] | None = None) -> int:
     pe.set_defaults(func=_eval.cmd_eval_run)
     pb = ep.add_parser("set-baseline", help="把最近一轮压测行回填为 baseline.json")
     pb.add_argument("--label", help="只取该标签的最近一轮（默认：每案最近一行）")
+    pb.add_argument(
+        "--runner",
+        choices=["leader", "bencher"],
+        help="只取该发起者的行（默认混合；E4 后专测行属 bencher）",
+    )
     pb.set_defaults(func=_eval.cmd_eval_set_baseline)
+
+    # ---- bench-*：bencher 专职测量员队列（REFACTOR §8 / E4）----
+    p = sub.add_parser(
+        "bench-add",
+        help="向 bencher 队列注入一个测量任务（run/capture/ab/check）；--start 顺手拉起 worker",
+    )
+    p.add_argument("kind", choices=list(_benchd.ITEM_KINDS))
+    p.add_argument("--cases", help="案卷 id，逗号分隔（run/capture/check 用）")
+    p.add_argument("--label", help="本轮标签（进台账供对照/基线回填）")
+    p.add_argument(
+        "--tier",
+        choices=["max", "flash", "minimum"],
+        help="覆盖案内档位（缺省=案内 tier，再缺省 minimum）",
+    )
+    p.add_argument("--ref", help="capture：被测 ref（默认 HEAD）")
+    p.add_argument("--ref-a", help="ab：基线侧 ref/commit")
+    p.add_argument("--ref-b", help="ab：实施侧 ref/commit")
+    p.add_argument("--brief", help="check：核查说明（派发正文）")
+    p.add_argument("--requested-by", help="提请人（默认 leader）")
+    p.add_argument("--summary", help="队列里展示的一句话（缺省按 kind 生成）")
+    p.add_argument(
+        "--start", action="store_true", help="入队后立即拉起 worker（默认等 bench-up）"
+    )
+    p.set_defaults(func=_benchd.cmd_bench_add)
+
+    p = sub.add_parser(
+        "bench-up",
+        help="拉起 bencher worker 后台消化队列（非空即消化，空即自毁）",
+    )
+    p.add_argument(
+        "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
+    )
+    p.set_defaults(func=_benchd.cmd_bench_up)
+
+    p = sub.add_parser("bench-queue", help="列 bencher 队列（默认只看在途与待查看）")
+    p.add_argument("--all", action="store_true", help="含已查看的历史条目")
+    p.set_defaults(func=_benchd.cmd_bench_queue)
+
+    p = sub.add_parser(
+        "bench-seen", help="标记某条目已查看（从 orch status 待查看面摘掉）"
+    )
+    p.add_argument("id", help="队列条目 id（bench-queue 可查）")
+    p.set_defaults(func=_benchd.cmd_bench_seen)
+
+    p = sub.add_parser(
+        "bench-stop", help="请求 bencher worker 协作停止（条目间隙干净退出）"
+    )
+    p.set_defaults(func=_benchd.cmd_bench_stop)
 
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(
@@ -786,6 +870,16 @@ def main(argv: list[str] | None = None) -> int:
         "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
     )
     p.set_defaults(func=_drain.cmd_drain_devops)
+
+    p = sub.add_parser(
+        "_bench-worker",
+        help="[内部] bencher 队列 drain 循环（下划线前缀=内部命令，勿手调）",
+    )
+    p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
+    p.add_argument(
+        "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
+    )
+    p.set_defaults(func=_benchd.cmd_bench_worker)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

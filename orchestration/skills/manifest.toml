@@ -56,3 +56,8 @@ targets = [".qoder/skills"]   # 项目根 = 组长专属（skills 不向下泄�
 name = "devops"
 source = "orchestration/skills/devops"
 targets = ["orchestration/pods/devops/.qoder/skills"]
+
+[[skills]]
+name = "bencher"
+source = "orchestration/skills/bencher"
+targets = ["orchestration/pods/bencher/.qoder/skills"]
