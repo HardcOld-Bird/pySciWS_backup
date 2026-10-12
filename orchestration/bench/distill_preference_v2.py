@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -45,6 +46,15 @@ DEFAULT_DRAFT = (
     PROJECT_ROOT / "orchestration" / "pods" / "twin" / "PREFERENCE-v2-draft.md"
 )
 CORPUS_DIR = PROJECT_ROOT / "data" / "others" / "prompts_storage"
+
+#: 批准单规格 2 点名「flash 冷启动会话」（旧档名 flash 归一即 ``main``）。默认必须显式给
+#: main：成员档位会随预设的 pro 名单漂走（2026-10-13 实测不传时 twin 落 pro），而成本
+#: 敏感是护栏级偏好（宪章 P-03）——不靠运气继承。
+DEFAULT_TIER = "main"
+
+#: 交付协议标签（``<artifact>`` 等）不属于宪章正文，落盘前剥离——否则用户把草案并进
+#: 生效面时要把协议噪声一起搬过去。
+PROTOCOL_TAG_RE = re.compile(r"\n?<artifact\b[^>]*>[\s\S]*?</artifact>\s*$")
 
 #: 草案首行硬标记（delivery 里也要求 twin 原样带上，双保险：肉眼与 grep 都能判非生效）。
 DRAFT_MARK = "<!-- PREFERENCE v2 草案 · 待用户确认 · 不生效（生效面=pods/twin/PREFERENCE.md） -->"
@@ -141,14 +151,15 @@ def main(argv: list[str] | None = None) -> int:
         "--model-tier",
         type=normalize_role,
         choices=["main", "pro", "minimum"],
-        help="档位覆盖（旧名 flash→main、max→pro；默认成员档位=main/flash 起步）",
+        default=DEFAULT_TIER,
+        help=f"蒸馏跳档位（旧名 flash→main、max→pro）；默认 {DEFAULT_TIER}=批准单点名的 flash",
     )
     ap.add_argument("--out", default=str(DEFAULT_DRAFT), help="草案落点")
     ap.add_argument("--dry", action="store_true", help="只打印注入内容与哈希，不派发")
     args = ap.parse_args(argv)
 
     out = Path(args.out)
-    if out.name == PREFERENCE_NAME:
+    if out.name == PREFERENCE_NAME or out.resolve() == EFFECTIVE.resolve():
         print(f"[!] 拒写生效面：--out 不能是 {PREFERENCE_NAME}（本单只产草案）")
         return 2
 
@@ -189,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         attach_replies=False,
         eval_hop=True,
     )
-    body = (outcome.body or "").strip()
+    body = PROTOCOL_TAG_RE.sub("", (outcome.body or "").strip()).strip()
     if outcome.code != 0 or len(body) < 200:
         print(
             f"[✗] 蒸馏跳未产出（code={outcome.code} kind={outcome.kind} "
