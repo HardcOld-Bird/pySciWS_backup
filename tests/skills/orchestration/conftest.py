@@ -596,8 +596,13 @@ def fake_headless(monkeypatch, responder):
     return calls
 
 
-def envelope(result, *, is_error=True, stop="stop_sequence", rc=1):
-    """构造 run_headless 的 (rc, stdout, err) 三元组（stdout 为 envelope JSON）。"""
+def envelope(result, *, is_error=True, stop="stop_sequence", rc=1, ctx=0.0):
+    """构造 run_headless 的 (rc, stdout, err) 三元组（stdout 为 envelope JSON）。
+
+    ``ctx``：本跳结束时的上下文占用比（envelope 的 ``context_usage_ratio``）。渠道故障的
+    形状判据读它，而 ``session="latest"`` 的续/新水位闸（``dispatch.FRESH_CTX_RATIO``）也读
+    它——不给就默认 0，测试可据此造「水位已过崖」的会话。
+    """
     return (
         rc,
         json.dumps(
@@ -608,6 +613,7 @@ def envelope(result, *, is_error=True, stop="stop_sequence", rc=1):
                 "num_turns": 1,
                 "duration_ms": 13000,
                 "session_id": "aaaa1111",
+                "usage": {"context_usage_ratio": ctx},
             }
         ),
         "",

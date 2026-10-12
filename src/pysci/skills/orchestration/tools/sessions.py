@@ -53,8 +53,9 @@ def touch_session(
     *,
     hops_delta: int = 1,
     chars_offset: int | None = None,
+    ctx_ratio: float | None = None,
 ) -> None:
-    """一跳完成后更新会话元数据（跳数/最后活跃/字符水位）。
+    """一跳完成后更新会话元数据（跳数/最后活跃/字符水位/上下文水位）。
 
     Args:
         member: 成员条目（就地改，落盘由调用方 ``Registry.save`` 负责）。
@@ -64,6 +65,10 @@ def touch_session(
             是唯一能客观反映「这一跳说了多少话」的本地存储，而每跳都在独立进程里跑，
             必须有跨进程的基准点（backlog 20261010-ledger-est-tokens）。水位与本跳实测
             起点不一致 = 期间存在 orch 记账外的增长（手动 --resume 等）。
+        ctx_ratio: 本跳结束时的**上下文占用比**（envelope 的 ``context_usage_ratio``）。
+            记它是为了让跨进程的下一次 ``session="latest"`` 选择知道这具会话离压缩悬崖
+            还有多远（``dispatch.FRESH_CTX_RATIO`` 水位闸）——ctx 是会话态只增不减，不落
+            池就永远只能事后在台账里看到 81%/87% 那种腰斩读数。
     """
     member.update_session(sid, last_active=_now())
     for s in member.sessions:
@@ -71,6 +76,8 @@ def touch_session(
             s["hops"] = int(s.get("hops", 0)) + hops_delta
             if chars_offset is not None:
                 s["chars_offset"] = chars_offset
+            if ctx_ratio is not None:
+                s["ctx_ratio"] = round(float(ctx_ratio), 4)
 
 
 def session_jsonl(member: Member, sid: str) -> Path:

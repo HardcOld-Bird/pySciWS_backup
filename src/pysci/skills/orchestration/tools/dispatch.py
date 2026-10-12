@@ -69,6 +69,12 @@ SYSTEMIC_TEXT: dict[str, tuple[str, str]] = {
     "channel_error": ("渠道级失败", "模型渠道级故障（channel_error）"),
 }
 
+#: 上下文水位闸：上一跳末 ``ctx_ratio`` 达到此值的会话，``session="latest"`` 不再续、改起
+#: 新会话（记忆已按 charter 蒸馏进只读层与台账，续作靠任务书不靠会话记忆）。取 0.6=60%：
+#: 与巡检清单「ctx_ratio 持续 >60% 的成员→提请组长归档」同一把尺（devops 实测 81%/87% 两跳
+#: 后接 run_failed/rc=1 腰斩，续上去就是把它推过压缩悬崖）。低于此值才续，留一跳余量。
+FRESH_CTX_RATIO: float = 0.6
+
 
 def systemic_error_text(kind: str) -> str:
     """全局停止的说明句（``.done`` 的 ``error`` 字段，三个 worker 面同文）。"""
@@ -451,8 +457,22 @@ def do_dispatch(
     if session == "new":
         sid, resume = new_session_id(), False
     elif session == "latest":
+        # 上下文水位闸（backlog insp-20261012-224853-mechanical）：上一跳末 ctx_ratio 已过
+        # FRESH_CTX_RATIO 水位的会话不再续——resume 是在那个水位之上起步，只涨不降，续上去
+        # 就是把它推过压缩/腰斩悬崖（devops 实测 81%→87% 后接 run_failed/rc=1，两案同因）。
+        # 手动 `--session new` 照旧不受此闸约束；无记录（崩溃跳/首次）也不拦，fail-open。
         active = m.active_sessions
-        sid, resume = (active[0]["sid"], True) if active else (new_session_id(), False)
+        fresh = [
+            s for s in active if float(s.get("ctx_ratio") or 0.0) < FRESH_CTX_RATIO
+        ]
+        if active and not fresh:
+            print(
+                f"[i] 最近 {len(active)} 个会话的末跳 ctx_ratio 均 ≥"
+                f" {FRESH_CTX_RATIO:.0%}（压缩悬崖前兆）→ 本跳起新会话；记忆已按"
+                " charter 蒸馏进只读层与台账"
+            )
+        pick = fresh[0] if fresh else None
+        sid, resume = (pick["sid"], True) if pick else (new_session_id(), False)
     else:
         found = m.find_session(session)
         if found is None:
@@ -677,7 +697,9 @@ def do_dispatch(
                     error=err_text,
                 )
             )
-        _sessions.touch_session(m, sid, chars_offset=chars_after)
+        _sessions.touch_session(
+            m, sid, chars_offset=chars_after, ctx_ratio=env_json.context_usage_ratio
+        )
         reg.write_sessions(m)
         reg.save()
         outcome = DispatchOutcome(
@@ -749,7 +771,9 @@ def do_dispatch(
         sent = p.parent / "sent"
         sent.mkdir(exist_ok=True)
         shutil.move(str(p), str(sent / p.name))
-    _sessions.touch_session(m, sid, chars_offset=chars_after)
+    _sessions.touch_session(
+        m, sid, chars_offset=chars_after, ctx_ratio=env_json.context_usage_ratio
+    )
     reg.write_sessions(m)
     reg.save()
 
