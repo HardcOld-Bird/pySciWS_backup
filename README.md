@@ -6,7 +6,7 @@
 
 代码组织为单一 **src-layout 安装包 `pysci`**，通过 [uv](https://docs.astral.sh/uv/) 以 editable
 方式装入唯一的 `.venv`——**无需任何 `sys.path` hack**，直接 `import pysci...`、
-`uv run python scripts/...` 即可运行。非代码资产放在与代码树镜像的平行资产树 `data/`。
+`uv run --no-sync python scripts/...` 即可运行。非代码资产放在与代码树镜像的平行资产树 `data/`。
 
 > **本文件是项目结构的事实描述，可能随重构过时。**
 > 资产目录布局的**权威索引是 [`src/pysci/paths.py`](src/pysci/paths.py)**——每个 `*_ROOT` 常量的
@@ -109,19 +109,19 @@ assert_within_data(fig_dir / "out.pdf")  # 写入前断言落在 data/ 内（防
 
 ```bash
 # 研究脚本（已 editable 安装，直接 import pysci）
-uv run python scripts/research/gain_ep/theory/相位绕数参数空间对比.py
-uv run python scripts/research/gain_ep/simulation/runner_beam_scatter.py
+uv run --no-sync python scripts/research/gain_ep/theory/相位绕数参数空间对比.py
+uv run --no-sync python scripts/research/gain_ep/simulation/runner_beam_scatter.py
 
 # 技能 CLI：6 个 console script（uv sync 后生成于 .venv/Scripts）
-uv run pysci-research    --help      # 文献调研        ⟷ literature_research
-uv run pysci-simulation  --help      # COMSOL 仿真     ⟷ comsol_simulation
-uv run pysci-compose     --help      # 文档写作        ⟷ document_writing
-uv run pysci-figures     --help      # 科研绘图        ⟷ scientific_plotting
-uv run pysci-theory      --help      # 理论计算        ⟷ theoretical_computation
-uv run pysci-imagine     --help      # AI 绘图         ⟷ ai_drawing
+uv run --no-sync pysci-research   --help      # 文献调研        ⟷ literature_research
+uv run --no-sync pysci-simulation --help      # COMSOL 仿真     ⟷ comsol_simulation
+uv run --no-sync pysci-compose    --help      # 文档写作        ⟷ document_writing
+uv run --no-sync pysci-figures    --help      # 科研绘图        ⟷ scientific_plotting
+uv run --no-sync pysci-theory     --help      # 理论计算        ⟷ theoretical_computation
+uv run --no-sync pysci-imagine    --help      # AI 绘图         ⟷ ai_drawing
 
 # 等价兜底调用（入口映射见 pyproject.toml 的 [project.scripts]）
-uv run python -m pysci.skills.literature_research.tools.research doctor
+uv run --no-sync python -m pysci.skills.literature_research.tools.research doctor
 ```
 
 > **Windows PowerShell 注意**：调用任何输出中文的命令前，须先在同一 shell 执行
@@ -133,10 +133,10 @@ uv run python -m pysci.skills.literature_research.tools.research doctor
 ## 测试
 
 ```bash
-uv run pytest                     # 实测：1450 passed, 2 skipped, 6 deselected（约 22 s）
-uv run pytest -m "not hardware"   # 显式排除硬件用例（addopts 已默认如此）
-uv run pytest -m hardware         # 只跑硬件用例（需 NI 设备 / COMSOL Server）
-uv run pytest --cov               # 附带覆盖率（source = src/pysci）
+uv run --no-sync pytest                     # 实测：1450 passed, 2 skipped, 6 deselected（约 22 s）
+uv run --no-sync pytest -m "not hardware"   # 显式排除硬件用例（addopts 已默认如此）
+uv run --no-sync pytest -m hardware         # 只跑硬件用例（需 NI 设备 / COMSOL Server）
+uv run --no-sync pytest --cov               # 附带覆盖率（source = src/pysci）
 ```
 
 - `testpaths = ["tests"]`，`--strict-markers`；markers：`hardware`（需外部设备）、`slow`。
@@ -144,7 +144,7 @@ uv run pytest --cov               # 附带覆盖率（source = src/pysci）
   COMSOL Server），已由该目录 `conftest.py` 的 `collect_ignore` 精确排除，不被 pytest 收集；
   需要时先启动 COMSOL Server 再直接 `python tests/research/gain_ep/theory/<script>.py`。
 - 无 `nidaqmx` 时，`tests/research/gain_ep/experiment/conftest.py` 会以 `collect_ignore_glob`
-  跳过整个目录的收集，不会导致 `uv run pytest` 失败。
+  跳过整个目录的收集，不会导致 `uv run --no-sync pytest` 失败。
 
 ---
 

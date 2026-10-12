@@ -12,8 +12,8 @@ CLI, open code only when maintaining it ([maintenance.md](references/maintenance
 
 ## Invocation
 
-From the **project root**: `uv run pysci-compose <command> [options]`, below `compose …` (fallback:
-`uv run python -m pysci.skills.document_writing.tools.compose …`). This CLI prints Chinese and takes
+From the **project root**: `uv run --no-sync pysci-compose <command> [options]`, below `compose …` (fallback:
+`uv run --no-sync python -m pysci.skills.document_writing.tools.compose …`). This CLI prints Chinese and takes
 multi-word titles — apply `.qoder/rules/basic.md` §3 or you read mojibake and broken commands.
 
 ## Capability boundary

@@ -181,7 +181,7 @@ def _render_design_spec(
     L.append("## 下一步（视觉闭环）")
     L.append("")
     L.append(f"1. 编辑管线 `{_rel(pipeline)}`，把模板示例**替换为真实数据**。")
-    L.append(f"2. `uv run pysci-figures build {_rel(figdir)}`")
+    L.append(f"2. `uv run --no-sync pysci-figures build {_rel(figdir)}`")
     L.append(
         f"3. `Read` 预览 `{_rel(figdir)}/out/{slug}_preview.png`，对照本范本迭代（配色/构图逼近，数据用真的）。"
     )

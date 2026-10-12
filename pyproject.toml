@@ -96,7 +96,7 @@ imaging = ["scikit-image", "opencv-python-headless"]
 # ------------------------------------------------------------
 # 控制台脚本：各 skill 的统一 CLI 门面（均为 module:main 形态，main(argv=None)->int）。
 # 加前缀 pysci- 避免与全局工具重名；`uv sync` 后在 .venv/Scripts 生成 pysci-*.exe。
-# 等价兜底调用：`uv run python -m <入口模块>`（模块路径见各 SKILL.md 的 Invocation）。
+# 等价兜底调用：`uv run --no-sync python -m <入口模块>`（模块路径见各 SKILL.md 的 Invocation）。
 # ------------------------------------------------------------
 [project.scripts]
 pysci-research = "pysci.skills.literature_research.tools.research:main"
@@ -223,10 +223,10 @@ major_version_zero = true
 # ------------------------------------------------------------
 # pytest：测试根为 tests/（合并原 sweeper400 的 pytest 配置）
 # addopts 默认 `-m "not hardware"`：无硬件环境（nidaqmx 已装但 PXI/步进电机/COMSOL Server
-# 不可用）下 `uv run pytest tests` 全绿，硬件用例（@pytest.mark.hardware）默认跳过而非报错。
-# 需要跑硬件用例时显式覆盖：`uv run pytest -m hardware`（或 `-m ""` 跑全部）。
+# 不可用）下 `uv run --no-sync pytest tests` 全绿，硬件用例（@pytest.mark.hardware）默认跳过而非报错。
+# 需要跑硬件用例时显式覆盖：`uv run --no-sync pytest -m hardware`（或 `-m ""` 跑全部）。
 # 无 nidaqmx / 无 COMSOL Server 时，相关目录仍由各自 conftest.py 守卫自动跳过收集。
-# 覆盖率不写入 addopts（保持 `uv run pytest` 轻快），需要时显式 `uv run pytest --cov`。
+# 覆盖率不写入 addopts（保持 `uv run --no-sync pytest` 轻快），需要时显式 `uv run --no-sync pytest --cov`。
 # ------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]

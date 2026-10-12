@@ -2,7 +2,7 @@
 
 子命令::
 
-    uv run pysci-dev doctor [--pod <id>]     # pod 健康巡检
+    uv run --no-sync pysci-dev doctor [--pod <id>]     # pod 健康巡检
     ... dev sync [--check]                   # 技能真本→部署副本（复用 orchestration.sync 引擎）
     ... dev venv-sync [uv sync 参数…]         # Windows 安全的 uv sync：让路→sync→核对入口
     ... dev worktree add|merge|remove|list [<name>]

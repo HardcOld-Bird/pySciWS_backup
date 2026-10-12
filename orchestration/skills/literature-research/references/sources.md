@@ -50,7 +50,7 @@ The `paper-search-mcp` MCP aggregates ~22 sources on the primary path — see `S
 
 One honest caveat to “black box”: every backend module also carries a `python -m …` **debug
 backdoor** (an `__main__` block) for isolating a single layer, e.g.
-`uv run python -m pysci.skills.literature_research.tools.wos_client check`. Each prints a banner to
+`uv run --no-sync python -m pysci.skills.literature_research.tools.wos_client check`. Each prints a banner to
 **stderr** naming the equivalent `research` subcommand, so nothing is hidden — but they are for
 troubleshooting only, and normal work always goes through `research`. Three actions have *no* CLI
 equivalent and exist only there: `browser_fetch batch|pdf`, `wos_client journal` (WoS journal record

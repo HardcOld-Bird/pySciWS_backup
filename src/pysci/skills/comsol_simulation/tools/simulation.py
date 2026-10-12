@@ -3,7 +3,7 @@
 对 ``tools/`` 下各模块（config/session/inspect/build/run/export/postprocess/docs）做薄编排，
 让我（Agent）与用户都能用一条命令驱动闭环的每一步::
 
-    uv run python -m pysci.skills.comsol_simulation.tools.simulation doctor
+    uv run --no-sync python -m pysci.skills.comsol_simulation.tools.simulation doctor
     ... simulation inspect tree --mph model.mph
     ... simulation run solve --mph model.mph --study std1
     ... simulation export image --mph model.mph --plotgroup pg10 --out out.png

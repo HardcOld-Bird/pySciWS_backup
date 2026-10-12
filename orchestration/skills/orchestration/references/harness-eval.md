@@ -22,11 +22,11 @@ Tier A（tier-a-tags.md）是**被动**故障统计，Tier B 是**主动**压测
 ## 命令面
 
 ```
-uv run pysci-orch eval run --case <id>        # 跑一案
-uv run pysci-orch eval run --all              # 跑全套（按文件名序）
+uv run --no-sync pysci-orch eval run --case <id>        # 跑一案
+uv run --no-sync pysci-orch eval run --all              # 跑全套（按文件名序）
         [--model-tier max|flash|minimum]      # 覆盖案卷档位（默认案卷里的 minimum）
         [--label <轮次名>]                     # 本轮打标，供 set-baseline 精确回取
-uv run pysci-orch eval set-baseline [--label <轮次名>] [--runner leader|bencher]
+uv run --no-sync pysci-orch eval set-baseline [--label <轮次名>] [--runner leader|bencher]
         # 以最近（或指定）一轮回填基线；E4 后不带 --runner 就是混合通道（慎用）
 ```
 

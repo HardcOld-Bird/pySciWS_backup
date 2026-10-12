@@ -40,8 +40,8 @@ Tier 1 needs exactly one secret. To obtain it:
 7. Verify without spending anything:
 
    ```powershell
-   uv run pysci-imagine doctor
-   uv run pysci-imagine gen --prompt 'test' --dry-run
+   uv run --no-sync pysci-imagine doctor
+   uv run --no-sync pysci-imagine gen --prompt 'test' --dry-run
    ```
 
    `doctor` prints the key **masked** (`abc***xyz`) and the resolved endpoint; `--dry-run` prints the

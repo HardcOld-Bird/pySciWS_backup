@@ -7,7 +7,7 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
 
 命令面（plan-first：组长日常走 plan；dispatch/sessions 等为底层命令，降级与调试用）::
 
-    uv run pysci-orch status
+    uv run --no-sync pysci-orch status
     ... orch plan new <file> | run <id> [--text/--task ...] | amend <id> | drop <id> | list
     ... orch plan adhoc <member> --text "..."        # 计划外事项的正确姿势
     ... orch approve <sid> (--jury | --bench <案id[,案id]> | --override "<理由>") [--note ...]
@@ -285,7 +285,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     print()
     print("[NEXT]")
     if sugg:
-        print("  有待审批建议：uv run pysci-orch suggestions 查看 → approve/reject")
+        print(
+            "  有待审批建议：uv run --no-sync pysci-orch suggestions 查看 → approve/reject"
+        )
     if needs_leader:
         print(
             "  有 needs_leader 条目（drain 跳过）：查 state/backlog.json 后决定"
@@ -303,13 +305,15 @@ def cmd_status(args: argparse.Namespace) -> int:
         )
     if live:
         print(
-            '  推进进行中计划：uv run pysci-orch plan run <id> --text "<当前环节任务书>"'
+            '  推进进行中计划：uv run --no-sync pysci-orch plan run <id> --text "<当前环节任务书>"'
         )
     else:
         print(
-            "  新工作：uv run pysci-orch plan new <计划.yaml>（格式见 README §4.2）；"
+            "  新工作：uv run --no-sync pysci-orch plan new <计划.yaml>（格式见 README §4.2）；"
         )
-        print('  计划外单步：uv run pysci-orch plan adhoc <member> --text "..."')
+        print(
+            '  计划外单步：uv run --no-sync pysci-orch plan adhoc <member> --text "..."'
+        )
     return 0
 
 
@@ -490,7 +494,9 @@ def cmd_sync(args: argparse.Namespace) -> int:
         return 2
     if [line for line in report if line.startswith("[!]")] and args.check:
         print()
-        print("[NEXT] 存在漂移：uv run pysci-orch sync 重新部署（真本→副本单向）。")
+        print(
+            "[NEXT] 存在漂移：uv run --no-sync pysci-orch sync 重新部署（真本→副本单向）。"
+        )
         return 2
     return 0
 

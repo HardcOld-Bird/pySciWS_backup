@@ -31,13 +31,13 @@ SKILL.md 的命令面只留一行索引；本文放**为什么**与**踩过的�
 ## 3. bench-* 使用要领（组长侧）
 
 ```bash
-uv run pysci-orch bench-add run --cases fig-basic,lit-arxiv --label after-<commit> --start
-uv run pysci-orch bench-add ab  --ref-a dd6e37b --ref-b HEAD --cases fig-basic --label L
-uv run pysci-orch bench-add capture --case fig-basic --ref HEAD
-uv run pysci-orch bench-add check --brief "<核查任务书正文>" --requested-by leader
-uv run pysci-orch bench-queue          # 看在途/待查看；--all 看历史
-uv run pysci-orch bench-seen <id>      # 看完摘掉（否则一直挂在 status 上）
-uv run pysci-orch bench-stop           # 协作停止：条目间隙干净退出，不 kill
+uv run --no-sync pysci-orch bench-add run --cases fig-basic,lit-arxiv --label after-<commit> --start
+uv run --no-sync pysci-orch bench-add ab  --ref-a dd6e37b --ref-b HEAD --cases fig-basic --label L
+uv run --no-sync pysci-orch bench-add capture --case fig-basic --ref HEAD
+uv run --no-sync pysci-orch bench-add check --brief "<核查任务书正文>" --requested-by leader
+uv run --no-sync pysci-orch bench-queue          # 看在途/待查看；--all 看历史
+uv run --no-sync pysci-orch bench-seen <id>      # 看完摘掉（否则一直挂在 status 上）
+uv run --no-sync pysci-orch bench-stop           # 协作停止：条目间隙干净退出，不 kill
 ```
 
 - **入队即返**：`bench-add` 不阻塞；`--start`（或随后 `bench-up`）派生分离 worker，

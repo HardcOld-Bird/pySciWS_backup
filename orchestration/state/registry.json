@@ -113,6 +113,7 @@
       "cmd": [
         "uv",
         "run",
+        "--no-sync",
         "pysci-figures",
         "audit",
         "{path}",
@@ -123,6 +124,7 @@
       "cmd": [
         "uv",
         "run",
+        "--no-sync",
         "pytest",
         "tests/skills/orchestration",
         "-q"
@@ -132,6 +134,7 @@
       "cmd": [
         "uv",
         "run",
+        "--no-sync",
         "pytest",
         "tests/skills/orchestration/test_pod_guard_blocks.py",
         "tests/skills/orchestration/test_guards_in_force.py",

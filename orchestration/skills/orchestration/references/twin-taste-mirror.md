@@ -16,9 +16,9 @@ pysci-mirror status        # 用户侧全景：待盲审/宪章状态/taste_enab
 ## 2. `orch taste <案卷.md>`——审美孪生的单跳判断
 
 ```
-uv run pysci-orch taste state/evals/cases/xxx.md --dry     # 只看注入内容，零成本
-uv run pysci-orch taste state/evals/cases/xxx.md           # 真派发（须 taste_enabled=true）
-uv run pysci-orch taste <案卷.md> --member twin --model-tier flash
+uv run --no-sync pysci-orch taste state/evals/cases/xxx.md --dry     # 只看注入内容，零成本
+uv run --no-sync pysci-orch taste state/evals/cases/xxx.md           # 真派发（须 taste_enabled=true）
+uv run --no-sync pysci-orch taste <案卷.md> --member twin --model-tier flash
 ```
 
 - **案卷格式与 `orch jury` 同源**（`## 问题` / `## 选项 A` / `## 选项 B` [ `/ ## 证据` ]，
