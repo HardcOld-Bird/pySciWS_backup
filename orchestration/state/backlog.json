@@ -1271,7 +1271,41 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261013-045000-leader.md",
       "status": "pending",
       "proposed": "2026-10-13T04:35:32+08:00",
-      "note": ""
+      "note": "组长裁决再排：路径 2（技能真本+devops AGENTS.md 子集）立即执行；charter 8 处挂起待用户授权；判据口径=9 处（见建议文件追加注记）",
+      "started_at": "2026-10-13T04:35:34+08:00",
+      "worktree": "20261013-045000-leader"
+    },
+    {
+      "id": "insp-20261013-045553-mechanical",
+      "member": "inspector",
+      "actor": "inspector",
+      "source": "inspector",
+      "summary": "devops AGENTS.md 两处技能索引悬空（verdict-package.md / harness-eval.md 不在 devops references）",
+      "kind": "defect",
+      "success_criteria": "grep 'references/verdict-package\\|references/harness-eval' orchestration/pods/devops/AGENTS.md 命中行均已改为可解析路径，或两文件已补入 orchestration/skills/devops/references/，逐条 ls 可解析",
+      "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261013-045553-mechanical.md",
+      "class": "mechanical",
+      "channel": "mechanical",
+      "status": "in_progress",
+      "proposed": "2026-10-13T04:56:08+08:00",
+      "note": "inspector 自主发现（§5.2 不经组长）",
+      "started_at": "2026-10-13T04:56:10+08:00",
+      "worktree": "insp-20261013-045553-mechanical"
+    },
+    {
+      "id": "insp-20261013-045603-mechanical",
+      "member": "inspector",
+      "actor": "inspector",
+      "source": "inspector",
+      "summary": "imagine --max-images 无 --group 时静默吞掉 --n 多请求语义，产出张数跌回 1 且零提示",
+      "kind": "usability",
+      "success_criteria": "pysci-imagine gen --prompt t --n 5 --max-images 5 --dry-run 输出含「独立发起」提示或显式忽略告警，或命令 rc!=0；不得再出现零提示单张请求体",
+      "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261013-045603-mechanical.md",
+      "class": "mechanical",
+      "channel": "mechanical",
+      "status": "pending",
+      "proposed": "2026-10-13T04:56:09+08:00",
+      "note": "inspector 自主发现（§5.2 不经组长）"
     }
   ]
 }
