@@ -35,6 +35,9 @@
   orch watch）会**先删光其余入口**再报 os error 5；工具=让路→sync→让回原地→核对入口。**原名
   缺失时 `.locked-*` 就是唯一原件，删前先查**；别 kill 组长进程。隐式 sync 坑与三态处置见
   `references/uv-venv-sync.md`。
+- **CLI 范式=uv run 必带 --no-sync（2026-10-12）**：src/registry checks/技能真本/basic.md 四面
+  同口径，快照测试 `test_cli_paradigm_sync.py` 扫语料点火；charter 只读面登记 `READONLY_PENDING`，
+  文件合规后哨兵反红提醒删豁免（防永久假绿）。人工 grep 清点会漏（同行含 --no-sync 被吃掉）。
 - **任务书轻量 lint 表由 devops 维护（2026-10-10）**：`write_taskbook` 落盘前扫正文，命中
   `state/taskbook-lint.json`（跟踪）任一正则即**告警不阻断**；增补=`rules` 追加
   `{id, re, hint}`（JSON 内反斜杠双写）。fail-open⇒改坏 JSON 静默失效。
