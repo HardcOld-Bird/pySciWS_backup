@@ -408,20 +408,32 @@ def run_uv_sync(extra: list[str]) -> tuple[int, str]:
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 
-def _sweep_aside_residue(scripts_dir: Path) -> int:
-    """清掉往次让路留下的 ``<name>.exe.locked-<ts>`` 残留，返回删掉个数。
+def _aside_name(exe: Path, ts: str) -> Path:
+    """让路文件的名字（与 `_move_aside_locked` 保持一致）。"""
+    return exe.with_name(f"{exe.name}.locked-{ts}")
 
-    这些文件只有**占用它的进程退出后**才删得掉（本次让路的那个就删不掉），故 best-effort：
-    删不动的静默留着，交给下一次运行——否则半坏态的解药会积一堆垃圾。
+
+def _recycle_aside_residue(scripts_dir: Path) -> tuple[int, int]:
+    """回收往次让路留下的 ``<name>.exe.locked-<ts>``，返回 (删掉的副本数, 还原的原件数)。
+
+    判据必须先查原名：原名**在盘** ⇒ 残留只是多余副本，删；原名**缺失** ⇒ 残留是唯一的
+    原件（上次让路后 uv 判定无事可做、没重建它），必须改回原名。**反过来做就会吞掉唯一的
+    入口文件**（2026-10-12 main 实测踩过：无 pyproject 变更的一跑把 pysci-dev.exe 弄没了）。
+    还被占用进程捏着的删不动，静默留给下一次。
     """
-    n = 0
-    for stale in scripts_dir.glob("*.exe.locked-*"):
+    deleted = restored = 0
+    for stale in sorted(scripts_dir.glob("*.exe.locked-*")):
+        orig = stale.with_name(stale.name.split(".locked-")[0])
         try:
-            stale.unlink()
+            if orig.exists():
+                stale.unlink()
+                deleted += 1
+            else:
+                os.replace(stale, orig)
+                restored += 1
         except OSError:
             continue
-        n += 1
-    return n
+    return deleted, restored
 
 
 def cmd_venv_sync(args: argparse.Namespace) -> int:
@@ -430,7 +442,7 @@ def cmd_venv_sync(args: argparse.Namespace) -> int:
     动机：``uv sync`` 遇运行中 exe（典型=组长挂着的 ``pysci-orch.exe watch``）会以
     「拒绝访问 (os error 5)」失败，而**失败前已把同目录其余入口删光**——裸命令集体
     command not found 的半坏 venv，容易被误诊成 PATH/安装问题，并让在跑的 drain 会话
-    当场失去工具面。本命令把「重命名让路 → sync → 校验入口齐备 → 清残留」固化成一条。
+    当场失去工具面。本命令把「回收残留 → 改名让路 → sync → 让回原地 → 核对入口」固化成一条。
 
     Returns:
         0 成功且入口齐备；2 入口仍缺失（半坏态未消除，须上报）；否则透传 uv 的 rc。
@@ -446,9 +458,9 @@ def cmd_venv_sync(args: argparse.Namespace) -> int:
         return 2
 
     ts = datetime.now().astimezone().strftime("%Y%m%d%H%M%S")
-    swept = _sweep_aside_residue(scripts_dir)
-    if swept:
-        print(f"[i] 清理往次让路残留 {swept} 个")
+    deleted, revived = _recycle_aside_residue(scripts_dir)
+    if deleted or revived:
+        print(f"[i] 回收往次让路：删副本 {deleted} 个，还原原件 {revived} 个")
     moved: list[Path] = []
     if os.name == "nt":
         print("== 让路：探测声明入口是否被运行中进程占住 ==")
@@ -476,6 +488,16 @@ def cmd_venv_sync(args: argparse.Namespace) -> int:
     rc, out = run_uv_sync(list(args.uv_args or []))
     print(out)
 
+    put_back: list[str] = []
+    for exe in moved:
+        scratch = _aside_name(exe, ts)
+        if not exe.exists() and scratch.exists():
+            # uv 判定无事可做就不会重建入口——让路的原件必须自己改回去，否则让路成了肇事者
+            os.replace(scratch, exe)
+            put_back.append(exe.name)
+    if put_back:
+        print(f"  [√] uv 未重建 {put_back} → 已把让路原件改回原名")
+
     missing = [n for n in names if not (scripts_dir / f"{n}.exe").exists()]
     if missing:
         print(
@@ -484,7 +506,9 @@ def cmd_venv_sync(args: argparse.Namespace) -> int:
         )
         return 2
     for exe in moved:
-        scratch = exe.with_name(f"{exe.name}.locked-{ts}")
+        scratch = _aside_name(exe, ts)
+        if not scratch.exists():
+            continue  # 已被上面「让回原地」用掉了，不是待清残留
         try:
             scratch.unlink()
         except OSError:
