@@ -20,6 +20,7 @@ from . import sessions as _sessions
 from . import sync as _sync
 from .checks import run_checks
 from .delivery import parse_delivery
+from .failure_tags import load_infra_kinds
 from .ledger import LedgerEntry, append
 from .registry import Registry, orchestration_rel
 from .runner import (
@@ -173,12 +174,26 @@ def write_taskbook(
 
 
 def _persist_suggestion(member_id: str, body: str, kind: str = "") -> str:
-    """把 infra_suggestion 持久化为待审批条目，返回建议 id（文件名 stem）。
+    """把 infra_suggestion 持久化为待审批条目，返回建议 id（文件名 stem）；未入库返回空串。
 
     E0-B（判据 2）：把交付 XML 上解析出的 kind 写进文件头部标记行，使 approve 侧
     ``parse_suggestion_fields`` 无论建议正文是否自带 ``kind:`` 行都能读到权威分类
     （正文若自带则以头部这条为准——它来自被 gate 校验过的属性）。
+
+    词表二次校验（backlog 20261012-120001-leader）：gate 拦在组员的 Stop 上，但那一跳
+    仍可能以带非法 kind 的最终回复收场（实测 110101：交付里连发两块，占位块
+    ``kind="defusability-placeholder"`` 在前，被解析器取走并落盘，整改后的重交付另立新
+    文件，空壳从此留在审批队列）。落盘是入队的**唯一**门，故在此复核词表：非法或缺失
+    kind 一律不入库并告警——「退回改写」该是组员的下一步，不是组长的筛除负担。
     """
+    vocab = load_infra_kinds()
+    if kind not in vocab:
+        print(
+            f"[!] 改进建议未入库（{member_id}）：kind={kind!r} 不在受控词表"
+            f"（{'|'.join(vocab)}）。交付本身照常记账，但队列里不会有它；"
+            "确要提案请组员改正 kind 属性后重新交付。"
+        )
+        return ""
     SUGGESTIONS_DIR.mkdir(parents=True, exist_ok=True)
     sid = f"{_ts()}-{member_id}"
     p = SUGGESTIONS_DIR / f"{sid}.md"

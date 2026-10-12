@@ -7,22 +7,40 @@
 `orchestration/state/failure-tags.json`（git 跟踪）：
 
 ```json
-{"version": 1, "discipline": "…", "tags": {"<tag>": "<定义>"}}
+{"version": 1, "discipline": "…", "tags": {"<tag>": "<定义>"},
+ "infra_kinds": {"<kind>": "<定义>"}}
 ```
 
 初始 10 标签：`whitelist_conflict` `cli_missing` `doc_stale` `tool_bug`
 `harness_gap` `model_capability` `quota` `env_broken` `design_smell` `unknown`。
+提案分类两值：`defect` `usability`。
 
-- 增补标签 = 改文件（**须附定义**）并经 devops 交付，不改代码：Python 侧唯一读取口
-  `tools/failure_tags.load_tags()`，Node 侧 `orchestration/guards/delivery-gate.mjs`
-  直接读同一文件，两侧口径必须一致；
-- 词表缺席/损坏 → 两侧都 fail-open（不阻塞派发），只失去一次标签校验。
+- 增补标签/分类 = 改文件（**须附定义**）并经 devops 交付，不改代码：Python 侧唯一读取口
+  `tools/failure_tags.load_tags()` / `load_infra_kinds()`，Node 侧
+  `orchestration/guards/delivery-gate.mjs` 直接读同一文件，两侧口径必须一致；
+- 词表缺席/损坏 → 标签面 fail-open（不阻塞派发，只失去一次校验）；分类面回落
+  `DEFAULT_INFRA_KINDS` 兜底清单继续执法（两个值、协议文档写死，失去执法才是事故）。
 
 ## 交付面
 
 `<blocked tags="a,b">`：属性可选，缺省=空列表合法（不标注不阻断）；属性存在时
 gate 校验词表，含词表外标签 → exit 2 + 列出可用词表。分隔符半/全角逗号、分号、
 空白都收，大小写不敏感。`<result>` 上的 tags 一律忽略（只 blocked 携带失败语义）。
+
+## 提案分类（`<infra_suggestion kind="…">`）三面执法
+
+块非空时 kind 必填且须落在 `infra_kinds` 词表内。三个入口共读同一份词表——缺任一面都会被
+绕过（backlog 20261012-120001-leader 的实案：非法 kind 的占位空壳直达待审批队列）：
+
+1. **组员侧 gate**：**逐块**校验（同一条交付里的每一块，不是只看第一块），并拦「多块」
+   交付——解析器只取第一块，其余内容静默丢弃 → exit 2 要求合并成一块；
+2. **入库面 dispatch**：落盘前复核词表，非法/缺失 kind **不入库**并打
+   `[!] 改进建议未入库`。gate 退回后那一跳仍可能以违规回复收场，队列不该因此长空壳；
+3. **审批面 approve**：kind 不在词表 → 拒绝入队（rc 2）。提案来源不止交付一条路（组长
+   代补、Tier A 自动立案、手写文件都直接落进 `suggestions/`，绕过任何单侧执法）。
+
+`orch suggestions` 枚举时机械标注 `[!] 空壳建议`（剥掉标题与协议标记行后实质正文
+<40 字）与 `[!] kind 非法（值）`：见到空壳直接 `reject --override "空壳"`，不必细读。
 
 ## 统计面
 

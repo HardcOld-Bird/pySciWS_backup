@@ -1,10 +1,10 @@
 """Tier A 失败标签：受控词表的读取、解析与滑窗计数（REFACTOR v1.0 §2/§2.4）。
 
 词表落在 ``orchestration/state/failure-tags.json``（git 跟踪）。**文件形状即协议**：
-``{"version": 1, "discipline": "...", "tags": {<tag>: <定义>}}``——Node 侧
-（``orchestration/guards/delivery-gate.mjs``）直接读同一文件校验组员交付的
-``<blocked tags="a,b">``，Python 侧唯一读取口是本模块。两侧口径必须一致，所以增补
-标签只改文件（须附定义），不改代码。
+``{"version": 1, "discipline": "...", "tags": {<tag>: <定义>}, "infra_kinds": {…}}``——
+Node 侧（``orchestration/guards/delivery-gate.mjs``）直接读同一文件校验组员交付的
+``<blocked tags="a,b">`` 与 ``<infra_suggestion kind="…">``，Python 侧唯一读取口是本模块。
+两侧口径必须一致，所以增补标签/分类只改文件（须附定义），不改代码。
 
 本模块只懂「词表与标签」，不懂台账与 backlog：计数交给 :func:`failure_counts` 这种
 纯函数形态，由 ledger（统计面）与 workflow（立案面）各自决定窗口与后果，避免
@@ -38,9 +38,35 @@ DEFAULT_TAGS: dict[str, str] = {
     "unknown": "",
 }
 
+#: 提案分类（``<infra_suggestion kind="…">``）词表的兜底键集，口径同 :data:`DEFAULT_TAGS`。
+#: 三面共读这一份词表：gate 拦（Node 侧默认清单由 test_infra_kind_vocab 钉住与文件一致）、
+#: dispatch 落盘前复核（不合法不入库）、approve 入队前复核（backlog 20261012-120001-leader：
+#: 非法 kind 的占位空壳曾绕过 gate 直达审批队列）。
+DEFAULT_INFRA_KINDS: dict[str, str] = {"defect": "", "usability": ""}
+
 #: tags 属性的分隔符：半/全角逗号分号与空白都收（组员在中文语境里手打，别逼他改符号）。
 #: 与 guard 侧 ``splitTags`` 的字符集必须一致，否则「gate 放行、统计另算」会出现。
 _SPLIT_RE = re.compile(r"[,，;；\s]+")
+
+
+def _read_section(
+    key: str, default: dict[str, str], path: Path | None
+) -> dict[str, str]:
+    """从词表文件取一个段落（``tags`` / ``infra_kinds``）为 ``{键: 定义}``。
+
+    读不到（文件缺失/坏 JSON/段落缺席或为空）一律回落 ``default``：词表故障不该让派发、
+    统计或审批崩掉，最多失去一次校验——但绝不回落成空白名单（那会把「一切都不合法」
+    伪装成「一切都合法」的反面，同样不可用）。
+    """
+    target = path if path is not None else TAGS_PATH
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return dict(default)
+    section = data.get(key) if isinstance(data, dict) else None
+    if not isinstance(section, dict) or not section:
+        return dict(default)
+    return {str(k): str(v) for k, v in section.items()}
 
 
 def load_tags(path: Path | None = None) -> dict[str, str]:
@@ -54,15 +80,12 @@ def load_tags(path: Path | None = None) -> dict[str, str]:
         否则回落 :data:`DEFAULT_TAGS`。异常一律吞掉（fail-open）：词表读取失败不该
         让派发或统计崩掉，最多失去一次标签校验。
     """
-    target = path if path is not None else TAGS_PATH
-    try:
-        data = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return dict(DEFAULT_TAGS)
-    tags = data.get("tags") if isinstance(data, dict) else None
-    if not isinstance(tags, dict) or not tags:
-        return dict(DEFAULT_TAGS)
-    return {str(k): str(v) for k, v in tags.items()}
+    return _read_section("tags", DEFAULT_TAGS, path)
+
+
+def load_infra_kinds(path: Path | None = None) -> dict[str, str]:
+    """读取提案分类词表：``{kind: 定义}``（读取与回落口径同 :func:`load_tags`）。"""
+    return _read_section("infra_kinds", DEFAULT_INFRA_KINDS, path)
 
 
 def parse_tags(value: str | None) -> list[str]:
