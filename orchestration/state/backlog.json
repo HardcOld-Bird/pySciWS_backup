@@ -938,11 +938,12 @@
       "kind": "usability",
       "success_criteria": "三席 smoke 三票+双序+usage 落盘；单席缺 Key 标 unavailable 不崩全案；回退告警三面可见；minimum 调查有书面结论；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-164600-leader.md",
-      "status": "in_progress",
+      "status": "needs_leader",
       "proposed": "2026-10-12T16:46:40+08:00",
-      "note": "孤儿条目回收（原 started_at=2026-10-12T18:11:03+08:00）",
+      "note": "drain 跳过（交付=blocked）：backlog id=20261012-164600-leader（E3-live 仲裁团三席 provider 直调）——**同一 worktree 出现并发写入者，本会话零成功写入，继续实施会把两套设计混成一团，故停手上报**。  ## 事实链（命令 + 实际输出）  1. drain 在 18:28:10 判我为",
       "started_at": "2026-10-12T18:28:10+08:00",
-      "worktree": "20261012-164600-leader"
+      "worktree": "20261012-164600-leader",
+      "needs_leader_at": "2026-10-12T18:35:45+08:00"
     },
     {
       "id": "20261012-173500-leader",
@@ -951,10 +952,23 @@
       "kind": "usability",
       "success_criteria": "- registry 读数互换 + 一次 `refresh-models`/drain 启动后映射**不被刷回**\n（阳性用例钉住模式表一致性）；\n- 一次真实 flash 派发台账 model 字段=BYOK UUID（credits 应恢复计量——\n顺带取证 BYOK flash 的 credits 上报行为并记录）；\n- README §3.5 与代码模式表同源（快照断言）；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-173500-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T18:26:45+08:00",
       "note": "｜组长调度：用户指示提前生效，移至队首（下一批即消化）",
-      "effort": "medium"
+      "effort": "medium",
+      "started_at": "2026-10-12T18:35:45+08:00",
+      "worktree": "20261012-173500-leader"
+    },
+    {
+      "id": "20261012-184000-leader",
+      "member": "leader",
+      "summary": "**（缺陷类）worker 崩溃接管不杀旧派生会话：孤儿 devops headless 与重派新会话并发写同一 worktree**",
+      "kind": "defect",
+      "success_criteria": "孤儿会话场景单测双路径绿；真实接管出现第四面回收或异名重建行；既有机制不回归；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-184000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T18:37:16+08:00",
+      "note": ""
     },
     {
       "id": "20261012-164601-leader",
