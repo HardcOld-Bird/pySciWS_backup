@@ -305,6 +305,35 @@ def _merge_sessions(
     return merged
 
 
+def note_hop_pid(member_id: str, sid: str, *, pid: int, task: str = "") -> None:
+    """把**在途跳**的会话进程 pid 盖进运行态会话池（孤儿回收的第四面判据）。
+
+    为什么必须在派生瞬间写盘、而不是跳结束时记进台账：worker 若在跳中途被杀，台账那行
+    根本不会存在，可它派生的会话进程还活着并继续写 worktree（backlog
+    20261012-184000-leader 的并发双写根因）。反之跳正常收尾时，派发侧的常规
+    :meth:`Registry.write_sessions` 会用「本进程条目为准」的合并语义把它覆盖掉
+    （见 :func:`_merge_sessions`）——所以 **pid 键的存活期恰好等于这一跳的在途期**，
+    回收者看到的就是一个天然的「有谁还在写」标记，无需再加状态机。``pid=0`` 是显式收工
+    写法（回收者处置完一个孤儿后用它抹掉标记，免得下次对着已复用的 pid 误动手）。
+
+    ``task`` 记任务书文件名（含条目 id），供 drain 把孤儿条目对上会话。
+
+    **fail-open**：运行态写不动（磁盘/权限/并发损坏）只静默放弃——记账面不得拖垮真实
+    派发；代价是该跳失去第四面保护，回收会退化为异名隔离重建（仍安全）。
+    """
+    try:
+        reg = Registry.load()
+        sessions = _runtime_member(reg.runtime, member_id).setdefault("sessions", [])
+        for s in sessions:
+            if s.get("sid") == sid:
+                s["pid"] = int(pid)
+                s["pid_task"] = task
+        reg.rt_members.add(member_id)
+        reg.save()
+    except Exception:  # noqa: BLE001 - 记账旁路，任何异常都不该影响派发
+        return
+
+
 def _warn_missing_runtime(config_data: dict[str, Any], runtime_file: Path) -> None:
     """(a) 轻哨兵（backlog 20261010-worktree-merge-cp ④）：members 非空 + 无内嵌 sessions
     + 运行态文件缺席 → stderr 打印显著警告，不反推数据（避免掩盖跨合并 cp 失败的真因）。

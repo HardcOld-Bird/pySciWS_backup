@@ -220,7 +220,7 @@ def test_internal_retry_growth_counted_in_one_row(iso_dispatch, monkeypatch):
     seed_session(iso_dispatch)
     calls = []
 
-    def run(cmd, cwd=None, env=None, timeout_s=None):
+    def run(cmd, cwd=None, env=None, timeout_s=None, on_spawn=None):
         calls.append(cmd)
         grow_session(iso_dispatch, SID, "g" * 25)
         if len(calls) == 1:

@@ -44,8 +44,8 @@ pysci-dev worktree remove <任务名>
 注意：worktree 不含 gitignored 的未跟踪重数据；需真实数据时以绝对路径只读引用主树
 （同 README §7）。
 
-**worktree 命名约定**：drain/backlog 派发用**条目 id** 作 `<任务名>`（孤儿回收据此定位，
-细节见 `references/worktree-merge.md` §3）。
+**worktree 命名约定**：drain/backlog 派发用**条目 id**（或异名重建后的 `<id>-r<N>`）作
+`<任务名>`（孤儿回收四面含**进程**，据此定位；细节见 `references/worktree-merge.md` §3）。
 
 **批量消化任务书**（drain 组包）：任务书可能含**种子**（必做）
 + **组包菜单**。**自主选取 ≥1 项**（必含种子，可只吃种子），合并到**同一 worktree**（名

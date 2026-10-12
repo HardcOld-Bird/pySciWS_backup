@@ -438,3 +438,60 @@ def test_cmd_merge_proceeds_when_branch_behind_main(tmp_path, monkeypatch, capsy
     assert (main / "orchestration" / "state" / "registry.json").read_text(
         encoding="utf-8"
     ) == '{"v":3} uncommitted\n', "无关脏项不受影响"
+
+
+# ---------------------------------------------------------------------------
+# worktree add 的世代守卫（backlog 20261012-184000-leader）
+# ---------------------------------------------------------------------------
+def _add_guard_env(tmp_path, monkeypatch, *, listed_for=None):
+    """把 WORKTREES_ROOT 与 git 桩好；``listed_for(root)`` 给 ``git worktree list`` 的行。"""
+    root = tmp_path / "worktrees"
+    monkeypatch.setattr(dev, "WORKTREES_ROOT", root)
+    calls: list[tuple] = []
+
+    def _fake(*args):
+        calls.append(args)
+        if args[:2] == ("worktree", "list"):
+            return 0, "\n".join(listed_for(root) if listed_for else [])
+        return 0, ""
+
+    monkeypatch.setattr(dev, "_run_git", _fake)
+    return root, calls
+
+
+def test_add_on_registered_face_says_reuse(tmp_path, monkeypatch, capsys):
+    """目录存在**且登记在册** = 自己的面还在 → 说明白「继续用」，但 add 不重复起（rc=2）。"""
+    root, calls = _add_guard_env(
+        tmp_path,
+        monkeypatch,
+        # 真 git 在 Windows 上输出的正是正斜杠形态（实测 ``git worktree list``），
+        # 桩照此写——解析器若改了归一化方式，这里就会失配
+        listed_for=lambda r: [
+            f"{tmp_path / 'main'}  8e3d83b [main]",
+            f"{(r / 'gen').as_posix()}  abc1234 [wt-gen]",
+        ],
+    )
+    (root / "gen").mkdir(parents=True)
+
+    rc = dev.cmd_worktree(dev.argparse.Namespace(action="add", name="gen"))
+
+    assert rc == 2
+    assert "登记在册" in capsys.readouterr().out
+    assert not any(c[:2] == ("worktree", "add") for c in calls), "同名面不重复建"
+
+
+def test_add_on_lingering_dir_points_to_next_generation(tmp_path, monkeypatch, capsys):
+    """目录存在却**不在登记面里**（remove --force 后旧句柄没放）= 残骸 → 必须指路新一代名，
+    绝不让人把第二个写者请回同一个房间。"""
+    root, calls = _add_guard_env(
+        tmp_path, monkeypatch, listed_for=lambda r: [f"{tmp_path / 'main'}  abc1234"]
+    )
+    (root / "gen").mkdir(parents=True)
+
+    rc = dev.cmd_worktree(dev.argparse.Namespace(action="add", name="gen"))
+
+    assert rc == 2
+    out = capsys.readouterr().out
+    assert "残骸" in out and "worktree add gen-r2" in out
+    assert "rm -rf" in out, "旧目录归组长处置，不能让组员就地删"
+    assert not any(c[:2] == ("worktree", "add") for c in calls)
