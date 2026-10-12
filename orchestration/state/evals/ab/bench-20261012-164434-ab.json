@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "label": "bench-20261012-164434-ab",
+  "started_at": "2026-10-12T16:44:35+08:00",
+  "ref_a": "89a93c3^",
+  "ref_b": "89a93c3",
+  "commit_a": "b2e5b3586c3f2dedddb19266a43a1628cc09513a",
+  "commit_b": "89a93c33d04838bac350eb8cc21ddff4a64b05a7",
+  "cases": [
+    "fig-basic"
+  ],
+  "pollution": [],
+  "verdict": "未改善",
+  "escalate": "",
+  "sides": {
+    "a": {
+      "commit": "b2e5b3586c3f2dedddb19266a43a1628cc09513a",
+      "cases": {
+        "fig-basic": {
+          "case": "fig-basic",
+          "verdict": "fail",
+          "reasons": [
+            "副本未返回读数（rc=1）：XXIIIGGG\\projects\\pySci\\pySciWS\\.venv\\Scripts\\python.exe: Error while finding module specification for 'pysci.skills.bencher.tools.bench' (ModuleNotFoundError: No module named 'pysci.skills.bencher')\n"
+          ],
+          "num_turns": 0
+        }
+      }
+    },
+    "b": {
+      "commit": "89a93c33d04838bac350eb8cc21ddff4a64b05a7",
+      "cases": {
+        "fig-basic": {
+          "case": "fig-basic",
+          "verdict": "fail",
+          "reasons": [
+            "副本未返回读数（rc=1）：XXIIIGGG\\projects\\pySci\\pySciWS\\.venv\\Scripts\\python.exe: Error while finding module specification for 'pysci.skills.bencher.tools.bench' (ModuleNotFoundError: No module named 'pysci.skills.bencher')\n"
+          ],
+          "num_turns": 0
+        }
+      }
+    }
+  },
+  "compare": {
+    "verdict": "未改善",
+    "pass_now": 0,
+    "pass_base": 0,
+    "mean_turns_now": 0.0,
+    "mean_turns_base": 0.0,
+    "compared": [
+      "fig-basic"
+    ],
+    "only_now": [],
+    "diffs": [
+      {
+        "case": "fig-basic",
+        "turns": "0 → 0",
+        "verdict": "fail → fail"
+      }
+    ]
+  },
+  "residual_worktrees": [],
+  "finished_at": "2026-10-12T16:44:36+08:00"
+}

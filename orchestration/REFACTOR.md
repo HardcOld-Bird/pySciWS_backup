@@ -121,9 +121,18 @@ devops 管理编辑；**Agent harnessing 测试**（harness 设计的特殊套�
 
 - **定位**：成对比较；**实施前**的常态判决模式（实测昂贵缓慢且实施前不可用，
   §5.1）。
-- **渠道（用户裁决）**：SiliconFlow（国内直连、模型全、用户有账号与 Key、
-  单轮冷咨询按量开销极小）；实施时据平台模型自由选型；**硬性规则：不含
-  Qwen 系**（排除同族自恋偏差）。
+- **渠道（用户裁决 2026-10-12 修订，取代 SiliconFlow 主用方案）**：
+  - **仲裁团三席官方直调**（减平票；含最新旗舰）：`DEEPSEEK_API_KEY` /
+    `GLM_API_KEY` / `KIMI_API_KEY` 三提供商各一席，OpenAI 兼容端点直连；
+  - **SILICONFLOW 降为回退位**：仅当主席不可达时启用，**触发回退必须显式告警**
+    （提请者 + mirror 控制台留痕），提醒用户尽早处理；
+  - **minimum 压测档（用户选型）**：火山方舟 `doubao-seed-2.0-mini`（组长可
+    自选型）；Key=`VOLC_AGENT_PLAN_KEY`（**Agent Plan 专用 Key**，非通用
+    API Key——若调用面需要通用 Key 或模型需手动开通，用户要求联系之）；
+  - ⚠ 待验证（12 日 16:4x 实测）：上述四把 Key 在组长会话进程、HKCU/HKLM
+    Environment 与常见 shell profile 均不可见——**用户需确认设置位置并重启
+    会话**；另 Agent Plan Key 能否注册为 Qoder BYOK 模型渠道（压测必须经
+    Qoder headless 驱动）属 E3-live 前置调查项。
 - **架构**：不经 Qoder；共享库直连 OpenAI 兼容接口并发调用，orch /
   pysci-inspect 各自封装子命令。Key 环境变量注入（永不入库；doctor 泄漏
   哨兵）。

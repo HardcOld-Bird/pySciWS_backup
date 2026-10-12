@@ -39,8 +39,7 @@ alwaysApply: true
 - 所有 agent（组长与组员）的 Bash 工具均为 **Git Bash**：多词参数用单引号；
   **编辑项目文件一律用文件编辑工具，不用 shell 重定向**（编码/转义事故源）。
 - CLI 调用范式（全员统一，实测三范式同速）：**首选裸 `pysci-X`**（PATH 已含
-  `.venv/Scripts`）；命令不存在时 fallback `uv run pysci-X`——**裸名只试一次，
-  禁止重试循环**。程序化子进程调用（工具内部）统一 `uv run`（不依赖会话环境）。
+  `.venv/Scripts`）；命令不存在时 fallback `uv run --no-sync pysci-X`——**裸名只试一次，禁止重试循环**。程序化子进程调用（工具内部）统一 `uv run --no-sync`（不依赖会话环境）。**改 `pyproject.toml`（含新增 console script/依赖）后必须先 `pysci-dev venv-sync`**（入口缺失而它不可用时经 `.venv/Scripts/python.exe -m pysci.skills.devops.tools.dev venv-sync`）——裸 `uv run` 的隐式 sync 在 Windows 上会撞运行中 exe 的锁并先删其余入口，造成工具面集体失联（2026-10-12 实测，细则见 `orchestration/skills/devops/references/uv-venv-sync.md`）。
 - Python 输出中文：环境已设 `PYTHONUTF8=1`，Git Bash 下无需额外处理。
 - **Git Bash 下 Windows 命令的 `/` 前缀参数会被 MSYS 转成路径**：`tasklist /FI`、
   `findstr /C`、`netstat /an` 等的 `/xx` 被改成 `C:/Program Files/Git/xx`，命令静默

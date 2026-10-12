@@ -874,11 +874,11 @@
       "kind": "usability",
       "success_criteria": "见单内 success_criteria（十三 pod/自主发现全程组长介入=0/迟滞闸双态实测/无 override 面核验）",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120003-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T12:26:23+08:00",
       "note": "组长再排：E4 前置已合并（8192235），十三 pod 与验收面可达；要求 solo 执行勿组包（E5b 在途，二者同改 orch.py/approve 面，组包将再触顶+必冲突）",
       "effort": "high",
-      "started_at": "2026-10-12T14:28:42+08:00",
+      "started_at": "2026-10-12T15:44:43+08:00",
       "worktree": "20261012-120003-leader",
       "needs_leader_at": "2026-10-12T14:45:20+08:00"
     },
@@ -889,12 +889,15 @@
       "kind": "usability",
       "success_criteria": "见单内 success_criteria（无包拒绝/例外通道实测/J+M 全程/未改善自动立案/override 率入 status）",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120004-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T12:26:24+08:00",
-      "note": "E5b：审批判决包硬化，基建判断自组长职责事实分离的收口单。",
+      "note": "drain 批量销账（commit 919f12b）",
       "effort": "high",
       "started_at": "2026-10-12T14:45:20+08:00",
-      "worktree": "20261012-120004-leader"
+      "worktree": "20261012-120004-leader",
+      "done_at": "2026-10-12T15:44:43+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-120004-leader"
     },
     {
       "id": "20261012-132138-devops",
@@ -906,6 +909,40 @@
       "status": "pending",
       "proposed": "2026-10-12T14:30:38+08:00",
       "note": "defect：读数面与入库面口径分裂，与 #62 同源收尾。本批不唤醒，由在途 drain 接手。"
+    },
+    {
+      "id": "20261012-125455-devops",
+      "member": "devops",
+      "summary": "success_criteria: 组员/组长在改动 pyproject 后不必踩「隐式 sync 撞锁删入口」这一步：按文档改用的调用范式在 main 上实测一条命令即入口齐备、且 `uv run` 不再触发 sync；basic.md §3 与 charter 的 CLI 范式段一致。",
+      "kind": "usability",
+      "success_criteria": "改 pyproject 后按文档范式一条命令入口齐备（main 实测）；uv run 不触发隐式 sync（--no-sync 入 basic.md/charter/技能真本三方一致，快照断言）；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-125455-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T16:44:53+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261012-164600-leader",
+      "member": "leader",
+      "summary": "**（E3-live，REFACTOR v1.0 §4 渠道修订）仲裁团三席官方直调（deepseek/glm/kimi）+ SiliconFlow 回退告警面 + minimum 火山方舟渠道验证**",
+      "kind": "usability",
+      "success_criteria": "三席 smoke 三票+双序+usage 落盘；单席缺 Key 标 unavailable 不崩全案；回退告警三面可见；minimum 调查有书面结论；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-164600-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T16:46:40+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261012-164601-leader",
+      "member": "leader",
+      "summary": "**（E6b，REFACTOR v1.0 §11 来源②）用户 prompt 语料倒序解析入库 + twin 宪章增量蒸馏草案 v2**",
+      "kind": "usability",
+      "success_criteria": "解析三例阳性；journal 行数对账；v2 草案落盘且生效面未动 taste_enabled=false；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-164601-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T16:46:41+08:00",
+      "note": "",
+      "effort": "high"
     }
   ]
 }
