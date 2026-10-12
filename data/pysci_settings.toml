@@ -1,0 +1,44 @@
+# ═══════════════════════════════════════════════════════════════
+# data/pysci_settings.toml —— pySci 人工运行时配置（手改面）
+# ═══════════════════════════════════════════════════════════════
+# 规则：
+#   1. 保存即生效于「下一次派发」，在途会话不受影响；
+#   2. 验证生效：uv run pysci-orch status（显示当前预设与各席解析值）；
+#   3. TOML 格式，注释用 #；选项请用注释里的精确字符串（大小写敏感）。
+
+[model]
+# ── 主力模型预设，三选一（精确字符串，全小写）─────────────────
+#
+#   "qwen"
+#       主力  = BYOK "Qwen-3.8-Flash"        （大部分成员默认）
+#       pro席 = BYOK "Qwen-3.8-Max"          （仅 twin）
+#       仲裁团 = GLM + KIMI + MIMO 三族旗舰（官网按量直调，非 Qoder 渠道）
+#
+#   "mimo"
+#       主力  = BYOK "Mimo-V2.6-Flash"       （大部分成员默认）
+#       pro席 = BYOK "Mimo-V2.6-Pro"         （reviewer / deputy / inspector / twin）
+#       仲裁团 = GLM + KIMI + Qwen 三族旗舰
+#
+#   "deepseek"
+#       主力  = BYOK "DeepSeek-V4-Flash"     （全员同一档，无 pro 席）
+#              ⚠ 待确认精确名：--list-models 现无此 BYOK 条目，
+#                若实为内置 "DeepSeek-Flash" 或待加 BYOK，以实名为准回填。
+#       仲裁团 = GLM + KIMI + MIMO 三族旗舰
+#
+#   共通语义：席位不可用时短窗粘滞降级（跳过故障席→内置默认，双面告警）；
+#   仲裁团固定排除预设同族（同族偏差防线）。
+#   组长默认模型 = 本预设主力模型（与大部分组员同源；现场 /model 管理优先）。
+#   注意：qwen 预设 pro 席仅 twin（Qwen pro 贵，刻意不规模化）；mimo 预设
+#   pro 席四人组——两预设不对称为有意设计（用户 2026-10-12 确认）。
+preset = "mimo"
+
+[inspector]
+# inspector 巡检引擎全局开关 —— true / false（原 state/inspector.enabled 迁至本文件）
+enabled = true
+
+# ── 预留节（暂不使用）────────────────────────────────────────
+# [bencher]
+#   压测 minimum 档（用户 2026-10-12 裁决）：火山引擎豆包
+#   （doubao-seed-2.0-mini 候选，E3-live 调查单内），不随预设走。
+# [jury]
+#   席位覆盖：如需指定具体旗舰型号在此列

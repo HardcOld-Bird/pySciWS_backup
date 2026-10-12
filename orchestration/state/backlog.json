@@ -1114,11 +1114,14 @@
       "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261012-211429-mechanical.md",
       "class": "mechanical",
       "channel": "mechanical",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T21:14:29+08:00",
-      "note": "inspector 自主发现（§5.2 不经组长）",
+      "note": "drain 批量销账（commit 49df169）",
       "started_at": "2026-10-12T21:14:31+08:00",
-      "worktree": "insp-20261012-211429-mechanical"
+      "worktree": "insp-20261012-211429-mechanical",
+      "done_at": "2026-10-12T22:15:12+08:00",
+      "batch_size": 1,
+      "batch_seed": "insp-20261012-211429-mechanical"
     },
     {
       "id": "20261012-211500-leader",
@@ -1127,9 +1130,22 @@
       "kind": "usability",
       "success_criteria": "链形态+refresh 不刷回+降级告警双面+CHANNEL-STOP+真实双档派发可证+旧键兼容+全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-211500-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T21:15:09+08:00",
-      "note": "｜组长调度：用户指令模型变更置队首，下一批即消化"
+      "note": "｜组长调度：用户指令模型变更置队首，下一批即消化",
+      "started_at": "2026-10-12T22:15:12+08:00",
+      "worktree": "20261012-211500-leader"
+    },
+    {
+      "id": "20261012-225500-leader",
+      "member": "leader",
+      "summary": "**（渠道改版 v2，用户裁决 2026-10-12 22:4x）移除 flash/max 档位模式，改「提供商预设」：qwen/mimo/deepseek 三预设一键切换**",
+      "kind": "usability",
+      "success_criteria": "见单内 success_criteria 六条（三预设实测切换/仲裁换血同族排除/粘滞降级复测/inspector 迁移/minimum 独立/全量无回归）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-225500-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T23:32:20+08:00",
+      "note": ""
     }
   ]
 }
