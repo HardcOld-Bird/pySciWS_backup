@@ -1286,8 +1286,13 @@ def cmd_inspector_assign(args: argparse.Namespace) -> int:
 
 
 def cmd_inspect_worker(args: argparse.Namespace) -> int:
-    """``_inspect-worker``（内部）：一次激活的巡检循环。"""
+    """``_inspect-worker``（内部）：一次激活的巡检循环。
+
+    **不向 stdout 打印任何东西**：派生时 stdout 就重定向进了本 run 的 ``.log``
+    （照 drain/benchd 的写法），一次 ``print`` 会从偏移 0 覆写整段运行日志——实测
+    2026-10-12：run 日志只剩摘要 JSON，巡检过程（让路/闸门/派跳）全灭。摘要已落
+    ``.done``，读它，不读 stdout。
+    """
     run_log = Path(args.run_log) if args.run_log else new_run_log(INSPECT_PATHS)
     summary = inspect_drain(run_log, dry=bool(args.dry))
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if summary.get("skipped") != "lock_busy" else 1

@@ -347,6 +347,20 @@ def test_quota_exhaustion_ends_the_activation(monkeypatch, iso_engine):
     assert summary["stopped"] == "quota_exhausted" and "quota" in summary["error"]
 
 
+def test_worker_command_prints_nothing_to_stdout(monkeypatch, iso_engine, capsys):
+    """派生时 stdout 被重定向进本 run 的 ``.log``——打印会从偏移 0 覆写整段运行日志。
+
+    2026-10-12 实测：worker 收尾 ``print(summary)`` 让 run 日志只剩摘要 JSON，
+    让路/闸门/派跳过程全灭（mock 测不出：``_spawn_detached`` 被桩时 stdout 不参与）。
+    """
+    use_params(monkeypatch, max_hops=1)
+    log = inspectd.new_run_log(inspectd.INSPECT_PATHS)
+    assert inspectd.cmd_inspect_worker(Namespace(run_log=str(log), dry=True)) == 0
+    assert capsys.readouterr().out == "", "stdout 即运行日志：一个字都不许打印"
+    text = log.read_text(encoding="utf-8")
+    assert "worker 启动" in text and "worker 结束" in text
+
+
 # ---------------------------------------------------------------------------
 # ④ 双队列迟滞（§5.2：超过才停，回落至 resume 才恢复）
 # ---------------------------------------------------------------------------
