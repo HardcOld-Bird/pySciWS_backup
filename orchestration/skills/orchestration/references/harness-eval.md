@@ -94,3 +94,8 @@ turns=2、transcript 里 50+ 条 assistant 消息）。`dispatch._accumulate_hop
   模型多做一次自证就会翻成 fail。`eval run` 会在行尾打 `turns=N/M` 并在 M 用满时
   点名 `[!] 预算用满`，对照表同样标注；见到就放宽案内 `max_turns`（预算按任务最小可
   达成量 ×1.4 留余量），别把贴线读数写进结论。
+- **一轮只跑一次，别并发**：`eval run` 不锁 pod 也不锁 `dirs:` 产物，两轮同时跑会互踩
+  产物并把同 label 混成多行（E2 实测：并发轮 fig-basic 14 与 16 轮两条读数，顺序轮
+  9 轮）。同案同档全新会话的**两次判决可以相反**（blocked-recheck 并发轮 1 pass/1 fail
+  ——断言锚在交付正文，minimum 档是否复述边界有运气成分），故单次测量不是结论，
+  要回 `evals.jsonl` 看同一 label 的重复度再谈改善。
