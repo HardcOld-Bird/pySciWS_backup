@@ -32,9 +32,9 @@ LEADER_RULE = "leader-only.md"
 BASIC_RULE = "basic.md"
 
 
-def _run_git(*args: str) -> tuple[int, str]:
-    """在项目根运行 git 命令并返回 (rc, 合并输出)。"""
-    proc = subprocess.run(
+def _git_proc(*args: str) -> subprocess.CompletedProcess[str]:
+    """在项目根跑 git，返回原始 CompletedProcess（不裁剪输出）。"""
+    return subprocess.run(
         ["git", *args],
         cwd=str(PROJECT_ROOT),
         capture_output=True,
@@ -43,6 +43,11 @@ def _run_git(*args: str) -> tuple[int, str]:
         errors="replace",
         timeout=300,
     )
+
+
+def _run_git(*args: str) -> tuple[int, str]:
+    """在项目根运行 git 命令并返回 (rc, 合并输出)。"""
+    proc = _git_proc(*args)
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 
@@ -394,14 +399,113 @@ def _runtime_session_total(root: Path) -> int | None:
     return total
 
 
+def porcelain_paths(out: str) -> set[str]:
+    """``git status --porcelain`` 输出 → 工作区未提交面（含未跟踪；目录以 ``/`` 结尾）。
+
+    重命名/复制取**新**路径（合并会覆盖的是新路径上的工作）。行格式是定长的
+    ``XY<空格>path``，故非该形态的行（别的命令混进来的输出）一律跳过——宁漏不误，
+    误报会把「无关脏项」也算成冲突而挡掉本该放行的合并。
+    """
+    paths: set[str] = set()
+    for line in out.splitlines():
+        if len(line) < 4 or line[2] != " ":
+            continue
+        xy, rest = line[:2], line[3:]
+        if xy[0] in "RC" and " -> " in rest:
+            rest = rest.split(" -> ", 1)[1]
+        paths.add(rest.strip('"'))
+    return paths
+
+
+def committed_face(branch: str) -> set[str] | None:
+    """本次合并会触碰的文件面 = **merge-base 起算**的分支提交面；算不出返回 None。
+
+    判据必须是 ``merge-base HEAD <branch>..branch``，不是 ``main..HEAD``：分支落后 main 时
+    两点 diff 列出的是**别人新提交**的文件（实测两次假阳性，其中一次据此交出了错误的
+    <blocked>）。
+    """
+    rc, base = _run_git("merge-base", "HEAD", branch)
+    if rc != 0 or not base.strip():
+        return None
+    rc, out = _run_git(
+        "-c",
+        "core.quotepath=false",
+        "diff",
+        "--name-only",
+        f"{base.strip()}..{branch}",
+    )
+    if rc != 0:
+        return None
+    return {line.strip() for line in out.splitlines() if line.strip()}
+
+
+def intersect_faces(committed: set[str], dirty: set[str]) -> list[str]:
+    """提交面 ∩ 未提交面；未跟踪**目录**脏项命中其下的提交文件（前缀匹配）。"""
+    hits: list[str] = []
+    for f in sorted(committed):
+        if f in dirty or any(
+            d.endswith("/") and (f + "/").startswith(d) for d in dirty
+        ):
+            hits.append(f)
+    return hits
+
+
+def dirty_face() -> set[str]:
+    """main 工作区未提交面（含未跟踪）。
+
+    走 ``_git_proc`` 而非 ``_run_git``：后者把输出 ``strip()`` 了，会吃掉 porcelain **首行的
+    前导空格**（``" M a.txt"`` → ``"M a.txt"``），解析器便把首项判成非 status 行而漏掉。
+    """
+    proc = _git_proc("-c", "core.quotepath=false", "status", "--porcelain")
+    return porcelain_paths(proc.stdout)
+
+
+def merge_faces(branch: str) -> tuple[set[str], set[str]] | None:
+    """``(本次提交面, main 未提交面)``；任一算不出返回 None（调用方据此跳过检查）。"""
+    try:
+        committed = committed_face(branch)
+        if committed is None:
+            return None
+        return committed, dirty_face()
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def cmd_worktree_merge(name: str, wt: Path) -> int:
-    """worktree merge 主体：cp gitignored 运行态 → 会话数基线校验 → git merge --no-ff → 自检。
+    """worktree merge 主体：交集检查 → cp gitignored 运行态 → 会话数校验 → merge --no-ff → 自检。
 
     Returns:
-        0 成功；2 硬阻塞（worktree 缺失/会话数会倒退/merge 失败）。
+        0 成功；2 硬阻塞（与 main 未提交面有交集 / worktree 缺失 / 会话数会倒退）；
+        merge 自身失败则透传其 rc。
     """
     branch = f"wt-{name}"
     ts = datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
+
+    print("== 合并前交集检查（本次提交面 ∩ main 未提交面）==")
+    faces = merge_faces(branch)
+    if faces is None:
+        # 求交失败不该挡合并：那是把 usability 缺陷换成另一种误报。git merge 自身仍会
+        # 拒绝覆盖未提交工作，本检查的价值在于**先于 cp** 给出可读清单。
+        print("  [!] 求交失败（git 不可用 / merge-base·diff 非零）——跳过检查，继续合并")
+    else:
+        committed, dirty = faces
+        offenders = intersect_faces(committed, dirty)
+        print(
+            f"  本次提交面 {len(committed)} 文件（merge-base 起算）"
+            f" / main 未提交 {len(dirty)} 项"
+        )
+        if offenders:
+            print(
+                f"  [✗] 交集 {len(offenders)} 项——合并会覆盖 main 工作区的未提交改动，"
+                "中止（未 cp、未 merge）："
+            )
+            for f in offenders:
+                print(f"      {f}")
+            print(
+                "  处置：组长先提交或还原上述文件后重跑；与本单无关的脏项不会走到这里"
+            )
+            return 2
+        print("  [√] 交集为空（无关脏项不拦）")
 
     base_n = _runtime_session_total(PROJECT_ROOT) or 0
     wt_n = _runtime_session_total(wt)

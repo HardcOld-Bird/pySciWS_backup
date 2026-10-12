@@ -20,17 +20,17 @@ WT="$ROOT/.qoder/worktrees/<任务名>"
 
 # 2. 在 worktree 内改代码（Edit/Write 用 $WT 下路径；**不要 cd 进 worktree**）
 
-# 3. 测试 —— PYTHONPATH 覆盖策略（实测定型 2026-10-09）：复用主 .venv 全部依赖，
-#    worktree 代码优先于 editable 主树 src。**前提=cwd 在 worktree 之外**（pod/main，
-#    uv 沿 cwd 找主 .venv）；已 cd 进去时 uv 会就地新建空 <wt>/.venv 缺依赖即崩
-#    （2026-10-12 实测），那时改用主解释器 "$ROOT/.venv/Scripts/python.exe" -m pytest。
+# 3. 测试 —— PYTHONPATH 覆盖策略（复用主 .venv；worktree 代码优先于 editable 主树）：
+#    **前提=cwd 在 worktree 之外**；已 cd 进去时 uv 就地建空 <wt>/.venv 缺依赖即崩，
+#    那时改用主解释器 "$ROOT/.venv/Scripts/python.exe" -m pytest。细节见 references/worktree-merge.md
 PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
 
 # 3b. 仅当 pyproject 依赖变更才 uv sync --project "$WT"（重、分钟级），之后用 "$WT/.venv"
 
 # 4. 合并回 main（先在 worktree 内 commit 本次改动，再在主树操作）：
-pysci-dev worktree merge <任务名>   # cp gitignored 运行态(旧件 .bak-<ts>) → merge --no-ff
-                                    #   → 会话数不减自检（--no-ff 不带运行态，见 references/registry-runtime.md）
+pysci-dev worktree merge <任务名>   # 交集检查 → cp gitignored 运行态(旧件 .bak-<ts>)
+                                    #   → merge --no-ff → 会话数不减自检（见 references/registry-runtime.md）
+                                    #   交集非空即 rc=2 列文件（判据 merge-base 起算，勿手算 main..HEAD）
 
 # 5. commit（cz 规范；pre-commit 全过，禁 --no-verify）后一次限时 push（规程见 charter）
 timeout 25 git push origin main   # 忽略一切失败、不重试、不设代理；超时硬要求（防挂起阻塞 drain）
@@ -41,10 +41,8 @@ pysci-dev worktree remove <任务名>
 注意：worktree 不含 gitignored 的未跟踪重数据；需真实数据时以绝对路径只读引用主树
 （同 README §7）。
 
-**worktree 命名约定**：drain/backlog 派发用**条目 id** 作 `<任务名>`（take_first 记
-`worktree=id`）。会话中途死亡的孤儿条目，下次 drain 回收据 `wt-<id>` 名
-`git worktree remove --force` + `branch -D` 清理（否则重派 `worktree add` 撞名）。手动/
-临时派发可用任意名（不属孤儿、不自动清理，防误删并发作业）。
+**worktree 命名约定**：drain/backlog 派发用**条目 id** 作 `<任务名>`（孤儿回收据此定位，
+细节见 `references/worktree-merge.md` §3）。
 
 **批量消化任务书**（drain 组包）：任务书可能含**种子**（必做）
 + **组包菜单**。**自主选取 ≥1 项**（必含种子，可只吃种子），合并到**同一 worktree**（名
@@ -80,13 +78,11 @@ pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写、�
 
 ## 新 pod 脚手架（只读层入库面）
 
-每 pod 仅 5 个文件入 git：`.gitignore`、`.qoder/settings.json`、`.qoder/mcp.json`、
-`.qoder/rules/charter.md`、`AGENTS.md`；`bench/`·`outbox/`·`.qoder/skills/` 被 pod
-`.gitignore` 排除，`inbox/` 空目录不跟踪——后三者须**合并后在 main 上** `mkdir` +
-`sync` 再生。settings.json 模板必带两件事：① 两个 hook 接线（Stop=delivery-gate、
-PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
-`"agentsMdExcludes": ["**/leader-only.md"]` 排除组长专属根规则（缺则组员注入
-`leader-only.md`；glob 写成 `**/*.md` 会连 `basic.md` 公约数一起吞掉，doctor 两项都判 ✗）。
+每 pod 仅 5 个文件入库（`.gitignore`/`.qoder/settings.json`/`.qoder/mcp.json`/
+`.qoder/rules/charter.md`/`AGENTS.md`）；`bench/`·`outbox/`·`.qoder/skills/`·`inbox/`
+须在**合并后于 main 上** `mkdir` + `sync` 再生。settings 模板必带 hook 接线 +
+`agentsMdExcludes`（恰好排除 leader-only）。逐项、零技能 pod 裁定与注册面见
+`references/pod-scaffold.md`。
 
 ## harness 预算三层执法（basic.md §1）
 
@@ -109,7 +105,10 @@ PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
 - pre-commit 钩子全过（ruff 自动修复后需重新 add 再 commit——被钩子改写不算失败）；
 - **push**：见上 worktree 规程第 5 步（一次、限时、忽略失败、不重试、不设代理）；
 - 禁止 --no-verify；禁止 reset --hard/force 类破坏性操作，除非任务书明确授权；
-- 合并前先 `git status` 检查工作区；发现非本任务的未提交改动，保留并在交付中报告。
+- 合并前的「main 脏面 ∩ 本次改动」由 `pysci-dev worktree merge` 内建；手算须用
+  `git diff --name-only "$(git merge-base HEAD wt-<名>)"..wt-<名>`——**`main..HEAD` 在分支
+  落后时把别人的提交也算进来**（实发一次错误 blocked）；
+- 发现与本单无关的未提交改动：保留、不替组长清理，交付中报告。
 
 ## 巡检清单（doctor 之外的人工项）
 
