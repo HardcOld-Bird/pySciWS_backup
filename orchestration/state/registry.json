@@ -4,7 +4,8 @@
   "models": {
     "max": "982ae403-bc5e-4f74-996d-04a9cd66f933",
     "flash": "Qwen3.8-Flash",
-    "flash_fallback": "ed6f5996-0992-479f-86a8-3f29ce0e794c"
+    "flash_fallback": "ed6f5996-0992-479f-86a8-3f29ce0e794c",
+    "minimum": "Qwen3.8-Flash"
   },
   "members": {
     "figure": {

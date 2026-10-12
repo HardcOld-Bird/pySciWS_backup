@@ -45,6 +45,47 @@ def _run_git(*args: str) -> tuple[int, str]:
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 
+def _owning_root(cwd: Path) -> Path | None:
+    """cwd 及其祖先中最近的 ``pyproject.toml`` 所在目录（一个都没有则返回 None）。"""
+    for cur in (cwd, *cwd.parents):
+        if (cur / "pyproject.toml").exists():
+            return cur
+    return None
+
+
+def cross_tree_warning(cwd: Path | None = None) -> str:
+    """脚下那棵树与代码面所指的项目根不是同一棵时返回告警文本，同树返回空串。
+
+    ``pysci`` 以 editable 装入，``pysci.paths.PROJECT_ROOT`` 由**包文件位置**决定、与
+    cwd 无关：在 worktree 目录里裸跑 ``pysci-dev sync``（漏设 ``PYTHONPATH=<wt>/src``）
+    时命令照旧退出 0、逐行输出「（一致）」，读写的却全是 main 的真本与 pod 副本——
+    「看起来跑了但什么都没发生」；``doctor`` 更糟，它据 main 的状态给出「健康」的假结论。
+    worktree 就摆在 ``PROJECT_ROOT/.qoder/worktrees/`` 里，所以「不在项目根之下」判不出
+    跨树，判据是**脚下有没有自己的 pyproject.toml**：有且不是 PROJECT_ROOT 即另一棵树。
+
+    Args:
+        cwd: 待判定目录，默认 ``Path.cwd()``（测试注入用）。
+
+    Returns:
+        告警正文（多行）；同树可信时为空串。
+    """
+    cur = (cwd if cwd is not None else Path.cwd()).resolve()
+    root = PROJECT_ROOT.resolve()
+    own = _owning_root(cur)
+    if own is None or own == root:
+        return ""
+    lines = [
+        "[!] 跨树执行：脚下是另一棵树，而本进程的代码面/项目根指向别处——",
+        f"    cwd 所属项目根 = {own}",
+        f"    PROJECT_ROOT  = {root}（由包文件位置决定，与 cwd 无关）",
+        "    不加拦则读写后者的真本/副本/台账、对前者什么都不做，且照样退出 0"
+        "（doctor 会拿别处的状态给出「健康」的假结论）。",
+        '    worktree 内请带代码面覆盖：PYTHONPATH="<wt>/src" pysci-dev …，'
+        "或确认自己确实要操作上面那个项目根后加 --force。",
+    ]
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # doctor
 # ---------------------------------------------------------------------------
@@ -545,7 +586,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=cmd_mdgen_check)
 
+    # 每个子命令都吃 --force：跨树自检是全局护栏，不该有子命令例外。
+    for sp in sub.choices.values():
+        sp.add_argument(
+            "--force",
+            action="store_true",
+            help="cwd 与项目根不同树时仍然执行（默认拒绝并 rc=2）",
+        )
+
     args = parser.parse_args(argv)
+    warn = cross_tree_warning()
+    if warn:
+        print(warn)
+        if not getattr(args, "force", False):
+            print("    已拒绝执行（rc=2）。修好代码面再来，或加 --force 明示知情。")
+            return 2
+        print("    [--force] 明知跨树，继续执行。")
     return int(args.func(args))
 
 

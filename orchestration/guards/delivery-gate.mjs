@@ -26,18 +26,27 @@ import { fileURLToPath } from 'node:url';
 
 const LIMIT = 8192;
 const CHARTER = 'charter.md'; // 只读层，always_on 槽位专属；尺寸由 pysci-dev doctor 审计
-// 交付块允许带属性（E1 的 `<blocked tags="…">`），故标签匹配用 `\b[^>]*` 而非字面 `>`——
-// 写死 `<blocked>` 会让**带属性的合法交付**被判成「缺交付块」，把组员逼成不用标签。
-const TAG_RE =
-  /<result\b[^>]*>[\s\S]*<\/result>|<blocked\b[^>]*>[\s\S]*<\/blocked>/;
+// 交付块允许带属性（E1 的 `<blocked tags="…">`），写死字面 `<blocked>` 会把**带属性的合法
+// 交付**判成「缺交付块」，把组员逼成不用标签——故属性面必须匹配属性，但不能用裸 `[^>]*`：
+// 属性**值里**的 `>`（`reason="优于 > 阈值"`）会让它在引号内部提前收尾，tags/kind 被截在
+// 属性面之外 → gate 看不见标签、跳过词表校验，而 Python 侧读得到（同一交付两侧读数分裂）。
+// 属性面必须**引号感知**（与 Python 侧 delivery._ATTRS 同形，backlog 20261012-025325）：
+// 先吃成对引号段（值内 `>`/`</` 一律放行），再吃不参与引号与 `>` 的普通字符。引号段禁跨行，
+// 避免未闭合引号吞掉整段交付。
+const ATTRS = String.raw`(?:"[^"\n]*"|'[^'\n]*'|[^>"'])*`;
+const TAG_RE = new RegExp(
+  `<result\\b${ATTRS}>[\\s\\S]*</result>|<blocked\\b${ATTRS}>[\\s\\S]*</blocked>`,
+);
 // E0-B（REFACTOR §12 判据 1）：改进提案必须结构化分类。infra_suggestion 块非空时
 // kind 属性必填且须落在词表内——这是后续判决包分流（E5）的地基。
 const INFRA_KINDS = ['defect', 'usability'];
-const INFRA_RE = /<infra_suggestion\b([^>]*)>([\s\S]*?)<\/infra_suggestion>/;
+const INFRA_RE = new RegExp(
+  `<infra_suggestion\\b(${ATTRS})>([\\s\\S]*?)</infra_suggestion>`,
+);
 // E1（REFACTOR §2）：`<blocked tags="a,b">` 的失败标签受控词表。词表**只有一份**，
 // 落在 state/failure-tags.json（Python 侧 failure_tags.load_tags() 读同一文件）——
 // 这里不复制清单，否则两侧口径必然漂移（漂移的后果是组员被拦在两边不同的词表下）。
-const BLOCKED_RE = /<blocked\b([^>]*)>([\s\S]*?)<\/blocked>/;
+const BLOCKED_RE = new RegExp(`<blocked\\b(${ATTRS})>([\\s\\S]*?)</blocked>`);
 const VOCAB_REL = ['orchestration', 'state', 'failure-tags.json'];
 
 let raw = '';
