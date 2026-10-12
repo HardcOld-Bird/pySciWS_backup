@@ -39,9 +39,16 @@ const TAG_RE = new RegExp(
 );
 // E0-B（REFACTOR §12 判据 1）：改进提案必须结构化分类。infra_suggestion 块非空时
 // kind 属性必填且须落在词表内——这是后续判决包分流（E5）的地基。
-const INFRA_KINDS = ['defect', 'usability'];
+// 词表**只有一份**：state/failure-tags.json 的 infra_kinds 段（Python 侧
+// failure_tags.load_infra_kinds() 读同一段）。下面的清单仅是文件读不到时的兜底，
+// 与文件键集的一致性由 tests/.../test_infra_kind_vocab.py 钉住。
+// 执法面必须覆盖**每一个**块（旧写法 .match 只看第一块）：组员在同一条交付里连发两块
+// （110101 那跳：占位块在前、正式块在后），gate 只查第一块、解析器也只取第一块，
+// 于是非法 kind 的块被落盘、合法块反而没入库（backlog 20261012-120001-leader）。
+const INFRA_KINDS_DEFAULT = ['defect', 'usability'];
 const INFRA_RE = new RegExp(
   `<infra_suggestion\\b(${ATTRS})>([\\s\\S]*?)</infra_suggestion>`,
+  'g',
 );
 // E1（REFACTOR §2）：`<blocked tags="a,b">` 的失败标签受控词表。词表**只有一份**，
 // 落在 state/failure-tags.json（Python 侧 failure_tags.load_tags() 读同一文件）——
@@ -84,17 +91,28 @@ function run() {
 
   // E0-B（REFACTOR §12 判据 1）：非空 <infra_suggestion> 必须带合法 kind 属性——
   // 结构化分类是后续判决包分流（E5）的地基。块为空则不执法（无建议可分类）。
-  const infraMatch = msg.match(INFRA_RE);
-  if (infraMatch && infraMatch[2].trim()) {
-    const kindM = (infraMatch[1] || '').match(/\bkind\s*=\s*"([^"]*)"/);
-    const kind = kindM ? kindM[1] : '';
-    if (!INFRA_KINDS.includes(kind)) {
-      problems.push(
-        '<infra_suggestion> 必须带 kind 属性且取值 defect 或 usability（当前' +
-          (kindM ? ' kind="' + kind + '"' : '缺 kind') +
-          '）。动作：<infra_suggestion kind="defect">（缺陷，附复现证据）' +
-          '或 kind="usability"（难用/体验类）；块正文含 kind: 与 success_criteria 标记行供 approve 解析。'
-      );
+  // 逐块校验：解析器（delivery._INFRA_RE）只取第一块，所以「第一块合法、后块违规」的
+  // 交付同样会让违规内容在队列里隐形——这里把每一块都过一遍词表。
+  const infraBlocks = [...msg.matchAll(INFRA_RE)].filter((b) => b[2].trim());
+  if (infraBlocks.length > 1) {
+    problems.push(
+      `交付含 ${infraBlocks.length} 个非空 <infra_suggestion> 块，而解析器只取第一块（其余会被静默丢弃）。` +
+        '动作：把各块内容合并成**一个** <infra_suggestion kind="…"> 块。'
+    );
+  }
+  if (infraBlocks.length) {
+    const vocab = readInfraKinds();
+    for (const b of infraBlocks) {
+      const kindM = (b[1] || '').match(/\bkind\s*=\s*"([^"]*)"/);
+      const kind = kindM ? kindM[1] : '';
+      if (!vocab.includes(kind)) {
+        problems.push(
+          `<infra_suggestion> 必须带 kind 属性且取值 ${vocab.join(' 或 ')}（当前` +
+            (kindM ? ` kind="${kind}"` : '缺 kind') +
+            '）。动作：<infra_suggestion kind="defect">（缺陷，附复现证据）' +
+            '或 kind="usability"（难用/体验类）；块正文含 kind: 与 success_criteria 标记行供 approve 解析。'
+        );
+      }
     }
   }
 
@@ -230,22 +248,38 @@ function splitTags(raw) {
   return out;
 }
 
-/** 读受控词表的标签键；读不到或形状不符返回 null（调用方放行 + 留痕）。
- *  根路径优先取 runner.build_env 注入的 PYSCI_PROJECT_ROOT，缺席时按 guard 自身位置
- *  回溯（orchestration/guards/ → 项目根），使 pod 外的手工调用也能校验。 */
-function readVocab() {
+/** 读词表文件原文；根路径优先取 runner.build_env 注入的 PYSCI_PROJECT_ROOT，缺席时按
+ *  guard 自身位置回溯（orchestration/guards/ → 项目根），使 pod 外的手工调用也能校验。 */
+function vocabData() {
   const root =
     process.env.PYSCI_PROJECT_ROOT ||
     path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
   const file = path.join(root, ...VOCAB_REL);
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+/** 读受控词表的标签键；读不到或形状不符返回 null（调用方放行 + 留痕）。 */
+function readVocab() {
   try {
-    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const data = vocabData();
     const tags = Object.keys((data && data.tags) || {});
     return tags.length ? tags : null;
   } catch (e) {
     /* fail-open：词表缺失/损坏时**不**拦交付——门禁自身故障不得伪装成组员违规 */
     failOpen('失败标签词表读取', e);
     return null;
+  }
+}
+
+// 提案分类词表：读不到文件时回落到 INFRA_KINDS_DEFAULT 而不是「不执法」——分类只有两
+// 个值且协议文档写死，兜底清单比 tags 那份稳定得多；失去执法才是本单要修的病灶。
+function readInfraKinds() {
+  try {
+    const keys = Object.keys((vocabData() || {}).infra_kinds || {});
+    return keys.length ? keys : INFRA_KINDS_DEFAULT;
+  } catch (e) {
+    failOpen('提案分类词表读取（改用兜底清单）', e);
+    return INFRA_KINDS_DEFAULT;
   }
 }
 

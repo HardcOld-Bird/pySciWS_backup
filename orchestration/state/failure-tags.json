@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "discipline": "受控词表（REFACTOR v1.0 §2）。组员 <blocked tags=\"a,b\"> 只能取本表 tags 的键；缺省不标注合法（=空列表，不阻断交付）。增补须**附定义**（definition 非空）并走 devops 交付 + pre-commit 校验——词表改动会改变全体组员的失败分类面与 Tier A 统计口径，不是本地偏好。删减同规矩。库侧读取口：pysci.skills.orchestration.tools.failure_tags.load_tags()，Node 侧：orchestration/guards/delivery-gate.mjs。",
+  "discipline": "受控词表（REFACTOR v1.0 §2）。组员 <blocked tags=\"a,b\"> 只能取本表 tags 的键；缺省不标注合法（=空列表，不阻断交付）。增补须**附定义**（definition 非空）并走 devops 交付 + pre-commit 校验——词表改动会改变全体组员的失败分类面与 Tier A 统计口径，不是本地偏好。删减同规矩。库侧读取口：pysci.skills.orchestration.tools.failure_tags.load_tags()，Node 侧：orchestration/guards/delivery-gate.mjs。**提案分类同用本文件**（infra_kinds 键）：<infra_suggestion kind=\"…\"> 的合法取值以此表为准，gate 拦、dispatch 落盘复核、approve 入队三面共读同一份——词表若有两份就会漂移，非法分类便可能只被其中一面看见（backlog 20261012-120001-leader）。",
   "tags": {
     "whitelist_conflict": "写权限面冲突：目标路径不在本 pod 允许写面内（pod-guard 拦截、或须经他人/组长代写）。",
     "cli_missing": "所需 CLI/子命令不存在、未部署或签名与文档不符（含 PATH 与 editable 安装漂移）。",
@@ -12,5 +12,9 @@
     "env_broken": "环境损坏：venv/PATH/node/编码/代理/钩子接线等本机设施不可用（通常一次修复消掉一批失败）。",
     "design_smell": "设计异味：能跑但方向可疑，需要人裁决而非修 bug（Goodhart 防护：别让它混进 bug 计数）。",
     "unknown": "归不进以上任何一类。**慎用**：它的出现即说明词表该补一项——若反复出现，Tier A 会把它立案出来。"
+  },
+  "infra_kinds": {
+    "defect": "缺陷：既有机制行为与其声明不符（须附复现命令与实际输出，否则不可证伪）。",
+    "usability": "难用/体验：机制能跑但路径别扭、要人记住本不该记的规矩（描述场景即可，不强制复现）。"
   }
 }

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,13 @@ from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 from . import journal
 from .delivery import parse_suggestion_fields
 from .dispatch import REPLIES_DIR, do_dispatch
-from .failure_tags import TAGS_PATH, failure_counts, load_tags, within_window
+from .failure_tags import (
+    TAGS_PATH,
+    failure_counts,
+    load_infra_kinds,
+    load_tags,
+    within_window,
+)
 from .ledger import (
     LEDGER_PATH,
     format_by_effort,
@@ -315,17 +322,69 @@ def backlog_batch_text(seed: dict, group: list[dict], *, max_batch: int = 4) -> 
     )
 
 
+#: 空壳建议判据（呈现面标注，backlog 20261012-120001-leader）：剥掉标题与结构化标记行
+#: 后，剩余实质正文的**非空白字符数**低于此值即标注。阈值取 40（约一行中文短句）——
+#: 再短就承载不了「证据 + 修复面」，approve 面也入不了队。实测样例：非法 kind 的占位
+#: 提案正文只有 ``placeholder`` 一词（11 字）。
+SHELL_MIN_CHARS = 40
+
+#: 结构化标记行前缀：这些行是协议字段，不算「实质正文」。``success_criteria`` 行只剥前缀，
+#: 其后的判据内容仍计入（那是人写的真话）。
+_MARKER_LINE_RE = re.compile(r"^\s*(kind|source|fingerprint)\s*[:：]", re.IGNORECASE)
+_SC_PREFIX_RE = re.compile(r"^\s*success_criteria\s*[:：]?\s*", re.IGNORECASE)
+
+
+def _substantive_chars(body: str) -> int:
+    """建议正文里「实质内容」的字符数（去空白、去标题行、去协议标记行前缀）。"""
+    total = 0
+    for i, ln in enumerate(body.splitlines()):
+        s = ln.strip()
+        if not s or (i == 0 and s.startswith("#")):
+            continue
+        if _MARKER_LINE_RE.match(s):
+            continue
+        total += len(re.sub(r"\s", "", _SC_PREFIX_RE.sub("", s, count=1)))
+    return total
+
+
+def suggestion_marks(body: str) -> list[str]:
+    """呈现面质检标记：``[!] 空壳建议``/``[!] kind 非法``/``[!] 缺 kind``（合规时 []）。
+
+    词表校验在 gate（组员侧）与 approve（入队侧）都已有，这里是**第三面**：提案来源不
+    止交付一条路（组长代补、自动立案、手写文件都会直接落进 ``suggestions/``），枚举时
+    不标出来，组长就得逐条打开才知道是空壳。
+    """
+    out: list[str] = []
+    kind, _ = parse_suggestion_fields(body)
+    if not kind:
+        out.append("[!] 缺 kind")
+    elif kind not in load_infra_kinds():
+        out.append(f"[!] kind 非法（{kind}）")
+    if _substantive_chars(body) < SHELL_MIN_CHARS:
+        out.append("[!] 空壳建议")
+    return out
+
+
 def cmd_suggestions(args) -> int:
-    """列出待审批改进建议。"""
+    """列出待审批改进建议，并对空壳/非法分类给出机械标注。"""
     del args
     items = pending_suggestions()
     if not items:
         print("（无待审批建议）")
         return 0
+    flagged = 0
     for p in items:
         body = p.read_text(encoding="utf-8")
         first = next((ln.strip() for ln in body.splitlines()[2:] if ln.strip()), "")
-        print(f"  {p.stem}  [{_member_of(p)}]  {first[:70]}")
+        marks = suggestion_marks(body)
+        flagged += 1 if marks else 0
+        suffix = f"  {' '.join(marks)}" if marks else ""
+        print(f"  {p.stem}  [{_member_of(p)}]  {first[:70]}{suffix}")
+    if flagged:
+        print(
+            f"[!] {flagged} 条待审批建议存在空壳/分类非法标注：空壳=正文不足 "
+            f"{SHELL_MIN_CHARS} 实质字，reject 即可（--override 记一句依据），无需细读。"
+        )
     print()
     print(
         '[NEXT] 审批：uv run pysci-orch approve <id> --note "..."；'
@@ -363,6 +422,17 @@ def cmd_approve(args) -> int:
             f"[!] 建议 '{sugg.stem}' 缺 kind 分类，拒绝入队。请在建议正文补一行"
             "  `kind: defect`（缺陷，附复现证据）或 `kind: usability`（难用/体验类）。\n"
             '    （交付侧本应带 <infra_suggestion kind="...">；此处缺失说明来源早于 E0-B。）'
+        )
+        return 2
+    if kind and kind not in load_infra_kinds():
+        # 入队面的词表硬闸（backlog 20261012-120001-leader）：非法分类进 backlog 后，
+        # E5 判决包分流与 stats 的 kind 分布都会被一个自造词带偏，而那时再发现就要
+        # 回滚整条队列。缺失走上面那条提示，这里只管「标了但标错」。
+        vocab = "|".join(load_infra_kinds())
+        print(
+            f"[!] 建议 '{sugg.stem}' 的 kind={kind!r} 不在受控词表（{vocab}），拒绝入队。\n"
+            f"    词表：{orchestration_rel(TAGS_PATH)} 的 infra_kinds 段"
+            "（增补须附定义并走 devops 交付，不是本地偏好）。"
         )
         return 2
     if not criteria:

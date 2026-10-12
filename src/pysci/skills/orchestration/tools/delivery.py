@@ -64,8 +64,10 @@ _LOOSE_ATTR_RE = re.compile(
 #: 兜底命中时的告警文案（逐字进 :attr:`Delivery.warning`，由 dispatch/drain 呈现）。
 PROTOCOL_LAG_HINT = "解析器早于协议：交付块按宽松兜底形态解析，建议重跑本单"
 # 建议正文里的结构化标记行（本批 leader 建议自身即样例）：`kind: defect`、
-# `success_criteria：` 后紧跟要点行。
-_KIND_LINE_RE = re.compile(r"^\s*kind[:：]\s*([A-Za-z_]+)\s*$", re.MULTILINE)
+# `success_criteria：` 后紧跟要点行。kind 值面**含连字符与数字**：组员自造的分类词
+# （实测 `defusability-placeholder`）必须能被读出来再交给词表判定，否则「标错分类」会被
+# 误报成「没标分类」，提示文案指错方向（backlog 20261012-120001-leader）。
+_KIND_LINE_RE = re.compile(r"^\s*kind[:：]\s*([A-Za-z][\w-]*)\s*$", re.MULTILINE)
 _SC_HEADER_RE = re.compile(r"^\s*success_criteria", re.IGNORECASE)
 
 
