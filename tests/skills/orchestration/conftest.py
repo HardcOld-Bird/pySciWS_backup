@@ -42,6 +42,9 @@ QUOTA_TEXT = (
     "subscription plan to get more resources. Report Issue (input /feedback)"
 )
 
+#: :func:`fake_headless` 派生瞬间回报给 ``on_spawn`` 的假 pid（第四面回收的测试锚）。
+FAKE_HOP_PID = 424242
+
 
 @pytest.fixture
 def iso_registry(tmp_path, monkeypatch):
@@ -317,11 +320,16 @@ def fake_headless(monkeypatch, responder):
     """monkeypatch dispatch.run_headless；responder(call_index, cmd) -> (rc, out, err)。
 
     返回 calls 列表（每项为该次 argv），供断言所用模型（``-m`` 后的值）。
+    ``on_spawn`` 若被调用方传入，就以 :data:`FAKE_HOP_PID` 回调一次——孤儿会话回收
+    （backlog 20261012-184000-leader）依赖派生瞬间的 pid 登记，桩不给 pid 就等于
+    把那条通路测成了哑巴。
     """
     calls = []
 
-    def run(cmd, cwd=None, env=None, timeout_s=None):
+    def run(cmd, cwd=None, env=None, timeout_s=None, on_spawn=None):
         calls.append(cmd)
+        if on_spawn is not None:
+            on_spawn(FAKE_HOP_PID)
         return responder(len(calls), cmd)
 
     monkeypatch.setattr(dispatch, "run_headless", run)

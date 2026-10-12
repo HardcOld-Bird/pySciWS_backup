@@ -97,6 +97,12 @@ ORCH_STATE_ROOT: Path = ORCHESTRATION_ROOT / "state"
 #: bench/inbox/outbox），以 pod 为 cwd 的 headless 会话在此运行。
 PODS_ROOT: Path = ORCHESTRATION_ROOT / "pods"
 
+#: 隔离作业面（git worktree）根：``pysci-dev worktree add <name>`` 建在这里，drain 的
+#: 孤儿回收与「对面到底还在不在」的判定也读这里（分支名 ``wt-<name>`` 同源于此）。
+#: 两侧各硬编码一份路径早晚会漂——漂一位就把两个写者放回同一个目录（backlog
+#: 20261012-184000-leader 的并发双写）。
+WORKTREES_ROOT: Path = PROJECT_ROOT / ".qoder" / "worktrees"
+
 
 def research_asset_dir(name: str) -> Path:
     """解析某条研究线的资产目录。

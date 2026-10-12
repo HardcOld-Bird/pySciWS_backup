@@ -68,6 +68,18 @@ git -c core.quotepath=false status --porcelain    # main 工作区未提交面�
 - **drain/backlog 派发**：`<任务名>` = 条目 id（take_first 记 `worktree=id`）。会话中途死亡的
   孤儿条目，下次 drain 回收据 `wt-<id>` 名做 `git worktree remove --force` + `branch -D`；
   名字不合规就定位不到残留，重派 `worktree add` 还会撞名；
+- **回收管四面**（backlog 20261012-184000-leader）：锁、backlog 条目、worktree 名之外还有
+  **进程**——worker 被杀时它派生的 headless 会话活在独立进程树里，不随父进程退出，仍往原
+  worktree 写。`dispatch` 在派生瞬间把会话 pid 记进运行态（`pid` 键的存活期=该跳在途期），
+  drain 回收时判活 + 核对 argv 里的 sid 后终止进程树；**判不准就不开火**（pid 会被系统复用），
+  该条目改走下面的异名重建；
+- **异名重建 `<id>-r<N>`**：旧面没能确认干净（杀不掉 / pid 已易主 / `remove --force` rc=0 但
+  目录仍趴在原地）→ 条目 `worktree_gen` 升一代，任务书直接把新名交给 worker。**世代号读磁盘
+  事实**（已有的 `<id>-r*` 目录），不是计数器自增，所以别把名字改回旧名——那个目录里可能正
+  有第二个写者；
+- **同名目录 ≠ 你的面**：`worktree add` 撞见同名目录时会区分「登记在册」（继续用）与
+  **残骸未登记**（旧会话句柄没放，remove 只是半途成功）。后者照提示换新一代名，**别在残骸目录
+  里 `rm -rf`**，旧目录留给组长处置；
 - **手动/临时派发**：可用任意名——它不属孤儿集合、不会被自动清理，这正是防误删并发作业的
   理由；
 - 收口后自己清：`pysci-dev worktree remove <名>` 会连分支一起删；分支还有未合并提交时

@@ -22,7 +22,7 @@ from .checks import run_checks
 from .delivery import parse_delivery
 from .failure_tags import load_infra_kinds
 from .ledger import LedgerEntry, append
-from .registry import Registry, orchestration_rel
+from .registry import Registry, note_hop_pid, orchestration_rel
 from .runner import (
     PROTOCOL_REMINDER,
     Envelope,
@@ -358,6 +358,11 @@ def do_dispatch(
         return delta, int(round(delta * per_char)), after
 
     taskbook = write_taskbook(m.pod, text=text, task_file=task_file, slug=slug)
+
+    def _note_pid(pid: int) -> None:
+        """派生瞬间把会话进程 pid 记进运行态（第四面回收的判据，见 note_hop_pid）。"""
+        note_hop_pid(member_id, sid, pid=pid, task=taskbook.name)
+
     replies_body, reply_files = (
         collect_replies(member_id) if attach_replies else ("", [])
     )
@@ -390,7 +395,11 @@ def do_dispatch(
             f"，模型 {model or '(默认)'}{eff}，任务书 {taskbook.name}）"
         )
     rc, out, err = run_headless(
-        cmd, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
+        cmd,
+        cwd=PROJECT_ROOT,
+        env=env,
+        timeout_s=timeout or m.timeout_s,
+        on_spawn=_note_pid,
     )
     env_json = acc_env = Envelope.parse(out)
     failed = rc != 0 or env_json.is_error
@@ -417,7 +426,11 @@ def do_dispatch(
             effort=level,
         )
         rc, out, err = run_headless(
-            cmd2, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
+            cmd2,
+            cwd=PROJECT_ROOT,
+            env=env,
+            timeout_s=timeout or m.timeout_s,
+            on_spawn=_note_pid,
         )
         env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
         failed = rc != 0 or env_json.is_error
@@ -451,7 +464,11 @@ def do_dispatch(
                 effort=level,
             )
             rc, out, err = run_headless(
-                cmd3, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
+                cmd3,
+                cwd=PROJECT_ROOT,
+                env=env,
+                timeout_s=timeout or m.timeout_s,
+                on_spawn=_note_pid,
             )
             env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
             failed = rc != 0 or env_json.is_error

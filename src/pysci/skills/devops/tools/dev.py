@@ -23,11 +23,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from pysci.paths import PODS_ROOT, PROJECT_ROOT
+from pysci.paths import PODS_ROOT, PROJECT_ROOT, WORKTREES_ROOT
 from pysci.skills.orchestration.tools.registry import dirty_tracked_state
 
-#: worktree 统一放置目录（与 Qoder 原生 --worktree 约定一致，避免两套位置）。
-WORKTREES_ROOT = PROJECT_ROOT / ".qoder" / "worktrees"
+#: worktree 统一放置目录取自 ``pysci.paths.WORKTREES_ROOT``（与 Qoder 原生 --worktree
+#: 约定一致，也与 drain 的孤儿回收/世代判定同一份事实——两处各写一遍必漂）。
 
 #: 组长专属根规则（组员 pod 须经 settings.agentsMdExcludes 排除）与全员公约数（必须可见）。
 LEADER_RULE = "leader-only.md"
@@ -760,6 +760,37 @@ def cmd_worktree_merge(name: str, wt: Path) -> int:
     return 0
 
 
+def _worktree_exists(*, name: str, wt_path: Path) -> None:
+    """同名 worktree 目录已存在时的**世代守卫**断言（backlog 20261012-184000-leader）。
+
+    为什么不再只说一句「复用即可」：孤儿回收走的是 ``git worktree remove --force``，
+    而 Windows 上只要旧 headless 会话还开着目录里的句柄，remove 完全可能 rc=0 而目录
+    依旧趴在原地——那是**残骸**，不是「你的隔离面还在」。把它当成可复用的面，就是请第二
+    个写者进同一个房间（2026-10-12 实测：两个会话并发写同一 worktree，一边整跳白跑）。
+    故此处区分两种事实，并把「换新一代名字」这条路明确指出来。
+    """
+    rc, out = _run_git("worktree", "list")
+    registered = rc == 0 and any(
+        line.split(maxsplit=1)[0].strip('"').lower() == wt_path.as_posix().lower()
+        for line in out.splitlines()
+        if line.strip()
+    )
+    if registered:
+        print(f"[!] 已存在且登记在册的 worktree：{wt_path}")
+        print("  同一隔离面继续用即可（add 不重复建，rc=2 只是把话说明白）")
+        return
+    print(f"[!] 目录存在但**未登记为 worktree**（残骸，非你的面）：{wt_path}")
+    print(
+        "  常见成因：孤儿回收 remove --force 后旧会话句柄仍占用，目录没真被摘掉——"
+        "同名重建 = 两个写者并发写同一目录"
+    )
+    print(
+        f"  处置：先 `git worktree prune` 复验；若目录还在，改用新一代名 "
+        f"`pysci-dev worktree add {name}-r2`（drain 的异名重建就是这么做的），"
+        "旧目录留给组长处置，别在这里 rm -rf"
+    )
+
+
 def cmd_worktree(args: argparse.Namespace) -> int:
     """worktree 生命周期：add / merge / remove / list（统一 .qoder/worktrees/，分支 wt-<name>）。"""
     action = args.action
@@ -773,7 +804,7 @@ def cmd_worktree(args: argparse.Namespace) -> int:
     wt_path = WORKTREES_ROOT / args.name
     if action == "add":
         if wt_path.exists():
-            print(f"[!] 已存在：{wt_path}（复用即可）")
+            _worktree_exists(name=args.name, wt_path=wt_path)
             return 2
         rc, out = _run_git("worktree", "add", "-b", f"wt-{args.name}", str(wt_path))
         print(out)

@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -244,6 +245,7 @@ def run_headless(
     cwd: Path,
     env: dict[str, str],
     timeout_s: int,
+    on_spawn: Callable[[int], None] | None = None,
 ) -> tuple[int, str, str]:
     """同步执行 headless 进程并捕获输出。
 
@@ -255,29 +257,36 @@ def run_headless(
         cwd: 进程工作目录（orch 调用方项目根；成员 cwd 经 --cwd 指定）。
         env: build_env 产出的环境。
         timeout_s: 墙钟超时秒数。
+        on_spawn: 进程**一落地就**调用，参数为子进程 OS pid。为什么要有它：worker 若在跳
+            中途被杀，台账里那一行永远不会写，可它派生的会话进程还活着继续写 worktree，
+            下一次 drain 重派同名 worktree 就并发双写（backlog 20261012-184000-leader）。
+            回收者需要的 pid 只能来自派生瞬间的登记，故在此留钩子；回调自身的
+            fail-open 由调用方负责（记账面不得影响派发结果）。
 
     Returns:
         (returncode, stdout, stderr)；超时时 returncode=-1、stderr 含超时说明。
     """
+    # Popen 而非 subprocess.run：后者不暴露子进程 pid，而 on_spawn 要的恰是它（超时语义
+    # 在此手工复刻——kill + 二次 communicate，与 subprocess.run 的超时路径一致）。
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(cwd),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if on_spawn is not None:
+        on_spawn(proc.pid)
     try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(cwd),
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_s,
-        )
-        return proc.returncode, proc.stdout, proc.stderr
-    except subprocess.TimeoutExpired as exc:
-        partial = (
-            (exc.stdout or b"").decode("utf-8", errors="replace")
-            if isinstance(exc.stdout, bytes)
-            else (exc.stdout or "")
-        )
-        return -1, partial, f"TIMEOUT after {timeout_s}s"
+        out, err = proc.communicate(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        out, _ = proc.communicate()
+        return -1, out or "", f"TIMEOUT after {timeout_s}s"
+    return proc.returncode, out or "", err or ""
 
 
 def new_session_id() -> str:

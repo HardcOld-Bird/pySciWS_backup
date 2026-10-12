@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
+from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT, WORKTREES_ROOT
 
 from . import journal, verdict
 from .delivery import parse_suggestion_fields
@@ -122,9 +122,10 @@ def backlog_find(item_id: str) -> dict | None:
 def backlog_take_first() -> dict | None:
     """取队首 pending 条目标记 in_progress 并返回（devops 派发用）。
 
-    同时记入 ``worktree`` 字段（= 条目 id，与 dispatch slug 一致）：devops 按任务书
-    约定用此名开 worktree，worker 中途死亡后 drain 孤儿回收据此定位并清理残留
-    worktree/branch（见 :func:`drain.cleanup_orphan_worktrees`）。
+    同时记入 ``worktree`` 字段（= 条目 id，或孤儿回收判定旧面不干净后的世代名
+    ``<id>-r<gen>``，见 :func:`worktree_name`）：devops 按任务书约定用此名开 worktree，
+    worker 中途死亡后 drain 孤儿回收据此定位并清理残留 worktree/branch（见
+    :func:`drain.cleanup_orphan_worktrees`）。
     """
     if not BACKLOG_PATH.exists():
         return None
@@ -133,7 +134,7 @@ def backlog_take_first() -> dict | None:
         if item.get("status") == "pending":
             item["status"] = "in_progress"
             item["started_at"] = _now()
-            item["worktree"] = str(item.get("id", ""))
+            item["worktree"] = worktree_name(item)
             BACKLOG_PATH.write_text(
                 json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
@@ -177,7 +178,7 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
         return None, []
     seed["status"] = "in_progress"
     seed["started_at"] = _now()
-    seed["worktree"] = str(seed.get("id", ""))
+    seed["worktree"] = worktree_name(seed)
     member = seed.get("member")
     seed_effort = _effort_key(seed)
     group: list[dict] = []
@@ -195,6 +196,70 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     return seed, group
+
+
+def worktree_name(item: dict) -> str:
+    """条目对应的隔离 worktree 名：默认=条目 id，孤儿回收后带世代后缀 ``<id>-r<gen>``。
+
+    ``worktree_gen`` 由 :func:`bump_worktree_generation` 写入（缺省=第 1 代）。世代不是
+    装饰：上一代的隔离面在被回收时若仍有活着的会话进程写着它（或目录摘不掉），复用同名
+    就是让两个写入者落到同一个目录上（backlog 20261012-184000-leader 的并发双写）。
+    """
+    entry_id = str(item.get("id", ""))
+    gen = int(item.get("worktree_gen") or 1)
+    return f"{entry_id}-r{gen}" if gen > 1 else entry_id
+
+
+def bump_worktree_generation(ids: list[str]) -> dict[str, str]:
+    """给这些条目开新一代隔离面（``<id>-r<gen>``），返回 ``{id: 新名}``。
+
+    只在「旧会话进程杀不掉」或「旧 worktree 目录摘不掉」时调用——回收者无法让旧写者
+    离场，就换一个它不可能已经占着的名字，把并发双写关在门外。世代号从**磁盘上已有的
+    最大世代**推进（不是条目计数器自增）：条目可能早被重置，而残留目录还挂在那儿，
+    读磁盘事实才不会撞回同一个坑。
+    """
+    wanted = {str(i) for i in ids if i}
+    if not wanted or not BACKLOG_PATH.exists():
+        return {}
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    renamed: dict[str, str] = {}
+    root = WORKTREES_ROOT
+    for item in data.get("items", []):
+        entry_id = str(item.get("id", ""))
+        if entry_id not in wanted:
+            continue
+        gen = _next_generation(root, entry_id)
+        name = f"{entry_id}-r{gen}"
+        item["worktree_gen"] = gen
+        item["worktree"] = name
+        note = str(item.get("note") or "")
+        item["note"] = (
+            f"{note}｜隔离重建：第 {gen} 代用 {name}"
+            "（上一代仍被活进程或残骸占了同名面，禁止复用旧名）"
+        ).strip("｜")
+        renamed[entry_id] = name
+    if renamed:
+        BACKLOG_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    return renamed
+
+
+def _next_generation(root: Path, entry_id: str) -> int:
+    """下一个世代号：裸名（第 1 代）与已有 ``<id>-r*`` 目录里的最大世代 + 1。
+
+    fail-open：目录不可读/名字不合式 → 视作只有第 1 代，返回 2。
+    """
+    gens = {1}
+    try:
+        names = {p.name for p in root.glob(f"{entry_id}-r*") if p.is_dir()}
+    except OSError:
+        names = set()
+    for name in names:
+        suffix = name[len(entry_id) + 2 :]
+        if suffix.isdigit():
+            gens.add(int(suffix))
+    return max(gens) + 1
 
 
 def backlog_reclaim_orphans() -> list[str]:
@@ -320,14 +385,27 @@ def backlog_task_text(item: dict) -> str:
     ``dispatch --from-backlog``（手动）与 ``_drain-devops``（自动）共用此模板，保证
     两条路径派发内容一致。末尾附**合并安全**提示：devops 合并 worktree 前须核对
     main 工作区，避免覆盖组长未提交改动（README §6 自动唤醒下的并发防护）。
+
+    隔离面名走 :func:`worktree_name`——孤儿回收判定「旧面还不干净」时条目带
+    ``worktree_gen``，任务书就让 worker 用新一代名字，不复用可能仍有活写者的旧面。
     """
-    return (
+    wt = worktree_name(item)
+    gen = int(item.get("worktree_gen") or 1)
+    head = (
         f"基础设施改进任务（backlog FIFO 队首，id={item['id']}）：\n\n"
         f"摘要：{item.get('summary', '')}\n\n"
         f"证据：{item.get('evidence') or item.get('evidence_file', '（见建议归档）')}\n\n"
         f"组长附注：{item.get('note', '（无）')}\n\n"
-        "要求：以 worktree 隔离实施，**worktree 名用本条目 id**——"
-        f"`pysci-dev worktree add {item['id']}`（分支 wt-{item['id']}），以便 worker "
+    )
+    if gen > 1:
+        head += (
+            f"**本条已进入第 {gen} 代隔离面**：上一代回收时没能确认干净（旧会话进程或"
+            "残骸仍在原地写着），严禁改用回旧名。\n\n"
+        )
+    return head + (
+        "要求：以 worktree 隔离实施，**worktree 名用这里给出的隔离面名**"
+        "（默认=本条目 id，孤儿回收升代后带 ``-r<代>`` 后缀）——"
+        f"`pysci-dev worktree add {wt}`（分支 wt-{wt}），以便 worker "
         "中途死亡时 drain 孤儿回收能据此定位并清理残留 worktree；完整测试后合并、"
         "commit（commit 后按 charter 的 push 规程执行：限时 best-effort、失败忽略）；"
         "交付中报告改动清单与验证证据，"

@@ -17,8 +17,11 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
   message 固定附 watch 事件等待器挂载指令（:mod:`watch`，README §4.5）——工作交棒的
   当刻由代码把「怎么等」交给组长。
 - **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
-  worker 遗留，重置 pending），并顺带清理其残留 worktree/branch
-  （:func:`cleanup_orphan_worktrees`，worktree 名 = 条目 id，``--force`` 摘除 + ``prune``
+  worker 遗留，重置 pending），并**四面**清干净它留下的写入者
+  （:func:`reclaim_orphan_sessions` 终止仍活着的派生会话进程 →
+  :func:`cleanup_orphan_worktrees` 摘 worktree/branch → 任一面确认不了干净就
+  :func:`workflow.bump_worktree_generation` 换 ``<id>-r<gen>`` 新一代隔离面，绝不复用
+  可能还有人写的旧名；worktree 名默认 = 条目 id，``--force`` 摘除 + ``prune``
   兜底，只清孤儿名不误删活跃/手动 worktree）；``backlog_take_batch`` 取队首为种子 +
   同提请者组包（≤ :data:`BATCH_MAX` 项）→ 批量任务书（种子必做 + 组包菜单，devops 自主
   选取合并实施）→ 一次 ``do_dispatch("devops")`` → 解析交付 ``backlog id=<ids>`` 逐 id
@@ -54,7 +57,8 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
-from .registry import orchestration_rel, refresh_models
+from . import procs, workflow
+from .registry import Registry, note_hop_pid, orchestration_rel, refresh_models
 from .workflow import (
     backlog_batch_text,
     backlog_complete,
@@ -62,6 +66,8 @@ from .workflow import (
     backlog_reclaim_orphans,
     backlog_requeue,
     backlog_take_batch,
+    bump_worktree_generation,
+    worktree_name,
 )
 
 #: 单批消化上限（护栏）：种子 + 同提请者组包 ≤ 此数（backlog 20261010-batch-digest）。
@@ -546,8 +552,13 @@ def _consume_stop_request(paths: WorkerPaths | None = None) -> bool:
 # ---------------------------------------------------------------------------
 # run 日志 / .done
 # ---------------------------------------------------------------------------
-def _log(run_log: Path, line: str) -> None:
-    """向 run 日志追加一行（带时间戳）。日志写入失败不阻塞 drain（fail-open）。"""
+def _log(run_log: Path | None, line: str) -> None:
+    """向 run 日志追加一行（带时间戳）。日志写入失败不阻塞 drain（fail-open）。
+
+    ``run_log=None`` = 静默：回收类函数允许被独立调用（非 drain 循环内）而不必编日志。
+    """
+    if run_log is None:
+        return
     try:
         run_log.parent.mkdir(parents=True, exist_ok=True)
         with run_log.open("a", encoding="utf-8") as fh:
@@ -752,18 +763,166 @@ def cleanup_orphan_worktrees(
     for name in names:
         if not name:
             continue
-        wt_path = PROJECT_ROOT / ".qoder" / "worktrees" / name
+        wt_path = workflow.WORKTREES_ROOT / name  # 与 pysci-dev worktree add 同源
         rc_wt, _ = _run_git("worktree", "remove", "--force", str(wt_path))
         rc_br, _ = _run_git("branch", "-D", f"wt-{name}")
         if rc_wt == 0 or rc_br == 0:
             cleaned.append(name)
-            if run_log:
-                _log(
-                    run_log,
-                    f"[i] 清理孤儿 worktree：{name}（worktree rc={rc_wt}, branch rc={rc_br}）",
-                )
+            _log(
+                run_log,
+                f"[i] 清理孤儿 worktree：{name}（worktree rc={rc_wt}, branch rc={rc_br}）",
+            )
     _run_git("worktree", "prune")  # 兜底：清悬挂管理项
     return cleaned
+
+
+def worktree_dir_present(name: str) -> bool:
+    """孤儿 worktree 的目录在 ``cleanup_orphan_worktrees`` 之后是否仍趴在磁盘上。
+
+    为什么单独立一个判据：``git worktree remove --force`` 返回 0 **不等于**目录真没了。
+    Windows 上只要有进程还开着该目录里的句柄（典型=还没被终止的 headless 会话），删除
+    就是异步/半途的；把「rc=0」当「已清空」再重建同名 worktree，等于把两个写者请回同
+    一个房间（backlog 20261012-184000-leader 的实证路径）。
+    """
+    if not name:
+        return False
+    return (workflow.WORKTREES_ROOT / name).exists()
+
+
+# ---------------------------------------------------------------------------
+# 孤儿会话进程回收（第四面；backlog 20261012-184000-leader）
+# ---------------------------------------------------------------------------
+#: 终止后复查存活的等待秒数（杀进程树是异步的，立即复查会假报「还活着」）。
+KILL_GRACE_S: float = 1.5
+
+
+def orphan_hop_sessions(orphans: list[str]) -> list[dict[str, Any]]:
+    """从运行态会话池里捞出「还在为这些孤儿条目写盘」的在途跳。
+
+    归属靠 :func:`registry.note_hop_pid` 在派生瞬间记下的两键：``pid``（会话进程 OS
+    pid）与 ``pid_task``（任务书文件名 ``task-<派发时刻>-<slug>.md``，slug=种子条目 id）。
+    跳正常收尾时该 pid 会被常规会话池写覆盖掉，所以**看得到 pid 就等于这跳没走完**——
+    正是 worker 被中途杀死时唯一留下的活口线索。
+
+    Returns:
+        ``[{"member", "sid", "pid", "task", "entry_id", "entry"}…]``（``entry`` 是会话池
+        里的原字典，供调用方就地改 pid；``entry_id`` 为反解出的条目 id）。
+    """
+    wanted = [str(i) for i in orphans if i]
+    if not wanted:
+        return []
+    reg = Registry.load()
+    hits: list[dict[str, Any]] = []
+    members = reg.runtime.get("members", {})
+    if not isinstance(members, dict):
+        return []
+    for mid, entry in members.items():
+        for s in (entry or {}).get("sessions", []) or []:
+            try:
+                pid = int(s.get("pid") or 0)
+            except (TypeError, ValueError):
+                continue
+            task = str(s.get("pid_task") or "")
+            if pid <= 0 or not task:
+                continue
+            matched = next((oid for oid in wanted if task.endswith(f"-{oid}.md")), None)
+            if matched is None:
+                continue
+            hits.append(
+                {
+                    "member": str(mid),
+                    "sid": str(s.get("sid", "")),
+                    "pid": pid,
+                    "task": task,
+                    "entry_id": matched,
+                    "entry": s,
+                }
+            )
+    return hits
+
+
+def reclaim_orphan_sessions(
+    orphans: list[str],
+    run_log: Path | None = None,
+    *,
+    alive=None,
+    is_session=None,
+    terminate=None,
+    sleep_s: float | None = None,
+) -> list[str]:
+    """孤儿回收的**第四面**：终止旧 worker 遗留、仍在写隔离面的 headless 会话进程。
+
+    原本回收只动三面（锁、backlog 条目、worktree 名），漏了进程：worker 被杀时它派生
+    的会话进程活在独立进程树里，继续往同名 worktree 写；下一次 drain 删掉那个 worktree
+    再重派同单，新会话与旧会话就并发双写（2026-10-12 实测：新会话读 25 轮才发现「本
+    会话零成功写入」并主动停手上报）。
+
+    动手前必过两道闸，因为 pid 会被系统复用：
+
+    1. :func:`procs.pid_alive` —— 不活就只是陈记账，擦掉即可；
+    2. :func:`procs.pid_is_session` —— 命令行里得带着那个 sid。对不上就**绝不终止**
+       （那可能是不相干的进程），宁可将该条目列为待异名重建。
+
+    终止后复查仍存活（杀不动/孙进程赖着）→ 同样列为待异名重建。
+
+    Args:
+        orphans: 本次回收到的孤儿条目 id（= 任务书里嵌的种子 id）。
+        run_log: 写日志面（None 静默）。
+        alive / is_session / terminate: 注入点（测试钉两条通路用），默认走
+            :mod:`procs` 与 :func:`_pid_alive` 的真实实现。
+        sleep_s: 终止后复查前的等待秒数。
+
+    Returns:
+        仍可能被旧写者占据的条目 id（调用方据此走「异名隔离重建」，禁止复用旧名）。
+    """
+    alive = alive or _pid_alive
+    is_session = is_session or procs.pid_is_session
+    terminate = terminate or procs.terminate_tree
+    wait = KILL_GRACE_S if sleep_s is None else sleep_s
+    hits = orphan_hop_sessions(orphans)
+    hot: list[str] = []
+    for hit in hits:
+        oid = hit["entry_id"]
+        sid8 = hit["sid"][:8]
+        label = f"{hit['member']}/{sid8} pid={hit['pid']} 任务书={hit['task']}"
+        if not alive(hit["pid"]):
+            _log(run_log, f"[i] 第四面回收：孤儿会话进程已自灭，清记账：{label}")
+            _clear_hop_pid(hit)
+            continue
+        if not is_session(hit["pid"], hit["sid"]):
+            _log(
+                run_log,
+                f"[!] 第四面回收：pid={hit['pid']} 已不是会话 {sid8}"
+                "（pid 被复用/命令行不符）——**不动手**，条目改走异名重建",
+            )
+            _clear_hop_pid(hit)
+            hot.append(oid)
+            continue
+        _log(run_log, f"[i] 第四面回收：终止孤儿会话进程 → {label}")
+        done, echo = terminate(hit["pid"])
+        if not done:
+            _log(run_log, f"[!] 第四面回收：终止失败（{echo}）→ 条目改走异名重建")
+            _clear_hop_pid(hit)
+            hot.append(oid)
+            continue
+        if wait:
+            time.sleep(wait)
+        if alive(hit["pid"]):
+            _log(
+                run_log,
+                f"[!] 第四面回收：已发终止但 pid={hit['pid']} 仍存活"
+                "（孙进程/内核挂起）→ 条目改走异名重建",
+            )
+            _clear_hop_pid(hit)
+            hot.append(oid)
+        else:
+            _clear_hop_pid(hit)
+    return hot
+
+
+def _clear_hop_pid(hit: dict[str, Any]) -> None:
+    """抹掉一条会话的在途 pid 记账（处置完不留陈标记，免得下次对着复用的 pid 误动手）。"""
+    note_hop_pid(hit["member"], hit["sid"], pid=0, task="")
 
 
 # ---------------------------------------------------------------------------
@@ -849,7 +1008,12 @@ def _drain_batch(
                 completed.append(did)
         # commit 逐 id 定位：正文抓得到就用抓到的，抓不到按 wt-<id> 分支回溯 merge
         # commit（worktree 名 = 条目 id 的任务书纪律），再查不到才落注记
-        commits = {cid: resolve_commit(outcome.body, cid) for cid in completed}
+        commits = {
+            cid: resolve_commit(
+                outcome.body, worktree_name(seed) if cid == seed_id else cid
+            )
+            for cid in completed
+        }
         for cid in completed:
             backlog_complete(
                 cid,
@@ -978,13 +1142,28 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
     if orphans:
         summary["reclaimed"] = orphans
         _log(run_log, f"[i] 回收孤儿 in_progress 条目：{', '.join(orphans)}")
-        # 顺带清理死 worker 残留的 worktree/branch（worktree 名 = 条目 id）；dry 演练不破坏
         if dry:
-            _log(run_log, "[i] dry 模式：跳过孤儿 worktree 清理（非破坏性演练）")
+            _log(
+                run_log,
+                "[i] dry 模式：跳过孤儿会话进程终止与 worktree 清理（非破坏性演练）",
+            )
         else:
+            # 第四面（进程）先动手：旧会话还活着时删它的 worktree，只会让它对着已删目录
+            # 继续写（Windows 上句柄不放，remove 也未必真清干净），随后重派就是双写。
+            hot = reclaim_orphan_sessions(orphans, run_log)
             cleaned = cleanup_orphan_worktrees(orphans, run_log)
             if cleaned:
                 summary["worktrees_cleaned"] = cleaned
+            stuck = sorted(set(hot) | {n for n in orphans if worktree_dir_present(n)})
+            if stuck:
+                renamed = bump_worktree_generation(stuck)
+                summary["worktrees_regenerated"] = renamed
+                for oid, name in renamed.items():
+                    _log(
+                        run_log,
+                        f"[!] 旧隔离面无法确认干净 → 异名重建：{oid} → {name}"
+                        "（新一代隔离面，禁止复用旧名）",
+                    )
     try:
         while True:
             if _consume_stop_request():
