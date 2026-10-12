@@ -642,6 +642,99 @@ def test_readonly_checks_register_and_promote_engine_findings(monkeypatch, iso_e
     )
 
 
+# ---------------------------------------------------------------------------
+# 读侧两支的分工：est_tokens=吞吐，ctx_ratio=上下文（insp-20261012-211429-mechanical）
+# ---------------------------------------------------------------------------
+def _seed_ledger(state, rows):
+    """把台账行原样落进隔离 state（``read_all`` 读的就是这个文件）。"""
+    ledger.LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ledger.LEDGER_PATH.write_text(
+        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
+    )
+
+
+def _curve_rows(est, ctx, turns=10, member="figure"):
+    return [
+        {
+            "ts": f"2026-10-12T{10 + i:02d}:00:00+08:00",
+            "member": member,
+            "session_id": "s",
+            "est_tokens": e,
+            "ctx_ratio": c,
+            "num_turns": turns,
+        }
+        for i, (e, c) in enumerate(zip(est, ctx))
+    ]
+
+
+def test_cost_curve_fires_on_big_hop_without_claiming_context(iso_engine):
+    """大单必然读出大 est_tokens——判语只能说「这一跳做得多」，不许再冒名「上下文用量」。
+
+    钉住的正是本次发现的根因：devops 78 跳实测 corr(est_tokens, num_turns)=+0.81、
+    corr(est_tokens, ctx_ratio)=−0.11。让一个与上下文无关的读数去诊断膨胀，等于给
+    组员下一条「少干活」的伪判据。
+    """
+    est = [100] * 7 + [10_000]
+    low_ctx = [0.2] * 8
+    _seed_ledger(iso_engine, _curve_rows(est, low_ctx))
+    found = inspectd.check_cost_curve()
+    assert len(found) == 1
+    assert "工作量" in found[0]["title"] and "上下文" not in found[0]["title"]
+    assert "ctx_ratio" in found[0]["symptom"], (
+        "症状里点名真正的上下文信号，避免再次混用"
+    )
+    assert inspectd.check_context_pressure() == [], (
+        "末跳 ctx=20%：这一跳再大也不是上下文压力"
+    )
+
+
+def test_context_pressure_reads_last_hop_not_tail_mean(iso_engine):
+    """末跳 81% 就成案——下一跳 resume 从那儿起步；判尾部均值会把它稀释掉（devops 实测
+    末跳 0.81 被三跳均值 0.51 抹平，正是原检查漏报的那一格）。"""
+    est = [100] * 8
+    ctx = [0.1] * 5 + [0.37, 0.33, 0.81]
+    _seed_ledger(iso_engine, _curve_rows(est, ctx))
+    found = inspectd.check_context_pressure()
+    assert len(found) == 1 and "81%" in found[0]["title"]
+    assert "滑窗均值=25.1%" in found[0]["evidence"], "读数面自证：低均值不否定末跳高压"
+    assert "--archive" in found[0]["expect"], (
+        "处置写真实命令，不写「归档会话」这种无入口的话"
+    )
+    assert inspectd.check_cost_curve() == [], "est 均匀：吞吐侧不该跟着立案"
+
+
+def test_context_pressure_zero_readings_are_not_low_pressure(iso_engine):
+    """BYOK 渠道 ctx_ratio 恒 0（实测）＝读数缺席，不能当「压力低」把判读压下去。"""
+    ctx = [0.2] * 7 + [0.85] + [0.0] * 3
+    _seed_ledger(iso_engine, _curve_rows([100] * 11, ctx))
+    assert len(inspectd.check_context_pressure()) == 1, "最近一条**有读数**的跳仍算末跳"
+
+
+def test_context_pressure_needs_min_rows_and_ignores_other_members(iso_engine):
+    """样本不足不判（同 cost_curve 纪律）；一条成员的爆表不给全体成员定罪。"""
+    _seed_ledger(
+        iso_engine,
+        _curve_rows([100] * 7, [0.9] * 7, member="figure")
+        + _curve_rows([100] * 9, [0.2] * 9, member="lit"),
+    )
+    assert inspectd.check_context_pressure() == [], "figure 只有 7 跳，不足 min_rows=8"
+    _seed_ledger(iso_engine, _curve_rows([100] * 9, [0.9] * 9, member="figure"))
+    found = inspectd.check_context_pressure()
+    assert len(found) == 1 and "figure" in found[0]["title"]
+
+
+def test_readonly_checks_cover_both_faces_and_dedupe(iso_engine):
+    """两支同时越线 → 两案并立（现象不同、处置不同）；再跑一轮不重登（同指纹）。"""
+    est = [100] * 7 + [10_000]
+    ctx = [0.2] * 7 + [0.9]
+    _seed_ledger(iso_engine, _curve_rows(est, ctx, member="figure"))
+    first = inspectd.run_readonly_checks()
+    assert len(first) == 2, "吞吐与上下文是两件事，各立一案"
+    titles = {f["title"] for f in inspectd.findings()}
+    assert len(titles) == 2
+    assert inspectd.run_readonly_checks() == [], "读数没变就不该再立案"
+
+
 def test_assignment_items_use_given_brief_without_menu(monkeypatch, iso_engine):
     """组长指派项吃自带任务书；``orch inspector-patrol`` 不给 target 时随机补一项。"""
     item = inspectd.enqueue(

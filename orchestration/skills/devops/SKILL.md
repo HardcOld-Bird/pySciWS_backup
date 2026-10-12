@@ -102,21 +102,22 @@ pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写、�
 `references/budget-layers.md`（豁免/TDZ 教训/Stop 探针/分册次序）与
 `references/guards-in-force.md`（fail-open 留痕+活体探针+元哨兵）。
 
+经验底账（事故经过与判据；AGENTS.md 只留约束）：`references/lessons-incidents.md`。
+
 ## git 纪律
 
 - commit：cz 规范（feat/fix/docs/refactor/test/chore + scope）；一笔提交一个主题；
 - pre-commit 钩子全过（ruff 自动修复后需重新 add 再 commit——被钩子改写不算失败）；
 - **push**：见上 worktree 规程第 5 步（一次、限时、忽略失败、不重试、不设代理）；
 - 禁止 --no-verify；禁止 reset --hard/force 类破坏性操作，除非任务书明确授权；
-- 合并前的「main 脏面 ∩ 本次改动」由 `pysci-dev worktree merge` 内建；手算须用
-  `git diff --name-only "$(git merge-base HEAD wt-<名>)"..wt-<名>`——**`main..HEAD` 在分支
-  落后时把别人的提交也算进来**（实发一次错误 blocked）；
+- 合并前的「main 脏面 ∩ 本次改动」由 `pysci-dev worktree merge` 内建（手算须按 merge-base
+  起算——`main..HEAD` 在分支落后时会把别人的提交也算进来）；
 - 发现与本单无关的未提交改动：保留、不替组长清理，交付中报告。
 
 ## 巡检清单（doctor 之外的人工项）
 
-- 台账：`orchestration/state/ledger/deliveries.jsonl` 中 ctx_ratio 持续 >60% 的成员
-  → 提请组长归档轮换；
+- 台账：末跳 `ctx_ratio` >60% 已机械化立案（`inspectd.check_context_pressure`）→ 组长
+  `orch sessions --archive <sid> --distill` 归档轮换；
 - **压测面已移交 bencher**（E4）：案卷与基线区归他，你只维护 checks 注册表与
   `orch eval run` 抽检面；动了 harness 面后不自跑压测，交付里写明「需复测/重取基线」，
   由组长 `orch bench-add` 入队（分界全文见 charter）。

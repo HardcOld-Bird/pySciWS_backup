@@ -759,26 +759,32 @@ def submit_judgment(
 # ---------------------------------------------------------------------------
 # 读侧机械检查（引擎自己做，零模型成本；让路时仍允许跑）
 # ---------------------------------------------------------------------------
+def _member_series(field: str, *, min_rows: int) -> dict[str, list[float]]:
+    """台账里某数值字段按成员分组的**非零**时序（读侧检查共用；样本不足直接剔除）。"""
+    from .ledger import read_all  # 延迟导入：台账读全量，非队列常驻路径
+
+    by: dict[str, list[float]] = {}
+    for r in read_all():
+        v = getattr(r, field, 0) or 0
+        if v:
+            by.setdefault(str(getattr(r, "member", "?")), []).append(float(v))
+    return {m: v for m, v in by.items() if len(v) >= min_rows}
+
+
 def check_cost_curve(*, factor: float = 3.0, min_rows: int = 8) -> list[dict[str, Any]]:
-    """台账成本曲线异常：某跳 ``est_tokens`` 超过同成员均值 ``factor`` 倍即成案（§7②）。
+    """单跳**工作量**异常：某跳 ``est_tokens`` 超过同成员均值 ``factor`` 倍即成案（§7②）。
 
-    判据用**相对排名**而非绝对值（``registry.est_tokens_per_char`` 是启发式尺子，两渠道
-    同法才可比）。行数不足时不判——样本太小的均值没有解释力。
+    判据用相对排名而非绝对值（``registry.est_tokens_per_char`` 是启发式尺子，两渠道同法
+    才可比）。行数不足时不判——样本太小的均值没有解释力。
+
+    **它量的不是上下文**（本函数原名「上下文用量超均值」，2026-10-12 改名）：est_tokens 是
+    「本跳往会话档追加了多少字符」=吞吐。devops 78 跳实测与 ``num_turns`` 相关 **+0.81**、
+    与 ``ctx_ratio`` 相关 **−0.11**——大单必然读出大数，据此诊断「膨胀」会把「这一跳做得多」
+    当成病。上下文占用改由 :func:`check_context_pressure` 读真实读数；本支留着的理由是
+    大单/超大组包确实是 max_turns 腰斩的前兆（README §7 教训面）。
     """
-    from .ledger import (  # 延迟导入：台账读全量，非队列常驻路径
-        read_all,
-    )
-
-    rows = [r for r in read_all() if getattr(r, "est_tokens", 0)]
-    by_member: dict[str, list[int]] = {}
-    for r in rows:
-        by_member.setdefault(str(getattr(r, "member", "?")), []).append(
-            int(getattr(r, "est_tokens", 0))
-        )
     out: list[dict[str, Any]] = []
-    for member, vals in sorted(by_member.items()):
-        if len(vals) < min_rows:
-            continue
+    for member, vals in sorted(_member_series("est_tokens", min_rows=min_rows).items()):
         mean = sum(vals) / len(vals)
         if mean <= 0:
             continue
@@ -789,15 +795,77 @@ def check_cost_curve(*, factor: float = 3.0, min_rows: int = 8) -> list[dict[str
             {
                 "cls": "mechanical",
                 "kind": "usability",
-                "title": f"{member} 最近三跳的上下文用量超均值 {factor:.0f} 倍",
-                "symptom": "疑似上下文膨胀（长文档反复注入/会话未归档）",
+                "title": f"{member} 最近三跳的单跳工作量超均值 {factor:.0f} 倍",
+                "symptom": (
+                    "单跳吞吐异常（任务书过大或组包过宽），是 max_turns 腰斩的前兆——"
+                    "非上下文读数（膨胀看 ctx_ratio）"
+                ),
                 "repro": f"orch ledger --member {member} --days 14",
-                "evidence": (f"均值={mean:.0f}，尾部读数={tail}，样本={len(vals)} 跳"),
-                "expect": "尾部读数回落到均值 3 倍以内，或该会话归档后重新起会话",
+                "evidence": (
+                    f"est_tokens 均值={mean:.0f}，尾部越线读数={tail}，样本={len(vals)} 跳"
+                ),
+                "expect": (
+                    f"后续三跳的单跳工作量回落到均值 {factor:.0f} 倍以内（拆单或缩组包），"
+                    "或组长裁定该跳确为一次性大单"
+                ),
                 "tag": "",
                 "criteria": (
-                    f"- {member} 最近 3 跳的 est_tokens 均低于其滑窗均值的 {factor:.0f} 倍"
-                    "（`orch stats` 成本列可复核）"
+                    f"- {member} 最近 3 跳的 est_tokens 均低于其滑窗均值的 {factor:.0f} 倍，"
+                    "或对应跳的轮数（num_turns）同步回落（`orch ledger` 可复核）"
+                ),
+                "source": "inspectd",
+            }
+        )
+    return out
+
+
+def check_context_pressure(
+    *, high: float = 0.6, min_rows: int = 8, tail: int = 3
+) -> list[dict[str, Any]]:
+    """上下文占用压力：末跳 ``ctx_ratio`` 越过 ``high`` 即成案（§7② 归档提示的正牌信号）。
+
+    与 :func:`check_cost_curve` 的分工就在这里：**ctx_ratio 是 envelope 的真实读数**
+    （0~1，跨成员天然可比），不需要相对排名，也不随「这一跳干了多少活」失真。取**末跳**而
+    不取尾部均值：ctx_ratio 是一跳结束时的水位，下一跳 resume 就从这儿起步——末跳 81% 就是
+    起步 81%，那是压缩/腰斩的直接前兆，而尾部均值会把它稀释掉（devops 末跳 0.81 被
+    尾部三跳均值 0.51 抹平，正是原检查漏报的那一格）。
+
+    ``high=0.6`` 不是新造的数：devops 巡检清单里「ctx_ratio 持续 >60% 的成员→提请组长归档」
+    本就是人工侧的既成阈值，这里只是把它机械化。行数不足不判（同 cost_curve 纪律）。
+    """
+    out: list[dict[str, Any]] = []
+    for member, vals in sorted(_member_series("ctx_ratio", min_rows=min_rows).items()):
+        last = vals[-1]
+        if last <= high:
+            continue
+        recent = [round(v, 3) for v in vals[-tail:]]
+        out.append(
+            {
+                "cls": "mechanical",
+                "kind": "usability",
+                "title": (
+                    f"{member} 末跳上下文占用 {last:.0%} 越过 {high:.0%}，下一跳起步水位过高"
+                ),
+                "symptom": (
+                    "会话接近压缩窗口：resume 下一跳即在高压下运行，每跳全文注入的只读层"
+                    "（charter/AGENTS/basic）会把它继续往上推"
+                ),
+                "repro": f"orch ledger --member {member} --days 14",
+                "evidence": (
+                    f"末跳 ctx={last:.1%}，尾部 {tail} 跳={recent}，"
+                    f"滑窗均值={sum(vals) / len(vals):.1%}，样本={len(vals)} 跳"
+                ),
+                "expect": (
+                    f"组长归档该成员会话后重开"
+                    f"（`orch sessions {member} --archive <sid> --distill`），"
+                    f"或末跳读数回落到 {high:.0%} 以内"
+                ),
+                "tag": "",
+                "criteria": (
+                    f"- {member} 末跳 ctx_ratio ≤ {high:.0%}"
+                    "（`orch ledger --member "
+                    + member
+                    + "` 的 ctx 列可复核），或会话已归档重开"
                 ),
                 "source": "inspectd",
             }
@@ -836,7 +904,11 @@ def run_readonly_checks(*, dry: bool = False) -> list[str]:
     """
     seen = {(str(r.get("title", "")), str(r.get("evidence", ""))) for r in findings()}
     found: list[str] = []
-    for cand in [*check_cost_curve(), *check_throttle_config()]:
+    for cand in [
+        *check_cost_curve(),
+        *check_context_pressure(),
+        *check_throttle_config(),
+    ]:
         if (str(cand.get("title", "")), str(cand.get("evidence", ""))) in seen:
             continue
         rec = append_finding(**cand)
