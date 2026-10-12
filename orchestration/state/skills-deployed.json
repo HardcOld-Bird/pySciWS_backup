@@ -9,15 +9,15 @@
       }
     },
     "orchestration": {
-      "source_hash": "72ac90b2a036c8ffac9eb44a16330b9d6b1b04e291a50a5da9da3e37771bde03",
+      "source_hash": "5e7e296f59f5bc3b83caa2636163c408627fbf7e2745491a54564b959425c85b",
       "targets": {
-        ".qoder/skills/orchestration": "72ac90b2a036c8ffac9eb44a16330b9d6b1b04e291a50a5da9da3e37771bde03"
+        ".qoder/skills/orchestration": "5e7e296f59f5bc3b83caa2636163c408627fbf7e2745491a54564b959425c85b"
       }
     },
     "devops": {
-      "source_hash": "7166f9b109016be428d9d37638b10720b9c76b5afdbb6722255edaac6f1fa51c",
+      "source_hash": "91f4ffd200813de3e48f46703ddbf4b839c0b9176a37355cf3cf9e1939a0a9cf",
       "targets": {
-        "orchestration/pods/devops/.qoder/skills/devops": "7166f9b109016be428d9d37638b10720b9c76b5afdbb6722255edaac6f1fa51c"
+        "orchestration/pods/devops/.qoder/skills/devops": "91f4ffd200813de3e48f46703ddbf4b839c0b9176a37355cf3cf9e1939a0a9cf"
       }
     },
     "comsol-simulation": {
@@ -60,6 +60,12 @@
       "targets": {
         "orchestration/pods/deputy/.qoder/skills/modeling3d": "58bc21e45ecf243df9e569227bdd02e05c1973f6f4403e000ffc8b387c2e4627",
         "orchestration/pods/model3d/.qoder/skills/modeling3d": "58bc21e45ecf243df9e569227bdd02e05c1973f6f4403e000ffc8b387c2e4627"
+      }
+    },
+    "bencher": {
+      "source_hash": "50cab4ead0c68de00fd1bd16dcac0922a8c764a4ac5b8577581f8ad1cc0d43d8",
+      "targets": {
+        "orchestration/pods/bencher/.qoder/skills/bencher": "50cab4ead0c68de00fd1bd16dcac0922a8c764a4ac5b8577581f8ad1cc0d43d8"
       }
     }
   }

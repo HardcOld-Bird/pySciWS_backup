@@ -826,11 +826,14 @@
       "kind": "defect",
       "success_criteria": "按新配方 pyproject 增删 console script → uv sync：入口一个不缺、失败无半坏态（阳性用例）；devops 技能 references 落配方；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-114239-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T12:25:14+08:00",
-      "note": "defect 实锤（本机今日实际发生：watch 持锁 exe→uv sync 半坏 venv），修复 uv 配方批准。",
+      "note": "drain 批量销账（commit 42cda09）",
       "started_at": "2026-10-12T12:26:25+08:00",
-      "worktree": "20261012-114239-devops"
+      "worktree": "20261012-114239-devops",
+      "done_at": "2026-10-12T12:54:55+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-114239-devops"
     },
     {
       "id": "20261012-120001-leader",
@@ -839,9 +842,14 @@
       "kind": "defect",
       "success_criteria": "非法 kind 交付被 gate exit 2（阳性）；手写漏网路径被 suggestions 枚举标注/拒入库实锤；110101 进入路径结论写入本单 note；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120001-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T12:26:22+08:00",
-      "note": "词表防御纵深缺口，与 E5 判决包准入面同源，批准。"
+      "note": "drain 批量销账（commit 89a93c3）",
+      "started_at": "2026-10-12T12:54:55+08:00",
+      "worktree": "20261012-120001-leader",
+      "done_at": "2026-10-12T13:21:39+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-120001-leader"
     },
     {
       "id": "20261012-120002-leader",
@@ -850,10 +858,14 @@
       "kind": "usability",
       "success_criteria": "见单内 success_criteria 四条（doctor 全绿/无人值守队列跑通/副本 A/B 二元判决零残留/污染检查与 runner 字段）",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120002-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T12:26:23+08:00",
-      "note": "E4：bencher 专职测试员上线，套件运行职责自 devops/组长面移交。",
-      "effort": "high"
+      "note": "drain 跳过（交付=run_failed）：tool_use…｜组长代收官：会话触 150 轮上限未合并，代码完整零交集，合并+sync+doctor+队列生命周期实测+runner 字段实锤；A/B 实测进行中",
+      "effort": "high",
+      "started_at": "2026-10-12T13:21:39+08:00",
+      "worktree": "20261012-120002-leader",
+      "needs_leader_at": "2026-10-12T14:28:42+08:00",
+      "commit": "8192235+merge"
     },
     {
       "id": "20261012-120003-leader",
@@ -864,8 +876,11 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120003-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T12:26:23+08:00",
-      "note": "E5a：inspector 上线，设计审查 rubric 由组长从用户 2026-10-11 原话整理入册。",
-      "effort": "high"
+      "note": "组长再排：E4 前置已合并（8192235），十三 pod 与验收面可达；要求 solo 执行勿组包（E5b 在途，二者同改 orch.py/approve 面，组包将再触顶+必冲突）",
+      "effort": "high",
+      "started_at": "2026-10-12T14:28:42+08:00",
+      "worktree": "20261012-120003-leader",
+      "needs_leader_at": "2026-10-12T14:45:20+08:00"
     },
     {
       "id": "20261012-120004-leader",
@@ -874,10 +889,23 @@
       "kind": "usability",
       "success_criteria": "见单内 success_criteria（无包拒绝/例外通道实测/J+M 全程/未改善自动立案/override 率入 status）",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-120004-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T12:26:24+08:00",
       "note": "E5b：审批判决包硬化，基建判断自组长职责事实分离的收口单。",
-      "effort": "high"
+      "effort": "high",
+      "started_at": "2026-10-12T14:45:20+08:00",
+      "worktree": "20261012-120004-leader"
+    },
+    {
+      "id": "20261012-132138-devops",
+      "member": "devops",
+      "summary": "success_criteria：构造一条 kind 非法的 infra 交付，`orch ledger` 该行不再显示「建议✓」（或改为「建议✗未入库」），且 `orch suggestions` 计数与台账读数一致；新增测试钉住「台账建议字段 ⟺ 队列存在条目」同真同假。",
+      "kind": "defect",
+      "success_criteria": "非法 kind 交付的台账行不再显示建议✓（改为未入库标注）；suggestions 计数与 ledger 读数一致性阳性用例钉住同真同假；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-132138-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T14:30:38+08:00",
+      "note": "defect：读数面与入库面口径分裂，与 #62 同源收尾。本批不唤醒，由在途 drain 接手。"
     }
   ]
 }

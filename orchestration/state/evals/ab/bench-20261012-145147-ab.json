@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "label": "bench-20261012-145147-ab",
+  "started_at": "2026-10-12T14:51:48+08:00",
+  "ref_a": "80ce9ef",
+  "ref_b": "HEAD",
+  "commit_a": "",
+  "commit_b": "",
+  "cases": [
+    "fig-basic"
+  ],
+  "pollution": [
+    {
+      "sha": "8192235",
+      "subject": "feat(orch): E4 bencher 专测面存档，并修完它留下的 8 个红测"
+    },
+    {
+      "sha": "2b53182",
+      "subject": "docs(dev): AGENTS.md 蒸馏协议词表三面执法条目"
+    },
+    {
+      "sha": "89a93c3",
+      "subject": "fix(orch): 提案 kind 词表三面收口，非法分类不再直达审批队列"
+    },
+    {
+      "sha": "b2e5b35",
+      "subject": "docs(dev): devops AGENTS.md 蒸馏 uv 半坏态配方——venv-sync 四步（让路→sync→让回原地→核对）/ uv run 隐式 sync 使工具本体跑不起来 / 删 .locked-* 前先查原名"
+    },
+    {
+      "sha": "dd6e37b",
+      "subject": "fix(dev): venv-sync 让路后若 uv 未重建则把原件改回原名，回收残留先查原名"
+    },
+    {
+      "sha": "2d04a19",
+      "subject": "feat(dev): venv-sync 开局 sweep 让路残留 + 记入 main 真仓验收与 uv run 隐式 sync 陷阱"
+    },
+    {
+      "sha": "7a1485d",
+      "subject": "feat(dev): pysci-dev venv-sync——Windows exe 锁改名让路后 sync，再按 [project.scripts] 核对入口"
+    },
+    {
+      "sha": "177b81f",
+      "subject": "docs(dev): devops AGENTS.md 蒸馏 20261012-094646 经验——跨树自检放行标准 worktree 配方（免 --force）/ mdgen-check 相对入参锚 PROJECT_ROOT"
+    },
+    {
+      "sha": "b85feec",
+      "subject": "fix(dev): 跨树自检放行标准 worktree 配方（PROJECT_ROOT 在脚下树内且 .git 是文件）；mdgen-check 相对入参与 pre-commit cwd 锚 PROJECT_ROOT——按 cwd 解析会拿另一棵树的字节当钩子终态基准"
+    },
+    {
+      "sha": "5634fb6",
+      "subject": "docs(dev): devops AGENTS.md 蒸馏 20261012-082932 经验——porcelain 首行前导空格是判位符（strip 即漏项，须走 _git_proc）/ 合并前交集判据按 merge-base 起算，工具已内建勿手算"
+    },
+    {
+      "sha": "1a4a581",
+      "subject": "feat(dev): worktree merge 内建合并前交集检查——判据按 merge-base 起算，main..HEAD 误报出局"
+    },
+    {
+      "sha": "36aa1ea",
+      "subject": "chore(dev): devops AGENTS.md 蒸馏 E6-prep 经验——uv sync exe 锁重命名法 / PYSCI_POD 假绿坑 / 零技能 pod 不进 manifest"
+    },
+    {
+      "sha": "fb9c688",
+      "subject": "fix(orch): E6-prep 收口——mirror 菜单 EOF 干净拒绝 + twin 零技能 pod 裁定入测试与文档"
+    },
+    {
+      "sha": "2bcfd6e",
+      "subject": "Merge branch 'wt-20261012-005900-leader'（E6-prep 半成品 5b62ac3 续作，backlog 20261012-075201-leader 防重做）"
+    },
+    {
+      "sha": "142e6ba",
+      "subject": "chore(dev): devops AGENTS.md 蒸馏 E2 经验——压测跳隔离面已内建，删 lint 首期规则旧句"
+    },
+    {
+      "sha": "6988550",
+      "subject": "chore(orch): E2 基线固化 e2-r10（首个可信读数）+ 并发/抖动口径"
+    },
+    {
+      "sha": "ad7a67d",
+      "subject": "fix(orch): 压测跳隔离组员自维护层（附注禁写 + 还原本跳新增脏面）"
+    },
+    {
+      "sha": "de1f704",
+      "subject": "fix(eval): fig-basic 案内预算 14→16，并钉死「取数前清空 scratch」口径"
+    },
+    {
+      "sha": "d95dfb4",
+      "subject": "fix(orch): 自动重试/换档跳的 envelope 读数累计成整任务值"
+    },
+    {
+      "sha": "bc41441",
+      "subject": "fix(orch): E2 验收——eval 判决补预算贴线可读面，blocked-recheck 案内放宽 10→14"
+    },
+    {
+      "sha": "cce839c",
+      "subject": "feat(orch): devops 获 eval 压测面；档位自愈改写运行态 + 脏跟踪面哨兵"
+    },
+    {
+      "sha": "19db1e2",
+      "subject": "Merge branch 'main' into wt-20261012-073700-leader"
+    },
+    {
+      "sha": "73a2090",
+      "subject": "fix(orch): pysci-dev 跨树自检护栏 + 交付属性面引号感知"
+    },
+    {
+      "sha": "f47a579",
+      "subject": "fix(orch): 夜航三失败面硬化——devops 150 轮 + 挂载唯一顶层命令 + fired 未确认补账"
+    },
+    {
+      "sha": "5b62ac3",
+      "subject": "feat(orch): E6-prep twin pod 脚手架 + taste 通道 + pysci-mirror 骨架（半成品留档）"
+    }
+  ],
+  "verdict": "inconclusive",
+  "escalate": "twin",
+  "sides": {},
+  "error": "窗口期污染：80ce9ef..HEAD 间另有 25 个 harness 面提交，读数差无法归因于 a→b 这一改动——二元判决会给出错误的因果",
+  "finished_at": "2026-10-12T14:51:48+08:00"
+}
