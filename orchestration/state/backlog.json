@@ -938,11 +938,45 @@
       "kind": "usability",
       "success_criteria": "三席 smoke 三票+双序+usage 落盘；单席缺 Key 标 unavailable 不崩全案；回退告警三面可见；minimum 调查有书面结论；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-164600-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T16:46:40+08:00",
-      "note": "孤儿条目回收（原 started_at=2026-10-12T18:11:03+08:00）",
+      "note": "drain 批量销账（commit unresolved）",
       "started_at": "2026-10-12T18:28:10+08:00",
-      "worktree": "20261012-164600-leader"
+      "worktree": "20261012-164600-leader",
+      "needs_leader_at": "2026-10-12T18:35:45+08:00",
+      "done_at": "2026-10-12T18:58:38+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-164600-leader"
+    },
+    {
+      "id": "20261012-173500-leader",
+      "member": "leader",
+      "summary": "**（渠道互换，用户裁决 2026-10-12）flash 档永久改指 BYOK Qwen3.8-Flash 优先、内置渠道降为回退——同步 DEFAULT_MODEL_PATTERNS 防自愈翻转**",
+      "kind": "usability",
+      "success_criteria": "- registry 读数互换 + 一次 `refresh-models`/drain 启动后映射**不被刷回**\n（阳性用例钉住模式表一致性）；\n- 一次真实 flash 派发台账 model 字段=BYOK UUID（credits 应恢复计量——\n顺带取证 BYOK flash 的 credits 上报行为并记录）；\n- README §3.5 与代码模式表同源（快照断言）；全量无回归。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-173500-leader.md",
+      "status": "done",
+      "proposed": "2026-10-12T18:26:45+08:00",
+      "note": "drain 批量销账（commit 2fbd333）",
+      "effort": "medium",
+      "started_at": "2026-10-12T18:35:45+08:00",
+      "worktree": "20261012-173500-leader",
+      "done_at": "2026-10-12T19:15:12+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-173500-leader"
+    },
+    {
+      "id": "20261012-184000-leader",
+      "member": "leader",
+      "summary": "**（缺陷类）worker 崩溃接管不杀旧派生会话：孤儿 devops headless 与重派新会话并发写同一 worktree**",
+      "kind": "defect",
+      "success_criteria": "孤儿会话场景单测双路径绿；真实接管出现第四面回收或异名重建行；既有机制不回归；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-184000-leader.md",
+      "status": "in_progress",
+      "proposed": "2026-10-12T18:37:16+08:00",
+      "note": "",
+      "started_at": "2026-10-12T18:58:38+08:00",
+      "worktree": "20261012-184000-leader"
     },
     {
       "id": "20261012-164601-leader",
@@ -953,8 +987,11 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-164601-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T16:46:41+08:00",
-      "note": "",
-      "effort": "high"
+      "note": "组长再排：blocked 系会话双占用（#76 范围已扩至会话池面），#76 落地后自动消解；devops 明示未开工未销账，原文证据见其交付",
+      "effort": "high",
+      "started_at": "2026-10-12T19:15:12+08:00",
+      "worktree": "20261012-164601-leader",
+      "needs_leader_at": "2026-10-12T19:21:19+08:00"
     },
     {
       "id": "20261012-170000-leader",
@@ -963,10 +1000,12 @@
       "kind": "defect",
       "success_criteria": "- 真实重跑「fig-basic A/B（相邻提交对 b2e5b358→89a93c3）」→ 两副本各真跑\n（台账各新增一行 runner=bencher kind=ab 读数）→ 输出二元判决或\ninconclusive+窗口证据，二者必居其一，绝无 1.3s-done-无判决形状；\n- done-无证据→failed 的机械判据单测全绿；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170000-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T16:58:42+08:00",
       "note": "",
-      "effort": "medium"
+      "effort": "medium",
+      "started_at": "2026-10-12T19:21:19+08:00",
+      "worktree": "20261012-170000-leader"
     },
     {
       "id": "20261012-170300-leader",
@@ -1003,18 +1042,6 @@
       "proposed": "2026-10-12T17:48:36+08:00",
       "note": "",
       "effort": "ultracode"
-    },
-    {
-      "id": "20261012-173500-leader",
-      "member": "leader",
-      "summary": "**（渠道互换，用户裁决 2026-10-12）flash 档永久改指 BYOK Qwen3.8-Flash 优先、内置渠道降为回退——同步 DEFAULT_MODEL_PATTERNS 防自愈翻转**",
-      "kind": "usability",
-      "success_criteria": "- registry 读数互换 + 一次 `refresh-models`/drain 启动后映射**不被刷回**\n（阳性用例钉住模式表一致性）；\n- 一次真实 flash 派发台账 model 字段=BYOK UUID（credits 应恢复计量——\n顺带取证 BYOK flash 的 credits 上报行为并记录）；\n- README §3.5 与代码模式表同源（快照断言）；全量无回归。",
-      "evidence_file": "orchestration/state/suggestions/approved/20261012-173500-leader.md",
-      "status": "pending",
-      "proposed": "2026-10-12T18:26:45+08:00",
-      "note": "",
-      "effort": "medium"
     },
     {
       "id": "20261012-174114-devops",

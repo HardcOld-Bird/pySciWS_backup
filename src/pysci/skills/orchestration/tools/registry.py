@@ -60,12 +60,15 @@ RUNTIME_MODELS_KEY: str = "models_resolved"
 STATE_REL_PATH: str = "orchestration/state"
 
 #: 档位 → 具体型号映射（README §3.5）；registry.json 的 models 块覆盖这里的出厂默认。
-#: 渠道策略（用户裁决 2026-10-10，credit 耗尽事故复盘）：
+#: 渠道策略（用户裁决 2026-10-10 credit 耗尽事故复盘；**2026-10-12 flash 渠道互换**）：
 #: - ``max`` = ''（不传 -m → 走用户级默认 BYOK；**禁用内置同名模型**——烧订阅 credit）；
-#: - ``flash`` = 内置 Qwen3.8-Flash（限时免费，零额度消耗）；
-#: - ``<tier>_fallback`` = 该档额度耗尽时的备用渠道（do_dispatch 自动换档重试一次）。
-#:   BYOK modelID 账号相关，出厂默认为空=无回退；实际值由组长在 registry.json 配置
-#:   （flash_fallback=BYOK Qwen-3.8-Flash，护栏级、须经用户）。
+#: - ``flash`` = **BYOK Qwen-3.8-Flash 优先**，内置 ``Qwen3.8-Flash`` 降为
+#:   ``flash_fallback``（用户原话：内置免费但限速、响应慢影响效率）。互换落在**跟踪面**
+#:   （registry.json models）与**模式表**（:data:`DEFAULT_MODEL_PATTERNS`）；本常量只是
+#:   三级回退的最后一级（跟踪 > 运行态解析 > 出厂，见 :meth:`Registry.models`），BYOK
+#:   modelID 是账号级 UUID、写不进代码，故出厂值保守取内置免费名——**宁慢不烧 credit**。
+#: - ``<tier>_fallback`` = 该档额度耗尽时的备用渠道（do_dispatch 自动换档重试一次，
+#:   逻辑不动：互换后其语义自然变成「BYOK 按量耗尽 → 内置限时免费兜底」）。
 #: - ``minimum`` = harness 压测专用最低成本档（REFACTOR §1.1，驱动 ``orch eval run``）。
 #:   ``registry.models`` 改动属护栏级：本档的**设立**经用户裁决（§1.1），而**型号选择**
 #:   原属专门环节，委托期内由组长代决（§9.4）——暂映射内置 ``Qwen3.8-Flash``（现唯一
@@ -79,14 +82,20 @@ DEFAULT_MODELS: dict[str, str] = {
     "flash_fallback": "",
 }
 
-#: 档位 → ``--list-models`` 人类名精确匹配表（用户裁决 2026-10-10，模型映射自动刷新）；
-#: registry.json 的 ``model_patterns`` 块可逐档覆盖。BYOK 命名是账号级配置（当前
-#: Qwen-3.8-Max/Flash），改名后更新这里或 registry——**精确匹配**是硬要求：内置
-#: ``Qwen3.8-Flash`` 与 BYOK ``Qwen-3.8-Flash`` 仅差一个连字符，模糊匹配必串档。
+#: 档位 → ``--list-models`` 人类名精确匹配表（用户裁决 2026-10-10，模型映射自动刷新；
+#: **2026-10-12 与 models 同步互换**）；registry.json 的 ``model_patterns`` 块可逐档覆盖。
+#: BYOK 命名是账号级配置（当前 Qwen-3.8-Max/Flash），改名后更新这里或 registry——
+#: **精确匹配**是硬要求：内置 ``Qwen3.8-Flash`` 与 BYOK ``Qwen-3.8-Flash`` 仅差一个连字符，
+#: 模糊匹配必串档。
+#:
+#: 这张表是「哪个名对应哪个档」的**唯一机器可读口径**：drain 每次启动都跑
+#: :func:`refresh_models`，跟踪面缺哪一档就按本表补哪一档。所以换档/互换**只改
+#: registry.json 是不够的**——模式表不改，自愈就把映射刷回旧渠道（README §3.5 护栏教训
+#: 的镜像场景）。快照断言见 ``tests/skills/orchestration/test_flash_channel_swap.py``。
 DEFAULT_MODEL_PATTERNS: dict[str, str] = {
     "max": "Qwen-3.8-Max",
-    "flash_fallback": "Qwen-3.8-Flash",
-    "flash": "Qwen3.8-Flash",
+    "flash": "Qwen-3.8-Flash",
+    "flash_fallback": "Qwen3.8-Flash",
     "minimum": "Qwen3.8-Flash",
 }
 

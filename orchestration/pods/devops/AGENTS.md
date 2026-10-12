@@ -13,9 +13,10 @@
 
 - **worktree 内跑测试/CLI（2026-10-12 定型）**：`PYTHONPATH="<wt>/src" uv run --no-sync pytest
   "<wt>/tests" -q` 复用主 `.venv`，**前提=cwd 在 worktree 之外**（cd 进去 uv 就地新建空 venv，
-  缺 pyyaml 即崩）。副作用：`PROJECT_ROOT` 就近认 `pyproject.toml` ⇒ state 写进 worktree 副本
-  （backlog.json 被跟踪），实验后 `git checkout -- orchestration/state/…` 还原。配方与兜底
-  见技能 `references/worktree-merge.md` §1。
+  缺 pyyaml 即崩）。副作用：`PROJECT_ROOT` 就近认 `pyproject.toml` ⇒ state 写进 worktree 副本，
+  跑完逐文件还原——**worktree 内禁 `git checkout -- .`**（一次抹光全部未提交改动）。全量套件
+  另经 `ensure_inspector` 真派生 worker，merge 的 cp 面含 `*.lock` 会把他树锁拖进 main。配方与
+  兜底见技能 `references/worktree-merge.md` §1。
 - **判决包流（2026-10-12 E5b）**：`tools/verdict.py`=共享库（§0.9 组员复用，不另起 CLI）。
   approve 必带 `--jury`/`--bench`/`--override` 之一；例外通道=defect×当跳 blocked，判据读落盘
   固化的 `delivery:` 行（事后反查台账会失效）。J 出 B 自动驳回且**不计 override 率**——账只有
@@ -37,7 +38,7 @@
   `references/uv-venv-sync.md`。
 - **CLI 范式=uv run 必带 --no-sync（2026-10-12）**：src/registry checks/技能真本/basic.md 四面
   同口径，快照测试 `test_cli_paradigm_sync.py` 扫语料点火；charter 只读面登记 `READONLY_PENDING`，
-  文件合规后哨兵反红提醒删豁免（防永久假绿）。人工 grep 清点会漏（同行含 --no-sync 被吃掉）。
+  文件合规后哨兵反红提醒删豁免（防永久假绿）；人工 grep 会漏计。
 - **任务书轻量 lint 表由 devops 维护（2026-10-10）**：`write_taskbook` 落盘前扫正文，命中
   `state/taskbook-lint.json`（跟踪）任一正则即**告警不阻断**；增补=`rules` 追加
   `{id, re, hint}`（JSON 内反斜杠双写）。fail-open⇒改坏 JSON 静默失效。
@@ -60,7 +61,7 @@
   勿把 pod 自建规则命名成 `leader-only*`）。其余见 `references/pod-scaffold.md`。
 - **agentsMdExcludes 生效性机械哨兵（2026-10-10）**：doctor 验不出 CLI 真按 glob 排除，`pysci-dev
   probe` 造带不可猜 token 的 fixture 跑两跳做**因果断言**（不灵敏只报 inconclusive、不误绿）；
-  结论落 `state/agents-md-excludes-probe.json`（staleness={cli_version,排除面}）。
+  结论落 `state/agents-md-excludes-probe.json`。
 - **交付协议滚动升级窗口（2026-10-12 E1）**：派发进程 import 的解析器快照可能早于协议；
   parse_delivery 宽松兜底救回带属性交付并附「解析器早于协议」告警——见告警就重跑本单。
 - **协议词表四面执法＋双源漂移（2026-10-12）**：`<blocked tags>` 与 `<infra_suggestion kind>`

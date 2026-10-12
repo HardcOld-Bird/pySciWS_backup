@@ -32,7 +32,7 @@ CATALOG = (
     "Qwen-3.8-Max (982ae403-bc5e-4f74-996d-04a9cd66f933)\n"
 )
 MAX_UUID = "982ae403-bc5e-4f74-996d-04a9cd66f933"
-FB_UUID = "ed6f5996-0992-479f-86a8-3f29ce0e794c"
+BYOK_FLASH_UUID = "ed6f5996-0992-479f-86a8-3f29ce0e794c"
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +41,7 @@ FB_UUID = "ed6f5996-0992-479f-86a8-3f29ce0e794c"
 def test_parse_catalog_real_format():
     assert registry.parse_model_catalog(CATALOG) == {
         "Qwen3.8-Flash": "Qwen3.8-Flash",  # 内置：值即名自身（-m 直接可用）
-        "Qwen-3.8-Flash": FB_UUID,
+        "Qwen-3.8-Flash": BYOK_FLASH_UUID,
         "Qwen-3.8-Max": MAX_UUID,
     }
 
@@ -105,10 +105,10 @@ def test_refresh_writes_runtime_face_never_tracked(iso_reg, monkeypatch):
     face = _runtime(runtime_file)[registry.RUNTIME_MODELS_KEY]
     assert face == {
         "max": MAX_UUID,
-        "flash": "Qwen3.8-Flash",
-        "flash_fallback": FB_UUID,
+        "flash": BYOK_FLASH_UUID,
+        "flash_fallback": "Qwen3.8-Flash",
         "minimum": "Qwen3.8-Flash",
-    }
+    }, "渠道互换（用户裁决 2026-10-12）：flash 解析到 BYOK，内置名降到兜底档"
     assert set(res["changed"]) == {"max", "flash", "flash_fallback", "minimum"}
     assert res["changed"]["max"] == {"old": None, "new": MAX_UUID}
     assert res["missing"] == [] and res["shadowed"] == {}
@@ -186,7 +186,7 @@ def test_refresh_missing_name_keeps_current(iso_reg, monkeypatch):
     res = registry.refresh_models()
 
     assert reg_file.read_bytes() == before
-    assert res["missing"] == ["max←Qwen-3.8-Max", "flash_fallback←Qwen-3.8-Flash"]
+    assert res["missing"] == ["max←Qwen-3.8-Max", "flash←Qwen-3.8-Flash"]
     assert "max" not in _runtime(runtime_file).get(registry.RUNTIME_MODELS_KEY, {})
     assert registry.Registry.load().models["max"] == "old-max-uuid", "未命中不清空"
 
@@ -233,7 +233,7 @@ def test_drain_startup_refreshes_and_logs(iso_state, monkeypatch):
         calls.append(1)
         return {
             "changed": {"max": {"old": "a", "new": MAX_UUID}},
-            "missing": ["flash_fallback←Qwen-3.8-Flash"],
+            "missing": ["flash←Qwen-3.8-Flash"],
             "shadowed": {
                 "minimum": {"tracked": "HumanMin", "resolved": "Qwen3.8-Flash"}
             },
