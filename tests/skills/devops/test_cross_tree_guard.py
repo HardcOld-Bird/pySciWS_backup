@@ -129,12 +129,13 @@ def test_same_tree_dispatches_without_noise(trees, monkeypatch, capsys):
 
 
 def test_every_subcommand_accepts_force(trees, monkeypatch):
-    """自检是全局护栏：六个子命令都得有 --force 出口，否则新命令一上线就堵死人。"""
+    """自检是全局护栏：所有子命令都得有 --force 出口，否则新命令一上线就堵死人。"""
     main, _ = trees
     seen: list[str] = []
     for func in (
         "cmd_doctor",
         "cmd_sync",
+        "cmd_venv_sync",
         "cmd_worktree",
         "cmd_skilltax",
         "cmd_probe",
@@ -148,6 +149,7 @@ def test_every_subcommand_accepts_force(trees, monkeypatch):
     for argv in (
         ["doctor", "--force"],
         ["sync", "--force"],
+        ["venv-sync", "--force"],
         ["worktree", "list", "--force"],
         ["skilltax", "--force"],
         ["probe", "--force"],
@@ -157,6 +159,7 @@ def test_every_subcommand_accepts_force(trees, monkeypatch):
     assert seen == [
         "cmd_doctor",
         "cmd_sync",
+        "cmd_venv_sync",
         "cmd_worktree",
         "cmd_skilltax",
         "cmd_probe",

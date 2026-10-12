@@ -4,6 +4,7 @@
 
     uv run pysci-dev doctor [--pod <id>]     # pod 健康巡检
     ... dev sync [--check]                   # 技能真本→部署副本（复用 orchestration.sync 引擎）
+    ... dev venv-sync [uv sync 参数…]         # Windows 安全的 uv sync：让路→sync→核对入口
     ... dev worktree add|merge|remove|list [<name>]
     ... dev skilltax [--apply|--probe]       # 平台技能清单税：量、落关停配置、复测键义
     ... dev probe [--json|--no-ledger]       # agentsMdExcludes 生效性机械探针：因果 A/B、写台账
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -313,6 +315,163 @@ def cmd_sync(args: argparse.Namespace) -> int:
     print("\n".join(report))
     drift = [line for line in report if line.startswith("[!]")]
     return 2 if (drift and args.check) else 0
+
+
+# ---------------------------------------------------------------------------
+# venv-sync（uv sync 的 Windows 安全配方，backlog 20261012-114239-devops）
+# ---------------------------------------------------------------------------
+def project_scripts(pyproject: Path) -> list[str]:
+    """读 ``[project.scripts]`` 的命令名（排序）；读不到/解析不了返回空表。"""
+    import tomllib
+
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    scripts = (data.get("project") or {}).get("scripts") or {}
+    return sorted(scripts)
+
+
+def _move_aside_locked(exe: Path, ts: str) -> str:
+    """把入口 exe 改名让路，同时判明它是否被**运行中进程**占住。
+
+    Windows 语义（2026-10-12 实测）：运行中的镜像以 FILE_SHARE_DELETE 打开 ⇒ **改名能成、
+    删除失败**；普通打开句柄则两者都失败。``uv sync`` 要删这些 exe，所以只有前者是
+    「改名让开、sync 就能原地重建」的可救形态——后者只能报给组长处置。
+
+    删除就是判据本身，故未被占用的文件会被真删掉：先取字节快照、探测后原样写回
+    （代价仅 mtime 变新，而 uv sync 本来就会重写这些入口）。
+
+    Returns:
+        ``"moved"``：被占住，已改名为 ``<name>.locked-<ts>``，原路径让开；
+        ``""``：未被占用（改名+删除都成），已按原字节还原到原名；
+        ``"stuck"``：连改名都被拒（或读不出内容），文件原样未动。
+    """
+    try:
+        payload = exe.read_bytes()
+    except OSError:
+        return "stuck"
+    scratch = exe.with_name(f"{exe.name}.locked-{ts}")
+    try:
+        os.replace(exe, scratch)
+    except OSError:
+        return "stuck"
+    try:
+        os.remove(scratch)
+    except OSError:
+        return "moved"
+    exe.write_bytes(payload)
+    return ""
+
+
+def _locked_holder(exe: Path) -> str:
+    """best-effort 找出占住该 exe 的进程，找不到返回空串。
+
+    进程镜像路径在创建时定格，**改名后 wmic 仍显示原名**，故按原名匹配。参数经 argv
+    直传（不经 shell），免疫 MSYS 把 ``/format:csv`` 改写成路径。
+    """
+    try:
+        proc = subprocess.run(
+            ["wmic", "process", "get", "ProcessId,ExecutablePath", "/format:csv"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if proc.returncode != 0:
+        return ""
+    tail = f"\\{exe.name.lower()}"
+    for line in proc.stdout.splitlines():
+        parts = [p.strip() for p in line.strip().split(",")]
+        if len(parts) < 3:
+            continue
+        node, path, pid = parts[0], parts[-2], parts[-1]
+        if path.lower().endswith(tail):
+            return f"占用者={node} PID {pid}（{path}）"
+    return ""
+
+
+def run_uv_sync(extra: list[str]) -> tuple[int, str]:
+    """在项目根跑 ``uv sync``，返回 (rc, 合并输出)。测试替身挂这一层。"""
+    proc = subprocess.run(
+        ["uv", "sync", *extra],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=1800,
+    )
+    return proc.returncode, (proc.stdout + proc.stderr).strip()
+
+
+def cmd_venv_sync(args: argparse.Namespace) -> int:
+    """Windows 安全的 ``uv sync``：先让被占住的入口 exe 改名让路，sync 后逐个核对入口。
+
+    动机：``uv sync`` 遇运行中 exe（典型=组长挂着的 ``pysci-orch.exe watch``）会以
+    「拒绝访问 (os error 5)」失败，而**失败前已把同目录其余入口删光**——裸命令集体
+    command not found 的半坏 venv，容易被误诊成 PATH/安装问题，并让在跑的 drain 会话
+    当场失去工具面。本命令把「重命名让路 → sync → 校验入口齐备 → 清残留」固化成一条。
+
+    Returns:
+        0 成功且入口齐备；2 入口仍缺失（半坏态未消除，须上报）；否则透传 uv 的 rc。
+    """
+    pyproject = PROJECT_ROOT / "pyproject.toml"
+    scripts_dir = PROJECT_ROOT / ".venv" / "Scripts"
+    names = project_scripts(pyproject)
+    if not names:
+        print(f"[!] 读不到 [project.scripts]（{pyproject}）——无法核对入口")
+        return 2
+    if not scripts_dir.exists():
+        print(f"[!] 无 {scripts_dir}（非 Windows 布局或尚未 uv sync）")
+        return 2
+
+    ts = datetime.now().astimezone().strftime("%Y%m%d%H%M%S")
+    moved: list[Path] = []
+    if os.name == "nt":
+        print("== 让路：探测声明入口是否被运行中进程占住 ==")
+        for name in names:
+            exe = scripts_dir / f"{name}.exe"
+            if not exe.exists():
+                continue
+            state = _move_aside_locked(exe, ts)
+            if state == "moved":
+                moved.append(exe)
+                holder = _locked_holder(exe)
+                print(
+                    f"  [√] {exe.name} 被占住 → 已改名让路"
+                    f"（{exe.name}.locked-{ts}）" + (f"；{holder}" if holder else "")
+                )
+            elif state == "stuck":
+                print(
+                    f"  [!] {exe.name} 连改名都被拒（被非镜像句柄占用），原样未动——"
+                    "它仍会挡住 uv sync，请组长关掉占用程序（勿擅 kill 组长进程）"
+                )
+    else:
+        print("[i] 非 Windows：无 exe 锁形态，直接 uv sync")
+
+    print("== uv sync ==")
+    rc, out = run_uv_sync(list(args.uv_args or []))
+    print(out)
+
+    missing = [n for n in names if not (scripts_dir / f"{n}.exe").exists()]
+    if missing:
+        print(
+            f"[✗] 入口缺失 {missing}（uv rc={rc}）——半坏态未消除；"
+            "把上面报错原文与缺失清单一并报组长"
+        )
+        return 2
+    for exe in moved:
+        scratch = exe.with_name(f"{exe.name}.locked-{ts}")
+        try:
+            scratch.unlink()
+        except OSError:
+            print(f"  [i] 残留 {scratch.name} 仍被占用（占用进程退出后可删）")
+    print(f"[√] 入口齐备（[project.scripts] {len(names)} 个全在盘）")
+    return rc
 
 
 # ---------------------------------------------------------------------------
@@ -678,6 +837,16 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("sync", help="技能真本 → 部署副本同步")
     p.add_argument("--check", action="store_true")
     p.set_defaults(func=cmd_sync)
+
+    p = sub.add_parser(
+        "venv-sync",
+        help="Windows 安全的 uv sync：先把被运行中进程占住的入口 exe 改名让路，"
+        "sync 后按 [project.scripts] 核对入口一个不缺（防半坏 venv）",
+    )
+    p.add_argument(
+        "uv_args", nargs="*", help="转发给 uv sync 的额外参数（如 --offline）"
+    )
+    p.set_defaults(func=cmd_venv_sync)
 
     p = sub.add_parser(
         "worktree",

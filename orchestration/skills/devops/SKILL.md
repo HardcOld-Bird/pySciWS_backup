@@ -6,7 +6,8 @@ description: devops 组员的作业规程：worktree 隔离实施、PYTHONPATH �
 # devops 作业规程
 
 角色边界与红线见 charter（`.qoder/rules/charter.md`）；本文放**操作知识**。
-专属 CLI：`pysci-dev`（doctor / sync / worktree）。不使用 pysci-orch——唯一例外是
+专属 CLI：`pysci-dev`（doctor / sync / venv-sync / worktree / probe …）。
+不使用 pysci-orch——唯一例外是
 **eval 面**（`eval run`/`eval set-baseline`，边界与退役条件见 README §1）。
 
 ## worktree 作业规程（一切代码改动）
@@ -37,6 +38,9 @@ timeout 25 git push origin main   # 忽略一切失败、不重试、不设代�
 # 6. 清理
 pysci-dev worktree remove <任务名>
 ```
+
+**主树同步入口/依赖一律 `pysci-dev venv-sync`**（裸 `uv sync` 遇运行中 exe 会先把其余
+入口删光再报错，半坏态静默；见 `references/uv-venv-sync.md`）。
 
 注意：worktree 不含 gitignored 的未跟踪重数据；需真实数据时以绝对路径只读引用主树
 （同 README §7）。
