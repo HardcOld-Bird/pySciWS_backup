@@ -733,12 +733,13 @@
       "kind": "usability",
       "success_criteria": "orch eval run/set-baseline 划入 devops 可调用面（README §角色边界或 charter 一处写死，含保留边界：不得触碰 approve/dispatch/drain 队列侧），注明 E4 bencher 上线后本条款退役；此后 E 系列验收交付不再出现引用批准面豁免 charter 的自我论证段",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-023430-devops.md",
-      "status": "needs_leader",
+      "status": "done",
       "proposed": "2026-10-12T07:50:13+08:00",
-      "note": "drain 跳过（交付=blocked）：`。  <blocked> **结论：本批两项（种子 20261012-023430-devops + 批次 20261012-080410-devops 方案 A+C）已实施完毕、全量测试通过、提交在 `wt-20261012-023430-devops@cce839c`（15 文件 +712/−148）。只差合并—",
+      "note": "drain 跳过（交付=blocked）：`。  <blocked> **结论：本批两项（种子 20261012-023430-devops + 批次 2026…｜组长代收官合并 cbb6ddc（工作 devops 会话内完成；blocked 系 #60 护栏误拦配方，交付无损）",
       "started_at": "2026-10-12T09:19:25+08:00",
       "worktree": "20261012-023430-devops",
-      "needs_leader_at": "2026-10-12T09:46:46+08:00"
+      "needs_leader_at": "2026-10-12T09:46:46+08:00",
+      "commit": "cbb6ddc"
     },
     {
       "id": "20261012-075200-leader",
@@ -772,9 +773,10 @@
       "kind": "defect",
       "success_criteria": "干净 main 上跑 approve/drain 唤醒后 git status --porcelain -- orchestration/state/** 为空；models 四档解析仍全（含 minimum）；refresh_models 字节不变阳性单测；doctor 脏面哨兵阳性；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-080410-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T08:06:14+08:00",
-      "note": "defect 实锤（自愈写脏跟踪配置=周期墙，devops 挖根因漂亮）。方案 B 组长已代提交 80ce9ef（minimum 落盘），本单执行 A（三级回退+运行态面）+C（doctor/orch status 脏跟踪面哨兵）。判据见正文。"
+      "note": "defect 实锤（自愈写脏跟踪配置=周期墙，devops 挖根因漂亮）。方案 B 组长已代提交 80ce9ef（minimum 落盘），本单执行 A（三级回退…｜组长代收官合并 cbb6ddc（工作 devops 会话内完成；blocked 系 #60 护栏误拦配方，交付无损）",
+      "commit": "cbb6ddc"
     },
     {
       "id": "20261012-082932-devops",
