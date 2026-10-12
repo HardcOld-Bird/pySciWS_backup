@@ -1199,11 +1199,14 @@
       "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261012-224853-mechanical.md",
       "class": "mechanical",
       "channel": "mechanical",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T03:36:08+08:00",
-      "note": "inspector 自主发现（§5.2 不经组长）",
+      "note": "drain 批量销账（commit 00171d9）",
       "started_at": "2026-10-13T03:36:10+08:00",
-      "worktree": "insp-20261012-224853-mechanical"
+      "worktree": "insp-20261012-224853-mechanical",
+      "done_at": "2026-10-13T04:11:52+08:00",
+      "batch_size": 2,
+      "batch_seed": "insp-20261012-224853-mechanical"
     },
     {
       "id": "insp-20261013-020358-mechanical",
@@ -1216,9 +1219,14 @@
       "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261013-020358-mechanical.md",
       "class": "mechanical",
       "channel": "mechanical",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T03:36:08+08:00",
-      "note": "inspector 自主发现（§5.2 不经组长）"
+      "note": "drain 批量销账（commit unresolved）",
+      "started_at": "2026-10-13T04:11:52+08:00",
+      "worktree": "insp-20261013-020358-mechanical",
+      "done_at": "2026-10-13T04:27:11+08:00",
+      "batch_size": 1,
+      "batch_seed": "insp-20261013-020358-mechanical"
     },
     {
       "id": "insp-20261013-020358-mechanical-002",
@@ -1231,9 +1239,12 @@
       "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261013-020358-mechanical-002.md",
       "class": "mechanical",
       "channel": "mechanical",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T03:36:08+08:00",
-      "note": "inspector 自主发现（§5.2 不经组长）"
+      "note": "drain 批量销账（commit unresolved）",
+      "done_at": "2026-10-13T04:11:52+08:00",
+      "batch_size": 2,
+      "batch_seed": "insp-20261012-224853-mechanical"
     },
     {
       "id": "20261013-020853-devops",
@@ -1242,8 +1253,24 @@
       "kind": "defect",
       "success_criteria": "- 对同一交付会话，注入记录中「文件不存在」或「行号 > 文件实际行数」或「引文在对应文件中 grep 零命中」的条目数为 0（可脚本化：解析告警的 path:line/引文 → 与磁盘读数比对，命中即判失败）；\n- 同一条已处置/已证伪的记录在后续跳不再重复出现；\n- 真实信号（超预算、真实格式错误）仍照常送达：`find orchestration/skills -name '*.md' -size +8192c` 输出为空、`ruff check` 通过时不得产生任何 lint 告警。",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-020853-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T03:36:57+08:00",
+      "note": "drain 批量销账（commit unresolved）",
+      "started_at": "2026-10-13T04:27:11+08:00",
+      "worktree": "20261013-020853-devops",
+      "done_at": "2026-10-13T04:32:03+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-020853-devops"
+    },
+    {
+      "id": "20261013-045000-leader",
+      "member": "leader",
+      "summary": "**（防御性，范围外缺陷的仓内缓解）lint 幻影告警防御条款：引用 file:line 的 lint 指令须先对盘核验**",
+      "kind": "usability",
+      "success_criteria": "三处真本含句快照断言+sync 一致+预算钩子绿+全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-045000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T04:35:32+08:00",
       "note": ""
     }
   ]
