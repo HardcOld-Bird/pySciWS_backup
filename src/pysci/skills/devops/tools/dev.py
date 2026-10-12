@@ -59,8 +59,13 @@ def _owning_root(cwd: Path) -> Path | None:
     return None
 
 
+def _is_linked_worktree(root: Path) -> bool:
+    """root/.git 是**文件**（而非目录）即 linked worktree；纯 stat，不起子进程。"""
+    return (root / ".git").is_file()
+
+
 def cross_tree_warning(cwd: Path | None = None) -> str:
-    """脚下那棵树与代码面所指的项目根不是同一棵时返回告警文本，同树返回空串。
+    """脚下那棵树与代码面所指的项目根不是同一棵时返回告警文本，可信时返回空串。
 
     ``pysci`` 以 editable 装入，``pysci.paths.PROJECT_ROOT`` 由**包文件位置**决定、与
     cwd 无关：在 worktree 目录里裸跑 ``pysci-dev sync``（漏设 ``PYTHONPATH=<wt>/src``）
@@ -69,16 +74,24 @@ def cross_tree_warning(cwd: Path | None = None) -> str:
     worktree 就摆在 ``PROJECT_ROOT/.qoder/worktrees/`` 里，所以「不在项目根之下」判不出
     跨树，判据是**脚下有没有自己的 pyproject.toml**：有且不是 PROJECT_ROOT 即另一棵树。
 
+    但**标准 worktree 配方**（技能 §worktree 作业规程：cwd 停在主仓、代码面用
+    ``PYTHONPATH=<wt>/src`` 覆盖）恰好也是 own ≠ PROJECT_ROOT，方向却相反——此时
+    PROJECT_ROOT 位于脚下树之内、且自身是 linked worktree（``.git`` 是文件），正是本次
+    要操作的那棵树，故放行。反向事故（脚下在 worktree、代码面指外层 main）与两树无隶属
+    （真·跑错项目）仍照旧拦。
+
     Args:
         cwd: 待判定目录，默认 ``Path.cwd()``（测试注入用）。
 
     Returns:
-        告警正文（多行）；同树可信时为空串。
+        告警正文（多行）；同树或标准配方可信时为空串。
     """
     cur = (cwd if cwd is not None else Path.cwd()).resolve()
     root = PROJECT_ROOT.resolve()
     own = _owning_root(cur)
     if own is None or own == root:
+        return ""
+    if own in root.parents and _is_linked_worktree(root):
         return ""
     lines = [
         "[!] 跨树执行：脚下是另一棵树，而本进程的代码面/项目根指向别处——",
@@ -86,7 +99,7 @@ def cross_tree_warning(cwd: Path | None = None) -> str:
         f"    PROJECT_ROOT  = {root}（由包文件位置决定，与 cwd 无关）",
         "    不加拦则读写后者的真本/副本/台账、对前者什么都不做，且照样退出 0"
         "（doctor 会拿别处的状态给出「健康」的假结论）。",
-        '    worktree 内请带代码面覆盖：PYTHONPATH="<wt>/src" pysci-dev …，'
+        '    操作 worktree 请站在主仓外面带代码面覆盖：PYTHONPATH="<wt>/src" pysci-dev …，'
         "或确认自己确实要操作上面那个项目根后加 --force。",
     ]
     return "\n".join(lines)

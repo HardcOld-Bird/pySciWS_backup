@@ -11,9 +11,34 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from pysci.skills.devops.tools import dev
+
+
+def _git(root: Path, *args: str) -> str:
+    """在 root 跑 git（测试夹具需要真 git 上下文，带 identity 防无配置报错）。"""
+    proc = subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.invalid",
+            *args,
+        ],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    return proc.stdout
 
 
 @pytest.fixture
@@ -137,3 +162,88 @@ def test_every_subcommand_accepts_force(trees, monkeypatch):
         "cmd_probe",
         "cmd_mdgen_check",
     ]
+
+
+# ---------------------------------------------------------------------------
+# 标准 worktree 配方不该被自家护栏误拦（backlog 20261012-094646-devops）
+# ---------------------------------------------------------------------------
+def _linked(root: Path) -> Path:
+    """把 root 标成 linked worktree：``.git`` 是文件（内容为 gitdir: 指针）。"""
+    (root / ".git").write_text("gitdir: ../../.git/worktrees/t1\n", encoding="utf-8")
+    return root
+
+
+@pytest.fixture
+def recipe(tmp_path, monkeypatch):
+    """配方形状：脚下=主仓 main，代码面=其下 linked worktree（``PYTHONPATH=<wt>/src``）。"""
+    main = tmp_path / "main"
+    wt = main / ".qoder" / "worktrees" / "t1"
+    wt.mkdir(parents=True)
+    for root in (main, wt):
+        (root / "pyproject.toml").write_text('[project]\nname = "pysci"\n', "utf-8")
+    _linked(wt)
+    monkeypatch.setattr(dev, "PROJECT_ROOT", wt)
+    return main, wt
+
+
+def test_standard_recipe_is_allowed_without_force(recipe, monkeypatch, capsys):
+    """护栏要防的是「脚下 worktree、代码面指 main」，配方恰好相反——判据方向不能搞反。"""
+    main, wt = recipe
+    assert dev.cross_tree_warning(main) == ""
+
+    seen: list[str] = []
+    monkeypatch.setattr(dev, "cmd_sync", lambda args: seen.append("sync") or 0)
+    monkeypatch.chdir(main)
+    assert dev.main(["sync"]) == 0
+    assert seen == ["sync"] and "--force" not in capsys.readouterr().out
+    assert dev.PROJECT_ROOT == wt  # 夹具自证：操作对象确实是 worktree 那棵树
+
+
+def test_allowance_needs_real_worktree_marker(tmp_path, monkeypatch):
+    """放行只认 linked worktree 的 ``.git`` **文件**：内嵌的另一棵树（无 .git）仍拦，
+    否则「PROJECT_ROOT 恰好在脚下目录里随便某处」也会被当配方放过。"""
+    main = tmp_path / "main"
+    inner = main / "vendored" / "other"
+    inner.mkdir(parents=True)
+    for root in (main, inner):
+        (root / "pyproject.toml").write_text('[project]\nname = "x"\n', "utf-8")
+    monkeypatch.setattr(dev, "PROJECT_ROOT", inner)
+    assert dev.cross_tree_warning(main) != ""
+
+
+def test_reverse_accident_shape_still_blocked(recipe, monkeypatch, capsys):
+    """反向事故：cwd 在 worktree 里、代码面却指外层 main——照旧 rc=2 拒执行。"""
+    main, wt = recipe
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+    monkeypatch.chdir(wt)
+    assert dev.main(["sync"]) == 2
+    assert "跨树执行" in capsys.readouterr().out
+
+
+def test_guard_agrees_with_real_linked_worktree(tmp_path):
+    """`.git` 是文件这一判据须与真 git 一致（造不出 linked worktree 则跳过）。"""
+    if shutil.which("git") is None:
+        pytest.skip("需 git")
+    main = tmp_path / "repo"
+    main.mkdir()
+    (main / "pyproject.toml").write_text('[project]\nname = "pysci"\n', "utf-8")
+    _git(main, "init", "-q", "-b", "main")
+    _git(main, "add", "pyproject.toml")
+    _git(main, "commit", "-q", "-m", "i")
+    wt = main / ".qoder" / "worktrees" / "t1"
+    _git(main, "worktree", "add", "-q", "-b", "wt-t1", str(wt))
+
+    assert (wt / ".git").is_file() and (main / ".git").is_dir()
+    old = dev.PROJECT_ROOT
+    dev.PROJECT_ROOT = wt
+    try:
+        assert dev.cross_tree_warning(main) == "", (
+            "真 linked worktree + 主仓脚下 = 配方"
+        )
+    finally:
+        dev.PROJECT_ROOT = old
+    dev.PROJECT_ROOT = main
+    try:
+        assert dev.cross_tree_warning(wt) != "", "事故形状（代码面指外层 main）仍拦"
+    finally:
+        dev.PROJECT_ROOT = old

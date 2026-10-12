@@ -39,10 +39,18 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from pysci.paths import PROJECT_ROOT
+
 #: 与 `.pre-commit-config.yaml` §1 Official 的两支改写钩子对齐；顺序即执行顺序——
 #: trailing-whitespace 先削行末空白，end-of-file-fixer 再收敛文件末尾（否则末尾纯空格
 #: 空行会被 eoff 判成「一个非空行」留下）。追加钩子须同步本表与 dev.py 帮助文。
 REWRITE_HOOKS: tuple[str, ...] = ("trailing-whitespace", "end-of-file-fixer")
+
+
+def _anchored(path: Path) -> Path:
+    """相对路径按 ``PROJECT_ROOT`` 解析，绝对路径原样返回。"""
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
 
 #: 两支钩子互相触发（EOF 收敛后可能露出新的行末空白等）在真实仓库中未见；上限 3 轮
 #: 纯为防御——若真到 3 轮仍不收敛，说明有钩子互相打架，宁可抛错也不静默放行陈旧字节。
@@ -206,7 +214,12 @@ def format_results(results: list[FileResult]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI 入口；返回 rc。``--dry-run`` 只报告不改动。"""
+    """CLI 入口；返回 rc。``--dry-run`` 只报告不改动。
+
+    相对入参与 pre-commit 的 cwd 都锚在 ``PROJECT_ROOT``（代码面所指那棵树）：标准
+    worktree 配方要求 cwd 停在主仓外，若按 cwd 解析，报的就是**另一棵树**的字节与
+    post_sha256——「以钩子终态哈希为基准」的立身之本当场失效。
+    """
     parser = argparse.ArgumentParser(
         prog="pysci-dev mdgen-check",
         description=(
@@ -226,8 +239,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         results = check_files(
-            [Path(p) for p in args.paths],
-            cwd=Path.cwd(),
+            [_anchored(p) for p in map(Path, args.paths)],
+            cwd=PROJECT_ROOT,
             dry_run=args.dry_run,
         )
     except RuntimeError as exc:
