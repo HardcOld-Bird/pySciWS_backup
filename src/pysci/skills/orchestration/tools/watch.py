@@ -6,8 +6,8 @@
 工具发起**（外部进程无法向 TUI 注入通知），故硬化到能硬的那一层：
 
 - **事件判定全在代码**（本模块）：读状态文件 + Python 侧 ``_pid_alive``（不起 shell，
-  故 MSYS 路径转换问题免疫），四类事件——CRASH / QUOTA-STOP / NEEDS-LEADER /
-  QUEUE-COMPLETE。
+  故 MSYS 路径转换问题免疫），五类事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
+  NEEDS-LEADER / QUEUE-COMPLETE。
 - **挂载提示由代码在唤醒当刻注入**：``wake_devops`` / ``approve`` / ``--from-backlog``
   的输出固定追加 :func:`mount_lines`，组长在需要等待的那一刻被明确告知挂什么命令。
 
@@ -66,11 +66,47 @@ HEARTBEAT_GRACE_FACTOR: int = 3
 HEARTBEAT_GRACE_S: int = 60
 
 #: 事件优先级（同刻多事件时取首个为主事件，其余以「同时」附注）。
-PRIORITY: tuple[str, ...] = ("CRASH", "QUOTA-STOP", "NEEDS-LEADER", "QUEUE-COMPLETE")
+PRIORITY: tuple[str, ...] = (
+    "CRASH",
+    "QUOTA-STOP",
+    "CHANNEL-STOP",
+    "NEEDS-LEADER",
+    "QUEUE-COMPLETE",
+)
 
 #: run 日志里的额度类全局停止痕迹（drain 在触发全局停止前打 ``[Q]`` 行）。日志判定
 #: 早于 .done 落盘，能让 watch 在 drain 收尾的瞬间就唤醒，而不是等摘要写完。
 QUOTA_RE = re.compile(r"quota_exhausted|额度耗尽|credit usage limit", re.IGNORECASE)
+
+#: run 日志里的渠道级故障全局停止痕迹（drain 打 ``[C]`` 行并显式写出 kind，
+#: backlog 20261012-194500-leader）。判据与 QUOTA 同构：**日志先于 .done**，早一拍唤醒。
+CHANNEL_RE = re.compile(r"channel_error|渠道级故障|custom model service error", re.I)
+
+#: 系统性故障族全表：(``.done`` 的 stopped 值, 快照身份字段, 事件名, 日志判据, 读数)。
+#: 五列并置是有意为之——kind、字段、事件名、文案若分处五地各写一遍，加下一族时必漏一列
+#: （本表新加的就是第二族）。事件名须都在 :data:`PRIORITY` 里（test_watch 钉住这一条）。
+SYSTEMIC_FACES: tuple[tuple[str, str, str, re.Pattern[str], str], ...] = (
+    ("quota_exhausted", "quota_run", "QUOTA-STOP", QUOTA_RE, "额度类失败"),
+    ("channel_error", "channel_run", "CHANNEL-STOP", CHANNEL_RE, "渠道级故障"),
+)
+
+#: 快照字段 → (kind, 事件名)，供 :func:`detect` 逐族差分。
+_SYSTEMIC_EVENTS: tuple[tuple[str, str, str], ...] = tuple(
+    (field, kind, event) for kind, field, event, _rx, _read in SYSTEMIC_FACES
+)
+
+#: kind → 事件 detail 里的故障读数（两类停止动作相同、成因不同，须说得出差别）。
+_SYSTEMIC_READINGS: dict[str, str] = {
+    kind: read for kind, _f, _e, _rx, read in SYSTEMIC_FACES
+}
+
+#: 以 run 名为身份、须受 ``hold`` 保护的字段。系统性族一支由 :data:`SYSTEMIC_FACES`
+#: 派生——加第三族时若还手写在下面这张表里，抑制帧就会把新事件的身份抹掉（同一 run
+#: 重复报 CHANNEL-STOP，或反过来在瞬态空帧里丢掉停止事实）。
+_HOLD_RUN_FIELDS: tuple[str, ...] = (
+    "crash_run",
+    *(field for _kind, field, _event, _rx, _read in SYSTEMIC_FACES),
+)
 
 #: 完成事件的身份三元组字段：任一变化即「新完成事实」——同 run 的 ``.done`` 被重写
 #: （配额/协作停止后续跑完）也能再报（backlog 20261011-220622-leader 要求 1）。
@@ -105,30 +141,40 @@ def _stem(path_like: Any) -> str:
 # ---------------------------------------------------------------------------
 # 快照：drain 观察面的单帧全貌（全部字段皆代码判定，无 LLM 参与）
 # ---------------------------------------------------------------------------
-def _quota_run(lock_run: str, done_name: str, done: dict[str, Any] | None) -> str:
-    """额度类全局停止发生在哪个 run（无则空串）。
+def _systemic_runs(
+    lock_run: str, done_name: str, done: dict[str, Any] | None
+) -> dict[str, str]:
+    """各类系统性故障发生在哪个 run（未发生的 kind 缺席）。
 
-    两路取一：``.done`` 的 ``stopped=quota_exhausted``（收尾后），或 run 日志现
-    :data:`QUOTA_RE` 痕迹（收尾前）——后者让 watch 早一拍唤醒。
+    两路取一：``.done`` 的 ``stopped=<kind>``（收尾后），或 run 日志现该族痕迹（收尾前）
+    ——后者让 watch 早一拍唤醒。一次扫日志把两族都判掉，别为第二类再开一遍文件。
     """
-    if done and done.get("stopped") == "quota_exhausted":
-        return done_name
-    for name in (lock_run, done_name):
-        if not name:
+    found: dict[str, str] = {}
+    texts: dict[str, str] = {}
+    for kind, _field, _event, rx, _read in SYSTEMIC_FACES:
+        if done and done.get("stopped") == kind:
+            found[kind] = done_name
             continue
-        log = _drain.DEVOPS_RUNS_DIR / f"{name}.log"
-        try:
-            if QUOTA_RE.search(log.read_text(encoding="utf-8", errors="replace")):
-                return name
-        except OSError:
-            continue
-    return ""
+        for name in (lock_run, done_name):
+            if not name:
+                continue
+            if name not in texts:
+                try:
+                    texts[name] = (_drain.DEVOPS_RUNS_DIR / f"{name}.log").read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                except OSError:
+                    texts[name] = ""
+            if rx.search(texts[name]):
+                found[kind] = name
+                break
+    return found
 
 
 def snapshot() -> dict[str, Any]:
-    """当前 drain 观察面快照（四类事件的判据原料）。
+    """当前 drain 观察面快照（五类事件的判据原料）。
 
-    字段全部为「身份 + 状态」，供 :func:`detect` 做**基线差分**：崩溃/额度以
+    字段全部为「身份 + 状态」，供 :func:`detect` 做**基线差分**：崩溃与系统性故障以
     run 名为身份（同一 run 不重复报，新 run 再报），完成以 (名, completed, count)
     三元组为身份，needs_leader 以条目 id 集合为身份。
     """
@@ -144,6 +190,7 @@ def snapshot() -> dict[str, Any]:
             if i.get("id")
         }
     )
+    systemic = _systemic_runs(lock_run, done_name, done)
     return {
         "ts": _now(),
         "lock_state": lock["state"],
@@ -158,12 +205,17 @@ def snapshot() -> dict[str, Any]:
         "done_elapsed_s": (done or {}).get("elapsed_s", "?"),
         "needs_leader": needs,
         "pending": len(_workflow.backlog_pending()),
-        "quota_run": _quota_run(lock_run, done_name, done),
+        "quota_run": systemic.get("quota_exhausted", ""),
+        "channel_run": systemic.get("channel_error", ""),
     }
 
 
 #: ``.done`` 的 ``stopped`` 字段 → 完成方式的人类读数。
-_HOW_DONE = {"cooperative": "协作停止", "quota_exhausted": "额度耗尽全局停止"}
+_HOW_DONE = {
+    "cooperative": "协作停止",
+    "quota_exhausted": "额度耗尽全局停止",
+    "channel_error": "渠道级故障全局停止",
+}
 
 
 def _complete_event(
@@ -258,6 +310,7 @@ def detect(
 
     - **CRASH**：锁持有者 pid 已死且该 run 无 ``.done``，且该 run 未报过。
     - **QUOTA-STOP**：额度类全局停止出现在某个尚未报过的 run 上。
+    - **CHANNEL-STOP**：渠道级故障全局停止，判据与上一条同族（:data:`SYSTEMIC_FACES`）。
     - **NEEDS-LEADER**：backlog 里新出现的 needs_leader 条目（逐个成事件）。
     - **QUEUE-COMPLETE**：完成身份三元组（名, completed, count）变化，且该 run 不是
       「锁自称在跑且尚无 ``.done``」的真进行中 run。**收尾事实优先于锁的自称**。
@@ -289,19 +342,20 @@ def detect(
     else:
         hold.add("crash_run")
 
-    quota = str(cur.get("quota_run", "") or "")
-    if quota:
-        if quota != base.get("quota_run", ""):
-            out.append(
-                {
-                    "event": "QUOTA-STOP",
-                    "subject": quota,
-                    "detail": "额度类失败触发全局停止",
-                    "action": "条目均保持 pending，待渠道恢复后 approve/drain 续消化",
-                }
-            )
-    else:
-        hold.add("quota_run")
+    for field, kind, event in _SYSTEMIC_EVENTS:
+        hit = str(cur.get(field, "") or "")
+        if hit:
+            if hit != base.get(field, ""):
+                out.append(
+                    {
+                        "event": event,
+                        "subject": hit,
+                        "detail": f"{_SYSTEMIC_READINGS[kind]}触发全局停止",
+                        "action": "条目均保持 pending，待渠道恢复后 approve/drain 续消化",
+                    }
+                )
+        else:
+            hold.add(field)
 
     seen = set(base.get("needs_leader") or [])
     for bid in cur.get("needs_leader") or []:
@@ -371,8 +425,8 @@ def advance_base(
     if "done" in groups:
         for field in DONE_IDENTITY_FIELDS:
             nxt[field] = base.get(field, "" if field != "done_count" else 0)
-    for group, field in (("crash_run", "crash_run"), ("quota_run", "quota_run")):
-        if group in groups:
+    for field in _HOLD_RUN_FIELDS:
+        if field in groups:
             nxt[field] = base.get(field, "")
     return nxt
 
@@ -605,8 +659,8 @@ def mount_lines(*, indent: str = "", header: bool = True) -> list[str]:
     lines = [
         first,
         f"  {watch_argv()}",
-        "  命中单行退出：CRASH / QUOTA-STOP / NEEDS-LEADER <id> / QUEUE-COMPLETE；"
-        "超时无事件打印 TIMEOUT。",
+        "  命中单行退出：CRASH / QUOTA-STOP / CHANNEL-STOP / NEEDS-LEADER <id> / "
+        "QUEUE-COMPLETE；超时无事件打印 TIMEOUT。",
         "  ⚠ 必须作为后台 Bash 调用的**唯一顶层命令**——禁止用 `&`/`&&`/管道把它嵌进"
         "其他命令：父任务终结会连坐杀死等待器，事件命中也没有唤醒通道"
         "（2026-10-12 夜航停摆 6h 的直接成因）。",

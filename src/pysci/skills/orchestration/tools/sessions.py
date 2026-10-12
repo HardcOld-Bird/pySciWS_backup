@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from datetime import datetime
@@ -18,6 +19,14 @@ from .registry import Member, pod_sessions_dir, resolve_exe
 _LINE_RE = re.compile(
     r"^\s*(?P<idx>\d+)\.\s+(?P<name>.*?)\((?P<when>[^)]*)\)\s+\[(?P<sid>[0-9a-f-]{36})\]"
 )
+
+#: 渠道级故障轮的模型名（20261012-194500-leader 实锤）：上游故障不是真实模型回合，
+#: CLI 把它合成一条 assistant 记录写进会话档，``model`` 恒为此值。
+SYNTHETIC_MODEL = "<synthetic>"
+
+#: 末轮探针读取的尾部字节窗口。会话档可达数 MB（本跳实测 6.3 M 字符），为一判据全量读
+#: 不值；故障轮总在档尾，256 KiB 足够覆盖其后追加的 active-leaf/summary 等簿记行。
+TAIL_BYTES = 1 << 18
 
 
 def _now() -> str:
@@ -87,6 +96,72 @@ def session_chars(member: Member, sid: str) -> int:
         return len(path.read_text(encoding="utf-8", errors="replace"))
     except OSError:
         return 0
+
+
+def last_assistant_record(member: Member, sid: str) -> dict[str, Any] | None:
+    """会话档尾部**最后一条** assistant 记录（读不出 → ``None``，不抛）。
+
+    只读尾部 :data:`TAIL_BYTES`：判据问的是「这一跳是怎么收尾的」，档头几 M 字符的
+    历史回合与答案无关。首行可能被窗口切断，故从第二条起取完整行。
+    """
+    path = session_jsonl(member, sid)
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as fh:
+            fh.seek(max(0, size - TAIL_BYTES))
+            chunk = fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    lines = chunk.splitlines()
+    if size > TAIL_BYTES and lines:
+        lines = lines[1:]  # 切断的半行不是合法 JSON，留给下一条
+    for line in reversed(lines):
+        if '"assistant"' not in line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(rec, dict) and rec.get("type") == "assistant":
+            msg = rec.get("message")
+            return msg if isinstance(msg, dict) else None
+    return None
+
+
+def channel_failure_turn(
+    member: Member, sid: str, *, text_re: re.Pattern[str]
+) -> bool | None:
+    """会话档末轮是否为**渠道级故障轮**——三特征在同一记录内合取。
+
+    判据（2026-10-12 实测，devops 会话 6f0cc8e5 档尾）：上游故障时 CLI 合成的那条
+    assistant 记录同时满足 ``model="<synthetic>"``、``stop_reason="stop_sequence"`` 而
+    ``stop_sequence`` 为空（自称停在某个序列上、却没有任何序列）、正文是渠道固定句。
+    真实模型回合的 ``model`` 是渠道名（实测健康档为 ``qfmodel``），故本判据不会把
+    「模型自己说了那句话」的回合误读成故障——这正是文案单特征会误伤的地方。
+
+    Args:
+        member: 成员条目（决定会话档所在目录）。
+        sid: 会话 id。
+        text_re: 渠道固定句模式（由 dispatch 的模式表持有，此处只做读取与合取）。
+
+    Returns:
+        ``True``=末轮确为故障轮；``False``=末轮是真实回合（调用方据此**不**升级为
+        系统性故障）；``None``=读不出（档缺失/半写/窗口内无 assistant 记录），判据缺席。
+    """
+    msg = last_assistant_record(member, sid)
+    if msg is None:
+        return None
+    text = " ".join(
+        str(c.get("text", ""))
+        for c in msg.get("content", [])
+        if isinstance(c, dict) and c.get("type") == "text"
+    )
+    return (
+        str(msg.get("model", "")) == SYNTHETIC_MODEL
+        and str(msg.get("stop_reason", "")) == "stop_sequence"
+        and not msg.get("stop_sequence")
+        and bool(text_re.search(text))
+    )
 
 
 def format_pool(member: Member, limit: int = 5) -> list[str]:

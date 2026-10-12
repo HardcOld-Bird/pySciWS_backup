@@ -42,6 +42,15 @@ QUOTA_TEXT = (
     "subscription plan to get more resources. Report Issue (input /feedback)"
 )
 
+# 2026-10-12 渠道级故障固定句（BYOK 渠道服务面故障，会话 6f0cc8e5 档尾实测）：
+# CLI 合成的那条 assistant 回合正文，逐字照抄实测形状。
+CHANNEL_TEXT = (
+    "Custom model service error, please retry later or switch to another model."
+)
+
+#: 真实模型回合的 model 读数（健康档实测渠道名）——形状判据靠它与 ``<synthetic>`` 区分。
+REAL_MODEL_TURN = "qfmodel"
+
 #: :func:`fake_headless` 派生瞬间回报给 ``on_spawn`` 的假 pid（第四面回收的测试锚）。
 FAKE_HOP_PID = 424242
 
@@ -277,6 +286,47 @@ def grow_session(state, sid: str, text: str) -> int:
     with p.open("a", encoding="utf-8") as fh:
         fh.write(text)
     return len(p.read_text(encoding="utf-8"))
+
+
+def sid_from_argv(cmd) -> str:
+    """从派发 argv 取会话 id（``--session-id``/``--resume`` 的取值）。
+
+    渠道故障的形状判据读的是**会话档**，而 sid 由 do_dispatch 自己生成（新会话=随机
+    uuid），用例只能从 argv 里把它接回来，再往对应文件写末轮形状。
+    """
+    for flag in ("--session-id", "--resume"):
+        if flag in cmd:
+            return cmd[cmd.index(flag) + 1]
+    return ""
+
+
+def append_turn(
+    state,
+    sid: str,
+    *,
+    model: str,
+    text: str,
+    stop_reason: str = "stop_sequence",
+    stop_sequence: str = "",
+) -> None:
+    """往隔离会话档追加一条 assistant 记录（钉「这一跳是怎么收尾的」的形状）。
+
+    只写 :func:`sessions.channel_failure_turn` 读的那几个字段：真实模型回合与上游故障
+    合成回合的差别全在 ``model`` / ``stop_reason`` / ``stop_sequence`` 三者上。
+    """
+    rec = {
+        "type": "assistant",
+        "message": {
+            "model": model,
+            "stop_reason": stop_reason,
+            "stop_sequence": stop_sequence,
+            "content": [{"type": "text", "text": text}],
+        },
+    }
+    p = state / "sessions" / f"{sid}.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def enable_registry_save(monkeypatch):

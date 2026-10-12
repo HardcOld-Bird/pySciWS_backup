@@ -340,11 +340,29 @@ def test_quota_exhaustion_ends_the_activation(monkeypatch, iso_engine):
     use_params(monkeypatch, max_hops=3)
 
     def fake_run(item, run_log, *, dry=False):
-        return {"status": "failed", "hop": True, "quota_exhausted": True}
+        return {"status": "failed", "hop": True, "systemic": "quota_exhausted"}
 
     monkeypatch.setattr(inspectd, "run_item", fake_run)
     summary, _ = activate(dry=False)
     assert summary["stopped"] == "quota_exhausted" and "quota" in summary["error"]
+
+
+def test_channel_error_ends_the_activation(monkeypatch, iso_engine):
+    """渠道级故障与额度同族处置：巡检激活同样全局停止，不在坏渠道上连烧第二跳。
+
+    ``systemic`` 是 kind 串而非布尔（backlog 20261012-194500-leader）——三个 worker 面
+    共用一支清单，停止动作相同、``.done`` 里必须说得出是哪一类故障。
+    """
+    use_params(monkeypatch, max_hops=3)
+
+    def fake_run(item, run_log, *, dry=False):
+        return {"status": "failed", "hop": True, "systemic": "channel_error"}
+
+    monkeypatch.setattr(inspectd, "run_item", fake_run)
+    summary, _ = activate(dry=False)
+    assert summary["stopped"] == "channel_error"
+    assert "渠道级故障" in summary["error"]
+    assert "quota" not in summary["error"], "两类故障的读数不得混成一副面孔"
 
 
 def test_worker_command_prints_nothing_to_stdout(monkeypatch, iso_engine, capsys):

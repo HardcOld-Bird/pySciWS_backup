@@ -67,8 +67,9 @@ STATE_REL_PATH: str = "orchestration/state"
 #:   （registry.json models）与**模式表**（:data:`DEFAULT_MODEL_PATTERNS`）；本常量只是
 #:   三级回退的最后一级（跟踪 > 运行态解析 > 出厂，见 :meth:`Registry.models`），BYOK
 #:   modelID 是账号级 UUID、写不进代码，故出厂值保守取内置免费名——**宁慢不烧 credit**。
-#: - ``<tier>_fallback`` = 该档额度耗尽时的备用渠道（do_dispatch 自动换档重试一次，
-#:   逻辑不动：互换后其语义自然变成「BYOK 按量耗尽 → 内置限时免费兜底」）。
+#: - ``<tier>_fallback`` = 该档**系统性故障**（额度耗尽 / 渠道级故障，见
+#:   ``dispatch.SYSTEMIC_KINDS``）时的备用渠道（do_dispatch 自动换档重试一次，两类同族
+#:   处置；逻辑不动：互换后其语义自然变成「BYOK 按量耗尽 → 内置限时免费兜底」）。
 #: - ``minimum`` = harness 压测专用最低成本档（REFACTOR §1.1，驱动 ``orch eval run``）。
 #:   ``registry.models`` 改动属护栏级：本档的**设立**经用户裁决（§1.1），而**型号选择**
 #:   原属专门环节，委托期内由组长代决（§9.4）——暂映射内置 ``Qwen3.8-Flash``（现唯一
