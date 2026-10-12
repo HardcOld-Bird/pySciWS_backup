@@ -940,8 +940,8 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-164600-leader.md",
       "status": "in_progress",
       "proposed": "2026-10-12T16:46:40+08:00",
-      "note": "",
-      "started_at": "2026-10-12T18:11:03+08:00",
+      "note": "孤儿条目回收（原 started_at=2026-10-12T18:11:03+08:00）",
+      "started_at": "2026-10-12T18:28:10+08:00",
       "worktree": "20261012-164600-leader"
     },
     {
@@ -965,7 +965,8 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170000-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T16:58:42+08:00",
-      "note": ""
+      "note": "",
+      "effort": "medium"
     },
     {
       "id": "20261012-170300-leader",
@@ -988,7 +989,8 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170301-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T17:02:34+08:00",
-      "note": ""
+      "note": "",
+      "effort": "max"
     },
     {
       "id": "20261012-171200-leader",
@@ -999,7 +1001,8 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-171200-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T17:48:36+08:00",
-      "note": ""
+      "note": "",
+      "effort": "ultracode"
     },
     {
       "id": "20261012-173500-leader",
@@ -1010,7 +1013,20 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-173500-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T18:26:45+08:00",
-      "note": ""
+      "note": "",
+      "effort": "medium"
+    },
+    {
+      "id": "20261012-174114-devops",
+      "member": "devops",
+      "summary": "success_criteria：worker 派生时 stdout 不再指向运行日志文件（改 DEVNULL 或分文件），且有一条阳性测试证明「worker 内任何 print 都无法破坏 run 日志」；benchd/inspectd/drain 三条派生路径同形。",
+      "kind": "defect",
+      "success_criteria": "三条派生路径（drain/benchd/inspectd）worker stdout/stderr 改 DEVNULL 或 <run>.out 分文件，run 日志仅 _log() 追加语义；阳性断言「worker stdout 非 run 日志 fd」；0463ee2 既有修复不回归；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-174114-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T18:28:08+08:00",
+      "note": "",
+      "effort": "medium"
     }
   ]
 }
