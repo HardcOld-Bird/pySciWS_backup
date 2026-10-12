@@ -9,9 +9,9 @@
       }
     },
     "orchestration": {
-      "source_hash": "afd4236d0eaae2488a511b58963ccb561109b718c9a3097cb0c26bd9e1b25504",
+      "source_hash": "5ace8d752413e59592d700c6a46dbf723067b558dcff5b83c3b99ccc97b7d8a4",
       "targets": {
-        ".qoder/skills/orchestration": "afd4236d0eaae2488a511b58963ccb561109b718c9a3097cb0c26bd9e1b25504"
+        ".qoder/skills/orchestration": "5ace8d752413e59592d700c6a46dbf723067b558dcff5b83c3b99ccc97b7d8a4"
       }
     },
     "devops": {
@@ -66,6 +66,12 @@
       "source_hash": "50cab4ead0c68de00fd1bd16dcac0922a8c764a4ac5b8577581f8ad1cc0d43d8",
       "targets": {
         "orchestration/pods/bencher/.qoder/skills/bencher": "50cab4ead0c68de00fd1bd16dcac0922a8c764a4ac5b8577581f8ad1cc0d43d8"
+      }
+    },
+    "inspector": {
+      "source_hash": "3fef86672837b7f5d6ac23000c581c746f15a0cff034657268b74da335c32f1a",
+      "targets": {
+        "orchestration/pods/inspector/.qoder/skills/inspector": "3fef86672837b7f5d6ac23000c581c746f15a0cff034657268b74da335c32f1a"
       }
     }
   }
