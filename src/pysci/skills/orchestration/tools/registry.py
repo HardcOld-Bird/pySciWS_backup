@@ -710,8 +710,10 @@ def refresh_models(*, timeout_s: int = 60) -> dict[str, Any]:
     }
 
 
-def dirty_tracked_state(*, timeout_s: int = 10) -> list[str]:
-    """git 跟踪的 ``orchestration/state/**`` 中有未提交改动的文件路径（观测用）。
+def dirty_tracked_state(
+    *, path: str = STATE_REL_PATH, timeout_s: int = 10
+) -> list[str]:
+    """git 跟踪的 ``path`` 范围（默认 ``orchestration/state/**``）中有未提交改动的文件路径。
 
     为什么要哨兵（backlog 20261012-080410-devops 方案 C）：运行时自愈把跟踪配置改脏时，
     组长只在组员交上来的 ``<blocked>`` 里才发现——「本次合并会触碰的脏面」已经变成了
@@ -721,6 +723,8 @@ def dirty_tracked_state(*, timeout_s: int = 10) -> list[str]:
     硬失败会把正常作业挡成事故。
 
     Args:
+        path: 扫描范围（项目根相对的目录/文件形参）。默认只看跟踪的 state 面；压测隔离面
+            复用同一份解析，改传 ``orchestration/pods/<member>``。
         timeout_s: git 调用上限（挂起即放弃）。
 
     Returns:
@@ -736,7 +740,7 @@ def dirty_tracked_state(*, timeout_s: int = 10) -> list[str]:
                 "--porcelain",
                 "--untracked-files=no",
                 "--",
-                STATE_REL_PATH,
+                path,
             ],
             cwd=str(PROJECT_ROOT),
             capture_output=True,
