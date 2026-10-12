@@ -28,6 +28,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PODS_ROOT, PROJECT_ROOT
 
+from . import channels as _channels
 from . import journal as _journal
 from . import jury
 from .registry import Registry
@@ -190,6 +191,14 @@ def _line_jury() -> str:
     return jury.readiness_summary(jury.seat_readiness())
 
 
+def _line_fallback() -> str:
+    """渠道回退事件（用户裁决 2026-10-12 21:1x 规格 4b）：计数 + 最近几条。
+
+    读事件流不判成败；空流也要出一行「尚无回退」——「没坏」与「没人记账」必须可辨。
+    """
+    return _channels.summary_line()
+
+
 def _line_trend() -> str:
     return "一致率 / override 率趋势 = 占位（overrides·stats 属 E6 后续单）"
 
@@ -209,6 +218,7 @@ STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("开关", _line_switches),
     ("队列", _line_queues),
     ("仲裁", _line_jury),
+    ("回退", _line_fallback),
     ("趋势", _line_trend),
     ("待决", _line_pending),
     ("验收", _line_acceptance),

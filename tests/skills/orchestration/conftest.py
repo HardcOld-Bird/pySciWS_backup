@@ -14,6 +14,7 @@ import pytest
 
 from pysci.skills.orchestration.tools import (
     benchd,
+    channels,
     dispatch,
     drain,
     failure_tags,
@@ -96,6 +97,9 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
     monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")
     monkeypatch.setattr(watch, "WATCH_PATH", state / "watch.json")
+    # 渠道回退事件流（backlog 20261012-211500-leader 规格 4b）：降级一跳就追加一行，
+    # 不 patch 则任何跑到换席通路的用例都真写仓库 state/channel-events.jsonl。
+    monkeypatch.setattr(channels, "EVENTS_PATH", state / "channel-events.jsonl")
     # E3-prep（仲裁团）：裁决留痕/降级队列/冻结简报三份状态同归 tmp——不 patch 会让
     # mock 测试真往 orchestration/state/evals/ 写案卷（与真实提案混在一起）。
     monkeypatch.setattr(jury, "JURY_DIR", state / "evals" / "jury")
@@ -271,6 +275,7 @@ def iso_dispatch(tmp_path, monkeypatch):
     # 直接 no-op save，防止测试写真实 registry.json
     monkeypatch.setattr(registry.Registry, "save", lambda self: None)
     monkeypatch.setattr(ledger, "LEDGER_PATH", state / "ledger.jsonl")
+    monkeypatch.setattr(channels, "EVENTS_PATH", state / "channel-events.jsonl")
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(dispatch, "SUGGESTIONS_DIR", state / "suggestions")
     monkeypatch.setattr(dispatch, "LINT_RULES_PATH", state / "taskbook-lint.json")

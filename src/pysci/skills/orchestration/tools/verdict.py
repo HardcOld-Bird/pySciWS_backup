@@ -27,7 +27,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
-from . import journal, jury
+from . import channels, journal, jury
 from .registry import Registry, orchestration_rel
 
 #: 审批时自动组的案卷落盘处（``evals/`` 整面 gitignored——案卷是运行态，
@@ -444,6 +444,19 @@ def seat_alert_lines() -> list[str]:
     return [f"    仲裁 {jury.readiness_summary(plan)}"]
 
 
+def channel_fallback_lines() -> list[str]:
+    """渠道回退事件行（用户裁决 2026-10-12 21:1x 规格 4b 的组长侧落点）。
+
+    与 mirror 概览项共读 :func:`channels.summary_line`——同一句话两处呈现，不各写各的。
+    观察面失败只报读数失败，绝不拦 ``orch status``。
+    """
+    try:
+        body = channels.summary_line()
+    except (OSError, ValueError) as exc:
+        return [f"    渠道回退读数失败：{type(exc).__name__}: {exc}"]
+    return [f"    {line}" for line in body.splitlines()]
+
+
 def health_lines() -> list[str]:
     """``orch status`` 的「判决包健康」段（无判决记录时给一行引导，不静默缺席）。"""
     h = health()
@@ -452,6 +465,7 @@ def health_lines() -> list[str]:
             "    （尚无判决包记录：approve 须带 --jury / --bench / --override，"
             "§5.1 四态之一）",
             *seat_alert_lines(),
+            *channel_fallback_lines(),
         ]
     c = h["channels"]
     line = (
@@ -471,6 +485,7 @@ def health_lines() -> list[str]:
             f"{', '.join(h['escalate'][:5])} → 需组长人工终裁"
         )
     lines.extend(seat_alert_lines())
+    lines.extend(channel_fallback_lines())
     return lines
 
 

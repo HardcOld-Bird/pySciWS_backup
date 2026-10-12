@@ -295,11 +295,12 @@ ledger 流水、`state/devops.{lock,cancel}` / `state/devops-runs/` / `state/wat
    回复中直接给出下一步**（决策选项，或已自动完成的机械接力说明）。
 
 失败处理：超时/非零退出 → 自动重试一次（同会话 resume，注入错误上下文）；再失败 →
-呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。**例外**：系统性故障
-（`dispatch.SYSTEMIC_KINDS`）→ 不做**同渠道**重试；若该档配置了 `<tier>_fallback`（如
-flash→BYOK flash）则**换档重试一次**，仍失败 → 该 kind（drain 据此全局停止）：
+呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。**例外**：席位不可用
+（`dispatch.SYSTEMIC_KINDS` 的 `quota_exhausted`/`channel_error`，加上「启动即失败」）
+→ 不做**同席**重试，沿该档**有序回退链**逐席下探（一席一跳，§3.5）；全链耗尽 → 沿用
+该 kind（drain 据此全局停止）：
 额度类（`quota_exhausted`，envelope/stderr 含『credit usage limit』类文案）[NEXT] 提示
-检查 registry models 渠道绑定 / 等待额度重置；渠道级（`channel_error`，固定文案 **∧** 会话档
+检查 registry models 回退链 / 等待额度重置；渠道级（`channel_error`，固定文案 **∧** 会话档
 末轮合成故障形状合取，backlog 20261012-194500-leader）等渠道恢复即可，不必充值。
 
 ### 3.4 交付协议（XML 标记块 + delivery-gate 强制）
@@ -342,36 +343,56 @@ stderr 强制注入）：每 pod settings 接 Stop hook，成员收尾时自动�
 parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即可使用新属性**，不必等下一跳，
 但兜底读出的交付应当复跑一次以确认严格面也能判读。
 
-### 3.5 模型双档路由（用户裁决，2026-10-10 渠道策略修订；2026-10-12 flash 渠道互换）
+### 3.5 模型档位路由（用户裁决，2026-10-10 渠道策略；2026-10-12 21:1x 升级为有序回退链）
 
-- registry 维护档位抽象：组长只见「max/flash」两档，orch 内部路由具体渠道；
-- **渠道策略（用户裁决，源于 credit 耗尽事故；flash 两渠道地位 2026-10-12 互换）**：
-  - `max` = **不传 `-m`**，走用户级默认的 **BYOK Qwen-3.8-Max**（Token Plan 额度大且
-    实惠；**禁用内置同名模型**——烧订阅 credit 且 envelope 低报为 0，2026-10-10 实战
-    烧穿额度）；
-  - `flash` = **BYOK Qwen-3.8-Flash 的 modelID**（按量小额、不限速）。用户裁决
-    2026-10-12：内置渠道虽免费但限速、响应慢拖累效率，flash 档**永久**改指 BYOK 优先；
-  - `flash_fallback` = 内置 `Qwen3.8-Flash`（**限时免费**，零额度消耗，降为兜底位）。
-    **回退逻辑不动**（backlog 20261010-flash-fallback）：do_dispatch 遇 quota_exhausted
-    且该档配了非空 `<tier>_fallback`（异于当前型号）→ 换备用渠道重试一次；仍耗尽才归类
-    quota_exhausted 触发 drain 全局停止（见 §3.3 失败处理）——互换后其语义自然变成
-    「BYOK 按量耗尽 → 内置免费兜底」，比互换前更省；
-- **模型映射自动刷新**（用户裁决 2026-10-10）：BYOK 模型的人类名→UUID 目录只来自
+- registry 维护档位抽象：组长只见「max/flash/minimum」三档，orch 内部路由具体席位；
+- **每档是一串有序回退链**（`registry.models.<tier>` 写成数组、首席在前；**旧的单值写法
+  照样能读**，等价于只有一席的链）。渠道策略（用户裁决 2026-10-12 21:1x：Mimo 转主力、
+  Qwen 转回退、内置兜底）：
+  - `max` = **Mimo-V2.6-Pro**（用户新增自定义模型，1M 上下文）→ BYOK `Qwen-3.8-Max`
+    → 不传 `-m`（用户级默认）。**内置同名 Qwen3.8-Max 永不入链**——烧订阅 credit 且
+    envelope 低报为 0，2026-10-10 实战烧穿过额度；
+  - `flash` = **Mimo-V2.6-Flash** → BYOK `Qwen-3.8-Flash`（按量）→ 内置 `Qwen3.8-Flash`
+    （限时免费、限速，只作兜底位）；旧 `flash_fallback` 键**并入本链**（兼容读，新写走链）；
+  - `minimum`（压测最低成本档）= **Mimo-V2.6-Flash** → 内置 `Qwen3.8-Flash`；Qwen BYOK
+    不进链——按量额度宝贵，压测烧的是量不是质量；
+- **回退触发**：当前席不可用（`quota_exhausted` / `channel_error` / **启动即失败**）
+  → 自动沿链换下一席，**一席一跳**；全链耗尽 → 沿用该系统性 kind，drain **全局停止**
+  （§3.3 与 §6，别再逐单空烧）。非系统性失败仍是**同席**重试一次（故障不在渠道，
+  换席白烧）；机制源流：backlog 20261010-flash-fallback → 20261012-211500-leader 链化；
+- **回退必告警**（用户裁决 2026-10-12 21:1x，双面，缺一面就等于「静默降级」）：
+  a. **调用者面**——dispatch 输出与 drain run 日志逐条打
+  `[!] 档位回退：<tier> 席<名>不可用 → 已切换 <新席>（原因 …）`；
+  b. **观察面**——事件流落 `state/channel-events.jsonl`（gitignored 过程态），
+  `pysci-mirror status` 概览项「回退」与 `orch status` 判决包健康段报「近 7 日 N 起」
+  加最近几条（时刻/档位/原席→新席/原因）；
+- **降级粘滞窗**：某席探测失败后进窗（`registry.model_fallback.skip_window_s`，默认
+  3600s），窗内同档直接落到下一席、不再重复探测它，但每次派发仍打一行「席 X 跳过中
+  （故障时刻/原因）」——省跳数不丢可查性。窗口过期自动恢复探测，充值/修好后第一次
+  成功即销窗（**自愈，无需改代码**）；全链都在窗内时不停摆：按最先到期的一席再探一次。
+  此语义针对现状：用户 2026-10-12 21:3x 明示 BYOK Qwen 渠道**暂不充值、将持续不可用**。
+- **模型映射自动刷新**（用户裁决 2026-10-10）：BYOK/自定义模型的人类名→UUID 目录只来自
   `--list-models`（账户级；settings.json 仅存当前激活 UUID、无法监听），故 orch 在
-  **drain 启动时**跑 `--list-models` 按名称模式（`DEFAULT_MODEL_PATTERNS`：Qwen-3.8-Max→max、
-  Qwen-3.8-Flash→flash、内置无 UUID 的 Qwen3.8-Flash→flash_fallback 与 minimum；
-  registry.model_patterns 可覆盖）刷新 registry.models，重配 BYOK 后下次 drain 自愈、零
-  daemon；手动 `orch refresh-models` 同逻辑。**未命中档保持现值不清空**（宁旧勿空）；
-  刷新只更新既有档的 UUID/名，**不改变哪个名对应哪个档**——那仍是护栏级（下方教训登记），
-  改名/换档须同步更新模式表：**2026-10-12 的互换就是这一条的镜像用例**——只改
-  registry.json 而不动模式表，下一次 drain 自愈就把映射刷回旧渠道（快照断言见
-  `tests/skills/orchestration/test_flash_channel_swap.py`）；
+  **drain 启动时**跑 `--list-models`，按**链模板**（`DEFAULT_MODEL_CHAINS`：max=Mimo-V2.6-Pro
+  →Qwen-3.8-Max→默认、flash=Mimo-V2.6-Flash→Qwen-3.8-Flash→Qwen3.8-Flash、minimum=
+  Mimo-V2.6-Flash→Qwen3.8-Flash；`registry.model_chains` 可覆盖，取代旧的 `model_patterns`
+  倒表）逐席解析并刷新 registry 的**运行态面**（`sessions-runtime.json` 的 `models_resolved`，
+  gitignored——跟踪面 `registry.json` 自愈一个字节都不写，理由见技能
+  `references/registry-runtime.md`），重配 BYOK 后下次 drain 自愈、零 daemon；手动
+  `orch refresh-models` 同逻辑。**未命中的席跳过、该档保持现值不清空**（宁旧勿空）；跟踪面
+  写了该档则**整条链**由人值优先、机器只在 `shadowed` 里报差异（要换档由人决定）。
+  刷新只解析既有模板里的名字，**不改变哪个名属于哪个档**——那仍是护栏级（下方教训登记），
+  改名/换档须同步更新链模板与名→档规则：**2026-10-12 的 Mimo 入档就是这一条的正例**——
+  链模板里补上 Mimo-V2.6-Pro/Flash（首席）而非只改 registry.json，否则下一次 drain 自愈
+  就把映射刷回旧渠道（快照断言见 `tests/skills/orchestration/test_flash_channel_swap.py`）；
 - 默认档位：组长（TUI）= **max**；**deputy/reviewer** + 7 专职组员 + **devops** = **flash**
   （deputy/reviewer 于 2026-10-11 经 REFACTOR v1.0 §1.1 定稿降档 flash——「全项目降档，flash
   主力、无组员常驻 max」；二者几乎无台账存量，任何时候改动都不阻碍观察（用户确认）。devops
   于 2026-10-10 经用户裁决降档：其工作为「规格已审定的末端实现」，Flash+强 harness 匹配。
   架构/推理敏感项由组长派发时显式 `--model-tier max` 升档（通道保留）；降档后以台账数据观察
-  失败率/返工率，质量下滑即回调）；计划环节可覆盖（`steps[].model`）；
+  失败率/返工率，质量下滑即回调）；计划环节可覆盖（`steps[].model`）。
+  **观察期注记（用户明示 2026-10-12 21:1x）**：Mimo 入档后组员**全部保持 flash**、暂不升档，
+  `max` 链仅供 deputy/reviewer 按需升档与组长侧使用；台账 `model` 字段即升档与否的证据；
 - **推理强度按项标注**（用户裁决 2026-10-10，backlog 20261010-orch-effort-per-item）：
   双档默认「中」，**不做全局 high**——由组长对推理密集项（并发/状态机/跨模块语义）
   逐项标 `high`，机械项留默认。四来源逐层覆盖，最终解析出一个跳级档位后透传原生旗标
@@ -385,8 +406,8 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
   `effort` 字段（`orch ledger` 显示 `[effort=high]`），据此做同类项 high vs medium 的
   轮数/失败率/返工率对比，**数据驱动再调策略**（聚合视图已就绪：`orch stats` / `orch ledger
   --stats` 的 by_effort 段，§4.4，backlog 20261010-153041-devops）；
-- **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射改动属护栏级（影响全体
-  成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止**已实现**（backlog
+- **教训登记**：模型渠道 = 成本渠道，registry 的 models 映射（含每档的**回退链**顺序）改动
+  属护栏级（影响全体成员计费），须经用户；额度类失败的系统性识别与 drain 全局停止**已实现**（backlog
   20261010-orch-quota-awareness，见 §3.3 失败处理与 §6）；渠道级故障（`channel_error`）
   同族识别于 2026-10-12 补齐——判据须**文案 ∧ 会话档末轮形状**合取，因为那句话也会出现在
   复盘它的任务书正文里。

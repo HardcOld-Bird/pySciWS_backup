@@ -79,3 +79,8 @@ __pycache__/
 # 原文备份，同属运行态。永久审计在 registry 配置面 + backlog + ledger，故不入库。
 /orchestration/state/sessions-runtime.json
 /orchestration/state/registry.presplit.json
+# 渠道回退事件流（用户裁决 2026-10-12 21:1x，backlog 20261012-211500-leader 规格 4b）：
+# 每次降级一跳就可能追加一行，入库等于让 main 工作区每跳必 dirty（sessions-runtime
+# 同构教训）。永久审计在 ledger 的 model 字段与 drain run 日志，本文件只是 mirror/
+# orch status 概览项的过程态读数源。
+/orchestration/state/channel-events.jsonl

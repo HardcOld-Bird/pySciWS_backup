@@ -34,6 +34,7 @@ import argparse
 import sys
 
 from . import benchd as _benchd
+from . import channels as _channels
 from . import drain as _drain
 from . import eval as _eval
 from . import inspectd as _inspectd
@@ -537,9 +538,9 @@ def cmd_refresh_models(args: argparse.Namespace) -> int:
         return 2
     if res["changed"]:
         for tier, c in sorted(res["changed"].items()):
-            print(f"  [{tier}] {c['old'] or '(空)'} → {c['new']}")
+            print(f"  [{tier}] {c['old'] or '(空)'} → {_channels.chain_text(c['new'])}")
         print(
-            f"[√] 已刷新 {len(res['changed'])} 个档位映射"
+            f"[√] 已刷新 {len(res['changed'])} 个档位链"
             "（写 sessions-runtime.json 的 models_resolved，跟踪 registry.json 不动）。"
         )
     else:
@@ -547,17 +548,21 @@ def cmd_refresh_models(args: argparse.Namespace) -> int:
     if res.get("shadowed"):
         for tier, s in sorted(res["shadowed"].items()):
             print(
-                f"  [{tier}] 跟踪值 {s['tracked'] or '(空)'} 遮蔽解析值 "
-                f"{s['resolved'] or '(空)'}（人写覆盖优先，未改）"
+                f"  [{tier}] 跟踪链 {_channels.chain_text(s['tracked'])} 遮蔽解析链 "
+                f"{_channels.chain_text(s['resolved'])}（人写覆盖优先，未改）"
             )
         print(
-            "    要换档：改 registry.json 的 models.<档>（护栏级，经用户授权），"
+            "    要换档：改 registry.json 的 models.<档>（整条链，护栏级经用户授权），"
             "或删掉该键让机器接管。"
         )
+    if res.get("conflicts"):
+        print("[!] 链模板与名→档规则冲突（串档，须人裁决）：")
+        for item in res["conflicts"]:
+            print(f"    {item}")
     if res["missing"]:
-        print(f"[!] 未命中（保持现值）：{', '.join(res['missing'])}")
+        print(f"[!] 未命中（该席跳过、该档保持现值）：{', '.join(res['missing'])}")
         print(
-            "    BYOK 模型改名 → 更新 registry.model_patterns（或 registry.py 默认表）。"
+            "    模型改名 → 更新 registry.model_chains（或 registry.py 的默认链模板）。"
         )
     return 0
 

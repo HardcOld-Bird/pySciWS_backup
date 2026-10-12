@@ -1,19 +1,21 @@
-"""flash 渠道互换（backlog 20261012-173500-leader，用户裁决 2026-10-12）。
+"""档位链的同源断言（backlog 20261012-173500-leader 渠道互换 → 20261012-211500-leader 链化）。
 
-flash 档**永久**改指 BYOK ``Qwen-3.8-Flash``，内置 ``Qwen3.8-Flash``（限时免费但限速）
-降为 ``flash_fallback`` 兜底位。互换必须同时落在三处并**同源**：
+本文件的血缘：173500 那跳把 flash 首席从内置换成 BYOK，漏改「名→档」规则表就会被下一次
+``refresh-models`` 刷回旧渠道（#74 教训）。211500 那跳把每档升级成**有序回退链**
+（Mimo 主力 → BYOK Qwen 回退 → 内置兜底），同源要求随之变成**三处**：
 
-1. 跟踪面 ``orchestration/state/registry.json`` 的 ``models``；
-2. 代码模式表 :data:`registry.DEFAULT_MODEL_PATTERNS`（「名→档」的唯一机器可读口径）；
+1. 跟踪面 ``orchestration/state/registry.json`` 的 ``models``（席位 UUID 链）；
+2. 代码链模板 :data:`registry.DEFAULT_MODEL_CHAINS`（「哪个名属于哪个档、谁在前」的唯一
+   机器可读口径）；
 3. README §3.5 渠道策略文案。
 
-漏改模式表会怎样：``refresh_models`` 每个 drain 都跑，跟踪面**缺**的档按模式表补进运行态
-面，跟踪面**写了**的档一旦被解析值顶到就报 ``shadowed``（漂移被点名，永不生效的配置）。
-两组用例分别钉这两条通路；反向用例用「互换前的模式表」验证断言确实有牙。
+漏改任一侧的实发症状都钉在这里：只改 registry 不改模板 ⇒ 自愈把解析链报成 ``shadowed``
+（人值被点名，永不生效）；只改模板不改 registry ⇒ 下一次 drain 直接按新链顶掉裁决渠道。
+反向用例（``test_pre_chain_tracking_face_is_named_as_drift``）用**链化前**的单值跟踪面验证
+断言确有牙。
 
-quota 换档回退逻辑（backlog 20261010-flash-fallback）**不动**，见
-``test_flash_fallback.py``——互换只是让 ``<tier>_fallback`` 的自然语义变成
-「BYOK 按量耗尽 → 内置免费兜底」。
+链化前的文件名叫 ``test_flash_channel_swap.py``——README §3.5 的教训登记按这个名字索引本
+组断言，故保留文件名，内容口径已升级为链。
 """
 
 from __future__ import annotations
@@ -25,29 +27,32 @@ import pytest
 
 from pysci.skills.orchestration.tools import registry
 
-# --list-models 实测格式（同 test_model_refresh.CATALOG；三行名分别是内置、BYOK flash、BYOK max）
+# --list-models 实测格式（2026-10-12 22:xx 真实账户目录，含用户新增的 Mimo 自定义模型）
+MIMO_PRO_UUID = "99127e47-626d-421f-b0cb-02ffdbf1ada7"
+MIMO_FLASH_UUID = "017036af-b630-498a-bfea-883a20c67e33"
+BYOK_MAX_UUID = "982ae403-bc5e-4f74-996d-04a9cd66f933"
+BYOK_FLASH_UUID = "ed6f5996-0992-479f-86a8-3f29ce0e794c"
+BUILTIN_FLASH = "Qwen3.8-Flash"
+
 CATALOG = (
     "MODEL\n"
-    "Qwen3.8-Flash\n"
-    "Qwen-3.8-Flash (ed6f5996-0992-479f-86a8-3f29ce0e794c)\n"
-    "Qwen-3.8-Max (982ae403-bc5e-4f74-996d-04a9cd66f933)\n"
+    f"Mimo-V2.6-Pro ({MIMO_PRO_UUID})\n"
+    f"Mimo-V2.6-Flash ({MIMO_FLASH_UUID})\n"
+    f"Qwen-3.8-Max ({BYOK_MAX_UUID})\n"
+    f"Qwen-3.8-Flash ({BYOK_FLASH_UUID})\n"
+    f"{BUILTIN_FLASH}\n"
+    "Qwen3.8-Max\n"  # 内置同名模型：永不入链（2026-10-10 烧穿订阅 credit 的教训）
 )
-BUILTIN_FLASH = "Qwen3.8-Flash"
-BYOK_FLASH_NAME = "Qwen-3.8-Flash"
-BYOK_FLASH_UUID = "ed6f5996-0992-479f-86a8-3f29ce0e794c"
-MAX_UUID = "982ae403-bc5e-4f74-996d-04a9cd66f933"
 
-#: 导入期捕获的真实跟踪配置面（下面夹具会把 ``registry.REGISTRY_PATH`` 搬到 tmp）
-REAL_REGISTRY_PATH = registry.REGISTRY_PATH
-
-PRE_SWAP_PATTERNS = {
-    "max": "Qwen-3.8-Max",
-    "flash": BUILTIN_FLASH,
-    "flash_fallback": BYOK_FLASH_NAME,
+#: 链化前的跟踪面（单值写法 + 已废的 ``flash_fallback`` 键），反向用例用它模拟旧配置。
+PRE_CHAIN_MODELS = {
+    "max": BYOK_MAX_UUID,
+    "flash": BYOK_FLASH_UUID,
+    "flash_fallback": BUILTIN_FLASH,
     "minimum": BUILTIN_FLASH,
 }
 
-#: 导入期锚定真本配置面（夹具会搬走 ``registry.REGISTRY_PATH``）。
+#: 导入期锚定真本配置面（夹具会把 ``registry.REGISTRY_PATH`` 搬到 tmp）。
 REAL_REGISTRY_PATH = registry.REGISTRY_PATH
 
 
@@ -58,24 +63,27 @@ def iso_reg(tmp_path, monkeypatch):
     return reg_file, tmp_path / registry.RUNTIME_NAME
 
 
-def _seed(reg_file, models: dict, patterns: dict | None = None) -> bytes:
+def _tracked_face() -> dict:
+    """真本 registry.json 的 models + model_chains（读侧实际生效的跟踪配置）。
+
+    路径在**导入期**捕获：夹具把 ``registry.REGISTRY_PATH`` 搬到 tmp（那是 refresh_models
+    的写面），而这里要读的是随 main 入库的那份配置。
+    """
+    data = json.loads(REAL_REGISTRY_PATH.read_text(encoding="utf-8"))
+    return {
+        "models": data.get("models", {}),
+        "model_chains": data.get("model_chains", {}),
+    }
+
+
+def _seed(reg_file, models: dict, chains: dict | None = None) -> bytes:
     data = {"version": 1, "exe": None, "models": models, "members": {}, "checks": {}}
-    if patterns is not None:
-        data["model_patterns"] = patterns
+    if chains is not None:
+        data["model_chains"] = chains
     reg_file.write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return reg_file.read_bytes()
-
-
-def _tracked_models() -> dict[str, str]:
-    """真本 registry.json 的 models（读侧实际生效的跟踪值）。
-
-    路径在**导入期**捕获：本文件的夹具把 ``registry.REGISTRY_PATH`` 搬到 tmp（那是
-    refresh_models 的写面），而这里要读的是随 main 入库的那份配置。
-    """
-    data = json.loads(REAL_REGISTRY_PATH.read_text(encoding="utf-8"))
-    return data.get("models", {})
 
 
 def _fake_output(monkeypatch, text=CATALOG):
@@ -87,98 +95,181 @@ def _runtime_face(runtime_file):
     return face.get(registry.RUNTIME_MODELS_KEY, {})
 
 
-# ---------------------------------------------------------------------------
-# 1. 跟踪面：值确实互换了
-# ---------------------------------------------------------------------------
-def test_tracked_registry_models_are_swapped():
-    models = _tracked_models()
-    assert models["flash"] == BYOK_FLASH_UUID, (
-        "flash 主渠道=BYOK（用户裁决 2026-10-12）"
-    )
-    assert models["flash_fallback"] == BUILTIN_FLASH, "内置免费渠道降为兜底位"
-    assert models["max"] == MAX_UUID and models["minimum"] == BUILTIN_FLASH
-
-
-# ---------------------------------------------------------------------------
-# 2. 三处同源：跟踪值 ↔ 模式表（自愈既不改写、也不该报漂移）
-# ---------------------------------------------------------------------------
-def test_tracked_values_agree_with_pattern_table(iso_reg, monkeypatch):
-    """以真 registry.json 的 models 为跟踪面跑一次自愈 → changed/shadowed 皆空。
-
-    这是「drain 启动后映射不被刷回」的阳性判据：任何一侧单独回退（改了 registry
-    没改模式表，或反之）都会让本用例变红——模式表旧 ⇒ 解析值顶到人值上报 shadowed，
-    registry 旧 ⇒ 同样报 shadowed，且被缺档通路（下条用例）直接刷回。
-    """
-    reg_file, runtime_file = iso_reg
-    before = _seed(reg_file, _tracked_models())
-    _fake_output(monkeypatch)
-
-    res = registry.refresh_models()
-
-    assert reg_file.read_bytes() == before, "自愈绝不写 git 跟踪的配置面"
-    assert res["changed"] == {} and res["missing"] == []
-    assert res["shadowed"] == {}, (
-        f"跟踪值与模式表已同源，不该有漂移被点名：{res['shadowed']}"
-    )
-    assert not runtime_file.exists() or _runtime_face(runtime_file) == {}, (
-        "四档都在跟踪面 → 没有档交给机器，运行态面不该多出值"
-    )
-
-
-def test_machine_face_resolves_byok_to_flash_tier(iso_reg, monkeypatch):
-    """跟踪面把档交还机器（删键）时，自愈补的必须是互换后的新对应关系。"""
-    reg_file, runtime_file = iso_reg
-    _seed(reg_file, {})
-    _fake_output(monkeypatch)
-
-    registry.refresh_models()
-
-    assert _runtime_face(runtime_file) == {
-        "max": MAX_UUID,
-        "flash": BYOK_FLASH_UUID,
-        "flash_fallback": BUILTIN_FLASH,
-        "minimum": BUILTIN_FLASH,
-    }
-
-
-def test_pre_swap_patterns_would_flip_the_mapping(iso_reg, monkeypatch):
-    """反向阳性：用互换前的模式表（``model_patterns`` 覆盖模拟），跟踪面立即被报成漂移。
-
-    证明上面两条断言真有牙——「只改 registry.json 不动模式表」不是纸面担忧。
-    """
-    reg_file, _ = iso_reg
-    _seed(reg_file, _tracked_models(), patterns=PRE_SWAP_PATTERNS)
-    _fake_output(monkeypatch)
-
-    res = registry.refresh_models()
-
-    assert res["shadowed"] == {
-        "flash": {"tracked": BYOK_FLASH_UUID, "resolved": BUILTIN_FLASH},
-        "flash_fallback": {"tracked": BUILTIN_FLASH, "resolved": BYOK_FLASH_UUID},
-    }
-
-
-# ---------------------------------------------------------------------------
-# 3. README §3.5 与代码模式表同源（文案不许领先或落后于代码）
-# ---------------------------------------------------------------------------
-def test_readme_pattern_clause_matches_code_table():
+def _readme_clause() -> str:
     text = (registry.PROJECT_ROOT / "orchestration" / "README.md").read_text(
         encoding="utf-8"
     )
     m = re.search(r"^### 3\.5 .*?(?=^### |\Z)", text, re.S | re.M)
     assert m, "README 找不到 §3.5（文案同源断言的锚点丢了）"
-    clause = re.sub(r"\s+", " ", m.group(0))
+    return re.sub(r"\s+", " ", m.group(0))
 
-    documented: set[tuple[str, str]] = set()
-    for name, tier, extra in re.findall(
-        r"(Qwen3\.8-Flash|Qwen-3\.8-Flash|Qwen-3\.8-Max)→([a-z_]+)(?: 与 ([a-z_]+))?",
-        clause,
-    ):
-        documented.add((tier, name))
-        if extra:
-            documented.add((extra, name))
-    expected = set(registry.DEFAULT_MODEL_PATTERNS.items())
+
+# ---------------------------------------------------------------------------
+# 1. 跟踪面：三档三席，排序正确（success_criteria 第一条）
+# ---------------------------------------------------------------------------
+def test_tracked_registry_is_ordered_chains():
+    models = _tracked_face()["models"]
+    assert models["max"] == [MIMO_PRO_UUID, BYOK_MAX_UUID, ""], (
+        "max 链：Mimo-Pro 首席 → BYOK Qwen-Max → 不传 -m（用户级默认）"
+    )
+    assert models["flash"] == [MIMO_FLASH_UUID, BYOK_FLASH_UUID, BUILTIN_FLASH]
+    assert models["minimum"] == [MIMO_FLASH_UUID, BUILTIN_FLASH], (
+        "压测最低成本档：Qwen BYOK 不进链（按量额度宝贵，用户裁决 2026-10-12 21:1x）"
+    )
+    assert "flash_fallback" not in models, "旧回退键已并入链，跟踪面不该再留第二张表"
+
+
+# ---------------------------------------------------------------------------
+# 2. 三处同源：跟踪链 ↔ 链模板（自愈既不改写、也不该报漂移）
+# ---------------------------------------------------------------------------
+def test_tracked_values_agree_with_chain_template(iso_reg, monkeypatch):
+    """以真 registry.json 的 models/model_chains 为跟踪面跑一次自愈 → 四个读数皆空。
+
+    这是「``refresh-models`` 后不被刷回」的阳性判据：模板旧 ⇒ 解析链顶到人值上报
+    ``shadowed``；registry 旧 ⇒ 同样报 ``shadowed``；账户缺名 ⇒ 报 ``missing``。
+    """
+    reg_file, runtime_file = iso_reg
+    face = _tracked_face()
+    before = _seed(reg_file, face["models"], chains=face["model_chains"])
+    _fake_output(monkeypatch)
+
+    res = registry.refresh_models()
+
+    assert reg_file.read_bytes() == before, "自愈绝不写 git 跟踪的配置面"
+    assert res["changed"] == {}, f"跟踪链已同源，自愈不该改任何档：{res['changed']}"
+    assert res["missing"] == [], f"链模板里的名都在账户目录：{res['missing']}"
+    assert res["shadowed"] == {}, (
+        f"跟踪值与链模板已同源，不该有漂移被点名：{res['shadowed']}"
+    )
+    assert res["conflicts"] == []
+    assert not runtime_file.exists() or _runtime_face(runtime_file) == {}, (
+        "三档都在跟踪面 → 没有档交给机器，运行态面不该多出值"
+    )
+
+
+def test_mimo_names_resolve_to_their_tiers(iso_reg, monkeypatch):
+    """名→档 规则表的阳性断言（规格 2）：Mimo 两名各归其档，不被自愈塞错地方。"""
+    reg_file, runtime_file = iso_reg
+    _seed(reg_file, {})  # 跟踪面空缺 = 把档交给机器
+    _fake_output(monkeypatch)
+
+    registry.refresh_models()
+
+    assert _runtime_face(runtime_file) == {
+        "max": [MIMO_PRO_UUID, BYOK_MAX_UUID, ""],
+        "flash": [MIMO_FLASH_UUID, BYOK_FLASH_UUID, BUILTIN_FLASH],
+        "minimum": [MIMO_FLASH_UUID, BUILTIN_FLASH],
+    }
+    rules = registry.model_tier_rules()
+    assert rules["Mimo-V2.6-Pro"] == {"max"}
+    assert rules["Mimo-V2.6-Flash"] == {"flash", "minimum"}
+    assert rules["Qwen3.8-Flash"] == {"flash", "minimum"}
+    assert "Qwen3.8-Max" not in rules, (
+        "内置同名 Qwen3.8-Max 永不入链：它烧订阅 credit 且 envelope 低报为 0"
+        "（2026-10-10 实战烧穿额度）"
+    )
+
+
+def test_pre_chain_tracking_face_is_named_as_drift(iso_reg, monkeypatch):
+    """反向阳性：跟踪面还停在链化前的单值写法 → 三档全被报成漂移（断言确有牙）。"""
+    reg_file, _ = iso_reg
+    _seed(reg_file, PRE_CHAIN_MODELS)
+    _fake_output(monkeypatch)
+
+    res = registry.refresh_models()
+
+    assert res["shadowed"] == {
+        "max": {
+            "tracked": BYOK_MAX_UUID,
+            "resolved": [MIMO_PRO_UUID, BYOK_MAX_UUID, ""],
+        },
+        "flash": {
+            "tracked": BYOK_FLASH_UUID,
+            "resolved": [MIMO_FLASH_UUID, BYOK_FLASH_UUID, BUILTIN_FLASH],
+        },
+        "minimum": {
+            "tracked": BUILTIN_FLASH,
+            "resolved": [MIMO_FLASH_UUID, BUILTIN_FLASH],
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# 3. 旧写兼容读（规格 1 的向后兼容半边）
+# ---------------------------------------------------------------------------
+def test_legacy_single_value_and_fallback_key_still_read(iso_reg):
+    """单值写法＝一席链；旧 ``<tier>_fallback`` 键**并入链尾**（兼容读，新写不产生）。"""
+    reg_file, _ = iso_reg
+    _seed(reg_file, {"flash": "solo-flash", "flash_fallback": "legacy-backup"})
+
+    reg = registry.Registry.load()
+
+    assert reg.model_chain("flash") == ["solo-flash", "legacy-backup"]
+    assert reg.models["flash"] == "solo-flash", "首席平读面不变（老消费方不受惊）"
+    assert reg.model_chain("max") == [""], (
+        "跟踪面没写的档 → 回落**出厂保守值**（max=不传 -m 走用户级默认）：链模板里的"
+        "人类名没经 --list-models 解析成席位，裸名喂给 exe 会启动即失败，故出厂面宁窄不猜"
+    )
+
+
+def test_legacy_fallback_already_in_chain_not_duplicated(iso_reg):
+    """回退键与链内某席同名 → 保序去重（同一席在链里出现两次只会白烧一跳）。"""
+    reg_file, _ = iso_reg
+    _seed(reg_file, {"flash": ["a-seat", "b-seat"], "flash_fallback": "b-seat"})
+
+    assert registry.Registry.load().model_chain("flash") == ["a-seat", "b-seat"]
+
+
+# ---------------------------------------------------------------------------
+# 4. README §3.5 与代码链模板同源（文案不许领先或落后于代码）
+# ---------------------------------------------------------------------------
+def test_readme_chain_clause_matches_code_template():
+    """README §3.5 里 ``DEFAULT_MODEL_CHAINS`` 的逐档文案 == 代码链模板。"""
+    clause = _readme_clause()
+    m = re.search(r"DEFAULT_MODEL_CHAINS`?：(.*?)(?:；|）|\))", clause)
+    assert m, (
+        'README §3.5 找不到链模板文案（应写 "DEFAULT_MODEL_CHAINS：max=名→名→默认、'
+        'flash=…、minimum=…"）——代码改了文案不改，此处必须变红'
+    )
+    documented: dict[str, list[str]] = {}
+    for part in m.group(1).split("、"):
+        tier, _, rest = part.partition("=")
+        tier = tier.strip()
+        if not tier:
+            continue
+        documented[tier] = [
+            "" if seat.strip() == "默认" else seat.strip()
+            for seat in rest.split("→")
+            if seat.strip()
+        ]
+
+    expected = {
+        tier: [name for name in names]
+        for tier, names in registry.DEFAULT_MODEL_CHAINS.items()
+    }
     assert documented == expected, (
-        f"README §3.5 的模式表描述与 DEFAULT_MODEL_PATTERNS 不同源：只文档有="
-        f"{documented - expected}，只代码有={expected - documented}"
+        f"README §3.5 的链描述与 DEFAULT_MODEL_CHAINS 不同源："
+        f"只文档有={set(documented) - set(expected)}，"
+        f"只代码有={set(expected) - set(documented)}，"
+        f"内容差异="
+        f"{ {t: (documented.get(t), expected.get(t)) for t in expected if documented.get(t) != expected.get(t)} }"
+    )
+
+
+def test_readme_documents_fallback_and_alert():
+    """规格 6 的观察面锚点：文案要讲清「回退触发」与「回退必告警」，缺一就是文档落后的信号。"""
+    clause = _readme_clause()
+
+    for anchor in (
+        "有序回退链",
+        "回退触发",
+        "启动即失败",
+        "全局停止",
+        "回退必告警",
+        "channel-events.jsonl",
+        "降级粘滞窗",
+    ):
+        assert anchor in clause, f"README §3.5 缺「{anchor}」——机制改了文案没跟上"
+    assert "档位回退" in clause, (
+        "调用者面告警文案（规格 4a）须逐字留在文档里，避免各处自立口径"
     )

@@ -127,7 +127,10 @@ def pod(iso_eval) -> Path:
 # ---------------------------------------------------------------------------
 def test_minimum_tier_is_free_channel():
     assert registry.DEFAULT_MODELS["minimum"] == "Qwen3.8-Flash"
-    assert registry.DEFAULT_MODEL_PATTERNS["minimum"] == "Qwen3.8-Flash"
+    assert registry.DEFAULT_MODEL_CHAINS["minimum"] == (
+        "Mimo-V2.6-Flash",
+        "Qwen3.8-Flash",
+    ), "压测最低成本链：Mimo-Flash 首席、内置兜底，**BYOK Qwen 不进链**（额度宝贵）"
 
 
 def test_orch_cli_accepts_minimum_tier(iso_state, iso_dispatch, monkeypatch):

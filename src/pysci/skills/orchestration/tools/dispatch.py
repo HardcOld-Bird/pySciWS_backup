@@ -13,9 +13,11 @@ import shutil
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
+from . import channels as _channels
 from . import sessions as _sessions
 from . import sync as _sync
 from .checks import run_checks
@@ -115,6 +117,31 @@ def _detect_systemic(
     return ""
 
 
+def _seat_startup_failure(env: Envelope, rc: int) -> bool:
+    """席位本身**没起跑**（型号 UUID 失效、exe 直接拒绝该 ``-m``）的判据。
+
+    为什么要把这一类单独判出来（backlog 20261012-211500-leader 规格 3）：跑了一半才断
+    （瞬时中断、工具报错）同渠道重试有意义；而**席位本身不存在**时同渠道重试就是白烧
+    一跳——链里的下一席才是解。判据取「零回合 + envelope 不可解析」而非文案，因为这条
+    路径的 stdout 常常根本不是 envelope（exe 在参数校验阶段就退出）。
+    """
+    return rc != 0 and (
+        env.stop_reason == "envelope_parse_failed" or env.num_turns == 0
+    )
+
+
+def _seat_broken(env: Envelope, rc: int, systemic: str) -> str:
+    """本跳是否该换席：返回故障成因串（``systemic`` 的 kind 或 ``startup_failure``），不该换则空。"""
+    return systemic or ("startup_failure" if _seat_startup_failure(env, rc) else "")
+
+
+def _seat_reason_text(reason: str) -> str:
+    """换席原因的文案（两类系统性故障共读 :data:`SYSTEMIC_TEXT`，启动即失败自有一句）。"""
+    if reason == "startup_failure":
+        return "席位启动即失败（型号不可用）"
+    return SYSTEMIC_TEXT.get(reason, (reason, reason))[1]
+
+
 def _ts() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -143,6 +170,9 @@ class DispatchOutcome:
     #: 但组长/drain 必须看见这一行——交付是在「旧解析器读新协议」的窗口里被兜底救下的
     #: （backlog 20261012-002857-devops）。空串=解析器与协议同版。
     warning: str = ""
+    #: 本跳实际发生的**降级回退事件**（首席→…→最终席，含 ``to=""`` 的耗尽事件）。
+    #: drain 据此把告警行写进运行日志；空表=没换席。全量账在 ``channels`` 事件流里。
+    fallbacks: list[dict[str, Any]] = field(default_factory=list)
     suggestion_id: str = ""
     envelope: Envelope | None = None
     error: str = ""
@@ -375,7 +405,16 @@ def do_dispatch(
             error=f"cold_start 成员只允许 session='new'（收到 {session!r}）",
         )
     tier = model_tier or m.model_tier
-    model = reg.models.get(tier, "")
+    # 席位选择（用户裁决 2026-10-12 21:1x：档 → **有序回退链**，首席在前）：链里落在
+    # 降级粘滞窗内的席本跳不探测（省跳数），但仍要逐席打出来——故障可查性不能换成安静。
+    plan = _channels.plan_seats(reg, tier)
+    chain = list(plan.usable)
+    model = chain[0] if chain else str(reg.models.get(tier, ""))
+    if not quiet:
+        for item in plan.skipped:
+            print(_channels.skip_line(item))
+        if plan.forced_probe:
+            print(_channels.forced_line(plan))
     slug = slug or (Path(task_file).stem if task_file else f"adhoc-{_ts()}")
 
     # 会话选择（README §3.2：默认续最近活跃会话）
@@ -463,12 +502,13 @@ def do_dispatch(
     )
     env_json = acc_env = Envelope.parse(out)
     failed = rc != 0 or env_json.is_error
-    # 系统性故障（额度耗尽 / 渠道级故障）不做**同渠道**重试——重试只会再烧一跳；
-    # 若配置了 <tier>_fallback 则走下方的换档重试（2026-10-10 事故 + 用户裁决的 flash
-    # 回退机制；渠道级故障同族处置，backlog 20261012-194500-leader）
+    # 席位不可用（额度耗尽 / 渠道级故障 / 启动即失败）**不做同席位重试**——同席位再跳
+    # 只会再烧一跳；出路是沿该档有序回退链换席（机制 2026-10-10 flash 回退，链形态与
+    # 「启动即失败也算席坏」的用户裁决 2026-10-12 21:1x，backlog 20261012-211500-leader）
     systemic = _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
+    broken = _seat_broken(env_json, rc, systemic)
 
-    if failed and not no_retry and not systemic:
+    if failed and not no_retry and not broken:
         if not quiet:
             print(
                 f"[!] 首跑失败（rc={rc}, stop={env_json.stop_reason}），自动重试一次…"
@@ -498,33 +538,43 @@ def do_dispatch(
         systemic = systemic or (
             _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
         )
+        broken = _seat_broken(env_json, rc, systemic)
 
-    # 系统性故障且该档配置了备用渠道（<tier>_fallback 非空且异于当前型号）→ 换档重试一次
-    # （机制定於 2026-10-10；渠道地位 2026-10-12 互换后背用渠道自然变成内置免费档——
-    #   本段代码不感知谁主谁备，只看 registry models 的 <tier>_fallback；
-    #   fallback 为空=不回退，仍按该系统性 kind 处理）
-    if systemic and not no_retry:
-        fallback = str(reg.models.get(f"{tier}_fallback") or "")
-        if fallback and fallback != model:
-            label = SYSTEMIC_TEXT[systemic][1]
-            if not quiet:
-                print(f"[!] {tier} 档{label}，切换备用渠道重试一次（{tier}_fallback）…")
-            model = fallback  # 台账/后续报告记实际所用渠道
-            fallback_prompt = (
-                f"上一次运行因{label}而中断（rc={rc}）。已切换备用渠道，"
-                f"请继续完成任务书 {taskbook}，按交付协议收尾。\n\n{PROTOCOL_REMINDER}"
+    # 沿链换席：一席一跳，跑通即止（规格 3）。每次降级都过一遍 note_fallback，它同时
+    # 落两笔账：故障席进**粘滞窗**（窗内后续派发直接跳过，不再白烧探测跳——BYOK 渠道
+    # 余额长期不可用是用户 21:3x 明示的现状）+ 渠道事件流一行（mirror/status 面的读数源）。
+    # 告警行是硬要求（规格 4a，双面之一）：谁挂了、换到哪，必须让调用者当场看见。
+    fallbacks: list[dict[str, Any]] = []
+    if broken and not no_retry:
+        for nxt in chain[1:]:
+            event = _channels.note_fallback(
+                reg,
+                tier=tier,
+                frm=model,
+                to=nxt,
+                reason=broken,
+                member=member_id,
+                sid=sid,
             )
-            cmd3 = build_command(
-                m,
-                fallback_prompt,
-                session_id=sid,
-                resume=True,
-                model=model,
-                max_turns=max_turns,
-                effort=level,
+            fallbacks.append(event)
+            if not quiet:
+                print(_channels.alert_line(event))
+            model = nxt  # 台账/后续报告记实际所用席位
+            hop_prompt = (
+                f"上一次运行因{_seat_reason_text(broken)}而中断（rc={rc}）。"
+                f"已切到 {tier} 档下一席，请继续完成任务书 {taskbook}，"
+                f"按交付协议收尾。\n\n{PROTOCOL_REMINDER}"
             )
             rc, out, err = run_headless(
-                cmd3,
+                build_command(
+                    m,
+                    hop_prompt,
+                    session_id=sid,
+                    resume=True,
+                    model=model,
+                    max_turns=max_turns,
+                    effort=level,
+                ),
                 cwd=PROJECT_ROOT,
                 env=env,
                 timeout_s=timeout or m.timeout_s,
@@ -532,13 +582,39 @@ def do_dispatch(
             )
             env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
             failed = rc != 0 or env_json.is_error
-            # 备用渠道的结果即最终结果：再犯同类系统性故障 → 该 kind（drain 全局停止）；
+            # 最后一席的结果即最终结果：仍系统性故障 → 该 kind（drain 全局停止）；
             # 普通失败 → run_failed；成功 → 落入正常交付解析
             systemic = (
                 _detect_systemic(env_json, out, err, member=m, sid=sid)
                 if failed
                 else ""
             )
+            broken = _seat_broken(env_json, rc, systemic)
+            if not broken:
+                break
+        if broken and fallbacks:
+            # 全链耗尽：这一笔也必须落账，否则「停止」在观测面上是隐形的。
+            # 启动即失败耗尽 → 升格为 channel_error：UUID 失效本来就是渠道级故障，
+            # 且只有进了 SYSTEMIC_KINDS 才拿得到 #77 的全局停止（规格 3 要的正是
+            # 「别逐单空烧」）；单席链（无可换）不升格，免得把一次性抖动说成停摆。
+            event = _channels.note_fallback(
+                reg,
+                tier=tier,
+                frm=model,
+                to="",
+                reason=broken,
+                member=member_id,
+                sid=sid,
+            )
+            fallbacks.append(event)
+            if not quiet:
+                print(_channels.alert_line(event))
+            if broken == "startup_failure":
+                systemic = "channel_error"
+
+    if not failed:
+        # 跑通即销窗：充值/修好后的第一次成功就恢复正常优先级（无需改代码自愈）
+        _channels.note_seat_ok(reg, tier=tier, seat=model)
 
     if failed:
         kind = systemic or "run_failed"
@@ -587,6 +663,7 @@ def do_dispatch(
             body=env_json.result[:800],
             envelope=env_json,
             error=err_text,
+            fallbacks=fallbacks,
         )
         if not quiet:
             if systemic:
@@ -666,6 +743,7 @@ def do_dispatch(
         warning=delivery.warning,
         suggestion_id=suggestion_id,
         envelope=env_json,
+        fallbacks=fallbacks,
     )
     if not quiet:
         _report_success(outcome, failed_checks)
@@ -709,10 +787,14 @@ def _report_systemic(o: DispatchOutcome) -> None:
     _print_next(
         [
             f"系统性故障（{cause}）——非任务本身问题，勿逐跳重试再烧：",
-            "  1) 检查 registry models 档位→渠道绑定（2026-10-12 起 max/flash 均 BYOK 优先、"
-            "内置免费档作 flash_fallback，README §3.5；models 属护栏级，改动须经用户）",
-            "  2) 或等待额度重置 / 请用户切换渠道后重派",
+            "  1) 查该档回退链 registry models（README §3.5：Mimo 主力 → Qwen BYOK 回退 →"
+            "内置兜底；档值是**有序链**，首席挂了会自动往后换席）；"
+            "链里全挂了才说明整档要动，models 属护栏级、改动须经用户",
+            "  2) 或等待额度重置 / 请用户充值切换渠道后重派；故障席进跳过窗（"
+            "registry model_fallback.skip_window_s），窗内不重复探测，过期自动恢复",
             "  3) drain 场景已触发全局停止：剩余条目保持 pending，渠道恢复后自动续消化",
+            f"  4) 回退事件账：{orchestration_rel(_channels.EVENTS_PATH)}"
+            "（mirror status / orch status 健康段已汇总）",
         ]
     )
 
@@ -732,6 +814,12 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
     if o.warning:
         # 协议扩展的滚动升级窗口：本跳交付由宽松兜底面救回，判读可用但不可当正常路径
         print(f"    [!] {o.warning}")
+    if o.fallbacks:
+        # 规格 4a「交付告警」：降级跑通的跳**也是**告警跳——只报成功不报路径，
+        # 组长就会以为主力渠道还好着（事件流的账只有 mirror/status 面才去看）
+        print(
+            f"    [!] 本跳发生 {len(o.fallbacks)} 起档位回退，最终所用席位见台账 model 字段"
+        )
     if o.tags:
         print(f"    失败标签：{', '.join(o.tags)}")
     print(
