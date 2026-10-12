@@ -945,6 +945,18 @@
       "worktree": "20261012-164600-leader"
     },
     {
+      "id": "20261012-173500-leader",
+      "member": "leader",
+      "summary": "**（渠道互换，用户裁决 2026-10-12）flash 档永久改指 BYOK Qwen3.8-Flash 优先、内置渠道降为回退——同步 DEFAULT_MODEL_PATTERNS 防自愈翻转**",
+      "kind": "usability",
+      "success_criteria": "- registry 读数互换 + 一次 `refresh-models`/drain 启动后映射**不被刷回**\n（阳性用例钉住模式表一致性）；\n- 一次真实 flash 派发台账 model 字段=BYOK UUID（credits 应恢复计量——\n顺带取证 BYOK flash 的 credits 上报行为并记录）；\n- README §3.5 与代码模式表同源（快照断言）；全量无回归。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-173500-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T18:26:45+08:00",
+      "note": "｜组长调度：用户指示提前生效，移至队首（下一批即消化）",
+      "effort": "medium"
+    },
+    {
       "id": "20261012-164601-leader",
       "member": "leader",
       "summary": "**（E6b，REFACTOR v1.0 §11 来源②）用户 prompt 语料倒序解析入库 + twin 宪章增量蒸馏草案 v2**",
@@ -1003,18 +1015,6 @@
       "proposed": "2026-10-12T17:48:36+08:00",
       "note": "",
       "effort": "ultracode"
-    },
-    {
-      "id": "20261012-173500-leader",
-      "member": "leader",
-      "summary": "**（渠道互换，用户裁决 2026-10-12）flash 档永久改指 BYOK Qwen3.8-Flash 优先、内置渠道降为回退——同步 DEFAULT_MODEL_PATTERNS 防自愈翻转**",
-      "kind": "usability",
-      "success_criteria": "- registry 读数互换 + 一次 `refresh-models`/drain 启动后映射**不被刷回**\n（阳性用例钉住模式表一致性）；\n- 一次真实 flash 派发台账 model 字段=BYOK UUID（credits 应恢复计量——\n顺带取证 BYOK flash 的 credits 上报行为并记录）；\n- README §3.5 与代码模式表同源（快照断言）；全量无回归。",
-      "evidence_file": "orchestration/state/suggestions/approved/20261012-173500-leader.md",
-      "status": "pending",
-      "proposed": "2026-10-12T18:26:45+08:00",
-      "note": "",
-      "effort": "medium"
     },
     {
       "id": "20261012-174114-devops",
