@@ -44,6 +44,10 @@
   `last_assistant_message`；`PYSCI_PROJECT_ROOT` 须 Windows 形态。
 - **git/shell 读数**：定长格式走 `_git_proc`（strip 吃前导空格＝漏首项）；合并交集按
   merge-base 起算（已内建，勿手算）；取 rc 别经管道（`${PIPESTATUS[0]}` 是 grep 的）。
+- **一个 worktree 一个写者**：续作任务书点名的面即你的唯一写者身份；发现同一面有并发写者
+  （自己写入零成功、或冒出别人的 inbox 回执）→ **停手报 `<blocked>`**，别抢写也别 `rm -rf`。
+  派发侧同族闸=sid 在途闸（判活+argv 双闸，人工 rc=2 拒、批次自动换 sid 并标
+  `sid_new_reason=prev_alive`）；细则 `orchestration/skills/orchestration/references/salvage-reclaim.md` §7。
 - **上下文膨胀看 ctx_ratio，不看 est_tokens**（后者=本跳吞吐，78 跳实测相关 −0.11）；组员侧
   唯一自有杠杆=压薄每跳全文注入的自维护层，归档是组长侧 `orch sessions --archive --distill`。
   派发侧已加水位闸 `dispatch.FRESH_CTX_RATIO=0.6`：`session="latest"` 见上一跳 ctx 已过 60%

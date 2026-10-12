@@ -377,6 +377,7 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
         step=args.step or "",
         no_checks=args.no_checks,
         no_retry=args.no_retry,
+        force_new_session=getattr(args, "force_new_session", False),
     )
     if took_backlog_id and outcome.code == 0:
         _workflow.backlog_complete(took_backlog_id, note="orch 自动销账")
@@ -503,6 +504,8 @@ def cmd_ledger(args: argparse.Namespace) -> int:
             )
             + (f" 标签[{','.join(e.tags)}]" if e.tags else "")
             + (f" 计划={e.plan}/{e.step}" if e.plan else "")
+            # ④ sid 在途闸换席必须出现在读数面（批次静默换 sid 否则只能人肉翻 run 日志）
+            + (f" 换席[{e.sid_new_reason}]" if e.sid_new_reason else "")
         )
     return 0
 
@@ -806,6 +809,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--step")
     p.add_argument("--no-checks", action="store_true")
     p.add_argument("--no-retry", action="store_true")
+    p.add_argument(
+        "--force-new-session",
+        action="store_true",
+        help="目标 sid 上一跳进程仍在途时（默认 rc=2 拒绝）改为自动起新会话放行",
+    )
     p.set_defaults(func=cmd_dispatch)
 
     p = sub.add_parser("sessions", help="[底层] 成员会话池管理")
