@@ -251,6 +251,8 @@ def _run_kind_run(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str
             f"[{'√' if row.verdict == 'pass' else '✗'}] {row.case}: {row.verdict} "
             f"turns={row.num_turns}/{row.max_turns} dur={row.duration_ms / 1000:.0f}s",
         )
+    if not rows and not dry:
+        raise ValueError("本轮零判决行——run 项的 done 必须携带读数，无案可跑不算完成")
     return {"cases": rows, "systemic": systemic}
 
 
@@ -267,7 +269,12 @@ def _run_kind_capture(
     if dry:
         _log(run_log, f"[dry] capture {case or '（未指定案）'} @{ref} 演练")
         return {"case": case, "ref": ref, "dry": True}
-    return capture_baseline(case, ref=ref)
+    doc = capture_baseline(case, ref=ref)
+    if not doc.get("files"):
+        raise ValueError(
+            f"capture 归档 0 文件（{case}@{ref}）——空基线不可比，无读数证据不得 done"
+        )
+    return doc
 
 
 def _run_kind_ab(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str, Any]:
@@ -286,6 +293,16 @@ def _run_kind_ab(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str,
         tier=str(item.get("tier") or ""),
         log=lambda m: _log(run_log, m),
     )
+    # done 机械判据（backlog 20261012-170000-leader）：判决必须有台账读数支撑，
+    # 不信任 run_ab 内部实现——证据缺失一律 failed，静默完成比失败危险。
+    verdict = str(doc.get("verdict") or "")
+    ledger_rows = int((doc.get("evidence") or {}).get("ledger_rows") or 0)
+    if not doc.get("error") and verdict in ("改善", "未改善") and ledger_rows <= 0:
+        doc["error"] = (
+            f"判决 {verdict} 无读数支撑（本轮 evals.jsonl 零新增行）——done 必须携带"
+            "判决证据，收紧为 failed"
+        )
+        _log(run_log, f"[✗] {doc['error']}")
     bid = str(item.get("backlog_id") or "")
     if bid:
         # §5.6 核验判决直接落到提案账上（无人再裁决）：测量已完成，落地失败只该告警，

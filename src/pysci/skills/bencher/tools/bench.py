@@ -21,16 +21,24 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import sys
 from typing import Any
 
 from pysci.paths import PODS_ROOT, PROJECT_ROOT
 from pysci.skills.orchestration.tools import eval as _eval
-from pysci.skills.orchestration.tools import replica as _rep
 
 ROWS_BEGIN = "ROWS_BEGIN"
 ROWS_END = "ROWS_END"
+
+#: pod 内需重建的 gitignored 运行目录（缺失时派发落盘/技能部署无处可去）。
+#: 定义在本文件而非 ``orchestration.tools.replica``：``_replica-prep`` 在**副本语义**下
+#: 执行，而 pre-E4 的副本树里没有 replica 模块——入口对它的 import 会掀翻整个内部命令。
+POD_RUNTIME_DIRS: tuple[str, ...] = ("bench", "outbox", "inbox", ".qoder/skills")
+
+#: 默认发起方（getattr 兜底：模块可能在 pre-E4 的副本语义下导入，其 eval 无此常量）。
+DEFAULT_RUNNER: str = getattr(_eval, "RUNNER_BENCHER", "bencher")
 
 
 def _split_csv(value: str | None) -> list[str]:
@@ -91,6 +99,8 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
 def cmd_report(args: argparse.Namespace) -> int:
     """``pysci-bench report``：最近读数表（默认只看 bencher 通道）+ 基线对照。"""
+    from pysci.skills.orchestration.tools import replica as _rep
+
     rows = _eval.latest_rows(args.label or "", args.runner or _eval.RUNNER_BENCHER)
     if not rows:
         print("  （台账里没有匹配的压测行）")
@@ -129,6 +139,8 @@ def _verdict_exit(ran: dict[str, dict[str, Any]]) -> int:
 # ---------------------------------------------------------------------------
 def cmd_capture(args: argparse.Namespace) -> int:
     """``pysci-bench capture``：基线捕获（commit 记录 + gitignored 面归档）。"""
+    from pysci.skills.orchestration.tools import replica as _rep
+
     try:
         doc = _rep.capture_baseline(
             args.case, ref=args.ref or "HEAD", extra_pods=_split_csv(args.pods)
@@ -150,6 +162,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
 
 def cmd_ab(args: argparse.Namespace) -> int:
     """``pysci-bench ab``：副本 A/B 二元判决（含窗口期污染闸）。"""
+    from pysci.skills.orchestration.tools import replica as _rep
+
     try:
         doc = _rep.run_ab(
             args.ref_a,
@@ -164,6 +178,8 @@ def cmd_ab(args: argparse.Namespace) -> int:
         print(f"[✗] A/B 未起跑：{exc}")
         return 2
     print(f"\n== A/B 判决：{doc['verdict'] or '未出'}（label={doc['label']}）==")
+    if doc.get("error"):
+        print(f"  [✗] {doc['error']}")
     print(
         f"  a={doc.get('commit_a', '')[:8]}（{doc['ref_a']}）  "
         f"b={doc.get('commit_b', '')[:8]}（{doc['ref_b']}）"
@@ -203,6 +219,8 @@ def cmd_ab(args: argparse.Namespace) -> int:
 
 def cmd_replica(args: argparse.Namespace) -> int:
     """``pysci-bench replica``：列残留副本（清理纪律的自查面）。"""
+    from pysci.skills.orchestration.tools import replica as _rep
+
     names = _rep.list_replicas()
     if not names:
         print("  （无 bench-* 副本残留）")
@@ -219,24 +237,27 @@ def cmd_replica(args: argparse.Namespace) -> int:
 # 内部命令（副本语义下由 orchestration.tools.replica 调用）
 # ---------------------------------------------------------------------------
 def cmd_hop(args: argparse.Namespace) -> int:
-    """内部命令 ``_hop``：在**当前树**（副本 PYTHONPATH 已重锚）跑一批案，吐行。"""
+    """内部命令 ``_hop``：在**当前树**（副本 PYTHONPATH 已重锚）跑一批案，吐行。
+
+    被测树可能是**早于 E4 的 ref**（其 ``eval`` 无 ``RUNNER_BENCHER``、``run_case`` 不收
+    ``runner`` 形参）：协议层按能力探测降级调用，``runner=bencher`` 在行字典上补齐——
+    台账分账口径不随被测树年代漂移。
+    """
     ids = _split_csv(args.cases)
     cases = _eval.load_cases()
     if ids:
         cases = [c for c in cases if c.case_id in ids]
+    runner = getattr(_eval, "RUNNER_BENCHER", "bencher")
+    kwargs: dict[str, Any] = {"tier": args.tier or "", "label": args.label or ""}
+    if "runner" in inspect.signature(_eval.run_case).parameters:
+        kwargs["runner"] = runner
     rows = []
     for case in cases:
         try:
-            rows.append(
-                _asdict(
-                    _eval.run_case(
-                        case,
-                        tier=args.tier or "",
-                        label=args.label or "",
-                        runner=_eval.RUNNER_BENCHER,
-                    )
-                )
-            )
+            row = _asdict(_eval.run_case(case, **kwargs))
+            # 无条件盖：老 ref 的 Row 缺省 runner="leader"，setdefault 盖不掉默认值。
+            row["runner"] = runner
+            rows.append(row)
         except Exception as exc:  # noqa: BLE001 — 标记带必须吐得出来，一案崩不许带走整批
             rows.append(
                 {
@@ -245,7 +266,7 @@ def cmd_hop(args: argparse.Namespace) -> int:
                     "reasons": [f"副本跳异常：{type(exc).__name__}: {exc}"],
                     "num_turns": 0,
                     "duration_ms": 0,
-                    "runner": _eval.RUNNER_BENCHER,
+                    "runner": runner,
                     "label": args.label or "",
                 }
             )
@@ -264,7 +285,7 @@ def cmd_replica_prep(args: argparse.Namespace) -> int:
     made = 0
     if PODS_ROOT.exists():
         for pod in sorted(p for p in PODS_ROOT.iterdir() if p.is_dir()):
-            for rel in _rep.POD_RUNTIME_DIRS:
+            for rel in POD_RUNTIME_DIRS:
                 target = pod / rel
                 if not target.exists():
                     target.mkdir(parents=True, exist_ok=True)
@@ -322,8 +343,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--label", default="", help="只取该标签的读数")
     p.add_argument(
         "--runner",
-        default=_eval.RUNNER_BENCHER,
-        help=f"只取该发起方的读数（默认 {_eval.RUNNER_BENCHER}；空=不分）",
+        default=DEFAULT_RUNNER,
+        help=f"只取该发起方的读数（默认 {DEFAULT_RUNNER}；空=不分）",
     )
     p.set_defaults(fn=cmd_baseline)
 
@@ -331,7 +352,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--label", default="", help="按标签过滤")
     p.add_argument(
         "--runner",
-        default=_eval.RUNNER_BENCHER,
+        default=DEFAULT_RUNNER,
         help="按发起方过滤（空=不分 leader/bencher）",
     )
     p.set_defaults(fn=cmd_report)
