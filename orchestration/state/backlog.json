@@ -922,11 +922,14 @@
       "kind": "usability",
       "success_criteria": "改 pyproject 后按文档范式一条命令入口齐备（main 实测）；uv run 不触发隐式 sync（--no-sync 入 basic.md/charter/技能真本三方一致，快照断言）；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-125455-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T16:44:53+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit b20f157）",
       "started_at": "2026-10-12T17:41:15+08:00",
-      "worktree": "20261012-125455-devops"
+      "worktree": "20261012-125455-devops",
+      "done_at": "2026-10-12T18:11:03+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-125455-devops"
     },
     {
       "id": "20261012-164600-leader",
@@ -935,9 +938,11 @@
       "kind": "usability",
       "success_criteria": "三席 smoke 三票+双序+usage 落盘；单席缺 Key 标 unavailable 不崩全案；回退告警三面可见；minimum 调查有书面结论；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-164600-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T16:46:40+08:00",
-      "note": ""
+      "note": "",
+      "started_at": "2026-10-12T18:11:03+08:00",
+      "worktree": "20261012-164600-leader"
     },
     {
       "id": "20261012-164601-leader",
@@ -994,6 +999,17 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-171200-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T17:48:36+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261012-173500-leader",
+      "member": "leader",
+      "summary": "**（渠道互换，用户裁决 2026-10-12）flash 档永久改指 BYOK Qwen3.8-Flash 优先、内置渠道降为回退——同步 DEFAULT_MODEL_PATTERNS 防自愈翻转**",
+      "kind": "usability",
+      "success_criteria": "- registry 读数互换 + 一次 `refresh-models`/drain 启动后映射**不被刷回**\n（阳性用例钉住模式表一致性）；\n- 一次真实 flash 派发台账 model 字段=BYOK UUID（credits 应恢复计量——\n顺带取证 BYOK flash 的 credits 上报行为并记录）；\n- README §3.5 与代码模式表同源（快照断言）；全量无回归。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-173500-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T18:26:45+08:00",
       "note": ""
     }
   ]
