@@ -47,8 +47,8 @@ pysci-orch review <产物> --origin <member> [--rubric generic]
         [--goal-from <原生产任务书> | --goal "<目标陈述>"]
         # 审查链：VERDICT → FAIL 回派返工 → 复审一次 → 二次 FAIL 升级仲裁；
         # --goal* 把组长目标陈述送任务书，供 reviewer G2 独立核验
-pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（非 Qwen 双序对局，
-        # 阻塞出裁决；不可达降级入队 rc=1，案卷格式 references/jury-panel.md）
+pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（非 Qwen 双序对局，阻塞
+        # 出裁决；不可达入队 rc=1；格式 jury-panel.md，渠道面 jury-channels.md）
 pysci-orch eval run (--case <id>|--all) [--label L]
         # Tier B 压测**抽检面**（runner=leader）；套件本体归 bencher
 pysci-orch bench-add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]

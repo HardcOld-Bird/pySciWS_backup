@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+import time
 from argparse import Namespace
 
 import pytest
@@ -18,6 +20,7 @@ from pysci.paths import ORCH_STATE_ROOT
 from pysci.skills.orchestration.tools import jury
 
 from .conftest import (
+    SEAT_KEY_ENV,
     ai_reply,
     biased_first_juror,
     display_label_for_liked,
@@ -52,10 +55,10 @@ def biased_by_name(model: str) -> bool:
 
 
 def open_court(iso_state, monkeypatch, panel, transport, *, key=KEY):
-    """开庭准备：写 panel、注 Key、换 transport 桩，返回解析好的案卷。"""
+    """开庭准备：写 seats、注 Key、换 transport 桩，返回解析好的案卷。"""
     set_jury_panel(iso_state.parent / "registry.json", panel)
     if key is not None:
-        monkeypatch.setenv(jury.KEY_ENV, key)
+        monkeypatch.setenv(SEAT_KEY_ENV, key)
     if transport is not None:
         monkeypatch.setattr(jury, "chat_once", transport)
     return jury.parse_case(seed_case(iso_state))
@@ -191,36 +194,71 @@ def test_transient_single_failure_recovers_on_retry(iso_jury, monkeypatch):
     assert run.record["attempts"] == 2 and len(n) == 4
 
 
+def test_same_org_ballots_never_overlap(iso_jury, monkeypatch):
+    """同账号串行（2026-10-12 真实三席 smoke 爆出的 429 根因）：官方直调并发额度按**组织**
+    算（实测 DeepSeek ``max organization concurrency: 1``），故一个提供商名下所有席的所有
+    局都不得重叠。桩 transport 按端点记在飞数——任一端点峰值 >1 即违约（按席位分锁测不出，
+    因为两席可以挂同一个账号）。
+    """
+    guard = threading.Lock()
+    live: dict[str, int] = {}
+    peak: dict[str, int] = {}
+
+    def transport(model, messages, *, base_url, timeout_s, **ignored):
+        del model, timeout_s, ignored
+        host = base_url.split("/")[2]
+        with guard:
+            live[host] = live.get(host, 0) + 1
+            peak[host] = max(peak.get(host, 0), live[host])
+        time.sleep(0.05)
+        with guard:
+            live[host] -= 1
+        return ai_reply(display_label_for_liked(messages, LIKE))
+
+    panel = [
+        {"name": "ds-pro", "model": "pro", "base_url": "https://ds.invalid/v1"},
+        {"name": "ds-flash", "model": "flash", "base_url": "https://ds.invalid/v1"},
+        {"name": "glm", "model": "glm-x", "base_url": "https://glm.invalid/v1"},
+    ]
+    set_jury_panel(iso_jury.parent / "registry.json", panel)
+    monkeypatch.setenv(SEAT_KEY_ENV, KEY)
+    monkeypatch.setattr(jury, "chat_once", transport)
+    run = jury.adjudicate(jury.parse_case(seed_case(iso_jury)))
+    assert run.status == "recorded" and run.record["verdict"] == "A"
+    assert set(peak) == {"ds.invalid", "glm.invalid"}, "两提供商六局都应真跑到"
+    assert max(peak.values()) == 1, f"同组织内出现并发叠加：{peak}"
+
+
 # ---------------------------------------------------------------------------
 # 渠道降级：不崩、不烧、入队
 # ---------------------------------------------------------------------------
 def test_missing_key_degrades_without_any_call(iso_jury, monkeypatch):
     """缺 Key 的成功判据：可读降级 + 入队，零请求（不崩不烧）。"""
     set_jury_panel(iso_jury.parent / "registry.json", ["m1"])
-    monkeypatch.delenv(jury.KEY_ENV, raising=False)
+    monkeypatch.delenv(SEAT_KEY_ENV, raising=False)
     calls = []
     monkeypatch.setattr(jury, "chat_once", lambda *a, **k: calls.append(a))
     run = jury.adjudicate(jury.parse_case(seed_case(iso_jury)))
     assert calls == [], "缺 Key 绝不能真发请求"
-    assert run.status == "queued" and jury.KEY_ENV in run.message
+    assert run.status == "queued" and SEAT_KEY_ENV in run.message
     entry = json.loads(run.path.read_text(encoding="utf-8"))
-    assert entry["case_id"] == "case-1" and jury.KEY_ENV in entry["reason"]
+    assert entry["case_id"] == "case-1" and SEAT_KEY_ENV in entry["reason"]
 
 
 def test_key_from_dotenv_is_picked_up(iso_jury, monkeypatch):
     """用户早晨把 Key 写进项目根 .env 即可验收，不必动 shell 配置。"""
-    monkeypatch.delenv(jury.KEY_ENV, raising=False)
+    monkeypatch.delenv(SEAT_KEY_ENV, raising=False)
     (iso_jury.parent / ".env").write_text(
-        f'# SiliconFlow 账号 Key\n{jury.KEY_ENV}="{KEY}"\n', encoding="utf-8"
+        f'# 某 provider 账号 Key\n{SEAT_KEY_ENV}="{KEY}"\n', encoding="utf-8"
     )
-    assert jury.read_key() == KEY
+    assert jury.read_key(SEAT_KEY_ENV) == KEY
 
 
 def test_empty_panel_degrades(iso_jury, monkeypatch):
     set_jury_panel(iso_jury.parent / "registry.json", [])
-    monkeypatch.setenv(jury.KEY_ENV, KEY)
+    monkeypatch.setenv(SEAT_KEY_ENV, KEY)
     run = jury.adjudicate(jury.parse_case(seed_case(iso_jury)))
-    assert run.status == "queued" and "panel 未选型" in run.message
+    assert run.status == "queued" and "未选型" in run.message
     assert not jury.record_path("case-1").exists()
 
 
@@ -240,6 +278,29 @@ def test_timeout_retries_once_then_enqueues(iso_jury, monkeypatch):
     entry = json.loads(run.path.read_text(encoding="utf-8"))
     assert "Timeout" in entry["reason"]
     assert not (iso_jury / "evals" / "jury" / "case-1.json").exists()
+
+
+def test_truncated_reasoning_is_channel_failure_not_blank_vote(iso_jury, monkeypatch):
+    """推理型裁判把 max_output_tokens 吃光 → 正文空。这必须是**渠道故障**（入队修因），
+    不能记成无效票——否则留痕写成「模棱两可 escalate=twin」，把预算问题伪装成意见分歧
+    （2026-10-12 三席真实 smoke 首爆：六局 completion 全顶格、三票全 inconclusive）。
+    """
+
+    def capped(model, messages, **kw):
+        del model, messages, kw
+        return {
+            "choices": [{"message": {"content": ""}, "finish_reason": "length"}],
+            "usage": {
+                "completion_tokens": 1500,
+                "completion_tokens_details": {"reasoning_tokens": 1500},
+            },
+        }
+
+    run = jury.adjudicate(open_court(iso_jury, monkeypatch, ["m1"], capped))
+    assert run.status == "queued" and run.record is None
+    entry = json.loads(run.path.read_text(encoding="utf-8"))
+    assert "截断" in entry["reason"] and "max_output_tokens" in entry["reason"]
+    assert not jury.record_path("case-1").exists(), "截断不得落成一份裁决"
 
 
 def test_successful_readjudication_clears_queue_entry(iso_jury, monkeypatch):
@@ -271,12 +332,82 @@ def test_qwen_in_panel_refuses_to_open_court(iso_jury, monkeypatch):
 
 
 def test_registry_jury_config_fail_open(iso_registry):
-    set_jury_panel(iso_registry[0], ["m1"], deadline_s=-5, pricing="not-a-dict")
+    set_jury_panel(
+        iso_registry[0],
+        ["m1"],
+        deadline_s=-5,
+        max_output_tokens="big",
+        pricing="not-a-dict",
+    )
     cfg = jury.load_config()
-    assert cfg["panel"] == ["m1"]
+    assert [s["model"] for s in cfg["seats"]] == ["m1"]
     assert cfg["deadline_s"] == jury.DEFAULT_JURY["deadline_s"], "非法值回落默认"
-    assert cfg["base_url"] == "https://api.siliconflow.cn/v1"
+    assert cfg["max_output_tokens"] == jury.DEFAULT_JURY["max_output_tokens"]
+    assert cfg["fallback"]["enabled"] is False
     assert cfg["pricing"] == {}, "pricing 类型不符 → 空表（成本记 null，不猜价）"
+
+
+def test_seat_missing_keys_marked_defect_not_dropped(iso_registry):
+    """缺必填键的席位带 defect 被看见（静默剔除＝用户以为评审团真有那席）。"""
+    set_jury_panel(iso_registry[0], [{"model": "m1", "base_url": "", "key_env": ""}])
+    cfg = jury.load_config()
+    assert len(cfg["seats"]) == 1, "缺键不剔除"
+    plan = jury.seat_readiness(cfg)
+    assert plan["seats"][0].usable is False
+    assert "base_url" in plan["seats"][0].defect
+    assert plan["missing_primary"][0].reason.startswith("配置")
+
+
+def _seed_fallback_scenario(iso_jury, monkeypatch):
+    """一主席 Key 缺失 + 回退席就位：返回三席命名，供「回退告警三面可见」各断言复用。"""
+    absent, fb_key = "PYSCI_JURY_ABSENT_KEY", "PYSCI_JURY_FB_KEY"
+    monkeypatch.delenv(absent, raising=False)
+    monkeypatch.setenv(SEAT_KEY_ENV, KEY)
+    monkeypatch.setenv(fb_key, KEY)
+    set_jury_panel(
+        iso_jury.parent / "registry.json",
+        [
+            {"name": "deep", "model": "deep-m", "key_env": SEAT_KEY_ENV},
+            {"name": "gone", "model": "gone-m", "key_env": absent},
+        ],
+        fallback={
+            "enabled": True,
+            "name": "sf",
+            "model": "sf-m",
+            "base_url": "https://stub.invalid/sf/v1",
+            "key_env": fb_key,
+        },
+    )
+    return absent
+
+
+def test_fallback_record_and_alert_when_primary_missing(iso_jury, monkeypatch):
+    """≥1 主席不可达 → 回退席上场开庭，§4 告警进留痕案卷与 Run.message。"""
+    _seed_fallback_scenario(iso_jury, monkeypatch)
+    monkeypatch.setattr(jury, "chat_once", prefer_juror(LIKE))
+    plan = jury.seat_readiness()
+    assert plan["fallback_used"] is True
+    assert [s.name for s in plan["missing_primary"]] == ["gone"]
+    assert {s.name for s in plan["voting"]} == {"deep", "sf"}
+    assert jury.FALLBACK_NOTICE in jury.readiness_summary(plan)
+
+    run = jury.adjudicate(jury.parse_case(seed_case(iso_jury)))
+    assert run.status == "recorded"
+    assert jury.FALLBACK_NOTICE in run.message, "告警语须出现在结论首行"
+    assert run.record["fallback"]["used"] is True
+    assert run.record["fallback"]["missing_primary"] == ["gone"]
+    assert run.record["panel"] == ["deep-m", "sf-m"], "本庭实际开庭席位（含回退）"
+
+
+def test_fallback_warns_on_status_and_mirror_faces(iso_jury, monkeypatch):
+    """三面可见（§4）：留痕已测，这里覆盖 orch status 判决包健康段 + mirror 概览段。"""
+    from pysci.skills.orchestration.tools import mirror, verdict
+
+    _seed_fallback_scenario(iso_jury, monkeypatch)
+    assert any(jury.FALLBACK_NOTICE in ln for ln in verdict.seat_alert_lines()), (
+        "orch status 判决包段须点名掉线主席"
+    )
+    assert jury.FALLBACK_NOTICE in mirror._line_jury(), "mirror 概览仲裁段须告警"
 
 
 # ---------------------------------------------------------------------------
@@ -299,8 +430,8 @@ def test_line_endings_do_not_shift_hash():
 def test_key_echoed_by_juror_is_redacted_in_record(iso_jury, monkeypatch):
     """裁判把 Key 回显进理由：留痕正文只留掩码（§4 Key 永不入库）。"""
 
-    def leaky(model, messages, *, base_url, key, timeout_s):
-        del model, messages, base_url, timeout_s
+    def leaky(model, messages, *, base_url, key, timeout_s, **ignored):
+        del model, messages, base_url, timeout_s, ignored
         return ai_reply("A", reason=f"依据 api_key {key} 判定")
 
     rec = jury.adjudicate(
@@ -334,7 +465,7 @@ def test_record_shape_matches_spec(iso_jury, monkeypatch):
         ["m1"],
         pricing={"m1": {"input": 2.0, "output": 8.0}},
     )
-    monkeypatch.setenv(jury.KEY_ENV, KEY)
+    monkeypatch.setenv(SEAT_KEY_ENV, KEY)
     monkeypatch.setattr(jury, "chat_once", prefer_juror(LIKE))
     run = jury.adjudicate(jury.parse_case(seed_case(iso_jury)))
     rec = json.loads(run.path.read_text(encoding="utf-8"))
@@ -423,7 +554,7 @@ def test_cmd_jury_exit_codes(iso_jury, monkeypatch, capsys):
     """退出码三档（0 留痕 / 1 降级入队 / 2 拒开庭或案卷不可用）——脚本分流靠它。"""
     case = seed_case(iso_jury)
     set_jury_panel(iso_jury.parent / "registry.json", ["m1"])
-    monkeypatch.setenv(jury.KEY_ENV, KEY)
+    monkeypatch.setenv(SEAT_KEY_ENV, KEY)
     monkeypatch.setattr(jury, "chat_once", prefer_juror(LIKE))
     assert jury.cmd_jury(ns(case)) == 0
     assert "裁决=A" in capsys.readouterr().out
@@ -445,7 +576,7 @@ def test_cmd_jury_exit_codes(iso_jury, monkeypatch, capsys):
 def test_cmd_jury_dry_prints_dossier_and_calls_nothing(iso_jury, monkeypatch, capsys):
     """--dry 判据：打印完整案卷（含自动附着段与材料哈希），零调用、零留痕。"""
     set_jury_panel(iso_jury.parent / "registry.json", ["m1"])
-    monkeypatch.setenv(jury.KEY_ENV, KEY)
+    monkeypatch.setenv(SEAT_KEY_ENV, KEY)
     calls = []
     monkeypatch.setattr(jury, "chat_once", lambda *a, **k: calls.append(a))
     rc = jury.cmd_jury(ns(seed_case(iso_jury), dry=True))

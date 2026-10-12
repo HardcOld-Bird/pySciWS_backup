@@ -29,6 +29,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PODS_ROOT, PROJECT_ROOT
 
 from . import journal as _journal
+from . import jury
 from .registry import Registry
 from .taste import PREFERENCE_NAME, TASTE_DIR
 
@@ -181,6 +182,14 @@ def _line_queues() -> str:
     )
 
 
+def _line_jury() -> str:
+    """仲裁团席位健康（REFACTOR §4 逐席直调）：主席不可达即 ``[!]`` 点名并宣告回退上场。
+
+    只读 registry 与 Key 就位性——不开庭、不发请求、不打 Key 值。
+    """
+    return jury.readiness_summary(jury.seat_readiness())
+
+
 def _line_trend() -> str:
     return "一致率 / override 率趋势 = 占位（overrides·stats 属 E6 后续单）"
 
@@ -199,6 +208,7 @@ STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("宪章", _line_charter),
     ("开关", _line_switches),
     ("队列", _line_queues),
+    ("仲裁", _line_jury),
     ("趋势", _line_trend),
     ("待决", _line_pending),
     ("验收", _line_acceptance),
@@ -305,7 +315,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="用户控制台（REFACTOR §10）：status 全景 + journal 口述分流",
     )
     sub = ap.add_subparsers(dest="action", required=True)
-    p = sub.add_parser("status", help="全景概览（待盲审/宪章/开关/队列/待决事项）")
+    p = sub.add_parser(
+        "status", help="全景概览（待盲审/宪章/开关/队列/仲裁席位/待决事项）"
+    )
     p.set_defaults(func=cmd_status)
     p = sub.add_parser("journal", help="口述内容编号分流：①偏好→日志 ②指令→强制队列")
     p.add_argument("text", nargs="*", help="口述正文（可多词，合并为一行）")

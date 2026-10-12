@@ -1,18 +1,19 @@
 # Tier C 仲裁团（`orch jury`）调用面与处置依据
 
-> REFACTOR v1.0 §4；E3-prep，backlog `20261011-233003-leader`。本页是**组长侧**读
-> `orch jury` 输出后的处置依据；权威设计与用户裁决原文见 `orchestration/REFACTOR.md` §4/§5。
+> REFACTOR v1.0 §4；组卷/双序面=E3-prep（`20261011-233003-leader`），逐席 provider
+> 传输面=E3-live（`20261012-164600-leader`）。本页是**组长侧**读 `orch jury` 输出后的
+> 处置依据；**配置面/Key/回退告警/渠道纪律见 `references/jury-channels.md`**；权威设计
+> 与用户裁决原文见 `orchestration/REFACTOR.md` §4/§5。
 
 ## 0. 定位与法院模式
 
 评审团是**家族外、直连、阻塞**的成对比较判决面：不经 Qoder、不给裁判任何工具，
-裁判**只能看见案卷**（用户裁决 v0.4：jury 不自行读代码——工具访问会引入 agent loop，
-且各裁判所见不同会破坏双序一致性与材料哈希）。因此**材料组装责任在撰写者侧**，
-CLI 的补偿是自动附着确定性材料（见 §2）。
+裁判**只能看见案卷**（用户裁决 v0.4：裁判自行读代码会引入 agent loop，且各裁判所见
+不同会破坏双序一致性与材料哈希）。因此**材料组装责任在撰写者侧**，CLI 的补偿是自动
+附着确定性材料（§2）。
 
-硬性规则：`registry.jury.panel` 里**任何含 `qwen` 字样的型号 → 拒开庭**（排除同族
-自恋偏差）。选型权归用户（SiliconFlow 账号与付费面是用户的），代码不做能力判断、
-不内置候选清单。
+硬规则：席位清单里**任何含 `qwen` 字样的型号 → 拒开庭**（排除同族自恋偏差）。选型权
+归用户（账号与付费面是用户的），代码不做能力判断、不内置候选清单。
 
 ## 1. 案卷文件（撰写者交付物）
 
@@ -63,50 +64,33 @@ pysci-orch jury <case-file> --timeout 600   # 覆盖整体等待上限（默认 
 
 | 状态 | 打印 | 落盘 | rc | 组长处置 |
 | --- | --- | --- | --- | --- |
-| `recorded` | 逐裁判票 + 一致性 + usage/cost | `state/evals/jury/<case>.json` | 0 | 照 `[NEXT]` 给的 `approve`/`reject` 执行 |
+| `recorded` | 逐席票 + 一致性 + usage/cost | `state/evals/jury/<case>.json` | 0 | 照 `[NEXT]` 给的 `approve`/`reject` 执行 |
 | `dry` | 完整案卷 + 材料哈希 | 无 | 0 | 检查材料够不够，再正式开庭 |
 | `queued` | 降级原因 + 队列路径 | `state/evals/jury-queue/<case>.json` | 1 | 修因（选型/Key/渠道）后重跑同命令；成功重裁自动销队列条目 |
-| `declined` | 点名违约型号 | 无 | 2 | 改 `registry.jury.panel` 去掉 Qwen 系（不入队：配置面改一下就通） |
+| `declined` | 点名违约型号 | 无 | 2 | 改 `registry.jury.seats` 去掉 Qwen 系（不入队：配置面改一下就通） |
 
-**仲裁面绝不 raise**：缺 Key、panel 未选型、registry 读坏、超时、渠道 5xx、返回体
-不可解析——全部降级 `queued`。基建决策不因仲裁不可达而停摆（§4）。
+**仲裁面绝不 raise**：缺 Key、seats 未选型、registry 读坏、无一席可开庭、超时、
+渠道 5xx/429、返回体不可解析、正文被截断——全部降级 `queued`。基建决策不因仲裁
+不可达而停摆（§4）。
 
 ## 4. 双序、计票与 escalate
 
-每个型号跑两局：A/B 与 B/A 各一次（同一材料、两种摆法，`temperature=0`、强制 JSON
-输出 `{choice, reason, confidence}`）。
+每席跑两局：A/B 与 B/A 各一次（同一材料、两种摆法；请求默认 `temperature: 0`、强制
+JSON 输出 `{choice, reason, confidence}`，逐席 `params` 可覆盖，见 jury-channels.md）。
 
 - 票的 `choice` 经 `flip()` 映射回**真实选项**后计票；
-- 同型号两局结论不一致 → 该型号记 `inconclusive`，**两票都不计**（位置偏好被识别而非
+- 同席两局结论不一致 → 该席记 `inconclusive`，**两票都不计**（位置偏好被识别而非
   被 averaging 掩盖，仍留在记录里供事后复盘）；
 - 有效票**少数服从多数**；
-- `verdict` 为空（无人有效投票）、或**平票**、或 `inconclusive` 超过有效裁判半数
-  → `escalate: "twin"`。E6（双副本 A/B 实裁）之前，这案**挂起呈组长**：由你带证据
+- `verdict` 为空（无有效投票）、或**平票**、或 `inconclusive` 超过有效席半数
+  → `escalate: "twin"`。E6（双副本 A/B 实裁）之前这案**挂起呈组长**：由你带证据
   上报用户，不要凭直觉硬判。
 - 单局瞬时失败（网络/5xx）→ 整案重跑一次（`attempts=2`）；两轮仍有失败 → `queued`。
 
-## 5. 配置面与 Key
+两条 E3-live 实测渠道纪律（**同组织两局串行**、**截断算渠道错误不算无效票**）的
+成因与修法见 `jury-channels.md` §5——它们改变的是「为什么入队」，不改变计票规则。
 
-`registry.json` 顶层 `jury` 块（低频配置面，git 跟踪）逐键覆盖，非法值回落默认，
-默认 `panel: []`（语义=「尚未选型」，据此降级入队而非报错）：
-
-```json
-{"jury": {"panel": ["deepseek-ai/DeepSeek-V3", "moonshotai/Kimi-K2-Instruct"],
-          "base_url": "https://api.siliconflow.cn/v1",
-          "call_timeout_s": 120, "deadline_s": 300,
-          "pricing": {"deepseek-ai/DeepSeek-V3": {"input": 2.0, "output": 8.0}}}}
-```
-
-`pricing` 单位=元/百万 token；**缺席 → 记录里 `cost.amount` 为 null 并附 note，不猜价**
-（留痕数字必须能对外负责）。
-
-Key 只从环境取：环境变量 `SILICONFLOW_API_KEY` 优先，回落项目根 `.env`（已 gitignore）。
-**永不入库**：Key 只进请求头；出模块的自由文本（异常文本、裁判 reason、案卷、队列
-reason）一律过 `scrub()` 掩码。`pysci-dev doctor` 的「API Key 泄漏哨兵」扫 git 跟踪
-文件找疑似密钥形态（`sk-` 前缀 / `键名=长随机值` / `Bearer 长令牌`；`tests/**` 豁免
-为阳性用例素材），命中报 ✗ 并给脱敏片段——把纪律变成机制。
-
-## 6. 冻结简报与「待用户确认」
+## 5. 冻结简报与「待用户确认」
 
 `state/evals/jury-brief.md` 是护栏级统一裁决规则（项目优化面 / 既有裁决约束 /
 **v0.6 直通规则**：「仅涉提议者自身专有基础设施的提案，除非有明确危害，默认 approve」
@@ -116,19 +100,24 @@ reason）一律过 `scrub()` 掩码。`pysci-dev doctor` 的「API Key 泄漏哨
 未批准时 `orch jury` 每次打印「简报未批准」警告但**照常可用**；批准前请勿用它做不可
 撤销的裁决。
 
-## 7. 留痕记录字段
+## 6. 留痕记录字段
 
 `state/evals/jury/<case-id>.json`：`case_id` / `case_file` / `ts` / `question` /
 `options` / `targets` / `dossier_hash` / `dossier_chars` / `dossier`（裁判所见全文）/
-`brief{path,approved,hash}` / `base_url` / `panel` / `attempts` / `jurors`（逐型号：
-两局票、`consistent`、计票选择）/ `votes` / `tally` / `inconclusive` / `verdict` /
-`escalate` / `usage` / `usage_by_model` / `cost{amount,unit,note,priced,unpriced}`。
+`brief{path,approved,hash}` / `seats`（逐席公开状态行，含 `role`/`defect`/`reason`/
+`usable`；**无 Key 值**）/ `fallback{enabled,used,notice,missing_primary}` /
+`panel`（本庭实开庭型号）/ `attempts` / `jurors`（逐席：两局票、`consistent`、计票
+选择）/ `votes` / `tally` / `inconclusive` / `verdict` / `escalate` / `usage` /
+`usage_by_model` / `cost{amount,unit,note,priced,unpriced}`。E3-prep 的顶层 `base_url`
+已随逐席化移除。
 
 重裁同案覆盖旧记录（以最新为准），并自动删除同案的 `jury-queue/` 条目。
 
-## 8. 边界（本轮交付未做的事）
+## 7. 边界（本轮交付未做的事）
 
-- **真实连通**留用户 Key：`SILICONFLOW_API_KEY` 只能由用户本人提供（REFACTOR §15），
-  全套单测走 mock transport，不发任何真实请求；
-- **`--dry` 不校验 panel/Key**：组卷面与开庭面分离，先 dry 后开庭是省钱顺序；
-- 平票/inconclusive 的 **twin 终裁**（双副本 A/B 实裁）属 E6，未实现。
+- **`--dry` 不校验 seats/Key**：组卷面与开庭面分离，先 dry 后开庭是省钱顺序；
+- 平票/inconclusive 的 **twin 终裁**（双副本 A/B 实裁）属 E6，未实现；
+- **`pricing` 出厂为空**：三家刊例须由用户按账号实价填（可能挂套餐/Agent Plan），
+  缺席时留痕记 `cost.amount=null` 并附 note；
+- **minimum 火山方舟档位**：调查结论=不可行，维持 flash（三道硬阻塞与替代路径见
+  `state/suggestions/approved/20261012-164600-leader.md` 回填段）。

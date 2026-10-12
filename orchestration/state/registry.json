@@ -108,6 +108,43 @@
     "resume_backlog": 8,
     "resume_bench": 4
   },
+  "jury": {
+    "_note": "Tier C 仲裁团三席官方直调（REFACTOR §4 用户裁决 2026-10-12 修订，E3-live）。型号=各提供商 /models 实测目录内的在架旗舰（10-12 实测：deepseek 2 个、bigmodel 11 个、moonshot 2 个）；base_url 逐家核官方 OpenAI 兼容端点。选型权归用户，改这里即可，代码不内置候选清单。\"pricing\" 故意留空：三家刊例（且用户可能挂套餐/Agent Plan）须由用户按账号实价填，缺席时留痕记 cost.amount=null 并附 note——不猜价。kimi 席 params.temperature=1 是实测必需（该型号只接受 1，写 0 即 400，见 references/jury-panel.md）。max_output_tokens=8000：三席皆推理型，真案卷（prompt≈4k）上 reasoning 是重尾的（实测 432～3986），额度不足会随机把正文截空；截断按渠道错误入队并点名席位，不记无效票。席内两局按「同端点+同 Key 变量」串行：DeepSeek 实测 max organization concurrency=1，同席并发必 429。",
+    "seats": [
+      {
+        "name": "deepseek",
+        "key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-pro"
+      },
+      {
+        "name": "glm",
+        "key_env": "GLM_API_KEY",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-5.3"
+      },
+      {
+        "name": "kimi",
+        "key_env": "KIMI_API_KEY",
+        "base_url": "https://api.moonshot.cn/v1",
+        "model": "kimi-k2.6",
+        "params": {
+          "temperature": 1
+        }
+      }
+    ],
+    "fallback": {
+      "enabled": true,
+      "name": "siliconflow",
+      "key_env": "SILICONFLOW_API_KEY",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "model": "deepseek-ai/DeepSeek-V4-Pro"
+    },
+    "call_timeout_s": 120,
+    "deadline_s": 300,
+    "max_output_tokens": 8000,
+    "pricing": {}
+  },
   "checks": {
     "figure-audit": {
       "cmd": [

@@ -429,13 +429,29 @@ def _backlog_items() -> list[dict[str, Any]]:
     return list(data.get("items", []))
 
 
+def seat_alert_lines() -> list[str]:
+    """仲裁席位告警行（§4「触发回退必须显式告警」在 status 面的落点）。
+
+    只读配置与 Key 就位性，不开庭、不发请求；主席有缺位就点名（无论回退席是否上场）——
+    「J 判决还能跑」不等于「三席直调还健康」。registry 读不通也只报读数失败，不拦 status。
+    """
+    try:
+        plan = jury.seat_readiness()
+    except (OSError, ValueError) as exc:
+        return [f"    仲裁席位读数失败：{type(exc).__name__}: {exc}"]
+    if not plan["missing_primary"]:
+        return []
+    return [f"    仲裁 {jury.readiness_summary(plan)}"]
+
+
 def health_lines() -> list[str]:
     """``orch status`` 的「判决包健康」段（无判决记录时给一行引导，不静默缺席）。"""
     h = health()
     if not h["decided"] and not h["pending"] and not h["escalate"]:
         return [
             "    （尚无判决包记录：approve 须带 --jury / --bench / --override，"
-            "§5.1 四态之一）"
+            "§5.1 四态之一）",
+            *seat_alert_lines(),
         ]
     c = h["channels"]
     line = (
@@ -454,6 +470,7 @@ def health_lines() -> list[str]:
             f"    [!] 核验挂起（escalate=twin）={len(h['escalate'])}："
             f"{', '.join(h['escalate'][:5])} → 需组长人工终裁"
         )
+    lines.extend(seat_alert_lines())
     return lines
 
 

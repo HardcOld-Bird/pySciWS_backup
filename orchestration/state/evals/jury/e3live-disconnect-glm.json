@@ -1,0 +1,301 @@
+{
+  "case_id": "e3live-disconnect-glm",
+  "case_file": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\.qoder\\worktrees\\20261012-164600-leader\\orchestration\\state\\evals\\jury-cases\\e3live-disconnect-glm.md",
+  "ts": "2026-10-12T19:19:20+08:00",
+  "question": "是否采纳这条基建改进提案并派 devops 实施？提案摘要：worker 派生时 stdout 与 run 日志\n同文件双写者，任何 print 从偏移 0 覆写整段运行日志；建议派生侧收口（stdout/stderr →\nDEVNULL 或分文件），三条派生路径同形。",
+  "options": {
+    "A": "采纳（kind=defect）。提案全文：\n\n**现象**：headless worker 的 stdout 被重定向进本 run 的 `.log`，而 `_log()` 也写同一文件。\n任何一次 `print()` 都从偏移 0 **覆写整段运行日志**——让路/闸门/派跳过程当场全灭，且 mock\n测不出（`_spawn_detached` 被桩时 stdout 不参与）。2026-10-12 实测引爆于 `cmd_inspect_worker`\n的收尾 `print(summary)`，run 日志只剩摘要 JSON（已修：commit `0463ee2`，删 print + 加\nstdout 静默回归）。\n\n**为什么模式本身仍脆弱**：修复只消除了本次的 print，没有消除「一个文件两个写者、其中一个用\nC 语义从 0 覆写」的结构。benchd 与 drain 的 worker 同形（`_spawn_detached` 重定向\nstdout→run log），下一个 `print` 只是还没被写出来。建议派生侧收口：stdout/stderr → DEVNULL\n（或 `",
+    "B": "暂不采纳：维持现状——这套摩擦继续由组长和组员的记忆与文档吸收，不占 backlog、不派 devops、\n不增加设施复杂度。已落地的局部修复（删掉那次 print + stdout 静默回归测试）覆盖了当前已知\n引爆点；结构性收口要动 drain/benchd/inspectd 三条派生路径，收益是消除一类尚未再次发生的\n覆写，代价是三条路径的派生语义变更本身也可能引入新的运行态问题。"
+  },
+  "targets": [
+    "src/pysci/skills/orchestration/tools/drain.py",
+    "src/pysci/skills/orchestration/tools/benchd.py",
+    "src/pysci/skills/orchestration/tools/inspectd.py"
+  ],
+  "dossier_hash": "da2c868586174344",
+  "dossier_chars": 6505,
+  "dossier": "# 案卷 e3live-disconnect-glm\n\n## 问题\n是否采纳这条基建改进提案并派 devops 实施？提案摘要：worker 派生时 stdout 与 run 日志\n同文件双写者，任何 print 从偏移 0 覆写整段运行日志；建议派生侧收口（stdout/stderr →\nDEVNULL 或分文件），三条派生路径同形。\n\n## 选项 A\n采纳（kind=defect）。提案全文：\n\n**现象**：headless worker 的 stdout 被重定向进本 run 的 `.log`，而 `_log()` 也写同一文件。\n任何一次 `print()` 都从偏移 0 **覆写整段运行日志**——让路/闸门/派跳过程当场全灭，且 mock\n测不出（`_spawn_detached` 被桩时 stdout 不参与）。2026-10-12 实测引爆于 `cmd_inspect_worker`\n的收尾 `print(summary)`，run 日志只剩摘要 JSON（已修：commit `0463ee2`，删 print + 加\nstdout 静默回归）。\n\n**为什么模式本身仍脆弱**：修复只消除了本次的 print，没有消除「一个文件两个写者、其中一个用\nC 语义从 0 覆写」的结构。benchd 与 drain 的 worker 同形（`_spawn_detached` 重定向\nstdout→run log），下一个 `print` 只是还没被写出来。建议派生侧收口：stdout/stderr → DEVNULL\n（或 `<run>.out` 分文件），日志只由 `_log()` 以追加语义写；再钉一条断言「worker 进程 stdout\n不是 run 日志 fd」。这属结构裁决、影响三条派生路径，故提案而非本跳擅自改。\n\n## 选项 B\n暂不采纳：维持现状——这套摩擦继续由组长和组员的记忆与文档吸收，不占 backlog、不派 devops、\n不增加设施复杂度。已落地的局部修复（删掉那次 print + stdout 静默回归测试）覆盖了当前已知\n引爆点；结构性收口要动 drain/benchd/inspectd 三条派生路径，收益是消除一类尚未再次发生的\n覆写，代价是三条路径的派生语义变更本身也可能引入新的运行态问题。\n\n## 证据\n成功判据（做完后可机械验证的条款）：worker 派生时 stdout 不再指向运行日志文件（改 DEVNULL\n或分文件），且有一条阳性测试证明「worker 内任何 print 都无法破坏 run 日志」；benchd/inspectd/drain\n三条派生路径同形。\n\n## 自动附着材料（CLI 确定性抓取，非撰写者所写）\n\n### git diff --stat\norchestration/state/backlog.json                 |  19 +-\n orchestration/state/preference-journal.jsonl     |   1 +\n orchestration/state/registry.json                |  37 ++\n src/pysci/skills/orchestration/tools/jury.py     | 409 +++++++++++++++++------\n src/pysci/skills/orchestration/tools/mirror.py   |  14 +-\n src/pysci/skills/orchestration/tools/registry.py | 101 ++++--\n src/pysci/skills/orchestration/tools/verdict.py  |  19 +-\n tests/skills/orchestration/conftest.py           |  40 ++-\n tests/skills/orchestration/test_jury.py          | 167 ++++++++-\n 9 files changed, 655 insertions(+), 152 deletions(-)\n\n### git diff\ndiff --git a/orchestration/state/backlog.json b/orchestration/state/backlog.json\nindex 87128fe..080fd49 100644\n--- a/orchestration/state/backlog.json\n+++ b/orchestration/state/backlog.json\n@@ -940,8 +940,8 @@\n       \"evidence_file\": \"orchestration/state/suggestions/approved/20261012-164600-leader.md\",\n       \"status\": \"in_progress\",\n       \"proposed\": \"2026-10-12T16:46:40+08:00\",\n-      \"note\": \"孤儿条目回收（原 started_at=2026-10-12T18:11:03+08:00）\",\n-      \"started_at\": \"2026-10-12T18:28:10+08:00\",\n+      \"note\": \"孤儿条目回收（原 started_at=2026-10-12T18:28:10+08:00）\",\n+      \"started_at\": \"2026-10-12T18:51:03+08:00\",\n       \"worktree\": \"20261012-164600-leader\"\n     },\n     {\n@@ -1027,6 +1027,21 @@\n       \"proposed\": \"2026-10-12T18:28:08+08:00\",\n       \"note\": \"\",\n       \"effort\": \"medium\"\n+    },\n+    {\n+      \"id\": \"insp-20261012-185053-mechanical\",\n+      \"member\": \"inspector\",\n+      \"actor\": \"inspector\",\n+      \"source\": \"inspector\",\n+      \"summary\": \"harness 预算三档执法漏掉 orchestration/README.md：唯一权威文档 93KB，超按需档单文件上限 11 倍且三层硬闸均不覆盖\",\n+      \"kind\": \"defect\",\n+      \"success_criteria\": \"满足任一即视为已修复：(a) wc -c orchestration/README.md ≤ 8192；或 (b) budget_check.py 的 TIERS 或 .pre-commit files 正则新增匹配 orchestration/README.md 且对其 >8192 报错；或 (c) basic.md §1/budget-layers.md 明文把 orchestration/README.md 列为「不注入·总量不限」例外，并改写 budget_check.py line40 的整改指向不再落入该文件。三者皆无 → 漂移仍在。\",\n+      \"evidence_file\": \"orchestration\\\\state\\\\inspector\\\\evidence\\\\insp-20261012-185053-mechanical.md\",\n+      \"class\": \"mechanical\",\n+      \"channel\": \"mechanical\",\n+      \"status\": \"pending\",\n+      \"proposed\": \"2026-10-12T18:50:58+08:00\",\n+      \"note\": \"inspector 自主发现（§5.2 不经组长）\"\n     }\n   ]\n }\ndiff --git a/orchestration/state/preference-journal.jsonl b/orchestration/state/preference-journal.jsonl\nindex 05a0e01..ca5d489 100644\n--- a/orchestration/state/preference-journal.jsonl\n+++ b/orchestration/state/preference-journal.jsonl\n@@ -52,3 +52,4 @@\n {\"ts\": \"2026-10-12T18:26:45+08:00\", \"situation\": \"**（渠道互换，用户裁决 2026-10-12）flash 档永久改指 BYOK Qwen3.8-Flash 优先、内置渠道降为回退——同步 DEFAULT_MODEL_PATTERNS 防自愈翻转**\", \"options\": \"\", \"choice\": \"approve\", \"reason\": \"\", \"source\": \"override\", \"kind\": \"ruling\", \"channel\": \"override\", \"suggestion_id\": \"20261012-173500-leader\", \"member\": \"leader\"}\n {\"ts\": \"2026-10-12T17:3x:00+08:00\", \"situation\": \"flash 档模型渠道优先级\", \"options\": \"内置 flash 为主（免费但限速慢）｜BYOK flash 为主（按量小额）、内置降回退\", \"choice\": \"BYOK flash 为主，内置 Qwen3.8-Flash 为回退（永久互换）\", \"reason\": \"用户裁决原话：内置渠道免费但限速、响应慢影响效率；要求两渠道地位互换；在途 drain 不便更换可暂缓\", \"source\": \"user\", \"kind\": \"ruling\", \"decider\": \"用户\"}\n {\"ts\": \"2026-10-12T17:3x:01+08:00\", \"situation\": \"备用 Key VOLC_AGENT_PLAN_KEY_2 的使用边界\", \"options\": \"完全禁止程序读取（等用户手工过户）｜测试期间用户外出时可临时读取试用\", \"choice\": \"测试期间可临时用 _2；用户回来过户值后恢复单名\", \"reason\": \"用户补充：刚才外出无法编辑文件，若首个 Key 不可用请临时填第二个测试；手工换名回来后完成并通知我——非永久回退\", \"source\": \"user\", \"kind\": \"ruling\", \"decider\": \"用户\"}\n+{\"ts\": \"2026-10-12T18:50:58+08:00\", \"situation\": \"harness 预算三档执法漏掉 orchestration/README.md：唯一权威文档 93KB，超按需档单文件上限 11 倍且三层硬闸均不覆盖\", \"options\": \"\", \"choice\": \"approve\", \"reason\": \"机械证据类：复现命令与实际输出即依据（§5.2）\", \"source\": \"inspector\", \"kind\": \"ruling\", \"channel\": \"mechanical\", \"finding_id\": \"insp-20261012-185053-mechanical\", \"member\": \"inspector\"}\ndiff --git a/orchestration/state/registry.json b/orchestration/state/registry.json\nindex 893c8c6..61618fb 100644\n--- a/orchestration/state/registry.json\n+++ b/orchestration/state/registry.json\n@@ -108,6 +108,43 @@\n     \"resume_backlog\": 8,\n     \"resume_bench\": 4\n   },\n+  \"jury\": {\n+    \"_note\": \"Tier C 仲裁团三席官方直调（REFACTOR §4 用户裁决 2026-10-12 修订，E3-live）。型号=各提供商 /models 实测目录内的在架旗舰（10-12 实测：deepseek 2 个、bigmodel 11 个、moonshot 2 个）；base_url 逐家核官方 OpenAI 兼容端点。选型权归用户，改这里即可，代码不内置候选清单。\\\"pricing\\\" 故意留空：三家刊例（且用户可能挂套餐/Agent Plan）须由用户按账号实价填，缺席时留痕记 cost.amount=null 并附 note——不猜价。kimi 席 params.temperature=1 是实测必需（该型号只接受 1，写 0 即 400，见 references/jury-panel.md）。max_output_tokens=8000：三席皆推理型，真案卷（prompt≈4k）上 reasoning 是重尾的（实测 432～3986），额度不足会随机把正文截空；截断按渠道错误入队并点名席位，不记无效票。席内两局按「同端点+同 Key 变量」串行：DeepSeek 实测 max orga\n…（截断：git diff 全文 56575 B）\n\n### git log --oneline -5\n843dc19 chore(orch): 排队大单 effort 散列分桶，临时防组包过载（待 #72 solo 旗标根治）\naa65222 chore(orch): flash 渠道互换单入队（#74，用户裁决）；备用 Key 测试期条款修正；journal 两则登记\n09b4701 docs(devops): 记忆登记 CLI 范式 --no-sync 四面口径与豁免哨兵过期纪律\n42b87cd chore(orch): 部署台账随 CLI 范式真本变更重生成（a7052a08→d2bd5557，devops 91f4ffd2→a51f4636）\nd2d116a Merge branch 'wt-20261012-125455-devops'\n\n### 涉事文件字节读数\n- src/pysci/skills/orchestration/tools/drain.py: 50785 B / 1123 行 / sha256=23de10a68731c395\n- src/pysci/skills/orchestration/tools/benchd.py: 25997 B / 635 行 / sha256=9fb993d1fbd8140c\n- src/pysci/skills/orchestration/tools/inspectd.py: 54776 B / 1298 行 / sha256=bbbd0f5358b7908c\n\n### 相关台账行\n（无相关台账行）\n",
+  "brief": {
+    "path": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\.qoder\\worktrees\\20261012-164600-leader\\orchestration\\state\\evals\\jury-brief.md",
+    "approved": false,
+    "hash": "4e026d2b65bb85e1"
+  },
+  "seats": [
+    {
+      "name": "deepseek",
+      "model": "deepseek-v4-pro",
+      "base_url": "https://api.deepseek.com/v1",
+      "key_env": "DEEPSEEK_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "glm",
+      "model": "glm-5.3",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "key_env": "GLM_API_KEY_DEMO_ABSENT",
+      "role": "primary",
+      "defect": "",
+      "reason": "缺 GLM_API_KEY_DEMO_ABSENT",
+      "usable": false
+    },
+    {
+      "name": "kimi",
+      "model": "kimi-k2.6",
+      "base_url": "https://api.moonshot.cn/v1",
+      "key_env": "KIMI_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "siliconflow",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "key_env": "SILICONFLOW_API_KEY",
+      "role": "fallback",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    }
+  ],
+  "fallback": {
+    "enabled": true,
+    "used": true,
+    "notice": "回退席已激活——请用户处理主席",
+    "missing_primary": [
+      "glm"
+    ]
+  },
+  "panel": [
+    "deepseek-v4-pro",
+    "kimi-k2.6",
+    "deepseek-ai/DeepSeek-V4-Pro"
+  ],
+  "attempts": 1,
+  "jurors": [
+    {
+      "seat": "deepseek",
+      "model": "deepseek-v4-pro",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "deepseek",
+          "model": "deepseek-v4-pro",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "worker stdout覆写run日志，破坏失败可回访性；提案含机械判据与阳性测试，收益明确，无明确危害证据",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 4010,
+            "completion_tokens": 917,
+            "total_tokens": 4927,
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 867
+            },
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 2858
+          },
+          "error": ""
+        },
+        {
+          "seat": "deepseek",
+          "model": "deepseek-v4-pro",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "提案针对 stdout 覆写 run 日志的结构缺陷，成功判据可机械验证，三条路径同形收口并加阳性测试，提升可审计性，成本可控。",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 4010,
+            "completion_tokens": 1186,
+            "total_tokens": 5196,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1128
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 4010
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 8020,
+        "completion_tokens": 2103,
+        "total_tokens": 10123
+      }
+    },
+    {
+      "seat": "kimi",
+      "model": "kimi-k2.6",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "日志覆写破坏可审计性与留痕，属结构缺陷；已引爆一次且三路径同形，收口有机械验证判据，收益大于变更代价。",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 3769,
+            "completion_tokens": 1521,
+            "total_tokens": 5290,
+            "cached_tokens": 1024,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1466
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "案卷B段载2026-10-12实测已引爆，且success criteria可机械验证；A依赖记忆吸收摩擦，不符合可靠性优先之目标函数。",
+          "confidence": 0.85,
+          "usage": {
+            "prompt_tokens": 3769,
+            "completion_tokens": 2474,
+            "total_tokens": 6243,
+            "cached_tokens": 1024,
+            "completion_tokens_details": {
+              "reasoning_tokens": 2419
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 7538,
+        "completion_tokens": 3995,
+        "total_tokens": 11533
+      }
+    },
+    {
+      "seat": "siliconflow",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "siliconflow",
+          "model": "deepseek-ai/DeepSeek-V4-Pro",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "案卷指出“一个文件两个写者、其中一个用C语义从0覆写”的结构缺陷，已导致日志丢失；提案收口stdout可机械验证消除覆写风险，提升可审计性，代价可控。",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 3990,
+            "completion_tokens": 539,
+            "total_tokens": 4529,
+            "completion_tokens_details": {
+              "reasoning_tokens": 472
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 3990
+          },
+          "error": ""
+        },
+        {
+          "seat": "siliconflow",
+          "model": "deepseek-ai/DeepSeek-V4-Pro",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "提案指出 stdout 覆写日志的结构缺陷（证据段），已修一次但模式仍脆弱；修复可机械验证，提升可审计性，符合可靠性优先。",
+          "confidence": 0.85,
+          "usage": {
+            "prompt_tokens": 3990,
+            "completion_tokens": 638,
+            "total_tokens": 4628,
+            "completion_tokens_details": {
+              "reasoning_tokens": 584
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 256
+            },
+            "prompt_cache_hit_tokens": 256,
+            "prompt_cache_miss_tokens": 3734
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 7980,
+        "completion_tokens": 1177,
+        "total_tokens": 9157
+      }
+    }
+  ],
+  "votes": {
+    "deepseek": "A",
+    "kimi": "A",
+    "siliconflow": "A"
+  },
+  "tally": {
+    "A": 3,
+    "B": 0
+  },
+  "inconclusive": [],
+  "verdict": "A",
+  "escalate": "",
+  "usage": {
+    "prompt_tokens": 23538,
+    "completion_tokens": 7275,
+    "total_tokens": 30813
+  },
+  "usage_by_model": {
+    "deepseek-v4-pro": {
+      "prompt_tokens": 8020,
+      "completion_tokens": 2103,
+      "total_tokens": 10123
+    },
+    "kimi-k2.6": {
+      "prompt_tokens": 7538,
+      "completion_tokens": 3995,
+      "total_tokens": 11533
+    },
+    "deepseek-ai/DeepSeek-V4-Pro": {
+      "prompt_tokens": 7980,
+      "completion_tokens": 1177,
+      "total_tokens": 9157
+    }
+  },
+  "cost": {
+    "amount": null,
+    "unit": "",
+    "note": "无价目表：registry.jury.pricing 未覆盖任何 panel 型号（成本不猜）",
+    "priced": [],
+    "unpriced": [
+      "deepseek-ai/DeepSeek-V4-Pro",
+      "deepseek-v4-pro",
+      "kimi-k2.6"
+    ]
+  }
+}

@@ -131,26 +131,73 @@ DEFAULT_TIER_A: dict[str, int] = {
 }
 
 
-#: Tier C 仲裁团配置（REFACTOR §4，E3-prep）。**panel 默认空**：选型权归用户
-#: （SiliconFlow 账号与付费面是用户的），代码只负责一条硬规则——型号串含 ``qwen``
-#: 即拒开庭（排除同族自恋偏差），不做模型能力判断也不内置候选清单。空 panel 的语义
-#: 是「尚未选型」，``orch jury`` 据此降级入队而不是报错。
+#: Tier C 仲裁团配置（REFACTOR §4；E3-prep 单渠道，E3-live 改**逐席 provider**）。
+#: **seats 默认空**：选型权归用户（各提供商的账号与付费面是用户的），代码只负责一条硬
+#: 规则——型号串含 ``qwen`` 即拒开庭（排除同族自恋偏差），不做模型能力判断也不内置候选
+#: 清单。空 seats 的语义是「尚未选型」，``orch jury`` 据此降级入队而不是报错。
 #: registry.json 顶层 ``jury`` 块逐键覆盖（非法值回落默认，见 :meth:`Registry.jury`）：
 #:
 #: .. code-block:: json
 #:
-#:    {"jury": {"panel": ["deepseek-ai/DeepSeek-V3", "moonshotai/Kimi-K2-Instruct"],
-#:              "pricing": {"deepseek-ai/DeepSeek-V3": {"input": 2.0, "output": 8.0}}}}
+#:    {"jury": {"seats": [{"name": "deepseek", "key_env": "DEEPSEEK_API_KEY",
+#:                         "base_url": "https://api.deepseek.com/v1",
+#:                         "model": "deepseek-v4-pro"}],
+#:              "fallback": {"enabled": true, "name": "siliconflow",
+#:                           "key_env": "SILICONFLOW_API_KEY",
+#:                           "base_url": "https://api.siliconflow.cn/v1",
+#:                           "model": "deepseek-ai/DeepSeek-V3"},
+#:              "pricing": {"deepseek-v4-pro": {"input": 2.0, "output": 8.0}}}}
 #:
-#: ``pricing`` 单位 = 元/百万 token（SiliconFlow 刊例按型号而定）；缺席 → 记录里
+#: 每席四键 ``name``/``key_env``/``base_url``/``model`` 缺一不可：缺了不剔除该席，而是标
+#: ``defect`` 让它以 unavailable 身份被看见（静默剔除会让用户以为评审团里真有那席）。
+#: 可选 ``params`` 是逐席请求参数覆盖——实测三席传输面并不齐（``kimi-k2.6`` 只接受
+#: ``temperature=1``，共享的 ``temperature: 0`` 请求会 400），故参数必须能按席覆盖。
+#: ``fallback`` 是带独立开关的**回退席**，仅当 ≥1 主席不可达时才上场，上场必告警（§4）。
+#: ``pricing`` 单位 = 元/百万 token（各提供商刊例按型号而定）；缺席 → 记录里
 #: ``cost.amount`` 为 null 并附 note，**不猜价**——成本数字要能对外负责。
+#: ``max_output_tokens`` 是请求的 ``max_tokens``：三席皆推理型，正文之前先烧一大段
+#: reasoning，且这段的长度是**重尾**的——真案卷（prompt ≈4 k）上实测 432～1500 浮动，
+#: 4000 仍有一席烧到 3986 空手而归。1500/4000 都会**随机**把正文截成空；出厂给 8000。
+#: 截断不再计为无效票（:func:`.jury._ballot` 报错误并降级入队，点名是哪一席）。
 DEFAULT_JURY: dict[str, Any] = {
-    "panel": [],
-    "base_url": "https://api.siliconflow.cn/v1",
+    "seats": [],
+    "fallback": {"enabled": False},
     "call_timeout_s": 120,
     "deadline_s": 300,
+    "max_output_tokens": 8000,
     "pricing": {},
 }
+
+#: 席位必填键（``name`` 可缺，缺则回落型号名）。
+SEAT_REQUIRED_KEYS: tuple[str, ...] = ("base_url", "model", "key_env")
+
+
+def normalize_seat(raw: Any) -> dict[str, Any] | None:
+    """配置里的一个席位 → 规范化 dict；非 dict 直接作废（返回 None）。
+
+    缺必填键**不剔除**该席，而是落 ``defect`` 说明缺什么：调用侧据此标 unavailable，
+    读数面（``orch status``／mirror）点名——违约要被看见，这是 §4 非 Qwen 硬规则的同一条课。
+    """
+    if not isinstance(raw, dict):
+        return None
+    out: dict[str, Any] = {
+        "base_url": "",
+        "model": "",
+        "key_env": "",
+        "name": "",
+        "params": {},
+    }
+    for key in ("base_url", "model", "key_env", "name"):
+        if isinstance(raw.get(key), str):
+            out[key] = raw[key].strip()
+    if isinstance(raw.get("params"), dict):
+        out["params"] = dict(raw["params"])
+    if not out["name"]:
+        out["name"] = out["model"] or "seat"
+    missing = [k for k in SEAT_REQUIRED_KEYS if not out[k]]
+    out["defect"] = f"缺 {','.join(missing)}" if missing else ""
+    return out
+
 
 #: twin 判断通道（``orch taste``）的生效开关默认值。**False 是设计而不是缺省占位**：
 #: PREFERENCE.md v1 是草案，生效确认权归用户（REFACTOR §9.4「上线留用户」），故代码
@@ -545,32 +592,41 @@ class Registry:
 
     @property
     def jury(self) -> dict[str, Any]:
-        """Tier C 仲裁团配置（见 :data:`DEFAULT_JURY`，REFACTOR §4）。
+        """Tier C 仲裁团配置（见 :data:`DEFAULT_JURY`，REFACTOR §4，E3-live 逐席 provider）。
 
         逐键 fail-open：类型不符 → 该键回落默认（宁按出厂值跑，不让配置笔误停摆）。
-        ``panel`` 只保证「字符串列表」这一形状，**不在此处过滤 Qwen**——硬规则的违约
+        ``seats`` 只保证「规范化席位表」这一形状，**不在此处过滤 Qwen**——硬规则的违约
         必须被看见（``orch jury`` 拒开庭并点名型号），静默剔除会让用户以为评审团里
-        真有那个模型。
+        真有那个模型。席位自身缺必填键同样不剔除，带 ``defect`` 交给读数面点名。
 
         Returns:
-            ``{"panel": [str…], "base_url": str, "call_timeout_s": int,
-            "deadline_s": int, "pricing": {model: {"input": x, "output": y}}}``。
+            ``{"seats": [seat…]（主席）, "fallback": {seat…, "enabled": bool},
+            "call_timeout_s": int, "deadline_s": int, "max_output_tokens": int,
+            "pricing": {model: {"input": x, "output": y}}}``。
         """
         out: dict[str, Any] = {
-            "panel": list(DEFAULT_JURY["panel"]),
-            "base_url": str(DEFAULT_JURY["base_url"]),
+            "seats": [],
+            "fallback": {
+                **normalize_seat(DEFAULT_JURY["fallback"]),
+                "enabled": bool(DEFAULT_JURY["fallback"].get("enabled")),
+            },
             "call_timeout_s": int(DEFAULT_JURY["call_timeout_s"]),
             "deadline_s": int(DEFAULT_JURY["deadline_s"]),
+            "max_output_tokens": int(DEFAULT_JURY["max_output_tokens"]),
             "pricing": dict(DEFAULT_JURY["pricing"]),
         }
         raw = self.data.get("jury")
         if not isinstance(raw, dict):
             return out
-        if isinstance(raw.get("panel"), list):
-            out["panel"] = [str(m).strip() for m in raw["panel"] if str(m).strip()]
-        if isinstance(raw.get("base_url"), str) and raw["base_url"].strip():
-            out["base_url"] = raw["base_url"].strip()
-        for key in ("call_timeout_s", "deadline_s"):
+        if isinstance(raw.get("seats"), list):
+            out["seats"] = [
+                s for s in (normalize_seat(x) for x in raw["seats"]) if s is not None
+            ]
+        fb = normalize_seat(raw.get("fallback"))
+        if fb is not None:
+            fb["enabled"] = raw["fallback"].get("enabled") is True
+            out["fallback"] = fb
+        for key in ("call_timeout_s", "deadline_s", "max_output_tokens"):
             try:
                 value = int(raw.get(key, out[key]))
             except (TypeError, ValueError):
@@ -900,8 +956,10 @@ __all__ = [
     "RUNTIME_MODELS_KEY",
     "RUNTIME_NAME",
     "Registry",
+    "SEAT_REQUIRED_KEYS",
     "STATE_REL_PATH",
     "dirty_tracked_state",
+    "normalize_seat",
     "orchestration_rel",
     "pod_session_key",
     "pod_sessions_dir",
