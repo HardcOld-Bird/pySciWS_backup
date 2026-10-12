@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sys
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import channels as _channels
-from . import presets
+from . import presets, procs
 from . import sessions as _sessions
 from . import sync as _sync
 from .checks import run_checks
@@ -74,6 +75,47 @@ SYSTEMIC_TEXT: dict[str, tuple[str, str]] = {
 #: 与巡检清单「ctx_ratio 持续 >60% 的成员→提请组长归档」同一把尺（devops 实测 81%/87% 两跳
 #: 后接 run_failed/rc=1 腰斩，续上去就是把它推过压缩悬崖）。低于此值才续，留一跳余量。
 FRESH_CTX_RATIO: float = 0.6
+
+
+def _sid_inflight(m: Member, sid: str) -> dict[str, Any] | None:
+    """目标 sid 的**上一跳进程仍活着**的证据（在途闸判据，184000 修复面④）。
+
+    运行态会话池的 ``pid``/``pid_task`` 由 :func:`registry.note_hop_pid` 在派生瞬间写下、
+    正常收尾时被常规写覆盖——**看得到非零 pid 就等于那跳没走完**。但 pid 会被系统复用，
+    故与第四面回收同口径过两道闸：``pid_alive`` 判活 + ``pid_is_session`` 核对 argv 里的
+    sid，两闸都过才算在途。任一不过 → None（fail-open 放行，不冤枉正常续跑）。
+
+    Returns:
+        ``{"pid": int, "task": str}``（占用证据，供拒绝信息点名）；不在途 → None。
+    """
+    entry = m.find_session(sid)
+    if not entry:
+        return None
+    try:
+        pid = int(entry.get("pid") or 0)
+    except (TypeError, ValueError):
+        return None
+    task = str(entry.get("pid_task") or "")
+    if pid <= 0 or not task:
+        return None
+    if not procs.pid_alive(pid) or not procs.pid_is_session(pid, sid):
+        return None
+    return {"pid": pid, "task": task}
+
+
+def _audit_blocked_delivery(pod: Path, raw: str) -> None:
+    """blocked/失败交付的**全文**审计副本（184000 修复面⑤）。
+
+    ``needs_leader`` note 曾截 200 字——两案（183545/192119）的关键证据都变残片，违背
+    §0.4 留痕原则。落 ``pods/<m>/outbox/delivery-<ts>.xml``（gitignore 面）供组长/审计
+    复原。fail-open：审计副本写失败绝不能反噬交付本身。
+    """
+    try:
+        outbox = pod / "outbox"
+        outbox.mkdir(parents=True, exist_ok=True)
+        (outbox / f"delivery-{_ts()}.xml").write_text(raw, encoding="utf-8")
+    except OSError as exc:  # pragma: no cover - 只防反噬，不值得为它造故障面
+        print(f"[!] 审计副本落盘失败（不影响交付）：{exc}", file=sys.stderr)
 
 
 def systemic_error_text(kind: str) -> str:
@@ -183,6 +225,9 @@ class DispatchOutcome:
     suggestion_id: str = ""
     envelope: Envelope | None = None
     error: str = ""
+    #: sid 在途闸换新会话的原因（``prev_alive``=上一跳进程仍活；""=没换）。台账同名字段
+    #: 留痕，drain 据此写 run 日志——人工拒绝与批次换新都必须可见（184000 修复面④）。
+    sid_new_reason: str = ""
 
 
 def collect_replies(member_id: str) -> tuple[str, list[Path]]:
@@ -358,8 +403,15 @@ def do_dispatch(
     quiet: bool = False,
     attach_replies: bool = True,
     eval_hop: bool = False,
+    auto: bool = False,
+    force_new_session: bool = False,
 ) -> DispatchOutcome:
     """执行一跳派发（完整链路）。参数语义与 ``orch dispatch`` 一致。
+
+    ``auto=True``（drain 批次通路）：目标 sid 的上一跳进程仍在途时**自动换新 sid**并在
+    台账标 ``sid_new_reason=prev_alive``；人工派发（默认）同情形**拒绝**（rc=2 点名占用
+    PID/任务书），``force_new_session=True``（CLI ``--force-new-session``）放行为新 sid——
+    禁止双进程同 sid 并发写会话历史（184000 修复面④/192119）。
 
     ``attach_replies=False``：不把组长的审批回复附进提示词、也不归档 ``sent/``
     （REFACTOR §3：harness 压测跳必须与「生产跳」隔离，否则回复里的上下文会让
@@ -486,6 +538,38 @@ def do_dispatch(
                 error=f"会话 {session} 未找到",
             )
         sid, resume = found["sid"], True
+    # sid 在途闸（184000 修复面④/192119）：上一跳进程仍活 = 双进程同 sid 并发写会话历史
+    # （#69 实证，两个进程共写 6f0cc8e5…）。人工派发默认拒绝并点名占用证据；drain 批次
+    # （auto）自动换新 sid 并在台账标注；--force-new-session 人工放行同法。无在途证据
+    # （没记 pid / pid 已死 / argv 对不上 sid）fail-open 照续，不冤枉正常跑。
+    sid_new_reason = ""
+    if resume:
+        occ = _sid_inflight(m, sid)
+        if occ and auto:
+            old_sid, sid, resume = sid, new_session_id(), False
+            sid_new_reason = "prev_alive"
+            print(
+                f"[i] sid {old_sid[:8]} 上一跳进程仍在途（pid={occ['pid']}，"
+                f"任务书 {occ['task']}）→ 自动起新 sid，台账 sid_new_reason=prev_alive"
+            )
+        elif occ and not force_new_session:
+            msg = (
+                f"会话 {sid} 的上一跳进程仍在途：pid={occ['pid']}，"
+                f"任务书 {occ['task']}（双进程同 sid 会并发写会话历史，已拒绝）。"
+                "待其退出后重试，或加 --force-new-session 改起新会话"
+            )
+            print(f"[!] {msg}")
+            return DispatchOutcome(
+                code=2,
+                kind="run_failed",
+                member=member_id,
+                sid=sid,
+                error=msg,
+            )
+        elif occ:  # 人工 + --force-new-session：放行 = 改起新 sid（不与在途进程同 sid）
+            sid, resume = new_session_id(), False
+            sid_new_reason = "prev_alive"
+            print(f"[i] --force-new-session：上一跳 pid={occ['pid']} 仍活 → 改起新会话")
     if not resume:
         _sessions.register_session(m, sid, slug)
     name = slug if not resume else (m.find_session(sid) or {}).get("name", slug)
@@ -694,6 +778,7 @@ def do_dispatch(
                     permission_denials=len(env_json.permission_denials),
                     plan=plan,
                     step=step,
+                    sid_new_reason=sid_new_reason,
                     error=err_text,
                 )
             )
@@ -702,6 +787,10 @@ def do_dispatch(
         )
         reg.write_sessions(m)
         reg.save()
+        if not eval_hop:
+            # ⑤ run_failed/系统性同样落审计副本——它们在 drain 也会产 needs_leader note，
+            # 截断的残片证据同源。env_json.result 是组员原始输出（含 <blocked>/<result> 全文）。
+            _audit_blocked_delivery(m.pod, env_json.result)
         outcome = DispatchOutcome(
             code=2,
             kind=kind,
@@ -714,6 +803,7 @@ def do_dispatch(
             est_tokens=est_tokens,
             body=env_json.result[:800],
             envelope=env_json,
+            sid_new_reason=sid_new_reason,
             error=err_text,
             fallbacks=fallbacks,
         )
@@ -725,6 +815,12 @@ def do_dispatch(
         return outcome
 
     delivery = parse_delivery(env_json.result)
+    # ⑤ blocked 交付全文落 outbox 审计副本（184000 修复面⑤）：needs_leader note 截 200 字
+    # 会让关键证据变残片（两案实证），全文必须留在 `pods/<m>/outbox/delivery-<ts>.xml`
+    # 供组长/审计复原。失败通路（run_failed/系统性）同理——它们不走 parse_delivery，
+    # 在失败分支另落一份 env_json.result。
+    if delivery.kind == "blocked" and not eval_hop:
+        _audit_blocked_delivery(m.pod, env_json.result)
     check_results = (
         [] if no_checks else run_checks(delivery.artifacts, reg, member_pod=m.pod)
     )
@@ -764,6 +860,7 @@ def do_dispatch(
         permission_denials=len(env_json.permission_denials),
         plan=plan,
         step=step,
+        sid_new_reason=sid_new_reason,
     )
     if not eval_hop:
         append(entry)
@@ -797,6 +894,7 @@ def do_dispatch(
         warning=delivery.warning,
         suggestion_id=suggestion_id,
         envelope=env_json,
+        sid_new_reason=sid_new_reason,
         fallbacks=fallbacks,
     )
     if not quiet:

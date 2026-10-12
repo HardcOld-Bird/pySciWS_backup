@@ -1345,7 +1345,13 @@ def _drain_batch(
         session="latest",
         effort=effort,
         quiet=True,
+        auto=True,  # ④ sid 在途闸批次通路：上一跳进程仍活 → 自动换新 sid，不拒批
     )
+    # ④ 可见性：批次自动换 sid 必须进 run 日志（人工拒绝走 rc=2 报告面，批次走这里）
+    if outcome.sid_new_reason:
+        _log(
+            run_log, f"[i] sid 在途闸：{outcome.sid_new_reason}，本批已自动换新会话续跑"
+        )
     elapsed = round(time.time() - t0, 1)
     # 规格 4a「run 日志」面：do_dispatch 走 quiet 通路，换席告警不会自己打到屏幕上，
     # 于是降级跑完的批次在日志里看起来就像「首席好好的」——回退必须进日志，否则
@@ -1424,9 +1430,18 @@ def _drain_batch(
 
     # 失败（blocked / run_failed / parse_error / 验收 FAIL）→ 仅种子 needs_leader；
     # 组包项保持 pending（不连坐：未被承诺、未 in_progress，留待下轮）
+    # ⑤ needs_leader note 不截断全文（184000 修复面⑤）：note 是**唯一**留在 backlog 上的
+    # 证据索引，截 160 字让两案关键证据变残片（违背 §0.4 留痕）。全文另在 dispatch 落
+    # outbox 审计副本；note 一并留全文（err 只给 run 日志一行摘要）。
     err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
+    full = (outcome.error or outcome.body or "").strip()
     backlog_needs_leader(
-        seed_id, note=f"drain 跳过（交付={outcome.kind}）：{err[:160]}"
+        seed_id,
+        note=(
+            f"drain 跳过（交付={outcome.kind}）：{full}\n"
+            # 点名**被派发者**的 outbox（seed["member"] 是提请者，不是写交付的人）
+            f"【全文已留审计副本：pods/{outcome.member or 'devops'}/outbox/delivery-*.xml】"
+        ),
     )
     salv = _salvage_progress(seed, run_log, reason=str(outcome.kind or "needs_leader"))
     _log(

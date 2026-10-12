@@ -76,6 +76,9 @@ class LedgerEntry:
     permission_denials: int = 0
     plan: str = ""  # 所属计划 id（Phase 2 起填充）
     step: str = ""
+    #: sid 在途闸换新会话的原因（``prev_alive``=上一跳进程仍活；""=没换）。
+    #: 台账留痕：批次自动换 sid 与人工拒绝都必须在读数面可见（184000 修复面④）。
+    sid_new_reason: str = ""
     error: str = ""
 
 
