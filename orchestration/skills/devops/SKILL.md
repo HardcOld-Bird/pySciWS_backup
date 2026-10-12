@@ -39,8 +39,8 @@ timeout 25 git push origin main   # 忽略一切失败、不重试、不设代�
 pysci-dev worktree remove <任务名>
 ```
 
-**主树同步入口/依赖一律 `pysci-dev venv-sync`**（裸 `uv sync` 遇运行中 exe 会先把其余
-入口删光再报错，半坏态静默；见 `references/uv-venv-sync.md`）。
+**主树同步入口/依赖一律 `pysci-dev venv-sync`**（裸 `uv sync`/`uv run` 遇运行中 exe 会先删光
+其余入口，半坏态静默；见 `references/uv-venv-sync.md`）。
 
 注意：worktree 不含 gitignored 的未跟踪重数据；需真实数据时以绝对路径只读引用主树
 （同 README §7）。
