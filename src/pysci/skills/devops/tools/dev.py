@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pysci.paths import PODS_ROOT, PROJECT_ROOT
+from pysci.skills.orchestration.tools.registry import dirty_tracked_state
 
 #: worktree 统一放置目录（与 Qoder 原生 --worktree 约定一致，避免两套位置）。
 WORKTREES_ROOT = PROJECT_ROOT / ".qoder" / "worktrees"
@@ -250,6 +251,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print(ln)
     bad += sum(1 for r in gp_results if r.status == "bad")
     print()
+    # 脏跟踪面哨兵（backlog 20261012-080410-devops 方案 C）：orchestration/state/** 里被
+    # git 跟踪的文件有未提交改动时，碰同一文件的组员单会被「合并前 git status 检查」拦下
+    # （只能交 <blocked>）。此段只观测不计 bad——脏多半是组长在飞的改动或待提交的正常
+    # 积压；「无人操作却自己变脏」才是缺陷（自愈写运行态面，跟踪面只留人写的覆盖）。
+    print("== 跟踪 state 脏面哨兵 ==")
+    dirty = dirty_tracked_state()
+    if dirty:
+        for p in dirty:
+            print(f"  [!] {p}")
+        print("  → 派发改 registry/backlog/deliveries 的单前，先提交或还原这些；")
+        print(
+            "    若它们不是你或组长改的（运行时自愈改脏跟踪面），那是缺陷，提请 devops。"
+        )
+    else:
+        print("  [√] orchestration/state/** 跟踪面无未提交改动")
+    print()
     # API Key 泄漏哨兵（REFACTOR §14、E3-prep）：Key 只能由用户本人提供且永不入库，
     # 而「永不入库」一旦只是纪律就会随某次提交进 git 历史。扫 git 跟踪文件找疑似密钥
     # 形态（tests/ 豁免：假 Key 是阳性用例素材），命中即硬失败；git 不可用只 advisory。
@@ -443,10 +460,21 @@ def cmd_worktree(args: argparse.Namespace) -> int:
         print(out)
         if rc == 0:
             print()
-            print("[NEXT] 测试策略（PYTHONPATH 覆盖，免建环境）：")
+            print(
+                "[NEXT] 测试策略（PYTHONPATH 覆盖，免建环境；**cwd 须在 worktree 之外**）："
+            )
             print(
                 f'  PYTHONPATH="{wt_path.as_posix()}/src" uv run --no-sync pytest '
                 f'"{wt_path.as_posix()}/tests" -x -q'
+            )
+            print(
+                "  已 cd 进 worktree 时别用 uv（会就地建空 .venv，缺依赖即崩），"
+                "改用主解释器："
+            )
+            print(
+                f'  PYTHONUTF8=1 PYTHONPATH="{wt_path.as_posix()}/src" '
+                f'"{PROJECT_ROOT.as_posix()}/.venv/Scripts/python.exe" '
+                f'-m pytest "{wt_path.as_posix()}/tests" -q'
             )
         return rc
     if action == "merge":

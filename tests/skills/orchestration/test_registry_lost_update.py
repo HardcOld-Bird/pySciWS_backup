@@ -214,12 +214,19 @@ def test_declare_config_overlays_only_declared_keys(iso_registry):
     assert worker.models["max"] == MAX_NEW, "内存副本同步（同进程后续读一致）"
 
 
-def test_refresh_models_from_stale_snapshot_keeps_merged_config(
+def test_refresh_models_from_stale_snapshot_never_touches_tracked_config(
     iso_registry, monkeypatch
 ):
-    """drain 启动自愈：即便拿的是旧快照，也只叠 models，不整体回写配置面。"""
-    reg_file, _runtime_file = _seed(iso_registry, _cfg(), _runtime({}))
+    """drain 启动自愈：陈旧快照也不得写跟踪配置面（一个字节不变）。
+
+    旧形状（backlog 20261011-220621-leader 修复后仍残留）：refresh 走 declare_config +
+    save()，虽按键合并保住了兄弟键，却每个 drain 都把 git 跟踪的 registry.json 改脏，
+    堵死一切碰该文件的 worktree 交付，且机器静默改写护栏级 models 面本身越权
+    （backlog 20261012-080410-devops 方案 A）。现语义：解析值只落运行态面。
+    """
+    reg_file, runtime_file = _seed(iso_registry, _cfg(), _runtime({}))
     stale = Registry.load()  # ← worker 启动时的旧副本
+    before = reg_file.read_bytes()
 
     merged = _cfg()
     merged["members"]["deputy"]["model_tier"] = "flash"
@@ -231,6 +238,7 @@ def test_refresh_models_from_stale_snapshot_keeps_merged_config(
     reg_file.write_text(
         json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    tracked_after_merge = reg_file.read_bytes()
 
     monkeypatch.setattr(Registry, "load", classmethod(lambda cls, *a, **k: stale))
     catalog = f"Qwen-3.8-Max ({MAX_NEW})\nQwen3.8-Flash\n"
@@ -238,14 +246,19 @@ def test_refresh_models_from_stale_snapshot_keeps_merged_config(
 
     res = reg_mod.refresh_models()
 
-    cfg = json.loads(reg_file.read_text(encoding="utf-8"))
-    assert res["changed"]["max"]["new"] == MAX_NEW, "变更档要落"
-    assert cfg["models"]["max"] == MAX_NEW
-    assert cfg["members"]["deputy"]["model_tier"] == "flash", (
-        "期间合并的成员改动不被回退"
+    assert before != tracked_after_merge, "夹具确有期间合并"
+    assert reg_file.read_bytes() == tracked_after_merge, (
+        "自愈不写跟踪面：期间合并的成员/checks 天然不会被陈旧副本回退"
     )
-    assert cfg["members"]["devops"]["tier_note"] == "E0-C 合并附注"
-    assert "figure-audit" in cfg["checks"], "期间合并的 checks 不丢"
+    rt = json.loads(runtime_file.read_text(encoding="utf-8"))
+    assert rt["models_resolved"] == {"minimum": "Qwen3.8-Flash"}, (
+        "跟踪面未 pin 的档 → 解析值落运行态面"
+    )
+    assert res["changed"] == {"minimum": {"old": None, "new": "Qwen3.8-Flash"}}
+    assert res["shadowed"]["max"] == {"tracked": MAX_OLD, "resolved": MAX_NEW}, (
+        "跟踪值优先，解析值只点名不顶掉"
+    )
+    assert "flash_fallback←Qwen-3.8-Flash" in res["missing"]
 
 
 def test_corrupt_config_file_fails_loud_not_overwritten(iso_registry):

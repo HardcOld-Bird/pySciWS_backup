@@ -18,6 +18,7 @@ from pysci.skills.orchestration.tools import (
     failure_tags,
     jury,
     ledger,
+    orch,
     registry,
     watch,
     workflow,
@@ -81,6 +82,9 @@ def iso_state(tmp_path, monkeypatch):
         "refresh_models",
         lambda: {"changed": {}, "missing": [], "catalog_size": 0},
     )
+    # 脏跟踪面哨兵默认「干净」：不 patch 则 orch status 用例会真跑 ``git status`` 读
+    # 开发者工作区，输出随仓库脏净而变（backlog 20261012-080410-devops 方案 C）。
+    monkeypatch.setattr(orch, "dirty_tracked_state", lambda **kw: [])
     return state
 
 

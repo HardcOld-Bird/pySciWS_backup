@@ -6,7 +6,8 @@ description: devops 组员的作业规程：worktree 隔离实施、PYTHONPATH �
 # devops 作业规程
 
 角色边界与红线见 charter（`.qoder/rules/charter.md`）；本文放**操作知识**。
-专属 CLI：`pysci-dev`（doctor / sync / worktree）。你不使用 pysci-orch。
+专属 CLI：`pysci-dev`（doctor / sync / worktree）。不使用 pysci-orch——唯一例外是
+**eval 面**（`eval run`/`eval set-baseline`，边界与退役条件见 README §1）。
 
 ## worktree 作业规程（一切代码改动）
 
@@ -14,32 +15,31 @@ description: devops 组员的作业规程：worktree 隔离实施、PYTHONPATH �
 # 1. 开 worktree（从最新 main）
 #    ← drain/backlog 派发时 <任务名> 用**任务书 id**（如 20261010-xxx），便于孤儿回收
 pysci-dev worktree add <任务名>        # = git worktree add -b wt-<任务名> .qoder/worktrees/<任务名>
-WT="$(git rev-parse --show-toplevel)/.qoder/worktrees/<任务名>"
+ROOT="$(git rev-parse --show-toplevel)"   # 在 main/pod 侧执行 → 主树根
+WT="$ROOT/.qoder/worktrees/<任务名>"
 
-# 2. 在 worktree 内改代码（Edit/Write 用 $WT 下路径）
+# 2. 在 worktree 内改代码（Edit/Write 用 $WT 下路径；**不要 cd 进 worktree**）
 
-# 3. 测试 —— PYTHONPATH 覆盖策略（实测定型 2026-10-09）：
-#    复用主 .venv 全部依赖，worktree 代码优先于 editable 主树 src（免建环境）。
+# 3. 测试 —— PYTHONPATH 覆盖策略（实测定型 2026-10-09）：复用主 .venv 全部依赖，
+#    worktree 代码优先于 editable 主树 src。**前提=cwd 在 worktree 之外**（pod/main，
+#    uv 沿 cwd 找主 .venv）；已 cd 进去时 uv 会就地新建空 <wt>/.venv 缺依赖即崩
+#    （2026-10-12 实测），那时改用主解释器 "$ROOT/.venv/Scripts/python.exe" -m pytest。
 PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
-PYTHONPATH="$WT/src" uv run --no-sync python -c "import <改动模块>; ..."   # 定向验证
 
-# 3b. 仅当 pyproject 依赖本身变更时，才在 worktree 内建独立环境（重、分钟级）：
-#     uv sync --project "$WT"   然后用 "$WT/.venv" 运行
+# 3b. 仅当 pyproject 依赖变更才 uv sync --project "$WT"（重、分钟级），之后用 "$WT/.venv"
 
 # 4. 合并回 main（先在 worktree 内 commit 本次改动，再在主树操作）：
 pysci-dev worktree merge <任务名>   # cp gitignored 运行态(旧件 .bak-<ts>) → merge --no-ff
                                     #   → 会话数不减自检（--no-ff 不带运行态，见 references/registry-runtime.md）
 
-# 5. commit（cz 规范；pre-commit 必须全过，禁 --no-verify）
-#    合并/提交后**尝试一次限时 push**（best-effort，用户裁决 2026-10-10）：
-timeout 25 git push origin main   # 忽略一切失败（网络/认证/超时）；不重试、不设代理
-#    ↑ 超时硬要求：直连失败会挂起阻塞 drain；push 按分支增量，失败当预期、不着急。
+# 5. commit（cz 规范；pre-commit 全过，禁 --no-verify）后一次限时 push（规程见 charter）
+timeout 25 git push origin main   # 忽略一切失败、不重试、不设代理；超时硬要求（防挂起阻塞 drain）
 # 6. 清理
 pysci-dev worktree remove <任务名>
 ```
 
-注意：worktree 检出不含被 gitignore 的未跟踪重数据（data/research 的 simulation/storage）；
-需真实数据验证时用绝对路径只读引用主树。
+注意：worktree 不含 gitignored 的未跟踪重数据；需真实数据时以绝对路径只读引用主树
+（同 README §7）。
 
 **worktree 命名约定**：drain/backlog 派发用**条目 id** 作 `<任务名>`（take_first 记
 `worktree=id`）。会话中途死亡的孤儿条目，下次 drain 回收据 `wt-<id>` 名
@@ -59,19 +59,20 @@ pysci-dev worktree remove <任务名>
 - `tree_hash` **行尾无关**（哈希前 CRLF→LF）：worktree 内 sync 提交的
   `skills-deployed.json` 对 main 即正确，无需合并后重跑；
 - 红线：只碰 manifest 声明的部署名；**不删除成员自建技能**；不手改部署副本。
-- **真本 references 超 8KB 的处置**：按 `##` 主题拆 `<stem>-0N-<slug>.md` 分册（逐字
-  搬运、原名留分册索引），所属 SKILL.md 索引行标 ``*`` + 节首加图例行。机械拆分与验证
-  次序（含 pre-commit 会先改写文件的坑）见 `references/budget-layers.md` §4。
+- **真本 references 超 8KB 的处置**：按 `##` 主题拆 `<stem>-0N-<slug>.md` 分册，所属
+  SKILL.md 索引行标 ``*``；搬运纪律与次序（含 pre-commit 先改写文件的坑）见
+  `references/budget-layers.md` §4。
 - **机械生成/改写 markdown 的 EOF 窗口**：`pysci-dev mdgen-check <paths…>` 提前把
   pre-commit（trailing-ws + end-of-file-fixer）改写**做完**并打印 pre/post sha256；
-  内容等价性断言以 **post_sha256**（钩子终态）为基准，非生成前字节。首提必过。
+  等价性断言基准=**post_sha256**（钩子终态），非生成前字节。首提必过。
 
 ## pysci-dev 命令面
 
 ```
 pysci-dev doctor [--pod <id>]   # pod 巡检：hooks/leader 排除/charter/AGENTS 体量/积压
                                  # + 部署台账（sync --check）+ 预算三档（≤8192B/文件）
-                                 # + API Key 泄漏哨兵（只扫 git 跟踪文件，tests/ 豁免）
+                                 # + API Key 泄漏哨兵（tests/ 豁免）+ 跟踪 state 脏面
+                                 #   （advisory：脏=组员合并前检查会拦的东西）
 pysci-dev sync [--check]        # 技能部署
 pysci-dev worktree add|merge|remove|list [<name>]   # merge=搬运行态+--no-ff+会话数自检
 pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写、打印终态哈希
@@ -109,16 +110,15 @@ PreToolUse=pod-guard，均 `node ../../guards/*.mjs`）；②
 - **push**：见上 worktree 规程第 5 步（一次、限时、忽略失败、不重试、不设代理）；
 - 禁止 --no-verify；禁止 reset --hard/force 类破坏性操作，除非任务书明确授权；
 - 合并前先 `git status` 检查工作区；发现非本任务的未提交改动，保留并在交付中报告。
-- **状态分储**：registry.json=低频配置（git）/ sessions-runtime.json=会话池运行态
-  （心跳每跳必变，gitignore）。语义见 references/registry-runtime.md。
 
 ## 巡检清单（doctor 之外的人工项）
 
 - 台账：`orchestration/state/ledger/deliveries.jsonl` 中 ctx_ratio 持续 >60% 的成员
   → 提请组长归档轮换；
 - **Tier B 压测案卷**（`state/evals/harness/*.md`）与 checks 注册表归 devops 维护：
-  动了 harness 面（dispatch/runner/guards/档位）就请组长跑 `orch eval run --all`，
-  取二元判决+before/after；案卷格式见 orchestration 技能 `references/harness-eval.md`。
-- transcript 抽查：pod 键目录（`~/.qoder-cn/projects/<pod键>/`）会话 jsonl 中检索
-  pod-guard 拦截记录，核对其后有无 Bash 绕行迹象（诚实条款审计端）；
+  动了 harness 面（dispatch/runner/guards/档位）就**自跑** `pysci-orch eval run --all`
+  （队列侧 approve/dispatch/drain 仍组长专属；E4 上线后此面交 bencher），取二元判决
+  +before/after；案卷格式见 orchestration 技能 `references/harness-eval.md`。
+- transcript 抽查（诚实条款审计端）：`~/.qoder-cn/projects/<pod键>/*.jsonl` 里检索
+  pod-guard 拦截记录，核对其后有无 Bash 绕行迹象；
 - AGENTS.md 体量：>8KB 的成员提请其自行精简（蒸馏纪律）。

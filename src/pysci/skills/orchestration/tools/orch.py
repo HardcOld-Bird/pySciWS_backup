@@ -44,7 +44,12 @@ from .ledger import (
     read_all,
     summarize,
 )
-from .registry import Registry, orchestration_rel, refresh_models
+from .registry import (
+    Registry,
+    dirty_tracked_state,
+    orchestration_rel,
+    refresh_models,
+)
 from .runner import EFFORT_ALIASES, VALID_EFFORTS
 
 #: ``--effort`` 可选值（原生 exe 档位 + off/disabled 别名）。**不传=跟随用户级默认（中）**；
@@ -193,6 +198,16 @@ def cmd_status(args: argparse.Namespace) -> int:
                 + (f"（累计失败 {n} 次，勿原样重派）" if n else "")
             )
 
+    dirty = dirty_tracked_state()
+    if dirty:
+        print("== 跟踪 state 脏面（组员合并前检查拦的就是这些）==")
+        for p in dirty:
+            print(f"  [!] {p}")
+        print(
+            "  → 组员改 registry/backlog 的单会被合并前检查挡住：先提交或还原；"
+            "若是运行时自愈改脏了跟踪面，那是缺陷（registry 只应留人写的覆盖）。"
+        )
+
     print("== watch（drain 事件等待器）==")
     for line in _watch.status_lines():
         print(line)
@@ -219,6 +234,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(
             f"  [!] 重复失败 {len(repeat_fails)} 条（跨 run 累计 ≥2 次）："
             "上下文/轮数/任务书粒度失配的症状，改单再派，别原样重投"
+        )
+    if dirty:
+        print(
+            "  跟踪 state 有未提交改动（见上「脏面」段）：派发碰同文件的单前"
+            "先提交或还原，否则组员只能交 <blocked>"
         )
     if live:
         print(
@@ -418,10 +438,12 @@ def cmd_drain_stop(args: argparse.Namespace) -> int:
 
 
 def cmd_refresh_models(args: argparse.Namespace) -> int:
-    """手动刷新 registry 模型映射（--list-models 人类名→UUID；用户裁决 2026-10-10）。
+    """手动刷新模型映射的**运行态面**（--list-models 人类名→UUID；用户裁决 2026-10-10）。
 
-    drain 启动时会自动执行同一刷新（自愈）；本命令供重配 BYOK 后立即校验/写回。
-    未命中的档保持现值不清空（宁旧勿空——清空会静默改变计费渠道）。
+    drain 启动时会自动执行同一刷新（自愈）；本命令供重配 BYOK 后立即校验/写回。解析值
+    落 sessions-runtime.json（gitignored），跟踪 registry.json 的 models 是人写覆盖、
+    读取时优先（三级回退，backlog 20261012-080410-devops）。未命中的档保持现值不清空
+    （宁旧勿空——清空会静默改变计费渠道）。
     """
     del args
     try:
@@ -436,9 +458,22 @@ def cmd_refresh_models(args: argparse.Namespace) -> int:
     if res["changed"]:
         for tier, c in sorted(res["changed"].items()):
             print(f"  [{tier}] {c['old'] or '(空)'} → {c['new']}")
-        print(f"[√] 已刷新 {len(res['changed'])} 个档位映射并写回 registry。")
+        print(
+            f"[√] 已刷新 {len(res['changed'])} 个档位映射"
+            "（写 sessions-runtime.json 的 models_resolved，跟踪 registry.json 不动）。"
+        )
     else:
-        print(f"[√] 映射均为最新（目录 {res['catalog_size']} 个模型），无需写回。")
+        print(f"[√] 运行态面无变化（目录 {res['catalog_size']} 个模型），无需写回。")
+    if res.get("shadowed"):
+        for tier, s in sorted(res["shadowed"].items()):
+            print(
+                f"  [{tier}] 跟踪值 {s['tracked'] or '(空)'} 遮蔽解析值 "
+                f"{s['resolved'] or '(空)'}（人写覆盖优先，未改）"
+            )
+        print(
+            "    要换档：改 registry.json 的 models.<档>（护栏级，经用户授权），"
+            "或删掉该键让机器接管。"
+        )
     if res["missing"]:
         print(f"[!] 未命中（保持现值）：{', '.join(res['missing'])}")
         print(
