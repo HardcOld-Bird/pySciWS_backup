@@ -235,6 +235,36 @@ def test_cmd_venv_sync_survives_locked_entry(tree, monkeypatch, capsys):
         proc.wait()
 
 
+def test_sweep_removes_stale_residue(tmp_path):
+    """往次让路的 `.exe.locked-*` 该被清；删不动的（还被人占着）静默留着。"""
+    (tmp_path / "pysci-dev.exe.locked-20260101000000").write_bytes(b"old")
+    (tmp_path / "pysci-orch.exe.locked-20260101000001").write_bytes(b"held")
+    # 目录占位：unlink 必抛 IsADirectoryError（跨平台的「删不动」造法）
+    (tmp_path / "pysci-mirror.exe.locked-20260101000002").mkdir()
+    (tmp_path / "pysci-dev.exe").write_bytes(b"keep-me")  # 不是残留，不许碰
+
+    assert dev._sweep_aside_residue(tmp_path) == 2
+    assert not (tmp_path / "pysci-dev.exe.locked-20260101000000").exists()
+    assert (tmp_path / "pysci-mirror.exe.locked-20260101000002").exists()
+    assert (tmp_path / "pysci-dev.exe").read_bytes() == b"keep-me"
+
+
+def test_cmd_venv_sync_sweeps_stale_residue(tree, monkeypatch, capsys):
+    """命令面第一步就腾旧垃圾：让路造的是新名字，不会与往次残留撞车。"""
+    root, scripts = tree
+    stale = scripts / "pysci-orch.exe.locked-20260101000000"
+    stale.write_bytes(b"old")
+    monkeypatch.setattr(
+        dev,
+        "run_uv_sync",
+        _fake_uv(scripts, ["pysci-dev", "pysci-orch", "pysci-mirror"]),
+    )
+    assert dev.cmd_venv_sync(_Args(uv_args=[])) == 0
+    out = capsys.readouterr().out
+    assert "清理往次让路残留 1 个" in out
+    assert not stale.exists()
+
+
 def test_run_uv_sync_uses_project_root(tmp_path, monkeypatch):
     """真实 uv 调用面：cwd 必须是 PROJECT_ROOT（否则可能在 worktree 里建第二套 venv）。"""
     seen: dict = {}

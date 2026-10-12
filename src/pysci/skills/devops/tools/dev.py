@@ -408,6 +408,22 @@ def run_uv_sync(extra: list[str]) -> tuple[int, str]:
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 
+def _sweep_aside_residue(scripts_dir: Path) -> int:
+    """清掉往次让路留下的 ``<name>.exe.locked-<ts>`` 残留，返回删掉个数。
+
+    这些文件只有**占用它的进程退出后**才删得掉（本次让路的那个就删不掉），故 best-effort：
+    删不动的静默留着，交给下一次运行——否则半坏态的解药会积一堆垃圾。
+    """
+    n = 0
+    for stale in scripts_dir.glob("*.exe.locked-*"):
+        try:
+            stale.unlink()
+        except OSError:
+            continue
+        n += 1
+    return n
+
+
 def cmd_venv_sync(args: argparse.Namespace) -> int:
     """Windows 安全的 ``uv sync``：先让被占住的入口 exe 改名让路，sync 后逐个核对入口。
 
@@ -430,6 +446,9 @@ def cmd_venv_sync(args: argparse.Namespace) -> int:
         return 2
 
     ts = datetime.now().astimezone().strftime("%Y%m%d%H%M%S")
+    swept = _sweep_aside_residue(scripts_dir)
+    if swept:
+        print(f"[i] 清理往次让路残留 {swept} 个")
     moved: list[Path] = []
     if os.name == "nt":
         print("== 让路：探测声明入口是否被运行中进程占住 ==")

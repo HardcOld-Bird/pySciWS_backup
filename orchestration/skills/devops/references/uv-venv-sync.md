@@ -46,16 +46,17 @@ $ pysci-compose …         →  command not found
 pysci-dev venv-sync [--offline 等转发给 uv sync 的参数]
 ```
 
-做四件事，顺序固定：
+做五件事，顺序固定：
 
 1. 读 `pyproject.toml` 的 `[project.scripts]`（读不到 ⇒ rc=2 直接拒，**不**当「无需核对」）；
-2. 逐个对声明入口做改名探测，被占住的改名为 `<name>.exe.locked-<ts>` 让路，并用
+2. 扫掉往次让路留下的 `<name>.exe.locked-*` 垃圾（占用者已退的才删得动，删不动静默跳过）；
+3. 逐个对声明入口做改名探测，被占住的改名为 `<name>.exe.locked-<ts>` 让路，并用
    `wmic process get ProcessId,ExecutablePath /format:csv`（argv 直传，免疫 MSYS 把
    `/format:` 转成路径）**点名占用者**——镜像路径在创建时定格，改名后仍显示原名，
    故按原名匹配；
-3. `uv sync`（cwd 锁 `PROJECT_ROOT`，超时 1800 s）；
-4. **核对声明过的入口是否全在盘**：缺 ⇒ 打印缺失清单并 rc=2；齐 ⇒ best-effort 删
-   `.locked-*` 残留（删不掉只提示「占用进程退出后可删」，不视为失败）。
+4. `uv sync`（cwd 锁 `PROJECT_ROOT`，超时 1800 s）；
+5. **核对声明过的入口是否全在盘**：缺 ⇒ 打印缺失清单并 rc=2；齐 ⇒ best-effort 删
+   本次的 `.locked-*` 残留（删不掉只提示「占用进程退出后可删」，交给下次运行的第 2 步）。
 
 退出码：`0` 入口齐备 / `2` 半坏态未消除或前置条件不满足 / 其余透传 uv 的 rc。
 关键点是**把「半坏态」从静默变成显式失败**——旧现场里 uv 报一句锁错误就走，谁也不知道
@@ -71,7 +72,36 @@ pysci-dev venv-sync [--offline 等转发给 uv sync 的参数]
 - 非 Windows：无 exe 锁形态，工具直接 sync 并仍核对入口（入口名在 POSIX 下是脚本文件，
   `scripts_dir` 布局不同则 rc=2 提示，不误判）。
 
-## 5. 顺带纪律
+## 5. 谁能把它跑起来（半坏态自救的关键一环）
+
+`uv run pysci-X` 会**先隐式 sync 项目环境**再执行。所以 pyproject 一变，这条隐式 sync
+自己就撞同一把锁——而且**工具本体根本没被跑起来**（2026-10-12 main 实测：
+`uv run pysci-dev venv-sync` 只吐出 uv 的一行 `failed to remove file ... pysci-orch.exe:
+拒绝访问 (os error 5)`，rc=2，`.venv/Scripts` 当场少掉 6 个入口）。入口被删光时
+`pysci-dev.exe` 自己也在被删之列，于是「用新工具救火」这条路的正确走法是**绕开 uv**：
+
+```bash
+.venv/Scripts/python.exe -m pysci.skills.devops.tools.dev venv-sync   # python.exe 不是入口，uv 不动它
+uv run --no-sync pysci-dev venv-sync                                  # 入口还在盘时可用
+```
+
+## 6. main 真仓验收（2026-10-12，backlog 20261012-114239-devops）
+
+组长 `pysci-orch.exe`（PID 9804）真在跑 ⇒ 现场即缺陷本体。pyproject 新增一个 console
+script 后跑上面第一条：
+
+```
+  [√] pysci-orch.exe 被占住 → 已改名让路（pysci-orch.exe.locked-20261012124035）；占用者=ZHUANZ PID 9804
+== uv sync ==  Resolved 217 packages / Installed 1 package
+  [i] 残留 pysci-orch.exe.locked-20261012124035 仍被占用（占用进程退出后可删）
+[√] 入口齐备（[project.scripts] 11 个全在盘）      rc=0
+```
+
+11 个声明入口（含新增的那个）逐个 `--help` 均 rc=0；被让路的那个文件在进程存活期删不掉，
+由下一次运行的第 2 步（sweep）腾掉。同场另一枚旧残留 `.locked-20261012` 是本轮改造前手工
+删掉的——删得动，正说明「占用者退出后即可回收」这条判据成立。
+
+## 7. 顺带纪律
 
 - worktree 里**不要**跑 `venv-sync`：`PROJECT_ROOT` 就近取 `pyproject.toml`，会去重建
   worktree 那套环境（分钟级、且不是你要的那套）。跨树用 `PYTHONPATH="<wt>/src"` 配方，
