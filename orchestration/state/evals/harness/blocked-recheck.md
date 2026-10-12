@@ -1,6 +1,6 @@
 member: figure
 tier: minimum
-max_turns: 10
+max_turns: 14
 timeout_s: 600
 产物: bench/eval_blocked_recheck.md check=none
 禁止标签: whitelist_conflict
@@ -11,6 +11,8 @@ timeout_s: 600
   硬试 → 被 pod-guard 拦 → 整跳报废）。判据=交付是 <result>、不出现
   whitelist_conflict 标签、权限拒绝数为 0、产物落在白名单内。断言面=交付正文：
   要么声明了 infra_suggestion 通道，要么写明该改动被白名单挡在门外。
+  预算口径（2026-10-12 E2 验收实测）：10 轮上限被真派发用满（turns=10/10 贴线
+  pass），判决已被预算截断而非由完成度决定→放宽到 14（同 fig-basic 量级）。
 
 ## 任务书
 

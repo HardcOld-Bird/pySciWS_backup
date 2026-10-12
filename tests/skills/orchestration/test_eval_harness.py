@@ -404,9 +404,55 @@ def test_run_case_ledger_row_fields(iso_eval, monkeypatch):
         "ctx_ratio",
         "sid",
         "label",
+        "max_turns",
     } <= set(r)
     assert r["num_turns"] == 7 and r["est_tokens"] == 60
     assert r["ctx_ratio"] == pytest.approx(0.3) and r["model"] == "Qwen3.8-Flash"
+    assert r["max_turns"] == ev.DEFAULT_MAX_TURNS, (
+        "案内预算必须随行入台账：贴线判决只有台账可证，否则事后无从复核"
+    )
+
+
+def test_run_case_records_case_budget(iso_eval, monkeypatch):
+    """``max_turns:`` 案内值入台账行（不是运行态猜的）。"""
+    capture_dispatch(monkeypatch)
+    patch_reg(monkeypatch, iso_eval)
+    case = ev.parse_case(seed_case(iso_eval, "member: figure\nmax_turns: 8\n" + BODY))
+    assert ev.run_case(case).max_turns == 8
+
+
+def test_print_row_warns_when_budget_exhausted(capsys):
+    """贴线 pass 必须被点名：turns 用满案内预算时判决由预算截断，不是干净通过。"""
+    ev._print_row(
+        ev.Row(
+            ts="t",
+            case="a",
+            member="m",
+            tier="minimum",
+            model="x",
+            verdict="pass",
+            num_turns=10,
+            max_turns=10,
+        )
+    )
+    out = capsys.readouterr().out
+    assert "预算用满" in out and "贴线" in out and "turns=10/10" in out
+
+
+def test_print_row_silent_within_budget(capsys):
+    ev._print_row(
+        ev.Row(
+            ts="t",
+            case="a",
+            member="m",
+            tier="minimum",
+            model="x",
+            verdict="pass",
+            num_turns=9,
+            max_turns=10,
+        )
+    )
+    assert "预算用满" not in capsys.readouterr().out
 
 
 def test_run_case_does_not_write_member_ledger(iso_eval, monkeypatch):
@@ -739,8 +785,29 @@ def test_cli_run_compares_with_baseline(iso_eval, monkeypatch, capsys):
     assert "改善" in out and "11 → 5" in out
 
 
+def test_cli_run_marks_tight_case_in_diff_table(iso_eval, monkeypatch, capsys):
+    """对照表也要点名贴线案：均值轮次被预算截断的案污染判决，读数不可信。"""
+    monkeypatch.setattr(ev, "do_dispatch", lambda m, **kw: out_of(turns=8))
+    patch_reg(monkeypatch, iso_eval)
+    seed_case(iso_eval, "member: figure\nmax_turns: 8\n" + BODY, "a")
+    ev.append_row(
+        ev.Row(
+            ts="t",
+            case="a",
+            member="m",
+            tier="minimum",
+            model="x",
+            verdict="pass",
+            num_turns=4,
+        )
+    )
+    ev.write_baseline()
+    assert ev.cmd_eval_run(ns(**ARGS)) == 0
+    out = capsys.readouterr().out
+    assert "预算用满" in out and "4 → 8" in out
+
+
 def test_cli_run_bad_case_rc2(iso_eval, capsys):
-    seed_case(iso_eval, "bogus: 1\n" + BODY, "a")
     assert ev.cmd_eval_run(ns(**ARGS)) == 2
     assert "案卷不可用" in capsys.readouterr().out
 
