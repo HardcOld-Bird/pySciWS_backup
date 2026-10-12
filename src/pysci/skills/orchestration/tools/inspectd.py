@@ -51,6 +51,7 @@ from .drain import (
     WorkerPaths,
     _consume_stop_request,
     _log,
+    _log_exception,
     _now,
     _spawn_detached,
     _systemic_error_text,
@@ -992,8 +993,10 @@ def run_item(
             result = runner(item, run_log, dry=dry)
             result["status"] = "failed" if result.get("error") else "done"
         except Exception as exc:  # noqa: BLE001 — 后台无人值守：异常即终态
-            result = {"error": f"{type(exc).__name__}: {exc}", "status": "failed"}
-            _log(run_log, f"[!] {item.get('id')} 失败：{result['error']}")
+            result = {
+                "error": _log_exception(run_log, exc, f"{item.get('id')} 失败"),
+                "status": "failed",
+            }
     result["elapsed_s"] = round(time.time() - t0, 1)
     workq.finish(QUEUE_PATH, str(item["id"]), result["status"], result)
     return result
@@ -1104,8 +1107,7 @@ def inspect_drain(
                 )
                 break
     except Exception as exc:  # noqa: BLE001 — 记录后仍写 .done（不留黑洞）
-        summary["error"] = f"{type(exc).__name__}: {exc}"
-        _log(run_log, f"[!] inspector worker 异常中断：{summary['error']}")
+        summary["error"] = _log_exception(run_log, exc, "inspector worker 异常中断")
     finally:
         summary["count"] = len(summary["items"])
         summary["completed"] = _now()
