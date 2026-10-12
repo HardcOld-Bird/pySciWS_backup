@@ -15,7 +15,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
-from . import journal
+from . import journal, verdict
 from .delivery import parse_suggestion_fields
 from .dispatch import REPLIES_DIR, do_dispatch
 from .failure_tags import (
@@ -40,6 +40,9 @@ from .runner import normalize_effort
 SUGGESTIONS_DIR = ORCH_STATE_ROOT / "suggestions"
 BACKLOG_PATH = ORCH_STATE_ROOT / "backlog.json"
 
+#: 建议文件头部的机器标记行（dispatch 落盘）：读「人读的第一行」时必须整类跳过。
+_HEAD_MARKER_RE = re.compile(r"^(kind|delivery|source)\s*[:：]", re.IGNORECASE)
+
 
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -61,6 +64,21 @@ def _member_of(sugg: Path) -> str:
     # 文件名约定：<ts>-<member>.md
     parts = sugg.stem.split("-", 2)
     return parts[2] if len(parts) >= 3 else "unknown"
+
+
+def _archive(sugg: Path, dest_dir: Path) -> Path:
+    """把建议移入归档目录，同名已存在时加 ``-2``/``-3``… 序号。
+
+    判决留痕不得互相覆盖：重名覆盖会让上一笔判决的原文消失，而审计要的正是原文。
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    target = dest_dir / sugg.name
+    n = 2
+    while target.exists():
+        target = dest_dir / f"{sugg.stem}-{n}{sugg.suffix}"
+        n += 1
+    sugg.rename(target)
+    return target
 
 
 def _backlog_append(entry: dict) -> int:
@@ -89,6 +107,16 @@ def backlog_by_status(status: str) -> list[dict]:
         return []
     data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
     return [i for i in data.get("items", []) if i.get("status") == status]
+
+
+def backlog_find(item_id: str) -> dict | None:
+    """按 id 取 backlog 条目（交付后核验回路用；找不到返回 None）。"""
+    if not BACKLOG_PATH.exists():
+        return None
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    return next(
+        (i for i in data.get("items", []) if str(i.get("id")) == str(item_id)), None
+    )
 
 
 def backlog_take_first() -> dict | None:
@@ -235,6 +263,10 @@ def backlog_complete(
 
     batch_size/batch_seed：批量消化时记录本条目所属批次（同批一起 done 的条目数与
     种子 id），供 orch stats 批量大小分布与审计；单条消化时留空。
+
+    E5b（REFACTOR §5.6）：done 之后自动为带 M 通道（``--bench``）的条排出 A/B 核验项——
+    核验方式在审批时一次定死，交付后不再有人裁决，所以这一步必须机械发生。核验入队
+    失败不能让销账本身失败（条目已交付是事实），故 fail-soft 打印并继续。
     """
     extra: dict = {}
     if batch_size is not None:
@@ -242,6 +274,19 @@ def backlog_complete(
     if batch_seed is not None:
         extra["batch_seed"] = batch_seed
     _backlog_set_status(item_id, "done", note, stamp="done_at", extra=extra or None)
+    entry = backlog_find(item_id)
+    if not entry:
+        return
+    try:
+        item = verdict.post_verify_enqueue(entry)
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"[!] 交付后核验入队失败（{item_id}）：{type(exc).__name__}: {exc}")
+        return
+    if item:
+        print(
+            f"    已排交付后核验：{item['id']}（label={item['label']}，"
+            f"a={item['ref_a'][:8]} → b=HEAD）——判决由 bencher 消化后自动落地"
+        )
 
 
 def backlog_needs_leader(item_id: str, note: str = "") -> None:
@@ -387,7 +432,9 @@ def cmd_suggestions(args) -> int:
         )
     print()
     print(
-        '[NEXT] 审批：uv run pysci-orch approve <id> --note "..."；'
+        "[NEXT] 审批须带判决包（§5.1 四态其一）：approve <id> --jury（仲裁）/ "
+        '--bench <案id>（实测）/ --jury --bench <案id>（双）/ --override "<理由>"（自裁留痕）；'
+        "缺陷类且该跳交付含 blocked 走例外通道（裸 approve 即可，建议连带 --bench 复跑失败案）。"
         '否决：uv run pysci-orch reject <id> --override "<判决依据>"（必填，留痕入决策日志）。'
     )
     return 0
@@ -403,20 +450,20 @@ def cmd_approve(args) -> int:
         return 2
     member = _member_of(sugg)
     body = sugg.read_text(encoding="utf-8")
-    # 摘要行：跳过标题+空行，并跳过 dispatch 头部注入的 `kind:` 标记行（否则会被误当摘要）。
-    first = sugg.stem
-    for ln in body.splitlines()[2:]:
-        s = ln.strip()
-        if not s or s.lower().startswith("kind:"):
-            continue
-        first = s
-        break
     # E0-B（REFACTOR §12 判据 2/3）：backlog 条目须带结构化 kind 与可证伪 success_criteria。
     # 从建议正文解析（约定标记行），success_criteria 可由 --criteria 补录；缺任一 → 拒绝入队。
     kind, criteria = parse_suggestion_fields(body)
     cli_criteria = (getattr(args, "criteria", "") or "").strip()
     if cli_criteria:
         criteria = cli_criteria
+    # 摘要行须跳过头部所有标记行（kind/delivery），否则 delivery 会被当成建议内容。
+    first = sugg.stem
+    for ln in body.splitlines()[2:]:
+        s = ln.strip()
+        if not s or _HEAD_MARKER_RE.match(s):
+            continue
+        first = s
+        break
     if not kind:
         print(
             f"[!] 建议 '{sugg.stem}' 缺 kind 分类，拒绝入队。请在建议正文补一行"
@@ -443,6 +490,89 @@ def cmd_approve(args) -> int:
             "（REFACTOR §12 判据 3：无判据的提案不可证伪，不进队。）"
         )
         return 2
+    # ---- E5b 判决包闸（REFACTOR §5.1）：基建判断须与组长职责事实分离 ----
+    delivery = verdict.delivery_of(body)
+    channel, gate_err = verdict.validate(args, kind=kind, delivery=delivery)
+    if gate_err:
+        print(gate_err)
+        return 2
+    if channel == verdict.CHANNEL_EXCEPTION:
+        print(
+            "    判决通道=缺陷例外（kind=defect 且提请那一跳交付为 blocked，"
+            "in-vivo 实测即依据）。\n"
+            "    规程注记：建议连带 --bench 复跑原失败案，把「当时失败」变成可比的 A/B 读数。"
+        )
+    if channel in ("jury", "jury+bench"):
+        case_path = verdict.assemble_case(
+            sugg_id=sugg.stem, summary=first, kind=kind, criteria=criteria, body=body
+        )
+        try:
+            run = verdict.run_jury(case_path)
+        except (OSError, ValueError) as exc:
+            print(
+                f"[!] 案卷不可用，未开庭：{exc}\n    案卷 {orchestration_rel(case_path)}"
+            )
+            return 2
+        call = (run.record or {}).get("verdict")
+        if run.status != "recorded":
+            print(
+                f"[{'!' if run.status == 'queued' else '✗'}] 仲裁未出判决（{run.status}）："
+                f"{run.message}\n"
+                "    提案保持待审批、未入队。修好渠道后重跑本命令，"
+                '或改走 --override "<理由>"（计入 override 率）。'
+            )
+            return 1 if run.status == "queued" else 2
+        if call == "B":
+            tally = (run.record or {}).get("tally", {})
+            _finalize_rejection(
+                sugg,
+                member=member,
+                situation=first,
+                reason=f"仲裁裁决 B（不采纳）A:{tally.get('A')} B:{tally.get('B')}",
+                note=args.note or "",
+                source="jury",
+                channel=channel,
+            )
+            print(
+                f"[√] 仲裁判为不采纳，已自动驳回 {sugg.stem}"
+                f"（A:{tally.get('A')} B:{tally.get('B')}；此判决不计 override 率）。"
+            )
+            return 0
+        if not call:
+            journal.append(
+                {
+                    "ts": _now(),
+                    "situation": first[:200],
+                    "options": "",
+                    "choice": "pending",
+                    "reason": run.message,
+                    "source": "jury",
+                    "kind": "ruling",
+                    "channel": channel,
+                    "suggestion_id": sugg.stem,
+                    "member": member,
+                }
+            )
+            print(
+                f"[!] 仲裁模棱两可 → escalate=twin：提案保持待审批，未入队。\n"
+                f"    {run.message}\n"
+                "    人工终裁待 E6 twin 上线（orch consult-twin）；眼下要定案："
+                '--override "<理由>"（计入 override 率）。'
+            )
+            return 1
+    verify: dict | None = None
+    if channel in ("bench", "jury+bench"):
+        try:
+            verify = verdict.capture_baseline(
+                verdict.parse_bench_cases(getattr(args, "bench", "")),
+                item_id=sugg.stem,
+            )
+        except RuntimeError as exc:
+            print(
+                f"[!] M 通道需要可锚定的基线 commit：{exc}\n"
+                "    未入队。请确认在 git 仓库内运行，或改走 --jury / --override。"
+            )
+            return 2
     entry = {
         "id": sugg.stem,
         "member": member,
@@ -471,22 +601,47 @@ def cmd_approve(args) -> int:
     level = normalize_effort(getattr(args, "effort", None))
     if level:
         entry["effort"] = level
+    if verify:
+        entry["verify"] = verify
     n = _backlog_append(entry)
+    # 每条判决都进决策日志（含通道），override 率与用量由此回读，不另设第二本账。
+    journal.append(
+        {
+            "ts": _now(),
+            "situation": first[:200],
+            "options": "",
+            "choice": "approve",
+            "reason": (args.note or ""),
+            "source": channel,
+            "kind": "ruling",
+            "channel": channel,
+            "suggestion_id": sugg.stem,
+            "member": member,
+        }
+    )
     # 审批回复的收件人：自动立案没有「提请成员」可回话（member=tier-a 不是真成员，
     # 回复永远不会被附送），而基建修复的承接方按角色边界就是 devops——归它，回执才落地。
     reply_member = "devops" if entry.get("source") == "tier-a" else member
     REPLIES_DIR.joinpath(reply_member).mkdir(parents=True, exist_ok=True)
+    tail = ""
+    if verify:
+        tail = (
+            f"\n判决通道={channel}（REFACTOR §5.6）：基线 commit "
+            f"{verify['baseline_commit']}，已排基线捕获 {verify['baseline_item']}；"
+            "本条合并销账时自动入 A/B 核验队列，判决直接落地（改善→销账、"
+            "未改善→自动立案纠正提案、不可判→挂起呈组长）。\n"
+        )
     (REPLIES_DIR / reply_member / f"{sugg.stem}.md").write_text(
         f"# 组长审批：采纳（{_now()}）\n\n{args.note or '（无附注）'}\n\n"
-        f"已入 backlog（第 {n} 位），devops 将按 FIFO 处理；完成后你会在后续任务中获知。\n",
+        f"已入 backlog（第 {n} 位），devops 将按 FIFO 处理；完成后你会在后续任务中获知。\n"
+        + tail,
         encoding="utf-8",
     )
-    approved = SUGGESTIONS_DIR / "approved"
-    approved.mkdir(exist_ok=True)
-    sugg.rename(approved / sugg.name)
+    target = _archive(sugg, SUGGESTIONS_DIR / "approved")
     print(
-        f"[√] 已采纳 {sugg.stem}（kind={kind}）→ backlog 第 {n} 位；"
+        f"[√] 已采纳 {sugg.stem}（kind={kind}，判决通道={channel}）→ backlog 第 {n} 位；"
         f"审批回复将在下次派发 {reply_member} 时附送。"
+        + (f"归档重名，另存为 {target.name}。" if target.stem != sugg.stem else "")
     )
     # 自动唤醒 devops 后台 FIFO 消化 backlog（README §6）；--no-wake 跳过。
     if not getattr(args, "no_wake", False):
@@ -497,6 +652,54 @@ def cmd_approve(args) -> int:
         _, msg = wake_devops()
         print(f"    {msg}")
     return 0
+
+
+def _finalize_rejection(
+    sugg: Path,
+    *,
+    member: str,
+    situation: str,
+    reason: str,
+    note: str = "",
+    source: str = "override",
+    channel: str = "override",
+) -> None:
+    """驳回落盘三件套：决策日志（先）→ 审批回复 → 移入 ``rejected/``。
+
+    顺序刻意：journal 写失败即中止，不留下「已否决却无留痕」——那比多留一份 pending
+    文件坏得多（override 审计面从此残缺）。
+
+    Args:
+        sugg: 待审批建议文件（驳回后改名移入 ``rejected/``）。
+        member: 提案成员（回复收件人）。
+        situation: 建议摘要，进决策日志 ``situation``。
+        reason: 判决依据（override 理由或仲裁裁决理由）。
+        note: 附送给成员的额外说明（可选）。
+        source: 判决来源——``override``（组长自裁）或 ``jury``/``bench``（经判决通道）。
+        channel: 通道读数，进 ``channel`` 字段供 override 率统计（§5.1：经 J 或 M 判决
+            返回的 reject **不算** override，两者必须在同一份账里可分辨）。
+    """
+    journal.append(
+        {
+            "ts": _now(),
+            "situation": situation[:200],
+            "options": "",
+            "choice": "reject",
+            "reason": reason,
+            "source": source,
+            "kind": "override" if source == "override" else "ruling",
+            "channel": channel,
+            "suggestion_id": sugg.stem,
+            "member": member,
+        }
+    )
+    head = "否决依据（override）" if source == "override" else "仲裁判决：不采纳。依据"
+    reply = f"# 组长审批：暂不采纳（{_now()}）\n\n{head}：{reason}\n"
+    if note:
+        reply += f"\n附注：{note}\n"
+    REPLIES_DIR.joinpath(member).mkdir(parents=True, exist_ok=True)
+    (REPLIES_DIR / member / f"{sugg.stem}.md").write_text(reply, encoding="utf-8")
+    _archive(sugg, SUGGESTIONS_DIR / "rejected")
 
 
 def cmd_reject(args) -> int:
@@ -523,30 +726,24 @@ def cmd_reject(args) -> int:
         return 2
     member = _member_of(sugg)
     body = sugg.read_text(encoding="utf-8")
-    first = next((ln.strip() for ln in body.splitlines()[2:] if ln.strip()), sugg.stem)
-    # 先落审计原料（journal），再改建议状态——journal 写失败即中止，不留下「已否决却无留痕」。
-    journal.append(
-        {
-            "ts": _now(),
-            "situation": first[:200],
-            "options": "",
-            "choice": "reject",
-            "reason": override,
-            "source": "override",
-            "kind": "override",
-            "suggestion_id": sugg.stem,
-            "member": member,
-        }
+    first = next(
+        (
+            ln.strip()
+            for ln in body.splitlines()[2:]
+            if ln.strip() and not _HEAD_MARKER_RE.match(ln.strip())
+        ),
+        sugg.stem,
     )
     note = (args.note or "").strip()
-    reply = f"# 组长审批：暂不采纳（{_now()}）\n\n否决依据（override）：{override}\n"
-    if note:
-        reply += f"\n附注：{note}\n"
-    REPLIES_DIR.joinpath(member).mkdir(parents=True, exist_ok=True)
-    (REPLIES_DIR / member / f"{sugg.stem}.md").write_text(reply, encoding="utf-8")
-    rejected = SUGGESTIONS_DIR / "rejected"
-    rejected.mkdir(exist_ok=True)
-    sugg.rename(rejected / sugg.name)
+    _finalize_rejection(
+        sugg,
+        member=member,
+        situation=first,
+        reason=override,
+        note=note,
+        source="override",
+        channel="override",
+    )
     print(
         f"[√] 已否决 {sugg.stem}（override 留痕入决策日志）；"
         f"理由将在下次派发 {member} 时附送。"

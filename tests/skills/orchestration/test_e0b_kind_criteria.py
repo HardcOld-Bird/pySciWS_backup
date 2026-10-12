@@ -28,7 +28,11 @@ from .conftest import read_backlog, seed_raw_suggestion, seed_suggestion
 
 
 def _args(sid, **kw):
-    return argparse.Namespace(suggestion_id=sid, note="", no_wake=True, **kw)
+    # E5b 后 approve 必填判决包（§5.1 四态）；本文件测的是 kind/判据两道闸，
+    # 判决通道一律走 override（组长自裁），不与被测闸门口径混在一起。
+    base = dict(jury=False, bench="", override="测试自裁")
+    base.update(kw)
+    return argparse.Namespace(suggestion_id=sid, note="", no_wake=True, **base)
 
 
 # ---------------------------------------------------------------------------

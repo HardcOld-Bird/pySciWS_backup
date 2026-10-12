@@ -200,7 +200,9 @@ def test_approve_entry_triggers_sweep(iso_state, monkeypatch):
     sid = seed_suggestion(iso_state)
     entries = _rows("harness_gap", "reviewer")
     monkeypatch.setattr(workflow, "read_all", lambda: entries)
-    rc = workflow.cmd_approve(Namespace(suggestion_id=sid, note="采纳", no_wake=True))
+    rc = workflow.cmd_approve(
+        Namespace(suggestion_id=sid, note="采纳", no_wake=True, override="测试自裁")
+    )
     assert rc == 0
     stems = [p.stem for p in workflow.pending_suggestions()]
     assert any(s.endswith("-tier-a") for s in stems)
@@ -215,7 +217,9 @@ def test_approve_of_auto_case_marks_source(iso_state, monkeypatch):
     filed = sweep(iso_state, _rows("whitelist_conflict", "lit"))
     monkeypatch.setattr(workflow, "read_all", lambda: [])
     rc = workflow.cmd_approve(
-        Namespace(suggestion_id=filed[0], note="批准", no_wake=True)
+        Namespace(
+            suggestion_id=filed[0], note="批准", no_wake=True, override="测试自裁"
+        )
     )
     assert rc == 0
     item = read_backlog(iso_state)[0]
@@ -229,7 +233,11 @@ def test_auto_case_reply_goes_to_devops(iso_state, monkeypatch):
     """自动立案没有真提请成员，审批回复必须归 devops（否则回执永不到达）。"""
     filed = sweep(iso_state, _rows("tool_bug", "figure"))
     monkeypatch.setattr(workflow, "read_all", lambda: [])
-    workflow.cmd_approve(Namespace(suggestion_id=filed[0], note="批准", no_wake=True))
+    workflow.cmd_approve(
+        Namespace(
+            suggestion_id=filed[0], note="批准", no_wake=True, override="测试自裁"
+        )
+    )
     assert (iso_state / "replies" / "devops" / f"{filed[0]}.md").exists()
     assert not (iso_state / "replies" / "tier-a").exists()
 
@@ -239,5 +247,7 @@ def test_human_proposal_reply_still_goes_to_proposer(iso_state):
     from .conftest import seed_suggestion
 
     sid = seed_suggestion(iso_state, member="figure")
-    workflow.cmd_approve(Namespace(suggestion_id=sid, note="采纳", no_wake=True))
+    workflow.cmd_approve(
+        Namespace(suggestion_id=sid, note="采纳", no_wake=True, override="测试自裁")
+    )
     assert (iso_state / "replies" / "figure" / f"{sid}.md").exists()

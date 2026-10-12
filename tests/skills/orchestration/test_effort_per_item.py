@@ -283,7 +283,13 @@ def test_effort_key_fail_soft_on_invalid():
 def test_approve_effort_lands_on_backlog_item(iso_state):
     sid = seed_suggestion(iso_state)
     rc = workflow.cmd_approve(
-        argparse.Namespace(suggestion_id=sid, note="采纳", no_wake=True, effort="high")
+        argparse.Namespace(
+            suggestion_id=sid,
+            note="采纳",
+            no_wake=True,
+            effort="high",
+            override="测试自裁",
+        )
     )
     assert rc == 0
     assert read_backlog(iso_state)[0]["effort"] == "high"
@@ -292,7 +298,13 @@ def test_approve_effort_lands_on_backlog_item(iso_state):
 def test_approve_without_effort_omits_key(iso_state):
     sid = seed_suggestion(iso_state)
     workflow.cmd_approve(
-        argparse.Namespace(suggestion_id=sid, note="采纳", no_wake=True, effort=None)
+        argparse.Namespace(
+            suggestion_id=sid,
+            note="采纳",
+            no_wake=True,
+            effort=None,
+            override="测试自裁",
+        )
     )
     assert "effort" not in read_backlog(iso_state)[0]
 
@@ -301,7 +313,7 @@ def test_approve_partial_namespace_still_works(iso_state):
     """程序化调用方常建 partial 参数（无 effort 属性）→ 视为不标注。"""
     sid = seed_suggestion(iso_state)
     rc = workflow.cmd_approve(
-        argparse.Namespace(suggestion_id=sid, note="n", no_wake=True)
+        argparse.Namespace(suggestion_id=sid, note="n", no_wake=True, override="自裁")
     )
     assert rc == 0 and "effort" not in read_backlog(iso_state)[0]
 
@@ -521,7 +533,20 @@ def test_cli_plan_run_flag_parses(monkeypatch):
 def test_cli_approve_flag_parses(iso_state, monkeypatch):
     sid = seed_suggestion(iso_state)
     assert (
-        orch.main(["approve", sid, "--note", "n", "--effort", "high", "--no-wake"]) == 0
+        orch.main(
+            [
+                "approve",
+                sid,
+                "--note",
+                "n",
+                "--effort",
+                "high",
+                "--no-wake",
+                "--override",
+                "测试自裁",
+            ]
+        )
+        == 0
     )
     assert read_backlog(iso_state)[0]["effort"] == "high"
 
