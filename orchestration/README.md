@@ -265,11 +265,13 @@ ledger 流水、`state/devops.{lock,cancel}` / `state/devops-runs/` / `state/wat
   本次任务归属：属于最近会话→一键继续；属于更早会话→显式指定；全新任务→显式选择
   新开；
 - 每次派发以 `--name <任务slug>` 命名，会话池自描述；
-- **归档**：`orch archive`：先派一跳「把本会话可复用经验蒸馏进你的自维护层」，确认后
-  标记归档；归档会话仍可 resume（历史有价值时），不出现在默认列表；
+- **归档**：`orch sessions <member> --archive <sid> --distill`：先派一跳「把本会话可复用
+  经验蒸馏进你的自维护层」，确认后标记归档；归档会话仍可 resume（历史有价值时），
+  不出现在默认列表；
 - **清理**：`orch sessions <id> --prune`（复用 `--delete-session`）；
 - 上下文膨胀由**原生自动压缩**兜底（摘要式延续，非截断；§1.1）；orch 台账记录每跳
-  credits 与耗时，成本曲线异常时提示组长归档/新开——不自研压缩。
+  credits 与耗时，末跳 `ctx_ratio` 越过 60% 由巡检引擎机械化立案提示组长归档/新开
+  （`inspectd.check_context_pressure`）——不自研压缩。
 
 ### 3.3 派发机制
 
@@ -494,6 +496,10 @@ steps:
 - 增量基准优先取上一跳记账水位：崩溃跳/手动 resume 造成的「记账外增长」计入同会话
   下一跳，总量守恒（漏记会扭曲成员间排名）；水位高于实测起点只可能是文件被重写
   （压缩/清理），此时以实测起点为准。
+- **它不是上下文读数**（insp-20261012-211429-mechanical）：est_tokens 量的是吞吐——本跳
+  往会话档追加了多少字符。devops 78 跳实测与 `num_turns` 相关 **+0.81**、与 `ctx_ratio`
+  相关 **−0.11**：大单必然读出大数。用它诊断膨胀等于给组员下一条「少干活」的伪判据；
+  上下文占用看 envelope 的真实读数 `ctx_ratio`（判据面见 §3.2 归档条）。
 
 **by_effort 聚合**（backlog 20261010-153041-devops）：`summarize` 除 `by_member`
 外并列 `by_effort` 桶——按 `Ledger.effort` 分档，空标注（跟随用户级默认=中）归入
