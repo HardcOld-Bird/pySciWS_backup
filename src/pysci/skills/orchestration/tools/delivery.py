@@ -19,22 +19,34 @@ from dataclasses import dataclass, field
 
 from .failure_tags import parse_tags
 
+#: 标签属性面（**引号感知**）。旧写法 ``[^>]*`` 把属性值里的 ``>`` 当标签结束——
+#: ``reason="优于 > 阈值"`` 会在引号内部提前停下，剩余部分被当成正文起点：kind 仍判
+#: result、warning 仍为空（严格面自认为「匹配上了」，兜底面不触发），而产物路径被污染成
+#: ``阈值">p/q.pdf`` → 机械验收去 check 一个不存在的路径，比 parse_error 更隐蔽
+#: （backlog 20261012-025325-devops）。改法：先吃成对的引号段（值内 ``>``/``</`` 一律
+#: 放行），再吃不参与引号与 ``>`` 的普通字符。引号段禁跨行（普通字符仍可跨行，多行标签
+#: 形态照旧收下）：未闭合的引号若允许跨行找配对，会把到下一个孤立引号之间的整段交付
+#: 吞进属性面——那比截断更糟；禁跨行时最多吞到行尾，严格面随即失败并走兜底告警。
+_ATTRS = r"""(?:"[^"\n]*"|'[^'\n]*'|[^>"'])*"""
+
 _ARTIFACT_RE = re.compile(
-    r"<artifact\b(?P<attrs>[^>]*)>(?P<path>.*?)</artifact>", re.DOTALL
+    rf"<artifact\b(?P<attrs>{_ATTRS})>(?P<path>.*?)</artifact>", re.DOTALL
 )
 _ATTR_RE = re.compile(r'(?P<key>\w+)\s*=\s*"(?P<val>[^"]*)"')
 # E0-B：infra_suggestion 现在可带 kind 属性，通用 _extract（`<tag>` 字面量）匹配不到
 # 属性形式，故单列一条属性感知的正则（与 delivery-gate 的 INFRA_RE 同语义）。
 _INFRA_RE = re.compile(
-    r"<infra_suggestion\b(?P<attrs>[^>]*)>(?P<body>.*?)</infra_suggestion>",
+    rf"<infra_suggestion\b(?P<attrs>{_ATTRS})>(?P<body>.*?)</infra_suggestion>",
     re.DOTALL,
 )
 # ---- 严格面：本进程所认识的**那一版**协议形状（随协议版本演进）----
-_RESULT_RE = re.compile(r"<result\b(?P<attrs>[^>]*)>(?P<body>.*?)</result>", re.DOTALL)
+_RESULT_RE = re.compile(
+    rf"<result\b(?P<attrs>{_ATTRS})>(?P<body>.*?)</result>", re.DOTALL
+)
 # E1：同上理由，<blocked> 可带 tags 属性——用 _extract 会**整体漏匹配**（解析器
 # 看不见带属性的交付块，交付就被判成 parse_error）。delivery-gate 的 BLOCKED_RE 同语义。
 _BLOCKED_RE = re.compile(
-    r"<blocked\b(?P<attrs>[^>]*)>(?P<body>.*?)</blocked>", re.DOTALL
+    rf"<blocked\b(?P<attrs>{_ATTRS})>(?P<body>.*?)</blocked>", re.DOTALL
 )
 # ---- 宽松兜底面：协议形状之外的那一层 ----
 # 只认「交付块标签名 + 任意属性面 + 正文」：不校验属性语法（单/双引号、裸值、未知属性

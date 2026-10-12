@@ -65,3 +65,24 @@ Temp 内，写入只读层会被 tmp 分支放行——既让本会话新写的�
 只读保护。新顺序：**pod → readonly/deployed 检查（block 或 exit 0）→ 未命中 pod 才
 走 tmp/taskDirs 兜底放行**。判据字面：readonly 前缀命中即 exit 2，与是否在 Temp
 无关。
+
+## 工具面自检与两侧同形（backlog 20261012-010508-devops / 20261012-025325-devops）
+
+**pysci-dev 跨树自检**：`pysci` 以 editable 装入，`pysci.paths.PROJECT_ROOT` 由**包文件
+位置**决定、与 cwd 无关。在 worktree 目录里漏设 `PYTHONPATH=<wt>/src` 跑
+`pysci-dev sync/doctor`，用的是 main 的代码面、读写的也是 main 的真本/副本/台账，
+对脚下那棵树什么都不做**且照样退出 0**（`doctor` 还会据 main 状态给出「健康」的假结论）。
+`dev.py::cross_tree_warning()` 在子命令派发前判定**脚下有没有自己的 `pyproject.toml`**
+——worktree 就摆在 `PROJECT_ROOT/.qoder/worktrees/` 之内，所以「cwd 不在项目根下」这种
+直觉判据无效。判为跨树即打印两侧根路径 + 修法并 `rc=2`；`--force` 表示知情放行；
+无主之地（Temp fixture，找不到任何 pyproject）静默放行，不误伤合法用法。
+
+**两侧属性面必须同形**：交付块属性模式在 Python（`delivery._ATTRS`）与 Node
+（`delivery-gate.mjs` 的 `ATTRS`）各写一份，`test_delivery_quote_aware_attrs.py::
+test_both_sides_declare_the_same_attr_pattern` 钉两者字面量相等（只改一侧=读数漂移的
+源头）。裸 `[^>]*` 会在 `reason="优于 > 阈值"` 的引号内部提前收尾：解析侧正文与产物
+path 被污染而 `kind` 仍 result、`warning` 仍空（严格面自认匹配上了，兜底面不触发——
+比 parse_error 隐蔽，台账一片绿灯），gate 侧则把 `tags=`/`kind=` 截在属性面之外从而
+看不见标签、跳过词表校验。引号段**禁跨行**：未闭合引号若跨行找配对会吞掉整段交付，
+代价是跨行畸形落 `parse_error` 而非兜底救回（同行未闭合引号仍由宽松面捞回并附
+`PROTOCOL_LAG_HINT`）。
