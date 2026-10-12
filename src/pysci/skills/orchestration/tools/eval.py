@@ -109,6 +109,9 @@ class Row:
     sid: str = ""
     task_file: str = ""
     label: str = ""
+    #: 案内轮次预算（``预算用满`` 哨兵的对照面：turns 用到 == 此值的 pass 不稳——
+    #: E2 验收实测 blocked-recheck 4→10 轮跳，正是贴着上限跑完的）。
+    max_turns: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +336,7 @@ def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True)
         sid=out.sid,
         task_file=out.task_file or "",
         label=label,
+        max_turns=case.max_turns,
     )
     append_row(row)
     return row
@@ -488,14 +492,26 @@ def _mean_turns(rows: list[dict[str, Any]]) -> float:
 # ---------------------------------------------------------------------------
 def _print_row(row: Row) -> None:
     mark = "√" if row.verdict == "pass" else "✗"
+    budget = f"/{row.max_turns}" if row.max_turns else ""
     print(
         f"  [{mark}] {row.case:<18} {row.verdict:<4} "
-        f"turns={row.num_turns} dur={row.duration_ms / 1000:.0f}s "
+        f"turns={row.num_turns}{budget} dur={row.duration_ms / 1000:.0f}s "
         f"est_tokens={row.est_tokens} ctx={row.ctx_ratio:.4f} "
         f"model={row.model or '(默认)'}"
     )
     for r in row.reasons:
         print(f"        · {r}")
+    if row.max_turns and row.num_turns >= row.max_turns:
+        print(
+            f"        [!] 预算用满（turns {row.num_turns}==max_turns "
+            f"{row.max_turns}）：本案判决已被轮次上限截断，"
+            + (
+                "fail 未必是能力问题、pass 也未必是干净通过——"
+                if row.verdict == "fail"
+                else "pass 属贴线通过，下一跳多一次自证就会被拦成 fail——"
+            )
+            + "先放宽案内 max_turns 再取判决"
+        )
 
 
 def cmd_eval_run(args: argparse.Namespace) -> int:
@@ -530,7 +546,12 @@ def cmd_eval_run(args: argparse.Namespace) -> int:
         f"均值 num_turns {cmp['mean_turns_base']} → {cmp['mean_turns_now']}"
     )
     for d in cmp["diffs"]:
-        print(f"  - {d['case']}: {d['verdict']}｜turns {d['turns']}")
+        now = ran.get(d["case"], {})
+        tight = now.get("max_turns") and now.get("num_turns", 0) >= now["max_turns"]
+        print(
+            f"  - {d['case']}: {d['verdict']}｜turns {d['turns']}"
+            + ("（预算用满，读数不可信）" if tight else "")
+        )
     if cmp["only_now"]:
         print(f"  [i] 本轮新增案（基线无记录）：{cmp['only_now']}")
     if cmp["verdict"] == "无基线":
