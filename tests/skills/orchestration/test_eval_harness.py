@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from pysci.skills.orchestration.tools import dispatch, registry
+from pysci.skills.orchestration.tools import dispatch, presets, registry
 from pysci.skills.orchestration.tools import eval as ev
 from pysci.skills.orchestration.tools import ledger as ledgermod
 from pysci.skills.orchestration.tools.delivery import Artifact
@@ -707,7 +707,8 @@ def test_attach_replies_default_appends_and_archives(iso_dispatch, monkeypatch):
 
 
 def test_production_dispatch_still_flash(iso_dispatch, monkeypatch):
-    """E2 判据③：新增 minimum 档不得让常规派发降档/回归（成员默认仍 flash）。"""
+    """E2 判据③：新增 minimum 档不得让常规派发降档——无覆盖时角色解析回 **main**
+    （预设主力席），不是 minimum，也不是名单外成员够不着的 pro（档位退役 2026-10-12 22:4x）。"""
     calls = fake_headless(
         monkeypatch,
         lambda i, cmd: envelope("<result>done。</result>", is_error=False, rc=0),
@@ -722,7 +723,11 @@ def test_production_dispatch_still_flash(iso_dispatch, monkeypatch):
         quiet=True,
     )
     assert out.kind == "result"
-    assert registry.Registry.load().member("quotamember").model_tier == "flash"
+    reg = registry.Registry.load()
+    assert presets.resolve_role("quotamember") == "main"
+    assert cmd_model(calls[0]) == reg.model_chain("main")[0], (
+        "无覆盖的生产派发取 main 席链首席"
+    )
 
 
 # ---------------------------------------------------------------------------

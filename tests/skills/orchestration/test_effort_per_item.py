@@ -103,7 +103,6 @@ def _member(tmp_path) -> Member:
     return Member(
         member_id="m",
         pod=tmp_path / "pod",
-        model_tier="flash",
         max_turns=5,
         timeout_s=60,
         mcp_config=None,

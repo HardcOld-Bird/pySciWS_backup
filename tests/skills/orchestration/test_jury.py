@@ -17,7 +17,7 @@ import pytest
 import requests
 
 from pysci.paths import ORCH_STATE_ROOT
-from pysci.skills.orchestration.tools import jury
+from pysci.skills.orchestration.tools import jury, presets
 
 from .conftest import (
     SEAT_KEY_ENV,
@@ -27,6 +27,7 @@ from .conftest import (
     prefer_juror,
     seed_case,
     set_jury_panel,
+    write_preset,
 )
 
 LIKE = "实施改动，收益是机械可验收"
@@ -52,6 +53,16 @@ def content_driven(*against: str):
 
 def biased_by_name(model: str) -> bool:
     return model.startswith("biased")
+
+
+def _probe_transport(calls):
+    """记录每次调用并返回合法响应（返回 None 会在计票面炸成 AttributeError 掩盖真判据）。"""
+
+    def transport(*a, **k):
+        calls.append(a)
+        return ai_reply("A")
+
+    return transport
 
 
 def open_court(iso_state, monkeypatch, panel, transport, *, key=KEY):
@@ -316,19 +327,36 @@ def test_successful_readjudication_clears_queue_entry(iso_jury, monkeypatch):
 # ---------------------------------------------------------------------------
 # 非 Qwen 硬规则与配置面
 # ---------------------------------------------------------------------------
-def test_qwen_in_panel_refuses_to_open_court(iso_jury, monkeypatch):
-    """家族外是硬规则：清单里混进 Qwen 系就拒开庭（违约要被看见，不静默剔除）。"""
+def test_same_family_rule_refuses_under_own_preset(iso_jury, monkeypatch):
+    """§4 同族硬规则**相对预设**（2026-10-12 22:4x 预设化推翻了绝对的「不得含 Qwen」）：
+
+    qwen 预设下混进 Qwen 系 = 同族自恋，拒开庭且零调用；mimo 预设下同一席是点名合法席
+    （GLM+KIMI+Qwen），不得误伤——两面都要有断言，否则规则改回去没人拦。
+    """
+    assert jury.family_violations(["Qwen/Qwen3-235B"], "qwen") == ["Qwen/Qwen3-235B"]
+    assert jury.family_violations(["Qwen/Qwen3-235B"], "mimo") == []
+    assert (
+        jury.family_violations(
+            ["moonshotai/Kimi-K2", "deepseek-ai/DeepSeek-V3"], "qwen"
+        )
+        == []
+    )
+
+    write_preset("qwen")  # 改一行 toml → 换预设（真源面）
     calls = []
     case = open_court(
         iso_jury,
         monkeypatch,
         ["deepseek-ai/DeepSeek-V3", "Qwen/Qwen3-235B"],
-        lambda *a, **k: calls.append(a),
+        _probe_transport(calls),
     )
     run = jury.adjudicate(case)
-    assert run.status == "declined" and calls == [] and "Qwen" in run.message
+    assert run.status == "declined" and calls == [] and "同族" in run.message, (
+        presets.active().name,
+        run.status,
+        run.message,
+    )
     assert not jury.queue_path(case.case_id).exists(), "配置违规不是渠道故障，不入队"
-    assert jury.qwen_violations(["moonshotai/Kimi-K2", "deepseek-ai/DeepSeek-V3"]) == []
 
 
 def test_registry_jury_config_fail_open(iso_registry):
@@ -559,9 +587,11 @@ def test_cmd_jury_exit_codes(iso_jury, monkeypatch, capsys):
     assert jury.cmd_jury(ns(case)) == 0
     assert "裁决=A" in capsys.readouterr().out
 
+    write_preset("qwen")  # 同族拒开庭只在「qwen 预设 + Qwen 席」成立（相对化）
     set_jury_panel(iso_jury.parent / "registry.json", ["Qwen/Qwen3"])
     assert jury.cmd_jury(ns(case)) == 2
-    assert "Qwen" in capsys.readouterr().out
+    assert "同族" in capsys.readouterr().out
+    write_preset("mimo")
 
     set_jury_panel(iso_jury.parent / "registry.json", [])
     assert jury.cmd_jury(ns(case)) == 1

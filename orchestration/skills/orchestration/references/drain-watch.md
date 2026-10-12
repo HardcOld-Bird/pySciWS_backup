@@ -65,10 +65,14 @@ uv run --no-sync pysci-orch bench-stop           # 协作停止：条目间隙�
   `model="<synthetic>"` 的 assistant 回合说 "Custom model service error…"，故判据取**固定
   文案 ∧ 会话档末轮形状**合取，文案单特征会误伤复述该句的复盘任务）。恢复后条目照常 FIFO
   续跑（drain 由下一次 `approve` 自动接管，压测队列由 `bench-up`）。
-- **档位回退链**（用户裁决 2026-10-12 21:1x，README §3.5）：每档是**有序链**，当前席不可用
-  （额度 / 渠道 / 启动即失败）→ 沿链一席一跳自动降级；**全链耗尽**才保留系统性 kind 并全局
-  停止。非系统性失败仍是同席重试（故障不在渠道，换席白烧）。两条面都必须看得见：调用者面逐条
-  `[!] 档位回退：<tier> 席<名>不可用 → 已切换 <新席>（原因 …）`（dispatch 输出 + run 日志），
+- **预设席位回退链**（用户裁决 2026-10-12 21:1x 链化 / 22:4x 挂预设，README §3.5）：
+  `data/pysci_settings.toml [model] preset` 选预设，成员角色（main/pro，`--model-tier`
+  覆盖，旧 flash/max 归一）取该预设的**有序链**，当前席不可用（额度 / 渠道 / 启动即失败）
+  → 沿链一席一跳自动降级；**全链耗尽**才保留系统性 kind 并全局停止。预设不可激活（deepseek
+  过渡期）→ dispatch 拒发、drain 在**拿锁前**拒绝开工（`skipped=preset_unavailable`，
+  不把整队列标成失败）。非系统性失败仍是同席重试（故障不在渠道，换席白烧）。两条面都必须
+  看得见：调用者面逐条
+  `[!] 档位回退：<角色> 席<名>不可用 → 已切换 <新席>（原因 …）`（dispatch 输出 + run 日志），
   观察面 `state/channel-events.jsonl`（mirror 概览项「回退」/`orch status` 健康段报计数与最近
   几条）。**降级粘滞窗**（`registry.model_fallback.skip_window_s`，默认 3600s）：坏席进窗后
   窗内不再探测它（每次派发仍打一行「席 X 跳过中」），过期自动恢复探测，跑通即销窗；全链都在

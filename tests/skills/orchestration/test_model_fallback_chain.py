@@ -105,7 +105,7 @@ def test_chief_seat_broken_demotes_one_hop_and_alerts(
     assert o.kind == "result" and o.code == 0, "换席后跑通=正常交付，不是带伤交付"
     assert len(calls) == 2
     assert cmd_model(calls[0]) == A and cmd_model(calls[1]) == B, "一席一跳，不越过次席"
-    assert "[!] 档位回退：flash 席seat-a不可用 → 已切换 seat-b" in out, out
+    assert "[!] 档位回退：main 席seat-a不可用 → 已切换 seat-b" in out, out
     assert "原因 quota_exhausted" in out, (
         "告警要带成因，否则读的人无法决定充值还是修渠道"
     )
@@ -135,7 +135,7 @@ def test_demote_alert_suppressed_by_quiet_but_still_logged(
     assert o.kind == "result" and len(o.fallbacks) == 1
     events = _events(iso_dispatch)
     assert len(events) == 1
-    assert events[0]["tier"] == "flash" and events[0]["from"] == A
+    assert events[0]["tier"] == "main" and events[0]["from"] == A
     assert events[0]["to"] == B and events[0]["reason"] == "quota_exhausted"
     assert events[0]["member"] == "quotamember" and events[0]["ts"][:4] == "2026"
 

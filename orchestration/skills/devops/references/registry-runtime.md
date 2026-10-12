@@ -5,12 +5,13 @@
 ## 两份文件
 
 - `orchestration/state/registry.json`（**git 跟踪**）= 低频配置面：成员 → pod 路径、
-  model_tier/max_turns/timeout_s/mcp_config/effort/extra_dirs/readonly_extra、exe、
-  models（档 → **有序回退链**）、model_chains（档 → 名链模板，供解析）、model_fallback
-  （粘滞窗参数）、checks、est_tokens_per_char。人手编辑、随代码评审演进。旧
-  `model_patterns` 倒表已被 model_chains 取代，只当**规则**读（与解析链矛盾记 `conflicts`）。
+  max_turns/timeout_s/mcp_config/effort/extra_dirs/readonly_extra、exe、**presets**
+  （预设 → main/pro 席位链，账号级 UUID 整链覆盖）、models/model_chains（只余独立的
+  minimum）、model_fallback（粘滞窗参数）、jury（仲裁席定义）、checks、
+  est_tokens_per_char。人手编辑、随代码评审演进；**模型档位 model_tier/max|flash 已退役**
+  （2026-10-12 22:4x），预设名在 `data/pysci_settings.toml`。
 - `orchestration/state/sessions-runtime.json`（**gitignore**）= 高频运行态：会话池
-  `members[*].sessions`（sid/name/hops/last_active/**chars_offset**/status），加上档位
+  `members[*].sessions`（sid/name/hops/last_active/**chars_offset**/status），加上席位
   面三键 `models_resolved` / `model_seat_names` / `model_seat_fail`（见下两节）。每次派发
   一跳都改写它。
 
@@ -50,27 +51,25 @@ sessions/hops/chars_offset 是**心跳**——每派发必变。留在跟踪的 
 只覆盖本进程负责的键；纯记账的派发路径根本不该产生配置文件写入（`git diff HEAD` 应为空
 是 drain run 的事后判据）。
 
-## 档位映射：有序回退链与运行态面（080410-devops / 211500-leader）
+## 预设与角色：席位表三级读（080410-devops 方案 A 沿用 / 225500-leader 改键）
 
-`models`（档位 → 型号）混着两种来源：人写的覆盖与机器从 CLI 目录解析的自愈值
-（`refresh_models`，drain 启动跑一次）。自愈值写进跟踪面就每轮留 ` M registry.json`
-（周期墙复发），且 `models` 属护栏级、机器静默改写即越权。故：
+`main`/`pro` 的席位链**随预设**（`data/pysci_settings.toml` `[model] preset` 选，见
+`presets.py`）；`minimum` 独立不随预设。机器自愈只服务**人没写值**的键——故：
 
-- **读取三级回退**：`Registry.model_chain(tier)` = 出厂 `DEFAULT_MODEL_CHAINS` ← 运行态
-  `models_resolved` ← 跟踪 `data["models"]`，**跟踪值优先**（含 `""`——空席是人的裁决
-  「该席不传 `-m`、走 CLI 默认」，不是待填的空位）。`Registry.models` 摊平成档位→首席
-  旧视图供既有读数面（eval/orch）；末层不能是未解析的人名（exe 启动即失败），故
-  `DEFAULT_MODELS`（保守标量）兜底；
-- **机器只写运行态**：`merge_runtime_models()` 落 `sessions-runtime.json` 的
-  `models_resolved`（值=**整条链**），跟踪面一字节不碰；`refresh_models()` 里不存在
-  `save()`/`declare_config()`。同文件另两键：`model_seat_names`（席 → 目录显示名，告警
-  与事件流靠它把 UUID 写成人名）、`model_seat_fail`（降级粘滞窗，见下节）；
-- **合并粒度=整条链**：机器不得往人排的次序里插席——跟踪链与解析链**逐席不等**就整条
-  遮蔽。某档链里的真名**一个都没**命中目录（只剩 `""` 占位席）时该档**保持现值**并记
-  `missing`：那不是解析结果，写进运行态等于替人裁决该档，且每轮 drain 无意义 churn；
-- **遮蔽要出声**：跟踪值与解析值不一致时该档记入 `res["shadowed"]`（人不写则不换），
-  drain 日志与 `orch refresh-models` 都打印——否则「为什么我刷新了却没换档」只能靠猜。
-  要换档就改 `models.<档>`（护栏级，经用户授权），或删掉该键让机器接管。
+- **读取三级回退**：`Registry.model_chain(角色)` = 跟踪 `presets.<预设>.<role>`（整链覆盖）
+  ← 出厂 `presets.PRESETS`；`minimum` 走 跟踪 `models` ← 运行态 `models_resolved` ←
+  出厂 `DEFAULT_MODEL_CHAINS`。含 `""` 的席是人的裁决「该席不传 `-m`」，不是待填的空位；
+  无 `presets` 块的旧部署读 `models.flash/max` 兼容（main←flash、pro←max）；
+- **机器只写运行态**：`merge_runtime_models()` 落 `models_resolved`（值=整条链），跟踪面
+  一字节不碰；`refresh_models()` 里不存在 `save()`/`declare_config()`。同文件另两键：
+  `model_seat_names`（席 → 目录显示名，**presets 块的 UUID 也在这反查**，告警报人名）、
+  `model_seat_fail`（降级粘滞窗，见下节）；
+- **合并粒度=整条链**：机器不得往人排的次序里插席——逐席不等就整条遮蔽；某档真名**一个都
+  没**命中目录时该档**保持现值**并记 `missing`（那不是解析结果，写成运行态等于替人裁决，
+  且每轮 drain 无意义 churn）；
+- **遮蔽要出声**：跟踪值与解析值不一致记 `res["shadowed"]`，drain 日志与
+  `orch refresh-models` 都打印——否则「刷新了却没换档」只能靠猜。要换席改跟踪面
+  `presets`/`models`（护栏级，经用户授权），或删该键让机器接管。
 
 ## 降级粘滞窗与事件流
 
@@ -79,8 +78,9 @@ sessions/hops/chars_offset 是**心跳**——每派发必变。留在跟踪的 
 `note_seat_success` 清窗；全链都在窗内时强探**失败最早**=最先到期的一席，不停摆）。
 降级/跳过/全链耗尽各追加一行到 `state/channel-events.jsonl`（**gitignore**，周期墙理由
 同本文件开头）：mirror `status` 的「回退」项与 `verdict` 健康面读它算统计，永久审计不靠
-它。窗内零探测但仍打「席 X 跳过中…窗口内不重试」（省跳数不能换成安静）；告警文案、全局
-停止、台账 `model` 记**实际所用席位**等行为面见 orchestration 技能 `drain-watch.md`。
+它。窗内零探测但仍打「席 X 跳过中…窗口内不重试」（省跳数不能换成安静）；预设不可激活
+（deepseek 过渡期）时 dispatch 拒发、drain 拒绝开工。告警文案、全局停止、台账 `model` 记
+**实际所用席位**等行为面见 orchestration 技能 `drain-watch.md`。
 
 ## 脏跟踪面哨兵（同上）
 

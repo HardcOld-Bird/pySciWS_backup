@@ -11,7 +11,11 @@
   案卷。案卷由本模块**自动附加确定性材料**（``git diff`` / ``git log --oneline -5`` /
   涉事文件字节读数 / 相关台账行，按案卷头部 ``targets:`` 声明抓取），全文哈希入档
   ＝材料冻结——事后证据推翻裁决时能核对「裁判当时看到的是什么」。
-- **非 Qwen 硬规则**：席位型号串含 ``qwen`` 即拒开庭（排除同族自恋偏差）。选型权
+- **面板构成随预设换血**（用户裁决 2026-10-12 22:4x）：本庭 = 当前预设点名的三家族
+  （qwen→glm+kimi+mimo、mimo→glm+kimi+qwen、deepseek→glm+kimi+mimo），配置里其余席
+  **不入面板**但留痕报数，面板缺席的家族在读数行点名让用户去补 ``registry.jury.seats``。
+- **预设同族硬规则**：面板型号命中**当前预设同族**即拒开庭（排除同族自恋偏差）——
+  绝对化的「不得含 Qwen」已被 mimo 预设的合法 Qwen 席推翻，规则改为相对预设。选型权
   归用户，代码不内置候选清单、也不静默剔除——违约要被看见。
 - **逐席可用性**（§4 三席直调的减平票前提）：一席 Key 缺失只作废该席（标
   unavailable），**不拖垮整案**——剩下有 Key 的席位照常开庭计票。全部主席不可达且
@@ -51,6 +55,7 @@ from dotenv import dotenv_values
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
+from . import presets
 from .ledger import read_all
 from .registry import DEFAULT_JURY, Registry, orchestration_rel
 
@@ -77,7 +82,23 @@ DIFF_CAP_BYTES = 4000
 #: 每个涉事文件的 excerpt 不再抓取（只给字节读数），targets 条目数上限纯为止损。
 MAX_TARGETS = 20
 
-QWEN_RE = re.compile(r"qwen", re.IGNORECASE)
+#: 面板家族词（预设构成与同族排除的匹配口径）：席的 name/model 命中其一即归该家族。
+FAMILY_TOKENS: tuple[str, ...] = ("deepseek", "glm", "kimi", "mimo", "qwen")
+
+
+def seat_family(*parts: str) -> str:
+    """席 → 家族名（``deepseek``/``glm``/``kimi``/``mimo``/``qwen``；认不出返回 ``""``）。
+
+    name 与 model 一起看：配置可能只在 model 里带族名（如 ``deepseek-ai/DeepSeek-V4-Pro``），
+    认不出家族的席**不参与**同族排除（宁可放行也不误伤陌生配置）。
+    """
+    blob = " ".join(p for p in parts if p).lower()
+    for token in FAMILY_TOKENS:
+        if token in blob:
+            return token
+    return ""
+
+
 _BRIEF_APPROVED_RE = re.compile(
     r"^\s*>?\s*#*\s*approved\s*:", re.IGNORECASE | re.MULTILINE
 )
@@ -455,7 +476,21 @@ def seat_readiness(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "fallback_used": bool, "notice": str}``。**不返回 Key 值。**
     """
     out = cfg if cfg is not None else load_config()
-    seats = [_to_seat(raw, "primary") for raw in out["seats"]]
+    act = presets.active()
+    panel = list(act.preset.jury)
+    all_primary = [_to_seat(raw, "primary") for raw in out["seats"]]
+
+    # 预设构成换血（用户裁决 2026-10-12 22:4x）：面板=预设点名的三家族。**认得出家族却
+    # 不在面板**的配置席不入 panel（仍留痕报数，静默剔除会让人以为庭里真有那席）；认不出
+    # 家族的席照常入 panel——名字不带族名（测试桩/人自起的席名）不构成换血证据，宁可放行
+    # 也不误伤。缺席的**已点名家族**要出声：那是用户该去补 registry.jury.seats 的信号。
+    def _family(s: Seat) -> str:
+        return seat_family(s.name, s.model)
+
+    seats = [s for s in all_primary if not _family(s) or _family(s) in panel]
+    out_of_panel = [s for s in all_primary if _family(s) and _family(s) not in panel]
+    present = {_family(s) for s in seats}
+    missing_panel = [family for family in panel if family not in present]
     fallback_enabled = bool(out["fallback"].get("enabled"))
     fallback = _to_seat(out["fallback"], "fallback")
     planned = seats + ([fallback] if fallback_enabled else [])
@@ -479,13 +514,25 @@ def seat_readiness(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "fallback_enabled": fallback_enabled,
         "fallback_used": fallback_used,
         "notice": FALLBACK_NOTICE if fallback_used else "",
+        "panel": panel,
+        "preset": act.name,
+        "out_of_panel": out_of_panel,
+        "missing_panel": missing_panel,
     }
 
 
 def readiness_summary(plan: dict[str, Any]) -> str:
     """席位读数一行话（``orch status`` 判决包健康段与 mirror 概览共用，防两处文案漂移）。"""
+    panel = plan.get("panel") or []
+    panel_note = (
+        f"｜面板 {'+'.join(panel)}（预设 {plan.get('preset', '?')}）" if panel else ""
+    )
     if not plan["seats"]:
-        return "仲裁团未选型（registry.jury.seats 为空，开庭即入队）"
+        line = "仲裁团未选型（registry.jury.seats 为空，开庭即入队）"
+        if plan.get("out_of_panel"):
+            names = "、".join(s.name for s in plan["out_of_panel"])
+            line += f"｜预设外配置席未入面板：{names}"
+        return line + panel_note
     in_court = {s.name for s in plan["voting"]}
     parts: list[str] = []
     for s in plan["seats"]:
@@ -500,6 +547,12 @@ def readiness_summary(plan: dict[str, Any]) -> str:
     if plan["fallback_used"]:
         dropped = "、".join(s.name for s in plan["missing_primary"])
         line += f"｜[!] {FALLBACK_NOTICE}（不可达主席：{dropped}）"
+    line += panel_note
+    if plan.get("out_of_panel"):
+        names = "、".join(s.name for s in plan["out_of_panel"])
+        line += f"｜预设外未入面板：{names}"
+    if plan.get("missing_panel"):
+        line += f"｜[!] 面板缺席：{'、'.join(plan['missing_panel'])}（registry.jury.seats 未配置）"
     return line
 
 
@@ -529,9 +582,16 @@ def scrub(text: str, *, secrets: tuple[str, ...] = ()) -> str:
     return _SECRET_RES[1].sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", out)
 
 
-def qwen_violations(models: list[str]) -> list[str]:
-    """§4 硬规则：评审团型号不得含 Qwen 系（同族自恋偏差）。返回违约型号清单。"""
-    return [m for m in models if QWEN_RE.search(m)]
+def family_violations(models: list[str], family: str) -> list[str]:
+    """§4 硬规则的**预设相对化**版：面板不得含**预设同族**型号（同族自恋偏差）。
+
+    档位退役前这里写死「不得含 Qwen」——mimo 预设的面板恰恰要点名 Qwen 旗舰（用户裁决
+    2026-10-12 22:4x），绝对规则会把合法面板拒之门外。返回违约型号清单；``family`` 为空
+    （预设认不出）不判。
+    """
+    if not family:
+        return []
+    return [m for m in models if seat_family(m) == family]
 
 
 # ---------------------------------------------------------------------------
@@ -943,10 +1003,16 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
             f"{warn}降级入队：{cfg_error}",
             path=enqueue(case, reason=cfg_error, key_hints=secrets),
         )
-    if bad := qwen_violations([s.model for s in plan["seats"]]):
+    preset_name = presets.active().name
+    # 硬规则看**配置了的**席（含被面板构成排除的）：同族席即使已被换血逻辑挡在面板外，
+    # 也必须「违约被看见」地拒开庭，而不是退化成无声的入队——E3 纪律：静默剔除会让人
+    # 以为庭里真没有那席（或以为配置没问题）。
+    configured = [s.model for s in plan["seats"] + plan["out_of_panel"]]
+    if bad := family_violations(configured, preset_name):
         return Run(
             "declined",
-            f"拒开庭：评审团含 Qwen 系型号 {bad}（§4 硬规则，排除同族自恋偏差）",
+            f"拒开庭：评审团含预设 {preset_name} 同族型号 {bad}"
+            "（§4 硬规则，排除同族自恋偏差）",
         )
     if not cfg["seats"]:
         reason = "registry.jury.seats 未选型（席位清单为空）"
@@ -1098,7 +1164,7 @@ def cmd_jury(args: argparse.Namespace) -> int:
             f"后重裁：orch jury {args.case_file}"
         )
         return 1
-    print("[NEXT] 改 registry.jury.seats 去掉 Qwen 系型号后重裁（§4 硬规则不可放宽）")
+    print("[NEXT] 改 registry.jury.seats 去掉预设同族型号后重裁（§4 硬规则不可放宽）")
     return 2
 
 
@@ -1119,7 +1185,8 @@ __all__ = [
     "load_brief",
     "parse_case",
     "parse_vote",
-    "qwen_violations",
+    "family_violations",
+    "seat_family",
     "read_key",
     "readiness_summary",
     "scrub",

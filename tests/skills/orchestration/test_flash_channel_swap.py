@@ -25,7 +25,7 @@ import re
 
 import pytest
 
-from pysci.skills.orchestration.tools import registry
+from pysci.skills.orchestration.tools import presets, registry
 
 # --list-models 实测格式（2026-10-12 22:xx 真实账户目录，含用户新增的 Mimo 自定义模型）
 MIMO_PRO_UUID = "99127e47-626d-421f-b0cb-02ffdbf1ada7"
@@ -108,15 +108,27 @@ def _readme_clause() -> str:
 # 1. 跟踪面：三档三席，排序正确（success_criteria 第一条）
 # ---------------------------------------------------------------------------
 def test_tracked_registry_is_ordered_chains():
-    models = _tracked_face()["models"]
-    assert models["max"] == [MIMO_PRO_UUID, BYOK_MAX_UUID, ""], (
-        "max 链：Mimo-Pro 首席 → BYOK Qwen-Max → 不传 -m（用户级默认）"
-    )
-    assert models["flash"] == [MIMO_FLASH_UUID, BYOK_FLASH_UUID, BUILTIN_FLASH]
+    """档位退役后的跟踪面（2026-10-12 22:4x）：models 只留独立的 minimum，
+    main/pro 席位表落 ``presets`` 块，成员条目不再带 ``model_tier``。"""
+    data = json.loads(REAL_REGISTRY_PATH.read_text(encoding="utf-8"))
+    models = data.get("models", {})
+    assert set(models) == {"minimum"}, f"max/flash 档概念已退役：{sorted(models)}"
     assert models["minimum"] == [MIMO_FLASH_UUID, BUILTIN_FLASH], (
-        "压测最低成本档：Qwen BYOK 不进链（按量额度宝贵，用户裁决 2026-10-12 21:1x）"
+        "压测最低成本档独立不随预设：Qwen BYOK 不进链（按量额度宝贵）"
     )
-    assert "flash_fallback" not in models, "旧回退键已并入链，跟踪面不该再留第二张表"
+    assert "flash_fallback" not in models, "旧回退键已并入链，不该再留第二张表"
+    face = data.get("presets", {})
+    assert {"qwen", "mimo", "deepseek"} <= set(face), "三预设齐备"
+    assert face["mimo"]["main"] == [MIMO_FLASH_UUID, BUILTIN_FLASH]
+    assert face["mimo"]["pro"] == [MIMO_PRO_UUID, BUILTIN_FLASH]
+    assert face["qwen"]["main"] == [BYOK_FLASH_UUID, BUILTIN_FLASH]
+    assert face["qwen"]["pro"] == [BYOK_MAX_UUID, BUILTIN_FLASH]
+    assert face["deepseek"]["main"] == [] and face["deepseek"]["pro"] == [], (
+        "deepseek 空链=过渡期 BYOK 未回填、预设不可激活（toml ⚠ 同源）"
+    )
+    assert all("model_tier" not in m for m in data.get("members", {}).values()), (
+        "成员条目的档位字段随档位模式一起退役"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -156,18 +168,22 @@ def test_mimo_names_resolve_to_their_tiers(iso_reg, monkeypatch):
     registry.refresh_models()
 
     assert _runtime_face(runtime_file) == {
-        "max": [MIMO_PRO_UUID, BYOK_MAX_UUID, ""],
-        "flash": [MIMO_FLASH_UUID, BYOK_FLASH_UUID, BUILTIN_FLASH],
         "minimum": [MIMO_FLASH_UUID, BUILTIN_FLASH],
-    }
+    }, "档位退役：刷新只代管 minimum 模板"
     rules = registry.model_tier_rules()
-    assert rules["Mimo-V2.6-Pro"] == {"max"}
-    assert rules["Mimo-V2.6-Flash"] == {"flash", "minimum"}
-    assert rules["Qwen3.8-Flash"] == {"flash", "minimum"}
+    assert rules["Mimo-V2.6-Flash"] == {"minimum"}
+    assert rules["Qwen3.8-Flash"] == {"minimum"}
+    assert "Mimo-V2.6-Pro" not in rules, (
+        "pro 席归预设表管（presets.PRESETS），不进刷新规则表"
+    )
     assert "Qwen3.8-Max" not in rules, (
         "内置同名 Qwen3.8-Max 永不入链：它烧订阅 credit 且 envelope 低报为 0"
         "（2026-10-10 实战烧穿额度）"
     )
+    # 规格 2 的正名断言换了落点：Mimo 两名的归属改由预设表钉住
+    assert presets.PRESETS["mimo"].pro[0] == "Mimo-V2.6-Pro"
+    assert presets.PRESETS["mimo"].main[0] == "Mimo-V2.6-Flash"
+    assert presets.PRESETS["qwen"].main[0] == "Qwen-3.8-Flash"
 
 
 def test_pre_chain_tracking_face_is_named_as_drift(iso_reg, monkeypatch):
@@ -178,37 +194,38 @@ def test_pre_chain_tracking_face_is_named_as_drift(iso_reg, monkeypatch):
 
     res = registry.refresh_models()
 
-    assert res["shadowed"] == {
-        "max": {
-            "tracked": BYOK_MAX_UUID,
-            "resolved": [MIMO_PRO_UUID, BYOK_MAX_UUID, ""],
-        },
-        "flash": {
-            "tracked": BYOK_FLASH_UUID,
-            "resolved": [MIMO_FLASH_UUID, BYOK_FLASH_UUID, BUILTIN_FLASH],
-        },
-        "minimum": {
-            "tracked": BUILTIN_FLASH,
-            "resolved": [MIMO_FLASH_UUID, BUILTIN_FLASH],
-        },
+    assert set(res["shadowed"]) == {"minimum"}, (
+        "刷新面只剩 minimum；旧 max/flash 键不进刷新、不被代管"
+    )
+    assert res["shadowed"]["minimum"] == {
+        "tracked": BUILTIN_FLASH,
+        "resolved": [MIMO_FLASH_UUID, BUILTIN_FLASH],
     }
+    data = json.loads(reg_file.read_text(encoding="utf-8"))
+    assert data["models"]["max"] == BYOK_MAX_UUID
+    assert data["models"]["flash"] == BYOK_FLASH_UUID, (
+        "旧档键的跟踪值一字不改地留在配置面（刷新只读不代写）"
+    )
 
 
 # ---------------------------------------------------------------------------
 # 3. 旧写兼容读（规格 1 的向后兼容半边）
 # ---------------------------------------------------------------------------
 def test_legacy_single_value_and_fallback_key_still_read(iso_reg):
-    """单值写法＝一席链；旧 ``<tier>_fallback`` 键**并入链尾**（兼容读，新写不产生）。"""
+    """无 ``presets`` 块的旧跟踪面照样读：单值＝一席链、``<tier>_fallback`` 并入链尾、
+    旧档名 flash/max 归一到 main/pro；没配的 role 落**预设出厂表**（预设总给得出席）。"""
     reg_file, _ = iso_reg
     _seed(reg_file, {"flash": "solo-flash", "flash_fallback": "legacy-backup"})
 
     reg = registry.Registry.load()
 
     assert reg.model_chain("flash") == ["solo-flash", "legacy-backup"]
-    assert reg.models["flash"] == "solo-flash", "首席平读面不变（老消费方不受惊）"
-    assert reg.model_chain("max") == [""], (
-        "跟踪面没写的档 → 回落**出厂保守值**（max=不传 -m 走用户级默认）：链模板里的"
-        "人类名没经 --list-models 解析成席位，裸名喂给 exe 会启动即失败，故出厂面宁窄不猜"
+    assert reg.model_chain("main") == ["solo-flash", "legacy-backup"], "flash=main 别名"
+    assert reg.models["main"] == "solo-flash", "首席平读面不变（老消费方不受惊）"
+    assert "flash" not in reg.models, "旧档键归一进角色后不再双写"
+    assert reg.model_chain("max") == list(presets.active().chain("pro")), (
+        "跟踪面没写的 role → 预设出厂表（pro 席链）；出厂面不猜账号 UUID、"
+        "但预设总给得出席——空串只留给预设不可激活时的兜底"
     )
 
 
@@ -223,37 +240,29 @@ def test_legacy_fallback_already_in_chain_not_duplicated(iso_reg):
 # ---------------------------------------------------------------------------
 # 4. README §3.5 与代码链模板同源（文案不许领先或落后于代码）
 # ---------------------------------------------------------------------------
-def test_readme_chain_clause_matches_code_template():
-    """README §3.5 里 ``DEFAULT_MODEL_CHAINS`` 的逐档文案 == 代码链模板。"""
+def test_readme_clause_matches_preset_tables():
+    """README §3.5 与代码预设表/链模板同源：三预设构成串、席位名、minimum 独立链。"""
     clause = _readme_clause()
-    m = re.search(r"DEFAULT_MODEL_CHAINS`?：(.*?)(?:；|）|\))", clause)
-    assert m, (
-        'README §3.5 找不到链模板文案（应写 "DEFAULT_MODEL_CHAINS：max=名→名→默认、'
-        'flash=…、minimum=…"）——代码改了文案不改，此处必须变红'
-    )
-    documented: dict[str, list[str]] = {}
-    for part in m.group(1).split("、"):
-        tier, _, rest = part.partition("=")
-        tier = tier.strip()
-        if not tier:
-            continue
-        documented[tier] = [
-            "" if seat.strip() == "默认" else seat.strip()
-            for seat in rest.split("→")
-            if seat.strip()
-        ]
 
-    expected = {
-        tier: [name for name in names]
-        for tier, names in registry.DEFAULT_MODEL_CHAINS.items()
-    }
-    assert documented == expected, (
-        f"README §3.5 的链描述与 DEFAULT_MODEL_CHAINS 不同源："
-        f"只文档有={set(documented) - set(expected)}，"
-        f"只代码有={set(expected) - set(documented)}，"
-        f"内容差异="
-        f"{ {t: (documented.get(t), expected.get(t)) for t in expected if documented.get(t) != expected.get(t)} }"
+    # 仲裁团构成串与 presets.PRESETS[*].jury 逐预设同源
+    for name, table in presets.PRESETS.items():
+        want = f"{name}→{'+'.join(table.jury)}"
+        assert want in clause, (
+            f"README §3.5 缺「{want}」——构成串与 presets.PRESETS 不同源"
+        )
+
+    # 预设席位名逐个落文档（改出厂表不改 README 时这里变红）
+    for name in ("Qwen-3.8-Flash", "Qwen-3.8-Max", "Mimo-V2.6-Flash", "Mimo-V2.6-Pro"):
+        assert name in clause, f"README §3.5 缺席位名 {name}"
+
+    # minimum 独立链：名字与 DEFAULT_MODEL_CHAINS 同源
+    min_chain = registry.DEFAULT_MODEL_CHAINS["minimum"]
+    assert all(seat in clause for seat in min_chain), (
+        f"README §3.5 缺 minimum 链席位 {min_chain}"
     )
+    assert "独立、不随预设走" in clause, "minimum 与预设解耦的语义必须写明"
+    assert "data/pysci_settings.toml" in clause, "真源文件名必须逐字可检索"
+    assert "--model-tier pro|main" in clause, "角色覆盖旗标的合法值写进文档"
 
 
 def test_readme_documents_fallback_and_alert():

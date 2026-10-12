@@ -116,7 +116,9 @@ def test_registry_registers_inspector_with_produce_writeface():
     """registry：默认档 flash、写白名单只有产出两面、rubric 面只读。"""
     data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     m = data["members"]["inspector"]
-    assert m["model_tier"] == "flash", "巡检是每日常态，成本敏感（§7 flash/minimum）"
+    assert "model_tier" not in m, (
+        "档位退役（2026-10-12 22:4x）：角色由预设 pro 名单解析，不再落成员条目"
+    )
     assert m["extra_dirs"] == [
         "orchestration/state/inspector",
         "orchestration/state/evals/jury-cases",

@@ -120,9 +120,12 @@ def test_refresh_writes_runtime_face_never_tracked(iso_reg, monkeypatch):
 
     assert reg_file.read_bytes() == before, "自愈绝不写 git 跟踪的配置面"
     face = _runtime(runtime_file)[registry.RUNTIME_MODELS_KEY]
-    assert face == CHAINS, "三档都是**整条链**（首席在前），不是单值"
-    assert set(res["changed"]) == {"max", "flash", "minimum"}
-    assert res["changed"]["max"] == {"old": None, "new": CHAINS["max"]}
+    assert face == {"minimum": CHAINS["minimum"]}, (
+        "档位退役（2026-10-12 22:4x）：刷新只代管 minimum 模板，且是整条链不是单值；"
+        "main/pro 的席位表随预设（presets.PRESETS/跟踪 presets 块），不经自愈"
+    )
+    assert set(res["changed"]) == {"minimum"}
+    assert res["changed"]["minimum"] == {"old": None, "new": CHAINS["minimum"]}
     assert res["missing"] == [] and res["shadowed"] == {} and res["conflicts"] == []
     assert res["catalog_size"] == 5
 
@@ -131,6 +134,19 @@ def test_refresh_writes_seat_name_table_for_alerts(iso_reg, monkeypatch):
     """规格 4 告警面可读性：自愈顺带把「席（UUID/内置名）→ 人类名」写进运行态反查表。"""
     reg_file, runtime_file = iso_reg
     _seed(reg_file, {})
+    data = json.loads(reg_file.read_text(encoding="utf-8"))
+    data["presets"] = {
+        "mimo": {
+            "main": [MIMO_FLASH_UUID, "Qwen3.8-Flash"],
+            "pro": [MIMO_PRO_UUID, "Qwen3.8-Flash"],
+        },
+        "qwen": {
+            "main": [BYOK_FLASH_UUID, "Qwen3.8-Flash"],
+            "pro": [MAX_UUID, "Qwen3.8-Flash"],
+        },
+        "deepseek": {"main": [], "pro": []},
+    }
+    reg_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     _fake_output(monkeypatch)
 
     registry.refresh_models()
@@ -150,71 +166,79 @@ def test_refresh_writes_seat_name_table_for_alerts(iso_reg, monkeypatch):
 def test_tracked_pinned_tier_wins_and_reports_shadowed(iso_reg, monkeypatch):
     """跟踪面 pin 住的档：不写运行态、不改跟踪值，只在 shadowed 里点名（人不写则不换）。"""
     reg_file, runtime_file = iso_reg
-    before = _seed(reg_file, {"max": "old-max-uuid"})
+    before = _seed(reg_file, {"minimum": ["HumanMin-seat"]})
     _fake_output(monkeypatch)
 
     res = registry.refresh_models()
 
     assert reg_file.read_bytes() == before
     assert res["shadowed"] == {
-        "max": {"tracked": "old-max-uuid", "resolved": CHAINS["max"]}
+        "minimum": {
+            "tracked": ["HumanMin-seat"],
+            "resolved": [MIMO_FLASH_UUID, "Qwen3.8-Flash"],
+        }
     }
-    assert "max" not in _runtime(runtime_file).get(registry.RUNTIME_MODELS_KEY, {}), (
-        "被遮蔽的档不进运行态面（免得存一个永不生效的值）"
-    )
-    assert set(res["changed"]) == {"flash", "minimum"}
+    assert "minimum" not in _runtime(runtime_file).get(
+        registry.RUNTIME_MODELS_KEY, {}
+    ), "被遮蔽的档不进运行态面（免得存一个永不生效的值）"
+    assert set(res["changed"]) == set()
 
 
 def test_machine_does_not_insert_seats_into_human_chain(iso_reg, monkeypatch):
     """合并粒度是**整条链**：跟踪面写了两席的链，机器不得往里插第三席（#74 的链形态版本）。"""
     reg_file, runtime_file = iso_reg
-    _seed(reg_file, {"flash": [MIMO_FLASH_UUID, "Qwen3.8-Flash"]})
+    _seed(reg_file, {"minimum": [MIMO_FLASH_UUID]})
     _fake_output(monkeypatch)
 
     res = registry.refresh_models()
 
-    assert res["shadowed"]["flash"] == {
-        "tracked": [MIMO_FLASH_UUID, "Qwen3.8-Flash"],
-        "resolved": CHAINS["flash"],
-    }
-    assert "flash" not in _runtime(runtime_file).get(registry.RUNTIME_MODELS_KEY, {})
-    assert registry.Registry.load().model_chain("flash") == [
+    assert res["shadowed"]["minimum"] == {
+        "tracked": [MIMO_FLASH_UUID],
+        "resolved": [MIMO_FLASH_UUID, "Qwen3.8-Flash"],
+    }, "人写一席的链，机器解析出两席——整链遮蔽而不是插一席进去"
+    assert "minimum" not in _runtime(runtime_file).get(registry.RUNTIME_MODELS_KEY, {})
+    assert registry.Registry.load().model_chain("minimum") == [
         MIMO_FLASH_UUID,
-        "Qwen3.8-Flash",
     ], "读侧就是人写的整条链，顺序也不动"
 
 
 def test_three_level_fallback_order(iso_reg):
-    """读侧三级回退：跟踪值 > 运行态解析值 > 出厂默认（有意写空也是裁决）。"""
+    """minimum 读侧三级回退：跟踪值 > 运行态解析值 > 出厂默认；main/pro 走预设块。"""
     reg_file, runtime_file = iso_reg
-    _seed(reg_file, {"max": "", "flash": "TrackedFlash"})
+    _seed(reg_file, {"flash": "TrackedFlash"})
 
-    assert registry.Registry.load().models == {
-        **registry.DEFAULT_MODELS,
-        "max": "",
-        "flash": "TrackedFlash",
-    }, "两面皆空的档回落出厂默认"
+    reg = registry.Registry.load()
+    assert reg.models["minimum"] == registry.DEFAULT_MODELS["minimum"], (
+        "两面皆空的键回落出厂默认"
+    )
+    assert reg.models["main"] == "TrackedFlash", (
+        "旧 flash 键=main 角色的跟踪值（兼容读）"
+    )
+    assert "flash" not in reg.models, "旧档键被归一进角色，不双写两个键"
 
     runtime_file.write_text(
         json.dumps(
             {
                 "version": 1,
                 "members": {},
-                registry.RUNTIME_MODELS_KEY: {
-                    "flash": ["RuntimeFlash", "RuntimeBackup"],
-                    "minimum": "RuntimeMin",
-                },
+                registry.RUNTIME_MODELS_KEY: {"minimum": "RuntimeMin"},
             },
             ensure_ascii=False,
         ),
         encoding="utf-8",
     )
     reg = registry.Registry.load()
-
-    assert reg.models["max"] == "", "跟踪面写空=不传 -m 的裁决，不被运行态值顶掉"
-    assert reg.models["flash"] == "TrackedFlash", "跟踪值优先于运行态值"
     assert reg.models["minimum"] == "RuntimeMin", "运行态值优先于出厂默认"
     assert reg.model_chain("minimum") == ["RuntimeMin"], "单值旧写＝一席链"
+
+    data = json.loads(reg_file.read_text(encoding="utf-8"))
+    data["presets"] = {"mimo": {"main": ["PresetMain", "PresetBackup"]}}
+    reg_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    reg = registry.Registry.load()
+    assert reg.model_chain("main") == ["PresetMain", "PresetBackup"], (
+        "main/pro 不走三级面：跟踪 presets 块**整链**覆盖预设出厂表"
+    )
+    assert reg.models["main"] == "PresetMain"
 
 
 def test_refresh_no_change_does_not_rewrite_runtime(iso_reg, monkeypatch):
@@ -261,15 +285,12 @@ def test_refresh_missing_name_keeps_current(iso_reg, monkeypatch):
     res = registry.refresh_models()
 
     assert reg_file.read_bytes() == before
-    assert set(res["missing"]) == {
-        "flash←Mimo-V2.6-Flash",
-        "flash←Qwen-3.8-Flash",
-        "max←Mimo-V2.6-Pro",
-        "max←Qwen-3.8-Max",
-        "minimum←Mimo-V2.6-Flash",
-    }
-    assert "max" not in _runtime(runtime_file).get(registry.RUNTIME_MODELS_KEY, {})
-    assert registry.Registry.load().models["max"] == "old-max-uuid", "未命中不清空"
+    assert set(res["missing"]) == {"minimum←Mimo-V2.6-Flash"}, (
+        "刷新模板只剩 minimum；目录缺 Mimo 名 → 逐席点名"
+    )
+    assert registry.Registry.load().model_chain("pro") == ["old-max-uuid"], (
+        "未命中不清空：旧档键的跟踪值原样保留（pro←max 兼容读）"
+    )
     assert res["shadowed"] == {}, (
         "跟踪链含账户已摘除的席 → 只报 missing 不报 shadowed："
         "那不是人能改的漂移，报了会淹没真信号"
@@ -337,12 +358,13 @@ def test_legacy_inverted_patterns_are_rules_not_tiers(iso_reg, monkeypatch):
     res = registry.refresh_models()
 
     assert res["missing"] == [], "倒表键是模型名，不该被当成档去目录里找"
-    assert res["conflicts"] == [], (
-        "一席同属多档（Qwen3.8-Flash 在 flash 与 minimum 两条链里）不算串档"
-    )
     face = _runtime(runtime_file)[registry.RUNTIME_MODELS_KEY]
-    assert "Mimo-V2.6-Pro" not in face, "倒表键没变成一个以模型名命名的档"
-    assert face["max"] == CHAINS["max"], "档→名模板未被倒表污染"
+    assert set(face) == {"minimum"}, "倒表键没变成以模型名命名的档，模板也没被污染"
+    assert face["minimum"] == CHAINS["minimum"]
+    assert res["conflicts"] == ["Qwen3.8-Flash∈minimum，规则说 flash"], (
+        "规则指向已退役的档名 → 点名（规则表过期要看得见），而非静默忽略："
+        f"{res['conflicts']}"
+    )
 
 
 def test_inverted_rule_contradicting_chain_is_named(iso_reg, monkeypatch):
@@ -354,7 +376,7 @@ def test_inverted_rule_contradicting_chain_is_named(iso_reg, monkeypatch):
             {
                 "version": 1,
                 "models": {},
-                "model_patterns": {"Mimo-V2.6-Pro": "minimum"},
+                "model_patterns": {"Mimo-V2.6-Flash": "main"},
                 "members": {},
             },
             ensure_ascii=False,
@@ -365,8 +387,8 @@ def test_inverted_rule_contradicting_chain_is_named(iso_reg, monkeypatch):
 
     res = registry.refresh_models()
 
-    assert res["conflicts"] == ["Mimo-V2.6-Pro∈max，规则说 minimum"], (
-        f"串档必须被点名，否则自愈会安静地把组长档的席位塞进压测档：{res['conflicts']}"
+    assert res["conflicts"] == ["Mimo-V2.6-Flash∈minimum，规则说 main"], (
+        f"串档必须被点名，否则自愈会安静地把主力席塞错角色：{res['conflicts']}"
     )
 
 
@@ -447,7 +469,7 @@ def test_cli_refresh_models_success(iso_reg, monkeypatch, capsys):
     _fake_output(monkeypatch)
     assert orch.main(["refresh-models"]) == 0
     out = capsys.readouterr().out
-    assert "[max]" in out and "Mimo-V2.6-Pro" in out and "已刷新" in out
+    assert "[minimum]" in out and "Mimo-V2.6-Flash" in out and "已刷新" in out
     assert "(空)" in out and "→" in out, "打印的是整条链（首席→次席），不是单值"
     assert "models_resolved" in out, "打印落点：写运行态面，不是跟踪 registry"
     assert runtime_file.exists() and not _runtime(runtime_file).get("members")
@@ -455,11 +477,11 @@ def test_cli_refresh_models_success(iso_reg, monkeypatch, capsys):
 
 def test_cli_refresh_models_reports_shadowed(iso_reg, monkeypatch, capsys):
     reg_file, _runtime_file = iso_reg
-    _seed(reg_file, {"max": "old-max-uuid"})
+    _seed(reg_file, {"minimum": "old-min-seat"})
     _fake_output(monkeypatch)
     assert orch.main(["refresh-models"]) == 0
     out = capsys.readouterr().out
-    assert "遮蔽解析链" in out and "old-max-uuid" in out and "Mimo-V2.6-Pro" in out
+    assert "遮蔽解析链" in out and "old-min-seat" in out and "Mimo-V2.6-Flash" in out
     assert "护栏级" in out, "指出换档的正确通路（改跟踪值须经授权）"
 
 

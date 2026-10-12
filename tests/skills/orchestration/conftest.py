@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import re
 
 import pytest
@@ -24,6 +25,7 @@ from pysci.skills.orchestration.tools import (
     ledger,
     orch,
     registry,
+    settings,
     verdict,
     watch,
     workflow,
@@ -56,6 +58,45 @@ REAL_MODEL_TURN = "qfmodel"
 FAKE_HOP_PID = 424242
 
 
+def seed_settings(
+    base, preset: str = "mimo", *, inspector: bool = True
+) -> pathlib.Path:
+    """在 ``base`` 落一份最小 ``pysci_settings.toml`` 并返回其路径（预设面隔离用）。"""
+    path = base / "pysci_settings.toml"
+    flag = "true" if inspector else "false"
+    path.write_text(
+        f'[model]\npreset = "{preset}"\n\n[inspector]\nenabled = {flag}\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def write_preset(preset: str) -> pathlib.Path:
+    """改**当前生效的隔离 toml**（``settings.SETTINGS_PATH`` 指向的那份）里的 preset。
+
+    必须写指针指向的文件：多层夹具会把真源挪到不同 tmp 目录（iso_registry 再指一次），
+    写错目录=读的还是旧值，「改一行换预设」的用例就测了个寂寞。
+    """
+    path = settings.SETTINGS_PATH
+    path.write_text(f'[model]\npreset = "{preset}"\n', encoding="utf-8")
+    return path
+
+
+def set_presets(state, **tables):
+    """改写隔离 registry.json 的 ``presets`` 块（``qwen={...}`` / ``mimo={...}`` 形参）。"""
+    reg_file = state / "registry.json"
+    data = json.loads(reg_file.read_text(encoding="utf-8"))
+    face = data.get("presets")
+    if not isinstance(face, dict):
+        face = {}
+        data["presets"] = face
+    for name, table in tables.items():
+        face[name] = table
+    reg_file.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
 @pytest.fixture
 def iso_registry(tmp_path, monkeypatch):
     """把 ``REGISTRY_PATH`` 指向 tmp，返回 (reg_file, runtime_file, backup_file)。
@@ -67,6 +108,10 @@ def iso_registry(tmp_path, monkeypatch):
     runtime_file = tmp_path / registry.RUNTIME_NAME
     backup_file = tmp_path / registry.BACKUP_NAME
     monkeypatch.setattr(registry, "REGISTRY_PATH", reg_file)
+    # 预设真源隔离（backlog 20261012-225500-leader）：不 patch 则任何读预设的用例都读到
+    # 开发者 data/pysci_settings.toml 的真实行——组长改一行 preset，测试跟着漂。
+    monkeypatch.setattr(settings, "SETTINGS_PATH", tmp_path / "pysci_settings.toml")
+    seed_settings(tmp_path)
     return reg_file, runtime_file, backup_file
 
 
@@ -97,6 +142,9 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
     monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")
     monkeypatch.setattr(watch, "WATCH_PATH", state / "watch.json")
+    # 预设真源（toml）隔离：默认 mimo；切预设的用例用 write_preset(state, ...) 改一行。
+    monkeypatch.setattr(settings, "SETTINGS_PATH", state / "pysci_settings.toml")
+    seed_settings(state)
     # 渠道回退事件流（backlog 20261012-211500-leader 规格 4b）：降级一跳就追加一行，
     # 不 patch 则任何跑到换席通路的用例都真写仓库 state/channel-events.jsonl。
     monkeypatch.setattr(channels, "EVENTS_PATH", state / "channel-events.jsonl")
@@ -234,8 +282,8 @@ def seed_raw_suggestion(state, body: str, member="devops", sid=None):
 def iso_dispatch(tmp_path, monkeypatch):
     """隔离 do_dispatch：tmp registry/ledger + 假 pod + 假 exe。
 
-    默认 registry models 含 ``flash``/``flash_fallback``；用 :func:`set_models`
-    改档位映射。成员 ``quotamember`` 默认 model_tier=flash。返回 state 目录。
+    默认 registry models 走**旧档形态**（``flash``/``flash_fallback`` → main 角色兼容读）；
+    用 :func:`set_models` 改链、:func:`set_presets` 写新预设块。返回 state 目录。
     """
     state = tmp_path / "state"
     state.mkdir(exist_ok=True)  # 与 iso_state 同锚，组合挂载时不互撞
@@ -251,7 +299,6 @@ def iso_dispatch(tmp_path, monkeypatch):
                 "members": {
                     "quotamember": {
                         "pod": str(pod),
-                        "model_tier": "flash",
                         "max_turns": 3,
                         "timeout_s": 5,
                     }
@@ -275,6 +322,8 @@ def iso_dispatch(tmp_path, monkeypatch):
     # 直接 no-op save，防止测试写真实 registry.json
     monkeypatch.setattr(registry.Registry, "save", lambda self: None)
     monkeypatch.setattr(ledger, "LEDGER_PATH", state / "ledger.jsonl")
+    monkeypatch.setattr(settings, "SETTINGS_PATH", state / "pysci_settings.toml")
+    seed_settings(state)
     monkeypatch.setattr(channels, "EVENTS_PATH", state / "channel-events.jsonl")
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(dispatch, "SUGGESTIONS_DIR", state / "suggestions")
