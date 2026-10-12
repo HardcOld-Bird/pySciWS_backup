@@ -1,7 +1,7 @@
 {
   "version": 1,
   "exe": null,
-  "taste_enabled": false,
+  "taste_enabled": true,
   "models": {
     "minimum": [
       "017036af-b630-498a-bfea-883a20c67e33",
