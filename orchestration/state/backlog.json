@@ -1330,6 +1330,18 @@
       "status": "pending",
       "proposed": "2026-10-13T07:25:28+08:00",
       "note": ""
+    },
+    {
+      "id": "20261013-061000-leader",
+      "member": "leader",
+      "kind": "usability",
+      "summary": "**（#88 续）charter 8 处 lint 对盘核验句补齐（用户已授权）+ #89 remedy_shape 句同批**",
+      "success_criteria": "8 charter 各含核验句（快照断言）+ sync 部署副本一致 + 预算钩子绿 + 全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-045000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T06:10:00+08:00",
+      "note": "用户 05:5x 完全授权 charter 修改；一并落 #89 的 remedy_shape 纪律句（devops charter）",
+      "effort": "medium"
     }
   ]
 }
