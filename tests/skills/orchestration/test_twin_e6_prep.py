@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -39,6 +40,9 @@ from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 from pysci.skills.orchestration.tools.registry import Registry
 
 from .test_pod_guard_blocks import NODE_REQUIRED, run_guard
+
+#: 技能部署 manifest（唯一真本 → 部署目标映射）
+MANIFEST_PATH = PROJECT_ROOT / "orchestration" / "skills" / "manifest.toml"
 
 PREF_TEXT = "# 判断宪章（测试夹具）\n\n状态：**草案 v1，待用户确认生效**\n\n- P-01 客观优质 > 审美\n"
 
@@ -340,6 +344,24 @@ def test_journal_cli_noninteractive_requires_select(twin_face, capsys):
     assert mirror.read_queue() == [] and journal_tool.read_records() == []
 
 
+def test_journal_menu_eof_without_traceback(twin_face, monkeypatch, capsys):
+    """tty 但 stdin 无内容（agent 会话常态）：干净拒绝，不抛 EOFError traceback。
+
+    上面那条非交互用例走不到这一支——它的 stdin 不是 tty，在 isatty 处就返回了。
+    真跑 ``pysci-mirror journal`` 时 stdin 常是「伪 tty + 空管道」，两条路都得封。
+    """
+    monkeypatch.setattr(mirror.sys.stdin, "isatty", lambda: True)
+
+    def _eof(*_a):
+        raise EOFError
+
+    monkeypatch.setattr(mirror, "input", _eof, raising=False)
+    rc = mirror.main(["journal", "随手一句口述"])
+    assert rc == 2
+    assert "--select" in capsys.readouterr().out
+    assert mirror.read_queue() == [] and journal_tool.read_records() == []
+
+
 def test_cmd_status_panorama_covers_spec_items(twin_face, capsys):
     """status 全景覆盖任务书四项：待盲审/宪章/开关/队列水位（§10 注册纪律）。"""
     mirror.route("指令：给 mirror 加 review 面", [2])
@@ -443,3 +465,25 @@ def test_registry_ships_twin_disabled_by_default():
     assert twin["cold_start"] is True
     assert "PREFERENCE.md" in twin["readonly_extra"]
     assert not twin.get("extra_dirs"), "extra_dirs 即写白名单，给了就不再只读"
+
+
+def test_twin_intentionally_has_no_manifest_target():
+    """原单规格第 2 条要求「manifest 追加 twin 部署目标」——本用例把**不适用**的裁定钉住。
+
+    twin 无领域技能真本：判断输入只有「宪章 + 案卷」，由 ``orch taste`` 直接注入；给它挂
+    任何领域技能都会把绘图/写作方法论混进审美判断。而 manifest 的每个 target 必须指向存在
+    的 ``source`` 目录，凭空造一个 ``orchestration/skills/twin/`` 就是未被要求的文件。
+    ``reviewer`` 是同形先例（同样不在 targets 里）。若将来真要给 twin 挂技能，改这条测试
+    并附理由，别让「规格里写过」变成默认动作。
+    """
+    data = tomllib.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    targets = [t for s in data["skills"] for t in s.get("targets", [])]
+    assert not any("pods/twin" in t.replace("\\", "/") for t in targets)
+    assert (PODS_ROOT / "twin" / ".qoder" / "skills").exists() is False
+    # 反向护栏：manifest 里每条 target 的父目录都必须是已存在 pod 的 .qoder/skills 或项目根
+    for t in targets:
+        rel = t.replace("\\", "/")
+        if rel == ".qoder/skills":
+            continue
+        pod_name = rel.split("/")[2]
+        assert (PODS_ROOT / pod_name).is_dir(), f"manifest 指向不存在的 pod：{t}"

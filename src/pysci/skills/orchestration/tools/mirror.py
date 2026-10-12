@@ -241,7 +241,14 @@ def _menu() -> list[int]:
     if not sys.stdin.isatty():
         print("✗ 非交互环境：用 --select 1|2|1,2 明示分流（不猜）")
         return []
-    picks = _parse_select(input("选择编号（如 1,2；回车=1）：").strip() or "1")
+    try:
+        raw = input("选择编号（如 1,2；回车=1）：").strip() or "1"
+    except EOFError:
+        # tty 但没有键盘（agent 会话里 stdin 常是空管道）：与「非 tty」同一处置——
+        # 不猜编号、不写文件，把选择权交回 --select。抛出 traceback 会让人以为崩了。
+        print("✗ 读不到输入（stdin 无内容）：用 --select 1|2|1,2 明示分流（不猜）")
+        return []
+    picks = _parse_select(raw)
     if not picks:
         print("✗ 没有有效编号（只接受 1 / 2），未写入任何内容")
     return picks

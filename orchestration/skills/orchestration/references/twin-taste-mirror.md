@@ -54,6 +54,12 @@ twin pod 的写权限面：`PREFERENCE.md` 与 charter/settings/mcp/inbox 同属
 （`registry.readonly_extra` → `build_env` → `PYSCI_READONLY` → pod-guard exit 2）。宪章的修订
 链是 **用户盲审纠正 → 偏差报告绿色通道 → devops 实施**，不由 twin 自己动笔。
 
+**twin 是刻意的零技能 pod**（不进 `manifest.toml` targets，同 `reviewer` 先例）：它无领域技能
+真本可部署，判断输入只有「宪章 + 案卷」，由 `orch taste` 直接注入。给它挂任何领域技能都会把
+绘图/写作的方法论混进审美判断，且 manifest 的 target 必须指向存在的真本目录，凭空造一个
+`twin/` 技能册违反「不创建未被要求的文件」。此判断由
+`test_twin_intentionally_has_no_manifest_target` 钉住，后续会话不必再猜。
+
 ## 4. `pysci-mirror`——用户侧唯一关注入口
 
 ```
@@ -72,6 +78,12 @@ pysci-mirror journal "<口述>" --select 1              # 非交互（脚本/测
 队列水位对组长可见：`orch status` 的队列段打印
 `[!] mirror 行动指令待派发=N` 并列出前若干条正文；标 `status=done` 后不再计入（否则队列
 永不见底）。指令含糊或涉护栏疑虑时，组长经 mirror 回问，回问同样留痕。
+
+**两个新留痕面的 git 归属（勿误加进 `.gitignore`）**：`state/mirror-queue.jsonl` 与
+`state/evals/taste/*.json` 与 `preference-journal.jsonl` 同族——用户口述与代理裁决必留痕
+（§0.4），属**跟踪面**而非运行态。它们平时不存在（首次写入才出现为 `??`），随下一次交付
+一起 `git add` 即可；devops 的合并前检查只看「本次改动是否触碰」，未跟踪的留痕新文件不挡
+合并。
 
 `status` 的概览项当前覆盖：待盲审案件数（= `evals/taste/` 留痕数）、宪章状态（草案/已确认 +
 字节数）、`taste_enabled` 与 inspector 开关、行动指令/jury 待重裁队列水位、一致率与 override
