@@ -16,7 +16,7 @@
   pytest "<wt>/tests" -q`；worktree 内禁 `git checkout -- .`（抹光未提交改动）。
   配方 `references/worktree-merge.md` §1-§2。
 - **判决包流**：approve 必带 `--jury`/`--bench`/`--override` 之一；例外通道=defect×当跳
-  blocked。细则 `references/verdict-package.md`（orchestration 技能）。
+  blocked。细则 `orchestration/skills/orchestration/references/verdict-package.md`。
 - **档位映射自愈只写运行态** `models_resolved`，不写跟踪面；遮蔽时只报不写
   （`references/registry-runtime.md`）。
 - **worktree sync 台账**：tree_hash 行尾无关，但 pod 副本 gitignored ⇒ 合并后在 main 跑
@@ -32,7 +32,7 @@
 - **harness 预算三层**：delivery-gate Stop／pre-commit `harness-budget`／doctor 三档，口径=
   落盘字节；新钩子用 `language: python` 不用 `system`。
 - **eval 压测跳隔离已内建**：`EVAL_HOP_NOTE` + 前后脏面快照只还原本跳新增者
-  （`references/harness-eval.md`）。
+  （`orchestration/skills/orchestration/references/harness-eval.md`）。
 - **pod 脚手架**：每 pod 仅 5 文件入库，`bench/`·`outbox/`·`.qoder/skills/`·`inbox/` 合并后
   于 main 再生；settings 必带两 hook 接线 + `"agentsMdExcludes": ["**/leader-only.md"]`
   （写 `**/*.md` 会连 basic.md 一起吞掉）。生效性用 `pysci-dev probe` 做因果断言，doctor 验不出。
@@ -44,3 +44,6 @@
   merge-base 起算（已内建，勿手算）；取 rc 别经管道（`${PIPESTATUS[0]}` 是 grep 的）。
 - **上下文膨胀看 ctx_ratio，不看 est_tokens**（后者=本跳吞吐，78 跳实测相关 −0.11）；组员侧
   唯一自有杠杆=压薄每跳全文注入的自维护层，归档是组长侧 `orch sessions --archive --distill`。
+  派发侧已加水位闸 `dispatch.FRESH_CTX_RATIO=0.6`：`session="latest"` 见上一跳 ctx 已过 60%
+  就直接起新会话、不再续——ctx 只增不减，续上去只会把它推过压缩悬崖（81%/87% 两跳后接
+  run_failed/rc=1 腰斩，backlog insp-20261012-224853-mechanical）。

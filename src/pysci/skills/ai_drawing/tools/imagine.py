@@ -552,6 +552,16 @@ def _cloud_generate(
         n = int(getattr(args, "n", 1) or 1)
         max_images = getattr(args, "max_images", None)
         calls = 1
+        if max_images and not sequential:
+            # --max-images 是组图语义的字段（ark_client 只在 sequential 时写入 payload）。
+            # 单独给它会命中旧分支让 calls 恒为 1 且 payload 无字段——用户要 N 张实得 1 张、
+            # 零提示（insp-20261013-045603-mechanical）。明示忽略并走非组图多次请求。
+            print(
+                "[imagine] 提示：--max-images 未配合 --group（组图），已忽略；"
+                "非组图按 --n 走独立多次请求，张数受成本护栏夹取。",
+                file=sys.stderr,
+            )
+            max_images = None
         if sequential or max_images:
             kw["sequential"] = sequential
             kw["max_images"] = max_images or n

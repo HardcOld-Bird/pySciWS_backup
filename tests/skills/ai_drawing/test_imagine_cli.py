@@ -300,6 +300,61 @@ def test_main_gen_dry_run_omits_unset_seed(capsys):
     assert '"seed"' not in out  # 不能直接查 "seed"：模型名 seedream 也包含它
 
 
+def test_gen_max_images_without_group_warns_and_uses_n(capsys):
+    """--max-images 单给（无 --group）→ 明示忽略并走 --n 多次独立请求（insp-20261013-045603）。
+
+    旧缺陷：命中 `if sequential or max_images:` 让 calls 恒为 1，而 ark_client 只在
+    sequential 时写 payload → 用户要 N 张实得 1 张且零提示。
+    """
+    rc = imagine.main(
+        ["gen", "--prompt", "t", "--n", "5", "--max-images", "5", "--dry-run"]
+    )
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "已忽略" in captured.err, "必须明示 --max-images 被忽略"
+    assert "独立发起" in captured.out, "应落回 --n 多次独立请求语义"
+    assert '"sequential_image_generation"' not in captured.out
+
+
+def test_gen_group_with_model_still_sets_sequential(capsys):
+    """组图路径不受影响：--group + 支持组图的模型仍写 sequential 两字段（不误报忽略）。"""
+    rc = imagine.main(
+        [
+            "gen",
+            "--prompt",
+            "t",
+            "--group",
+            "--max-images",
+            "5",
+            "--model",
+            "doubao-seedream-5-0-251128",
+            "--dry-run",
+        ]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"sequential_image_generation": "auto"' in out
+    assert '"max_images": 5' in out
+
+
+def test_agents_pointers_resolve_within_own_skill_references():
+    """AGENTS.md 里 ``references/x.md`` 短指针必须能在 devops 技能 references 解析；跨技能的
+    用仓内全路径（insp-20261013-045553：verdict-package/harness-eval 曾悬空致 ENOENT）。"""
+    import re
+
+    from pysci.paths import PROJECT_ROOT
+
+    root = PROJECT_ROOT
+    agents = root / "orchestration" / "pods" / "devops" / "AGENTS.md"
+    refs_dir = root / "orchestration" / "skills" / "devops" / "references"
+    text = agents.read_text(encoding="utf-8")
+    dangling = []
+    for m in re.finditer(r"`references/([a-z0-9-]+\.md)`", text):
+        if not (refs_dir / m.group(1)).exists():
+            dangling.append(m.group(1))
+    assert not dangling, f"devops 技能 references 解析不到的短指针：{dangling}"
+
+
 def test_main_i2i_dry_run_redacts_data_uri(tmp_path, capsys):
     """本地参考图自动转 data URI，但打印时截断（否则刷屏 + 泄露进日志）。"""
     src = tmp_path / "ref.png"
