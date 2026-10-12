@@ -596,9 +596,9 @@
       "kind": "usability",
       "success_criteria": "**护栏级决定登记**：minimum 档经用户裁决创建（REFACTOR §1.1），但型号选择原\n属「专门环节」——委托期内组长决定：**minimum 暂映射内置 Qwen3.8-Flash**\n（现唯一零成本渠道，限时免费；credits 恒 0 已实锤）；档位抽象保持独立，\nE3 SiliconFlow 接入后重估是否引入更廉价的压测渠道。决策已入 preference-journal。",
       "evidence_file": "orchestration/state/suggestions/approved/20261011-233002-leader.md",
-      "status": "needs_leader",
+      "status": "done",
       "proposed": "2026-10-11T23:33:36+08:00",
-      "note": "drain 跳过（交付=run_failed）：tool_use",
+      "note": "drain 跳过（交付=run_failed）：tool_use｜组长销账：scope 已由续单 075200 完成（d18c49b），本单为失败历史留档",
       "started_at": "2026-10-12T01:05:08+08:00",
       "worktree": "20261011-233002-leader",
       "requeued_at": "2026-10-12T00:45:00+08:00",
@@ -672,9 +672,9 @@
       "kind": "usability",
       "success_criteria": "doctor 十一 pod 全绿；taste_enabled=false 拒绝派发实锤；PREFERENCE.md 只读拦截阳性用例；mirror status/journal 分流落点正确；v1 草案落盘标注待确认；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-005900-leader.md",
-      "status": "needs_leader",
+      "status": "done",
       "proposed": "2026-10-12T00:33:52+08:00",
-      "note": "drain 跳过（交付=run_failed）：tool_use",
+      "note": "drain 跳过（交付=run_failed）：tool_use｜组长销账：scope 已由续单 075201 完成（ac9d8f8），本单为失败历史留档",
       "started_at": "2026-10-12T02:53:25+08:00",
       "worktree": "20261012-005900-leader",
       "needs_leader_at": "2026-10-12T03:29:59+08:00"
@@ -748,12 +748,15 @@
       "kind": "usability",
       "success_criteria": "一次真实 harness 改动 before/after 二元判决；evals.jsonl 字段齐备；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-075200-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T07:51:19+08:00",
-      "note": "E2 再派（P0/#55 铺平前置）。判据见正文。",
+      "note": "drain 批量销账（commit d18c49b）",
       "effort": "high",
       "started_at": "2026-10-12T09:46:46+08:00",
-      "worktree": "20261012-075200-leader"
+      "worktree": "20261012-075200-leader",
+      "done_at": "2026-10-12T11:01:02+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-075200-leader"
     },
     {
       "id": "20261012-075201-leader",
@@ -762,9 +765,14 @@
       "kind": "defect",
       "success_criteria": "派发实锤；PREFERENCE.md 只读拦截阳性；mirror status/journal 分流落点正确；\nv1 草案落盘标注待确认；全量无回归；合并后清理续作 worktree。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-075201-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T07:51:19+08:00",
-      "note": "E6-prep 续作（worktree 半成品抢救，防重做）。生效面留用户确认。"
+      "note": "drain 批量销账（commit ac9d8f8）",
+      "started_at": "2026-10-12T11:01:02+08:00",
+      "worktree": "20261012-075201-leader",
+      "done_at": "2026-10-12T11:42:39+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-075201-leader"
     },
     {
       "id": "20261012-080410-devops",
@@ -785,10 +793,15 @@
       "kind": "usability",
       "success_criteria": "选 (b) 为主：pysci-dev worktree merge 内建 merge-base 提交面×main 脏项交集检查，非空打印冲突清单 rc=2；技能真本同步一行判据注记（注意 8178B 预算）；阳性单测：分支落后 main 且 main 脏时不误报、真交集时必拦；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-082932-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T09:19:22+08:00",
-      "note": "usability 实锤（main..HEAD 误报已造成一次错误 blocked）；采 (b) 工具内建+真本注记双落。",
-      "effort": "high"
+      "note": "drain 批量销账（commit 1b4c888）",
+      "effort": "high",
+      "started_at": "2026-10-12T11:42:39+08:00",
+      "worktree": "20261012-082932-devops",
+      "done_at": "2026-10-12T12:08:26+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-082932-devops"
     },
     {
       "id": "20261012-094646-devops",
@@ -797,9 +810,74 @@
       "kind": "defect",
       "success_criteria": "跨树自检判定改为『代码面指向≠脚下树 且 意图操作脚下树』的事故形状才拦：主树根+PYTHONPATH 指向 worktree 的标准配方放行（阳性用例）；mdgen-check 路径解析固定按 PROJECT_ROOT 而非 cwd（双树用例读数一致）；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-094646-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T09:49:01+08:00",
-      "note": "护栏误拦自家规定配方=自相矛盾，defect 批准，与 #59 同属合并收口摩擦面。"
+      "note": "drain 批量销账（commit 9e81a4a）",
+      "started_at": "2026-10-12T12:08:26+08:00",
+      "worktree": "20261012-094646-devops",
+      "done_at": "2026-10-12T12:22:52+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-094646-devops"
+    },
+    {
+      "id": "20261012-114239-devops",
+      "member": "devops",
+      "summary": "success_criteria: 在 main 上按新配方执行「pyproject 新增 console script → uv sync」，`.venv/Scripts/` 中 [project.scripts] 声明的入口一个不缺（含 pysci-orch/pysci-dev/pysci-mirror），且失败时不出现「其余入口已被删除」的半坏态；devops 技能 references 里",
+      "kind": "defect",
+      "success_criteria": "按新配方 pyproject 增删 console script → uv sync：入口一个不缺、失败无半坏态（阳性用例）；devops 技能 references 落配方；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-114239-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-12T12:25:14+08:00",
+      "note": "defect 实锤（本机今日实际发生：watch 持锁 exe→uv sync 半坏 venv），修复 uv 配方批准。",
+      "started_at": "2026-10-12T12:26:25+08:00",
+      "worktree": "20261012-114239-devops"
+    },
+    {
+      "id": "20261012-120001-leader",
+      "member": "leader",
+      "summary": "**（缺陷类）kind 词表校验存在漏网面：非法 kind 的提案可直达审批队列**",
+      "kind": "defect",
+      "success_criteria": "非法 kind 交付被 gate exit 2（阳性）；手写漏网路径被 suggestions 枚举标注/拒入库实锤；110101 进入路径结论写入本单 note；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-120001-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T12:26:22+08:00",
+      "note": "词表防御纵深缺口，与 E5 判决包准入面同源，批准。"
+    },
+    {
+      "id": "20261012-120002-leader",
+      "member": "leader",
+      "summary": "**（E4，REFACTOR v1.0 §8/§3）bencher 组员 pod：harness 实测专职工（FIFO 队列/套件所有权/基线捕获/副本 A/B/择机通知）**",
+      "kind": "usability",
+      "success_criteria": "见单内 success_criteria 四条（doctor 全绿/无人值守队列跑通/副本 A/B 二元判决零残留/污染检查与 runner 字段）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-120002-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T12:26:23+08:00",
+      "note": "E4：bencher 专职测试员上线，套件运行职责自 devops/组长面移交。",
+      "effort": "high"
+    },
+    {
+      "id": "20261012-120003-leader",
+      "member": "leader",
+      "summary": "**（E5a，REFACTOR v1.0 §7/§5.2）inspector 组员 pod：闲时巡检引擎（设计审查 rubric/发现晋升/双队列迟滞/全局开关/让路）**",
+      "kind": "usability",
+      "success_criteria": "见单内 success_criteria（十三 pod/自主发现全程组长介入=0/迟滞闸双态实测/无 override 面核验）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-120003-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T12:26:23+08:00",
+      "note": "E5a：inspector 上线，设计审查 rubric 由组长从用户 2026-10-11 原话整理入册。",
+      "effort": "high"
+    },
+    {
+      "id": "20261012-120004-leader",
+      "member": "leader",
+      "summary": "**（E5b，REFACTOR v1.0 §5.1/§5.6）组长判决包流：审批强制 J/M/J+M/override 四态 + 交付后核验闭环 + 咨询环节**",
+      "kind": "usability",
+      "success_criteria": "见单内 success_criteria（无包拒绝/例外通道实测/J+M 全程/未改善自动立案/override 率入 status）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-120004-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T12:26:24+08:00",
+      "note": "E5b：审批判决包硬化，基建判断自组长职责事实分离的收口单。",
+      "effort": "high"
     }
   ]
 }
