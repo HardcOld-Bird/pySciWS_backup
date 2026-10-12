@@ -44,9 +44,10 @@ J+M   approve <id> --jury --bench <案id>          先问裁判，核验交给�
 | 渠道降级（`queued`） | 案卷进 `evals/jury-queue/`，提案保持 pending | 1 |
 | 案卷/接口异常 | 不入队，打印案卷路径 | 2 |
 
-降级 rc=1 是刻意的：**「过了仲裁」这个读数必须是真开过庭**。缺 `SILICONFLOW_API_KEY`、
-简报未 `approved:`、panel 未选型都走 queued，绝不静默放行。案卷格式与简报冻结规则见
-`references/jury-panel.md`。
+降级 rc=1 是刻意的：**「过了仲裁」这个读数必须是真开过庭**。缺主席 Key（如
+`GLM_API_KEY`）、`registry.jury.seats` 未选型、简报未 `approved:` 都走 queued，绝不静默
+放行。案卷格式与简报冻结规则见 `references/jury-panel.md`，席位/回退渠道面见
+`references/jury-channels.md`。
 
 ## 4. M 路：核验方式审批时一次定死，实施后只实测
 

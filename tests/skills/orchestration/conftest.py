@@ -370,6 +370,11 @@ CASE_BODY = """targets: guards/target.txt
 """
 
 
+#: 逐席 provider 下每席各有 key_env；测试夹具让所有桩席位共用这一个变量名，
+#: 需要「一席缺 Key」的场景时再单独给某席换名（见 test_jury 的回退阳性用例）。
+SEAT_KEY_ENV = "PYSCI_JURY_TEST_KEY"
+
+
 @pytest.fixture
 def iso_jury(tmp_path, monkeypatch, iso_state, iso_registry):
     """隔离仲裁团三面（留痕/队列/简报）+ 假项目根 + 桩 git，返回 state 目录。
@@ -379,7 +384,7 @@ def iso_jury(tmp_path, monkeypatch, iso_state, iso_registry):
     """
     monkeypatch.setattr(jury, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(jury, "run_git", lambda *a: "stub-git-output")
-    monkeypatch.delenv(jury.KEY_ENV, raising=False)
+    monkeypatch.delenv(SEAT_KEY_ENV, raising=False)
     (tmp_path / "state" / "evals").mkdir(parents=True, exist_ok=True)
     (tmp_path / "guards").mkdir(parents=True, exist_ok=True)
     # write_bytes 而非 write_text：Windows 下文本写会 smudge 成 CRLF，
@@ -398,9 +403,30 @@ def seed_case(state, *, case_id="case-1", a="实施改动，收益是机械可�
 
 
 def set_jury_panel(reg_file, panel, **extra):
-    """写隔离 registry.json 的 jury 块（panel=型号清单；extra 覆盖 deadline/pricing 等）。"""
+    """写隔离 registry.json 的 ``jury`` 块（E3-live 逐席 provider 结构）。
+
+    ``panel`` 为席位清单，每项可以是型号串（自动补 name/base_url/key_env=SEAT_KEY_ENV）
+    或完整席位 dict（原样并入，缺 key_env 回落 SEAT_KEY_ENV）。``extra`` 逐键覆盖 jury 块
+    （如 ``deadline_s`` / ``pricing`` / ``fallback`` / ``seats``）。名称沿用 ``panel``
+    是测试侧的历史包袱，落到配置面已是 ``seats``。
+    """
     data = {"version": 1, "exe": None, "models": {}, "members": {}, "checks": {}}
-    data["jury"] = {"panel": list(panel), **extra}
+    seats: list[dict] = []
+    for item in panel:
+        if isinstance(item, dict):
+            seat = {"key_env": SEAT_KEY_ENV, **item}
+            seat.setdefault("name", seat.get("model", "seat"))
+            seat.setdefault("base_url", "https://stub.invalid/v1")
+        else:
+            seat = {
+                "name": str(item),
+                "model": str(item),
+                "base_url": f"https://stub.invalid/{item}/v1",
+                "key_env": SEAT_KEY_ENV,
+            }
+        seats.append(seat)
+    block: dict = {"seats": seats, "fallback": {"enabled": False}, **extra}
+    data["jury"] = block
     reg_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
@@ -439,8 +465,8 @@ def display_label_for_liked(messages, liked_text):
 def prefer_juror(liked_text, **kw):
     """内容驱动型裁判桩：永远投给它偏好的那段内容（双序两局都判同一真实选项）。"""
 
-    def transport(model, messages, *, base_url, key, timeout_s):
-        del model, base_url, key, timeout_s
+    def transport(model, messages, *, base_url, key, timeout_s, **ignored):
+        del model, base_url, key, timeout_s, ignored
         return ai_reply(display_label_for_liked(messages, liked_text), **kw)
 
     return transport
@@ -449,8 +475,8 @@ def prefer_juror(liked_text, **kw):
 def biased_first_juror(**kw):
     """位置偏好型裁判桩：永远投标签 A —— BA 局映射后与 AB 局矛盾 → inconclusive。"""
 
-    def transport(model, messages, *, base_url, key, timeout_s):
-        del model, messages, base_url, key, timeout_s
+    def transport(model, messages, *, base_url, key, timeout_s, **ignored):
+        del model, messages, base_url, key, timeout_s, ignored
         return ai_reply("A", **kw)
 
     return transport

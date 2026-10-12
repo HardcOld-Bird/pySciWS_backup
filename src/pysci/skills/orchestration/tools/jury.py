@@ -1,8 +1,9 @@
 """Tier C 仲裁团（REFACTOR §4）：家族外、直连、阻塞、双序、多数、材料冻结。
 
 **共享库，不建独立 CLI**（§0.9）：``orch jury <case-file>`` 子命令封装本模块
-（:func:`cmd_jury`），E6 的 pysci-inspect 复用同一条通路。渠道 = SiliconFlow 的
-OpenAI 兼容接口，Key 只进请求头。
+（:func:`cmd_jury`），E6 的 pysci-inspect 复用同一条通路。渠道 = **逐席 provider 直连**
+（E3-live，§4 用户裁决 2026-10-12 修订）：deepseek / bigmodel / moonshot 三家各一席，
+均为 OpenAI 兼容接口，Key 只进请求头。
 
 判决语义（每条对应 ``tests/skills/orchestration/test_jury.py`` 的一例）：
 
@@ -10,14 +11,20 @@ OpenAI 兼容接口，Key 只进请求头。
   案卷。案卷由本模块**自动附加确定性材料**（``git diff`` / ``git log --oneline -5`` /
   涉事文件字节读数 / 相关台账行，按案卷头部 ``targets:`` 声明抓取），全文哈希入档
   ＝材料冻结——事后证据推翻裁决时能核对「裁判当时看到的是什么」。
-- **非 Qwen 硬规则**：panel 型号串含 ``qwen`` 即拒开庭（排除同族自恋偏差）。选型权
+- **非 Qwen 硬规则**：席位型号串含 ``qwen`` 即拒开庭（排除同族自恋偏差）。选型权
   归用户，代码不内置候选清单、也不静默剔除——违约要被看见。
+- **逐席可用性**（§4 三席直调的减平票前提）：一席 Key 缺失只作废该席（标
+  unavailable），**不拖垮整案**——剩下有 Key 的席位照常开庭计票。全部主席不可达且
+  回退席也未就位时才降级入队。
+- **回退席**（``registry.jury.fallback``，独立开关）：仅当 ≥1 主席不可达时上场，
+  上场即 :data:`FALLBACK_NOTICE` 告警，三处可见（留痕案卷 / ``orch status`` 判决包健康段 /
+  mirror 概览）——回退是权宜，不是常态，用户必须知道主席掉了。
 - **双序**：每裁判跑 AB 与 BA 两局。BA 局把两个选项内容对调、仍以 A/B 标签提问，
   答案经 :func:`flip` 映射回真实选项；两局映射不一致 → 该裁判记 inconclusive
   **不计票**（被位置偏好牵着走的裁判自动出局）。
 - **多数 / 模棱两可**：计票少数服从多数；**无有效票 / 平票 / inconclusive 过半**
   → ``escalate="twin"``（§5.5 终裁链；E6 twin 未上线前挂起呈组长，不静默丢弃）。
-- **降级不阻塞生产**：缺 Key、panel 未选型、调用失败或超时（``deadline_s`` →
+- **降级不阻塞生产**：Key 全缺、席位未选型、调用失败或超时（``deadline_s`` →
   重试一次 → 仍败）一律把案卷落 ``state/evals/jury-queue/`` 待重裁，**绝不 raise**
   ——基建决策不因仲裁渠道不可达而停摆。
 - **Key 安全**：Key 永不进日志、留痕、异常文本；自由文本出模块前统一过 :func:`scrub`。
@@ -32,12 +39,15 @@ import json
 import os
 import re
 import subprocess
+import threading
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import requests
+from dotenv import dotenv_values
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
@@ -51,11 +61,15 @@ JURY_QUEUE_DIR: Path = ORCH_STATE_ROOT / "evals" / "jury-queue"
 #: 冻结简报（护栏级：出现 ``approved:`` 行才生效，否则运行时警告「简报未批准」）。
 JURY_BRIEF_PATH: Path = ORCH_STATE_ROOT / "evals" / "jury-brief.md"
 
-#: 渠道（§4 用户裁决：SiliconFlow 国内直连、按量开销极小）。
-KEY_ENV: str = "SILICONFLOW_API_KEY"
-DEFAULT_BASE_URL: str = str(DEFAULT_JURY["base_url"])
+#: 回退席上场时的告警语（§4 用户裁决：触发回退必须显式告警）。三处可见＝留痕案卷、
+#: ``orch status`` 判决包健康段、mirror 概览——回退是权宜不是常态，主席掉了要有人处理。
+FALLBACK_NOTICE = "回退席已激活——请用户处理主席"
 #: 双序两局的标签序。BA 局内容对调，答案映射回真实选项后才可比（见 :func:`flip`）。
 ORDERS: tuple[str, ...] = ("AB", "BA")
+#: 出厂请求 ``max_tokens``（registry.jury.max_output_tokens 可覆盖）。三席皆推理型，
+#: 真案卷上 reasoning_tokens 是重尾的（实测 432～3986），额度不足会把正文截成空——
+#: :func:`_ballot` 对此报 ``截断`` 错误（降级入队），不让它伪装成裁判的无效票。
+DEFAULT_MAX_TOKENS: int = int(DEFAULT_JURY["max_output_tokens"])
 
 #: 自动附着材料里 ``git diff`` 正文的字节上限——案卷要进每次调用的 prompt，一次大重构
 #: 不能把材料面撑成十万字（超出截断并标注原大小，哈希仍按截断后正文计算）。
@@ -367,25 +381,126 @@ def parse_vote(content: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Key 与配置
+# 席位（provider 直调）：Key 读取 → 可用性 → 回退席上场
 # ---------------------------------------------------------------------------
-def read_key() -> str:
-    """取渠道 Key：环境变量优先，回落项目根 ``.env``（gitignored，永不入库）。
+@dataclass
+class Seat:
+    """一席裁判的传输面：端点 + 型号 + Key 变量名 + 逐席请求参数（§4 三席直调）。
 
-    返回值只进请求头；任何要打印/落盘的文本都先过 :func:`scrub`。
+    ``usable`` 由 :func:`seat_readiness` 判定（配置齐全 且 Key 就位）。不可用的席位照样
+    进留痕与读数面并带 ``reason``：「这席这次没投票」必须能区分「没配好」「没 Key」「回退
+    席待命」——混为一谈就没法处理主席。
     """
-    if key := os.environ.get(KEY_ENV, "").strip():
-        return key
+
+    name: str
+    model: str
+    base_url: str
+    key_env: str
+    params: dict[str, Any] = field(default_factory=dict)
+    role: str = "primary"
+    defect: str = ""
+    reason: str = ""
+    usable: bool = False
+
+    def public(self) -> dict[str, Any]:
+        """留痕/读数用的一行状态（Key 值永不进这里，只有变量名与布尔）。"""
+        d = asdict(self)
+        d.pop("params", None)
+        return d
+
+
+def _to_seat(raw: dict[str, Any], role: str) -> Seat:
+    """registry 规范化席位 dict → :class:`Seat`（:func:`~.registry.normalize_seat` 的形状）。"""
+    return Seat(
+        name=str(raw.get("name") or role),
+        model=str(raw.get("model") or ""),
+        base_url=str(raw.get("base_url") or ""),
+        key_env=str(raw.get("key_env") or ""),
+        params=dict(raw.get("params") or {}),
+        role=role,
+        defect=str(raw.get("defect") or ""),
+    )
+
+
+def read_key(key_env: str) -> str:
+    """取一席的 Key：进程环境变量优先，回落项目根 ``.env``（gitignored，永不入库）。
+
+    ``.env`` 用 :func:`dotenv_values` **读文件**而不是 ``load_dotenv``：后者会把值灌进
+    ``os.environ``，让一次读数污染整个进程环境（Key 的可见面凭空变大）。返回值只进请求头；
+    任何要打印/落盘的文本都先过 :func:`scrub`。
+    """
+    if not key_env:
+        return ""
+    if value := os.environ.get(key_env, "").strip():
+        return value
     env_file = PROJECT_ROOT / ".env"
-    if env_file.exists():
-        m = re.search(
-            rf"^{KEY_ENV}\s*=\s*(.+)$",
-            env_file.read_text(encoding="utf-8", errors="replace"),
-            re.MULTILINE,
-        )
-        if m:
-            return m.group(1).strip().strip('"').strip("'")
-    return ""
+    if not env_file.is_file():
+        return ""
+    try:
+        return (dotenv_values(env_file).get(key_env) or "").strip()
+    except OSError:
+        return ""
+
+
+def seat_readiness(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """逐席读 Key 判可用性；**≥1 主席不可达**才让回退席上场（§4 回退必须告警）。
+
+    Args:
+        cfg: :func:`load_config` 的产物；缺席即自己读 registry（读数面 ``orch status``／
+            mirror 直接可用，不必先开庭）。
+
+    Returns:
+        ``{"seats": [Seat…主席+已启用的回退席], "voting": [Seat…本庭实际开庭的席],
+        "unavailable": [Seat…], "missing_primary": [Seat…], "fallback_enabled": bool,
+        "fallback_used": bool, "notice": str}``。**不返回 Key 值。**
+    """
+    out = cfg if cfg is not None else load_config()
+    seats = [_to_seat(raw, "primary") for raw in out["seats"]]
+    fallback_enabled = bool(out["fallback"].get("enabled"))
+    fallback = _to_seat(out["fallback"], "fallback")
+    planned = seats + ([fallback] if fallback_enabled else [])
+    for s in planned:
+        if s.defect:
+            s.reason = f"配置{s.defect}"
+        elif not read_key(s.key_env):
+            s.reason = f"缺 {s.key_env}"
+        else:
+            s.usable = True
+    missing = [s for s in seats if not s.usable]
+    voting = [s for s in seats if s.usable]
+    fallback_used = fallback_enabled and bool(missing) and fallback.usable
+    if fallback_used:
+        voting.append(fallback)
+    return {
+        "seats": planned,
+        "voting": voting,
+        "unavailable": [s for s in planned if not s.usable],
+        "missing_primary": missing,
+        "fallback_enabled": fallback_enabled,
+        "fallback_used": fallback_used,
+        "notice": FALLBACK_NOTICE if fallback_used else "",
+    }
+
+
+def readiness_summary(plan: dict[str, Any]) -> str:
+    """席位读数一行话（``orch status`` 判决包健康段与 mirror 概览共用，防两处文案漂移）。"""
+    if not plan["seats"]:
+        return "仲裁团未选型（registry.jury.seats 为空，开庭即入队）"
+    in_court = {s.name for s in plan["voting"]}
+    parts: list[str] = []
+    for s in plan["seats"]:
+        tag = f"{s.name}{'[回退]' if s.role == 'fallback' else ''}"
+        if s.name in in_court:
+            parts.append(f"{tag}✓")
+        elif s.role == "fallback":
+            parts.append(f"{tag}待命")
+        else:
+            parts.append(f"{tag}✗({s.reason})")
+    line = f"席位 {' '.join(parts)}｜本庭 {len(plan['voting'])} 席"
+    if plan["fallback_used"]:
+        dropped = "、".join(s.name for s in plan["missing_primary"])
+        line += f"｜[!] {FALLBACK_NOTICE}（不可达主席：{dropped}）"
+    return line
 
 
 def load_config() -> dict[str, Any]:
@@ -414,9 +529,9 @@ def scrub(text: str, *, secrets: tuple[str, ...] = ()) -> str:
     return _SECRET_RES[1].sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", out)
 
 
-def qwen_violations(panel: list[str]) -> list[str]:
+def qwen_violations(models: list[str]) -> list[str]:
     """§4 硬规则：评审团型号不得含 Qwen 系（同族自恋偏差）。返回违约型号清单。"""
-    return [m for m in panel if QWEN_RE.search(m)]
+    return [m for m in models if QWEN_RE.search(m)]
 
 
 # ---------------------------------------------------------------------------
@@ -424,8 +539,9 @@ def qwen_violations(panel: list[str]) -> list[str]:
 # ---------------------------------------------------------------------------
 @dataclass
 class Ballot:
-    """一局（某裁判 × 某标签序）的结果。``error`` 非空 = 该局没拿到可用答案。"""
+    """一局（某席位 × 某标签序）的结果。``error`` 非空 = 该局没拿到可用答案。"""
 
+    seat: str
     model: str
     order: str
     choice: str = ""
@@ -443,8 +559,14 @@ def chat_once(
     base_url: str,
     key: str,
     timeout_s: int,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """向 OpenAI 兼容端点发一次非流式对话，返回解析后的响应 JSON。
+
+    ``params`` 是**逐席请求参数覆盖**（registry 席位 ``params`` 键）：三家 provider 的参数
+    约束实测不一致——``kimi-k2.6`` 只接受 ``temperature=1``，共享一个写死的 0 会让那席
+    每次 400，于是「主席不可达」其实是请求体不合席位胃口。
 
     Raises:
         JuryError: HTTP 非 2xx 或响应体不是 JSON（消息已脱敏）。
@@ -458,8 +580,9 @@ def chat_once(
             "model": model,
             "messages": messages,
             "temperature": 0,
-            "max_tokens": 900,
+            "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
+            **(params or {}),
         },
         timeout=timeout_s,
     )
@@ -475,32 +598,67 @@ def chat_once(
 
 
 def _ballot(
-    model: str,
+    seat: Seat,
     order: str,
     case: Case,
     material: str,
     brief: str,
     *,
-    base_url: str,
-    key: str,
-    call_timeout_s: int,
+    cfg: dict[str, Any],
+    lock: threading.Lock | None = None,
 ) -> Ballot:
-    """一局的全部失败路径都收敛到 :attr:`Ballot.error`（一案多裁判，单点不可达不崩盘）。"""
+    """一局的全部失败路径都收敛到 :attr:`Ballot.error`（一案多裁判，单点不可达不崩盘）。
+
+    Key 在本局内现取（:func:`read_key`）：逐席 provider 各有各的变量名，且它只进请求头，
+    不进 :class:`Seat`——否则 :meth:`Seat.public` 的留痕字典就成了泄漏面。
+
+    ``lock`` = 同提供商组织的串行闸（见 :func:`collect_votes`）；缺席即不加闸。
+    """
+    key = read_key(seat.key_env)
     messages = render_prompt(case, material, brief, order=order)
-    try:
-        data = chat_once(
-            model, messages, base_url=base_url, key=key, timeout_s=call_timeout_s
-        )
-    except Exception as exc:  # 网络/HTTP/响应形状都只作废这一局，不外抛（§4 降级入队）
+    gate = lock if lock is not None else nullcontext()
+    with gate:
+        try:
+            data = chat_once(
+                seat.model,
+                messages,
+                base_url=seat.base_url,
+                key=key,
+                timeout_s=cfg["call_timeout_s"],
+                max_tokens=cfg["max_output_tokens"],
+                params=seat.params,
+            )
+        except (
+            Exception
+        ) as exc:  # 网络/HTTP/响应形状都只作废这一局，不外抛（§4 降级入队）
+            return Ballot(
+                seat=seat.name,
+                model=seat.model,
+                order=order,
+                error=scrub(
+                    f"{seat.name}/{order} {type(exc).__name__}: {exc}", secrets=(key,)
+                )[:300],
+            )
+    first = (data.get("choices") or [{}])[0]
+    content = (first.get("message") or {}).get("content") or ""
+    # 截断是**预算不合**（改 registry 即可修因），记成无效票会把渠道故障伪装成「裁判模棱两可」
+    if first.get("finish_reason") == "length":
+        det = (data.get("usage") or {}).get("completion_tokens_details") or {}
         return Ballot(
-            model=model,
+            seat=seat.name,
+            model=seat.model,
             order=order,
-            error=scrub(f"{type(exc).__name__}: {exc}", secrets=(key,))[:300],
+            usage=data.get("usage") or {},
+            error=(
+                f"{seat.name}/{order} 截断：正文未出"
+                f"（max_output_tokens={cfg['max_output_tokens']}，"
+                f"reasoning_tokens={det.get('reasoning_tokens', '?')}）"
+            ),
         )
-    content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content", "")
     vote = parse_vote(content)
     return Ballot(
-        model=model,
+        seat=seat.name,
+        model=seat.model,
         order=order,
         choice=vote["choice"],
         real=flip(vote["choice"], order),
@@ -511,36 +669,45 @@ def _ballot(
 
 
 def collect_votes(
-    panel: list[str],
+    seats: list[Seat],
     case: Case,
     dossier: str,
     brief: str,
     *,
     cfg: dict[str, Any],
-    key: str,
 ) -> list[Ballot]:
-    """并发跑 ``len(panel) × 2`` 局，按 (型号, 序) 原序返回（留痕顺序须稳定可重放）。
+    """并发跑 ``len(seats) × 2`` 局，按 (席位, 序) 原序返回（留痕顺序须稳定可重放）。
+
+    **同一提供商组织内串行**：席内两局（AB/BA）打的是同一个账号，而官方直调的并发额度
+    按组织算——实测 DeepSeek 免费档 ``max organization concurrency: 1``，同席两局并发必
+    429（2026-10-12 三席真实 smoke 首爆）。不同席是不同提供商，照常并发，故整案墙钟 ≈
+    单局时长 × 2 而非 × 6。
 
     总等待受 ``cfg["deadline_s"]`` 约束：超时未归的局记 error 并放弃等待（线程随进程
     结束），**不在这里重试**——重试是 :func:`adjudicate` 的 attempt 层职责。
     """
-    jobs = [(m, o) for m in panel for o in ORDERS]
+    jobs = [(s, o) for s in seats for o in ORDERS]
+    model_of = {s.name: s.model for s in seats}
+    #: 闸按 (端点, Key 变量名) 归组而非按席位：两席挂同一账号（如官方 deepseek 旗舰 +
+    #: 同家 flash）时也必须串行，按席位分锁会让它们照旧并发撞额度。
+    locks: dict[tuple[str, str], threading.Lock] = {}
+    for seat in seats:
+        locks.setdefault((seat.base_url, seat.key_env), threading.Lock())
     got: dict[tuple[str, str], Ballot] = {}
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(jobs)))
     try:
         futs = {
             ex.submit(
                 _ballot,
-                model,
+                seat,
                 order,
                 case,
                 dossier,
                 brief,
-                base_url=cfg["base_url"],
-                key=key,
-                call_timeout_s=cfg["call_timeout_s"],
-            ): (model, order)
-            for model, order in jobs
+                cfg=cfg,
+                lock=locks[(seat.base_url, seat.key_env)],
+            ): (seat.name, order)
+            for seat, order in jobs
         }
         done, pending = concurrent.futures.wait(
             futs, timeout=cfg["deadline_s"], return_when="ALL_COMPLETED"
@@ -548,16 +715,17 @@ def collect_votes(
         for fut in done:
             got[futs[fut]] = fut.result()
         for fut in pending:
-            model, order = futs[fut]
-            got[(model, order)] = Ballot(
-                model=model,
+            name, order = futs[fut]
+            got[(name, order)] = Ballot(
+                seat=name,
+                model=model_of[name],
                 order=order,
                 error=f"timeout(>{cfg['deadline_s']}s)",
             )
     finally:
         # wait=False：已经放弃等待了，就别在解释器退出时把整案再拖回超时窗口
         ex.shutdown(wait=False, cancel_futures=True)
-    return [got[j] for j in jobs]
+    return [got[(seat.name, order)] for seat, order in jobs]
 
 
 def _sum_usage(ballots: list[Ballot]) -> dict[str, int]:
@@ -614,26 +782,30 @@ def estimate_cost(
 def tally(ballots: list[Ballot]) -> dict[str, Any]:
     """双序一致性 → 计票 → 多数裁决 / 平票或大量 inconclusive 时 ``escalate="twin"``。
 
+    计票身份是**席位名**而非型号：逐席 provider 下同一型号可能挂在两个端点上，「谁投的」
+    要以席为准（两席同型号各投一票才是两票，合并成一票会悄悄改变多数）。
+
     Returns:
-        ``{"jurors": [{model, consistent, vote, ballots, usage}…], "votes": {model: 真实选项},
-        "tally": {"A": n, "B": n}, "inconclusive": [model…], "verdict": "A"|"B"|"",
-        "escalate": "twin"|""}``。
+        ``{"jurors": [{seat, model, consistent, vote, ballots, usage}…],
+        "votes": {seat: 真实选项}, "tally": {"A": n, "B": n}, "inconclusive": [seat…],
+        "verdict": "A"|"B"|"", "escalate": "twin"|""}``。
     """
-    by_model: dict[str, list[Ballot]] = {}
+    by_seat: dict[str, list[Ballot]] = {}
     for b in ballots:
-        by_model.setdefault(b.model, []).append(b)
+        by_seat.setdefault(b.seat, []).append(b)
     jurors: list[dict[str, Any]] = []
     votes: dict[str, str] = {}
     inconclusive: list[str] = []
-    for model in sorted(by_model):
-        bs = sorted(by_model[model], key=lambda b: b.order)
+    for seat in sorted(by_seat):
+        bs = sorted(by_seat[seat], key=lambda b: b.order)
         valid = [b for b in bs if not b.error and b.real in ("A", "B")]
         consistent = (
             len(bs) == 2 and len(valid) == 2 and len({b.real for b in valid}) == 1
         )
         jurors.append(
             {
-                "model": model,
+                "seat": seat,
+                "model": bs[0].model,
                 "consistent": consistent,
                 "vote": valid[0].real if consistent else "",
                 "ballots": [asdict(b) for b in bs],
@@ -641,9 +813,9 @@ def tally(ballots: list[Ballot]) -> dict[str, Any]:
             }
         )
         if consistent:
-            votes[model] = valid[0].real
+            votes[seat] = valid[0].real
         else:
-            inconclusive.append(model)
+            inconclusive.append(seat)
     n_a = sum(1 for v in votes.values() if v == "A")
     n_b = len(votes) - n_a
     escalate = (
@@ -694,7 +866,7 @@ def write_record(record: dict[str, Any]) -> Path:
     return p
 
 
-def enqueue(case: Case, *, reason: str, key_hint: str = "") -> Path:
+def enqueue(case: Case, *, reason: str, key_hints: tuple[str, ...] = ()) -> Path:
     """降级留痕：案卷进队列待重裁（§4 渠道单点不可达时基建决策不停摆）。"""
     p = queue_path(case.case_id)
     _atomic_write_json(
@@ -703,7 +875,7 @@ def enqueue(case: Case, *, reason: str, key_hint: str = "") -> Path:
             "case_id": case.case_id,
             "case_file": case.path,
             "queued_at": _now(),
-            "reason": scrub(reason, secrets=(key_hint,)),
+            "reason": scrub(reason, secrets=key_hints),
             "question": scrub(case.question),
         },
     )
@@ -724,6 +896,14 @@ class Run:
     dossier: str = ""
 
 
+def _court_alert(plan: dict[str, Any]) -> str:
+    """回退席上场时的一句告警（进 Run.message 开头，也进留痕 ``fallback.notice``）。"""
+    if not plan["fallback_used"]:
+        return ""
+    dropped = "、".join(s.name for s in plan["missing_primary"])
+    return f"[!] {FALLBACK_NOTICE}（不可达主席：{dropped}）；"
+
+
 def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) -> Run:
     """组卷 → 开庭 → 计票 → 落留痕；任何渠道故障降级入队（不 raise）。
 
@@ -732,13 +912,24 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
         dry: 只组卷并返回案卷文本，不发任何 API 调用、不落裁决。
         deadline_s: 覆盖 ``registry.jury.deadline_s`` 的整体等待上限（CLI ``--timeout``）。
     """
-    key = read_key()
-    #: material＝自动附着段；dossier＝按规范序摆好选项的全文（落留痕、算哈希的那一份）。
-    #: 分开存是对的：双序两局各渲染一次 dossier，材料只抓一次。
-    material = scrub(build_material(case), secrets=(key,))
-    dossier = render_dossier(case, material)
     brief, approved = load_brief()
     warn = "" if approved else "简报未批准（jury-brief.md 缺席或无 approved: 行）；"
+    cfg_error = ""
+    cfg: dict[str, Any] | None = None
+    plan: dict[str, Any] | None = None
+    try:
+        cfg = load_config()
+        plan = seat_readiness(cfg)
+    except (OSError, ValueError) as exc:  # registry.json 坏掉也不该崩 CLI
+        cfg_error = f"registry 读取失败 {type(exc).__name__}: {exc}"
+    #: 本次涉及的 Key 值只用于 scrub 兜底（异常文本常把请求上下文带出来），不落任何盘。
+    secrets: tuple[str, ...] = tuple(
+        k for s in (plan["seats"] if plan else []) if (k := read_key(s.key_env))
+    )
+    #: material＝自动附着段；dossier＝按规范序摆好选项的全文（落留痕、算哈希的那一份）。
+    #: 分开存是对的：双序两局各渲染一次 dossier，材料只抓一次。
+    material = scrub(build_material(case), secrets=secrets)
+    dossier = render_dossier(case, material)
     if dry:
         return Run(
             "dry",
@@ -746,44 +937,45 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
             record={"case_id": case.case_id, "dossier_hash": dossier_hash(dossier)},
             dossier=dossier,
         )
-    try:
-        cfg = load_config()
-    except (OSError, ValueError) as exc:  # registry.json 坏掉也不该崩 CLI
+    if cfg_error or cfg is None or plan is None:
         return Run(
             "queued",
-            f"{warn}降级入队：registry 读取失败 {type(exc).__name__}: {exc}",
-            path=enqueue(case, reason=f"registry 读取失败：{exc}", key_hint=key),
+            f"{warn}降级入队：{cfg_error}",
+            path=enqueue(case, reason=cfg_error, key_hints=secrets),
         )
-    panel = cfg["panel"]
-    if bad := qwen_violations(panel):
+    if bad := qwen_violations([s.model for s in plan["seats"]]):
         return Run(
             "declined",
             f"拒开庭：评审团含 Qwen 系型号 {bad}（§4 硬规则，排除同族自恋偏差）",
         )
-    if not panel:
+    if not cfg["seats"]:
+        reason = "registry.jury.seats 未选型（席位清单为空）"
         return Run(
             "queued",
-            f"{warn}降级入队：registry.jury.panel 未选型（型号清单为空）",
-            path=enqueue(
-                case, reason="registry.jury.panel 未选型（型号清单为空）", key_hint=key
-            ),
+            f"{warn}降级入队：{reason}",
+            path=enqueue(case, reason=reason, key_hints=secrets),
         )
-    if not key:
+    if not plan["voting"]:
+        reason = "无一席可开庭：" + "；".join(
+            f"{s.name}({s.reason})" for s in plan["seats"]
+        )
         return Run(
             "queued",
-            f"{warn}降级入队：缺 {KEY_ENV}（环境变量或项目根 .env）",
-            path=enqueue(case, reason=f"缺 {KEY_ENV}", key_hint=key),
+            f"{warn}降级入队：{reason}",
+            path=enqueue(case, reason=reason, key_hints=secrets),
         )
     if deadline_s:
         cfg["deadline_s"] = deadline_s
+    alert = _court_alert(plan)
 
+    seats = plan["voting"]
     ballots: list[Ballot] = []
     errors: list[str] = []
     attempts = 0
     try:
         for attempt in (1, 2):
             attempts = attempt
-            ballots = collect_votes(panel, case, material, brief, cfg=cfg, key=key)
+            ballots = collect_votes(seats, case, material, brief, cfg=cfg)
             errors = [b.error for b in ballots if b.error]
             if not errors:
                 break
@@ -791,11 +983,11 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
         errors = [f"{type(exc).__name__}: {exc}"]
         ballots = ballots or []
     if errors:
-        reason = f"{len(errors)}/{len(ballots) or len(panel) * 2} 局失败：{errors[0]}"
+        reason = f"{len(errors)}/{len(ballots) or len(seats) * 2} 局失败：{errors[0]}"
         return Run(
             "queued",
-            f"{warn}降级入队：{scrub(reason, secrets=(key,))}（已尝试 {attempts} 轮）",
-            path=enqueue(case, reason=reason, key_hint=key),
+            f"{alert}{warn}降级入队：{scrub(reason, secrets=secrets)}（已尝试 {attempts} 轮）",
+            path=enqueue(case, reason=reason, key_hints=secrets),
         )
 
     t = tally(ballots)
@@ -806,8 +998,8 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
         "ts": _now(),
         "question": scrub(case.question),
         "options": {
-            "A": scrub(case.option_a[:500], secrets=(key,)),
-            "B": scrub(case.option_b[:500], secrets=(key,)),
+            "A": scrub(case.option_a[:500], secrets=secrets),
+            "B": scrub(case.option_b[:500], secrets=secrets),
         },
         "targets": case.targets,
         "dossier_hash": dossier_hash(dossier),
@@ -818,8 +1010,14 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
             "approved": approved,
             "hash": dossier_hash(brief),
         },
-        "base_url": cfg["base_url"],
-        "panel": panel,
+        "seats": [s.public() for s in plan["seats"]],
+        "fallback": {
+            "enabled": plan["fallback_enabled"],
+            "used": plan["fallback_used"],
+            "notice": plan["notice"],
+            "missing_primary": [s.name for s in plan["missing_primary"]],
+        },
+        "panel": [s.model for s in seats],
         "attempts": attempts,
         "jurors": t["jurors"],
         "votes": t["votes"],
@@ -839,7 +1037,7 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
         )
     else:
         msg = f"裁决={t['verdict']}（tally A:{t['tally']['A']} B:{t['tally']['B']}）"
-    return Run("recorded", f"{warn}{msg}", record=record, path=p)
+    return Run("recorded", f"{alert}{warn}{msg}", record=record, path=p)
 
 
 def cmd_jury(args: argparse.Namespace) -> int:
@@ -862,9 +1060,8 @@ def cmd_jury(args: argparse.Namespace) -> int:
         print(run.dossier)
         print(f"— 材料哈希 {run.record['dossier_hash']}")
         print(
-            "[NEXT] 去掉 --dry 即开庭（阻塞 ≈1 min，需 registry.jury.panel + "
-            + KEY_ENV
-            + "）"
+            "[NEXT] 去掉 --dry 即开庭（阻塞 ≈1 min，需 registry.jury.seats 选型 + "
+            "逐席 Key 就位）"
         )
         return 0
     mark = {"queued": "!", "declined": "✗"}.get(run.status, "√")
@@ -874,7 +1071,10 @@ def cmd_jury(args: argparse.Namespace) -> int:
         for j in rec.get("jurors", []):
             conf = max((b["confidence"] for b in j["ballots"]), default=0.0)
             tag = "一致" if j["consistent"] else "inconclusive"
-            print(f"    {j['model']:<36} 票={j['vote'] or '-'} [{tag}] conf={conf:.2f}")
+            print(
+                f"    {j['seat']:<12} {j['model']:<26} 票={j['vote'] or '-'} "
+                f"[{tag}] conf={conf:.2f}"
+            )
         cost = rec.get("cost", {})
         amount = cost.get("amount")
         print(
@@ -892,19 +1092,24 @@ def cmd_jury(args: argparse.Namespace) -> int:
         return 0
     if run.status == "queued":
         print(f"    队列 {orchestration_rel(run.path)}")
-        print(f"[NEXT] 修好渠道（选型 + {KEY_ENV}）后重裁：orch jury {args.case_file}")
+        print(f"    席位 {readiness_summary(seat_readiness())}")
+        print(
+            "[NEXT] 修好渠道（registry.jury.seats 选型 + 该席 Key 进环境或项目根 .env）"
+            f"后重裁：orch jury {args.case_file}"
+        )
         return 1
-    print("[NEXT] 改 registry.jury.panel 去掉 Qwen 系型号后重裁（§4 硬规则不可放宽）")
+    print("[NEXT] 改 registry.jury.seats 去掉 Qwen 系型号后重裁（§4 硬规则不可放宽）")
     return 2
 
 
 __all__ = [
     "Ballot",
     "Case",
-    "DEFAULT_BASE_URL",
+    "DEFAULT_MAX_TOKENS",
+    "FALLBACK_NOTICE",
     "JuryError",
-    "KEY_ENV",
     "Run",
+    "Seat",
     "adjudicate",
     "build_dossier",
     "chat_once",
@@ -916,6 +1121,8 @@ __all__ = [
     "parse_vote",
     "qwen_violations",
     "read_key",
+    "readiness_summary",
     "scrub",
+    "seat_readiness",
     "tally",
 ]
