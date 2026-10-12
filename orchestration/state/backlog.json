@@ -1130,11 +1130,14 @@
       "kind": "usability",
       "success_criteria": "链形态+refresh 不刷回+降级告警双面+CHANNEL-STOP+真实双档派发可证+旧键兼容+全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-211500-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T21:15:09+08:00",
-      "note": "｜组长调度：用户指令模型变更置队首，下一批即消化",
+      "note": "drain 批量销账（commit 4309366）",
       "started_at": "2026-10-12T22:15:12+08:00",
-      "worktree": "20261012-211500-leader"
+      "worktree": "20261012-211500-leader",
+      "done_at": "2026-10-13T00:25:01+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-211500-leader"
     },
     {
       "id": "20261012-225500-leader",
@@ -1143,9 +1146,23 @@
       "kind": "usability",
       "success_criteria": "见单内 success_criteria 六条（三预设实测切换/仲裁换血同族排除/粘滞降级复测/inspector 迁移/minimum 独立/全量无回归）",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-225500-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T23:32:20+08:00",
-      "note": ""
+      "note": "孤儿条目回收（原 started_at=2026-10-13T00:25:01+08:00）",
+      "started_at": "2026-10-13T00:26:48+08:00",
+      "worktree": "20261012-225500-leader"
+    },
+    {
+      "id": "20261013-003000-leader",
+      "member": "leader",
+      "summary": "**（缺陷类）drain 批次循环 TypeError 崩溃：`expected str, bytes or os.PathLike object, not list`**",
+      "kind": "defect",
+      "success_criteria": "复现单测绿；崩溃日志含完整栈；drain 连跑两轮无异常；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-003000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T00:26:46+08:00",
+      "note": "｜组长调度：崩溃修复前置（#81 批次路径即崩溃现场，修复须先行）",
+      "effort": "high"
     },
     {
       "id": "20261012-234000-leader",
@@ -1156,7 +1173,8 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-234000-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T23:55:03+08:00",
-      "note": ""
+      "note": "",
+      "effort": "high"
     }
   ]
 }
