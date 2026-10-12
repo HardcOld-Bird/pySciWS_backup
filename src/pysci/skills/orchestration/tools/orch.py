@@ -10,8 +10,10 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     uv run pysci-orch status
     ... orch plan new <file> | run <id> [--text/--task ...] | amend <id> | drop <id> | list
     ... orch plan adhoc <member> --text "..."        # 计划外事项的正确姿势
-    ... orch approve <suggestion-id> --note "..." | reject <suggestion-id> --override "<依据>"
+    ... orch approve <sid> (--jury | --bench <案id[,案id]> | --override "<理由>") [--note ...]
+    ... orch reject <suggestion-id> --override "<依据>"
     ... orch suggestions | stats [--plan/--member/--days] | consult "<问题>"
+    ... orch consult-twin <case-file>   # 咨询 twin（未启用则明确拒绝，§5.1）
     ... orch dispatch <member> (--task F | --text T | --from-backlog) [--session ...] [--effort …]
     ... orch watch [--timeout S=4h] [--interval S=60]   # 后台挂起等 drain 事件（§4.5）
     ... orch sessions <member> [--all|--archive SID [--distill]|--prune SID]
@@ -37,6 +39,7 @@ from . import plans as _plans
 from . import sessions as _sessions
 from . import sync as _sync
 from . import taste as _taste
+from . import verdict as _verdict
 from . import watch as _watch
 from . import workflow as _workflow
 from .dispatch import do_dispatch
@@ -209,6 +212,10 @@ def cmd_status(args: argparse.Namespace) -> int:
                 f"    - {b['id']}: {str(b.get('summary', ''))[:50]}"
                 + (f"（累计失败 {n} 次，勿原样重派）" if n else "")
             )
+
+    print("== 判决包健康（REFACTOR §5.1/§5.6：基建判断的通道用量）==")
+    for line in _verdict.health_lines():
+        print(line)
 
     bst = _benchd.bench_status()
     print("== bencher worker（harness 专测队列，REFACTOR §8）==")
@@ -634,6 +641,24 @@ def main(argv: list[str] | None = None) -> int:
         help="补录成功判据（E0-B 判据 3：backlog 条目须带可证伪 success_criteria；"
         "建议正文缺 `success_criteria` 标记行时用此参数补，仍缺则拒绝入队）",
     )
+    p.add_argument(
+        "--jury",
+        action="store_true",
+        help="判决通道 J：自动组卷并阻塞仲裁（复用 orch jury 共享库）。裁决 A=入队、"
+        "B=自动驳回（不计 override 率）、模棱两可=挂起呈组长",
+    )
+    p.add_argument(
+        "--bench",
+        default="",
+        help="判决通道 M：捕获基线 commit 并排基线测量，合并销账时自动入 A/B 核验队列"
+        "（§5.6 核验方式在审批时一次定死）。取案 id 列表，逗号分隔；空=全套",
+    )
+    p.add_argument(
+        "--override",
+        default="",
+        help="判决通道 override：不选 J/M，凭组长自身判断定案（理由必填，"
+        "留痕入决策日志并计入 override 率；不可与 --jury/--bench 同时给）",
+    )
     p.set_defaults(func=_workflow.cmd_approve)
 
     p = sub.add_parser("reject", help="否决建议 → 须 --override 留痕（入决策日志）")
@@ -651,6 +676,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("question")
     p.add_argument("--session", help="latest(默认)|new|<sid前缀>")
     p.set_defaults(func=_workflow.cmd_consult)
+
+    p = sub.add_parser(
+        "consult-twin",
+        help="咨询 twin 组员（高风险裁决第二意见；taste_enabled=false 时明确拒绝并提示待上线）",
+    )
+    p.add_argument("case_file", help="案卷路径（## 问题 / ## 选项 A / ## 选项 B）")
+    p.add_argument("--session", help="latest(默认)|new|<sid前缀>")
+    p.set_defaults(func=_verdict.cmd_consult_twin)
 
     p = sub.add_parser(
         "review", help="审查产物：VERDICT → FAIL 自动回派返工 → 复审一次 → 升级仲裁"

@@ -424,7 +424,13 @@ def test_approve_output_injects_mount_command(iso_state, monkeypatch, capsys):
     sid = seed_suggestion(iso_state)
     monkeypatch.setattr(drain, "_spawn_detached", lambda argv, **kw: None)
     rc = workflow.cmd_approve(
-        Namespace(suggestion_id=sid, note="采纳", no_wake=False, effort=None)
+        Namespace(
+            suggestion_id=sid,
+            note="采纳",
+            no_wake=False,
+            effort=None,
+            override="测试自裁",
+        )
     )
     assert rc == 0
     out = capsys.readouterr().out
@@ -537,7 +543,13 @@ def test_approve_next_section_carries_sole_command_warning(
     monkeypatch.setattr(drain, "_spawn_detached", lambda argv, **kw: None)
     assert (
         workflow.cmd_approve(
-            Namespace(suggestion_id=sid, note="采纳", no_wake=False, effort=None)
+            Namespace(
+                suggestion_id=sid,
+                note="采纳",
+                no_wake=False,
+                effort=None,
+                override="测试自裁",
+            )
         )
         == 0
     )

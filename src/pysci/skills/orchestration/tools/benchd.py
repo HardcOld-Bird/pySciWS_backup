@@ -137,6 +137,7 @@ def enqueue(
     requested_by: str = "leader",
     summary: str = "",
     stamp: str | None = None,
+    backlog_id: str = "",
 ) -> dict[str, Any]:
     """入队一项测量任务（FIFO 尾部追加），返回该条目。
 
@@ -151,6 +152,8 @@ def enqueue(
         requested_by: 提请人（组长或 inspector），「待查看」面按此归位通知。
         summary: 人读的一行摘要（status 展示用）。
         stamp: 命名时间戳覆盖（测试注入）。
+        backlog_id: 关联的 backlog 条目 id（E5b §5.6 交付后核验：``ab`` 判决落地到该
+            条目的账——销账 / 自动立案 / 挂起）。空 = 普通测量，判决不外溢。
 
     Raises:
         ValueError: kind 不在词表，或 ``ab`` 少一侧 ref，或 ``capture`` 缺 case。
@@ -178,6 +181,8 @@ def enqueue(
         "status": "pending",
         "enqueued_at": _now(),
     }
+    if backlog_id:
+        item["backlog_id"] = backlog_id
     items = queue_load()
     items.append(item)
     queue_save(items)
@@ -335,14 +340,14 @@ def _run_kind_capture(
 
 
 def _run_kind_ab(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str, Any]:
-    """``ab`` 项：副本 A/B 二元判决（含窗口期污染闸）。"""
+    """``ab`` 项：副本 A/B 二元判决（含窗口期污染闸）+ 交付后核验落地。"""
     from .replica import run_ab
 
     label = str(item.get("label") or item["id"])
     if dry:
         _log(run_log, f"[dry] ab {item.get('ref_a')}..{item.get('ref_b')} 演练")
         return {"label": label, "verdict": "dry"}
-    return run_ab(
+    doc = run_ab(
         str(item["ref_a"]),
         str(item["ref_b"]),
         [str(c) for c in item.get("cases") or []],
@@ -350,6 +355,29 @@ def _run_kind_ab(item: dict[str, Any], run_log: Path, *, dry: bool) -> dict[str,
         tier=str(item.get("tier") or ""),
         log=lambda m: _log(run_log, m),
     )
+    bid = str(item.get("backlog_id") or "")
+    if bid:
+        # §5.6 核验判决直接落到提案账上（无人再裁决）：测量已完成，落地失败只该告警，
+        # 不该把整项判失败——重跑 A/B 的代价远高于补一次销账备注。
+        from .verdict import (  # 延迟导入：verdict 顶层依赖本模块
+            apply_ab_verdict,
+        )
+
+        try:
+            out = apply_ab_verdict(item, doc)
+            doc["post_verify"] = out
+            _log(
+                run_log,
+                f"[√] 交付后核验 {bid}：{out['action']}（verdict={doc.get('verdict') or '空'}）",
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            _log(
+                run_log,
+                f"[!] 交付后核验落地失败（{bid}）：{type(exc).__name__}: {exc}"
+                "——判决读数已落 ab/ 目录，需人工销账",
+            )
+            doc["post_verify_error"] = f"{type(exc).__name__}: {exc}"
+    return doc
 
 
 def _run_kind_check(

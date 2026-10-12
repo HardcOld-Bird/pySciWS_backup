@@ -173,12 +173,18 @@ def write_taskbook(
     return dest
 
 
-def _persist_suggestion(member_id: str, body: str, kind: str = "") -> str:
+def _persist_suggestion(
+    member_id: str, body: str, kind: str = "", delivery: str = ""
+) -> str:
     """把 infra_suggestion 持久化为待审批条目，返回建议 id（文件名 stem）；未入库返回空串。
 
     E0-B（判据 2）：把交付 XML 上解析出的 kind 写进文件头部标记行，使 approve 侧
     ``parse_suggestion_fields`` 无论建议正文是否自带 ``kind:`` 行都能读到权威分类
     （正文若自带则以头部这条为准——它来自被 gate 校验过的属性）。
+
+    E5b（REFACTOR §5.1 例外通道）：同处理由把**当条交付类型**也写成头部 ``delivery:``
+    标记行。「缺陷类且交付含 blocked」这个判据必须在落盘时就固化——组长审批时若只能靠
+    台账反查那一跳，反查不到的（归档、清理）就一律走不到例外通道，而那是最该免检的一类。
 
     词表二次校验（backlog 20261012-120001-leader）：gate 拦在组员的 Stop 上，但那一跳
     仍可能以带非法 kind 的最终回复收场（实测 110101：交付里连发两块，占位块
@@ -199,8 +205,10 @@ def _persist_suggestion(member_id: str, body: str, kind: str = "") -> str:
     p = SUGGESTIONS_DIR / f"{sid}.md"
     head = f"# 改进建议（{member_id}，待审批）\n\n"
     if kind:
-        head += f"kind: {kind}\n\n"
-    p.write_text(head + body + "\n", encoding="utf-8")
+        head += f"kind: {kind}\n"
+    if delivery:
+        head += f"delivery: {delivery}\n"
+    p.write_text(head + "\n" + body + "\n", encoding="utf-8")
     return sid
 
 
@@ -507,7 +515,10 @@ def do_dispatch(
     suggestion_id = ""
     if delivery.infra_suggestion.strip() and not eval_hop:
         suggestion_id = _persist_suggestion(
-            member_id, delivery.infra_suggestion, delivery.infra_kind
+            member_id,
+            delivery.infra_suggestion,
+            delivery.infra_kind,
+            delivery.kind,
         )
     delta_chars, est_tokens, chars_after = measure_usage()
     entry = LedgerEntry(

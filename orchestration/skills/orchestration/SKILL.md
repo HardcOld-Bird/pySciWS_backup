@@ -12,63 +12,62 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
 1. **严禁亲自执行末端工作**（生产/改代码/跑仿真绘图等），一律经 `pysci-orch` 派发。
    唯一例外：用户明确要求你亲做。
 2. **一切工作走 plan 系统**（plan-first）：多环节工作 `plan new`；计划外单件事
-   `plan adhoc`。底层命令（dispatch/sessions/ledger/sync）仅降级与调试用，勿养成
-   绕过 plan 的习惯。
-3. **长任务必须后台运行**：`plan run`/`dispatch`/`review` 用 Bash 工具的
-   `run_in_background` 启动，完成通知自动唤醒；等待期间**禁止 sleep-轮询**、禁止反复
-   读输出文件。
-4. 派发前不需要记忆 sid/型号/参数——orch 全代管，[NEXT] 段给下一步；需要决策时照
-   选项执行。
+   `plan adhoc`。底层命令（dispatch/sessions/ledger/sync）仅降级与调试用。
+3. **长任务必须后台运行**：`plan run`/`dispatch`/`review` 用 Bash 的
+   `run_in_background` 启动，完成通知自动唤醒；**禁止 sleep-轮询**与反复读输出文件。
+4. **不必记忆 sid/型号/参数**：orch 全代管，[NEXT] 给下一步；要决策时照选项执行。
 5. 任务书**延迟书写**：计划阶段只写环节粗描述（brief），推进到该环节时才写完整任务书
    （自包含：目标/输入路径/交付要求/白名单/验收预期——组员看不到你的会话上下文）。
-6. **判断 drain/后台 worker 状态只用 `uv run pysci-orch status`**，禁止手敲 `tasklist`
-   等原始命令——Git Bash 下 `/FI` 被 MSYS 转成路径产生**假阴性**。信号互相冲突时报告
-   「状态不确定，需可靠工具复核」，**不得升格为「崩溃」结论**（basic.md §2）。
+6. **判断 drain/后台 worker 状态只用 `pysci-orch status`**，禁止手敲 `tasklist`
+   等原始命令——Git Bash 下 `/FI` 被 MSYS 转成路径产生**假阴性**。信号冲突时按
+   basic.md §2 报「状态不确定」，**不得升格为「崩溃」结论**。
 
 ## 命令面
 
 ```
-uv run pysci-orch status                        # 全景：计划/成员/队列/devops worker/台账
+pysci-orch status                        # 全景：计划/成员/队列/devops worker/台账
 # —— 日常面 ——
-uv run pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
-uv run pysci-orch plan run <id> --text "<当前环节任务书>"   # 推进（交接处暂停）
-uv run pysci-orch plan amend <id>               # 直接编辑 plan YAML 后校验对账
-uv run pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步
-uv run pysci-orch plan list | plan drop <id>
-uv run pysci-orch suggestions                   # 待审批改进建议
-uv run pysci-orch approve <建议id> --note "..." [--no-wake] [--criteria "<判据>"]
-        # 采纳→入 backlog，默认自动唤醒 devops 后台 FIFO 消化；--no-wake 只入队不唤醒。
-        # 缺 kind 或 success_criteria 标记即拒绝入队（判据可用 --criteria "<文本>" 补录）
-uv run pysci-orch watch [--timeout 14400]
+pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
+pysci-orch plan run <id> --text "<当前环节任务书>"   # 推进（交接处暂停）
+pysci-orch plan amend <id>               # 直接编辑 plan YAML 后校验对账
+pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步
+pysci-orch plan list | plan drop <id>
+pysci-orch suggestions                   # 待审批改进建议
+pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<理由>")
+        [--note "..."] [--no-wake] [--criteria "<判据>"]  # 四态判决包必居其一（例外=缺陷类
+        # ×该跳 blocked）：J 出 B 自动驳回；M 锚基线、销账时自动排 A/B。缺 kind/
+        # success_criteria 亦拒入队。规程 references/verdict-package.md
+pysci-orch watch [--timeout 14400]
         # 后台挂起等 drain 事件（QUEUE-COMPLETE/NEEDS-LEADER/QUOTA-STOP/CRASH）：
-        # run_in_background 挂起，命中单行退出即唤醒；漏挂由 status 补账
-uv run pysci-orch reject <建议id> --override "<判决依据>"   # 否决=override：必填依据、留痕偏好日志
-uv run pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
-uv run pysci-orch review <产物> --origin <member> [--rubric generic]
+        # run_in_background 挂起，命中即唤醒；漏挂由 status 补账
+pysci-orch reject <建议id> --override "<判决依据>"   # 自裁否决：必填依据、留痕（J/M 判决的驳回不计 override）
+pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
+pysci-orch consult-twin <案卷.md>       # 咨询 twin（taste_enabled=false 即拒 rc=2）
+pysci-orch review <产物> --origin <member> [--rubric generic]
         [--goal-from <原生产任务书> | --goal "<目标陈述>"]
         # 审查链：VERDICT → FAIL 回派返工 → 复审一次 → 二次 FAIL 升级仲裁
         # 带 --goal-from/--goal：组长目标陈述进审查任务书，reviewer G2 据此独立核验
-uv run pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（非 Qwen 双序对局，
+pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（非 Qwen 双序对局，
         # 阻塞出裁决；不可达降级入队 rc=1，案卷格式 references/jury-panel.md）
-uv run pysci-orch eval run (--case <id>|--all) [--label L]
+pysci-orch eval run (--case <id>|--all) [--label L]
         # Tier B 压测**抽检面**（runner=leader）；套件本体归 bencher
-uv run pysci-orch bench-add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]
+pysci-orch bench-add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]
         [--label L] [--tier minimum] [--brief T] [--start]  # 测量任务入队（不阻塞）
-uv run pysci-orch bench-up [--dry] | bench-queue [--all] | bench-seen <id> | bench-stop
+pysci-orch bench-up [--dry] | bench-queue [--all] | bench-seen <id> | bench-stop
         # bencher worker 生命周期（FIFO 非常驻）；判决进 status「待查看」面，
-        # 不即时唤醒（REFACTOR §5.1-B）。要领/harness 案卷格式：
-        # references/drain-watch.md + references/harness-eval.md
-uv run pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（§9 冷启动+宪章注入；
+        # 不即时唤醒（§5.1-B）。要领/harness 案卷格式：
+        # references/drain-watch.md、harness-eval.md
+pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（§9 冷启动+宪章注入；
         # taste_enabled 未生效即拒派发，references/twin-taste-mirror.md）
-uv run pysci-orch stats [--plan id|--member m|--days N]
+pysci-orch stats [--plan id|--member m|--days N]
 # —— 底层命令面（降级/调试）——
-uv run pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
-uv run pysci-orch sessions <member> [--all|--archive <sid> [--distill]|--prune <sid>]
-uv run pysci-orch ledger [--member --days --stats] | sync [--check]
+pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
+pysci-orch sessions <member> [--all|--archive <sid> [--distill]|--prune <sid>]
+pysci-orch ledger [--member --days --stats] | sync [--check]
 ```
 
-成员 id：`sim` `figure` `writing` `theory` `lit` `drawing` `model3d`（专职）；
-`deputy` `reviewer` `devops` `bencher` `twin`（特殊）。已就绪 pod 以 `orch status` 为准。
+成员 id：sim figure writing theory lit drawing model3d（专职）；deputy reviewer devops
+bencher twin（特殊）。就绪 pod 以 `orch status` 为准。
 
 ## 派发要领
 
@@ -90,10 +89,12 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 - `<blocked tags="a,b">` 失败标签入台账/`orch stats` by_failure；滑窗内同 (tag,member)
   达 registry `tier_a` 阈值 → status/approve 自动立 source=tier-a 提案（references/tier-a-tags.md）；
 - blocked → 三选一：补充重派 / consult 副组长 / 上报用户；
-- 建议审批：approve 入 backlog 并**自动唤醒 devops 后台 FIFO 串行**（锁忙不重复唤醒，
-  单项失败标 needs_leader 跳过、不阻塞队列），审批回复自动附送提议人；**reject 即
-  override：必须 `--override "<依据>"`**，落 `state/preference-journal.jsonl` 计入 override
-  率（无依据的否决被代码拒绝）；护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
+- 建议审批：approve 须带**判决包**——`--jury` / `--bench <案id>` / 两者 /
+  `--override "<理由>"` 四态之一，缺则 `rc=2` 不入队（例外=kind=defect 且提请那一跳
+  blocked）；M 路销账时自动排 A/B 并三态落地，`orch status`「判决包健康」段看通道用量与
+  override 率，`escalate=twin` 非空须立即终裁。入 backlog 后**自动唤醒 devops FIFO**
+  （锁忙不重复唤醒，单项失败标 needs_leader 跳过），回复自动附送提议人；护栏级建议
+  （README/角色边界/审批权/guards）**必须转呈用户**；
 - **挂 `orch watch` 等事件**（照 [NEXT]，`run_in_background`）：watch 必须是该后台调用的
   **唯一顶层命令**（嵌进 `&`/`&&`/管道会被父任务连坐杀死，2026-10-12 夜航停摆 6h）；
   挂载纪律与 `bench-*` 要领见 `references/drain-watch.md`；

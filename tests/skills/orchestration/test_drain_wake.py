@@ -56,7 +56,9 @@ def test_wake_passes_dry_flag(iso_state, monkeypatch):
 def test_approve_wakes_and_enqueues(iso_state, monkeypatch, capsys):
     sid = seed_suggestion(iso_state)
     calls = _record_spawns(monkeypatch)
-    rc = workflow.cmd_approve(Namespace(suggestion_id=sid, note="采纳", no_wake=False))
+    rc = workflow.cmd_approve(
+        Namespace(suggestion_id=sid, note="采纳", no_wake=False, override="测试自裁")
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "已后台唤醒" in out
@@ -68,7 +70,9 @@ def test_approve_wakes_and_enqueues(iso_state, monkeypatch, capsys):
 def test_approve_no_wake_skips_spawn(iso_state, monkeypatch, capsys):
     sid = seed_suggestion(iso_state)
     calls = _record_spawns(monkeypatch)
-    rc = workflow.cmd_approve(Namespace(suggestion_id=sid, note="x", no_wake=True))
+    rc = workflow.cmd_approve(
+        Namespace(suggestion_id=sid, note="x", no_wake=True, override="测试自裁")
+    )
     assert rc == 0
     assert calls == []
     assert "已后台唤醒" not in capsys.readouterr().out
@@ -89,7 +93,9 @@ def test_approve_full_chain_to_done(iso_state, monkeypatch):
     monkeypatch.setattr(drain, "_spawn_detached", fake_spawn)
     monkeypatch.setenv(drain.DRY_ENV, "1")
 
-    rc = workflow.cmd_approve(Namespace(suggestion_id=sid, note="采纳", no_wake=False))
+    rc = workflow.cmd_approve(
+        Namespace(suggestion_id=sid, note="采纳", no_wake=False, override="测试自裁")
+    )
     assert rc == 0
 
     statuses = {i["id"]: i["status"] for i in read_backlog(iso_state)}

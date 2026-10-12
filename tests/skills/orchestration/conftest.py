@@ -17,10 +17,12 @@ from pysci.skills.orchestration.tools import (
     dispatch,
     drain,
     failure_tags,
+    journal,
     jury,
     ledger,
     orch,
     registry,
+    verdict,
     watch,
     workflow,
 )
@@ -65,7 +67,12 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(workflow, "TIER_A_FILED_PATH", state / "tier-a-filed.json")
     monkeypatch.setattr(ledger, "LEDGER_PATH", state / "ledger" / "deliveries.jsonl")
     monkeypatch.setattr(failure_tags, "TAGS_PATH", state / "failure-tags.json")
+    # E5b：每条判决（approve/reject/核验落地）都写决策日志，不 patch 就真写仓库里那份
+    # 长期资产（git 跟踪——测试污染会直接变成脏跟踪面）。
+    monkeypatch.setattr(journal, "JOURNAL_PATH", state / "preference-journal.jsonl")
+    monkeypatch.setattr(verdict, "JURY_CASE_DIR", state / "evals" / "jury-cases")
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
+    monkeypatch.setattr(dispatch, "SUGGESTIONS_DIR", state / "suggestions")
     monkeypatch.setattr(dispatch, "LINT_RULES_PATH", state / "taskbook-lint.json")
     monkeypatch.setattr(drain, "LOCK_PATH", state / "devops.lock")
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
