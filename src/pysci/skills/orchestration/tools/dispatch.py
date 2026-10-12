@@ -426,7 +426,8 @@ def do_dispatch(
         )
 
     # 额度耗尽且该档配置了备用渠道（<tier>_fallback 非空且异于当前型号）→ 换档重试一次
-    # （用户裁决 2026-10-10：flash 内置免费期结束后回退 BYOK flash；渠道未开通时
+    # （机制定於 2026-10-10；渠道地位 2026-10-12 互换后背用渠道自然变成内置免费档——
+    #   本段代码不感知谁主谁备，只看 registry models 的 <tier>_fallback；
     #   fallback 为空=不回退，仍按 quota_exhausted 处理）
     if quota_hit and not no_retry:
         fallback = str(reg.models.get(f"{tier}_fallback") or "")
@@ -614,7 +615,8 @@ def _report_quota(o: DispatchOutcome) -> None:
     _print_next(
         [
             "系统性故障（模型渠道额度耗尽）——非任务本身问题，勿逐跳重试再烧：",
-            "  1) 检查 registry models 档位→渠道绑定（max=BYOK 默认 / flash=内置免费，README §3.5；models 属护栏级，改动须经用户）",
+            "  1) 检查 registry models 档位→渠道绑定（2026-10-12 起 max/flash 均 BYOK 优先、"
+            "内置免费档作 flash_fallback，README §3.5；models 属护栏级，改动须经用户）",
             "  2) 或等待额度重置 / 请用户切换渠道后重派",
             "  3) drain 场景已触发全局停止：剩余条目保持 pending，渠道恢复后自动续消化",
         ]
