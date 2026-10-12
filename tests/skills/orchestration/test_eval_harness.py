@@ -38,6 +38,9 @@ def iso_eval(tmp_path, monkeypatch, iso_dispatch):
     monkeypatch.setattr(ev, "BASELINE_PATH", tmp_path / "baseline.json")
     monkeypatch.setattr(ev, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(ev, "run_checks", _stub_checks)
+    # 脏面快照默认「跳前跳后都干净」：真 dirty_tracked_state 会起 git 看当前工作树，
+    # 那会让每个 run_case 测试随仓库状态漂移。要测差集的用例再用 fake_dirt 覆盖。
+    monkeypatch.setattr(ev, "dirty_tracked_state", lambda *, path="", timeout_s=10: [])
     return tmp_path
 
 
@@ -419,6 +422,128 @@ def test_run_case_records_case_budget(iso_eval, monkeypatch):
     patch_reg(monkeypatch, iso_eval)
     case = ev.parse_case(seed_case(iso_eval, "member: figure\nmax_turns: 8\n" + BODY))
     assert ev.run_case(case).max_turns == 8
+
+
+# ---------------------------------------------------------------------------
+# 压测跳隔离面：组员自维护层（跟踪的 AGENTS.md）不得被测量跳留下脏面
+# ---------------------------------------------------------------------------
+class FakeOk:
+    returncode = 0
+
+
+def fake_dirt(monkeypatch, *snapshots):
+    """按调用顺序返回脏面快照（第 1 次=跳前，第 2 次=跳后），并记录查询范围。
+
+    真 ``dirty_tracked_state`` 起 git subprocess 看**当前工作树**——单测里工作树内容
+    随仓库状态变，断言会变成随机通过/失败。故快照由测试给定，只验差集逻辑与还原作用面。
+    """
+    seen: dict = {"scopes": [], "checkout": []}
+    calls = list(snapshots)
+
+    def fake(*, path: str = "", timeout_s: int = 10):
+        seen["scopes"].append(path)
+        return list(calls.pop(0)) if calls else []
+
+    monkeypatch.setattr(ev, "dirty_tracked_state", fake)
+    return seen
+
+
+def test_run_case_reverts_pod_dirt_created_by_hop(iso_eval, monkeypatch):
+    """本跳新弄脏的组员跟踪文件必须在判据前还原，并记进台账行。"""
+    seen = capture_dispatch(monkeypatch)
+    patch_reg(monkeypatch, iso_eval)
+    dirt = fake_dirt(
+        monkeypatch,
+        [],
+        ["orchestration/pods/figure/AGENTS.md"],
+    )
+    checkout: dict = {}
+
+    class FakeProc:
+        returncode = 0
+
+    def fake_run(argv, **kw):
+        checkout["argv"] = argv
+        checkout["cwd"] = kw.get("cwd")
+        return FakeProc()
+
+    monkeypatch.setattr(ev.subprocess, "run", fake_run)
+    case = ev.parse_case(seed_case(iso_eval, "member: figure\n" + BODY))
+    row = ev.run_case(case)
+    assert row.reverted == ["orchestration/pods/figure/AGENTS.md"]
+    assert checkout["argv"] == [
+        "git",
+        "checkout",
+        "--",
+        "orchestration/pods/figure/AGENTS.md",
+    ]
+    assert ev.read_rows()[0]["reverted"] == row.reverted, (
+        "还原事实必须可事后复核（台账是唯一留痕面）"
+    )
+    assert dirt["scopes"] == ["orchestration/pods/figure"] * 2, (
+        "快照范围=该组员的 pod，不是全树（全树会把别人的脏面也算进差集）"
+    )
+
+
+def test_revert_keeps_dirt_that_predated_hop(iso_eval, monkeypatch):
+    """跳前就脏的文件是组长在飞的工作——还原它=覆盖他人未提交改动，禁止。"""
+    monkeypatch.setattr(
+        ev,
+        "dirty_tracked_state",
+        lambda *, path="", timeout_s=10: ["orchestration/pods/figure/AGENTS.md"],
+    )
+    ran = []
+    monkeypatch.setattr(
+        ev.subprocess, "run", lambda argv, **kw: ran.append(argv) or FakeOk()
+    )
+    before = {"orchestration/pods/figure/AGENTS.md"}
+    assert ev.revert_new_dirt("figure", before) == []
+    assert ran == [], "差集为空却调了 git checkout=无条件回滚，会把组长的工作抹掉"
+
+
+def test_revert_refuses_paths_outside_pod(iso_eval, monkeypatch):
+    """还原作用面钉在该 pod 前缀下（git checkout 是破坏性的，范围错就是事故）。"""
+    monkeypatch.setattr(
+        ev,
+        "dirty_tracked_state",
+        lambda *, path="", timeout_s=10: ["src/pysci/skills/orchestration/tools/x.py"],
+    )
+    ran = []
+    monkeypatch.setattr(
+        ev.subprocess, "run", lambda argv, **kw: ran.append(argv) or FakeOk()
+    )
+    assert ev.revert_new_dirt("figure", set()) == []
+    assert ran == []
+
+
+def test_revert_fail_open_on_git_error(iso_eval, monkeypatch):
+    """git 非零退出 → 返回 []（还原失灵不该掀翻一次压测，也不该谎报「已还原」）。"""
+    monkeypatch.setattr(
+        ev,
+        "dirty_tracked_state",
+        lambda *, path="", timeout_s=10: ["orchestration/pods/figure/AGENTS.md"],
+    )
+
+    class Bad:
+        returncode = 128
+
+    monkeypatch.setattr(ev.subprocess, "run", lambda argv, **kw: Bad())
+    assert ev.revert_new_dirt("figure", set()) == []
+
+
+def test_run_case_brief_carries_isolation_note(iso_eval, monkeypatch):
+    """任务书后必须附压测纪律：光靠事后还原，组员每轮都白写一次记忆。"""
+    seen = capture_dispatch(monkeypatch)
+    patch_reg(monkeypatch, iso_eval)
+    fake_dirt(monkeypatch, [], [])
+    ev.run_case(ev.parse_case(seed_case(iso_eval, "member: figure\n" + BODY)))
+    text = seen["text"]
+    assert "本跳是 harness 压测" in text and "AGENTS.md" in text, (
+        "隔离纪律要进提示词，否则还原只是善后"
+    )
+    assert text.index("画一张单面板示意图") < text.index("本跳是 harness 压测"), (
+        "案内任务书在前、纪律附在后——否则判据正文被 note 顶掉"
+    )
 
 
 def test_print_row_warns_when_budget_exhausted(capsys):

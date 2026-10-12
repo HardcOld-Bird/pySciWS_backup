@@ -20,6 +20,7 @@ import argparse
 import json
 import re
 import statistics
+import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -30,7 +31,7 @@ from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 from .checks import run_checks
 from .delivery import Artifact
 from .dispatch import do_dispatch
-from .registry import Registry
+from .registry import Registry, dirty_tracked_state
 
 #: 套件案目录（bencher 完全写权，§3）。
 HARNESS_DIR: Path = ORCH_STATE_ROOT / "evals" / "harness"
@@ -112,6 +113,9 @@ class Row:
     #: 案内轮次预算（``预算用满`` 哨兵的对照面：turns 用到 == 此值的 pass 不稳——
     #: E2 验收实测 blocked-recheck 4→10 轮跳，正是贴着上限跑完的）。
     max_turns: int = 0
+    #: 本跳污染了组员跟踪面（如自己的 ``AGENTS.md``）并被还原的路径——非空即说明该轮的
+    #: 「组员自维护层」被压测跳过，噪声已隔离但要在台账可见。
+    reverted: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -288,8 +292,67 @@ def judge(
     return reasons, checks
 
 
+#: 压测跳的隔离纪律（附在案内任务书之后，不进生产语义）。
+#: E2 验收实测：压测跳会把「这一跳学到的东西」写进组员自己的 ``AGENTS.md``
+#: （git 跟踪面）——测量噪声变成合并前检查的脏面，正是 #58 那一类事故。
+EVAL_HOP_NOTE = (
+    "\n\n---\n\n**本跳是 harness 压测，不是生产任务**：只完成任务书描述的动作。"
+    "**不要**更新你的 `AGENTS.md`、不要新建/修改自建 rules 或 skills、不要写 pod "
+    "与案内白名单之外的任何文件——测量要可比，组员长期记忆由生产任务负责维护。"
+)
+
+
+#: pod 相对路径根（同 ``registry.STATE_REL_PATH`` 口径：git 只认项目根相对路径）。
+_PODS_REL: str = "orchestration/pods"
+
+
+def pod_tracked_dirt(member_id: str) -> set[str]:
+    """该组员 pod 下 **git 跟踪且已脏** 的文件集合——压测跳前拍一张快照。
+
+    为什么压测要拍它（E2 验收实测）：压测跳会让组员把「这一跳学到的东西」写进自己的
+    ``AGENTS.md``（跟踪面）。噪声一旦留在树上，合并前检查就出现与本单无关的脏面，且下一轮
+    测量起点与上一轮不同。判据是「本跳新增的脏面」，故先记下跳前已有的脏面。
+    """
+    return set(dirty_tracked_state(path=f"{_PODS_REL}/{member_id}"))
+
+
+def revert_new_dirt(member_id: str, before: set[str]) -> list[str]:
+    """把本跳**新弄脏**的跟踪文件还原到 HEAD，返回实际还原的路径。
+
+    只还原 ``after - before``：跳前就脏的文件可能是组长在飞的工作，动它=覆盖他人改动。
+    范围再钉一层「必须落在该 pod 前缀下」——这是 ``git checkout --``，作用面写错就是破坏性。
+    新增的**未跟踪**文件不删（删文件风险高于留一份说明）。
+
+    fail-open：git 缺失/超时/非零退出一律返回 ``[]``，测量噪声不该掀翻一次压测。
+    """
+    pod_rel = f"{_PODS_REL}/{member_id}"
+    after = set(dirty_tracked_state(path=pod_rel))
+    fresh = sorted(
+        p for p in after - before if p.replace("\\", "/").startswith(f"{pod_rel}/")
+    )
+    if not fresh:
+        return []
+    try:
+        proc = subprocess.run(
+            ["git", "checkout", "--", *fresh],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+            check=False,
+        )
+    except Exception:
+        return []
+    return fresh if proc.returncode == 0 else []
+
+
 def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True) -> Row:
     """跑一案：全新会话 + 固定档位 + 不附审批回复 + 不进生产台账 → 判据 → 台账行。
+
+    隔离面：任务书后附 :data:`EVAL_HOP_NOTE`（禁止本跳写组员自维护层），并用
+    :func:`pod_tracked_dirt` / :func:`revert_new_dirt` 夹住这一跳——组员在本跳新弄脏的
+    **跟踪**文件在判据前还原，还原掉的路径记进 ``Row.reverted``。跳前就脏的文件不动。
 
     Args:
         case: :func:`parse_case` 的产物。
@@ -301,9 +364,10 @@ def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True)
         :class:`Row`（同时已 append 进 ``evals.jsonl``）。
     """
     tier = tier or case.tier
+    before = pod_tracked_dirt(case.member)
     out = do_dispatch(
         case.member,
-        text=case.brief,
+        text=case.brief + EVAL_HOP_NOTE,
         slug=f"eval-{case.case_id}",
         session="new",
         model_tier=tier,
@@ -315,6 +379,7 @@ def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True)
         eval_hop=True,
         quiet=quiet,
     )
+    reverted = revert_new_dirt(case.member, before)
     reg = Registry.load()
     reasons, checks = judge(out, case, reg, reg.member(case.member).pod)
     env = out.envelope
@@ -337,6 +402,7 @@ def run_case(case: Case, *, tier: str = "", label: str = "", quiet: bool = True)
         task_file=out.task_file or "",
         label=label,
         max_turns=case.max_turns,
+        reverted=reverted,
     )
     append_row(row)
     return row
@@ -511,6 +577,12 @@ def _print_row(row: Row) -> None:
                 else "pass 属贴线通过，下一跳多一次自证就会被拦成 fail——"
             )
             + "先放宽案内 max_turns 再取判决"
+        )
+    if row.reverted:
+        print(
+            "        [!] 本跳弄脏组员跟踪面，已由测量面还原："
+            + "、".join(row.reverted)
+            + "（噪声不留在树上，但反复出现=案内纪律或 EVAL_HOP_NOTE 该加强）"
         )
 
 
