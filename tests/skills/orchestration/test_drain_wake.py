@@ -107,3 +107,39 @@ def test_approve_full_chain_to_done(iso_state, monkeypatch):
     assert summary["count"] == 2
     # drain 结束已释放锁
     assert not (iso_state / "devops.lock").exists()
+
+
+# ---------------------------------------------------------------------------
+# 咽喉闸：测试进程不许真起后台 worker（backlog 20261012-191512-devops）
+# ---------------------------------------------------------------------------
+def test_spawn_detached_never_reaches_popen_under_pytest(monkeypatch):
+    """真 Popen 面钉成「一碰就炸」再调用底层派生——不抛即证明没起进程。
+
+    worker 生命周期内嵌在 status/approve/dispatch 三入口，漏挂 iso_state 的用例（实测两个）
+    会真拉起 ``_inspect-worker``，run_log 落在当时所在 worktree 树内、锁随后被 merge cp 面拖进
+    main。夹具级 patch 管不住这类漏网，故闸放在所有派生的唯一咽喉。
+    """
+    assert drain.in_test_process() is True, "判据失灵则本用例自证无效"
+
+    def boom(*a, **k):
+        raise AssertionError("测试进程不许真 Popen")
+
+    monkeypatch.setattr(drain.subprocess, "Popen", boom)
+    drain._spawn_detached(["python", "-m", "x", "_inspect-worker"], env={}, stdout=None)
+
+
+def test_spawn_detached_still_reaches_popen_outside_pytest(monkeypatch):
+    """反证：闸的判据是「我是测试进程」，不是把派生焊死。
+
+    清掉判据环境变量后必须照样 Popen——否则生产侧的 worker 生命周期已被静默废掉，
+    而 mock 用例全绿看不见（fail-open 吞掉 guard 自身 bug 的同族坑）。
+    """
+    seen: list[list[str]] = []
+    monkeypatch.setattr(drain.subprocess, "Popen", lambda argv, **kw: seen.append(argv))
+    for name in drain.TEST_PROCESS_ENV:
+        monkeypatch.delenv(name, raising=False)
+    assert drain.in_test_process() is False
+
+    drain._spawn_detached(["python", "-m", "x"], env={}, stdout=None)
+
+    assert seen == [["python", "-m", "x"]], "非测试进程照常真派生"

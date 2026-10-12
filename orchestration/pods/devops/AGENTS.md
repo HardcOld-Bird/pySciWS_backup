@@ -14,9 +14,9 @@
 - **worktree 内跑测试/CLI（2026-10-12 定型）**：`PYTHONPATH="<wt>/src" uv run --no-sync pytest
   "<wt>/tests" -q` 复用主 `.venv`，**前提=cwd 在 worktree 之外**（cd 进去 uv 就地新建空 venv，
   缺 pyyaml 即崩）。副作用：`PROJECT_ROOT` 就近认 `pyproject.toml` ⇒ state 写进 worktree 副本，
-  跑完逐文件还原——**worktree 内禁 `git checkout -- .`**（一次抹光全部未提交改动）。全量套件
-  另经 `ensure_inspector` 真派生 worker，merge 的 cp 面含 `*.lock` 会把他树锁拖进 main。配方与
-  兜底见技能 `references/worktree-merge.md` §1。
+  跑完逐文件还原——**worktree 内禁 `git checkout -- .`**（一次抹光全部未提交改动）。测试真派生
+  worker 与 merge 拖他树锁两面已收口（#78：咽喉闸 + cp 排除 `*.lock`）。配方、判据与兜底见
+  技能 `references/worktree-merge.md` §1-§2。
 - **判决包流（2026-10-12 E5b）**：`tools/verdict.py`=共享库（§0.9 组员复用，不另起 CLI）。
   approve 必带 `--jury`/`--bench`/`--override` 之一；例外通道=defect×当跳 blocked，判据读落盘
   固化的 `delivery:` 行（事后反查台账会失效）。J 出 B 自动驳回且**不计 override 率**——账只有

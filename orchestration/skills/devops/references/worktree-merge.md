@@ -24,6 +24,13 @@ PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
   `--force`**。同理 `pysci-dev mdgen-check` 的相对入参与 pre-commit 的 cwd 一律按
   `PROJECT_ROOT` 解析——按 cwd 解析会拿**另一棵树**的字节当「钩子终态基准」（静默假基准）。
 - 仅当 pyproject 依赖变更才 `uv sync --project "$WT"`（分钟级），之后改用 `$WT/.venv`。
+- **跑套件不点着队列**（backlog 20261012-191512-devops）：`orch status`/`approve`/`dispatch`
+  三入口内嵌巡检拉起，夹具级 patch 挡不住漏挂 `iso_state` 的用例——实测两个这样的用例真起
+  过 `_inspect-worker`，run_log 落在当时所在 worktree 里，那把 `inspector.lock` 随后被 merge
+  的 cp 面拖进 main。故真 `Popen` 之前还有一道咽喉闸：`drain._spawn_detached` 见
+  `PYTEST_CURRENT_TEST`/`PYTEST_VERSION` 即就地返回（两变量被子进程继承，测试里跑真 CLI 也
+  挡得住）。闸在派生面不在判定面：测试里 `spawned=True` 是空话，要断言 argv 就 patch 本函数；
+  确需真派生的用例自清这两枚变量（`test_drain_wake.py` 备有反例，防闸焊死生产面而全绿）。
 
 ## 2. 合并前交集检查（backlog 20261012-082932-devops）
 
@@ -61,7 +68,11 @@ git -c core.quotepath=false status --porcelain    # main 工作区未提交面�
 
 照常合并（交集为空即放行），交付时在 `<result>` 里报告其存在——不替组长清理别人的工作区。
 运行态文件（`sessions-runtime.json` 等 gitignored）不进交集：它们由 merge 的 cp 阶段专门
-搬运（见 `registry-runtime.md`）。
+搬运（见 `registry-runtime.md`）；**但 `*.lock` 永不跨树**（`dev.MERGE_STATE_EXCLUDE_SUFFIXES`）。
+锁不是数据，是「谁在跑」的活体读数，归属判据 = 文件里的 pid + run_log 双锚；把他树锁 cp 进
+main，main 就认到一把两头都不属于自己的锁——`orch status` 误报 worker 在跑，真在跑的 drain
+反被这把假锁挡住不唤醒（实测两次合并各拖进一把 `inspector.lock`，人工删掉才解封）。锁的现场性
+由判活面负责（`lock_status` 认墓碑/残骸），不属于合并面。
 
 ## 3. worktree 命名与孤儿回收
 

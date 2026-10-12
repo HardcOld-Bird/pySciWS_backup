@@ -28,6 +28,11 @@ SKILL.md 的命令面只留一行索引；本文放**为什么这样设计**与*
 冷却窗专为「内嵌拉起」存在：没有它，组长每敲一次 status 就重激活一轮巡检。
 `--force` 只越冷却，**不越开关也不越锁**（开关是用户的成本控制裁决，锁是幂等的定义）。
 
+内嵌拉起意味着「凡跑到三入口就试派生」，连测试进程也算——故 `drain._spawn_detached` 有一道
+咽喉闸：见 `PYTEST_CURRENT_TEST`/`PYTEST_VERSION` 即就地返回，不起进程也不写锁（backlog
+20261012-191512-devops 实测两个漏挂 `iso_state` 的用例真点着过 worker）。闸在派生面不在判定
+面，测试里 `spawned=True` 不作生产证据。
+
 ## 3. 单次激活的预算与停止原因
 
 `inspect_drain()` 一轮 = 一次激活。退出条件写进 `.done` 的 `stopped` 字段：

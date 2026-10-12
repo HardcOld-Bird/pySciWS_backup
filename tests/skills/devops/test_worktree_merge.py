@@ -3,7 +3,8 @@
 --no-ff 只带 git 面，sessions-runtime.json/registry.presplit.json/watch.json 等
 gitignored 运行态不随迁——registry-runtime-split 那次靠人工 cp 才保住 5 成员 6 会话。
 `pysci-dev worktree merge` 把「cp → merge → 会话数不减自检」固化，本组钉住其纯函数面：
-cp 语义（new vs bak 覆盖）、fail-open、会话总数读数、cmd 主体在倒退时中止且不起 git。
+cp 语义（new vs bak 覆盖）、fail-open、会话总数读数、cmd 主体在倒退时中止且不起 git，
+以及 **锁面不跨树**（``*.lock`` 属排除集——backlog 20261012-191512-devops）。
 """
 
 from __future__ import annotations
@@ -154,6 +155,57 @@ def test_cp_picks_up_non_baseline_ignored_file(tmp_path):
     assert (main / "orchestration" / "state" / "custom-heartbeat.json").read_text(
         encoding="utf-8"
     ) == "HB"
+
+
+# ---------------------------------------------------------------------------
+# 锁面不跨树（backlog 20261012-191512-devops）
+# ---------------------------------------------------------------------------
+def _gitignored_locks(wt: Path) -> None:
+    """造一个「锁被 git 判为 ignored」的 worktree 面（真实仓库里正是如此）。"""
+    _git_init(wt)
+    (wt / ".gitignore").write_text("/orchestration/state/*.lock\n", encoding="utf-8")
+    _mk_state(
+        wt,
+        "inspector.lock",
+        '{"pid": 26520, "run_log": "…/inspector-runs/x.log"}',
+    )
+    _mk_state(wt, "devops.lock", '{"pid": 14956, "run_log": "…/devops-runs/y.log"}')
+
+
+def test_cp_never_moves_locks(tmp_path):
+    """``*.lock`` 被 git 发现为 ignored，也**绝不**搬——锁不是数据而是「谁在跑」的活体
+    读数（pid + run_log 双锚）。cp 进 main 后 main 认到一把两头都不属于自己的锁：
+    ``orch status`` 误报 worker 在跑，真在跑的 drain 反被这把假锁挡住不唤醒。
+    """
+    wt, main = tmp_path / "wt", tmp_path / "main"
+    _gitignored_locks(wt)
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(1))
+    found = dev._ignored_state_names(wt)
+    assert {"inspector.lock", "devops.lock"} <= found, "前提：git 确实把锁判为 ignored"
+
+    log = dev._cp_ignored_state(wt, main, ts="T")
+
+    moved = {nm for nm, _ in log}
+    assert "sessions-runtime.json" in moved, "状态文件照搬，排除面只限锁"
+    sd = main / "orchestration" / "state"
+    for lock in ("inspector.lock", "devops.lock"):
+        assert lock not in moved
+        assert not (sd / lock).exists(), f"{lock} 被 cp 进了 main——假锁会骗过判活面"
+
+
+def test_cmd_merge_output_has_no_lock_line(tmp_path, monkeypatch, fake_git, capsys):
+    """判据的读数面：``worktree merge`` 输出里不出现锁行（cp 日志即搬运事实）。"""
+    wt, main = tmp_path / "wt", tmp_path / "main"
+    _gitignored_locks(wt)
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(3))
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(1))
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+
+    assert dev.cmd_worktree_merge("foo", wt) == 0
+
+    out = capsys.readouterr().out
+    assert ".lock" not in out, f"合并面把锁当运行态搬了：\n{out}"
+    assert "sessions-runtime.json" in out
 
 
 # ---------------------------------------------------------------------------
