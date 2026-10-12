@@ -1,0 +1,8 @@
+# 可再生物与草稿区不入库（README §2 git 策略）
+bench/
+outbox/
+.qoder/skills/
+# 任务书运行态：orch dispatch 每次派发到 inbox 落 task-<ts>-<slug>.md，
+# 正文已被 backlog.json + 交付 ledger 记录，无需再入库（避免污染 git status
+# 与 git add -A 误提交）。twin 的判断跳同样经此通道落 taskbook。
+inbox/task-*.md

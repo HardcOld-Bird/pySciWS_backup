@@ -1,6 +1,7 @@
 {
   "version": 1,
   "exe": null,
+  "taste_enabled": false,
   "models": {
     "max": "982ae403-bc5e-4f74-996d-04a9cd66f933",
     "flash": "Qwen3.8-Flash",
@@ -55,6 +56,19 @@
       "max_turns": 60,
       "timeout_s": 7200,
       "mcp_config": ".qoder/mcp.json"
+    },
+    "twin": {
+      "pod": "orchestration\\pods\\twin",
+      "model_tier": "flash",
+      "max_turns": 8,
+      "timeout_s": 900,
+      "mcp_config": ".qoder/mcp.json",
+      "cold_start": true,
+      "readonly_extra": [
+        "PREFERENCE.md",
+        "AGENTS.md"
+      ],
+      "tier_note": "REFACTOR §9：twin=审美孪生，单跳判断，flash 起步（成本敏感=免费档优先）；max_turns 8/timeout 900 是「冷启动单跳、不做多轮探索」的代码化；cold_start 使 dispatch 拒绝任何非 new 会话（无记忆纪律，硬代码优先）；readonly_extra 保护宪章与笔记面（AGENTS.md 按 charter 不得积累）；**项目根只读=不配 extra_dirs**（extra_dirs 是 pod-guard 的写白名单，给了即可写；--add-dir 未用于成员面）"
     }
   },
   "checks": {
