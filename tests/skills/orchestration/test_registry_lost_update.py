@@ -258,7 +258,7 @@ def test_refresh_models_from_stale_snapshot_never_touches_tracked_config(
     assert res["shadowed"]["max"] == {"tracked": MAX_OLD, "resolved": MAX_NEW}, (
         "跟踪值优先，解析值只点名不顶掉"
     )
-    assert "flash_fallback←Qwen-3.8-Flash" in res["missing"]
+    assert "flash←Qwen-3.8-Flash" in res["missing"]
 
 
 def test_corrupt_config_file_fails_loud_not_overwritten(iso_registry):

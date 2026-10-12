@@ -1,9 +1,11 @@
 """flash 档额度回退（backlog 20261010-flash-fallback）。
 
-用户裁决 2026-10-10：flash 档走内置免费额度；额度耗尽且 registry models 配置了
-``<tier>_fallback``（BYOK modelID，账号相关、渠道待用户开通）时，do_dispatch 自动
-换档重试一次；备用渠道也耗尽 → 仍归类 quota_exhausted（drain 全局停止语义不变）。
-代码就绪即可，BYOK flash 渠道开通前无法实测线上分支，本组单测覆盖逻辑。
+机制与档位无关：额度耗尽且 registry models 配置了非空 ``<tier>_fallback``（异于当前
+型号）时，do_dispatch 自动换档重试一次；备用渠道也耗尽 → 仍归类 quota_exhausted
+（drain 全局停止语义不变）。**渠道地位 2026-10-12 互换**（backlog 20261012-173500-leader，
+用户裁决）：flash 主档=BYOK Qwen-3.8-Flash、``flash_fallback``=内置免费档，于是自然语义
+变成「按量耗尽 → 限时免费兜底」；回退代码一行未动，互换只落在 registry.json 与模式表
+（同源断言见 ``test_flash_channel_swap.py``）。本组单测用占位 modelID 覆盖逻辑。
 """
 
 from __future__ import annotations
@@ -24,8 +26,9 @@ OK_BODY = "<result>出图完成，commit eee5555 已合并。</result>"
 
 
 def test_default_models_new_channel_strategy():
-    """出厂默认对齐新渠道策略：max=''（走用户级默认 BYOK，禁内置烧 credit）、
-    flash=内置免费、flash_fallback=''（无默认回退，实际值在 registry.json 配置）。"""
+    """出厂默认（三级回退的最后一级）：max=''（走用户级默认 BYOK，禁内置烧 credit）、
+    flash=内置免费、flash_fallback=''（无默认回退）。**互换落在跟踪面与模式表**，
+    出厂值保守取内置名是有意为之——BYOK modelID 是账号级 UUID，不写进代码。"""
     assert registry.DEFAULT_MODELS["max"] == ""
     assert registry.DEFAULT_MODELS["flash"] == "Qwen3.8-Flash"
     assert registry.DEFAULT_MODELS["flash_fallback"] == ""
