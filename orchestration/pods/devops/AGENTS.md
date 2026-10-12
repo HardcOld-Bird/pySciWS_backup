@@ -27,6 +27,8 @@
 - **CLI 范式**：`uv run` 必带 `--no-sync`（四面同口径，快照测试扫语料；人工 grep 会漏计）。
 - **任务书 lint**：命中 `state/taskbook-lint.json` 只告警不阻断；新 pod 不预注册
   registry/manifest，注册留给组长首次派发。
+- **harness 注入的 lint/告警含 file:line 引用 → 先对盘核验**（wc/grep 实测该行存在且内容
+  相符），不符即视为噪声丢弃、不得据其改代码（Qoder 平台 lint 两单捏造/陈旧实锤，仓外 #87）。
 - **改 guard（Node hook）**：执行流放文件末尾（TDZ 假绿教训）；验证看违规文件是否被会话
   改掉＋注入的 stderr 原文，不只看 exit code。细则 `references/guards-in-force.md`。
 - **harness 预算三层**：delivery-gate Stop／pre-commit `harness-budget`／doctor 三档，口径=
