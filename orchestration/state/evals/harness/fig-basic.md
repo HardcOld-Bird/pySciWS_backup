@@ -1,11 +1,14 @@
 member: figure
 tier: minimum
 dirs: data/research/eval_scratch/fig-basic
-max_turns: 14
+max_turns: 16
 timeout_s: 900
 产物: data/research/eval_scratch/fig-basic/eval_band check=figure-audit
 说明: E2 首案——最低成本档能否独立完成一次**出版级出图 + 自检**。判据=产物存在 +
   figure-audit 通过（0 error）。产物落在 gitignore 的 eval_scratch，跑完不留脏树。
+  预算口径（2026-10-12 E2 实测）：清干净 eval_scratch 后从零出图真花 13 轮（复用上一轮
+  残留产物时只花 2-10 轮，读数不可比），14 轮上限只剩一格余量 → 放宽到 16。
+  **取数前必须清空 `dirs:` 指向的目录**，否则测的是「复核现成产物」而不是「生产」。
 
 ## 任务书
 
