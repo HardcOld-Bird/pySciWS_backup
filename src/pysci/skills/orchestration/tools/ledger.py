@@ -50,10 +50,13 @@ class LedgerEntry:
     duration_ms: int = 0
     credits: float = 0.0
     # ADR（2026-10-10，backlog 20261009-byok-cost-accounting）：credits 并非「BYOK 恒 0」。
-    # 实测 14 跳台账：max 档 BYOK 模型（Qwen3.8-Max）正常上报 total_credits，flash 档
-    # （Qwen3.8-Flash）恒 0——计量能力**依模型而定**。故新增 model 字段：缺它则 credits=0
-    # 无法区分「未计量档位」与「真零」，成本列不可解释。用户裁决（2026-10-09）BYOK 为主力、
-    # 完整计费留待未来，故此处**不做** token/账单核算，只补齐让既有部分数据可解释的最小维度。
+    # 实测 14 跳台账：**BYOK 渠道**（人类名 Qwen-3.8-Max，带连字符）正常上报 total_credits，
+    # **内置渠道**（Qwen3.8-Flash，无连字符）恒 0——计量能力**依模型而定**，与档位名无关。
+    # 故新增 model 字段：缺它则 credits=0 无法区分「未计量」与「真零」，成本列不可解释。
+    # 渠道↔档位 2026-10-12 互换（backlog 20261012-173500-leader）后这条更是硬道理：flash 档
+    # 改 BYOK 优先，档位名不再预示是否计量，判读一律看本字段（首跳上报行为待真派发取证）。
+    # 用户裁决（2026-10-09）BYOK 为主力、完整计费留待未来，故此处**不做** token/账单核算，
+    # 只补齐让既有部分数据可解释的最小维度。
     # model = 本跳实际派发的模型名（dispatch 解析 -m 后写入；旧台账无此字段→""）。
     model: str = ""
     # effort = 本跳实际所用的推理强度档位（""=跟随用户级默认=中）。用户裁决 2026-10-10
@@ -237,7 +240,8 @@ def format_by_failure(
 def format_est_tokens(summary: dict[str, Any]) -> str:
     """把 summarize 的 est_tokens 维度渲染成一行（相对用量尺子，见 Ledger.est_tokens ADR）。
 
-    credits 恒 0 的档位（内置 flash）靠这一列补位——它是**唯一**双渠道都可比的用量指标，
+    credits 未计量的渠道（实测=内置 Qwen3.8-Flash）靠这一列补位——它是**唯一**双渠道都
+    可比的用量指标，
     但只是估算：绝对值无意义（系数为启发式），可比的是同尺下的相对量，故文本附覆盖率。
 
     Args:
@@ -257,10 +261,10 @@ def format_est_tokens(summary: dict[str, Any]) -> str:
 def format_credits(summary: dict[str, Any]) -> str:
     """把 summarize 的成本维度渲染成**诚实**的一行文本（供 stats/plan/workflow 复用）。
 
-    BYOK 下 credits 依模型上报（flash 档恒 0、max 档计量），单看总额会误导：既可能把
+    BYOK 下 credits 依模型上报（内置渠道恒 0、BYOK 渠道计量），单看总额会误导：既可能把
     「未计量」当成「零成本」，也可能把部分覆盖当成全量。故文本显式标注覆盖跳数。
-    **跨档比用量请用 est_tokens**（:func:`format_est_tokens`）——它双渠道同法同尺，
-    而 credits 恒 0 的档位根本无法排名。
+    **跨渠道比用量请用 est_tokens**（:func:`format_est_tokens`）——它双渠道同法同尺，
+    而未计量的渠道根本无法用 credits 排名。
 
     Args:
         summary: summarize 的返回值。
