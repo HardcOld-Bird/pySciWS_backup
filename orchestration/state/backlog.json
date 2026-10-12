@@ -1146,11 +1146,14 @@
       "kind": "usability",
       "success_criteria": "见单内 success_criteria 六条（三预设实测切换/仲裁换血同族排除/粘滞降级复测/inspector 迁移/minimum 独立/全量无回归）",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-225500-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T23:32:20+08:00",
-      "note": "孤儿条目回收（原 started_at=2026-10-13T00:25:01+08:00）",
+      "note": "drain 批量销账（commit c6cbb59）",
       "started_at": "2026-10-13T00:26:48+08:00",
-      "worktree": "20261012-225500-leader"
+      "worktree": "20261012-225500-leader",
+      "done_at": "2026-10-13T02:08:53+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-225500-leader"
     },
     {
       "id": "20261013-003000-leader",
@@ -1159,10 +1162,15 @@
       "kind": "defect",
       "success_criteria": "复现单测绿；崩溃日志含完整栈；drain 连跑两轮无异常；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-003000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T00:26:46+08:00",
-      "note": "｜组长调度：崩溃修复前置（#81 批次路径即崩溃现场，修复须先行）",
-      "effort": "high"
+      "note": "drain 批量销账（commit 9b0effb）",
+      "effort": "high",
+      "started_at": "2026-10-13T02:08:53+08:00",
+      "worktree": "20261013-003000-leader",
+      "done_at": "2026-10-13T02:44:12+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-003000-leader"
     },
     {
       "id": "20261012-234000-leader",
@@ -1171,10 +1179,72 @@
       "kind": "defect",
       "success_criteria": "崩溃+脏树单测四断言绿；干净树清理不回归；端到端零手动零丢失；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-234000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T23:55:03+08:00",
-      "note": "",
-      "effort": "high"
+      "note": "组长销账：envelope_parse_failed 属交付面解析失败，工作已完整合并（7135f06/70f4a19，15 文件+1453 行，test_salvage_recovery 32 passed 实测）；抢救机制上线自证",
+      "effort": "high",
+      "started_at": "2026-10-13T02:44:12+08:00",
+      "worktree": "20261012-234000-leader",
+      "needs_leader_at": "2026-10-13T03:31:19+08:00",
+      "commit": "70f4a19"
+    },
+    {
+      "id": "insp-20261012-224853-mechanical",
+      "member": "inspector",
+      "actor": "inspector",
+      "source": "inspector",
+      "summary": "devops 最近三跳的单跳工作量超均值 3 倍",
+      "kind": "usability",
+      "success_criteria": "- devops 最近 3 跳的 est_tokens 均低于其滑窗均值的 3 倍，或对应跳的轮数（num_turns）同步回落（`orch ledger` 可复核）",
+      "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261012-224853-mechanical.md",
+      "class": "mechanical",
+      "channel": "mechanical",
+      "status": "in_progress",
+      "proposed": "2026-10-13T03:36:08+08:00",
+      "note": "inspector 自主发现（§5.2 不经组长）",
+      "started_at": "2026-10-13T03:36:10+08:00",
+      "worktree": "insp-20261012-224853-mechanical"
+    },
+    {
+      "id": "insp-20261013-020358-mechanical",
+      "member": "inspector",
+      "actor": "inspector",
+      "source": "inspector",
+      "summary": "devops 最近三跳的单跳工作量超均值 3 倍",
+      "kind": "usability",
+      "success_criteria": "- devops 最近 3 跳的 est_tokens 均低于其滑窗均值的 3 倍，或对应跳的轮数（num_turns）同步回落（`orch ledger` 可复核）",
+      "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261013-020358-mechanical.md",
+      "class": "mechanical",
+      "channel": "mechanical",
+      "status": "pending",
+      "proposed": "2026-10-13T03:36:08+08:00",
+      "note": "inspector 自主发现（§5.2 不经组长）"
+    },
+    {
+      "id": "insp-20261013-020358-mechanical-002",
+      "member": "inspector",
+      "actor": "inspector",
+      "source": "inspector",
+      "summary": "devops 末跳上下文占用 73% 越过 60%，下一跳起步水位过高",
+      "kind": "usability",
+      "success_criteria": "- devops 末跳 ctx_ratio ≤ 60%（`orch ledger --member devops` 的 ctx 列可复核），或会话已归档重开",
+      "evidence_file": "orchestration\\state\\inspector\\evidence\\insp-20261013-020358-mechanical-002.md",
+      "class": "mechanical",
+      "channel": "mechanical",
+      "status": "pending",
+      "proposed": "2026-10-13T03:36:08+08:00",
+      "note": "inspector 自主发现（§5.2 不经组长）"
+    },
+    {
+      "id": "20261013-020853-devops",
+      "member": "devops",
+      "summary": "**harness 注入的 lint/告警池连续两单服务伪造或陈旧记录**，本单又被拖走两轮复验。它以「未通过 lint…read the existing content, understand and fix the root cause」施压，但所引内容在磁盘上不存在或与实际相反：",
+      "kind": "defect",
+      "success_criteria": "- 对同一交付会话，注入记录中「文件不存在」或「行号 > 文件实际行数」或「引文在对应文件中 grep 零命中」的条目数为 0（可脚本化：解析告警的 path:line/引文 → 与磁盘读数比对，命中即判失败）；\n- 同一条已处置/已证伪的记录在后续跳不再重复出现；\n- 真实信号（超预算、真实格式错误）仍照常送达：`find orchestration/skills -name '*.md' -size +8192c` 输出为空、`ruff check` 通过时不得产生任何 lint 告警。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-020853-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-13T03:36:57+08:00",
+      "note": ""
     }
   ]
 }
