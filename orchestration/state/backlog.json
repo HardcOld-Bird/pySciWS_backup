@@ -906,11 +906,14 @@
       "kind": "defect",
       "success_criteria": "非法 kind 交付的台账行不再显示建议✓（改为未入库标注）；suggestions 计数与 ledger 读数一致性阳性用例钉住同真同假；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-132138-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T14:30:38+08:00",
-      "note": "defect：读数面与入库面口径分裂，与 #62 同源收尾。本批不唤醒，由在途 drain 接手。",
+      "note": "drain 批量销账（commit 0b161ce）",
       "started_at": "2026-10-12T17:00:15+08:00",
-      "worktree": "20261012-132138-devops"
+      "worktree": "20261012-132138-devops",
+      "done_at": "2026-10-12T17:41:15+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-132138-devops"
     },
     {
       "id": "20261012-125455-devops",
@@ -919,9 +922,11 @@
       "kind": "usability",
       "success_criteria": "改 pyproject 后按文档范式一条命令入口齐备（main 实测）；uv run 不触发隐式 sync（--no-sync 入 basic.md/charter/技能真本三方一致，快照断言）；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-125455-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T16:44:53+08:00",
-      "note": ""
+      "note": "",
+      "started_at": "2026-10-12T17:41:15+08:00",
+      "worktree": "20261012-125455-devops"
     },
     {
       "id": "20261012-164600-leader",
@@ -978,6 +983,17 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170301-leader.md",
       "status": "pending",
       "proposed": "2026-10-12T17:02:34+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261012-171200-leader",
+      "member": "leader",
+      "summary": "**（E7，REFACTOR v1.0 §9.4/§12）twin 初步上线接线：代理裁决接入全部「呈用户」升级点 + mirror 盲审队列就位**",
+      "kind": "usability",
+      "success_criteria": "- 构造/等待一次真实护栏级事项：全程无「等待用户」阻塞，twin 裁决落\ntaste 目录+mirror 可查+执行继续（时间戳对比证明不阻塞）；\n- jury 平票案（E3-prep 判据四留档的挂起案）自动被 twin 终裁收敛到 A/B；\n- `mirror review` 列出上述两案且支持盲审交互（先隐答案）；\n- 最终交付验收点核验仍呈用户（反向用例）；全量无回归。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-171200-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-12T17:48:36+08:00",
       "note": ""
     }
   ]
