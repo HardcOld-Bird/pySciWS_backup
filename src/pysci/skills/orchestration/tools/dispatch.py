@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -189,6 +189,36 @@ def _persist_suggestion(member_id: str, body: str, kind: str = "") -> str:
     return sid
 
 
+def _accumulate_hop(final: Envelope, prev: Envelope) -> Envelope:
+    """把重试/换档跳的 envelope 与已跑过的那跳**合并成整任务读数**。
+
+    ``-o json`` 的 envelope 是**本次进程调用**的读数：``resume=True`` 的续跑只报它
+    自己那几轮（E2 验收实测 fig-basic 首跳崩、续跑报 turns=2，而会话 transcript 里
+    躺着 50+ 条 assistant 消息）。直接拿末跳 envelope 记账/判决有三处失真：
+
+    - ``num_turns``/``duration_ms``/``total_credits`` 少报 → harness 的均值轮数判决、
+      ``orch stats`` 的耗时画像都被做低；
+    - ``permission_denials`` 少报 → pod-guard 在首跳拦下的拒绝被续跑清零，
+      案卷的 ``权限拒绝上限`` 判据会**假通过**；
+    - 只有 ``context_usage_ratio`` 是会话态而非增量，取两跳最大值。
+
+    Args:
+        final: 最后一跳解析出的 envelope。
+        prev: 此前各跳的累计 envelope（可为本函数自己的返回值）。
+
+    Returns:
+        合并后的 envelope（不改动入参）。
+    """
+    return replace(
+        final,
+        num_turns=final.num_turns + prev.num_turns,
+        duration_ms=final.duration_ms + prev.duration_ms,
+        total_credits=final.total_credits + prev.total_credits,
+        context_usage_ratio=max(final.context_usage_ratio, prev.context_usage_ratio),
+        permission_denials=[*prev.permission_denials, *final.permission_denials],
+    )
+
+
 def do_dispatch(
     member_id: str,
     *,
@@ -328,7 +358,7 @@ def do_dispatch(
     rc, out, err = run_headless(
         cmd, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
     )
-    env_json = Envelope.parse(out)
+    env_json = acc_env = Envelope.parse(out)
     failed = rc != 0 or env_json.is_error
     # 额度类失败不做**同渠道**重试——重试只会再烧一跳；若配置了 <tier>_fallback
     # 则走下方的换档重试（2026-10-10 事故 + 用户裁决的 flash 回退机制）
@@ -355,7 +385,7 @@ def do_dispatch(
         rc, out, err = run_headless(
             cmd2, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
         )
-        env_json = Envelope.parse(out)
+        env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
         failed = rc != 0 or env_json.is_error
         quota_hit = quota_hit or (
             failed and _detect_quota_exhaustion(env_json, out, err)
@@ -388,7 +418,7 @@ def do_dispatch(
             rc, out, err = run_headless(
                 cmd3, cwd=PROJECT_ROOT, env=env, timeout_s=timeout or m.timeout_s
             )
-            env_json = Envelope.parse(out)
+            env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
             failed = rc != 0 or env_json.is_error
             # 备用渠道的结果即最终结果：再耗尽 → quota_exhausted（drain 全局停止）；
             # 普通失败 → run_failed；成功 → 落入正常交付解析
