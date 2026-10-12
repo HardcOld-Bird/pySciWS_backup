@@ -1342,6 +1342,17 @@
       "proposed": "2026-10-13T06:10:00+08:00",
       "note": "用户 05:5x 完全授权 charter 修改；一并落 #89 的 remedy_shape 纪律句（devops charter）",
       "effort": "medium"
+    },
+    {
+      "id": "20261013-063000-leader",
+      "member": "leader",
+      "summary": "**（监督面，用户 2026-10-13 06:2x）inspector 决策审计面：mirror status 概览 + 全貌查阅命令**",
+      "kind": "usability",
+      "success_criteria": "mirror status 新段实时水位；decisions 命令对今晚真实决策链完整呈现（含水位闸案三态标记）；change 置顶；无新状态面；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-063000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T07:32:07+08:00",
+      "note": ""
     }
   ]
 }
