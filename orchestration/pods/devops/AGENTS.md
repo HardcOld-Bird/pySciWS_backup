@@ -17,31 +17,32 @@
   （曾被误记成「此法必崩」）；配方与兜底法见技能 `references/worktree-merge.md` §1。副作用：
   `pysci.paths.PROJECT_ROOT` 就近找 `pyproject.toml`，故 state/PODS 指向 **worktree** 副本——
   跑 sync/drain 会改其 `state/*.json`（backlog.json 被跟踪！），实验后
-  `git checkout -- orchestration/state/…` 还原。
+  `git checkout -- orchestration/state/…` 还原。工具已承认此副作用（backlog
+  20261012-094646-devops）：跨树自检放行该配方（`PROJECT_ROOT` 在脚下树内且 `.git` 是文件），
+  免 `--force`；mdgen-check 相对入参按 `PROJECT_ROOT` 解析。
 - **档位映射自愈写运行态、不写跟踪面（2026-10-12，backlog 20261012-080410-devops）**：
   `refresh_models` 落 `sessions-runtime.json` 的 `models_resolved`，读取按「跟踪 > 运行态 >
-  出厂默认」回退，跟踪值遮蔽解析值时只报不写。细则与脏跟踪面哨兵（doctor/orch status 各一段
-  advisory）见技能 `references/registry-runtime.md`。
+  出厂默认」回退，跟踪值遮蔽解析值时只报不写。细则与脏跟踪面哨兵见技能
+  `references/registry-runtime.md`。
 - **worktree sync 与 `skills-deployed.json`（行尾敏感已修 2026-10-10，backlog
   20261010-003127-devops）**：`tree_hash` 哈希前 CRLF→LF 归一，故 worktree 内 sync 写的台账
-  对 main 即正确；但 **pod 内的部署副本是 gitignored、不随合并搬运**，合并后仍须在 main
-  跑一次 `pysci-dev sync`（2026-10-12 实测报 [!] 漂移，重跑至 `sync --check` 全等才收工）；
-  doctor 哨兵 [*]=台账哈希漂移、[!]=副本漂移。
+  对 main 即正确；但 **pod 内部署副本是 gitignored、不随合并搬运**，合并后仍须在 main 跑
+  `pysci-dev sync` 至 `sync --check` 全等；doctor 哨兵 [*]=台账哈希漂移、[!]=副本漂移。
 - **uvx 型 MCP server 的 mcp 2.x 断供（2026-10-10 修，backlog 20261010-paper-search-mcp-down）**：
   SDK 2.x 移除了 `mcp.server.fastmcp`，上游依赖写 `mcp>=x` 无上限的 uvx server 解析到 2.x 即启动崩、
   pod 侧只见 ✗ Disconnected。**修法**：mcp.json args 前插 `["--with", "mcp<2", ...]` 钉住
   （lit/reviewer/deputy，commit 40058e4）。诊断 `echo '' | uvx <pkg>` 看 traceback；
   验证=initialize 握手见 serverInfo 即通。
 - **`uv sync` 遇运行中 exe 锁：重命名占用者，勿杀进程（2026-10-12）**：Windows 能重命名运行中的
-  exe 但不能删。pyproject 新增 console script 后 sync 会以「拒绝访问 (os error 5)」失败，且
-  **已先把其余入口删掉**（裸命令集体 MISSING）。用 `wmic process where ProcessId=N get
-  CommandLine` 找占用者（本次=组长 `orch watch`）→ `mv .venv/Scripts/pysci-orch.exe{,.x}`
-  → sync 即成、入口全数重建。别 kill 组长进程（越权且阻塞 drain）。
+  exe 但不能删——sync 报「拒绝访问 (os error 5)」时**已先把其余入口删掉**（裸命令集体 MISSING）。
+  `wmic process where ProcessId=N get CommandLine` 找占用者（本次=组长 `orch watch`）→
+  `mv .venv/Scripts/pysci-orch.exe{,.x}` → sync 即成、入口全数重建。别 kill 组长进程
+  （越权且阻塞 drain）。
 - **任务书轻量 lint 规则表由 devops 维护（2026-10-10 建，backlog 20261010-084105-devops）**：
-  `write_taskbook`（dispatch/plan run/drain 唯一落盘口）落盘前扫正文，命中 `state/taskbook-lint.json`
-  （git 跟踪）里任一规则正则即**告警但不阻断**。**增补**：往 `rules` 追加 `{id, re, hint}`（re 为
-  Python 正则、JSON 内反斜杠双写）；fail-open，故改坏 JSON 会**静默失效**——
-  test_taskbook_lint.py 在 CI 钉住「随附规则必须可编译」。
+  `write_taskbook` 落盘前扫正文，命中 `state/taskbook-lint.json`（git 跟踪）里任一规则正则即
+  **告警但不阻断**；增补=往 `rules` 追加 `{id, re, hint}`（re 为 Python 正则、JSON 内反斜杠
+  双写）。fail-open，故改坏 JSON 会**静默失效**——test_taskbook_lint.py 在 CI 钉住「随附规则
+  必须可编译」。
 - **新增 pod 无需预注册 registry.json**（零技能 pod 也不进 `manifest.toml` targets，reviewer/twin
   先例，同一测试钉住）：脚手架只建目录+只读层文件，注册留给组长首次派发；口径见技能
   `references/pod-scaffold.md`。
@@ -71,8 +72,8 @@
   不可猜 token，control 与 withexclude 各跑一跳做**因果断言**（不灵敏只报 inconclusive、不误绿）；
   结论落**无时间戳**台账 `state/agents-md-excludes-probe.json`（staleness=hash{cli_version,排除面}，
   仅 CLI 升级或排除面变时复测），doctor 读它定三档。
-- **交付协议滚动升级窗口（2026-10-12 E1 实测 → backlog 002857 已修）**：派发进程 import 的解析器
-  快照可能早于协议（旧版只认字面 `<tag>`）；现 parse_delivery 有宽松兜底面救回带属性交付并附
+- **交付协议滚动升级窗口（2026-10-12 E1 → backlog 002857 已修）**：派发进程 import 的解析器快照
+  可能早于协议（旧版只认字面 `<tag>`）；现 parse_delivery 宽松兜底救回带属性交付并附
   「解析器早于协议」告警（进 outcome/run 日志）——见告警就重跑本单确认。
 - **直跑 guard 探针的假绿坑（2026-10-12 两度踩）**：env 名是 **`PYSCI_POD`**（不是 PYSCI_POD_DIR），
   写错名⇒只读层形同虚设，拦截与对照都 exit 0；载荷要填 `last_assistant_message`（guard 不读
