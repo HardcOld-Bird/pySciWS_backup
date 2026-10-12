@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
@@ -454,17 +455,60 @@ def test_twin_charter_and_agents_discipline():
 
 
 def test_registry_ships_twin_disabled_by_default():
-    """随附 registry：taste_enabled=false（生效确认留用户）+ twin 条目无 extra_dirs。"""
+    """出厂默认关（代码而非配置当前值）+ 开着必须有用户批准单 + twin 条目无 extra_dirs。
+
+    原来这里断言 ``registry.json`` 的当前值为 False，把「运行面读数」当成「出厂默认」
+    锁死——于是用户 2026-10-12 批准上线（批准单 20261012-164601-leader 补充条款原话
+    「先上线了再说」）之后，每一次合法运行都打破回归。真正要守的两件事分开钉：
+
+    - **默认**：:data:`registry.DEFAULT_TASTE_ENABLED` 必须 False（代码不替用户按开关）；
+    - **授权留痕**：配置里若为 true，批准单必须存在且点名该开关——悄悄开启仍然被拦。
+    """
     data = json.loads(
         (PROJECT_ROOT / "orchestration" / "state" / "registry.json").read_text(
             encoding="utf-8"
         )
     )
-    assert data["taste_enabled"] is False
+    assert registry.DEFAULT_TASTE_ENABLED is False
+    if data.get("taste_enabled") is True:
+        approval = (
+            PROJECT_ROOT
+            / "orchestration"
+            / "state"
+            / "suggestions"
+            / "approved"
+            / "20261012-164601-leader.md"
+        )
+        assert approval.is_file(), "taste_enabled=true 却找不到授权批准单"
+        assert "taste_enabled" in approval.read_text(encoding="utf-8")
     twin = data["members"]["twin"]
     assert twin["cold_start"] is True
     assert "PREFERENCE.md" in twin["readonly_extra"]
     assert not twin.get("extra_dirs"), "extra_dirs 即写白名单，给了就不再只读"
+
+
+def test_taste_on_without_approval_is_caught(monkeypatch, tmp_path):
+    """上一条的留痕分支不能空转：造一棵「taste_enabled=true 但没有批准单」的假树，必须被咬。
+
+    只改本模块的 ``PROJECT_ROOT`` 全局——被测函数在函数体内读它，不碰真仓库任何面。
+    """
+    state = tmp_path / "orchestration" / "state"
+    state.mkdir(parents=True)
+    (state / "registry.json").write_text(
+        json.dumps(
+            {
+                "taste_enabled": True,
+                "members": {
+                    "twin": {"cold_start": True, "readonly_extra": ["PREFERENCE.md"]}
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "PROJECT_ROOT", tmp_path)
+
+    with pytest.raises(AssertionError, match="授权批准单"):
+        test_registry_ships_twin_disabled_by_default()
 
 
 def test_twin_intentionally_has_no_manifest_target():
