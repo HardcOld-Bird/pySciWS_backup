@@ -686,11 +686,12 @@
       "kind": "defect",
       "success_criteria": "- registry 读数 max_turns=150；一次真实 devops 派发 >80 轮不再被截断\n（台账 num_turns>80 且交付 result）；\n- `pysci-orch approve`/`--from-backlog` 输出的 [NEXT] 挂载段含新增警示行\n（快照断言）；\n- 人工构造「watch fired 未确认」态（写 watch.json）→ `orch status` 列出\n该事件明细；确认一次后不再重复列出；\n- 全量套件无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-073700-leader.md",
-      "status": "in_progress",
+      "status": "pending",
       "proposed": "2026-10-12T07:34:57+08:00",
-      "note": "P0：夜航三次 run_failed 全卡 num_turns=80（参数失配非规格障碍）+ watch 挂载软肋硬化。E2/E6 重派以本单合并为前置。委托期自主裁决。",
+      "note": "组长再派（08:0x）：卡点已解——models.minimum 未提交改动已由组长代提交 80ce9ef（护栏级登记见该 commit）。本单重排队列，须先于 #56/#57 消化（E2/E6 依赖 max_turns=150 生效）。",
       "started_at": "2026-10-12T07:34:59+08:00",
-      "worktree": "20261012-073700-leader"
+      "worktree": "20261012-073700-leader",
+      "requeued_at": "2026-10-12T08:10:00+08:00"
     },
     {
       "id": "20261012-010508-devops",
@@ -699,9 +700,11 @@
       "kind": "usability",
       "success_criteria": "worktree 内不设 PYTHONPATH 跑 pysci-dev sync/doctor → 跨树告警 rc=2 且零 main 侧写入；设 PYTHONPATH 或 --force 行为如旧；tests/skills/devops 两例阳性全绿",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-010508-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T07:42:42+08:00",
-      "note": "usability 实锤（editable PROJECT_ROOT 跨树静默），devops 自检护栏批准。"
+      "note": "usability 实锤（editable PROJECT_ROOT 跨树静默），devops 自检护栏批准。",
+      "started_at": "2026-10-12T08:04:10+08:00",
+      "worktree": "20261012-010508-devops"
     },
     {
       "id": "20261012-025325-devops",
