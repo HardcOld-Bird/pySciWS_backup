@@ -1,0 +1,55 @@
+{
+  "agentsMdExcludes": [
+    "**/leader-only.md"
+  ],
+  "mcp": {
+    "lazyLoad": true
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ../../guards/delivery-gate.mjs",
+            "name": "delivery-gate",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ../../guards/pod-guard.mjs",
+            "name": "pod-guard",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "skills": {
+    "disabled": [
+      "agent-creator",
+      "deep-research",
+      "hook-config",
+      "loop",
+      "mcp-config",
+      "qoder-create-plugin:create-plugin",
+      "qoder-sites:sites-build-agent-app",
+      "qoder-sites:sites-building",
+      "qoder-sites:sites-hosting",
+      "qoder-sites:sites-management",
+      "run",
+      "sdk",
+      "security-scan",
+      "skill-creator",
+      "verify",
+      "workflow-authoring"
+    ]
+  }
+}

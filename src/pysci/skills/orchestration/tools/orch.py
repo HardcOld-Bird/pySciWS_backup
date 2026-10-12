@@ -20,6 +20,9 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     ... orch ledger [--member --days --stats] | sync [--check]
     ... orch jury <case-file> [--dry] [--timeout S]   # Tier C 仲裁团（REFACTOR §4）
     ... orch taste <case-file> [--dry]        # twin 审美判断通道（宪章生效后可用，§9）
+    ... orch bench-add | bench-up | bench-queue | bench-seen | bench-stop   # bencher 测量队列（§8）
+    ... orch inspector-up [--dry|--force] | inspector-status | inspector-patrol |
+        inspector-assign | inspector-on | inspector-off   # 闲时巡检引擎生命周期（§7）
 
 长任务纪律：dispatch / plan run 应以 Bash 工具的 run_in_background 启动（README §4.5
 等待模型）；orch 自身同步阻塞等待组员进程属预期（进程级等待，零 token）。
@@ -33,6 +36,7 @@ import sys
 from . import benchd as _benchd
 from . import drain as _drain
 from . import eval as _eval
+from . import inspectd as _inspectd
 from . import jury as _jury
 from . import mirror as _mirror
 from . import plans as _plans
@@ -247,6 +251,14 @@ def cmd_status(args: argparse.Namespace) -> int:
                 f"{str(line)[:70]}"
             )
 
+    print("== inspector 巡检引擎（闲时自主巡逻，REFACTOR §7）==")
+    for line in _inspectd.status_lines():
+        print(line)
+    # 内嵌拉起（§7「生命周期由代码保证」）：status 是组长最常敲的命令，把「记得去开
+    # 巡检」这件事从人身上摘掉。放在读数之后——本轮显示的是拉起前的锁态，消息紧随其后，
+    # 不会让人看到「idle」却不知道它刚被拉起。
+    _inspectd.ensure_inspector(quiet=False)
+
     dirty = dirty_tracked_state()
     if dirty:
         print("== 跟踪 state 脏面（组员合并前检查拦的就是这些）==")
@@ -346,6 +358,9 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
         # 代码在「工作已交办」的当刻注入挂载指令，不靠组长记得去读文档（§4.5/§6）
         for line in _watch.mount_lines(indent="  ", header=False):
             print(line)
+    # 巡检内嵌拉起之二（§7）：派完一跳，组长的手正空着读输出——inspector 的活路就在这
+    # 个间隙里。让路/迟滞闸门由引擎自己判，这里只负责「想起来要试」。
+    _inspectd.ensure_inspector()
     return outcome.code
 
 
@@ -893,6 +908,54 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=_benchd.cmd_bench_stop)
 
+    # ---- inspector-*：闲时巡检引擎的生命周期面（REFACTOR §7 / E5a）----
+    # 组长侧只有「拉起/开关/读数/指派」四件事：巡检内容本身在 inspector pod 的会话里，
+    # 发现的分流在 pysci-inspect（组员侧）。资源闸门（预算/让路/迟滞）没有 CLI 旋钮——
+    # §7 要的是「代码保证」，可被随手关掉的成本控制等于没有。
+    p = sub.add_parser(
+        "inspector-up",
+        help="幂等拉起 inspector 巡检 worker（开关关/在跑/冷却窗内均 no-op 并说明）",
+    )
+    p.add_argument(
+        "--dry", action="store_true", help="干跑：派跳只演练不真派发（演练/测试）"
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="跳过冷却窗（一次性自主巡检；不越开关与锁）",
+    )
+    p.set_defaults(func=_inspectd.cmd_inspector_up)
+
+    p = sub.add_parser("inspector-status", help="巡检引擎面细读（闸门/阈值/队列/发现）")
+    p.set_defaults(func=_inspectd.cmd_inspector_status)
+
+    p = sub.add_parser(
+        "inspector-patrol",
+        help="手动排入一项巡检（--target 菜单 id，缺省随机抽；queue-first 的插队口）",
+    )
+    p.add_argument("--target", default="", help="巡检菜单项 id（空=随机抽取）")
+    p.add_argument("--summary", default="", help="队列里展示的一句话")
+    p.add_argument("--start", action="store_true", help="入队后立即拉起 worker")
+    p.set_defaults(func=_inspectd.cmd_inspector_patrol)
+
+    p = sub.add_parser(
+        "inspector-assign",
+        help="给 inspector 排一项指派核查（kind=assignment，正文走巡检队列）",
+    )
+    p.add_argument("--brief", required=True, help="指派任务书正文")
+    p.add_argument("--summary", default="", help="队列里展示的一句话")
+    p.add_argument("--start", action="store_true", help="入队后立即拉起 worker")
+    p.set_defaults(func=_inspectd.cmd_inspector_assign)
+
+    p = sub.add_parser("inspector-on", help="打开巡检全局开关（默认态）")
+    p.set_defaults(func=_inspectd.cmd_inspector_on)
+
+    p = sub.add_parser(
+        "inspector-off",
+        help="关闭巡检全局开关（成本控制；在跑的 worker 条目间隙自停）",
+    )
+    p.set_defaults(func=_inspectd.cmd_inspector_off)
+
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(
         "_drain-devops",
@@ -913,6 +976,16 @@ def main(argv: list[str] | None = None) -> int:
         "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
     )
     p.set_defaults(func=_benchd.cmd_bench_worker)
+
+    p = sub.add_parser(
+        "_inspect-worker",
+        help="[内部] inspector 巡检激活循环（下划线前缀=内部命令，勿手调）",
+    )
+    p.add_argument("--run-log", help="run 日志路径（拉起时传入；默认自动生成）")
+    p.add_argument(
+        "--dry", action="store_true", help="干跑：派跳只演练，不真派发组员会话"
+    )
+    p.set_defaults(func=_inspectd.cmd_inspect_worker)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

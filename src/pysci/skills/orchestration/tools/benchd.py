@@ -33,13 +33,13 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import eval as _eval
+from . import workq
 from .drain import (
     DRY_ENV as _DRY_ENV,
 )
@@ -72,41 +72,24 @@ BENCH_PATHS = WorkerPaths(
 ITEM_KINDS: tuple[str, ...] = ("run", "capture", "ab", "check")
 
 #: 队列项终态：``done``/``failed`` 都进「待查看」面，直到提请人 ``bench-seen``。
-TERMINAL_STATUSES: tuple[str, ...] = ("done", "failed")
+#: 状态词表与队列形状统一由 :mod:`workq` 定义（E4 时这套读写在本模块内部，E5a 抽库后
+#: 这里只留测量业务的薄封装——两处各写一份状态机就是双源漂移的开始）。
+TERMINAL_STATUSES: tuple[str, ...] = workq.TERMINAL_STATUSES
 
 _ITEM_SEP = "-"
 
 
 # ---------------------------------------------------------------------------
-# 队列
+# 队列（薄封装：全部原语见 :mod:`workq`）
 # ---------------------------------------------------------------------------
 def queue_load() -> list[dict[str, Any]]:
-    """读队列全部条目（按入队序）；文件缺失返回空表，损坏条目跳过但不静默。
-
-    fail-soft 而非 fail-open：坏行留在盘上会让人以为「队列清空了」，故调用方拿到的是
-    「读得出的条目」，损坏原件由 :func:`queue_save` 的整体重写自然清除（下一次入队即净化）。
-    """
-    if not QUEUE_PATH.exists():
-        return []
-    try:
-        data = json.loads(QUEUE_PATH.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return []
-    items = data.get("items") if isinstance(data, dict) else data
-    if not isinstance(items, list):
-        return []
-    return [i for i in items if isinstance(i, dict) and i.get("id")]
+    """读队列全部条目（按入队序）；文件缺失返回空表。"""
+    return workq.load(QUEUE_PATH)
 
 
 def queue_save(items: list[dict[str, Any]]) -> None:
     """整体重写队列（原子 replace）。"""
-    QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = QUEUE_PATH.with_name(QUEUE_PATH.name + ".tmp")
-    doc = {"version": 1, "updated_at": _now(), "items": items}
-    tmp.write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    os.replace(str(tmp), str(QUEUE_PATH))
+    workq.save(QUEUE_PATH, items)
 
 
 def new_item_id(kind: str, *, stamp: str | None = None) -> str:
@@ -114,14 +97,7 @@ def new_item_id(kind: str, *, stamp: str | None = None) -> str:
 
     ``stamp`` 参数是测试注入口：脚本里不许用 ``datetime.now()`` 决定可复现的命名。
     """
-    base = f"bench-{stamp or datetime.now().strftime('%Y%m%d-%H%M%S')}{_ITEM_SEP}{kind}"
-    taken = {str(i.get("id")) for i in queue_load()}
-    if base not in taken:
-        return base
-    n = 2
-    while f"{base}{_ITEM_SEP}{n:03d}" in taken:
-        n += 1
-    return f"{base}{_ITEM_SEP}{n:03d}"
+    return workq.new_item_id(QUEUE_PATH, "bench", kind, stamp=stamp, sep=_ITEM_SEP)
 
 
 def enqueue(
@@ -183,10 +159,7 @@ def enqueue(
     }
     if backlog_id:
         item["backlog_id"] = backlog_id
-    items = queue_load()
-    items.append(item)
-    queue_save(items)
-    return item
+    return workq.append(QUEUE_PATH, item)
 
 
 def _default_summary(kind: str, cases: list[str], label: str) -> str:
@@ -197,88 +170,42 @@ def _default_summary(kind: str, cases: list[str], label: str) -> str:
 
 def _mutate(item_id: str, **fields: Any) -> dict[str, Any] | None:
     """按 id 改写字段并落盘，返回改后的条目（找不到返回 None）。"""
-    items = queue_load()
-    for i, it in enumerate(items):
-        if str(it.get("id")) == item_id:
-            it.update(fields)
-            items[i] = it
-            queue_save(items)
-            return it
-    return None
+    return workq.mutate(QUEUE_PATH, item_id, **fields)
 
 
 def take_next() -> dict[str, Any] | None:
     """取队首 pending 项并标记 ``in_progress``（无则 None）。"""
-    for it in queue_load():
-        if it.get("status") == "pending":
-            return _mutate(str(it["id"]), status="in_progress", started_at=_now())
-    return None
+    return workq.take_next(QUEUE_PATH)
 
 
 def reset_orphans() -> list[str]:
-    """把 ``in_progress`` 复位为 pending——刚获锁时它们是已死 worker 的孤儿。
-
-    与 backlog 侧同理：单 worker 互斥由锁保证，故获锁一刻仍在 ``in_progress`` 的条目
-    必是上一任被杀死时留下的，不能让它永久卡在「正在跑」。
-    """
-    out: list[str] = []
-    items = queue_load()
-    for i, it in enumerate(items):
-        if it.get("status") != "in_progress":
-            continue
-        started = it.get("started_at", "?")
-        it = dict(it)
-        it.update(
-            status="pending",
-            started_at="",
-            reclaimed_at=_now(),
-            note=f"孤儿回收（{started} 起的在途项）",
-        )
-        items[i] = it
-        out.append(str(it.get("id")))
-    if out:
-        queue_save(items)
-    return out
+    """把 ``in_progress`` 复位为 pending——刚获锁时它们是已死 worker 的孤儿。"""
+    return workq.reset_orphans(QUEUE_PATH)
 
 
 def finish(item_id: str, status: str, result: dict[str, Any]) -> dict[str, Any] | None:
     """写终态（``done``/``failed``）与结构化结果；``reviewed_at`` 留空 = 待查看。"""
-    return _mutate(
-        item_id, status=status, result=result, finished_at=_now(), reviewed_at=""
-    )
+    return workq.finish(QUEUE_PATH, item_id, status, result)
 
 
 def pending_review() -> list[dict[str, Any]]:
     """「待查看结果」面：已终态但提请人尚未确认的条目（§5.1-B 择机查看，不即时唤醒）。"""
-    return [
-        i
-        for i in queue_load()
-        if i.get("status") in TERMINAL_STATUSES and not i.get("reviewed_at")
-    ]
+    return workq.pending_review(QUEUE_PATH)
 
 
 def mark_seen(item_id: str) -> dict[str, Any] | None:
     """提请人确认已查看（从「待查看」面移除；条目本身留在队列作审计，直到下次净化）。"""
-    return _mutate(item_id, reviewed_at=_now())
+    return workq.mark_seen(QUEUE_PATH, item_id)
 
 
-def prune_seen(keep: int = 20) -> int:
+def prune_seen(keep: int = workq.DEFAULT_KEEP) -> int:
     """裁掉已查看的历史条目，只留最近 ``keep`` 条（队列文件不许无界增长）。"""
-    items = queue_load()
-    if len(items) <= keep:
-        return 0
-    dropped = items[:-keep]
-    queue_save(items[-keep:])
-    return len(dropped)
+    return workq.prune(QUEUE_PATH, keep)
 
 
 def queue_counts() -> dict[str, int]:
     """按状态计数（status 一行读数）。"""
-    out: dict[str, int] = {}
-    for it in queue_load():
-        st = str(it.get("status", "?"))
-        out[st] = out.get(st, 0) + 1
-    return out
+    return workq.counts(QUEUE_PATH)
 
 
 # ---------------------------------------------------------------------------

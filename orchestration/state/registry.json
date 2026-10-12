@@ -80,7 +80,33 @@
         "orchestration/state/evals"
       ],
       "tier_note": "REFACTOR §8/E4：harness 实测专职工。flash 是**组员身份**的档位（被组长指派核查跑时用）；压测跑的被测档位由案卷 tier:/任务参数决定（默认 minimum），与本行无关。extra_dirs 只给 state/evals——案卷、基线、判决产物是它唯一的项目内常设写面（charter 权限面），src/guards/其他 pod 零写权：设施缺陷走 <infra_suggestion> 交 devops，不自己修。max_turns 120：A/B 副本一轮含两腿多案，比 devops 单跑轻但比 twin 单跳重。"
+    },
+    "inspector": {
+      "pod": "orchestration\\pods\\inspector",
+      "model_tier": "flash",
+      "max_turns": 50,
+      "timeout_s": 1200,
+      "mcp_config": ".qoder/mcp.json",
+      "extra_dirs": [
+        "orchestration/state/inspector",
+        "orchestration/state/evals/jury-cases"
+      ],
+      "readonly_extra": [
+        "rubrics"
+      ],
+      "tier_note": "REFACTOR §7/E5a：闲时巡检专职工，flash 起步（成本敏感：巡检是每日常态而非疑难攻坚；需要更高分辨率的 rubric 判断由引擎侧指派项 --model-tier max 升档）。全项目**只读**：extra_dirs 只给两处产出面（发现台账/证据/队列所在的 state/inspector，与判决案卷所在的 state/evals/jury-cases），其余零写权——巡检发现靠晋升 backlog 交 devops 消化，不自己动手。readonly_extra=rubrics 把 pod 内设计审查 rubric 锁成只读（修订权归用户）。timeout_s 1200 刻意小于引擎 wallclock_s 1800：单跳要显著短于单次激活的墙钟预算，否则「预算到顶自停」会退化成「跳完才发现超预算」。"
     }
+  },
+  "inspector": {
+    "_note": "闲时巡检引擎参数（REFACTOR §7/§5.2）。逐键覆盖 src 的 DEFAULT_INSPECTOR；此处显式写全八键是为了让 orch inspector-status 的阈值读数可核对（缺席=出厂值，行为不变）。pause_*/resume_* 四键若不满足 resume 严格低于 pause，整体回落出厂值并在 status 面标注「配置被忽略」。",
+    "max_hops": 3,
+    "wallclock_s": 1800,
+    "cooldown_s": 3600,
+    "yield_window_s": 900,
+    "pause_backlog": 12,
+    "pause_bench": 6,
+    "resume_backlog": 8,
+    "resume_bench": 4
   },
   "checks": {
     "figure-audit": {

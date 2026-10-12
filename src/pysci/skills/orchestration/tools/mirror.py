@@ -153,11 +153,21 @@ def _line_charter() -> str:
 
 
 def _line_switches() -> str:
+    from .inspectd import (
+        enabled as inspector_enabled,  # 延迟导入：inspectd 引整条 worker 链
+    )
+
     on = Registry.load().taste_enabled
+    insp = inspector_enabled()
     return (
         f"twin 判断通道 taste_enabled = {on}"
         f"{'（已生效）' if on else '（未生效：orch taste 拒绝派发）'}  "
-        "inspector 开关 = 未启用（E5+）"
+        f"inspector 开关 = {insp}"
+        + (
+            "（默认态：orch 命令自动拉起巡检）"
+            if insp
+            else "（已关闭：拉起逻辑 no-op，orch inspector-on 恢复）"
+        )
     )
 
 
