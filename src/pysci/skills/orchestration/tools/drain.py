@@ -562,6 +562,50 @@ def latest_done() -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+#: run 摘要 items 里「这一条目这次尝试失败」的状态读数。``quota_exhausted`` **不在**
+#: 此列：那是渠道级系统性故障、条目无罪复位，计入会把「额度没了」误读成「任务书写坏了」。
+FAILED_ITEM_STATUSES: tuple[str, ...] = (
+    "needs_leader",
+    "blocked",
+    "run_failed",
+    "parse_error",
+    "check_fail",
+)
+
+
+def failure_counts(*, limit: int = 0) -> dict[str, int]:
+    """按 backlog 条目 id 汇总 run 摘要中的失败次数（坏文件/坏行跳过，观察面 fail-soft）。
+
+    ``limit>0`` 只看最近 N 份 ``.done``。重派前的关键读数：同一条目累计失败 ≥2 次时，
+    原样重派大概率原样再败——该改的是任务书或补证据，而不是再派一次（backlog
+    20261012-073700-leader 要求 4，源于夜航三次 run_failed 期间 status 只报
+    needs_leader 不带次数）。
+    """
+    if not DEVOPS_RUNS_DIR.exists():
+        return {}
+    dones = sorted(DEVOPS_RUNS_DIR.glob("*.done"))
+    if limit > 0:
+        dones = dones[-limit:]
+    out: dict[str, int] = {}
+    for p in dones:
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        items = data.get("items") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            continue
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            if str(it.get("status", "")) not in FAILED_ITEM_STATUSES:
+                continue
+            cid = str(it.get("id", "") or "")
+            if cid:
+                out[cid] = out.get(cid, 0) + 1
+    return out
+
+
 def _extract_commit(body: str) -> str:
     """从交付正文尽力提取 commit hash（``commit ... <hex>``）；无则空串。"""
     m = _COMMIT_RE.search(body or "")

@@ -87,13 +87,13 @@ uv run pysci-orch ledger [--member --days --stats] | sync [--check]
 - 建议审批：approve 入 backlog 并**自动唤醒 devops 后台消化**（分离进程持锁 FIFO 串行；
   锁忙不重复唤醒，单项失败标 needs_leader 跳过、不阻塞队列），**reject 即 override：必须
   `--override "<依据>"`，落决策日志 `state/preference-journal.jsonl` 计入 override 率**（无
-  依据的否决被代码拒绝）——回复都会
-  自动附送提议人；`orch status` 看 devops worker 态 / 最近 run / needs_leader 提醒；
-  交办后照输出 [NEXT] 以 `run_in_background` 挂 `orch watch` 等事件（命中单行退出即唤醒，
-  勿 sleep-轮询 status）；漏挂的账由下次 `orch status` 的 watch 段补账；**测试/诊断性挂载
-  前须确认无 live 挂载或先停**——`arm()` 全局覆写 `state/watch.json`，会抹掉在等那任的心跳
-  与黑匣子；`watch.json` 的 `recent`/`exit_reason` 是脱靶复盘现场，`orch status` 会读出
-  「上一任无退出记录」（被外部杀死）及其末帧；
+  依据的否决被代码拒绝）——回复自动附送提议人；`orch status` 看 devops worker 态 /
+  最近 run / needs_leader 提醒；
+  交办后照输出 [NEXT] 以 `run_in_background` 挂 `orch watch` 等事件；**watch 必须是该后台
+  调用的唯一顶层命令**——用 `&`/`&&`/管道把它嵌进别的命令，父任务终结会连坐杀死等待器，
+  事件命中也无唤醒通道（2026-10-12 夜航停摆 6h）；漏挂/断唤的账由下次
+  `orch status` 补账（fired 未确认逐条列明细）；**测试/诊断性挂载前须确认无
+  live 挂载或先停**——`arm()` 全局覆写 `state/watch.json` 的心跳与黑匣子；
   护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：修改任务书重派，或行使最终裁定权
   坚持原派（理由留痕台账）；
