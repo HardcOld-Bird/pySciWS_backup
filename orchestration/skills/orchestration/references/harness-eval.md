@@ -61,12 +61,22 @@ check 类型未注册（`unrouted` 也算失败——套件要的是确定性）
 样本量提醒：三案的均值轮数是一轮真派发的**单次测量**（E2 实测同案两轮 4↔10 跳），
 判决读方向不读小数；要下结论看逐案 turns 与 `预算用满` 标记，而不是均值本身。
 
+读数口径（E2 实测缺陷，backlog 20261012-075200-leader）：`-o json` 的 envelope 是
+**本次进程调用**的读数，而 `do_dispatch` 在首跳崩溃/额度耗尽后会 `resume=True` 再跑一跳——
+直接取末跳会把轮数、耗时、credits 和 pod-guard 拒绝次数一起做低（实测某案末跳报
+turns=2、transcript 里 50+ 条 assistant 消息）。`dispatch._accumulate_hop` 已把各跳
+累计成整任务读数，故台账 turns 与 transcript 可直接对账；复核时用
+`~/.qoder-cn/projects/<pod键>/<sid>.jsonl` 的 assistant 条数核。
+
 ## 案卷设计要点（避坑）
 
 - 判据必须**可由组员正常达成**：把历史上的 blocked 案改编成正向断言（结果合规 +
   不出现该失败标签 + 零权限拒绝），而不是造一个只能失败的案。
 - 产物一律落在 gitignored 面（pod `bench/`、`data/research/eval_scratch/`——根
   `.gitignore` 已排除），否则反复跑会把测量噪声变成 `git status` 脏面，挡住合并前检查。
+  **但 gitignored 不等于每轮全新**：残留产物会让组员「复核现成的」而不是「生产」，
+  测出来的轮数是复核成本（E2 实测 fig-basic 第二轮起 2 轮即过，因为
+  `eval_scratch/fig-basic/eval_band` 还在盘上）。取数前先清 `dirs:` 指向的目录。
 - `figure-audit` 只以「宽度偏差 >±2mm / 字号 < tick×0.9 / 构建失败」出 ERROR，面板
   字母与交付宽度是 WARN——`--panels` 永不致 fail，别把它当判据主力。
 - 断言锚点须先实测取确定性结果（如 `pysci-research search '<精确标题>' --source arxiv
