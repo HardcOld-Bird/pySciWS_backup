@@ -178,12 +178,20 @@ def cmd_status(args: argparse.Namespace) -> int:
             extra = f" commit={it['commit']}" if it.get("commit") else ""
             print(f"    - {it.get('id')}: {it.get('status')}{extra}")
     needs_leader = _workflow.backlog_by_status("needs_leader")
+    repeat_fails: dict[str, int] = {}
     if needs_leader:
         print(
             f"  [!] needs_leader 条目 {len(needs_leader)}（drain 跳过，待组长处理）："
         )
+        repeat_fails = {
+            k: v for k, v in _drain.failure_counts().items() if v >= 2
+        }  # 阈值 2：一次失败是常态，两次才说明「原样重派」大概率再失败
         for b in needs_leader[:5]:
-            print(f"    - {b['id']}: {str(b.get('summary', ''))[:50]}")
+            n = repeat_fails.get(b["id"], 0)
+            print(
+                f"    - {b['id']}: {str(b.get('summary', ''))[:50]}"
+                + (f"（累计失败 {n} 次，勿原样重派）" if n else "")
+            )
 
     print("== watch（drain 事件等待器）==")
     for line in _watch.status_lines():
@@ -206,6 +214,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(
             "  有 needs_leader 条目（drain 跳过）：查 state/backlog.json 后决定"
             "重派 / 改任务书 / 上报用户"
+        )
+    if repeat_fails:
+        print(
+            f"  [!] 重复失败 {len(repeat_fails)} 条（跨 run 累计 ≥2 次）："
+            "上下文/轮数/任务书粒度失配的症状，改单再派，别原样重投"
         )
     if live:
         print(

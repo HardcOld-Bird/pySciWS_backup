@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pysci.paths import ORCHESTRATION_ROOT
 from pysci.skills.orchestration.tools import checks as checks_mod
+from pysci.skills.orchestration.tools import watch
 from pysci.skills.orchestration.tools.checks import run_checks
 from pysci.skills.orchestration.tools.delivery import Artifact
 from pysci.skills.orchestration.tools.registry import REGISTRY_PATH, Registry
@@ -62,6 +64,27 @@ def test_repo_shipped_registry_keeps_figure_audit_check():
     data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     assert "figure-audit" in data.get("checks", {})
     assert "orch-tests" in data.get("checks", {})
+
+
+def test_repo_shipped_registry_devops_turns_above_80():
+    """夜航实锤：多部分大单在 80 轮处三连 run_failed（台账 num_turns 恒 80）——腰斩的是
+    参数不是规格（backlog 20261012-073700-leader 要求 1）。随附 registry 必须已抬到 150
+    且留着注记，防止下一次有人把它改回 80。timeout 维持 10800（3h 内 150 轮有余量）。"""
+    devops = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))["members"]["devops"]
+    assert devops["max_turns"] == 150
+    assert devops["timeout_s"] == 10800
+    assert "num_turns" in devops.get("turns_note", "")
+
+
+def test_orchestration_skill_carries_sole_top_level_mount_warning():
+    """代码与文档同源：mount_lines() 的硬警示必须同步进技能真本「交付判读与决策点」段
+    （组长读的是文档，命中事故时读的是那一段——backlog 20261012-073700-leader 要求 2）。"""
+    text = (ORCHESTRATION_ROOT / "skills" / "orchestration" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "唯一顶层命令" in text
+    assert "`&`" in text and "父任务终结" in text
+    assert "唯一顶层命令" in "\n".join(watch.mount_lines())  # 两侧同源，不是各写一套
 
 
 def test_run_checks_routes_orch_tests_without_path_placeholder(monkeypatch):

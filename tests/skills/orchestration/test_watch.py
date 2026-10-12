@@ -502,3 +502,142 @@ def test_cli_watch_appears_in_command_surface(capsys):
     with pytest.raises(SystemExit):
         orch.main(["--help"])
     assert "watch" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# 挂载文案硬化 + fired 未确认补账（backlog 20261012-073700-leader 要求 2/3）
+# ---------------------------------------------------------------------------
+def _ev(event: str = "QUEUE-COMPLETE", ts: str | None = None) -> dict:
+    """构造一条与 watch._emit 同形的 fired 记录（format_event 需要的键齐全）。"""
+    return {
+        "ts": ts or watch._now(),
+        "event": event,
+        "subject": "run-night",
+        "detail": "处理 2 项",
+        "action": "查 outbox",
+    }
+
+
+def test_mount_lines_warns_that_watch_must_be_sole_top_level_command():
+    """夜航停摆 6h 的形态必须写进挂载指令本身：`&` 嵌入=父任务终结连坐杀等待器。"""
+    warn = [line for line in watch.mount_lines() if "唯一顶层命令" in line]
+    assert len(warn) == 1
+    assert "`&`" in warn[0] and "父任务终结" in warn[0]
+    indented = [
+        line for line in watch.mount_lines(indent="    ") if "唯一顶层命令" in line
+    ]
+    assert indented[0].startswith("    ")  # 缩进面一并生效（并入他方 [NEXT] 段时对齐）
+
+
+def test_approve_next_section_carries_sole_command_warning(
+    iso_state, monkeypatch, capsys
+):
+    """快照断言（success_criteria 2）：approve 的 [NEXT] 段带着这行警示出。"""
+    sid = seed_suggestion(iso_state)
+    monkeypatch.setattr(drain, "_spawn_detached", lambda argv, **kw: None)
+    assert (
+        workflow.cmd_approve(
+            Namespace(suggestion_id=sid, note="采纳", no_wake=False, effort=None)
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "[NEXT]" in out and "唯一顶层命令" in out
+
+
+def test_from_backlog_next_section_carries_sole_command_warning(
+    iso_state, monkeypatch, capsys
+):
+    """同上，走 dispatch --from-backlog 通道（交办当刻组长看到的就是这一段）。"""
+    seed_backlog(iso_state, [{"id": "b1", "status": "pending", "summary": "s"}])
+
+    class _Stub:
+        code = 0
+        kind = "result"
+        body = "done"
+        error = ""
+
+    monkeypatch.setattr(orch, "do_dispatch", lambda member, **kw: _Stub())
+    assert (
+        orch.cmd_dispatch(
+            Namespace(
+                member="devops",
+                text=None,
+                task=None,
+                from_backlog=True,
+                name=None,
+                session="latest",
+                effort=None,
+                model_tier=None,
+                max_turns=None,
+                timeout=None,
+                dirs=None,
+                plan=None,
+                step=None,
+                no_checks=False,
+                no_retry=False,
+            )
+        )
+        == 0
+    )
+    assert "唯一顶层命令" in capsys.readouterr().out
+
+
+def test_fired_unacked_listed_once_then_acked(iso_state, monkeypatch):
+    """「命中了但没人知道」的账：逐条补报明细，且**展示即确认**，第二次不再刷。"""
+    monkeypatch.setattr(watch, "snapshot", _seq(_snap()))
+    st = watch.arm()
+    e1 = _ev("NEEDS-LEADER", ts="2026-10-12T01:00:00+08:00")
+    e2 = _ev("QUEUE-COMPLETE", ts="2026-10-12T03:00:00+08:00")
+    st.update(fired=[e1, e2], fired_ack="", last_exit="event")
+    watch.save_state(st)
+
+    out = "\n".join(watch.status_lines())
+    assert "fired 未确认=2" in out
+    assert "NEEDS-LEADER run-night" in out and "QUEUE-COMPLETE run-night" in out
+    assert watch.load_state()["fired_ack"] == e2["ts"]  # 水位推到末条 ts
+    assert "fired 未确认" not in "\n".join(watch.status_lines())
+
+
+def test_fired_lines_in_unmounted_status(iso_state, monkeypatch):
+    """watch 早已死透（未挂载分支）也要把 fired 明细端出来，不只报补账事件。"""
+    monkeypatch.setattr(watch, "snapshot", _seq(_snap()))
+    st = watch.arm()
+    st.update(heartbeat_at="", fired=[_ev()], fired_ack="")
+    watch.save_state(st)
+    out = "\n".join(watch.status_lines())
+    assert "未挂载" in out and "fired 未确认=1" in out
+
+
+def test_active_mount_does_not_steal_fired_ack(iso_state, monkeypatch):
+    """活跃等待器（无 last_exit）不补报 fired——唤醒通道还归它自己。"""
+    monkeypatch.setattr(watch, "snapshot", _seq(_snap()))
+    st = watch.arm()
+    st.update(fired=[_ev()], fired_ack="")
+    watch.save_state(st)
+    out = "\n".join(watch.status_lines())
+    assert "已挂载" in out and "fired 未确认" not in out
+    assert watch.load_state()["fired_ack"] == ""  # 没抢账
+
+
+def test_arm_carries_unacked_fired_across_mounts(iso_state, monkeypatch):
+    """重新挂载不得抹掉未确认的账；确认过的则随新基线清掉。"""
+    monkeypatch.setattr(watch, "snapshot", _seq(_snap()))
+    st = watch.arm()
+    owed = _ev(ts="2026-10-12T03:00:00+08:00")
+    done_ev = _ev("NEEDS-LEADER", ts="2026-10-12T02:00:00+08:00")
+    st.update(fired=[done_ev, owed], fired_ack=done_ev["ts"])
+    watch.save_state(st)
+
+    watch.arm()
+    after = watch.load_state()
+    assert [e["ts"] for e in after["fired"]] == [owed["ts"]]
+    assert after["fired_ack"] == done_ev["ts"]
+
+
+def test_unacked_fired_treats_missing_watermark_as_all_pending(iso_state):
+    """旧版 watch.json 没有 fired_ack 键 → 全部视为未确认（宁可多报一次，不可沉默）。"""
+    st = {"fired": [_ev(), _ev("NEEDS-LEADER")]}
+    assert len(watch.unacked_fired(st)) == 2
+    assert watch.unacked_fired({"fired": [], "fired_ack": ""}) == []
+    assert watch.ack_fired([]) == []  # 空账不写水位

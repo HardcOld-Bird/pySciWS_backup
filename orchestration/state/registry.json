@@ -17,13 +17,14 @@
     "devops": {
       "pod": "orchestration\\pods\\devops",
       "model_tier": "flash",
-      "max_turns": 80,
+      "max_turns": 150,
       "timeout_s": 10800,
       "mcp_config": ".qoder/mcp.json",
       "extra_dirs": [
         "."
       ],
-      "tier_note": "2026-10-10 用户裁决降档；架构敏感项由组长派发时 --model-tier max 升档；台账观察 2-3 周"
+      "tier_note": "2026-10-10 用户裁决降档；架构敏感项由组长派发时 --model-tier max 升档；台账观察 2-3 周",
+      "turns_note": "2026-10-12 夜航实测：多部分大单（E2/E6-prep）在 80 轮处三连 run_failed（num_turns 恒 80，00:04/01:38/03:29）——腰斩的是参数不是规格，故 80→150；timeout 维持 10800（3h 内 150 轮实测有余量）。观察点：若仍见 num_turns 触顶，属任务粒度过大，应拆单而非继续加轮。"
     },
     "reviewer": {
       "pod": "orchestration\\pods\\reviewer",

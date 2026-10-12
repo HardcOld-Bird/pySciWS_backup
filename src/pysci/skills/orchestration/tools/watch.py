@@ -79,6 +79,9 @@ DONE_IDENTITY_FIELDS: tuple[str, ...] = ("done", "done_completed", "done_count")
 #: 黑匣子环形缓冲帧数。命中/超时之外，脱靶复盘只需要「最近几帧各自看见了什么」。
 RECENT_MAX: int = 10
 
+#: ``fired`` 审计留痕保留条数。
+FIRED_KEEP: int = 20
+
 
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -476,6 +479,49 @@ def last_words_lines(state: dict[str, Any] | None = None) -> list[str]:
     return out
 
 
+def unacked_fired(state: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """``fired`` 里尚未被 ``orch status`` 确认过的事件（水位线 :data:`fired_ack` 之上）。
+
+    watch 命中即写 ``fired`` 然后退出——唤醒靠**后台任务完成通知**，而通知只随「顶层
+    单命令挂载」这条通道存在。2026-10-12 夜航的形态是：挂载被 `&` 嵌进别的命令，
+    事件命中、留痕完整，唤醒却永远没送出。故 ``fired`` 才是命中事实的持久面，水位线
+    让它**至少被补报一次**而不是一直沉默、也不重复刷屏。
+
+    ts 由 :func:`_now` 产出（同时区、秒精度 ISO 串），字典序即时间序；水位线缺失
+    （旧版 watch.json 无 ``fired_ack`` 键）时全部视为未确认——宁可多报一次。
+    """
+    st = state if state is not None else load_state()
+    ack = str(st.get("fired_ack", "") or "")
+    return [e for e in (st.get("fired") or []) if str(e.get("ts", "")) > ack]
+
+
+def ack_fired(events: list[dict[str, Any]], *, state: dict[str, Any] | None = None):
+    """把水位线推到 ``events`` 末条并落盘（展示即确认，与补账的一次性清算同语义）。"""
+    st = state if state is not None else load_state()
+    if events:
+        st["fired_ack"] = str(events[-1].get("ts", "") or _now())
+        save_state(st)
+    return events
+
+
+def fired_lines() -> list[str]:
+    """``orch status`` 的 fired 未确认明细段：**展示即确认**（就地推进水位线）。
+
+    自读自写盘，调用方勿传自己的旧 state 字典——``reconcile()`` 会整体重写
+    watch.json，拿旧副本回写会把刚推进的补账基线覆盖回去（水位与基线互相抹掉，
+    正是本单要杜绝的「命中了但没人知道」的另一种复发形态）。
+    """
+    ev = unacked_fired()
+    if not ev:
+        return []
+    out = [
+        f"  [!] fired 未确认={len(ev)} 起（watch 已命中，唤醒未必送达；现补报明细）："
+    ]
+    out.extend(f"    · {format_event(e)}" for e in ev)
+    ack_fired(ev)
+    return out
+
+
 def mounted(state: dict[str, Any] | None = None) -> bool:
     """watch 是否仍在挂载：心跳新鲜度在 interval×3+60 s 宽限内。
 
@@ -517,11 +563,19 @@ def arm(
         "polls": 0,
         "base": cur,
         "fired": [],
+        "fired_ack": "",
         "recent": [],
     }
     prior = load_state()
     if prior.get("armed_at"):
         state["prev"] = _legacy(prior)
+        # 未确认的命中跨任继承：watch.json 是全局单例、新挂载整体覆写，若前任的
+        # fired 从未被 status 呈现过（嵌入式挂载丢唤醒的夜航形态），这些账必须活过
+        # 覆写——否则「命中了但没人知道」会被下一次挂载永久抹掉。
+        carry = unacked_fired(prior)
+        if carry:
+            state["fired"] = carry[-FIRED_KEEP:]
+            state["fired_ack"] = str(prior.get("fired_ack", "") or "")
     save_state(state)
     return state
 
@@ -553,6 +607,9 @@ def mount_lines(*, indent: str = "", header: bool = True) -> list[str]:
         f"  {watch_argv()}",
         "  命中单行退出：CRASH / QUOTA-STOP / NEEDS-LEADER <id> / QUEUE-COMPLETE；"
         "超时无事件打印 TIMEOUT。",
+        "  ⚠ 必须作为后台 Bash 调用的**唯一顶层命令**——禁止用 `&`/`&&`/管道把它嵌进"
+        "其他命令：父任务终结会连坐杀死等待器，事件命中也没有唤醒通道"
+        "（2026-10-12 夜航停摆 6h 的直接成因）。",
         "  watch 随本会话消亡、不影响后台 drain；漏挂由下次 orch status 补账。",
     ]
     return [f"{indent}{line}" for line in lines]
@@ -594,11 +651,15 @@ def _touch(
 
 
 def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> None:
-    """命中收场：``fired`` 审计留痕（最近 20 条）+ ``exit_reason`` + 单行呈现 + 重挂提示。"""
+    """命中收场：``fired`` 审计留痕（最近 :data:`FIRED_KEEP` 条）+ ``exit_reason`` + 单行呈现。
+
+    ``fired`` 只追加、不置水位线：本进程打出的单行**可能**永远到不了组长会话
+    （挂载通道被 `&` 嵌死时的夜航形态），确认权交给 ``orch status`` 的展示动作。
+    """
     fired = list(state.get("fired", []))
     for ev in events:
         fired.append({"ts": _now(), **ev})
-    state["fired"] = fired[-20:]
+    state["fired"] = fired[-FIRED_KEEP:]
     state["last_exit"] = "event"
     state["exit_reason"] = "event:" + ",".join(str(e["event"]) for e in events)
     save_state(state)
@@ -741,7 +802,7 @@ def status_lines() -> list[str]:
             return [
                 f"  ⊘ 上次运行已结束（{state['last_exit']}，心跳 {age:.0f}s 前）——"
                 f"继续等待请重挂：{watch_argv()}"
-            ]
+            ] + fired_lines()
         return [
             f"  ▶ 已挂载（心跳 {age:.0f}s 前，每 {interval}s 轮询，已跑 "
             f"{state.get('polls', 0)} 轮）——命中将以原生后台通知送达"
@@ -760,6 +821,7 @@ def status_lines() -> list[str]:
             out.append(f"    · {format_event(ev)}")
     else:
         out.append("  （自上次基线以来无新事件）")
+    out.extend(fired_lines())  # reconcile 之后：水位与基线各写各的，互不覆盖
     if _workflow.backlog_pending() or _drain.lock_status()["state"] == "running":
         out.append("  等待 drain：后台运行 pysci-orch watch（退出即唤醒）")
     return out
@@ -775,14 +837,17 @@ def cmd_watch(args: Any) -> int:
 
 __all__ = [
     "DONE_IDENTITY_FIELDS",
+    "FIRED_KEEP",
     "KILLED",
     "RECENT_MAX",
     "WATCH_PATH",
+    "ack_fired",
     "advance_base",
     "arm",
     "cmd_watch",
     "detect",
     "detect_events",
+    "fired_lines",
     "fmt_frame",
     "format_event",
     "last_words_lines",
@@ -794,5 +859,6 @@ __all__ = [
     "run_watch",
     "snapshot",
     "status_lines",
+    "unacked_fired",
     "watch_argv",
 ]

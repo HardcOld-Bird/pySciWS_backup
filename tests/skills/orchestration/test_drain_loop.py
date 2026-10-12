@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import json
+from argparse import Namespace
 
-from pysci.skills.orchestration.tools import dispatch, drain, workflow
+from pysci.skills.orchestration.tools import dispatch, drain, orch, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
 from .conftest import read_backlog, seed_backlog
@@ -123,3 +124,95 @@ def test_backlog_task_text_shared_builder():
     # push 规程句与 charter 一致（限时 best-effort），旧「不 push」矛盾句不得回潮
     assert "push 规程" in text and "best-effort" in text
     assert "不 push" not in text
+
+
+# ---------------------------------------------------------------------------
+# 跨 run 失败计数（backlog 20261012-073700-leader 要求 4：防重派盲目）
+# ---------------------------------------------------------------------------
+def _done(state, name: str, items: list) -> None:
+    """落一份 ``devops-runs/<name>.done`` run 摘要（只关心 items 面）。"""
+    d = state / "devops-runs"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{name}.done").write_text(
+        json.dumps(
+            {"count": len(items), "elapsed_s": 1.0, "items": items},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_failure_counts_accumulates_across_runs(iso_state):
+    """同一 run 内一条 id 至多败一次（失败即 needs_leader，drain 不再重取），
+    所以「重复失败」这个信号只能跨 ``.done`` 汇总——本测试钉住汇总口径。"""
+    _done(iso_state, "20261012-010000.done", [{"id": "a", "status": "run_failed"}])
+    _done(
+        iso_state,
+        "20261012-020000.done",
+        [
+            {"id": "a", "status": "blocked"},
+            {"id": "b", "status": "needs_leader"},
+            {"id": "c", "status": "done"},
+        ],
+    )
+    got = drain.failure_counts()
+    assert got == {"a": 2, "b": 1}  # 成功的 c 不入账
+    assert drain.failure_counts(limit=1) == {"a": 1, "b": 1}  # 只看最近一份
+    assert drain.failure_counts(limit=0) == got
+
+
+def test_failure_counts_excludes_quota_exhausted(iso_state):
+    """额度耗尽是渠道级故障、条目无罪复位——计入会把「渠道没了」误读成「单写坏了」。"""
+    _done(
+        iso_state,
+        "20261012-030000.done",
+        [
+            {"id": "q", "status": "quota_exhausted"},
+            {"id": "r", "status": "parse_error"},
+        ],
+    )
+    assert drain.failure_counts() == {"r": 1}
+
+
+def test_failure_counts_fail_soft_on_bad_files(iso_state):
+    d = iso_state / "devops-runs"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "broken.done").write_text("{不是 json", encoding="utf-8")
+    (d / "noitems.done").write_text(json.dumps({"count": 0}), encoding="utf-8")
+    (d / "junk.done").write_text(
+        json.dumps(
+            {"items": [None, {"status": "run_failed"}, {"id": "", "status": "blocked"}]}
+        ),
+        encoding="utf-8",
+    )
+    assert drain.failure_counts() == {}  # 坏摘要/缺 id/非字典项一律跳过，不抛
+
+
+def test_status_shows_repeat_failure_hint(iso_state, monkeypatch, capsys):
+    """组长决定重派的那一眼，必须同时看到「同条目累计失败次数」与出声提示。"""
+    seed_backlog(
+        iso_state,
+        [
+            {"id": "a", "status": "needs_leader", "summary": "大单"},
+            {"id": "b", "status": "needs_leader", "summary": "小单"},
+        ],
+    )
+    _done(iso_state, "20261012-010000.done", [{"id": "a", "status": "run_failed"}])
+    _done(iso_state, "20261012-020000.done", [{"id": "a", "status": "run_failed"}])
+    _done(iso_state, "20261012-030000.done", [{"id": "b", "status": "blocked"}])
+    monkeypatch.setattr(drain, "_pid_alive", lambda pid: False)
+    orch.cmd_status(Namespace())
+    out = capsys.readouterr().out
+    assert "累计失败 2 次，勿原样重派" in out
+    assert "重复失败 1 条" in out  # 只有 a 达阈值（≥2）
+    assert "小单（累计失败" not in out  # 单次失败是常态，不出声
+
+
+def test_status_quiet_without_repeat_failures(iso_state, monkeypatch, capsys):
+    seed_backlog(iso_state, [{"id": "a", "status": "needs_leader", "summary": "s"}])
+    _done(iso_state, "20261012-010000.done", [{"id": "a", "status": "run_failed"}])
+    monkeypatch.setattr(drain, "_pid_alive", lambda pid: False)
+    orch.cmd_status(Namespace())
+    out = capsys.readouterr().out
+    assert "needs_leader 条目 1" in out
+    assert "累计失败" not in out and "重复失败" not in out
