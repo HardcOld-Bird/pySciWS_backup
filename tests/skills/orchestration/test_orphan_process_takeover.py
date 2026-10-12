@@ -13,6 +13,10 @@
 
 身份闸（pid 会被系统复用）与「判不出来就不开火」的保守方向是本单的安全核心，故
 每个通路都各钉正反两例，而不是只看日志文案。
+
+与抢救面的分工（backlog 20261012-234000-leader）：本模块只管「同名会不会双写」；
+升代之前「面上还有没有没保住的进度」由 ``test_salvage_recovery.py`` 钉——过去这两件事
+被混成了一个 ``worktree remove --force``，升代顺带把进度也销毁了。
 """
 
 from __future__ import annotations
@@ -36,7 +40,7 @@ from pysci.skills.orchestration.tools import (
 )
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import FAKE_HOP_PID, envelope, read_backlog, seed_backlog
+from .conftest import FAKE_HOP_PID, GitFaces, envelope, read_backlog, seed_backlog
 
 OID = "20261012-184000-leader"
 SID = "11111111-2222-3333-4444-555555555555"
@@ -85,7 +89,9 @@ def takeover(iso_state, iso_registry, tmp_path, monkeypatch):
         encoding="utf-8",
     )
     wt_root = tmp_path / "worktrees"
-    wt_root.mkdir()
+    wt_root.mkdir(
+        exist_ok=True
+    )  # iso_state 已按同一锚建过（本夹具只是把 patch 再钉一次）
     # drain 读的是 workflow.WORKTREES_ROOT（动态属性），一处 patch 即两面生效
     monkeypatch.setattr(workflow, "WORKTREES_ROOT", wt_root)
     return SimpleNamespace(
@@ -268,12 +274,6 @@ def test_dispatch_notes_pid_at_spawn(iso_dispatch, monkeypatch):
 # ---------------------------------------------------------------------------
 # 第四面回收：开火与不开火
 # ---------------------------------------------------------------------------
-def _no_cleanup(monkeypatch):
-    monkeypatch.setattr(
-        drain, "cleanup_orphan_worktrees", lambda ids, log=None: list(ids)
-    )
-
-
 def test_reclaim_terminates_live_writer_and_clears_ledger(takeover, monkeypatch):
     seed_backlog(takeover.state, [ORPHAN_ITEM])
     _seed_hop(takeover)
@@ -457,7 +457,8 @@ def test_drain_takeover_kills_then_reuses_name(takeover, monkeypatch):
     monkeypatch.setattr(procs, "pid_is_session", lambda pid, sid: True)
     monkeypatch.setattr(procs, "terminate_tree", _kill)
     monkeypatch.setattr(drain, "KILL_GRACE_S", 0)  # 免真等复查间隔
-    monkeypatch.setattr(drain, "_run_git", lambda *a: (0, ""))
+    git = GitFaces(takeover.wt_root).patch(monkeypatch)
+    git.face(OID)  # 干净面：无未提交、不领先 main
     fake = _FakeDispatch()
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
 
@@ -467,6 +468,7 @@ def test_drain_takeover_kills_then_reuses_name(takeover, monkeypatch):
     assert summary["reclaimed"] == [OID]
     assert killed == [FAKE_HOP_PID]
     assert "worktrees_regenerated" not in summary, "已确认干净却改了单号"
+    assert summary["worktrees_cleaned"] == [OID] and git.commits == []
     assert _hop(takeover)["pid"] == 0, "处置完不留陈在途标记"
     text = run_log.read_text(encoding="utf-8")
     assert "终止孤儿会话进程" in text and "异名重建" not in text
@@ -483,7 +485,8 @@ def test_drain_takeover_rebuilds_when_writer_wont_die(takeover, monkeypatch):
     monkeypatch.setattr(
         procs, "terminate_tree", lambda pid: killed.append(pid) or (True, "ok")
     )
-    monkeypatch.setattr(drain, "_run_git", lambda *a: (0, ""))
+    git = GitFaces(takeover.wt_root).patch(monkeypatch)
+    git.face(OID)
     monkeypatch.setattr(drain, "KILL_GRACE_S", 0)
     fake = _FakeDispatch()
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
@@ -491,24 +494,35 @@ def test_drain_takeover_rebuilds_when_writer_wont_die(takeover, monkeypatch):
     summary = drain.drain_backlog(drain.new_run_log())
 
     assert summary["worktrees_regenerated"] == {OID: f"{OID}-r2"}
+    assert git.commits == [], "干净面隔离中也不该被打成抢救提交"
     assert f"worktree add {OID}-r2`" in fake.texts[0]
     assert read_backlog(takeover.state)[0]["worktree"] == f"{OID}-r2"
     assert _hop(takeover)["pid"] == 0
 
 
 def test_drain_takeover_rebuilds_on_lingering_dir(takeover, monkeypatch):
-    """remove 报 0 但目录还在（旧句柄不放）→ 同样判「没干净」，不开同名双写。"""
+    """remove 报 0 但目录还在（旧句柄不放）→ 判「没干净」开新一代名，**但进度先保住**。
+
+    旧契约在这里销毁整个面（backlog 20261012-234000-leader 要消灭的那一半）：新契约里
+    残骸目录不进去写（git 读数不可信），分支与提交被记进条目的抢救面，续作任务书直接
+    给出 ``cherry-pick`` 取回方式——升代与保进度是两件事，过去被混成了「删」。
+    """
     seed_backlog(takeover.state, [ORPHAN_ITEM])
     (takeover.wt_root / OID).mkdir()  # 残骸目录
     monkeypatch.setattr(drain, "_pid_alive", lambda pid: False)
-    monkeypatch.setattr(drain, "_run_git", lambda *a: (0, ""))
+    git = GitFaces(takeover.wt_root).patch(monkeypatch)
+    git.face(OID, registered=False, lingering=True, unmerged=2, head="c0ffee12")
     fake = _FakeDispatch()
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
 
     summary = drain.drain_backlog(drain.new_run_log())
 
     assert summary["worktrees_regenerated"] == {OID: f"{OID}-r2"}
-    assert f"worktree add {OID}-r2`" in fake.texts[0]
+    assert summary["worktrees_salvaged"] == [OID], "升代不等于销毁：读数得交回队列"
+    assert not [c for c in git.calls if c[:1] == ("-C",)], "残骸目录不进去写"
+    assert ("branch", "-D", f"wt-{OID}") not in git.calls, "未合并的分支就是进度本体"
+    assert "cherry-pick --no-commit c0ffee12" in fake.texts[0]
+    assert read_backlog(takeover.state)[0]["salvage"]["commit"] == "c0ffee12"
 
 
 def test_drain_dry_does_not_fire_fourth_face(takeover, monkeypatch):

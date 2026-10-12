@@ -81,15 +81,20 @@ def _archive(sugg: Path, dest_dir: Path) -> Path:
     return target
 
 
+def _backlog_save(data: dict) -> None:
+    """把整本 backlog 写回磁盘（与 :func:`_backlog_append` 同一格式，读-改-写用）。"""
+    BACKLOG_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
 def _backlog_append(entry: dict) -> int:
     data = {"version": 1, "items": []}
     if BACKLOG_PATH.exists():
         data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
     items = data.setdefault("items", [])
     items.append(entry)
-    BACKLOG_PATH.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    _backlog_save(data)
     return len(items)
 
 
@@ -182,9 +187,13 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
     member = seed.get("member")
     seed_effort = _effort_key(seed)
     group: list[dict] = []
-    if member and max_batch > 1:
+    if member and max_batch > 1 and not seed.get("salvage"):
         for it in items:
             if it is seed or it.get("status") != "pending":
+                continue
+            if it.get("salvage"):
+                # 续作单各带自己的抢救面（一跳一树），不组包：合并实施会把两份
+                # 未收尾进度塞进同一棵树，指令里的「原地续完」就自相矛盾了
                 continue
             # 组包只吃**同档位**：一批只有一跳，effort 是跳级参数——混档会让被标的项
             # 按种子档位跑完，静默污染台账 A/B 数据（backlog 20261010-orch-effort-per-item）
@@ -379,6 +388,213 @@ def backlog_requeue(item_id: str, note: str = "") -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# 抢救续作面（backlog 20261012-234000-leader：崩溃/腰斩留下的未收尾进度自动接手续完）
+# ---------------------------------------------------------------------------
+#: 抢救链深度上限：同一份工作最多自动续作几跳。到顶就不再自动立单、只在 note 留话——
+#: 一个反复修不好的单若每跳都能再生一单，队列就成了自我复制的永动机。
+SALVAGE_MAX_CHAIN: int = 3
+
+#: 续作条目的来源标记（与 Tier A 自动立案的 ``source: tier-a`` 同字段同意图：复盘时一眼
+#: 看出这条不是组员提的建议，是机器接的手）。
+SALVAGE_SOURCE = "salvage"
+
+#: 抢救记录的键（drain 侧构造，任务书 / status / watch 三处读取；缺键只降级显示不抛）。
+SALVAGE_FIELDS: tuple[str, ...] = ("worktree", "branch", "commit", "path", "reason")
+
+
+def _salvage_note(record: dict) -> str:
+    """抢救事实的单行注记（进条目 note——有人手读 backlog 时不必再挖 JSON 字段）。"""
+    return (
+        f"｜抢救续作：面={record.get('worktree', '?')} 分支={record.get('branch', '?')} "
+        f"提交={record.get('commit') or '?'} 成因={record.get('reason', '?')}"
+        + ("（未提交部分未能自动取回）" if record.get("uncommitted") else "")
+    )
+
+
+def _salvage_entry_id(items: list[dict]) -> str:
+    """续作条目 id：``<ts>-salvage``，同秒撞名顺延 ``.<n>``（Tier A 立案同法）。"""
+    taken = {str(i.get("id", "")) for i in items}
+    base = f"{_filed_ts()}-salvage"
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}.{n}" in taken:
+        n += 1
+    return f"{base}.{n}"
+
+
+def backlog_attach_salvage(name: str, record: dict) -> dict | None:
+    """把抢救事实挂到**仍在队列里**的条目上（崩溃回收后会被自动重派的那条）。
+
+    匹配判据：status ∈ {pending, in_progress}，且 ``name`` 等于条目 id 或它的世代名
+    ``<id>-r<gen>``（回收先把孤儿复位 pending，再由本函数注记，所以这里看到的 pending
+    就是那条待续完的原始单）。needs_leader **不匹配也不改状态**——「须组长处理」是已经
+    做出的裁决，代码无权撤销；那种收场走 :func:`backlog_append_salvage` 另立续作单。
+
+    Args:
+        name: 抢救时的隔离面名（= 条目 id 或 ``<id>-r<gen>``）。
+        record: :func:`drain.salvage_worktree` 的读数（含 commit/branch/path）。
+
+    Returns:
+        注记成功的条目（磁盘副本）；没匹配到、或同一提交已挂过（幂等）→ None。
+    """
+    if not name or not record or not BACKLOG_PATH.exists():
+        return None
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    hit = None
+    for item in data.get("items", []):
+        entry_id = str(item.get("id", ""))
+        if not entry_id:
+            continue
+        if name != entry_id and not name.startswith(f"{entry_id}-r"):
+            continue
+        if item.get("status") not in ("pending", "in_progress"):
+            continue
+        hit = item
+        break
+    if hit is None:
+        return None
+    prev = hit.get("salvage") or {}
+    if str(prev.get("commit", "")) == str(record.get("commit", "")):
+        return None  # 同一份进度已挂过：重跑回收不重复注记
+    merged = {
+        **record,
+        "from": str(hit.get("id")),
+        "gen": int(prev.get("gen") or 0) + 1,
+    }
+    hit["salvage"] = merged
+    hit["note"] = f"{str(hit.get('note') or '')}{_salvage_note(merged)}".strip("｜")
+    _backlog_save(data)
+    return dict(hit)
+
+
+def backlog_append_salvage(item: dict, record: dict) -> dict | None:
+    """为「已标 needs_leader 但面上还有未收尾进度」的单自动注册**续作单**。
+
+    与 :func:`backlog_attach_salvage` 的分工看条目状态：还在队列里（pending/
+    in_progress）的会被 drain 自动重派，挂注记即可原地续完；已经落到 needs_leader 的
+    不再会自动重派，就必须**另立一条 pending**——否则「进度保住了」仍然只是躺在分支上
+    等人想起来（本单要消灭的手动动作）。原条目保持 needs_leader 并留下续作单 id，
+    组长仍看得见「这一跳失败了」这一事实。
+
+    插在**第一个 pending 之前**：未合并提交随 main 前进而贬值，续作不是新提案，
+    不该再排一次队。
+
+    Args:
+        item: 失败收场的原条目（drain 手里的种子字典）。
+        record: :func:`drain.salvage_worktree` 的读数。
+
+    Returns:
+        新注册的续作条目；同一提交已在队 / 链深超 :data:`SALVAGE_MAX_CHAIN` → None
+        （后者只在原条目 note 里留「须组长处置」）。
+    """
+    orig_id = str(item.get("id", ""))
+    commit = str(record.get("commit") or "")
+    if not orig_id or not BACKLOG_PATH.exists():
+        return None
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    items = data.get("items", [])
+    orig = next((i for i in items if str(i.get("id", "")) == orig_id), None)
+    gen = int((item.get("salvage") or {}).get("gen") or 0) + 1
+    if commit and commit in {
+        str((i.get("salvage") or {}).get("commit", ""))
+        for i in items
+        if i.get("salvage") and i.get("status") in ("pending", "in_progress")
+    }:
+        return None  # 同一份 WIP 已有单在队，不重复立
+    if gen > SALVAGE_MAX_CHAIN:
+        if orig is not None:
+            orig["note"] = (
+                f"{str(orig.get('note') or '')}｜抢救链已达上限 {SALVAGE_MAX_CHAIN}，"
+                f"不再自动续作{_salvage_note(record)}——须组长处置"
+            ).strip("｜")
+            _backlog_save(data)
+        return None
+    entry = {
+        "id": _salvage_entry_id(items),
+        "member": item.get("member") or "leader",
+        "summary": f"（续作 {orig_id}）{str(item.get('summary', ''))[:150]}",
+        "kind": item.get("kind") or "defect",
+        "success_criteria": item.get("success_criteria")
+        or (
+            f"抢救提交 {commit or '?'} 的内容合并进 main，且续作面合并后 "
+            "``git rev-list --count main..wt-<隔离面名>`` 为空"
+        ),
+        "evidence": item.get("evidence") or item.get("evidence_file") or "",
+        "source": SALVAGE_SOURCE,
+        "salvage": {**record, "from": orig_id, "gen": gen},
+        "status": "pending",
+        "proposed": _now(),
+        "note": f"自动续作单（上次尝试 {orig_id} 未收尾，进度已抢救）",
+    }
+    if orig is not None:
+        orig["note"] = (
+            f"{str(orig.get('note') or '')}｜已自动立续作单 {entry['id']}".strip("｜")
+        )
+    idx = next(
+        (k for k, i in enumerate(items) if i.get("status") == "pending"), len(items)
+    )
+    items.insert(idx, entry)
+    _backlog_save(data)
+    return entry
+
+
+def backlog_salvage() -> list[dict]:
+    """队列里带抢救记录的条目（pending / in_progress）——watch 事件与 status 段的读数源。"""
+    if not BACKLOG_PATH.exists():
+        return []
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    return [
+        i
+        for i in data.get("items", [])
+        if i.get("salvage") and i.get("status") in ("pending", "in_progress")
+    ]
+
+
+def _salvage_instruction(sal: dict, wt: str) -> str:
+    """任务书里的续作指令：三条路按「面还在不在册、名字换没换」分。
+
+    ``pysci-dev worktree add`` 只会从当前 HEAD 新建分支，所以三种现场各有各的正确命令——
+    把命令写死在任务书里，续作的一跳才不必自己猜（猜错就是把进度丢在旧分支上）。
+    """
+    commit = str(sal.get("commit") or "")
+    branch = str(sal.get("branch") or "")
+    path = str(sal.get("path") or "")
+    reason = str(sal.get("reason") or "上次尝试未收尾")
+    sha = commit or "<抢救提交>"
+    if str(sal.get("worktree") or "") != wt:
+        how = (
+            f"上次尝试（成因：{reason}）的进度已抢救为提交 ``{sha}``"
+            f"（分支 ``{branch}``，旧面 ``{path}``）。旧面没能确认干净，**禁止复用旧名**："
+            f"先 ``pysci-dev worktree add {wt}``，再在新面里 "
+            f"``git cherry-pick --no-commit {sha}`` 取回进度续完。"
+        )
+    elif sal.get("registered"):
+        how = (
+            f"上次尝试（成因：{reason}）的隔离面**还在原地且登记在册**：``{path}``"
+            f"（分支 ``{branch}``，抢救提交 ``{sha}``）。"
+            f"``pysci-dev worktree add {wt}`` 会报「已登记在册」——那不是故障，"
+            "是让你直接进那棵树续完：**不要** reset/另起，也别从 main 重开"
+            "（未合并的进度只在这条分支上）。"
+        )
+    else:
+        how = (
+            f"上次尝试（成因：{reason}）的工作树已不在，但分支 ``{branch}`` 上还留着"
+            f"未合并的抢救提交 ``{sha}``。名字没换所以 **别用** "
+            f"``pysci-dev worktree add {wt}``（它从 main 建分支，撞已存在的名会 128 失败），"
+            f"改把原分支请回来：``git worktree add "
+            f"{(WORKTREES_ROOT / wt).as_posix()} {branch}``——进度就在脚下那棵树里。"
+        )
+    tail = (
+        "\n\n旧面当时还有**未提交**改动没能自动取回（抢救提交只含未合并进度里的已提交部分）："
+        f"开工先 ``git -C {path} status --short`` 判读，该留的手工移植。"
+        if sal.get("uncommitted")
+        else ""
+    )
+    return f"**续作指令（自动抢救）**：{how}{tail}\n\n"
+
+
 def backlog_task_text(item: dict) -> str:
     """由 backlog 条目生成 devops 派发任务书正文。
 
@@ -402,6 +618,10 @@ def backlog_task_text(item: dict) -> str:
             f"**本条已进入第 {gen} 代隔离面**：上一代回收时没能确认干净（旧会话进程或"
             "残骸仍在原地写着），严禁改用回旧名。\n\n"
         )
+    sal = item.get("salvage") or {}
+    if sal:
+        # 抢救事实进任务书：worker 不必猜「上次到哪了」，指令里直接给它续作面与提交
+        head += _salvage_instruction(sal, wt)
     return head + (
         "要求：以 worktree 隔离实施，**worktree 名用这里给出的隔离面名**"
         "（默认=本条目 id，孤儿回收升代后带 ``-r<代>`` 后缀）——"

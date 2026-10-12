@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+import shutil
 
 import pytest
 
@@ -125,6 +126,12 @@ def iso_state(tmp_path, monkeypatch):
     """
     state = tmp_path / "state"
     state.mkdir(exist_ok=True)
+    # 隔离面根目录（backlog 20261012-234000-leader）：抢救判据要读 ``<root>/<name>``
+    # 在不在、进不进去写 git——不 patch 就是拿开发者机器上真实的 worktree 台账判脏，
+    # 测试结论随开发者当时开了几棵树而变（更坏：对真树打出抢救提交）。
+    wt_root = tmp_path / "worktrees"
+    wt_root.mkdir(exist_ok=True)
+    monkeypatch.setattr(workflow, "WORKTREES_ROOT", wt_root)
     monkeypatch.setattr(workflow, "BACKLOG_PATH", state / "backlog.json")
     monkeypatch.setattr(workflow, "SUGGESTIONS_DIR", state / "suggestions")
     monkeypatch.setattr(workflow, "REPLIES_DIR", state / "replies")
@@ -246,6 +253,148 @@ def seed_backlog(state, items):
 def read_backlog(state):
     """读回 backlog.json 的 items 列表。"""
     return json.loads((state / "backlog.json").read_text(encoding="utf-8"))["items"]
+
+
+# ---------------------------------------------------------------------------
+# git 桩：按「隔离面台账」自洽应答（抢救判据的测试替身）
+# ---------------------------------------------------------------------------
+class GitFaces:
+    """替 ``drain._run_git`` 造一个**内部自洽**的假 git——按面台账答题，不是全绿。
+
+    为什么不用 ``lambda *a: (0, "")``：抢救判据读的是「目录在不在、登记不登记、有没有
+    未提交/未合并内容」这一组**互相约束**的事实，而全绿桩把它们全钉成「未知」——于是
+    只能测出保守方向（永不删），测不出「确认干净照旧销毁」那一支，也测不出脏面到底
+    有没有真被打成提交。台账式应答让每个用例只声明它关心的那几个事实，其余由本类推
+    导出一致读数（remove 之后目录就没了、commit 之后 head 就变了）。
+
+    用法::
+
+        git = GitFaces(wt_root).patch(monkeypatch)
+        git.face("a1", dirty=True)                 # 在册活面 + 未提交改动
+        git.face("a2", unmerged=2, head="c0ffee1")  # 干净但有未合并提交
+        git.face("a3", unmerged=1, registered=False, lingering=True)  # remove 摘不掉的残骸
+    """
+
+    def __init__(self, wt_root):
+        self.wt_root = pathlib.Path(wt_root)
+        self.specs: dict[str, dict] = {}
+        self.calls: list[tuple] = []
+        self.commits: list[tuple[str, str]] = []  # (面名, 提交消息)
+
+    def face(
+        self,
+        name: str,
+        *,
+        dirty: bool = False,
+        unmerged: int = 0,
+        head: str = "c0ffee1",
+        branch: bool = True,
+        registered: bool = True,
+        lingering: bool = False,
+    ) -> GitFaces:
+        """声明一个隔离面的事实（``registered``=在册；``lingering``=remove 后目录仍趴着）。"""
+        path = self.wt_root / name
+        spec = {
+            "name": name,
+            "path": path,
+            "branch": branch,
+            "branch_name": f"wt-{name}",
+            "head": head,
+            "dirty": dirty,
+            "unmerged": unmerged,
+            "registered": registered,
+            "lingering": lingering,
+        }
+        self.specs[name] = spec
+        if registered or lingering:
+            path.mkdir(parents=True, exist_ok=True)
+        return self
+
+    # -- 应答面 --------------------------------------------------------------
+    def _by_path(self, raw: str) -> dict | None:
+        want = pathlib.Path(raw).as_posix().lower()
+        for spec in self.specs.values():
+            if spec["path"].as_posix().lower() == want:
+                return spec
+        return None
+
+    def _by_branch(self, bname: str) -> dict | None:
+        for spec in self.specs.values():
+            if spec["branch"] and spec["branch_name"] == bname:
+                return spec
+        return None
+
+    def run(self, *args: str) -> tuple[int, str]:
+        self.calls.append(args)
+        head, *rest = args
+        if head == "-C":
+            path, *tail = rest
+            spec = self._by_path(path)
+            if spec is None or not spec["registered"]:
+                # 未登记/未知目录：git 在里面根本读不出仓库（残骸的真实下场）
+                return 1, "fatal: not a git repository"
+            if tail[:2] == ["status", "--short"]:
+                return 0, "M src/x.py" if spec["dirty"] else ""
+            if tail[:1] == ["add"]:
+                return 0, ""
+            if tail[:2] == ["commit", "--no-verify"]:
+                msg = tail[-1]
+                self.commits.append((spec["name"], msg))
+                spec["head"] = "wipsalv1"
+                spec["unmerged"] = max(spec["unmerged"], 1)
+                spec["dirty"] = False
+                return 0, "[wt-… 新建 WIP]"
+            return 0, ""
+        if args[:3] == ("rev-parse", "--verify", "--quiet"):
+            bname = str(args[3]).removeprefix("refs/heads/")
+            spec = self._by_branch(bname)
+            return (0, spec["head"]) if spec else (1, "fatal: not a valid object name")
+        if args[:2] == ("rev-parse", "--short"):
+            spec = self._by_branch(str(args[2]))
+            return (0, spec["head"]) if spec else (1, "")
+        if args[:2] == ("rev-list", "--count"):
+            bname = str(args[2]).split("..")[-1]
+            spec = self._by_branch(bname)
+            if spec is None:
+                return 1, "fatal: bad revision"
+            return 0, str(spec["unmerged"])
+        if args[:2] == ("worktree", "list"):
+            lines = [f"worktree {pathlib.Path('.').resolve().as_posix()}"]
+            lines += [
+                f"worktree {s['path'].as_posix()}"
+                for s in self.specs.values()
+                if s["registered"]
+            ]
+            return 0, "\n".join(lines)
+        if args[:3] == ("worktree", "remove", "--force"):
+            spec = self._by_path(str(args[3]))
+            if spec is None or not spec["registered"]:
+                return 1, "fatal: is not a working tree"
+            spec["registered"] = False
+            if not spec["lingering"]:
+                shutil.rmtree(spec["path"], ignore_errors=True)
+            return 0, ""
+        if args[:2] == ("branch", "-D"):
+            spec = self._by_branch(str(args[2]))
+            if spec is None:
+                return 1, "error: branch not found"
+            spec["branch"] = False
+            spec["registered"] = False
+            return 0, f"Deleted branch {spec['branch_name']}"
+        if args[:2] == ("worktree", "prune"):
+            return 0, ""
+        return 0, ""
+
+    def patch(self, monkeypatch, module=None) -> GitFaces:
+        """把本台账接到 ``drain._run_git``（module 可换别的被测模块）。"""
+        target = module if module is not None else drain
+        monkeypatch.setattr(target, "_run_git", self.run)
+        return self
+
+    def removed(self, name: str) -> bool:
+        """该面的目录是否已随 remove 消失（残骸面答 False，供断言）。"""
+        spec = self.specs.get(name)
+        return bool(spec) and not spec["path"].exists()
 
 
 def seed_suggestion(state, member="devops", sid=None):

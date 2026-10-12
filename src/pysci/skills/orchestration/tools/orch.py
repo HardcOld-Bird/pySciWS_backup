@@ -226,6 +226,20 @@ def cmd_status(args: argparse.Namespace) -> int:
                 + (f"（累计失败 {n} 次，勿原样重派）" if n else "")
             )
 
+    salvaged = _workflow.backlog_salvage()
+    if salvaged:
+        print(
+            f"  [+] 抢救续作面 {len(salvaged)}（未收尾进度已落成提交、队列自动接着消化，"
+            "无须手动盘点）："
+        )
+        for b in salvaged[:5]:
+            sal = b.get("salvage") or {}
+            print(
+                f"    - {b['id']}: 源单={sal.get('from', '?')} "
+                f"面={sal.get('worktree', '?')} 提交={sal.get('commit') or '(无)'}"
+                + ("（旧面未提交部分待判读）" if sal.get("uncommitted") else "")
+            )
+
     print("== 判决包健康（REFACTOR §5.1/§5.6：基建判断的通道用量）==")
     for line in _verdict.health_lines():
         print(line)
@@ -827,7 +841,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser(
         "watch",
         help="阻塞等待 drain 事件（CRASH/QUOTA-STOP/CHANNEL-STOP/NEEDS-LEADER/"
-        "QUEUE-COMPLETE）；"
+        "QUEUE-COMPLETE/SALVAGE）；"
         "组长以 Bash run_in_background 启动，退出即唤醒本会话",
     )
     p.add_argument(

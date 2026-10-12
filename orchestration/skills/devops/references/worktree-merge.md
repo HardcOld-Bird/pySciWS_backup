@@ -77,8 +77,12 @@ main，main 就认到一把两头都不属于自己的锁——`orch status` 误
 ## 3. worktree 命名与孤儿回收
 
 - **drain/backlog 派发**：`<任务名>` = 条目 id（take_first 记 `worktree=id`）。会话中途死亡的
-  孤儿条目，下次 drain 回收据 `wt-<id>` 名做 `git worktree remove --force` + `branch -D`；
-  名字不合规就定位不到残留，重派 `worktree add` 还会撞名；
+  孤儿条目，下次 drain 回收据 `wt-<id>` 名定位残留面；名字不合规就定位不到，重派
+  `worktree add` 还会撞名；
+- **回收先抢救（第五面=进度，backlog 20261012-234000-leader）**：孤儿面**不再默认销毁**——有未提交
+  改动 / 未合并提交 / 读数拿不准 → 自动打 ``wip(salvage)`` 提交、保面保分支、`source=salvage`
+  续作单自动插队；`remove --force` 只对被证明干净的面开放。抢救提交**不是交付、勿据此销账**。
+  判据与续作指令形状见 orchestration 技能 `references/salvage-reclaim.md`；
 - **回收管四面**（backlog 20261012-184000-leader）：锁、backlog 条目、worktree 名之外还有
   **进程**——worker 被杀时它派生的 headless 会话活在独立进程树里，不随父进程退出，仍往原
   worktree 写。`dispatch` 在派生瞬间把会话 pid 记进运行态（`pid` 键的存活期=该跳在途期），

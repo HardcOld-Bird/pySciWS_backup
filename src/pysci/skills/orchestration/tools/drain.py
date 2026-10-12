@@ -19,7 +19,11 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
 - **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
   worker 遗留，重置 pending），并**四面**清干净它留下的写入者
   （:func:`reclaim_orphan_sessions` 终止仍活着的派生会话进程 →
-  :func:`cleanup_orphan_worktrees` 摘 worktree/branch → 任一面确认不了干净就
+  :func:`cleanup_orphan_worktrees` **先抢救再清理**：面上有未提交/未合并内容就先打成
+  WIP-salvage 提交并保留分支与工作树（:func:`salvage_worktree`），force-remove 只对
+  被证明干净的面开放；条目自动注记成「原地续完」，失败收场的单还会自动生
+  ``source=salvage`` 续作单（:func:`_salvage_progress`），组长只收 watch 知会 →
+  任一面确认不了干净就
   :func:`workflow.bump_worktree_generation` 换 ``<id>-r<gen>`` 新一代隔离面，绝不复用
   可能还有人写的旧名；worktree 名默认 = 条目 id，``--force`` 摘除 + ``prune``
   兜底，只清孤儿名不误删活跃/手动 worktree）；``backlog_take_batch`` 取队首为种子 +
@@ -810,27 +814,247 @@ def _run_git(*args: str) -> tuple[int, str]:
     return proc.returncode, ((proc.stdout or "") + (proc.stderr or "")).strip()
 
 
-def cleanup_orphan_worktrees(
-    names: list[str], run_log: Path | None = None
-) -> list[str]:
-    """清理死 worker 残留的 worktree/branch（孤儿回收的顺带动作）。
+# ---------------------------------------------------------------------------
+# 抢救面（backlog 20261012-234000-leader：未收尾进度先保住，再谈清理）
+# ---------------------------------------------------------------------------
+#: 抢救提交的消息标记：机器的保命提交必须与人的里程碑提交一眼可分——前者不该被评审，
+#: 更不能被当成「这一单做完了」的销账证据。
+SALVAGE_COMMIT_TAG = "wip(salvage)"
 
-    每个 name（= 孤儿条目 id = worktree 名，见 workflow.backlog_take_first 记录约定）：
-    ``git worktree remove --force`` 摘工作树 + ``git branch -D wt-<name>`` 删分支；末尾
-    ``git worktree prune`` 兜底清悬挂管理项（目录已删但元数据残留）。
+#: 抢救提交的 hash 长度（与 :func:`merge_commit_of` 的短 hash 口径一致，够任务书指认）。
+SALVAGE_HEAD_LEN: int = 12
 
-    **只清传入的孤儿名**——活跃/手动 worktree（别名）不受影响，故不会误删并发的手动
-    作业（对齐任务书要求）。全程 fail-open（git 缺失/超时/该 worktree 不存在均忽略）。
+
+def worktree_path(name: str) -> Path:
+    """条目隔离面的目录（与 ``pysci-dev worktree add`` 同一布局，唯一构造点）。"""
+    return workflow.WORKTREES_ROOT / name
+
+
+def _rel_path(path: Path) -> str:
+    """项目根相对 posix 串（进任务书给组员看；根外路径退回绝对 posix 串）。"""
+    try:
+        return path.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _face_registered(path: Path) -> bool:
+    """该目录是否**登记在册**（``git worktree list`` 里有它）。
+
+    区分「你的隔离面还在」和「残骸还趴着」的唯一可靠依据。残骸目录里那个 ``.git``
+    文件指向已删的管理项，进去跑 ``git -C`` 的读数不可信（最坏情形回落到父仓工作区，
+    把主仓的脏面算成这个条目的进度）——所以判脏之前先问登记，未登记的一面绝不进去写。
+    """
+    rc, out = _run_git("worktree", "list", "--porcelain")
+    if rc != 0:
+        return False
+    want = path.as_posix().lower()
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            if Path(line[len("worktree ") :].strip()).as_posix().lower() == want:
+                return True
+    return False
+
+
+def worktree_salvage_state(name: str, *, main_ref: str = "main") -> dict[str, Any]:
+    """孤儿 worktree「还有什么没保住」的只读读数——回收动手前唯一的依据。
+
+    读不出证据时一律往「有东西要救」的方向判（``unknown``）：``worktree remove --force``
+    是这条链路上唯一不可逆的动作，误判干净＝销毁进度，误判脏＝只是多留一个面没人删，
+    两个代价不对称（backlog 20261012-234000-leader 的裁定）。
+
+    Args:
+        name: 隔离面名（= 条目 id 或 ``<id>-r<gen>``）。
+        main_ref: 比较基准分支，「未合并」＝这条分支领先它的提交数。
 
     Returns:
-        实际清理到（worktree 或 branch 至少其一删除成功）的 name 列表。
+        ``{worktree, path, present, registered, branch, branch_exists, dirty, unmerged,
+        head, unknown, salvageable}``；``salvageable`` 是「有东西要救或证据不足」的合取。
+    """
+    path = worktree_path(name)
+    branch = f"wt-{name}"
+    present = path.is_dir()
+    state: dict[str, Any] = {
+        "worktree": name,
+        "path": path,
+        "present": present,
+        "registered": present and _face_registered(path),
+        "branch": branch,
+        "branch_exists": False,
+        "dirty": False,
+        "unmerged": 0,
+        "head": "",
+        "unknown": False,
+    }
+    rc, _out = _run_git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
+    state["branch_exists"] = rc == 0
+    rc, out = _run_git("rev-parse", "--short", branch)
+    if rc == 0 and out.strip():
+        state["head"] = out.strip()[:SALVAGE_HEAD_LEN]
+    rc, out = _run_git("rev-list", "--count", f"{main_ref}..{branch}")
+    if rc == 0 and out.strip().isdigit():
+        state["unmerged"] = int(out.strip())
+    else:
+        state["unknown"] = True
+    if state["registered"]:
+        rc, out = _run_git("-C", str(path), "status", "--short")
+        if rc == 0:
+            state["dirty"] = bool(out.strip())
+        else:
+            state["dirty"] = True
+            state["unknown"] = True
+    elif present:
+        # 在册与否分不清时按「目录里有东西」算：宁可多留一个面，不赌它干净
+        state["dirty"] = True
+        state["unknown"] = True
+    state["salvageable"] = bool(
+        (state["present"] or state["branch_exists"])
+        and (state["dirty"] or state["unmerged"] > 0 or state["unknown"])
+    )
+    return state
+
+
+def salvage_worktree(
+    name: str,
+    run_log: Path | None = None,
+    *,
+    entry_id: str = "",
+    reason: str = "",
+    state: dict[str, Any] | None = None,
+    quarantined: bool = False,
+) -> dict[str, Any] | None:
+    """把面上没保住的进度落成一条 **WIP-salvage 提交**，分支与工作树都不删。
+
+    ``git add -A`` 收未提交改动 → ``commit`` 成抢救提交。**这里的 ``--no-verify`` 是
+    必需品不是违规**：pre-commit 跑 ruff/测试，半制成品几乎必挂，钩子一失败抢救就静默
+    不发生——那正是本单要消灭的「进度靠手动才保得住」。所以提交带
+    :data:`SALVAGE_COMMIT_TAG` 标记，评审与销账面都不把它当交付（里程碑提交仍是常态纪律）。
+
+    Args:
+        name: 隔离面名。
+        run_log: 写日志面（None 静默）。
+        entry_id: 原条目 id（进提交消息，让续作的人知道这坨是谁的活儿）。
+        reason: 成因读数（``crash`` / 交付 kind），进消息与任务书。
+        state: 已读好的 :func:`worktree_salvage_state`（省一遍 git；缺省现场读）。
+        quarantined: 旧会话进程没能确认离场（第四面判 hot）。此时**绝不往别人的树里写**
+            ——并发 ``add``/``commit`` 会把它的半成品卷进我们的提交，只读记账不碰工作树。
+
+    Returns:
+        抢救记录（``workflow.backlog_attach_salvage`` 等的输入）；没什么可救 → None。
+        抢救动作失败时**仍返回记录**（``uncommitted=True``），因为「没救成」恰恰意味着
+        这个面更不能被删。
+    """
+    st = state or worktree_salvage_state(name)
+    if not st["salvageable"]:
+        return None
+    uncommitted = bool(st["dirty"])
+    wrote = False
+    if st["present"] and not st["registered"] and not quarantined:
+        _log(
+            run_log,
+            f"[!] 抢救 {name}：目录在但**未登记为 worktree**（remove --force 的残骸）"
+            "——不进去写（git 读数不可信），面原样保留、进度靠分支取回",
+        )
+    elif st["registered"] and uncommitted and not quarantined:
+        rc_add, out_add = _run_git("-C", str(st["path"]), "add", "-A")
+        msg = (
+            f"{SALVAGE_COMMIT_TAG}: 抢救 {entry_id or name} 的未收尾进度（{_now()}）\n\n"
+            f"成因={reason or '未记录'}。本提交由 drain 孤儿回收自动打出：不是交付、"
+            "勿据此销账，续作者应在其上补完。"
+        )
+        rc_cm, out_cm = _run_git(
+            "-C", str(st["path"]), "commit", "--no-verify", "-m", msg
+        )
+        if rc_cm == 0:
+            wrote = True
+        elif rc_add != 0:
+            _log(
+                run_log,
+                f"[!] 抢救 {name}：git add 失败（{out_add[:120]}）——面与分支原样保留",
+            )
+        else:
+            # 「nothing to commit」也走这一支：读数说脏、落盘说不脏（行尾规范化/并发写），
+            # 不重复动手，但把差异写清楚，别让人以为进度已经进提交。
+            _log(
+                run_log,
+                f"[!] 抢救 {name}：commit 未发生（{out_cm[:120]}）——面与分支原样保留",
+            )
+    rc, head = _run_git("rev-parse", "--short", st["branch"])
+    if rc == 0 and head.strip():
+        st["head"] = head.strip()[:SALVAGE_HEAD_LEN]
+    record: dict[str, Any] = {
+        "worktree": name,
+        "branch": st["branch"],
+        "commit": st["head"],
+        "path": _rel_path(Path(st["path"])),
+        "reason": reason,
+        "entry": entry_id,
+        "registered": bool(st["registered"]),
+        "present": bool(st["present"]),
+        "uncommitted": bool(uncommitted and not wrote),
+        "unmerged_before": int(st["unmerged"] or 0),
+        "salvaged_at": _now(),
+    }
+    _log(
+        run_log,
+        f"[+] 抢救孤儿 worktree {name}：分支 {st['branch']} 保留、提交 "
+        f"{record['commit'] or '(无)'}"
+        + ("（未提交部分未能自动取回）" if record["uncommitted"] else "")
+        + ("［隔离：旧会话进程未确认离场，未动工作树］" if quarantined else ""),
+    )
+    return record
+
+
+def cleanup_orphan_worktrees(
+    names: list[str],
+    run_log: Path | None = None,
+    *,
+    salvage_sink: dict[str, dict[str, Any]] | None = None,
+    quarantined: Any = (),
+) -> list[str]:
+    """回收死 worker 的 worktree/branch——**先抢救没能确认干净的**。
+
+    每个 name 三分支：
+
+    - **确认干净**（无未提交改动、分支不领先 main）：``worktree remove --force`` +
+      ``branch -D``，与旧行为逐字相同（「不回归」的那一支）；
+    - **有未收尾内容**：先 :func:`salvage_worktree` 落成 WIP 提交，**分支与工作树都不删**
+      ——force-remove 只对被证明干净的面开放。抢救读数写进 ``salvage_sink``，调用方据此
+      注记条目 / 自动续作（原行为是把这些直接销毁）；
+    - **隔离中**（``quarantined``，旧会话没能确认离场）：不碰工作树，只读记账 + 保面。
+
+    全程 fail-open（git 缺失/超时/该 worktree 不存在均忽略）；**只动传入的孤儿名**——
+    活跃/手动 worktree（别名）不受影响，不会误删并发的手动作业。
+
+    Args:
+        names: 孤儿条目 id 列表（= worktree 名，见 :func:`workflow.backlog_take_first`）。
+        run_log: 写日志面。
+        salvage_sink: 可选字典，收 ``{name: 抢救记录}``（None 则只保不报）。
+        quarantined: 须隔离对待的名字（旧写者还在/摘不掉），不往里写。
+
+    Returns:
+        实际清理到（worktree 或 branch 至少其一删除成功）的 name 列表——**抢救过的面
+        不出现在这里**，它没被清掉，是有意保留的续作面。
     """
     cleaned: list[str] = []
+    guard = {str(q) for q in quarantined if q}
     for name in names:
         if not name:
             continue
-        wt_path = workflow.WORKTREES_ROOT / name  # 与 pysci-dev worktree add 同源
-        rc_wt, _ = _run_git("worktree", "remove", "--force", str(wt_path))
+        state = worktree_salvage_state(name)
+        if state["salvageable"]:
+            record = salvage_worktree(
+                name,
+                run_log,
+                entry_id=name,
+                reason="crash",
+                state=state,
+                quarantined=name in guard,
+            )
+            if record is not None and salvage_sink is not None:
+                salvage_sink[name] = record
+            continue
+        rc_wt, _ = _run_git("worktree", "remove", "--force", str(worktree_path(name)))
         rc_br, _ = _run_git("branch", "-D", f"wt-{name}")
         if rc_wt == 0 or rc_br == 0:
             cleaned.append(name)
@@ -849,10 +1073,14 @@ def worktree_dir_present(name: str) -> bool:
     Windows 上只要有进程还开着该目录里的句柄（典型=还没被终止的 headless 会话），删除
     就是异步/半途的；把「rc=0」当「已清空」再重建同名 worktree，等于把两个写者请回同
     一个房间（backlog 20261012-184000-leader 的实证路径）。
+
+    抢救过的面**该不该走到这里**看登记状态（:func:`_face_registered`）：在册的面留在原地是
+    设计意图——进度已在分支上，同名续完正是「零手动」要的那条路；目录虽在却未在册的是
+    上一代 remove 的残骸，必须升代，否则同名重建就是把两个写者请回同一个房间。
     """
     if not name:
         return False
-    return (workflow.WORKTREES_ROOT / name).exists()
+    return worktree_path(name).exists()
 
 
 # ---------------------------------------------------------------------------
@@ -994,6 +1222,62 @@ def _clear_hop_pid(hit: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # drain 循环
 # ---------------------------------------------------------------------------
+def _salvage_progress(
+    seed: dict[str, Any], run_log: Path, *, reason: str
+) -> dict[str, Any] | None:
+    """失败/停止收场的种子：先保住面上的未收尾进度，再让队列自动接手续完。
+
+    两条通路按条目此刻的状态分（组长裁决 2026-10-12 23:4x「全自动，不靠手动盘点」）：
+
+    - 条目还在队列里（系统性故障 → 已复位 pending）：就地注记抢救事实，下一跳回到**同一
+      棵树**接着干（:func:`workflow.backlog_attach_salvage`）；
+    - 条目已落 needs_leader（blocked/run_failed/parse_error/验收 FAIL → 不会再自动重派）：
+      另立 ``source=salvage`` 续作单插到 pending 队首，原条目仍是 needs_leader——
+      「这一跳失败了」是组长要看到的事实，代码不替他忘掉。
+
+    Args:
+        seed: 本批种子条目。
+        run_log: run 日志面。
+        reason: 成因读数（进提交消息与任务书，续作者据此判读）。
+
+    Returns:
+        抢救记录（附 ``continuation`` 若有续作单）；面上没东西可救 / 抢救未成 → 记录或 None。
+    """
+    name = worktree_name(seed)
+    state = worktree_salvage_state(name)
+    if not state["salvageable"]:
+        return None
+    record = salvage_worktree(
+        name,
+        run_log,
+        entry_id=str(seed.get("id", "")),
+        reason=reason,
+        state=state,
+    )
+    if record is None:
+        return None
+    if workflow.backlog_attach_salvage(name, record) is not None:
+        _log(
+            run_log,
+            f"[+] 未收尾进度已抢救并就地续作：{name}（提交 "
+            f"{record['commit'] or '无'}，成因 {reason}）",
+        )
+        return record
+    cont = workflow.backlog_append_salvage(seed, record)
+    _log(
+        run_log,
+        f"[+] 未收尾进度已抢救：{name}（提交 {record['commit'] or '无'}，成因 {reason}）"
+        + (
+            f" → 自动续作单 {cont['id']} 已插到队首"
+            if cont
+            else " → 续作单未立（同一提交已在队或抢救链已到顶，见条目 note）"
+        ),
+    )
+    if cont:
+        record = {**record, "continuation": cont["id"]}
+    return record
+
+
 def _drain_batch(
     seed: dict[str, Any], group: list[dict[str, Any]], run_log: Path, *, dry: bool
 ) -> list[dict[str, Any]]:
@@ -1006,9 +1290,12 @@ def _drain_batch(
       （种子必含——必做项，防御性兜底）；组包中未选的项保持 pending 留待下轮；每个 done
       项记 ``batch_size``/``batch_seed``（供 orch stats 批量分布）。
     - **blocked/run_failed/parse_error/验收FAIL**：仅**种子** → needs_leader，组包项保持
-      pending（**不连坐**——它们未被承诺、未 in_progress）。
+      pending（**不连坐**——它们未被承诺、未 in_progress）。种子隔离面里还有未收尾内容
+      时，收尾前先走 :func:`_salvage_progress`：进度落成抢救提交、续作单自动入队，
+      不需要组长盘点。
     - **系统性故障（``quota_exhausted`` / ``channel_error``）**：种子复位 pending、组包项
-      保持 pending，返回该 kind 由调用方触发全局停止（渠道坏了，不逐项 needs_leader）。
+      保持 pending，返回该 kind 由调用方触发全局停止（渠道坏了，不逐项 needs_leader）；
+      半路断掉的一跳同样先抢救。
 
     Returns:
         per-id 结果字典列表（写入 .done 的 items）：种子/每个完成组包项各一条
@@ -1117,6 +1404,9 @@ def _drain_batch(
         headline = _systemic_headline(kind)
         err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
         backlog_requeue(seed_id, note=f"{headline}全局停止，复位待渠道恢复")
+        # 停止不等价于「这一跳没干过活」：额度/渠道在半路断掉时，面上可能已经写了
+        # 一半。条目复位回队后下一跳回到同一棵树续完，别从 main 重开。
+        salv = _salvage_progress(seed, run_log, reason=kind)
         _log(
             run_log,
             f"[{_systemic_mark(kind)}] 批次 {label} {kind} → 种子复位回队，"
@@ -1127,6 +1417,7 @@ def _drain_batch(
                 "id": seed_id,
                 "status": kind,
                 "error": err[:200],
+                "salvage": (salv or {}).get("commit", ""),
                 "elapsed_s": elapsed,
             }
         ]
@@ -1137,20 +1428,24 @@ def _drain_batch(
     backlog_needs_leader(
         seed_id, note=f"drain 跳过（交付={outcome.kind}）：{err[:160]}"
     )
+    salv = _salvage_progress(seed, run_log, reason=str(outcome.kind or "needs_leader"))
     _log(
         run_log,
         f"[!] 批次 {label} 失败 → 种子 needs_leader（{outcome.kind}），"
         f"组包 {len(group_ids)} 项保持 pending 不连坐：{err[:120]}",
     )
-    return [
-        {
-            "id": seed_id,
-            "status": "needs_leader",
-            "kind": outcome.kind,
-            "error": err[:200],
-            "elapsed_s": elapsed,
-        }
-    ]
+    item_out: dict[str, Any] = {
+        "id": seed_id,
+        "status": "needs_leader",
+        "kind": outcome.kind,
+        "error": err[:200],
+        "elapsed_s": elapsed,
+    }
+    if salv:
+        item_out["salvage"] = salv["commit"]
+        if salv.get("continuation"):
+            item_out["continuation"] = salv["continuation"]
+    return [item_out]
 
 
 def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
@@ -1248,10 +1543,30 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
             # 第四面（进程）先动手：旧会话还活着时删它的 worktree，只会让它对着已删目录
             # 继续写（Windows 上句柄不放，remove 也未必真清干净），随后重派就是双写。
             hot = reclaim_orphan_sessions(orphans, run_log)
-            cleaned = cleanup_orphan_worktrees(orphans, run_log)
+            salvaged: dict[str, Any] = {}
+            cleaned = cleanup_orphan_worktrees(
+                orphans, run_log, salvage_sink=salvaged, quarantined=hot
+            )
             if cleaned:
                 summary["worktrees_cleaned"] = cleaned
-            stuck = sorted(set(hot) | {n for n in orphans if worktree_dir_present(n)})
+            for name, record in salvaged.items():
+                # 回收已把这些条目复位 pending，注记即「原地续完」；本轮循环就会再取到它
+                workflow.backlog_attach_salvage(name, record)
+            if salvaged:
+                summary["worktrees_salvaged"] = sorted(salvaged)
+            # 抢救过的面**不进「待升代」集合**——但只有**登记在册**的那部分才算数：
+            # 目录还在却没登记（remove --force 的残骸）就不是「你的面」，同名重建=两个
+            # 写者进同一房间（backlog 20261012-184000-leader 的实证路径）。残骸照样升代，
+            # 只是进度不再被销毁：抢救记录里的分支/提交会被续作任务书指回。
+            stuck = sorted(
+                set(hot)
+                | {
+                    n
+                    for n in orphans
+                    if worktree_dir_present(n)
+                    and not (salvaged.get(n) or {}).get("registered")
+                }
+            )
             if stuck:
                 renamed = bump_worktree_generation(stuck)
                 summary["worktrees_regenerated"] = renamed
