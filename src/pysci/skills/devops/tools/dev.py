@@ -522,8 +522,17 @@ def cmd_venv_sync(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 #: 跨合并必搬的 gitignored 运行态清单（backlog 20261010-worktree-merge-cp）。
 #: --no-ff 只带 git 面，这些文件不随迁；registry-runtime-split 那次靠 devops 人工 cp
-#: 才保住 5 成员 6 会话。此清单是**保底**——真实搬运集 = 本清单 ∪ git 侧 ignored 发现。
+#: 才保住 5 成员 6 会话。此清单是**保底**——真实搬运集 = 本清单 ∪ git 侧 ignored 发现，
+#: 再挖掉 :data:`MERGE_STATE_EXCLUDE_SUFFIXES`。
 MERGE_STATE_FILES = ("sessions-runtime.json", "registry.presplit.json", "watch.json")
+
+#: **永不跨树搬**的运行态后缀。``*.lock``（devops/inspector/bencher）不是数据而是
+#: 「谁在跑」的活体读数，其归属判据 = 文件里的 pid + run_log 双锚；把 worktree 侧的锁
+#: cp 进 main，main 就认到一把 pid 与 run_log **都不属于它**的锁——``orch status`` 据此
+#: 误报「worker 在跑」，而真在跑的 drain 反而被这把假锁挡住不唤醒（backlog
+#: 20261012-191512-devops 实测：两次合并各拖进一把 inspector.lock，人工 rm 才解封）。
+#: 锁的现场性由判活面负责（drain ``lock_status`` 认墓碑/残骸），合并面一律不搬。
+MERGE_STATE_EXCLUDE_SUFFIXES = (".lock",)
 
 
 def _state_dir(root: Path) -> Path:
@@ -562,7 +571,11 @@ def _cp_ignored_state(wt: Path, main: Path, ts: str) -> list[tuple[str, str]]:
         ``[(name, tag)]``——tag=``new`` 表目标原本不存在，否则 ``bak=<备份名>``。
         fail-open：worktree 侧文件缺失/读不动跳过本条不抛。
     """
-    names = set(MERGE_STATE_FILES) | _ignored_state_names(wt)
+    names = {
+        n
+        for n in set(MERGE_STATE_FILES) | _ignored_state_names(wt)
+        if not n.endswith(MERGE_STATE_EXCLUDE_SUFFIXES)
+    }
     sd_wt = _state_dir(wt)
     sd_main = _state_dir(main)
     sd_main.mkdir(parents=True, exist_ok=True)
