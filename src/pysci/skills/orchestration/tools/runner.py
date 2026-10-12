@@ -139,6 +139,41 @@ class Envelope:
         )
 
 
+class SeatShapeError(ValueError):
+    """席位/会话/配置路径**不是字符串**——配置形状与在跑代码的读法不匹配时止血。
+
+    事故原型（backlog 20261013-003000-leader，2026-10-13 00:25 实测）：21:14 派生的
+    drain 进程内存里是**旧代码**（``Registry.models`` 裸合并跟踪面），00:22 并入 main 的
+    新跟踪面是**链形态**（数组）。旧读法把整条链当一个席位取走，list 进 argv 后由
+    ``subprocess`` 抛 ``expected str, bytes or os.PathLike object, not list``——这条消息
+    不说是哪个旗标、也不说值从哪来，排查只能靠 git blame 猜。长生命周期 worker 撞上配置
+    迁移是**一类**竞态（进程数小时不改代码，磁盘随时在换形状），故在派生**之前**拦。
+    """
+
+
+def _argv_value(flag: str, value: object) -> str:
+    """进 argv 的取值闸：只放行字符串，其余带着**旗标名与实况值**报错。
+
+    Args:
+        flag: 该值所属的命令行旗标（写进消息，定位用）。
+        value: 待进 argv 的值。
+
+    Returns:
+        原样字符串（不做 ``str()`` 兜底——静默串化会把 list 变成 ``"['a', 'b']"``
+        这种「启动即失败」的垃圾席位，比报错更难查）。
+
+    Raises:
+        SeatShapeError: 值不是字符串。
+    """
+    if isinstance(value, str):
+        return value
+    raise SeatShapeError(
+        f"{flag} 收到 {type(value).__name__} 而非席位串：{value!r}"
+        "——跟踪面形状与本进程代码读法不匹配（长生命周期 worker 撞上配置迁移即此类）；"
+        "处置：重启该 worker 载入新代码，或把该值写成字符串/取链首一名"
+    )
+
+
 def build_command(
     member: Member,
     prompt: str,
@@ -166,20 +201,25 @@ def build_command(
         exe: 覆盖注册表/默认 exe。
 
     Returns:
-        subprocess 可用的 argv 列表。
+        subprocess 可用的 argv 列表（每个元素都是字符串，见 :func:`_argv_value`）。
+
+    Raises:
+        SeatShapeError: 席位/会话/配置路径不是字符串——在派生**之前**带着旗标名报错。
     """
     del timeout_note  # 保留参数位，暂无用途
     exe = exe or resolve_exe()
+    sid = _argv_value("--resume" if resume else "--session-id", session_id)
     cmd = [str(exe), "--cwd", str(member.pod), "-p", prompt, "-o", "json"]
-    cmd += ["--resume", session_id] if resume else ["--session-id", session_id]
+    cmd += ["--resume", sid] if resume else ["--session-id", sid]
     cmd += ["--max-turns", str(max_turns or member.max_turns)]
     if model:
-        cmd += ["-m", model]
+        cmd += ["-m", _argv_value("-m", model)]
     if effort:
-        cmd += ["--reasoning-effort", effort]
+        cmd += ["--reasoning-effort", _argv_value("--reasoning-effort", effort)]
     if member.mcp_config:
         # pod 相对路径：headless 以 pod 为 cwd，相对路径即 pod 内文件（Phase 0 实锤）
-        cmd += ["--mcp-config", member.mcp_config, "--strict-mcp-config"]
+        cfg = _argv_value("--mcp-config", member.mcp_config)
+        cmd += ["--mcp-config", cfg, "--strict-mcp-config"]
     return cmd
 
 

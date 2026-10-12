@@ -51,6 +51,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -567,6 +568,36 @@ def _log(run_log: Path | None, line: str) -> None:
             fh.write(f"[{datetime.now().strftime('%H:%M:%S')}] {line}\n")
     except OSError:
         pass
+
+
+def _log_exception(
+    run_log: Path | None, exc: BaseException, head: str, *, frames: int = 20
+) -> str:
+    """异常入 run 日志：一行短消息 + **完整栈回溯**；返回短消息串（进 ``.done``）。
+
+    三面派生路径（drain / bencher / inspector）同口径共用。只记 ``{type}: {exc}``
+    时，日志里能看到的就是 ``TypeError: expected str, bytes or os.PathLike object,
+    not list`` 这一句——不指文件、不指行、不指旗标，排查只能 git blame 猜落点
+    （2026-10-13 run 211429 实证，backlog 20261013-003000-leader）。后台进程无人值守，
+    栈必须由它自己留在日志里。
+
+    Args:
+        run_log: 本次 run 日志（None = 静默，仍返回短消息串）。
+        exc: 捕获到的异常（栈取自 ``exc.__traceback__``）。
+        head: 短消息前缀，如 ``drain 异常中断``。
+        frames: 栈帧上限（防循环调用把日志刷爆）。
+
+    Returns:
+        ``"{异常类型}: {消息}"`` 短串——调用方原样塞进 ``summary["error"]``。
+    """
+    brief = f"{type(exc).__name__}: {exc}"
+    if run_log is None:
+        return brief
+    stack = "".join(
+        traceback.format_exception(type(exc), exc, exc.__traceback__, limit=frames)
+    )
+    _log(run_log, f"[!] {head}：{brief}\n{stack.rstrip()}")
+    return brief
 
 
 def new_run_log(paths: WorkerPaths | None = None) -> Path:
@@ -1202,10 +1233,7 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                 "——BYOK/Mimo 改名则更新 registry.model_chains",
             )
     except Exception as exc:
-        _log(
-            run_log,
-            f"[!] 模型映射刷新失败（忽略，沿用 registry 现值）：{type(exc).__name__}: {exc}",
-        )
+        _log_exception(run_log, exc, "模型映射刷新失败（忽略，沿用 registry 现值）")
     # 刚获锁 → 此刻的 in_progress 必是已死 worker 的孤儿，回收为 pending
     orphans = backlog_reclaim_orphans()
     if orphans:
@@ -1260,8 +1288,7 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                 )
                 break
     except Exception as exc:  # 记录后仍写 .done（后台进程无人值守，不留黑洞）
-        summary["error"] = f"{type(exc).__name__}: {exc}"
-        _log(run_log, f"[!] drain 异常中断：{summary['error']}")
+        summary["error"] = _log_exception(run_log, exc, "drain 异常中断")
     finally:
         summary["count"] = len(summary["items"])
         summary["completed"] = _now()

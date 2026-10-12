@@ -47,6 +47,7 @@ from .drain import (
     WorkerPaths,
     _consume_stop_request,
     _log,
+    _log_exception,
     _now,
     _spawn_detached,
     _systemic_error_text,
@@ -385,10 +386,9 @@ def run_item(
             result["status"] = "failed" if result.get("error") else "done"
         except Exception as exc:  # noqa: BLE001 — 后台无人值守：异常即终态，不留黑洞
             result = {
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": _log_exception(run_log, exc, f"{item.get('id')} 失败"),
                 "status": "failed",
             }
-            _log(run_log, f"[!] {item.get('id')} 失败：{result['error']}")
     result["elapsed_s"] = round(time.time() - t0, 1)
     result["headline"] = _headline(item, result)
     finish(str(item["id"]), result["status"], result)
@@ -454,8 +454,7 @@ def bench_drain(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                 )
                 break
     except Exception as exc:  # noqa: BLE001 — 记录后仍写 .done（不留黑洞）
-        summary["error"] = f"{type(exc).__name__}: {exc}"
-        _log(run_log, f"[!] bencher worker 异常中断：{summary['error']}")
+        summary["error"] = _log_exception(run_log, exc, "bencher worker 异常中断")
     finally:
         summary["count"] = len(summary["items"])
         summary["completed"] = _now()

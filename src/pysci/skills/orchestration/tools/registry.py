@@ -112,11 +112,25 @@ def normalize_seats(value: Any) -> list[str]:
 
     ``""`` 保留（＝不传 ``-m`` 的合法席位裁决）；``None`` 丢弃（JSON null 容错）。
     非列表标量按单席处理；其它类型（数字等）串化后当一席——读侧宽容，写侧只有链。
+    **嵌套序列摊平**（backlog 20261013-003000-leader）：配置形状迁移期会出现「链中链」
+    （如 ``[["a","b"]]``），旧口径把它 ``str()`` 成 ``"['a', 'b']"`` 垃圾席位——一路
+    带到 ``-m`` 上「启动即失败」白烧一跳；摊平后它仍是一条合法链。dict 无席位语义，
+    丢弃（宁可退化成不传 ``-m`` 走用户级默认，也不把容器串塞进 argv）。
     """
     if value is None:
         return []
+    if isinstance(value, dict):
+        return []
     if isinstance(value, (list, tuple)):
-        return [str(item) for item in value if item is not None]
+        out: list[str] = []
+        for item in value:
+            if item is None or isinstance(item, dict):
+                continue
+            if isinstance(item, (list, tuple)):
+                out.extend(normalize_seats(item))
+                continue
+            out.append(str(item))
+        return out
     return [str(value)]
 
 
