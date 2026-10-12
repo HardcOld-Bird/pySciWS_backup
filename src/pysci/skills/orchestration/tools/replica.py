@@ -57,8 +57,6 @@ REPLICA_PREFIX: str = "bench"
 
 #: pod 内**不归档**的目录：运行期产物与草稿区（A/B 要求每轮全新，残留=复核而非生产）。
 ARCHIVE_SKIP: tuple[str, ...] = ("bench", "outbox", "inbox")
-#: pod 内需重建的 gitignored 运行目录（缺失时派发落盘/技能部署无处可去）。
-POD_RUNTIME_DIRS: tuple[str, ...] = ("bench", "outbox", "inbox", ".qoder/skills")
 
 #: 判「窗口期污染」看的知识面——只算会影响测量的那部分（§5 二元判决的归因面）。
 HARNESS_FACE: tuple[str, ...] = (
@@ -338,6 +336,19 @@ def _replica_pythonpath(replica: Path) -> str:
     return f"{src}{os.pathsep}{old}" if old else src
 
 
+#: 副本子进程的入口协议文件（**主树**的 ``pysci-bench`` 实现，按文件路径直跑）。
+#:
+#: 为什么不 ``-m pysci.skills.bencher.tools.bench``：``-m`` 让入口模块也从副本树解析，
+#: 而 bencher 包 E4（8192235）才入库——对更早的 ref，副本里根本没有这个模块，
+#: 子进程当场 ModuleNotFoundError，A/B 退化成「1.3s 空壳 done」（backlog
+#: 20261012-170000-leader 实锤）。文件直跑则 ``sys.path[0]``=主树 bench tools 目录
+#: （无 ``pysci`` 包可遮蔽），``import pysci`` 仍按 PYTHONPATH 命中副本——**测量协议
+#: 来自主树（稳定），被测 harness 来自副本**，正是 A/B 要的切分。
+BENCH_ENTRY: Path = (
+    Path(__file__).resolve().parents[2] / "bencher" / "tools" / "bench.py"
+)
+
+
 def _replica_call(
     replica: Path,
     bench_args: list[str],
@@ -350,6 +361,7 @@ def _replica_call(
     关键在 :func:`_replica_pythonpath`：PYTHONPATH 让 ``pysci.paths.PROJECT_ROOT`` 落在
     副本根，于是这一次调用看到的 state/pods/技能真本全是副本的。cwd 留在主树——
     cd 进副本会让 uv 就地建空 ``.venv``（devops AGENTS.md 已记录的坑）。
+    rc≠0 时把 stderr 尾巴写进调用方日志：静默失败正是空壳 done 的温床。
     """
     env = {
         **os.environ,
@@ -357,7 +369,7 @@ def _replica_call(
         "PYTHONUTF8": "1",
         "PYSCI_VENV_SCRIPTS": str(_venv_scripts(PROJECT_ROOT)),
     }
-    argv = [sys.executable, "-m", "pysci.skills.bencher.tools.bench", *bench_args]
+    argv = [sys.executable, str(BENCH_ENTRY), *bench_args]
     try:
         proc = subprocess.run(
             argv,
@@ -372,6 +384,9 @@ def _replica_call(
     except (OSError, subprocess.TimeoutExpired) as exc:
         log(f"[!] 副本调用失败：{exc}")
         return 1, "", str(exc)
+    if proc.returncode != 0:
+        tail = ((proc.stderr or "") + (proc.stdout or ""))[-400:]
+        log(f"[!] 副本调用 rc={proc.returncode}（{' '.join(bench_args[:2])}…）：{tail}")
     return proc.returncode, proc.stdout or "", proc.stderr or ""
 
 
@@ -459,7 +474,9 @@ def run_ab(
 
     Returns:
         ``{label, ref_a, ref_b, verdict, compared, pollution, escalate, sides,
-        residual_worktrees}``；``verdict`` ∈ 改善 / 未改善 / inconclusive。
+        evidence, residual_worktrees}``；``verdict`` ∈ 改善 / 未改善 / inconclusive。
+        任一侧零真实读数时置 ``error``（空壳闸）且不出判决——「没做」不许伪装成
+        「做了且未改善」。
     """
     ids = [str(c) for c in cases or []]
     if not ids:
@@ -502,15 +519,34 @@ def run_ab(
             rep = build_replica(name, ref, cases=ids, log=log)
             doc[f"commit_{side}"] = rep["commit"]
             rows = _hop_cases(
-                Path(rep["path"]), ids, label=f"{label}-{side}", tier=tier
+                Path(rep["path"]), ids, label=f"{label}-{side}", tier=tier, log=log
             )
             sides[side] = {"commit": rep["commit"], "cases": rows}
             doc["sides"] = sides
-        a_rows = {c: r for c, r in sides["a"]["cases"].items() if r}
-        b_rows = {c: r for c, r in sides["b"]["cases"].items() if r}
-        cmp = _eval.compare(b_rows, {"cases": a_rows})
-        doc["verdict"] = cmp["verdict"]
-        doc["compare"] = cmp
+        # 空壳闸（backlog 20261012-170000-leader）：占位 fail 行不是读数，不许进 compare。
+        real = {
+            side: {
+                c: r
+                for c, r in sides[side]["cases"].items()
+                if r and not r.get("synthetic")
+            }
+            for side in ("a", "b")
+        }
+        doc["evidence"] = {
+            "ledger_rows": sum(len(side_rows) for side_rows in real.values())
+        }
+        if not real["a"] or not real["b"]:
+            doc["error"] = (
+                "副本空壳完成闸：a 侧 "
+                f"{len(real['a'])}/{len(ids)}、b 侧 {len(real['b'])}/{len(ids)}"
+                " 行真实读数——副本未派发或环境失效（逐案原因见 sides 的 reasons），"
+                "无读数不构成判决"
+            )
+            log(f"[✗] {doc['error']}")
+        else:
+            cmp = _eval.compare(real["b"], {"cases": real["a"]})
+            doc["verdict"] = cmp["verdict"]
+            doc["compare"] = cmp
     finally:
         for name in names:
             destroy_replica(name, log=log)
@@ -521,9 +557,18 @@ def run_ab(
 
 
 def _hop_cases(
-    replica: Path, case_ids: list[str], *, label: str, tier: str
+    replica: Path,
+    case_ids: list[str],
+    *,
+    label: str,
+    tier: str,
+    log: Callable[[str], None] = _NO_LOG,
 ) -> dict[str, dict[str, Any]]:
-    """在副本里跑一批案，把读数取回主树台账（``runner=bencher``）。"""
+    """在副本里跑一批案，把读数取回主树台账（``runner=bencher``）。
+
+    副本未返回读数的案补 ``synthetic`` 占位行（带 rc/stderr 尾巴）——只供人查原因，
+    **不是判决证据**：run_ab 的空壳闸据此把这类行挡在 compare 之外。
+    """
     rc, out, err = _replica_call(
         replica,
         [
@@ -536,6 +581,7 @@ def _hop_cases(
             tier,
         ],
         timeout_s=_hop_timeout(case_ids),
+        log=log,
     )
     rows = rows_from_stdout(out)
     result: dict[str, dict[str, Any]] = {}
@@ -552,6 +598,7 @@ def _hop_cases(
                 "verdict": "fail",
                 "reasons": [f"副本未返回读数（rc={rc}）：{(err or out)[-200:]}"],
                 "num_turns": 0,
+                "synthetic": True,
             },
         )
     return result
