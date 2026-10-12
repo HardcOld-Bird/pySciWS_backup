@@ -686,12 +686,15 @@
       "kind": "defect",
       "success_criteria": "- registry 读数 max_turns=150；一次真实 devops 派发 >80 轮不再被截断\n（台账 num_turns>80 且交付 result）；\n- `pysci-orch approve`/`--from-backlog` 输出的 [NEXT] 挂载段含新增警示行\n（快照断言）；\n- 人工构造「watch fired 未确认」态（写 watch.json）→ `orch status` 列出\n该事件明细；确认一次后不再重复列出；\n- 全量套件无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-073700-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T07:34:57+08:00",
-      "note": "组长再派（08:0x）：卡点已解——models.minimum 未提交改动已由组长代提交 80ce9ef（护栏级登记见该 commit）。本单重排队列，须先于 #56/#57 消化（E2/E6 依赖 max_turns=150 生效）。",
-      "started_at": "2026-10-12T07:34:59+08:00",
+      "note": "drain 批量销账（commit 82a1bf7）",
+      "started_at": "2026-10-12T08:29:32+08:00",
       "worktree": "20261012-073700-leader",
-      "requeued_at": "2026-10-12T08:10:00+08:00"
+      "requeued_at": "2026-10-12T08:10:00+08:00",
+      "done_at": "2026-10-12T08:35:21+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-073700-leader"
     },
     {
       "id": "20261012-010508-devops",
@@ -700,11 +703,14 @@
       "kind": "usability",
       "success_criteria": "worktree 内不设 PYTHONPATH 跑 pysci-dev sync/doctor → 跨树告警 rc=2 且零 main 侧写入；设 PYTHONPATH 或 --force 行为如旧；tests/skills/devops 两例阳性全绿",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-010508-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T07:42:42+08:00",
-      "note": "usability 实锤（editable PROJECT_ROOT 跨树静默），devops 自检护栏批准。",
+      "note": "drain 批量销账（commit 73a2090）",
       "started_at": "2026-10-12T08:04:10+08:00",
-      "worktree": "20261012-010508-devops"
+      "worktree": "20261012-010508-devops",
+      "done_at": "2026-10-12T08:29:32+08:00",
+      "batch_size": 2,
+      "batch_seed": "20261012-010508-devops"
     },
     {
       "id": "20261012-025325-devops",
@@ -713,9 +719,12 @@
       "kind": "defect",
       "success_criteria": "属性值含 > / </ 的交付块解析出正确 path/reason/正文；gate Node 侧同核对；新增阳性用例两例与既有 parse_error 面不冲突；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-025325-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T07:42:43+08:00",
-      "note": "defect 实锤复现（静默截断比 parse_error 更隐蔽），引号感知解析批准。"
+      "note": "drain 批量销账（commit 73a2090）",
+      "done_at": "2026-10-12T08:29:32+08:00",
+      "batch_size": 2,
+      "batch_seed": "20261012-010508-devops"
     },
     {
       "id": "20261012-023430-devops",
@@ -724,9 +733,12 @@
       "kind": "usability",
       "success_criteria": "orch eval run/set-baseline 划入 devops 可调用面（README §角色边界或 charter 一处写死，含保留边界：不得触碰 approve/dispatch/drain 队列侧），注明 E4 bencher 上线后本条款退役；此后 E 系列验收交付不再出现引用批准面豁免 charter 的自我论证段",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-023430-devops.md",
-      "status": "pending",
+      "status": "needs_leader",
       "proposed": "2026-10-12T07:50:13+08:00",
-      "note": "用户裁决（2026-10-12）=方案 a：devops 获 eval 面，组长不亲执行守铁律；过渡条款+E4 退役注记。"
+      "note": "drain 跳过（交付=blocked）：`。  <blocked> **结论：本批两项（种子 20261012-023430-devops + 批次 20261012-080410-devops 方案 A+C）已实施完毕、全量测试通过、提交在 `wt-20261012-023430-devops@cce839c`（15 文件 +712/−148）。只差合并—",
+      "started_at": "2026-10-12T09:19:25+08:00",
+      "worktree": "20261012-023430-devops",
+      "needs_leader_at": "2026-10-12T09:46:46+08:00"
     },
     {
       "id": "20261012-075200-leader",
@@ -735,10 +747,12 @@
       "kind": "usability",
       "success_criteria": "一次真实 harness 改动 before/after 二元判决；evals.jsonl 字段齐备；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-075200-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-12T07:51:19+08:00",
       "note": "E2 再派（P0/#55 铺平前置）。判据见正文。",
-      "effort": "high"
+      "effort": "high",
+      "started_at": "2026-10-12T09:46:46+08:00",
+      "worktree": "20261012-075200-leader"
     },
     {
       "id": "20261012-075201-leader",
@@ -750,6 +764,40 @@
       "status": "pending",
       "proposed": "2026-10-12T07:51:19+08:00",
       "note": "E6-prep 续作（worktree 半成品抢救，防重做）。生效面留用户确认。"
+    },
+    {
+      "id": "20261012-080410-devops",
+      "member": "devops",
+      "summary": "。",
+      "kind": "defect",
+      "success_criteria": "干净 main 上跑 approve/drain 唤醒后 git status --porcelain -- orchestration/state/** 为空；models 四档解析仍全（含 minimum）；refresh_models 字节不变阳性单测；doctor 脏面哨兵阳性；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-080410-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T08:06:14+08:00",
+      "note": "defect 实锤（自愈写脏跟踪配置=周期墙，devops 挖根因漂亮）。方案 B 组长已代提交 80ce9ef（minimum 落盘），本单执行 A（三级回退+运行态面）+C（doctor/orch status 脏跟踪面哨兵）。判据见正文。"
+    },
+    {
+      "id": "20261012-082932-devops",
+      "member": "devops",
+      "summary": "**主题**：任务书要求的「合并前 git status 交集检查」缺可执行判据，`main..HEAD` 形式在分支落后 main 时必然误报",
+      "kind": "usability",
+      "success_criteria": "选 (b) 为主：pysci-dev worktree merge 内建 merge-base 提交面×main 脏项交集检查，非空打印冲突清单 rc=2；技能真本同步一行判据注记（注意 8178B 预算）；阳性单测：分支落后 main 且 main 脏时不误报、真交集时必拦；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-082932-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T09:19:22+08:00",
+      "note": "usability 实锤（main..HEAD 误报已造成一次错误 blocked）；采 (b) 工具内建+真本注记双落。",
+      "effort": "high"
+    },
+    {
+      "id": "20261012-094646-devops",
+      "member": "devops",
+      "summary": "**pysci-dev 的跨树自检误拦「标准 worktree 配方」，且 mdgen-check 的相对路径按 cwd 解析——同一配方下它校验的是另一棵树的字节**",
+      "kind": "defect",
+      "success_criteria": "跨树自检判定改为『代码面指向≠脚下树 且 意图操作脚下树』的事故形状才拦：主树根+PYTHONPATH 指向 worktree 的标准配方放行（阳性用例）；mdgen-check 路径解析固定按 PROJECT_ROOT 而非 cwd（双树用例读数一致）；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-094646-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-12T09:49:01+08:00",
+      "note": "护栏误拦自家规定配方=自相矛盾，defect 批准，与 #59 同属合并收口摩擦面。"
     }
   ]
 }
