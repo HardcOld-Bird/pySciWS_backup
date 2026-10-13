@@ -316,6 +316,15 @@ wheels = [
 ]
 
 [[package]]
+name = "chinesecalendar"
+version = "1.11.0"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/ac/6f/c14fe8aedc706fab826c0ae7fccd1c8f69610254dcb004cd386a0662b3d5/chinesecalendar-1.11.0.tar.gz", hash = "sha256:1b85d920ffee8e19a98a2a27a699a99f39ca224b3b1096aa574384d3837f5492", size = 17359, upload-time = "2025-11-04T10:22:36.108Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/19/e7/8f0215070e3a154e861a5838282f493649fa6ebcee01c9e919922917bd25/chinesecalendar-1.11.0-py2.py3-none-any.whl", hash = "sha256:9479ead6010e6001472efdf97317699882c16604c7858ba26862dc9d36d56d46", size = 11222, upload-time = "2025-11-04T10:22:34.704Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.5.0"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
@@ -2232,6 +2241,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "build123d" },
+    { name = "chinesecalendar" },
     { name = "markitdown", extra = ["pptx"] },
     { name = "matplotlib" },
     { name = "mineru-open-sdk" },
@@ -2279,6 +2289,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "build123d", specifier = ">=0.13" },
+    { name = "chinesecalendar", specifier = ">=1.10" },
     { name = "markitdown", extras = ["pptx"], specifier = ">=0.1.8" },
     { name = "matplotlib" },
     { name = "mineru-open-sdk", specifier = ">=0.2.5" },
