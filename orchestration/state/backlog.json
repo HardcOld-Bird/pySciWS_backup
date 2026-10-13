@@ -1663,11 +1663,14 @@
       "class": "mechanical",
       "channel": "mechanical",
       "remedy_shape": "change",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T16:25:45+08:00",
-      "note": "组长裁定（2026-10-13）：remedy_shape=restore（对齐判读语义，先例 #43/#44 家族），判决记录已入 findings 行；重排队列施工。",
+      "note": "drain 批量销账（commit b007b25）",
       "started_at": "2026-10-13T18:35:21+08:00",
-      "worktree": "insp-20261013-045910-mechanical"
+      "worktree": "insp-20261013-045910-mechanical",
+      "done_at": "2026-10-13T18:40:40+08:00",
+      "batch_size": 2,
+      "batch_seed": "insp-20261013-045910-mechanical"
     },
     {
       "id": "20261013-180000-leader",
@@ -1692,9 +1695,12 @@
       "kind": "usability",
       "success_criteria": "见单内判据（仲裁器矩阵/注册表生命周期/派生会话标档/端到端延期/睡到到期续跑/全量绿）",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-180500-leader.md",
-      "status": "pending",
+      "status": "needs_leader",
       "proposed": "2026-10-13T18:25:25+08:00",
-      "note": "｜组长调度：带宽治理前置（inspector 已因带宽关闭，用户指示优先）"
+      "note": "drain 跳过（交付=blocked）：backlog id=20261013-180500-leader —— 未实施，按规模/语义面受阻上报（非环境问题）\n\n**卡点**：本单是 5 个**互相咬合**的机制捆成一条，其原子单位不是一个 worker 跳；且其中一条要求**反转既有的队列级安全行为**。把它做一半（例如只落优先级表与注册表、不接延期）会产出「文档承诺了延期、代码其实还在全局停链」的半成品——正是 charter 明令禁止的形态，也会让 §6 的停止语义在文档与代码间分裂。故不施工、不建 worktree（无残留面），上报请组长拆分或重派。\n\n**规格拆解（逐条与落点，已侦察）**\n\n| # | 规格 | 落点 | 为什么不能与其他条分开验 |\n|---|---|---|---|\n| B1 | `[priority]` 优先级表（6 档，缺省见 approved） | `data/pysci_settings.toml` + `settings.py:30 read_settings` | 纯配置面，可独立交付 |\n| B2 | 活跃会话注册表 `state/active-sessions.json`（写心跳/读侧/stale>10min 清理） | 新库 + 各 worker 跳开始/结束写点 | 独立，但**只有 B3 用它**才有意义 |\n| B3 | 延期机制：`bandwidth` → 回队 pending + 指数退避 `defer_until` 2→4→8…；预算 ≤6 次 / ≤30min；不占槽；worker 睡到最近到期（≤10min） | `drain.py:1609 drain_backlog` 批循环 + 条目状态机（`workq.py`）+ `drain.py:1240` 睡眠点 | **改写队列消费语义**，必须与 B4 一起验 |\n| B4 | #105 接线：`channel_error` 处置改为「分类器 `bandwidth`→延期；`outage`/`unknown`→同席重试→链回退」 | `drain.py` 的系统性故障分支 | ← **见下「语义反转」** |\n| B5 | 预防面：`bench-pressure`（tier4）派发前置检查 | benchd 派发点 | 依赖 B1/B2 |\n\n**这一单最需要你先看一眼的地方（语义反转）**：现状是 `channel_error` → **全局停止**（`drain.py:35-36` 明载「渠道坏了不是任务书坏了，**全局停止**」，`.done` 记 `stopped=channel_error`，run 日志 `[C]` 行）。B4 要求**同一 kind 在 bandwidth 类下不再停链、改为延期继续**。这不是加一条分支，而是把一个「队列级熔断」降级成「条目级换道」，代价是：分类器一旦把 outage 误判成 bandwidth（或 provider 改了文案），队列就从「停下来等人」变成「逐项烧跳」——正是 2026-10-12 连烧四单那次事故的形态。`failure_classes` 今天对 mimo 文案判 `bandwidth` 是**对**的（它确实是 10 RPM 限流），但让这个判定直接决定「停不停链」，需要一个明确的裁决：**谁有权放弃熔断**（以及误判时的兜底：例如同一 deadline 内同类延期累计 N 次就回升为停链）。\n\n**已尝试路径（只读，零副作用）**：读了 approved 规格全文与上一单 B 的判据；按表逐条定位了落点（行号见上）；确认 `drain_backlog` 的批循环与 `time.sleep` 点是唯一可插入处；确认现有测试面（`test_channel_error.py` 的 `test_drain_channel_error_stops_globally` 断言的是**停链**行为）——B4 落地即需改该用例，属行为变更的正例而非回归。\n\n**建议方向（拆两单，各 1 跳可完成）**\n\n- **`20261013-180500a`（安全半）**：B1 + B2 + B3 的**闲置原语**。交付物＝优先级解析 + 注册表生命周期 + `defer_until` 计算（指数退避 + 预算）作为**纯函数库**（不接 drain 主循环），判据＝approve 里的「注册表生命周期实测」「延期预算触顶」两条单测矩阵 + 全量无回归。此半**不改变任何现有行为**，风险≈0。\n- **`20261013-180500b`（语义半，需你先裁决）**：B4 + B5 + B3 接入主循环。判据＝「高优先级在场+bandwidth → 延期不换席」「无高优先级+unknown → 回退」「端到端延期而非回退（run 日志 + mirror 可见）」「worker 睡到到期续跑实测」。**开工前请裁决两点**：① 熔断降级是否可接受（见上）；② `test_drain_channel_error_stops_globally` 由「停链」改为「延期」是否就是你要的语义（它同时是 drain 的 `.done`/run 日志/mirror 三面读数源）。\n\n若你希望一口气交付，我可以在下一跳按 B-合并做，但需要你在任务书里明确上面两点裁决——否则我只能按现状的熔断语义保守实现，等于没交付 B4。\n\n**未选菜单项（留 pending，不连坐）**：`20261013-173000-leader`（jury 同族排除把回退席纳入拒开庭判据）与 `20261013-190000-leader`（`[routing]` 并入 `[model]` 的配置面合并）均未选：前者是 jury 面缺陷、后者是配置面重构，都与本单不同模块；本单既已受阻，不连坐。\n\n<artifact check=\"none\" reason=\"未实施任何改动、未建 worktree（无残留面）；核对证据均为只读侦察与源码行号定位\">orchestration/state/suggestions/approved/20261013-180500-leader.md</artifact>\n【全文已留审计副本：pods/devops/outbox/delivery-*.xml】",
+      "started_at": "2026-10-13T18:40:40+08:00",
+      "worktree": "20261013-180500-leader",
+      "needs_leader_at": "2026-10-13T18:41:31+08:00"
     },
     {
       "id": "insp-20261013-050026-mechanical",
@@ -1708,9 +1714,12 @@
       "class": "mechanical",
       "channel": "mechanical",
       "remedy_shape": "change",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T16:25:45+08:00",
-      "note": "组长裁定（2026-10-13）：remedy_shape=restore（对齐判读语义，先例 #43/#44 家族），判决记录已入 findings 行；重排队列施工。"
+      "note": "drain 批量销账（commit b007b25）",
+      "done_at": "2026-10-13T18:40:40+08:00",
+      "batch_size": 2,
+      "batch_seed": "insp-20261013-045910-mechanical"
     },
     {
       "id": "insp-20261013-072528-mechanical",
@@ -1740,9 +1749,11 @@
       "class": "mechanical",
       "channel": "mechanical",
       "remedy_shape": "change",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T16:25:45+08:00",
-      "note": "inspector 自主发现（§5.2 不经组长）"
+      "note": "inspector 自主发现（§5.2 不经组长）",
+      "started_at": "2026-10-13T18:41:32+08:00",
+      "worktree": "insp-20261013-093307-mechanical"
     },
     {
       "id": "20261013-173000-leader",
