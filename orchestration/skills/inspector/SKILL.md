@@ -13,7 +13,7 @@ description: inspector 组员的巡检规程：pysci-inspect 命令面、两类�
 ```bash
 pysci-inspect finding add --class mechanical|judgment --title '一句话现象' \
     [--symptom T] [--repro '命令'] [--evidence '实际输出'] [--expect '期望输出'] \
-    [--kind defect|usability] [--criteria '可证伪判据'] [--tag 标签]
+    [--kind defect|usability] [--criteria '可证伪判据'] [--tag 标签] \n    --remedy-shape restore|change   # mechanical **必填**（缺则 rc=2）
 pysci-inspect finding list [--status pending|promoted|rejected|queued|escalated]
 pysci-inspect promote <finding-id>            # 仅机械证据类
 pysci-inspect submit <finding-id> --jury      # 判断类唯一出口
@@ -41,6 +41,8 @@ pysci-inspect transcript fetch --anchor <sid>.jsonl:L<a>-L<b>   # 或 --sid X --
 - **judgment**：需要判断的那类（设计是否冗余、命名是否反直觉、文档承诺与实现是否一致）。
   必经 `submit --jury` 仲裁。案卷由 `verdict.assemble_case` 自动组，你只需把
   `--title`/`--symptom`/`--expect` 写清楚到「两选项的差异能被读出来」的程度。
+
+`--class mechanical` 还必须显式给 `--remedy-shape`（backlog 20261013-182549-devops）：形状不登记，dispatch 按「缺省=change」保守处理，drain 派下来才发现是 change → 整跳白烧在等判决上。`restore`=复原既有声明行为（免判决）；`change`=改声明行为/策略（晋升时会出水告警，须先过判决包）。
 
 两类都必须 `--criteria`：一句可证伪的成功判据（「X 命令输出含 Y」「文件 ≤8192B」），
 不是「更好」「更稳」。缺判据按 §6 总闸被判 `rejected`——补上判据可复活，重跑没有用。
