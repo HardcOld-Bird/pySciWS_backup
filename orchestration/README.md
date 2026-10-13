@@ -508,7 +508,7 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 | 命令 | 作用 | 输出给组长的东西 |
 |---|---|---|
 | `orch jury <案卷> [--dry]` | Tier C 仲裁团（§5.3 的 **J** 通道）：家族外三席直调、双序对局、阻塞 ≈1 min | 结构化裁决（选择/理由/置信度）落 `state/evals/jury/<case>.json`；平票/inconclusive 过半 → 自动回退 twin 终裁（§5.3） |
-| `orch taste <案卷>` | twin 审美判断（§1 角色行）：冷启动单跳、注入 PREFERENCE.md | `{选择,理由,置信度}` 落 `state/evals/taste/`，`pysci review` 可盲审 |
+| `orch taste <案卷>` | twin 审美判断（§1 角色行）：冷启动单跳、注入 PREFERENCE.md | `{选择,理由,置信度}` 落 `state/evals/taste/`（盲审回放面留后续单，§12） |
 | `orch eval run --case <id>` / `orch eval set-baseline` | Tier B harness 套件执行与基线回填（§5.5；组员侧同面 `pysci-bench`） | 二元判决 + 指标表入 `state/ledger/evals.jsonl` |
 | `orch bench-add` / `orch bench-queue` | bencher 队列指派与查看（§5.5） | 队列态与「待查看」结果（择机查看，不即时唤醒组长） |
 | `orch inspector-up` / `inspector-off` / `inspector-status` | 巡检引擎生命周期与细读（§6；`up` 幂等、内嵌常用入口自动拉起） | 引擎态、全局开关、双队列水位 |

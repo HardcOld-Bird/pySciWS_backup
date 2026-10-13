@@ -13,7 +13,7 @@
   审美终裁，§5.5 模棱两可回退链才接得上；共享逻辑做库、不做第二套解析器（§0.9）。
 
 留痕形态：``state/evals/taste/<case-id>.json``（``{选择, 理由, 置信度}`` + 会话 sid +
-材料哈希），供 ``pysci review`` 盲审回放与 ``status`` 计数（§10）。
+材料哈希）。盲审回放面留后续单（§12），暂由 ``pysci status`` 计数（§10）。
 """
 
 from __future__ import annotations
