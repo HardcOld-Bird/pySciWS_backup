@@ -27,22 +27,19 @@ PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
 
 # 3b. 仅当 pyproject 依赖变更才 uv sync --project "$WT"（重、分钟级），之后用 "$WT/.venv"
 
-# 4. 合并回 main（先在 worktree 内 commit 本次改动，再在主树操作）：
-pysci-dev worktree merge <任务名>   # 交集检查 → cp gitignored 运行态(旧件 .bak-<ts>)
-                                    #   → merge --no-ff → 会话数不减自检（见 references/registry-runtime.md）
-                                    #   交集非空即 rc=2 列文件（判据 merge-base 起算，勿手算 main..HEAD）
-
-# 5. commit（cz 规范；pre-commit 全过，禁 --no-verify）后一次限时 push（规程见 charter）
-timeout 25 git push origin main   # 忽略一切失败、不重试、不设代理；超时硬要求（防挂起阻塞 drain）
-# 6. 清理
-pysci-dev worktree remove <任务名>
+# 4. 合并回 main（先在 worktree 内 commit；cz 规范、pre-commit 全过、禁 --no-verify）：
+pysci-dev worktree merge <任务名>   # 交集检查 → cp 运行态 → merge --no-ff → 会话数自检
+                                    #   → **成功自动摘面**（失败/blocked 保留；--keep 留检视）
+                                    #   交集非空 rc=2 列文件（merge-base 起算，勿手算）
+# 5. 推送（跨平台超时 + 成败留痕；best-effort，失败忽略）
+pysci-dev push
+# 6. 清理：merge 已自动做；遗留面 `pysci-dev worktree clean [--apply]`（拒绝未合入者）
 ```
 
 **主树同步入口/依赖一律 `pysci-dev venv-sync`**（裸 `uv sync`/`uv run` 遇运行中 exe 会先删光
 其余入口，半坏态静默；见 `references/uv-venv-sync.md`）。
 
-注意：worktree 不含 gitignored 的未跟踪重数据；需真实数据时以绝对路径只读引用主树
-（同 README §7）。
+worktree 不含 gitignored 未跟踪重数据；需真数据时以绝对路径只读引用主树（同 README §7）。
 
 **worktree 命名约定**：drain/backlog 派发用**条目 id**（或异名重建后的 `<id>-r<N>`）作
 `<任务名>`（孤儿回收五面含**进程**/**进度**，据此定位；细节见 `references/worktree-merge.md` §3）。
@@ -75,7 +72,8 @@ pysci-dev doctor [--pod <id>]   # pod 巡检：hooks/leader 排除/charter/AGENT
                                  # + API Key 泄漏哨兵（tests/ 豁免）+ 跟踪 state 脏面
                                  #   （advisory：脏=组员合并前检查会拦的东西）
 pysci-dev sync [--check]        # 技能部署
-pysci-dev worktree add|merge|remove|list [<name>]   # merge=搬运行态+--no-ff+会话数自检
+pysci-dev worktree add|merge|remove|list|clean [<name>]  # merge 成功自动摘面(--keep 留；clean 清遗留)
+pysci-dev push [--timeout S]    # 推 origin/main（跨平台超时 + 成败留痕；best-effort）
 pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写
 pysci-dev doc-faces <paths…|--changed>  # 动的源文件→文档面（改语义别忘对盘；不阻断）
 ```

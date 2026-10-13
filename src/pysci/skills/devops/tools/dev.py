@@ -5,7 +5,8 @@
     uv run --no-sync pysci-dev doctor [--pod <id>]     # pod 健康巡检
     ... dev sync [--check]                   # 技能真本→部署副本（复用 orchestration.sync 引擎）
     ... dev venv-sync [uv sync 参数…]         # Windows 安全的 uv sync：让路→sync→核对入口
-    ... dev worktree add|merge|remove|list [<name>]
+    ... dev worktree add|merge|remove|list|clean [<name>] [--keep|--apply]
+    ... dev push [--remote origin] [--branch main] [--timeout 25]   # 跨平台超时 + 成败留痕
     ... dev skilltax [--apply|--probe]       # 平台技能清单税：量、落关停配置、复测键义
     ... dev probe [--json|--no-ledger]       # agentsMdExcludes 生效性机械探针：因果 A/B、写台账
 
@@ -23,7 +24,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from pysci.paths import PODS_ROOT, PROJECT_ROOT, WORKTREES_ROOT
+from pysci.paths import ORCH_STATE_ROOT, PODS_ROOT, PROJECT_ROOT, WORKTREES_ROOT
 from pysci.skills.orchestration.tools.registry import dirty_tracked_state
 
 #: worktree 统一放置目录取自 ``pysci.paths.WORKTREES_ROOT``（与 Qoder 原生 --worktree
@@ -742,7 +743,69 @@ def merge_faces(branch: str) -> tuple[set[str], set[str]] | None:
         return None
 
 
-def cmd_worktree_merge(name: str, wt: Path) -> int:
+def _remove_worktree(name: str, wt: Path) -> int:
+    """摘 worktree 目录 + 删其分支（``worktree remove`` 与 merge 成功收尾共用一处）。"""
+    rc, out = _run_git("worktree", "remove", str(wt))
+    print(out.strip() or f"[√] worktree 已移除：{wt.name}")
+    rc2, out2 = _run_git("branch", "-D", f"wt-{name}")
+    if rc2 == 0:
+        print(f"[√] 分支已删除：wt-{name}")
+    else:
+        tail = out2.strip().splitlines()
+        print(f"[i] 分支删除跳过：{tail[-1] if tail else ''}")
+    return rc
+
+
+def _branch_merged_into_main(branch: str) -> bool:
+    """分支是否已**完整并入 main**（``merge-base --is-ancestor``；分支不存在 → False）。
+
+    这是「已完成 vs 待抢救」的机械分界（backlog 20261013-215911-leader）：已合入的面内容
+    在 main、清理安全；未合入的是崩溃/blocked 留下的进度，**一律保留**。分支不存在
+    （没建起来 / 已删）也算 False——判不出已合入就不敢清。
+    """
+    rc, _ = _run_git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
+    if rc != 0:
+        return False
+    rc, _ = _run_git("merge-base", "--is-ancestor", branch, "main")
+    return rc == 0
+
+
+def _clean_worktrees(*, apply: bool) -> int:
+    """列出/清理「已合入 main」的遗留隔离面（backlog 20261013-215911-leader）。
+
+    只清**已合入**的（内容在 main、可再生）；**未合入**的一律拒绝并列名、退出码非 0
+    ——那是待抢救的进度，误删即丢。缺省 dry-run（只列清单），``--apply`` 才真摘。
+
+    Returns:
+        0（无未合入项）；2（存在未合入项——拒绝清理它们）。
+    """
+    if not WORKTREES_ROOT.exists():
+        print(f"  （无 {WORKTREES_ROOT.name}/ 目录，无遗留面）")
+        return 0
+    names = sorted(p.name for p in WORKTREES_ROOT.iterdir() if p.is_dir())
+    if not names:
+        print("  （无遗留隔离面）")
+        return 0
+    merged = [n for n in names if _branch_merged_into_main(f"wt-{n}")]
+    unmerged = [n for n in names if n not in merged]
+    print(f"== worktree clean（{WORKTREES_ROOT.as_posix()}）==")
+    if merged:
+        print(f"  [√] 已合入 main（可清，{len(merged)}）：{'、'.join(merged)}")
+    if unmerged:
+        print(
+            f"  [✗] 未合入 main（**拒绝**，留待抢救，{len(unmerged)}）：{'、'.join(unmerged)}"
+        )
+    if not apply:
+        print("  （dry-run：加 --apply 真清理上面的「可清」项）")
+        return 2 if unmerged else 0
+    for n in merged:
+        print(f"  → 清理 {n}")
+        _remove_worktree(n, WORKTREES_ROOT / n)
+    print(f"  [√] 已清理 {len(merged)} 个；未合入 {len(unmerged)} 个保留")
+    return 2 if unmerged else 0
+
+
+def cmd_worktree_merge(name: str, wt: Path, *, keep: bool = False) -> int:
     """worktree merge 主体：交集检查 → cp gitignored 运行态 → 会话数校验 → merge --no-ff → 自检。
 
     Returns:
@@ -818,6 +881,14 @@ def cmd_worktree_merge(name: str, wt: Path) -> int:
         )
         return 2
     print(f"[√] 会话数不减（base={base_n} → after={after_n}）")
+    # 成功收尾＝自动摘除隔离面（backlog 20261013-215911-leader）：内容已 merge 进 main，
+    # 清理是安全的；失败/blocked 路径在前面各 return 点就退出了，面与分支一律保留供抢救链。
+    # 此前每次正常完成都在 .qoder/worktrees/ 留一个冗余面（实测积压 7 个）。--keep 检视用。
+    if keep:
+        print(f"[i] --keep：保留 worktree 与分支 wt-{name}（供检视）")
+    else:
+        print("== 收尾：摘除已完成的隔离面 ==")
+        _remove_worktree(name, wt)
     return 0
 
 
@@ -859,6 +930,8 @@ def cmd_worktree(args: argparse.Namespace) -> int:
         rc, out = _run_git("worktree", "list")
         print(out)
         return rc
+    if action == "clean":
+        return _clean_worktrees(apply=bool(getattr(args, "apply", False)))
     if not args.name:
         print(f"[!] {action} 需要 <name>")
         return 2
@@ -895,18 +968,99 @@ def cmd_worktree(args: argparse.Namespace) -> int:
         if not wt_path.exists():
             print(f"[!] worktree 不存在：{wt_path}")
             return 2
-        return cmd_worktree_merge(args.name, wt_path)
+        return cmd_worktree_merge(
+            args.name, wt_path, keep=bool(getattr(args, "keep", False))
+        )
     if action == "remove":
-        rc, out = _run_git("worktree", "remove", str(wt_path))
-        print(out or f"[√] worktree 已移除：{wt_path.name}")
-        rc2, out2 = _run_git("branch", "-D", f"wt-{args.name}")
-        if rc2 == 0:
-            print(f"[√] 分支已删除：wt-{args.name}")
-        else:
-            print(f"[i] 分支删除跳过：{out2.splitlines()[-1] if out2 else ''}")
-        return rc
+        return _remove_worktree(args.name, wt_path)
     print(f"[!] 未知 action：{action}")
     return 2
+
+
+# ---------------------------------------------------------------------------
+# push（跨平台超时 + 成败留痕）
+# ---------------------------------------------------------------------------
+#: push 成败留痕（backlog 20261013-215911-leader）：纯运行态、gitignored（ADR 同
+#: sessions-runtime —— 每次尝试追加一行，入库会让 main 每跳必 dirty）。为什么落盘：
+#: push 是 **best-effort**（用户裁决 2026-10-10，charter：失败忽略、不重试、不设代理），
+#: 但「失败不能静默」——「这一跳推上去了吗」必须可后查，否则成功完成的工作静默地没推送
+#: 也无人知。JSONL 末行即最近一次尝试。
+PUSH_LOG_PATH: Path = ORCH_STATE_ROOT / "push-log.jsonl"
+
+
+def _push_trace(record: dict) -> None:
+    """把一次 push 尝试追加进留痕（fail-soft：写不成也只打一行，不改变 push 结果）。"""
+    try:
+        PUSH_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with PUSH_LOG_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"[i] push 留痕写入失败：{exc}")
+
+
+def cmd_push(args: argparse.Namespace) -> int:
+    """推 ``<remote>/<branch>``——**跨平台超时 + 成败留痕**（backlog 20261013-215911-leader）。
+
+    取代 charter 里的 ``timeout 25 git push origin main``：``timeout`` 在 Git Bash / Windows
+    下语义存疑（MSYS coreutils vs Windows 自带），且裸 push 失败**静默**——成功完成的工作
+    可能没被推送也无人知。本命令把超时挪到 Python 侧 subprocess，且每次尝试都进
+    ``state/push-log.jsonl``（成功记推送范围、失败记原因），做到「失败不静默」。
+
+    push 仍是 **best-effort**（用户裁决 2026-10-10）：不重试、不设代理、失败即返回非零由
+    调用方按规程忽略。
+
+    Returns:
+        0=推送成功；非零=失败/超时（已留痕，按 best-effort 忽略）。
+    """
+    remote = getattr(args, "remote", None) or "origin"
+    branch = getattr(args, "branch", None) or "main"
+    timeout_s = int(getattr(args, "timeout", None) or 25)
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+
+    def _record(ok: bool, **extra: object) -> None:
+        _push_trace({"ts": now, "remote": remote, "branch": branch, "ok": ok, **extra})
+
+    try:
+        proc = subprocess.run(
+            ["git", "push", remote, branch],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired:
+        _record(False, detail=f"超时 {timeout_s}s")
+        print(
+            f"[!] push 超时（{timeout_s}s）——已留痕 {_rel(PUSH_LOG_PATH)}（best-effort，忽略）"
+        )
+        return 1
+    except OSError as exc:
+        _record(False, detail=f"{type(exc).__name__}: {exc}")
+        print(f"[!] push 起不来（{type(exc).__name__}）——已留痕（best-effort，忽略）")
+        return 1
+
+    out = (proc.stdout + proc.stderr).strip()
+    tail = out.splitlines()[-1].strip() if out else ""
+    if proc.returncode == 0:
+        _record(True, detail=tail)
+        print(f"[√] push 成功：{tail or f'{remote}/{branch}'}")
+        return 0
+    _record(False, rc=proc.returncode, detail=out[:400])
+    print(
+        f"[!] push 失败 rc={proc.returncode}——已留痕 {_rel(PUSH_LOG_PATH)}"
+        f"（best-effort：不重试、不设代理，按规程忽略）：{tail}"
+    )
+    return proc.returncode or 1
+
+
+def _rel(path: Path) -> str:
+    """相对项目根显示（不在根下则原样）——仅用于提示文案。"""
+    try:
+        return path.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 # ---------------------------------------------------------------------------
@@ -1013,11 +1167,30 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "worktree",
-        help="worktree add/merge/remove/list（merge=机械化跨合并搬运行态 + --no-ff + 会话数自检）",
+        help="worktree add/merge/remove/list/clean（merge 成功自动摘面；clean 列/清已合入的遗留）",
     )
-    p.add_argument("action", choices=["add", "merge", "remove", "list"])
+    p.add_argument("action", choices=["add", "merge", "remove", "list", "clean"])
     p.add_argument("name", nargs="?")
+    p.add_argument(
+        "--keep",
+        action="store_true",
+        help="merge：成功后保留 worktree 与分支（默认自动摘除已完成的面）",
+    )
+    p.add_argument(
+        "--apply", action="store_true", help="clean：真清理（缺省只列 dry-run 清单）"
+    )
     p.set_defaults(func=cmd_worktree)
+
+    p = sub.add_parser(
+        "push",
+        help="推 origin/<branch>（跨平台超时 + 成败留痕；best-effort，取代裸 timeout git push）",
+    )
+    p.add_argument("--remote", default="origin", help="远端名（默认 origin）")
+    p.add_argument("--branch", default="main", help="分支（默认 main）")
+    p.add_argument(
+        "--timeout", type=int, default=25, help="超时秒（默认 25，与 charter 一致）"
+    )
+    p.set_defaults(func=cmd_push)
 
     p = sub.add_parser(
         "skilltax",
