@@ -43,6 +43,10 @@
   （写 `**/*.md` 会连 basic.md 一起吞掉）。生效性用 `pysci-dev probe` 做因果断言，doctor 验不出。
 - **交付协议**：见「解析器早于协议」告警就重跑本单；tags/kind 单一源=
   `state/failure-tags.json`，四面执法（gate 逐块/dispatch/approve/ledger 读数）——分裂要可见。
+- **merge rc=2（main 脏面交集）别再重跳「试试」**：成因不在你的树上，重跑改变不了它。按
+  `<blocked tags="merge_dirty_face">` 交付并原样贴 `[✗] 交集 N 项` 及其后的文件清单——drain 认得
+  这个成因，会保住进度（`wip(salvage)` 提交+面+分支）但**停链**，清单挂回原条目与 `orch status`
+  等组长清面（细则 `references/worktree-merge.md` §2）。
 - **直跑 guard 探针**：env 名 `PYSCI_POD`（不是 PYSCI_POD_DIR）；载荷填
   `last_assistant_message`；`PYSCI_PROJECT_ROOT` 须 Windows 形态。
 - **git/shell 读数**：定长格式走 `_git_proc`（strip 吃前导空格＝漏首项）；合并交集按

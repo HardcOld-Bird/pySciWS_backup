@@ -44,3 +44,6 @@ trigger: always_on
 <blocked> 可带 tags="a,b" 标注失败类型，词表外 gate 退回、不标注合法）、
 CLI 范式（裸命令首选/uv run fallback/禁重试循环）、记忆自维护层（AGENTS.md +
 自建 rules/skills，轻量笔记原则）：同全体组员。
+
+**交付判读纪律**：harness 注入的 lint/告警若含 `file:line` 引用，处置前必须先对盘核验
+（wc/grep 实测该行存在且内容相符）；核验不符即视为噪声丢弃，不得据其修改代码。

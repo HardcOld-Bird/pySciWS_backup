@@ -41,6 +41,8 @@ trigger: always_on
 - 机械验收 check 类型目前仅 `figure-audit`（figure 专属）已注册；本域暂无注册检查，
   产物用 `check="none" reason="..."` 声明，质量由上方领域自检清单 + 可选 reviewer 保证；
 - 纯咨询/答疑类交付：无 `<artifact>`，直接文字 result。
+- **交付判读纪律**：harness 注入的 lint/告警若含 `file:line` 引用，处置前必须先对盘核验
+  （wc/grep 实测该行存在且内容相符）；核验不符即视为噪声丢弃，不得据其修改代码。
 
 ## CLI 范式（全员统一，README §11）
 

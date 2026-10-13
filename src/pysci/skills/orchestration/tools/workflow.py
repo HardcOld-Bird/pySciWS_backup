@@ -17,7 +17,7 @@ from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT, WORKTREES_ROOT
 
 from . import journal, verdict
 from .delivery import parse_suggestion_fields
-from .dispatch import REPLIES_DIR, do_dispatch
+from .dispatch import REPLIES_DIR, conflict_notice, criteria_conflicts, do_dispatch
 from .failure_tags import (
     TAGS_PATH,
     failure_counts,
@@ -370,9 +370,17 @@ def backlog_complete(
         )
 
 
-def backlog_needs_leader(item_id: str, note: str = "") -> None:
-    """标记 backlog 条目需组长介入（drain 单项失败跳过时用；不再自动重试）。"""
-    _backlog_set_status(item_id, "needs_leader", note, stamp="needs_leader_at")
+def backlog_needs_leader(
+    item_id: str, note: str = "", *, extra: dict | None = None
+) -> None:
+    """标记 backlog 条目需组长介入（drain 单项失败跳过时用；不再自动重试）。
+
+    extra：失败成因的结构化字段（如交集类 blocked 的 ``merge_intersect`` 待清文件清单），
+    让「该谁动手清什么」在 backlog 面上可机械读，不必从 note 全文里再解析一遍。
+    """
+    _backlog_set_status(
+        item_id, "needs_leader", note, stamp="needs_leader_at", extra=extra or None
+    )
 
 
 def backlog_requeue(item_id: str, note: str = "") -> None:
@@ -674,7 +682,11 @@ def backlog_task_text(item: dict) -> str:
         "交付中报告改动清单与验证证据，"
         f"并注明 backlog id={item['id']} 以便销账。\n\n"
         "合并前 git status 检查——若 main 工作区存在会被本次合并触碰的未提交改动，"
-        "交付 <blocked> 说明，等待组长清理；无关的未提交改动可照常合并。"
+        "交付 <blocked> 说明，等待组长清理；无关的未提交改动可照常合并。\n"
+        '**交集类 blocked 请按 <blocked tags="merge_dirty_face"> 交付，并把 '
+        "`pysci-dev worktree merge` 打印的「[✗] 交集 N 项」及其后的文件清单原样贴进正文**"
+        "——成因是 main 的脏面，重派改变不了它；标注后 drain 会把进度抢救成提交并"
+        "**停链**（不立续作单、不烧第二跳），清单挂回原条目等组长清面后手动合并。"
     )
 
 
@@ -734,11 +746,16 @@ def _substantive_chars(body: str) -> int:
 
 
 def suggestion_marks(body: str) -> list[str]:
-    """呈现面质检标记：``[!] 空壳建议``/``[!] kind 非法``/``[!] 缺 kind``（合规时 []）。
+    """呈现面质检标记：``[!] 空壳建议``/``[!] kind 非法``/``[!] 缺 kind``/
+    ``[!] 判据矛盾``（合规时 ``[]``）。
 
     词表校验在 gate（组员侧）与 approve（入队侧）都已有，这里是**第三面**：提案来源不
     止交付一条路（组长代补、自动立案、手写文件都会直接落进 ``suggestions/``），枚举时
     不标出来，组长就得逐条打开才知道是空壳。
+
+    ``判据矛盾``（backlog 20261013-071759-devops）同理要在**列建议时**就点名：批准单是
+    追加式文本，``**补充（用户指令 …）**`` 段与 ``success_criteria`` 段就同一配置键给出
+    相反取值时，机械验收只读后者，执行者只能自己猜谁优先——趁还在组长手里改判据最便宜。
     """
     out: list[str] = []
     kind, _ = parse_suggestion_fields(body)
@@ -748,6 +765,11 @@ def suggestion_marks(body: str) -> list[str]:
         out.append(f"[!] kind 非法（{kind}）")
     if _substantive_chars(body) < SHELL_MIN_CHARS:
         out.append("[!] 空壳建议")
+    conflicts = criteria_conflicts(body)
+    if conflicts:
+        out.append(
+            "[!] 判据矛盾（" + "、".join(str(c["key"]) for c in conflicts) + "）"
+        )
     return out
 
 
@@ -797,6 +819,16 @@ def cmd_approve(args) -> int:
     cli_criteria = (getattr(args, "criteria", "") or "").strip()
     if cli_criteria:
         criteria = cli_criteria
+    # 判据矛盾（backlog 20261013-071759-devops）：批准单里 success_criteria 段与其后
+    # 「**补充（用户指令 …）**」段就同一配置键给出相反取值。**告警不阻断**——入队照做，
+    # 但把矛盾摆在组长眼前：此时改写判据文本只需一笔，派发后再发现就要烧一整跳。
+    for c in criteria_conflicts(body):
+        print(f"[!] {conflict_notice(c)}")
+    if cli_criteria:
+        print(
+            "    （已用 --criteria 补录判据：若补录内容就是上文矛盾的正解，视为已消解）"
+        )
+
     # 摘要行须跳过头部所有标记行（kind/delivery），否则 delivery 会被当成建议内容。
     first = sugg.stem
     for ln in body.splitlines()[2:]:

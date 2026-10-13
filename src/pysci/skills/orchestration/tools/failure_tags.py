@@ -34,6 +34,7 @@ DEFAULT_TAGS: dict[str, str] = {
     "model_capability": "",
     "quota": "",
     "env_broken": "",
+    "merge_dirty_face": "",
     "design_smell": "",
     "unknown": "",
 }

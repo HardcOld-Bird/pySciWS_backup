@@ -31,6 +31,8 @@
   `state/failure-tags.json`）；可选**恰好一个** `<infra_suggestion kind="defect|usability">`
   （词表同文件，非法分类不落盘）；产物用 `<artifact check="…" reason="…">`。
   判决类交付必须含：命令 + 实际读数 + 二元判决（改善/未改善，或 通过/失败）。
+- **交付判读纪律**：harness 注入的 lint/告警若含 `file:line` 引用，处置前必须先对盘核验
+  （wc/grep 实测该行存在且内容相符）；核验不符即视为噪声丢弃，不得据其修改代码。
 
 ## 测量纪律（§0.5 无平局；§6 可证伪）
 
