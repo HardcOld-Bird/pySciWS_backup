@@ -80,6 +80,12 @@ class LedgerEntry:
     #: 台账留痕：批次自动换 sid 与人工拒绝都必须在读数面可见（184000 修复面④）。
     sid_new_reason: str = ""
     error: str = ""
+    #: 失败跳的 **provider 报错原文**（截 2000 字符；成功跳恒空，用户设计 2026-10-13，
+    #: backlog 20261013-180000-leader）。为什么必须存原文：`error` 面只有 stop_reason
+    #: 短码与人写摘要，而「带宽不足」与「渠道真不可用」只能靠原文区分（mimo 的 10 RPM
+    #: 限流与真正的 outage 在短码上长得一样）——分类器（failure_classes）无原料即失效。
+    #: 旧行无此字段 → ""。
+    error_text: str = ""
     # 同席重试读数（用户裁决 2026-10-13，backlog 20261013-143000-leader）：
     # ``same_seat_retries`` = 本跳在原席上 resume 重试了几次（0=没重试）；
     # ``same_seat_retry_ms`` = 这些重试累计跑了多久（ms，含退避）。
