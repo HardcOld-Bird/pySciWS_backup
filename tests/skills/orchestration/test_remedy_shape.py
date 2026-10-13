@@ -251,3 +251,58 @@ def test_shape_falls_back_to_backlog_when_findings_row_absent(iso_state, iso_rem
     text = workflow.backlog_task_text(_item(id="insp-20260101-000000-mechanical"))
     assert "直接交付 <blocked>" in text
     assert "两源不一致" not in text
+
+
+# ===========================================================================
+#  5. 动作归属：组长侧的发现不派 devops（backlog 20261013-184213-devops）
+# ===========================================================================
+def test_leader_side_action_detects_and_ignores_repro():
+    """只看 expect/success_criteria（修复面所在），不看 repro（复现命令常只是取证）。"""
+    assert inspectd.leader_side_action({"expect": "orch sessions devops --archive x"})
+    assert inspectd.leader_side_action({"expect": "组长归档该成员会话后重开"})
+    assert inspectd.leader_side_action({"success_criteria": "- 重取基线后全量绿"})
+    assert inspectd.leader_side_action({"repro": "orch status"}) == "", (
+        "repro 里的只读取数不算动作归属"
+    )
+    assert (
+        inspectd.leader_side_action(
+            {"expect": "lock_status 报 running、crashed 不为 True"}
+        )
+        == ""
+    ), "普通代码修复面不该被误标"
+
+
+def test_promote_parks_leader_side_finding_without_dispatching(iso_remedy):
+    """**本单复现**：expect 是 `orch sessions … --archive …` 的机械发现 → 晋升后不进
+    devops 派发队列，改挂 leader_todo。"""
+    rec = seed_mechanical(
+        stamp="20261013-184214",
+        expect="组长归档该成员会话后重开（`orch sessions devops --archive <sid> --distill`）",
+        criteria="- 末跳 ctx ≤ 60%，或会话已归档重开",
+    )
+    out = inspectd.promote_finding(rec, channel="mechanical", wake=False)
+
+    assert out["action"] == "leader_side" and "组长侧" in out["reason"]
+    assert workflow.backlog_find(rec["id"]) is None, "不派 devops＝不进 backlog 队列"
+    row = inspectd.finding_by_id(rec["id"])
+    assert row["status"] == "leader_todo"
+    assert "组长侧" in row["note"]
+
+
+def test_promote_normal_code_finding_still_dispatches(iso_remedy):
+    """阴性对照：普通代码修复面照常晋升进队列（闸只吃组长侧动作）。"""
+    rec = seed_mechanical(stamp="20261013-184215")
+    out = inspectd.promote_finding(rec, channel="mechanical", wake=False)
+
+    assert out["action"] == "promoted"
+    assert workflow.backlog_find(rec["id"]) is not None
+
+
+def test_leader_todo_is_out_of_the_pending_sweep(iso_remedy):
+    """挂 leader_todo 后不再出现在 pending 扫描面（否则引擎每轮都会再推它一次）。"""
+    rec = seed_mechanical(
+        stamp="20261013-184216", expect="组长归档该成员会话后重开（orch sessions …）"
+    )
+    inspectd.promote_finding(rec, channel="mechanical", wake=False)
+    assert inspectd.findings(status="pending") == []
+    assert [r["id"] for r in inspectd.findings(status="leader_todo")] == [rec["id"]]

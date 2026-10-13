@@ -14,7 +14,8 @@ description: inspector 组员的巡检规程：pysci-inspect 命令面、两类�
 pysci-inspect finding add --class mechanical|judgment --title '一句话现象' \
     [--symptom T] [--repro '命令'] [--evidence '实际输出'] [--expect '期望输出'] \
     [--kind defect|usability] [--criteria '可证伪判据'] [--tag 标签] \n    --remedy-shape restore|change   # mechanical **必填**（缺则 rc=2）
-pysci-inspect finding list [--status pending|promoted|rejected|queued|escalated]
+pysci-inspect finding list [--status pending|promoted|rejected|queued|escalated|leader_todo]
+#   leader_todo＝动作在**组长侧**（归档会话/清 main 脏面/重取基线/裁定），不派 devops
 pysci-inspect promote <finding-id>            # 仅机械证据类
 pysci-inspect submit <finding-id> --jury      # 判断类唯一出口
 pysci-inspect gate                            # 读当前闸门（只读）

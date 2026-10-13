@@ -114,6 +114,9 @@ FINDING_STATUSES: tuple[str, ...] = (
     "rejected",
     "queued",
     "escalated",
+    # 动作在**组长侧**（归档会话/清 main 脏面/重取基线/裁定之类）→ 不派 devops，
+    # 挂起等组长处置（backlog 20261013-184213-devops）。
+    "leader_todo",
 )
 
 _ID_PREFIX = "insp"
@@ -615,6 +618,36 @@ def append_finding(
     return rec
 
 
+#: 组长侧动作的**廉价线索**（命中即标，不做语义判断）。
+#: 为什么粗分拣够用：这类线索都指向只有组长能做的动作（`orch` 是组长专属工具，归档/
+#: 清面/裁定是组长通道）；标错组长一眼能改，漏掉则是每跳白烧（组员读完 expect 才发现
+#: 无权执行）。实测历史 findings：6/14 命中，且逐个核对**全部**确为组长侧动作。
+#: 刻意不用正则：这里要的字面全是不含空白歧义的短语，substring 更直白且不给转义留坑。
+LEADER_SIDE_CUES: tuple[str, ...] = (
+    "pysci-orch",
+    "orch ",
+    "--archive",
+    "归档",
+    "重开",
+    "重取基线",
+    "组长裁定",
+    "approve",
+)
+
+
+def leader_side_action(rec: dict[str, Any]) -> str:
+    """发现里是否写了「组长侧动作」；命中返回线索词，否则空串。
+
+    只看 ``expect`` 与 ``success_criteria``（**修复面**所在的字段），不看 ``repro``：
+    复现命令常只是取证（读只读读数），不代表交付动作的归属。
+    """
+    blob = " ".join(str(rec.get(k) or "") for k in ("expect", "success_criteria"))
+    for cue in LEADER_SIDE_CUES:
+        if cue in blob:
+            return cue
+    return ""
+
+
 def _evidence_file(rec: dict[str, Any]) -> Path:
     """把发现写成可复核的证据正文（backlog 条目的 ``evidence_file`` 指向它）。"""
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -698,6 +731,19 @@ def promote_finding(
         return {
             "action": "rejected_no_criteria",
             "reason": "缺 success_criteria：无判据的提案不可证伪，不进队（§6）",
+        }
+    if cue := leader_side_action(rec):
+        # **动作在组长侧** → 不派 devops（backlog 20261013-184213-devops）：这条排下去
+        # 组员只能白烧一跳（读完 expect 才发现无权执行），更坏是自作主张写一个「自动
+        # 归档」类新机制。挂 leader_todo 等组长处置；它也因此不再进 pending 扫描面。
+        _mutate_finding(
+            bid,
+            status="leader_todo",
+            note=f"动作在组长侧（命中线索「{cue}」）→ 未派 devops，等组长处置",
+        )
+        return {
+            "action": "leader_side",
+            "reason": f"命中组长侧动作线索「{cue}」",
         }
     ev = _evidence_file(rec)
     entry = {

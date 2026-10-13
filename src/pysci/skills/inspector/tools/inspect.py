@@ -151,6 +151,13 @@ def cmd_promote(args: argparse.Namespace) -> int:
     if action == "duplicate":
         print(f"[i] {out['backlog_id']} 已在 backlog 中（不重复立案）")
         return 0
+    if action == "leader_side":
+        # 动作在组长侧（backlog 20261013-184213-devops）：不派 devops——排下去只会白烧一跳
+        print(
+            f"[i] 本条动作在**组长侧**（{out.get('reason', '')}）→ 未派 devops，"
+            "已挂 leader_todo 等组长处置（`pysci-inspect finding list --status leader_todo`）"
+        )
+        return 0
     print(f"[✗] 未晋升（{action}）：{out.get('reason', '')}")
     return 1
 
