@@ -517,3 +517,148 @@ def test_orch_status_shows_salvage_section(iso_state, capsys):
     orch.cmd_status(Namespace())
     out = capsys.readouterr().out
     assert "抢救续作面" in out and OID in out and RECORD["commit"] in out
+
+
+# ---------------------------------------------------------------------------
+# 交集类 blocked：成因在 main 的脏面 → 进度照救，但**停链**
+# （backlog 20261013-102152-devops：三跳实测树哈希逐字节相同，纯烧轮次）
+# ---------------------------------------------------------------------------
+
+IFACE = "isect"
+
+#: 待清文件：``pysci-dev worktree merge`` 的拒合并读数原样（清单在拒合并行之后的缩进块）。
+INTERSECT_FILES = [
+    "src/pysci/skills/orchestration/tools/dispatch.py",
+    "orchestration/state/backlog.json",
+]
+INTERSECT_BODY = (
+    "合并被拒：main 工作区脏面与本单相交，我这跳改变不了它。\n"
+    "  [✗] 交集 2 项——本次合并与 main 未提交改动碰同一文件，拒绝合并：\n"
+    f"    {INTERSECT_FILES[0]}\n"
+    f"    `{INTERSECT_FILES[1]}`\n"
+    "  进度已在 worktree 提交，等组长清面后合并。"
+)
+
+
+def _blocked(
+    body: str = INTERSECT_BODY, tags: tuple[str, ...] = (drain.INTERSECT_TAG,)
+) -> DispatchOutcome:
+    return DispatchOutcome(
+        code=2, kind="blocked", member="devops", body=body, tags=list(tags)
+    )
+
+
+def test_intersect_cause_reads_tag_and_machine_list():
+    hit, files = drain.merge_intersect_cause(_blocked())
+    assert hit is True
+    assert files == INTERSECT_FILES, "反引号要脱壳、行首缩进不算路径的一部分"
+
+
+def test_intersect_cause_without_machine_line_keeps_cause_only():
+    """只有标签、正文没贴工具读数：成因仍成立（清单缺就报缺，不因此放弃停链）。"""
+    hit, files = drain.merge_intersect_cause(
+        _blocked(body="main 脏面与本单相交，拒合并。")
+    )
+    assert hit is True and files == []
+
+
+def test_intersect_cause_needs_one_of_two_signals():
+    """没标也没拒合并行 → 不认（别的成因照走原链路）；标签只归属失败面。"""
+    assert drain.merge_intersect_cause(_blocked(body="判据未过", tags=())) == (
+        False,
+        [],
+    )
+    assert drain.merge_intersect_cause(
+        DispatchOutcome(
+            code=0, kind="result", body=INTERSECT_BODY, tags=["merge_dirty_face"]
+        )
+    ) == (False, [])
+
+
+def test_task_text_teaches_intersect_tag_and_stop_chain():
+    """组员侧的词必须有：不教就没人标，停链永远只靠正文碰运气。"""
+    text = workflow.backlog_task_text({"id": "plain", "summary": "s"})
+    assert 'tags="merge_dirty_face"' in text and "停链" in text
+
+
+def test_drain_intersect_blocked_saves_progress_but_stops_chain(
+    iso_state, monkeypatch, tmp_path
+):
+    seed = {
+        "id": IFACE,
+        "status": "pending",
+        "member": "devops",
+        "summary": "会被交集卡住的单",
+        "kind": "defect",
+        "success_criteria": "合并进 main",
+    }
+    summary, texts, git, items = _drain_with_dispatch(
+        iso_state,
+        monkeypatch,
+        tmp_path,
+        [seed],
+        lambda n: _blocked(),
+        face=(IFACE, {"dirty": True, "unmerged": 2, "head": "c0ffee12"}),
+    )
+    assert len(texts) == 1, "停链=不烧第二跳：队列里没有新单可被消化"
+    assert [i for i in items if i.get("source") == workflow.SALVAGE_SOURCE] == []
+    orig = items[0]
+    assert orig["status"] == "needs_leader"
+    assert orig["merge_intersect"] == INTERSECT_FILES, (
+        "清单进条目字段：不必从 note 全文再解析"
+    )
+    assert "重跑无用" in orig["note"]
+    assert f"pysci-dev worktree merge {IFACE}" in orig["note"], "note 要给出可执行处置"
+    assert git.commits and git.commits[0][1].startswith(drain.SALVAGE_COMMIT_TAG)
+    row = summary["items"][0]
+    assert row["salvage"] == "wipsalv1" and row["merge_intersect"] == INTERSECT_FILES
+    assert "continuation" not in row
+
+
+def test_drain_plain_blocked_still_chains(iso_state, monkeypatch, tmp_path):
+    """阳性对照：非交集成因的 blocked 续作链行为不变（停链不是把抢救整体降格）。"""
+    seed = {
+        "id": "plainfail",
+        "status": "pending",
+        "member": "devops",
+        "summary": "交付判据未过",
+        "kind": "defect",
+        "success_criteria": "跑完",
+    }
+    outcomes = [
+        _blocked(body="验收 FAIL：success_criteria 未达成", tags=()),
+        DispatchOutcome(code=0, kind="result", body="续完 全绿"),
+    ]
+    summary, texts, git, items = _drain_with_dispatch(
+        iso_state,
+        monkeypatch,
+        tmp_path,
+        [seed],
+        lambda n: outcomes[min(n, len(outcomes)) - 1],
+        face=("plainfail", {"dirty": True, "unmerged": 1, "head": "c0ffee12"}),
+    )
+    cont = [i for i in items if i.get("source") == workflow.SALVAGE_SOURCE]
+    assert len(cont) == 1 and cont[0]["status"] == "done"
+    assert len(texts) == 2
+    assert summary["items"][0]["continuation"] == cont[0]["id"]
+    assert "merge_intersect" not in items[0]
+
+
+def test_orch_status_lists_intersect_files(iso_state, capsys):
+    """一跳就把「清哪个文件」摆到组长的 status 读数上——线索埋进 note 全文等于没有。"""
+    seed_backlog(
+        iso_state,
+        [
+            {
+                "id": IFACE,
+                "status": "needs_leader",
+                "member": "devops",
+                "summary": "被交集卡住",
+                "merge_intersect": ["a/b.py"],
+            }
+        ],
+    )
+    orch.cmd_status(Namespace())
+    out = capsys.readouterr().out
+    assert "合并相交待清" in out and "a/b.py" in out
+    assert f"worktree merge {IFACE}" in out and "已停链" in out

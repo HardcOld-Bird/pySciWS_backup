@@ -248,6 +248,18 @@ def cmd_status(args: argparse.Namespace) -> int:
                 f"    - {b['id']}: {str(b.get('summary', ''))[:50]}"
                 + (f"（累计失败 {n} 次，勿原样重派）" if n else "")
             )
+            if "merge_intersect" in b:
+                # 交集类：重派无用（成因是 main 的脏面）。这里必须把「清哪个文件」直接
+                # 摆到组长的 status 读数上，否则处置线索埋在 note 全文里等于没有。
+                files = (
+                    "、".join(b["merge_intersect"])
+                    or "（清单见条目 note / outbox 审计副本）"
+                )
+                print(
+                    f"        合并相交待清：{files}——清面后 "
+                    f"`pysci-dev worktree merge {_workflow.worktree_name(b)}`"
+                    f"（已停链，无续作单）"
+                )
 
     salvaged = _workflow.backlog_salvage()
     if salvaged:

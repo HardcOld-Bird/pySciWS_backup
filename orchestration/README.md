@@ -286,7 +286,11 @@ ledger 流水、`state/devops.{lock,cancel}` / `state/devops-runs/` / `state/wat
 
 1. 任务书写入 `pods/<id>/inbox/task-<ts>.md`（自包含：目标、输入路径、交付要求、
    白名单目录、验收声明要求、所属计划环节、模型角色 tier）；落盘前经 `state/taskbook-lint.json`
-   轻量 lint（正则扫已知错误 CLI 范式，命中仅**告警不阻断**，规则表 devops 可增补）；
+   轻量 lint（正则扫已知错误 CLI 范式，命中仅**告警不阻断**，规则表 devops 可增补）；同一入口
+   另做**判据矛盾检测**（`dispatch.criteria_conflicts`，backlog 20261013-071759-devops）：批准单
+   归档里的 `success_criteria` 段与其后「补充/修订」追加段对**同一配置键**给出相反布尔值 →
+   approve 时告警、派发时把矛盾原文与取舍规则嵌进任务书正文（组员看得见，不靠组长转述）；
+   单一源登记=追加段内 `superseded` **且点名该键**，登记后告警消解；
 2. 组装：`<exe> --cwd orchestration/pods/<id> -p <注入文本> --resume <sid>|
    --session-id <新sid> --name <slug>`；注入文本 = 任务书路径 + 待附送审批回复（§6）+
    交付协议提醒；
@@ -940,6 +944,12 @@ worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专
     故障形状**合取**（单看文案会被复盘它的任务书正文误报）；命中 → drain 全局停止（种子
     复位 pending、释放锁），watch 打 `CHANNEL-STOP` 事件（§4.5）——恢复动作是**等渠道
     恢复**，与额度类的充值/等待重置分列两事件。
+  - **交集成因停链（抢救面的例外闸，backlog 20261013-102152-devops）**：blocked 带
+    `tags="merge_dirty_face"` **或**正文含 `pysci-dev worktree merge` 的 `[✗] 交集 N 项` 行 →
+    认定成因在 **main 的工作区脏面**：续作单不立（下一跳改变不了 main，实测三连跳树哈希
+    逐字节相同=空转），进度照抢救、面与分支保住，待清文件进条目 `merge_intersect` 并渲染到
+    `orch status`；处置=组长清面后 `pysci-dev worktree merge <面>`。判定细则见
+    `skills/orchestration/references/tier-a-tags.md`。
 
 ---
 
@@ -1205,6 +1215,9 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **PREFERENCE v2 生效 + twin 全量上线**：用户审阅确认 v2 转正（33 条语料蒸馏增量+4 修订入宪章），twin 判断通道由初步上线转全量；盲审/回测动线不变，下线权归用户 | 用户 |
 | 2026-10-13 | **修复形状分流 + 后台决策审计面（用户裁决）**：① 回退 ctx 水位闸（fe68a40 改了策略面却绕过判决通道、压缩防溢出使宣称收益无效——重启须经判决包并以真实账单/缓存读数为依据）；② 修复形状分流：inspector mechanical 免判决仅限 restore，change 无判决记录 → 任务书要求 devops 交付 blocked 上报（登记字段/任务书注入/charter 纪律三落点）；③ `mirror status` 注册「决策」项 + `pysci-mirror decisions` 决策链全貌（只读拼装、免判决+change 置顶） | 用户 |
 | 2026-10-13 | **路由 v3 谷时隐性 DeepSeek**（backlog 20261013-093000-leader）：DeepSeek 官方价分峰谷（峰 2 倍）→ 谷时自动把 qwen/mimo 预设的 **main** 席链换成 DeepSeek，`preset` 行不动（不新增预设）；判据 chinesecalendar（周末全天=含调休上班的周末、法定节假日全天、工作日其余时段；覆盖外年份/库缺席保守不切换并告警）；入谷即切、入峰提前 1 小时、**只影响新派发**（在途单跳台账 model 不变）。终裁修正：pro 席保持原预设升档席、仲裁团固定 GLM+KIMI+Mimo（矩阵 qwen/mimo/deepseek/隐性态四态定格）、**一律按量付费、TokenPlan 路径整个不做**（个人版条款禁 API 自动化调用）、缺 Key 席双面告警减员运行（平票 twin 终裁兜底）、被评模型同族回退席不上场；观测面 = `orch status` 路由段 + mirror 概览「路由」项 + 决策日志 `kind=routing`。附带：minimum 席链改 BYOK Mimo-V2.6-Flash（火山豆包调查关闭，P-25） | 用户设计 + 终裁 v4 |
+| 2026-10-13 | **批准单单一源纪律机械化**（backlog 20261013-071759-devops）：批准可被追加段写成自相矛盾而无人能发现（`20261012-164601-leader` 的 `taste_enabled` 实案）。新增 `dispatch.criteria_conflicts` 只判**同一配置键的相反布尔值**（精度优先：义务/禁止反差不判，误报=噪声=没人读），approve 告警 + 派发时把矛盾与取舍规则嵌进任务书；单一源登记=`superseded` 且点名该键。全语料 78 份建议实测：1 处真阳、0 误报 | 组长采纳 + devops 实施 |
+| 2026-10-13 | **交集类失败停链**（backlog 20261013-102152-devops）：词表增 `merge_dirty_face`，drain 认此成因→抢救照做、续作单不立，待清清单进 `merge_intersect` 并渲染 `orch status`（§9 恢复面例外闸）；任务书尾部教组员贴清单。实测三连跳树哈希逐字节相同=续作链空转 | 组长采纳 + devops 实施 |
+| 2026-10-13 | **lint 幻影抗体扩面到 13 charter**（backlog 20261013-085045-devops）：「harness 注入的 lint/告警含 `file:line` 先对盘核验」此前只在 8 面在册，其余 5 名组员同样会被平台幻影误导；快照测试钉 13 charter + 2 技能面（清单长度与文件数双锁） | 组长批准（`229a238`）+ devops 实施 |
 
 ## 14. 已知代价与风险
 

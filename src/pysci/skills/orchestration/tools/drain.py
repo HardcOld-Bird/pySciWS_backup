@@ -1252,8 +1252,75 @@ def _clear_hop_pid(hit: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # drain 循环
 # ---------------------------------------------------------------------------
+
+#: 交集类 blocked 的标签（词表 ``state/failure-tags.json``，backlog 20261013-102152-devops）。
+INTERSECT_TAG = "merge_dirty_face"
+
+#: ``pysci-dev worktree merge`` 的拒合并行：``[✗] 交集 N 项——…``，其后缩进逐行列出相交文件。
+_INTERSECT_HEAD_RE = re.compile(r"\[✗\]\s*交集\s*(\d+)\s*项")
+
+#: 看起来是仓内相对路径的行（含 ``/`` 才认；``处置：…`` 这类中文散文不算）。
+_PATHISH_RE = re.compile(r"^[\w.\-]+(?:/[\w.\-]+)+$")
+
+
+def merge_intersect_cause(outcome: Any) -> tuple[bool, list[str]]:
+    """这一跳的 blocked 是不是「main 脏面与本次合并相交」——并尽量带上交集文件清单。
+
+    为什么要在抢救之前问成因：抢救假设「上一跳干了活没干完，下一跳接着干」，而交集类
+    成因里**下一跳改变不了 main 的脏面**。2026-10-13 上午实测三连跳
+    （``072000-leader`` → ``101105`` → ``101705``）三跳树哈希逐字节相同（``b270e8cd``）、
+    测试结果相同，纯烧 worktree 与测试轮次，第 4 跳才撞上 ``SALVAGE_MAX_CHAIN``。
+
+    两个通道任一命中即认定（组员有词可标、代码有文可辨，缺一面就会漂移）：``tags`` 含
+    :data:`INTERSECT_TAG`，或正文里有工具打印的 :data:`_INTERSECT_HEAD_RE` 行。清单只从
+    拒合并行**之后**的缩进路径行取；读不到清单仍算交集类——认成因比凑清单重要。
+
+    Args:
+        outcome: 本跳 :class:`dispatch.DispatchOutcome`。
+
+    Returns:
+        ``(是否交集类, 相交文件清单)``；非 blocked 或非交集成因 → ``(False, [])``。
+    """
+    if getattr(outcome, "kind", "") != "blocked":
+        return False, []
+    body = outcome.body or ""
+    tagged = INTERSECT_TAG in (outcome.tags or [])
+    lines = body.splitlines()
+    head_i = next(
+        (i for i, ln in enumerate(lines) if _INTERSECT_HEAD_RE.search(ln)), -1
+    )
+    if not tagged and head_i < 0:
+        return False, []
+    offenders: list[str] = []
+    # 清单从拒合并行的**下一行**起算：同一行的尾巴（「——本单提交与 main…」）不是文件。
+    for ln in lines[head_i + 1 :] if head_i >= 0 else []:
+        if not ln.strip():
+            continue
+        if not ln[:1].isspace():
+            break  # 缩进块结束：后面是组员自己的正文，不是工具读数
+        tok = ln.strip().strip("`*")
+        if _PATHISH_RE.match(tok) and tok not in offenders:
+            offenders.append(tok)
+    return True, offenders
+
+
+def _intersect_hold_text(face: str, offenders: list[str]) -> str:
+    """停链结论 + 组长的最小处置（note 里必须可执行，不留「等组长看着办」）。"""
+    files = (
+        "、".join(offenders)
+        if offenders
+        else "（组员未贴清单，全文见 outbox 审计副本）"
+    )
+    return (
+        f"\n【停链判定=成因是 main 脏面与本次合并相交，重跑无用】待清文件：{files}；"
+        f"处置：在 main 提交或还原上述文件后 "
+        f"`pysci-dev worktree merge {face}`"
+        f"（分支 wt-{face} 与抢救提交已保住进度，无需再派 worker 重做）"
+    )
+
+
 def _salvage_progress(
-    seed: dict[str, Any], run_log: Path, *, reason: str
+    seed: dict[str, Any], run_log: Path, *, reason: str, stop_chain: bool = False
 ) -> dict[str, Any] | None:
     """失败/停止收场的种子：先保住面上的未收尾进度，再让队列自动接手续完。
 
@@ -1269,6 +1336,9 @@ def _salvage_progress(
         seed: 本批种子条目。
         run_log: run 日志面。
         reason: 成因读数（进提交消息与任务书，续作者据此判读）。
+        stop_chain: 成因对续作无效时置真（如 main 脏面交集：再派一个 worker 改变不了
+            相交文件，只会多立一张空转单）。进度照样抢救成提交、面与分支都留着，
+            只是**不立续作单**——处置权交回组长的 note。
 
     Returns:
         抢救记录（附 ``continuation`` 若有续作单）；面上没东西可救 / 抢救未成 → 记录或 None。
@@ -1291,6 +1361,14 @@ def _salvage_progress(
             run_log,
             f"[+] 未收尾进度已抢救并就地续作：{name}（提交 "
             f"{record['commit'] or '无'}，成因 {reason}）",
+        )
+        return record
+    if stop_chain:
+        _log(
+            run_log,
+            f"[+] 未收尾进度已抢救：{name}（提交 {record['commit'] or '无'}，成因 {reason}）"
+            f" → **停链**：成因是 {reason}，再派 worker 改变不了它，不立续作单"
+            f"（进度在分支 wt-{name}，处置见条目 note）",
         )
         return record
     cont = workflow.backlog_append_salvage(seed, record)
@@ -1469,19 +1547,30 @@ def _drain_batch(
     # outbox 审计副本；note 一并留全文（err 只给 run 日志一行摘要）。
     err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
     full = (outcome.error or outcome.body or "").strip()
+    # 交集类失败（main 脏面与本次合并相交）单独分流：成因不在被派者的树上，重派一个
+    # worker 改变不了它 → 抢救进度但**停链**（不立续作单），待清清单挂回原条目。
+    isect, offenders = merge_intersect_cause(outcome)
     backlog_needs_leader(
         seed_id,
         note=(
             f"drain 跳过（交付={outcome.kind}）：{full}\n"
             # 点名**被派发者**的 outbox（seed["member"] 是提请者，不是写交付的人）
             f"【全文已留审计副本：pods/{outcome.member or 'devops'}/outbox/delivery-*.xml】"
+            + (_intersect_hold_text(worktree_name(seed), offenders) if isect else "")
         ),
+        extra={"merge_intersect": offenders} if isect else None,
     )
-    salv = _salvage_progress(seed, run_log, reason=str(outcome.kind or "needs_leader"))
+    salv = _salvage_progress(
+        seed,
+        run_log,
+        reason=str(outcome.kind or "needs_leader"),
+        stop_chain=isect,
+    )
     _log(
         run_log,
-        f"[!] 批次 {label} 失败 → 种子 needs_leader（{outcome.kind}），"
-        f"组包 {len(group_ids)} 项保持 pending 不连坐：{err[:120]}",
+        f"[!] 批次 {label} 失败 → 种子 needs_leader（{outcome.kind}）"
+        + (f"，交集 {len(offenders)} 项已停链（待组长清面后手动合并）" if isect else "")
+        + f"，组包 {len(group_ids)} 项保持 pending 不连坐：{err[:120]}",
     )
     item_out: dict[str, Any] = {
         "id": seed_id,
@@ -1490,6 +1579,8 @@ def _drain_batch(
         "error": err[:200],
         "elapsed_s": elapsed,
     }
+    if isect:
+        item_out["merge_intersect"] = offenders
     if salv:
         item_out["salvage"] = salv["commit"]
         if salv.get("continuation"):

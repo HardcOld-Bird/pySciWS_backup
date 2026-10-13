@@ -287,6 +287,189 @@ def lint_taskbook(body: str) -> list[str]:
     return warnings
 
 
+# ── 判据矛盾检测（backlog 20261013-071759-devops）────────────────────────────
+#
+# 批准单是追加式文本：转 approved 之后组长/用户常往同一份文件里再补一段
+# ``**补充（用户指令 …）**``，而机械验收只读 ``success_criteria`` 标记行。两处就同一配置键
+# 给出相反取值时（实锤反例 ``20261012-164601-leader``：``taste_enabled 仍 false`` vs
+# ``将 registry.taste_enabled 置 true``），执行者只能自行猜「后到者优先」——猜错被打回，
+# 猜对也留下一条与判据不符的交付读数。这里把矛盾本身和取舍规则都变成可见的机械事实。
+
+#: 判据标记行（容错半/全角冒号；``success_criteria：`` 单独成行时判据在其后 bullet 段里）。
+_CRITERIA_MARK_RE = re.compile(r"^\s*success_criteria\s*[:：]", re.IGNORECASE)
+
+#: 追加段起始行（``**补充（用户指令 …）**：``，也认修订/更正/增补同族措辞）。
+_AMEND_HEAD_RE = re.compile(r"^\s*\**\s*(补充|修订|更正|增补)")
+
+#: 关键标识候选：点分配置名（``registry.taste_enabled``）。带下划线是「这是个配置键」
+#: 的最强信号；纯单词不取——true/false/enabled 之类会让任何两段文本都被判成同类。
+_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_.]*[A-Za-z0-9_]", re.ASCII)
+
+#: 子句边界：中英文逗号/顿号/分号/句号/冒号——布尔取值读数的最小语境。**换行不算边界**
+#: （markdown 正文按 ~80 列折行，把折行当边界会让「置\ntrue」读不出值——反例正是这个形状）。
+_CLAUSE_SPLIT_RE = re.compile(r"[，,。；;、：]")
+
+#: bullet 起始（``- ``/``* ``/``1. ``）：折行规则之外的**真**边界，用它把列表项切开。
+_BULLET_RE = re.compile(r"^(?:[-*·]\s+|\d+[.)]\s+)")
+
+
+def _clauses(text: str) -> list[str]:
+    """段落文本 → 子句清单：bullet 起始行是边界，行内换行只是排版折行（用空格接回）。"""
+    buf: list[str] = []
+    for ln in text.splitlines():
+        s = ln.strip()
+        if not s:
+            continue
+        buf.append(("；" if buf else "") + s if _BULLET_RE.match(s) else s)
+    parts = _CLAUSE_SPLIT_RE.split(re.sub(r"\*\*|`", "", " ".join(buf)))
+    return [p.strip() for p in parts if p.strip()]
+
+
+#: 布尔字面量（大小写不敏感；同一子句里同时出现 true 与 false 视为「在讲切换」，不判）。
+#: 边界只按 ASCII 字母判，不用 ``\b``——中文动词可以直接贴着写（「置true」），而 CJK 在
+#: Unicode 模式下算 word char，``\b`` 在那种写法上根本不成立。
+_BOOL_RE = re.compile(r"(?<![A-Za-z])(true|false)(?![A-Za-z])", re.IGNORECASE)
+
+
+#: 单一源登记：追加段里出现 ``superseded`` 且点名该键，即视为组长已裁决「后到者优先」，
+#: 矛盾消解（本约定出自 backlog 20261013-071759-devops 的原文建议「或在补充段标注
+#: superseded by」——标注了就要被机械认账，否则登记等于没登记）。
+_SUPERSEDED_RE = re.compile(r"superseded", re.IGNORECASE)
+
+#: 单条矛盾的取舍规则（同一句话既进组长 stdout 也进任务书正文，两面不得各说各话）。
+CONFLICT_GUIDE = (
+    "判据须单一源：改写 success_criteria，或在追加段标 superseded by 本段并点名该键"
+    "（标了 lint 就认账）；未登记则执行者按**追加段（后到者优先）**实施，"
+    "并在交付里点名该取舍"
+)
+
+
+def _clause_bools(clauses: list[str], key: str) -> set[bool]:
+    """某键在各子句里被要求取的值（键与布尔字面量必须在**同一子句**，跨句不认）。"""
+    vals: set[bool] = set()
+    for c in clauses:
+        if key not in c.lower():
+            continue
+        found = {v.lower() for v in _BOOL_RE.findall(c)}
+        if found == {"true"}:
+            vals.add(True)
+        elif found == {"false"}:
+            vals.add(False)
+    return vals
+
+
+def _conflict_clauses(clauses: list[str], key: str) -> str:
+    """取该键第一条带布尔读数的子句（供告警原文点名，不编造）。"""
+    for c in clauses:
+        if key in c.lower() and _BOOL_RE.search(c):
+            return c.strip()[:120]
+    return ""
+
+
+def criteria_conflicts(body: str) -> list[dict]:
+    """批准单/建议正文里「判据面」与「追加段」对同一配置键给出相反布尔取值。
+
+    只判布尔矛盾：这是实锤反例的形状，误报面窄。义务/禁止一类的语义反差不判——中文
+    语气词无处不在，误报会把告警刷成噪声，噪声告警和没有告警一样没人读。
+
+    Args:
+        body: 批准单或建议全文。
+
+    Returns:
+        矛盾清单 ``{key, criteria, criteria_value, amend, amend_value}``；无矛盾 → ``[]``。
+    """
+
+    def _paragraphs(head_re: re.Pattern) -> list[str]:
+        lines = body.splitlines()
+        out: list[str] = []
+        for i, ln in enumerate(lines):
+            if not head_re.match(ln):
+                continue
+            para: list[str] = []
+            for seg in lines[i:]:
+                if not seg.strip():
+                    break
+                para.append(seg)
+            out.append("\n".join(para))
+        return out
+
+    def _keys(text: str) -> set[str]:
+        out: set[str] = set()
+        for tok in _TOKEN_RE.findall(text):
+            for seg in tok.split("."):
+                if "_" in seg and len(seg) >= 4:
+                    out.add(seg.lower())
+        return out
+
+    crit = "\n".join(_paragraphs(_CRITERIA_MARK_RE))
+    amend = "\n".join(_paragraphs(_AMEND_HEAD_RE))
+    if not crit or not amend:
+        return []
+    cc, ac = _clauses(crit), _clauses(amend)
+
+    out: list[dict] = []
+    for key in sorted(_keys(crit) & _keys(amend)):
+        if any(key in c.lower() for c in ac if _SUPERSEDED_RE.search(c)):
+            continue  # 追加段的 superseded 子句点名了该键 → 单一源已登记，矛盾消解
+        cvals, avals = _clause_bools(cc, key), _clause_bools(ac, key)
+        if len(cvals) == 1 and len(avals) == 1 and cvals != avals:
+            out.append(
+                {
+                    "key": key,
+                    "criteria": _conflict_clauses(cc, key),
+                    "criteria_value": "true" if True in cvals else "false",
+                    "amend": _conflict_clauses(ac, key),
+                    "amend_value": "true" if True in avals else "false",
+                }
+            )
+    return out
+
+
+def conflict_notice(c: dict) -> str:
+    """单条矛盾的告警文本（组长 stdout 用，与任务书注入面同源）。"""
+    return (
+        f"[判据矛盾] {c['key']}：success_criteria 段要求 {c['criteria_value']}"
+        f"（「{c['criteria']}」），追加段要求 {c['amend_value']}"
+        f"（「{c['amend']}」）——{CONFLICT_GUIDE}"
+    )
+
+
+def evidence_conflicts(body: str) -> list[dict]:
+    """任务书正文 → 其「证据：…approved/<id>.md」指向的批准单 → 矛盾清单（fail-open）。
+
+    证据行缺失、文件读不到、批准单没判据段 → 一律返回空列表：这是观测面，绝不挡派发。
+    """
+    m = re.search(r"^\s*证据[:：]\s*(\S+\.md)\s*$", body, re.M)
+    if not m:
+        return []
+    path = PROJECT_ROOT / m.group(1)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    return criteria_conflicts(text)
+
+
+def taskbook_conflict_block(conflicts: list[dict]) -> str:
+    """把矛盾与取舍规则写成任务书正文块——**组员侧可见**才是本单的病根。
+
+    派发 stdout 只有组长读到，执行者仍然只能自己猜后到者优先；所以告警必须落进任务书
+    本身，而不只是打在组长控制台。
+    """
+    lines = [
+        "",
+        "> ⚠ **判据矛盾（不阻断派发，但别再自行裁量）**——本单证据批准单里判据面与追加段"
+        "对同一配置键给出相反取值：",
+    ]
+    for c in conflicts:
+        lines.append(
+            f"> - `{c['key']}`：success_criteria 段 `{c['criteria_value']}`（「{c['criteria']}」）"
+            f"｜追加段 `{c['amend_value']}`（「{c['amend']}」）"
+        )
+    lines.append(f"> 处置：{CONFLICT_GUIDE}。")
+    return "\n".join(lines) + "\n"
+
+
 def write_taskbook(
     pod: Path, *, text: str | None, task_file: str | None, slug: str
 ) -> Path:
@@ -308,6 +491,11 @@ def write_taskbook(
     # 落盘前轻量 lint：命中错误 CLI 范式仅告警（组长确认后可照常派发），不阻断
     for warn in lint_taskbook(body):
         print(f"[!] 任务书 lint：{warn}")
+    conflicts = evidence_conflicts(body)
+    for c in conflicts:
+        print(f"[!] 任务书 lint：{conflict_notice(c)}")
+    if conflicts:
+        body = body.rstrip("\n") + "\n\n" + taskbook_conflict_block(conflicts)
     # 结尾恰好一个换行：裸文本会触发 pre-commit end-of-file-fixer 拦截任务书提交
     dest.write_text(header + body.rstrip("\n") + "\n", encoding="utf-8")
     return dest

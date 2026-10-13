@@ -47,11 +47,8 @@ git -c core.quotepath=false status --porcelain    # main 工作区未提交面�
 ```
 
 `git diff --name-only main..HEAD` **不可用作交集**：两点 diff 是「main 尖端 vs 分支尖端」，
-分支落后 main 时把**别人新提交的文件**也算成本次改动。实测两度踩：某次 `main..HEAD` 报
-8 文件，其中 `orchestration/state/backlog.json`、`registry.json` 我一次都没提交（main 前进了
-两个提交），与 main 的脏 backlog.json 求交得**假阳性交集**，而 `git merge-tree` 实际 rc=0；
-上一轮 P0 据此交出过错误的 `<blocked>`，白耗一轮。三点评测（merge-base / 两点 / merge-tree）
-用可执行输出裁决，结论就是本节第一行那条。
+分支落后 main 时把**别人新提交的文件**也算成本次改动 → 假阳性交集（实测据此交出过错误的
+`<blocked>`，白耗一轮；merge-base / 两点 / merge-tree 三点评测以可执行输出裁决）。
 
 ### 工具行为边界
 
@@ -67,12 +64,17 @@ git -c core.quotepath=false status --porcelain    # main 工作区未提交面�
 ### 与本单无关的脏项
 
 照常合并（交集为空即放行），交付时在 `<result>` 里报告其存在——不替组长清理别人的工作区。
-运行态文件（`sessions-runtime.json` 等 gitignored）不进交集：它们由 merge 的 cp 阶段专门
-搬运（见 `registry-runtime.md`）；**但 `*.lock` 永不跨树**（`dev.MERGE_STATE_EXCLUDE_SUFFIXES`）。
-锁不是数据，是「谁在跑」的活体读数，归属判据 = 文件里的 pid + run_log 双锚；把他树锁 cp 进
-main，main 就认到一把两头都不属于自己的锁——`orch status` 误报 worker 在跑，真在跑的 drain
-反被这把假锁挡住不唤醒（实测两次合并各拖进一把 `inspector.lock`，人工删掉才解封）。锁的现场性
-由判活面负责（`lock_status` 认墓碑/残骸），不属于合并面。
+运行态文件（`sessions-runtime.json` 等 gitignored）不进交集：由 merge 的 cp 阶段专门搬运
+（见 `registry-runtime.md`）；**但 `*.lock` 永不跨树**（`dev.MERGE_STATE_EXCLUDE_SUFFIXES`）——
+锁不是数据而是「谁在跑」的活体读数，把他树锁 cp 进 main，`orch status` 就误报 worker 在跑、
+真在跑的 drain 反被这把假锁挡住（实测两次合并各拖进一把 `inspector.lock`）。锁的现场性归判活面。
+
+### 被挡下之后：交集类 blocked 的交付形状（backlog 20261013-102152-devops）
+
+rc=2 时**别重测重合并地「试试」**：成因在 main 的脏面，再跳改变不了它（实测三连跳树哈希相同）。
+按 `<blocked tags="merge_dirty_face">` 交付并**原样贴** `[✗] 交集 N 项` 行与其后的清单 → drain 把进度
+打成 `wip(salvage)` 提交、保住面与分支，然后**停链**（不立续作单），清单挂回原条目与 `orch status`
+等组长清面后手动合并。判定细则见 orchestration 技能 `tier-a-tags.md`。
 
 ## 3. worktree 命名与孤儿回收
 
@@ -92,9 +94,8 @@ main，main 就认到一把两头都不属于自己的锁——`orch status` 误
   目录仍趴在原地）→ 条目 `worktree_gen` 升一代，任务书直接把新名交给 worker。**世代号读磁盘
   事实**（已有的 `<id>-r*` 目录），不是计数器自增，所以别把名字改回旧名——那个目录里可能正
   有第二个写者；
-- **同名目录 ≠ 你的面**：`worktree add` 撞见同名目录时会区分「登记在册」（继续用）与
-  **残骸未登记**（旧会话句柄没放，remove 只是半途成功）。后者照提示换新一代名，**别在残骸目录
-  里 `rm -rf`**，旧目录留给组长处置；
+- **同名目录 ≠ 你的面**：`worktree add` 区分「登记在册」（继续用）与**残骸未登记**（remove 只是
+  半途成功）。后者照提示换新一代名，**别在残骸目录里 `rm -rf`**，旧目录留给组长处置；
 - **手动/临时派发**：可用任意名——它不属孤儿集合、不会被自动清理，这正是防误删并发作业的
   理由；
 - 收口后自己清：`pysci-dev worktree remove <名>` 会连分支一起删；分支还有未合并提交时

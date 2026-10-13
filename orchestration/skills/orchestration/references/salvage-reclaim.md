@@ -1,9 +1,8 @@
 # 抢救面（孤儿回收第五面）：进度先保住，再谈清理
 
-回收原本只管四面（锁 / 条目 / worktree 名 / 进程），**默认动作是销毁**：`worktree remove
---force` + `branch -D`。会话被腰斩时那一半没提交的进度就这么没了，续作靠组长想起来。
-backlog 20261012-234000-leader 的裁定是把「进度」也当成一面：**回收先抢救，force-remove
-只对被证明干净的面开放**。
+回收原本只管四面（锁 / 条目 / worktree 名 / 进程）且**默认销毁**（`remove --force` + `branch -D`）：
+会话被腰斩时那一半没提交的进度就这么没了，续作靠组长想起来。backlog 20261012-234000-leader
+裁定把「进度」也当一面：**回收先抢救，force-remove 只对被证明干净的面开放**。
 
 ## 1. 判脏读数（`drain.worktree_salvage_state`，只读）
 
@@ -47,16 +46,13 @@ backlog 20261012-234000-leader 的裁定是把「进度」也当成一面：**�
 |---|---|---|
 | pending / in_progress（崩溃回收后会被自动重派） | **attach**：抢救事实就地挂到条目 `salvage` 键 + note 注记 | 下一跳回到**同一棵树**接着干，零新单 |
 | needs_leader（blocked / run_failed / parse_error / 验收 FAIL） | **append**：另立 `source=salvage` 的 pending 续作单，原条目不动 | needs_leader 不再会自动重派；「这一跳失败」是组长要看到的事实，代码不替他忘掉 |
+| needs_leader **且成因在 main 脏面**（`merge_dirty_face`） | **停链**：抢救照做、保面保分支，不立续作单 | 下一跳改变不了 main（实测三连跳树哈希相同）；判定见 `tier-a-tags.md` |
 
-- 续作单插在**第一个 pending 之前**：未合并提交随 main 前进而贬值，续作不是新提案，不该再排
-  一次队。
-- **幂等两道**：同一 `commit` 已挂过 → attach 返回 None；同一提交已有单在队 → append 返回
-  None（重跑回收不重复立单）。
-- **链深上限** `SALVAGE_MAX_CHAIN=3`：到顶不再自动续作，只在原条目 note 留「须组长处置」——
-  机器接手不能变成无限自我复制。
-- needs_leader **不被 attach 改状态**（那是已做出的裁决，代码无权撤销）。
-- `source=salvage` 与 Tier A 自动立案的 `source: tier-a` 同字段同意图：复盘时一眼看出这条不是
-  组员提的建议，是机器接的手。
+- 续作单插在**第一个 pending 之前**（未合并提交随 main 前进而贬值，续作不是新提案，不该再排队）。
+- **幂等两道**：同一 `commit` 已挂过 → attach 返回 None；同一提交已有单在队 → append 返回 None。
+- **链深上限** `SALVAGE_MAX_CHAIN=3`：到顶只留「须组长处置」注记，机器接手不能变成无限自我复制；
+  needs_leader 条目不被 attach 改状态（裁决已做出，代码无权撤销）。
+- `source=salvage` 与 `source: tier-a` 同字段同意图：复盘时一眼看出是机器接的手，不是组员建议。
 
 ## 4. 任务书里的续作指令（三形状）
 
@@ -81,7 +77,7 @@ backlog 20261012-234000-leader 的裁定是把「进度」也当成一面：**�
 - `.done` 摘要：`worktrees_salvaged`（本次抢救的名）与 per-item 的 `salvage`/`continuation`；
   run 日志痕迹 `[+] 抢救孤儿 worktree …` / `[+] 未收尾进度已抢救…→ 自动续作单 <id> 已插到队首`
   / `[!] 抢救 <名>：目录在但**未登记为 worktree**…不进去写`。
-- **`--dry` 一条都不执行**：不写、不删、不改运行态。
+- **`--dry` 一条都不执行**（不写、不删、不改运行态）。
 
 ## 6. 与升代（第四面）的共存
 
@@ -91,9 +87,9 @@ backlog 20261012-234000-leader 的裁定是把「进度」也当成一面：**�
 
 ## 7. 派发侧同族闸（④⑤，同一双写事故的另一半）
 
-回收闸在**事后**清孤儿，`dispatch` 还得在**事前**别去撞它还活着的会话（#69 实证两进程共写同一
-sid 的历史档）。判据同第四面：运行态会话池 `pid` 判活 + `pid_is_session` 核对 argv，两闸都过
-才算在途；任一不过（没记 pid、pid 已被系统复用）→ fail-open 照续，不冤枉正常跑。命中后分流通：
+回收闸在**事后**清孤儿，`dispatch` 还得在**事前**别撞它还活着的会话（#69 实证两进程共写同一
+sid 的历史档）。判据同第四面：池里 `pid` 判活 + `pid_is_session` 核对 argv，两闸都过才算在途；
+任一不过（没记 pid、pid 已易主）→ fail-open 照续，不冤枉正常跑。命中后分流通：
 
 - **人工派发**默认 `rc=2` 拒绝并点名占用 PID 与任务书，`--force-new-session` 才放行（放行=起
   新 sid，绝不复用占用中的）；**drain 批次**（`auto=True`）自动开新 sid 续跑，不换 sid 就会整批

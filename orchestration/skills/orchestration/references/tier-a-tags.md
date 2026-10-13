@@ -11,9 +11,9 @@
  "infra_kinds": {"<kind>": "<定义>"}}
 ```
 
-初始 10 标签：`whitelist_conflict` `cli_missing` `doc_stale` `tool_bug`
-`harness_gap` `model_capability` `quota` `env_broken` `design_smell` `unknown`。
-提案分类两值：`defect` `usability`。
+初始 10 标签 + 增补 `merge_dirty_face`（2026-10-13）共 11：`whitelist_conflict`
+`cli_missing` `doc_stale` `tool_bug` `harness_gap` `model_capability` `quota` `env_broken`
+`design_smell` `unknown`。提案分类两值：`defect` `usability`。
 
 - 增补标签/分类 = 改文件（**须附定义**）并经 devops 交付，不改代码：Python 侧唯一读取口
   `tools/failure_tags.load_tags()` / `load_infra_kinds()`，Node 侧
@@ -26,6 +26,28 @@
 `<blocked tags="a,b">`：属性可选，缺省=空列表合法（不标注不阻断）；属性存在时
 gate 校验词表，含词表外标签 → exit 2 + 列出可用词表。分隔符半/全角逗号、分号、
 空白都收，大小写不敏感。`<result>` 上的 tags 一律忽略（只 blocked 携带失败语义）。
+
+## 标签的第二用途：有的标签会改链路
+
+绝大多数标签是纯统计面（by_failure 计数 → 阈值自动立案）。`merge_dirty_face` 是第一个
+**驱动行为**的标签（backlog 20261013-102152-devops）：
+
+- **认成因**：`drain.merge_intersect_cause(outcome)` 在 blocked 交付上两通道任一命中即认定——
+  `tags` 含该标签，**或**正文含 `pysci-dev worktree merge` 打印的 `[✗] 交集 N 项` 行。待清文件清单
+  从该行**下一行起**的缩进路径行取（同一行的尾巴不是文件，反引号脱壳）；读不到清单仍算交集类
+  ——认成因比凑清单重要。
+- **停链**：抢救照做（`wip(salvage)` 提交、面与分支都保住），但**不立 `source=salvage` 续作单**。
+  理由：这类失败的成因在 **main 的工作区脏面**，不在被派者的树上，下一跳改变不了它——2026-10-13
+  上午实测三连跳（`072000-leader` → 两跳 salvage）树哈希逐字节相同、测试结果相同，第 4 跳才撞上
+  `SALVAGE_MAX_CHAIN`。续作链对它是空转。
+- **挂回原条目**：清单写进条目的 `merge_intersect` 字段（结构化，不必从 note 全文再解析），note
+  附处置命令，`orch status` 的 needs_leader 段渲染「合并相交待清：<文件>——清面后
+  `pysci-dev worktree merge <面>`（已停链，无续作单）」，组长一跳就知道要动哪个文件。
+- **组员侧教标**：任务书尾部（`workflow.backlog_task_text`）写明按该标签交付并原样贴清单；不教
+  就没人标，链路只能靠正文碰运气。
+
+**增补会改链路的标签必须同时改代码**，并在词表定义里写清它驱动哪条链路——只加词不加行为，
+组员标了也没人读；只改行为不加词，统计面会把这一类算进 `unknown`。
 
 ## 提案分类（`<infra_suggestion kind="…">`）四面执法
 
