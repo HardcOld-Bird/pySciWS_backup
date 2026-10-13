@@ -2,8 +2,8 @@
 
 三件事锁死：
 ① 退役事实——orchestration/ 下的原设计文档（REFACTOR 文档，下称 REF）已删除，代码/文档
-   面零 REF 字面量悬空引用（判据口径：全仓命中只允许 git 历史与本单留档；state 台账与
-   用户语料属留档面，不计）；
+   面零 REF 字面量悬空引用（口径=**旧路径** orchestration/REFACTOR.md；根目录另有 2026-10-14
+   的在役新蓝图 REFACTOR.md，引用它正当，2026-10-14 m1 收窄口径；state 台账与用户语料属留档面，不计）；
 ② 融合映射——README 各节含收官并入的新面（头部状态行、§1 三角色、§3.1 无记忆、
    §4.1 改进机构面、§4.5 硬警示、§5.3–5.5、§6 五要素、§9 三闸、§12 收官段、§13 三行）；
 ③ 指针清零——README 内不得再有 `REFACTOR §N` 式节号指针（历史名提及不算指针）。
@@ -18,7 +18,10 @@ from pysci.paths import PROJECT_ROOT
 
 #: 判据「代码/文档」面：这些根下任何文件都不得再出现 REF 字面量。
 #: 本测试文件自身豁免（判据字面量所在处），字面量经拼接避免自我命中。
-REF = "REFACTOR" + ".md"
+#: **口径收窄（2026-10-14，REFACTOR m1）**：只禁**被删除的旧文档路径** `orchestration/REFACTOR.md`
+#: ——v1.0 收官把它并入了 README，那条路径必须彻底清零。根目录另有**新的在役蓝图** `REFACTOR.md`
+#: （2026-10-14 用户批准，M 系列施工依据），引用它是正当的，不该被这条旧快照判据误伤。
+REF = "orchestration/REFACTOR" + ".md"
 CODE_DOC_ROOTS = (
     "src",
     "tests",
