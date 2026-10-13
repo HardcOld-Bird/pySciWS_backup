@@ -31,9 +31,9 @@ PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
 pysci-dev worktree merge <任务名>   # 交集检查 → cp 运行态 → merge --no-ff → 会话数自检
                                     #   → **成功自动摘面**（失败/blocked 保留；--keep 留检视）
                                     #   交集非空 rc=2 列文件（merge-base 起算，勿手算）
-# 5. 推送（跨平台超时 + 成败留痕；best-effort，失败忽略）
+# 5. 推送（跨平台超时 + 成败留痕；best-effort）
 pysci-dev push
-# 6. 清理：merge 已自动做；遗留面 `pysci-dev worktree clean [--apply]`（拒绝未合入者）
+# 6. 清理：merge 已自动做；遗留面 `pysci-dev worktree clean [--apply]`（未合入拒绝；脏面 --discard）
 ```
 
 **主树同步入口/依赖一律 `pysci-dev venv-sync`**（裸 `uv sync`/`uv run` 遇运行中 exe 会先删光

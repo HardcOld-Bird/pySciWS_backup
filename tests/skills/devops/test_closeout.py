@@ -181,3 +181,78 @@ def test_push_failure_is_traced_not_silent(tmp_path, monkeypatch, capsys):
     assert _last_trace(tmp_path)["ok"] is False
     out = capsys.readouterr().out
     assert "push 失败" in out and "留痕" in out
+
+
+# ---------------------------------------------------------------------------
+# ④ 分类—动作一致（backlog 20261013-222531-leader）：不许「说可清却删不掉」
+# ---------------------------------------------------------------------------
+def _merged_then_dirty(tmp_path, monkeypatch) -> Path:
+    """一个已合入 main、但盘内有未跟踪文件的温面（正是本单的实形）。"""
+    main = _main_repo(tmp_path)
+    wt = _add_face(main, "dirty", work="dirty work\n")
+    _git(main, "merge", "--no-ff", "-q", "-m", "m", "wt-dirty")
+    (wt / "scratch.txt").write_text("untracked\n", encoding="utf-8")
+    _bind(monkeypatch, main)
+    return main
+
+
+def _clean(main: Path, *, apply: bool, discard: bool = False) -> int:
+    return dev.cmd_worktree(
+        Namespace(action="clean", name=None, apply=apply, discard=discard)
+    )
+
+
+def test_clean_refuses_merged_but_dirty_by_default(tmp_path, monkeypatch, capsys):
+    """已合入但有脏 → 归「待确认」、默认不删、rc 非 0（分类=拒绝，与动作一致）。"""
+    main = _merged_then_dirty(tmp_path, monkeypatch)
+    rc = _clean(main, apply=True)
+    out = capsys.readouterr().out
+    assert "待确认" in out and "dirty" in out
+    assert rc != 0
+    assert "dirty" in _worktree_names(main)  # 确实没删
+
+
+def test_clean_force_removes_merged_but_dirty(tmp_path, monkeypatch):
+    """--force 才真删脏的已合入面（分类=可清(force)，与动作一致）。"""
+    main = _merged_then_dirty(tmp_path, monkeypatch)
+    assert _clean(main, apply=True, discard=True) == 0
+    assert "dirty" not in _worktree_names(main)
+
+
+def test_clean_dry_run_never_lies_about_cleanable(tmp_path, monkeypatch, capsys):
+    """dry-run 的「可清」必须个个真删得掉——本单的病灶就是这两者不一致。"""
+    main = _merged_then_dirty(tmp_path, monkeypatch)
+    _clean(main, apply=False)
+    out = capsys.readouterr().out
+    assert "[√] 可清" not in out  # 唯一的已合入面是脏的 → 不该出现在「可清」桶
+    assert "待确认" in out
+
+
+def test_clean_skips_in_flight_face(tmp_path, monkeypatch, capsys):
+    """新建未产出的面（分支 tip == main HEAD）不算「已合入的遗留」——别摘正在作业的面。"""
+    main = _main_repo(tmp_path)
+    _git(
+        main,
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "wt-fresh",
+        str(main / ".qoder" / "worktrees" / "fresh"),
+    )
+    _bind(monkeypatch, main)
+    rc = _clean(main, apply=True, discard=True)
+    out = capsys.readouterr().out
+    assert "在途" in out and "fresh" in out
+    assert rc == 0
+    assert "fresh" in _worktree_names(main)  # 不动
+
+
+def test_remove_worktree_keeps_branch_on_failure(tmp_path, monkeypatch, capsys):
+    """脏面删不掉时**不**谎报分支已删（此前打「分支删除跳过：used by worktree」）。"""
+    main = _merged_then_dirty(tmp_path, monkeypatch)
+    wt = main / ".qoder" / "worktrees" / "dirty"
+    assert dev._remove_worktree("dirty", wt) != 0
+    out = capsys.readouterr().out
+    assert "未能摘除" in out and "分支已删除" not in out
+    assert _git(main, "branch", "--list", "wt-dirty") != ""  # 分支保留
