@@ -36,9 +36,25 @@ preset = "mimo"
 # inspector 巡检引擎全局开关 —— true / false（原 state/inspector.enabled 迁至本文件）
 enabled = true
 
+[routing]
+# ── 谷时隐性 DeepSeek（路由 v3，用户设计 2026-10-13）────────────────
+# DeepSeek 官方价分峰谷：工作日 9:00–12:00、14:00–18:00 为峰（2 倍价），其余
+# 时刻为谷（周六日全天=含调休上班的周末、法定节假日全天、工作日其余时段）。
+# **谷时把上面 preset 的 main 席链换成 DeepSeek、入峰切回**——preset 那一行不动，
+# 不新增预设，这就是「隐性」。pro 席保持原预设升档席（用户终裁），minimum 不参与。
+# 切换只作用于**下一次派发**（在途单跳不换模型）：入谷即切，入峰提前 1 小时。
+# 节假日用 chinesecalendar 离线判定（2004–2026 含调休）；覆盖外年份/库缺席
+# 一律保守不切换并在 orch status 与 mirror 出声告警。
+enabled = true
+# valley_preset = "deepseek"           # 谷时席链取哪个预设（qwen/mimo/deepseek）
+# leadtime_s = 3600                    # 入峰提前量（秒；0 = 踩点才切）
+# peak = [[9, 12], [14, 18]]           # 峰段，半开区间 [起, 止)，24 小时制
+# jury_panel = ["glm", "kimi", "mimo"] # 谷时仲裁团固定面板（三席一律按量付费直调）
+# 非法值逐键回落出厂并告警——`orch status` 路由段会把警告逐条列出来。
+
 # ── 预留节（暂不使用）────────────────────────────────────────
 # [bencher]
-#   压测 minimum 档（用户 2026-10-12 裁决）：火山引擎豆包
-#   （doubao-seed-2.0-mini 候选，E3-live 调查单内），不随预设走。
+#   压测 minimum 档（用户 2026-10-12 裁决，P-25 关闭火山调查）：
+#   BYOK Mimo-V2.6-Flash → 内置回退，不随预设走（规格 5，路由 v3 同单改定）。
 # [jury]
 #   席位覆盖：如需指定具体旗舰型号在此列

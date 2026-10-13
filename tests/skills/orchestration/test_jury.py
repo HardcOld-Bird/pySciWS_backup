@@ -21,13 +21,16 @@ from pysci.skills.orchestration.tools import jury, presets
 
 from .conftest import (
     SEAT_KEY_ENV,
+    VALLEY_MOMENT,
     ai_reply,
     biased_first_juror,
     display_label_for_liked,
     prefer_juror,
     seed_case,
     set_jury_panel,
+    set_routing_clock,
     write_preset,
+    write_routing,
 )
 
 LIKE = "实施改动，收益是机械可验收"
@@ -327,11 +330,17 @@ def test_successful_readjudication_clears_queue_entry(iso_jury, monkeypatch):
 # ---------------------------------------------------------------------------
 # 非 Qwen 硬规则与配置面
 # ---------------------------------------------------------------------------
-def test_same_family_rule_refuses_under_own_preset(iso_jury, monkeypatch):
-    """§4 同族硬规则**相对预设**（2026-10-12 22:4x 预设化推翻了绝对的「不得含 Qwen」）：
+def test_same_family_rule_refuses_court_not_registry(iso_jury, monkeypatch):
+    """§4 同族硬规则：锚点是「**被评模型的家族坐进了本庭**」，不是「席位表里在册」。
 
-    qwen 预设下混进 Qwen 系 = 同族自恋，拒开庭且零调用；mimo 预设下同一席是点名合法席
-    （GLM+KIMI+Qwen），不得误伤——两面都要有断言，否则规则改回去没人拦。
+    路由 v3 把这条规则再相对化一次（旧写法拿 ``presets.active().name`` 当同族）：谷时
+    被评的是 DeepSeek，而席位表跨预设共用——deepseek 席必然在册、又必然被隐性态的固定
+    面板（终裁 v4：glm+kimi+mimo）挡在庭外。按「在册即拒」，本单要开的谷时庭一庭都开不成。
+    三支断言缺一就拦不住相应的回归：
+
+    1. 纯函数面：认家族、认不出被评模型时不判；
+    2. 谷时阳性放行：同族席在册但庭外 → 照常开庭，读数面点名它为何不在庭里；
+    3. 谷时违规拦下：``[routing] jury_panel`` 把被评家族点进面板 → 拒开庭且零调用。
     """
     assert jury.family_violations(["Qwen/Qwen3-235B"], "qwen") == ["Qwen/Qwen3-235B"]
     assert jury.family_violations(["Qwen/Qwen3-235B"], "mimo") == []
@@ -341,22 +350,43 @@ def test_same_family_rule_refuses_under_own_preset(iso_jury, monkeypatch):
         )
         == []
     )
+    assert jury.family_violations(["deepseek-v4-pro"], "") == [], "认不出被评模型不判"
 
-    write_preset("qwen")  # 改一行 toml → 换预设（真源面）
-    calls = []
-    case = open_court(
-        iso_jury,
-        monkeypatch,
-        ["deepseek-ai/DeepSeek-V3", "Qwen/Qwen3-235B"],
-        _probe_transport(calls),
+    seats = [
+        {"name": "deepseek", "model": "deepseek-v4-pro"},
+        {"name": "glm", "model": "glm-5.3"},
+        {"name": "kimi", "model": "kimi-k2.6"},
+        {"name": "qwen", "model": "Qwen3.8-Max-Preview"},
+    ]
+    write_preset("qwen")
+    set_routing_clock(monkeypatch, VALLEY_MOMENT)  # 周六夜间 → 隐性态生效
+
+    calls: list = []
+    case = open_court(iso_jury, monkeypatch, seats, _probe_transport(calls))
+    plan = jury.seat_readiness(jury.load_config())
+    assert plan["hidden"] is True and plan["producer"] == "deepseek"
+    assert [s.name for s in plan["out_of_panel"]] == ["deepseek", "qwen"], (
+        "deepseek 因被评同族、qwen 因隐性态固定面板（终裁 v4 第三席=Mimo）挡在庭外"
     )
+    assert sorted(s.name for s in plan["seats"]) == ["glm", "kimi"]
+    assert "面板缺席：mimo" in jury.readiness_summary(plan), "第三席未配置要出声催办"
     run = jury.adjudicate(case)
-    assert run.status == "declined" and calls == [] and "同族" in run.message, (
-        presets.active().name,
-        run.status,
-        run.message,
+    assert run.status == "recorded", (run.status, run.message)
+    assert "被评同族，依 §4 不得入庭" in jury.readiness_summary(plan), (
+        jury.readiness_summary(plan)
     )
-    assert not jury.queue_path(case.case_id).exists(), "配置违规不是渠道故障，不入队"
+
+    # 违规面：把被评家族点进面板 → 同族席坐进本庭 → 拒开庭，且一次调用都不发
+    calls.clear()
+    write_routing(jury_panel=["deepseek", "glm"])
+    case2 = open_court(iso_jury, monkeypatch, seats, _probe_transport(calls))
+    run2 = jury.adjudicate(case2)
+    assert run2.status == "declined" and calls == [] and "同族" in run2.message, (
+        presets.active().name,
+        run2.status,
+        run2.message,
+    )
+    assert not jury.queue_path(case2.case_id).exists(), "配置违规不是渠道故障，不入队"
 
 
 def test_registry_jury_config_fail_open(iso_registry):
@@ -581,14 +611,18 @@ def ns(case_file, **kw):
 def test_cmd_jury_exit_codes(iso_jury, monkeypatch, capsys):
     """退出码三档（0 留痕 / 1 降级入队 / 2 拒开庭或案卷不可用）——脚本分流靠它。"""
     case = seed_case(iso_jury)
+    set_routing_clock(monkeypatch, VALLEY_MOMENT)  # 谷态：面板走 [routing] jury_panel
     set_jury_panel(iso_jury.parent / "registry.json", ["m1"])
     monkeypatch.setenv(SEAT_KEY_ENV, KEY)
     monkeypatch.setattr(jury, "chat_once", prefer_juror(LIKE))
     assert jury.cmd_jury(ns(case)) == 0
     assert "裁决=A" in capsys.readouterr().out
 
-    write_preset("qwen")  # 同族拒开庭只在「qwen 预设 + Qwen 席」成立（相对化）
-    set_jury_panel(iso_jury.parent / "registry.json", ["Qwen/Qwen3"])
+    # 拒开庭的成立条件是「被评同族**坐进了本庭**」：三预设的出厂面板都排除本族，非谷态时
+    # 构造不出违规；谷态把面板写成 deepseek 打头（被评模型自己审自己）才是那条拦下的路。
+    write_preset("qwen")
+    write_routing(jury_panel=["deepseek", "glm"])
+    set_jury_panel(iso_jury.parent / "registry.json", ["deepseek-v4-pro"])
     assert jury.cmd_jury(ns(case)) == 2
     assert "同族" in capsys.readouterr().out
     write_preset("mimo")

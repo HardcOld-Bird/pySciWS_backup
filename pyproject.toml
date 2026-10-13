@@ -56,6 +56,12 @@ dependencies = [
     # gain_ep 实验平台（原 sweeper400）：绑定 NI 数据采集硬件，仅 Windows + 装 NI-DAQmx 驱动后可运行；
     # 包本身跨平台可安装，无驱动时相关用例由 tests/…/conftest.py 守卫自动跳过收集。
     "nidaqmx",
+    # 编排体系路由 v3（src/pysci/skills/orchestration/tools/routing.py）：DeepSeek 官方峰谷
+    # 价差 2 倍，谷时（周末全天 / 法定节假日全天 / 工作日峰段之外）把 qwen·mimo 预设的主席与
+    # 仲裁团隐性换到 DeepSeek 席。**法定节假日判定必须有库**——星期几能自己算，假日不能。
+    # 选型：chinesecalendar 零传递依赖、内嵌国务院 2004–2026 公告（含调休），判不出年份抛
+    # NotImplementedError，由 routing 转成「保守不切换 + 出声告警」。
+    "chinesecalendar>=1.10",
     # 科研绘图 skill（src/pysci/skills/scientific_plotting/；数据：data/skills/scientific_plotting/）：
     # 出版规范层 + 图生产管线骨架。绘图后端复用已声明的 matplotlib/scienceplots/ultraplot/pyvista；
     # pyyaml 用于读取 figures 目录下的 STYLE.yaml 风格绑定（此前仅作为传递依赖存在，此处显式声明）。

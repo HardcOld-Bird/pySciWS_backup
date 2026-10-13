@@ -11,6 +11,8 @@ import json
 import pathlib
 import re
 import shutil
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -26,6 +28,7 @@ from pysci.skills.orchestration.tools import (
     ledger,
     orch,
     registry,
+    routing,
     settings,
     verdict,
     watch,
@@ -39,6 +42,46 @@ RUNTIME_FILE = "sessions-runtime.json"
 #: 真实 ``Registry.save``——模块导入时捕获。默认夹具为防污染把它 no-op 掉，
 #: 需要断言落盘（读-改-写合并语义）的用例用本引用还原。
 REAL_REGISTRY_SAVE = registry.Registry.save
+
+
+#: 路由时钟的测试基准：2026-10-14 是**普通周三的峰段内**（chinesecalendar 实测
+#: ``get_holiday_detail(2026-10-14) == (False, None)``）→ 谷时隐性态**不生效**，
+#: 全部既有 jury/preset 用例看到的席链与面板都还是 toml 那一行的预设。
+#: 为什么必须 autouse 冻结（而不是各用例自己传 ``moment=``）：席链与仲裁面板现在
+#: 由时钟驱动，夜里跑套件会看到 ``main`` 链变成 DeepSeek 席、面板第三席换族——
+#: 两千多个用例的断言随墙上时钟漂，红得一地却一行代码都没坏。
+#: 要测谷态就用 :func:`set_routing_clock` 或 :func:`valley_clock` 显式改时刻。
+PEAK_MOMENT = datetime(2026, 10, 14, 10, 0, tzinfo=ZoneInfo(routing.CN_TZ_NAME))
+#: 谷态基准：同一周的周六（``2026-10-17``）——周末全天谷，与节假日库无关，最稳的谷样本。
+VALLEY_MOMENT = datetime(2026, 10, 17, 20, 0, tzinfo=ZoneInfo(routing.CN_TZ_NAME))
+
+
+def set_routing_clock(monkeypatch, moment: datetime) -> datetime:
+    """把路由时钟钉到给定时刻（返回该时刻，用例可直接断言）。"""
+    monkeypatch.setattr(routing, "now_cn", lambda: moment)
+    return moment
+
+
+@pytest.fixture(autouse=True)
+def freeze_routing_clock(monkeypatch, tmp_path):
+    """默认冻结在峰段——隐性 DeepSeek 态是**时间驱动**的配置面覆盖，测试必须自己选时刻。
+
+    顺带把切换留痕的两个落盘点进 ``tmp_path``（兜底隔离）：``iso_state``/``iso_dispatch``
+    各自也会 patch，但两者都没挂的用例只要走到 ``do_dispatch``（→ ``note_switch``）就会真写
+    仓库状态面——实测泄漏形态：``routing-last.json`` 留下一条冻结时点的假基线，之后第一个
+    真实进程拿它当「上次读数」，往决策日志写一场**没发生过的峰谷跨越**。autouse 先于显式
+    fixture 实例化，挂了 iso 的用例会被 iso 的路径再覆盖回自己的 state 目录，互不抢道。
+    """
+    set_routing_clock(monkeypatch, PEAK_MOMENT)
+    monkeypatch.setattr(routing, "ROUTING_STATE_PATH", tmp_path / "routing-last.json")
+    monkeypatch.setattr(journal, "JOURNAL_PATH", tmp_path / "preference-journal.jsonl")
+
+
+@pytest.fixture
+def valley_clock(monkeypatch):
+    """把路由时钟搬到周六夜间（隐性态生效）的用例专用夹具。"""
+    return set_routing_clock(monkeypatch, VALLEY_MOMENT)
+
 
 # 2026-10-10 额度事故原文（会话 jsonl 实测）
 QUOTA_TEXT = (
@@ -81,6 +124,41 @@ def write_preset(preset: str) -> pathlib.Path:
     path = settings.SETTINGS_PATH
     path.write_text(f'[model]\npreset = "{preset}"\n', encoding="utf-8")
     return path
+
+
+def write_routing(**kv) -> pathlib.Path:
+    """在**当前生效的隔离 toml** 上落 ``[routing]`` 块，保留 ``[model]``/``[inspector]``。
+
+    整份重建而不是往文件尾追加：追加写法二次调用就出现两个 ``[routing]`` 表，
+    ``tomllib`` 直接抛错 → ``read_settings`` fail-open 返回 ``{}`` → 用例以为在测「配置无效」
+    其实在测「上一行把文件写坏了」。值按 TOML 字面量给（``true`` / ``3600`` / ``["glm"]``）。
+    """
+    path = settings.SETTINGS_PATH
+    data = settings.read_settings()
+    preset = str((data.get("model") or {}).get("preset") or "mimo")
+    inspector = data.get("inspector") or {"enabled": True}
+    face = {k: v for k, v in (data.get("routing") or {}).items()}
+    face.update(kv)
+    body = [f'[model]\npreset = "{preset}"\n', "[inspector]"]
+    for key, value in inspector.items():
+        body.append(f"{key} = {_toml_value(value)}")
+    body.append("")
+    body.append("[routing]")
+    for key, value in face.items():
+        body.append(f"{key} = {_toml_value(value)}")
+    path.write_text("\n".join(body) + "\n", encoding="utf-8")
+    return path
+
+
+def _toml_value(value) -> str:
+    """Python 值 → TOML 字面量（bool 必须小写，str 用双引号，list 内元素同规则）。"""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_toml_value(v) for v in value) + "]"
+    return '"' + str(value).replace('"', '\\"') + '"'
 
 
 def set_presets(state, **tables):
@@ -160,6 +238,9 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(jury, "JURY_DIR", state / "evals" / "jury")
     monkeypatch.setattr(jury, "JURY_QUEUE_DIR", state / "evals" / "jury-queue")
     monkeypatch.setattr(jury, "JURY_BRIEF_PATH", state / "evals" / "jury-brief.md")
+    # 路由 v3：切换留痕的运行态（跨进程比对上次读数）——不 patch 就真写仓库那份，
+    # 而且上一用例留下的读数会把本用例的「首次只立基线」分支吃掉（误报一次切换）。
+    monkeypatch.setattr(routing, "ROUTING_STATE_PATH", state / "routing-last.json")
     # drain 启动的模型映射自愈默认 no-op（防测试真起 exe/写真实 registry；
     # 测刷新行为的用例自行 monkeypatch 覆盖）
     monkeypatch.setattr(
@@ -474,6 +555,10 @@ def iso_dispatch(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "SETTINGS_PATH", state / "pysci_settings.toml")
     seed_settings(state)
     monkeypatch.setattr(channels, "EVENTS_PATH", state / "channel-events.jsonl")
+    # 路由面：do_dispatch 每跳都读一次峰谷并可能落「上次读数」+ 决策日志。不 patch
+    # 就成了测试往真实 worktree 状态面写 routing-last.json / preference-journal.jsonl。
+    monkeypatch.setattr(routing, "ROUTING_STATE_PATH", state / "routing-last.json")
+    monkeypatch.setattr(journal, "JOURNAL_PATH", state / "preference-journal.jsonl")
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(dispatch, "SUGGESTIONS_DIR", state / "suggestions")
     monkeypatch.setattr(dispatch, "LINT_RULES_PATH", state / "taskbook-lint.json")

@@ -1382,6 +1382,10 @@ def _drain_batch(
         _log(
             run_log, f"[i] sid 在途闸：{outcome.sid_new_reason}，本批已自动换新会话续跑"
         )
+    # 路由 v3 规格 2「切换记录入 run 日志」：do_dispatch 走 quiet 通路，那句切换文案不会
+    # 自己冒到屏幕上。不抄这一行，谷时批次在日志里就与平时长得一模一样——而账单不是。
+    if outcome.route:
+        _log(run_log, f"{outcome.route}（批次 {label}）")
     elapsed = round(time.time() - t0, 1)
     # 规格 4a「run 日志」面：do_dispatch 走 quiet 通路，换席告警不会自己打到屏幕上，
     # 于是降级跑完的批次在日志里看起来就像「首席好好的」——回退必须进日志，否则

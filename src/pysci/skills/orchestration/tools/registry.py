@@ -49,7 +49,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, ORCHESTRATION_ROOT, PODS_ROOT, PROJECT_ROOT
 
-from . import presets
+from . import presets, routing
 
 REGISTRY_PATH: Path = ORCH_STATE_ROOT / "registry.json"
 
@@ -202,8 +202,9 @@ DEFAULT_TIER_A: dict[str, int] = {
 
 #: Tier C 仲裁团配置（REFACTOR §4；E3-prep 单渠道，E3-live 改**逐席 provider**）。
 #: **seats 默认空**：选型权归用户（各提供商的账号与付费面是用户的），代码只负责一条硬
-#: 规则——型号串含 ``qwen`` 即拒开庭（排除同族自恋偏差），不做模型能力判断也不内置候选
-#: 清单。空 seats 的语义是「尚未选型」，``orch jury`` 据此降级入队而不是报错。
+#: 规则——面板不得含**被评模型同族**型号（排除同族自恋偏差；「同族」随预设/谷时隐性态
+#: 相对化，见 :func:`.routing.producer_family`），不做模型能力判断也不内置候选清单。
+#: 空 seats 的语义是「尚未选型」，``orch jury`` 据此降级入队而不是报错。
 #: registry.json 顶层 ``jury`` 块逐键覆盖（非法值回落默认，见 :meth:`Registry.jury`）：
 #:
 #: .. code-block:: json
@@ -219,6 +220,9 @@ DEFAULT_TIER_A: dict[str, int] = {
 #:
 #: 每席四键 ``name``/``key_env``/``base_url``/``model`` 缺一不可：缺了不剔除该席，而是标
 #: ``defect`` 让它以 unavailable 身份被看见（静默剔除会让用户以为评审团里真有那席）。
+#: **一席一条端点、一律按量付费**（用户终裁 2026-10-13，路由 v3 返工）：TokenPlan 套餐
+#: 路径整个不做——两家个人版条款都禁止 API 自动化调用（违规封 Key），而仲裁团正是自动化
+#: 调用。故席位没有端点链、没有 ``billing``/``endpoints`` 键，代码里也不存下探回退。
 #: 可选 ``params`` 是逐席请求参数覆盖——实测三席传输面并不齐（``kimi-k2.6`` 只接受
 #: ``temperature=1``，共享的 ``temperature: 0`` 请求会 400），故参数必须能按席覆盖。
 #: ``fallback`` 是带独立开关的**回退席**，仅当 ≥1 主席不可达时才上场，上场必告警（§4）。
@@ -632,7 +636,7 @@ class Registry:
 
         合并粒度是**整条链**（不是逐席）：跟踪面写了 ``minimum`` 就是人对这一档的完整裁决，
         运行态解析值不得往中间插席——那正是 #74「机器静默顶掉裁决」的链形态版本。
-        ``main``/``pro`` 的真值**不走这条合并**（随预设，见 :meth:`_preset_chain`），本函数
+        ``main``/``pro`` 的真值**不走这条合并**（随预设，见 :meth:`Registry.preset_chain`），本函数
         只在预设缺席/不可激活时给它们出厂空位兜底。
         """
         faces = (
@@ -649,21 +653,37 @@ class Registry:
                 merged.setdefault(tier, seats)
         return merged
 
-    def _preset_chain(self, role: str) -> list[str]:
-        """``main``/``pro`` 的席位链（跟随当前预设）。
+    def preset_chain(self, role: str, *, preset: str | None = None) -> list[str]:
+        """``main``/``pro`` 的席位链（跟随当前预设；谷时隐性态跟随隐性预设）。
 
         三级：跟踪 ``presets.<预设>.<role>`` **整链覆盖**（账号级 BYOK UUID 落这里，选型权
         归用户）← 出厂预设表 ``presets.PRESETS``（人类名）。跟踪面**没有** ``presets`` 块的
         旧部署读 ``models.flash``/``models.max`` 兼容（旧档=当年的主力/升档席，本仓库迁移
         后走新块，此路径只服务回退/异机）。
+
+        **谷时隐性 DeepSeek**（路由 v3 规格 3，backlog 20261013-093000-leader）：判定生效时
+        **只有 ``main``** 改读隐性预设的席表——``pro`` 保持配置预设的升档席不变（用户终裁
+        2026-10-13：「pro 席成员保持原 pro 席不变，提高工作质量」，原「全员同档无 pro 席」
+        作废）。时间只覆盖**选哪张席表**，不绕过跟踪整链覆盖纪律：跟踪面写了
+        ``presets.deepseek.main`` 就以覆盖为准，机器不往链里插席。
+
+        ``preset`` 显式给定时读**那一个**预设，且**不再**做时间覆盖（隐性链本身就走这条
+        路，再覆盖一次等于自指）。
         """
+        if role == "main" and preset is None:
+            valley = routing.hidden_valley_preset()
+            if valley:
+                return self.preset_chain("main", preset=valley)
         active = presets.active()
+        name = preset or active.name
         tracked_presets = self.data.get("presets")
         if isinstance(tracked_presets, dict):
-            table = tracked_presets.get(active.name)
+            table = tracked_presets.get(name)
             if isinstance(table, dict) and role in table:
                 return dedupe_seats(normalize_seats(table[role]))
-        else:
+            if preset:
+                return dedupe_seats(presets.factory_chain(name, role))
+        elif not preset:
             key = "flash" if role == "main" else "max"
             models_face = self.data.get("models") or {}
             legacy = models_face.get(key)
@@ -673,13 +693,15 @@ class Registry:
                     if seat and seat not in seats:
                         seats.append(seat)
                 return dedupe_seats(seats)
-        return dedupe_seats(active.chain(role))
+        return dedupe_seats(
+            presets.factory_chain(name, role) if preset else active.chain(role)
+        )
 
     @property
     def models(self) -> dict[str, str]:
         """角色 → 具体型号的**平读面**（首席）。
 
-        ``main``/``pro`` 首席随当前预设（:meth:`_preset_chain`），``minimum`` 与旧档键走
+        ``main``/``pro`` 首席随当前预设（:meth:`Registry.preset_chain`），``minimum`` 与旧档键走
         :meth:`_merged_model_faces` 的三级回退。保留这个视图是为了不惊动既有消费方
         （``eval``/``orch`` 蒸馏跳/大量断言），它们要的就是「这一角色现在用哪个渠道」。
         需要回退链的代码请走 :meth:`model_chain`。
@@ -689,7 +711,7 @@ class Registry:
         # 角色是读数面的正名：旧档键（flash/max）归一进 main/pro 后从平读面摘掉，
         # 免得消费方同时看到两把钥匙、哪把是真值全靠猜。
         for role, legacy in (("main", "flash"), ("pro", "max")):
-            chain = self._preset_chain(role)
+            chain = self.preset_chain(role)
             out[role] = chain[0] if chain else ""
             out.pop(legacy, None)
         return out
@@ -697,13 +719,13 @@ class Registry:
     def model_chain(self, tier: str) -> list[str]:
         """该角色的有序回退链（首席在前）；``tier`` 接受旧档名（flash/max 别名到 main/pro）。
 
-        ``main``/``pro`` 跟随预设（:meth:`_preset_chain`）；``minimum`` 及其余键走三级回退
-        且旧 ``<tier>_fallback`` 键**并入链尾**（兼容读）。至少返回一席：链为空时回落
-        ``[""]``＝不传 ``-m``（走用户级默认渠道）。
+        ``main``/``pro`` 跟随预设（:meth:`Registry.preset_chain`，谷时隐性态跟随隐性预设）；
+        ``minimum`` 及其余键走三级回退且旧 ``<tier>_fallback`` 键**并入链尾**（兼容读）。
+        至少返回一席：链为空时回落 ``[""]``＝不传 ``-m``（走用户级默认渠道）。
         """
         role = LEGACY_TIER_ALIASES.get(tier, tier)
         if role in ("main", "pro"):
-            return self._preset_chain(role) or [""]
+            return self.preset_chain(role) or [""]
         merged = self._merged_model_faces()
         seats = list(merged.get(tier) or merged.get(role) or [""])
         legacy = merged.get(f"{tier}_fallback") or []
