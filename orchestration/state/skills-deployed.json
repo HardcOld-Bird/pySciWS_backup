@@ -15,9 +15,9 @@
       }
     },
     "devops": {
-      "source_hash": "e12f81f9e4cdcd054a2aabc862431b4294976b6cfb4ee97bd5e529d1c25e28b6",
+      "source_hash": "bb232713c15066d2c40fae54e4cdd3f4cdd45ef64959c2a79725f39c9d7cf8dc",
       "targets": {
-        "orchestration/pods/devops/.qoder/skills/devops": "e12f81f9e4cdcd054a2aabc862431b4294976b6cfb4ee97bd5e529d1c25e28b6"
+        "orchestration/pods/devops/.qoder/skills/devops": "bb232713c15066d2c40fae54e4cdd3f4cdd45ef64959c2a79725f39c9d7cf8dc"
       }
     },
     "comsol-simulation": {
@@ -69,9 +69,9 @@
       }
     },
     "inspector": {
-      "source_hash": "bdf20abf5a88e1d5db8375d57a98c1bb3e99ec59ef8ca2352e20ec0dc37e427d",
+      "source_hash": "b44d246a07802d00c29d641b81af03eab6a4feae594a34e4be2ab60988538571",
       "targets": {
-        "orchestration/pods/inspector/.qoder/skills/inspector": "bdf20abf5a88e1d5db8375d57a98c1bb3e99ec59ef8ca2352e20ec0dc37e427d"
+        "orchestration/pods/inspector/.qoder/skills/inspector": "b44d246a07802d00c29d641b81af03eab6a4feae594a34e4be2ab60988538571"
       }
     }
   }
