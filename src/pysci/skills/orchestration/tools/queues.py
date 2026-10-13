@@ -19,12 +19,13 @@ devops backlog 的组包/延期/needs_leader 语义在 :mod:`workflow` 侧原样
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT
 
-from . import workq
+from . import backpressure, workq
 
 #: 成员队列根（运行态；gitignore 语义与其余 state 同族）。
 QUEUES_DIR: Path = ORCH_STATE_ROOT / "queues"
@@ -109,6 +110,72 @@ def items(member: str, *, root: Path | None = None) -> list[dict[str, Any]]:
 def counts(member: str, *, root: Path | None = None) -> dict[str, int]:
     """按状态计数（status 队列段读数）。"""
     return workq.counts(queue_path(member, root=root))
+
+
+def _now_s(now: float | None = None) -> float:
+    return time.time() if now is None else float(now)
+
+
+def all_items(*, root: Path | None = None) -> list[dict[str, Any]]:
+    """全部成员队列的条目（跨队聚合读数用）。"""
+    out: list[dict[str, Any]] = []
+    for m in all_members(root=root):
+        out.extend(items(m, root=root))
+    return out
+
+
+def take_ready(
+    member: str, *, now: float | None = None, root: Path | None = None
+) -> dict[str, Any] | None:
+    """**出队单点**（m4 预留、§3.3 在此接延期检查）：先过 backpressure 延期判据再取。
+
+    未到期的条目不被取（``defer_until`` 在未来的 pending 跳过）——带宽类失败回队挂延期后，
+    调度侧睡到到期再查即自然重取。缺省 ``now`` 取系统时钟（worker 主循环）；测试注入假时钟。
+    """
+    now_s = _now_s(now)
+    return workq.take_next(
+        queue_path(member, root=root),
+        ready=lambda it: not backpressure.item_deferred(it, now_s),
+    )
+
+
+def defer(
+    member: str,
+    item_id: str,
+    *,
+    until: float,
+    count: int,
+    elapsed_s: float,
+    note: str = "",
+    root: Path | None = None,
+) -> dict[str, Any] | None:
+    """成员队列条目的延期回队（带宽类失败主处置；语义同 workflow.backlog_defer）。"""
+    return workq.defer_item(
+        queue_path(member, root=root),
+        item_id,
+        until=until,
+        count=count,
+        elapsed_s=elapsed_s,
+        note=note,
+    )
+
+
+def deferred_count(
+    member: str | None = None, *, now: float | None = None, root: Path | None = None
+) -> int:
+    """延期窗内的条目数；``member`` 给定则只数该队（worker 用），否则跨队聚合（观察面用）。"""
+    now_s = _now_s(now)
+    pool = items(member, root=root) if member is not None else all_items(root=root)
+    return backpressure.deferred_count(pool, now=now_s)
+
+
+def next_defer_s(
+    member: str | None = None, *, now: float | None = None, root: Path | None = None
+) -> float:
+    """到最近一个延期条目到期的秒数（worker 睡到到期用）；``member`` 语义同上。"""
+    now_s = _now_s(now)
+    pool = items(member, root=root) if member is not None else all_items(root=root)
+    return backpressure.next_defer_s(pool, now=now_s)
 
 
 def water_lines(*, root: Path | None = None) -> list[str]:

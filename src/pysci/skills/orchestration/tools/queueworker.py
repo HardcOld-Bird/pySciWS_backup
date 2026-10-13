@@ -20,15 +20,19 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT
 
-from . import events, queues, workq
+from . import backpressure, events, queues, workq
+from . import drain as _drain
 from .drain import (
+    DEFER_MAX_SLEEP_S,
     WorkerPaths,
     _consume_stop_request,  # drain 的实现——按 §纪律「抽取共用」直接引用，不复制
+    _seed_tier,
     _spawn_detached,
     acquire_lock,
     lock_status,
@@ -92,10 +96,14 @@ def wake_member(
     return True, f"{member} worker 已后台唤醒（日志 {orchestration_rel(run_log)}）"
 
 
-def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any]]:
-    """执行一条 job（复用 :func:`dispatch.do_dispatch`，会话策略沿派发惯例）。"""
+def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any], Any]:
+    """执行一条 job（复用 :func:`dispatch.do_dispatch`，会话策略沿派发惯例）。
+
+    返回 ``(status, result, outcome)``；``outcome`` 原样带出（带宽类延期判据要用它的
+    ``kind``/``error_text``，别在结果字典里丢掉分类原料）。
+    """
     if dry:
-        return workq.STATUS_DONE, {"dry": True}
+        return workq.STATUS_DONE, {"dry": True}, None
     from .dispatch import do_dispatch  # 延迟导入：dispatch 引 runner 链
 
     out = do_dispatch(
@@ -118,7 +126,20 @@ def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any]]:
         "error": str(getattr(out, "error", ""))[:500],
         "task_file": str(item.get("task_file") or ""),
     }
-    return (workq.STATUS_DONE if code == 0 else workq.STATUS_FAILED), result
+    return (workq.STATUS_DONE if code == 0 else workq.STATUS_FAILED), result, out
+
+
+def _defer_plan(outcome: Any, item: dict[str, Any], now: float):
+    """带宽类失败的延期判决（**复用** drain 的纯函数，不重写，§纪律）。
+
+    成员队列与 devops backlog 走同一套分类/退避/双闸（``backpressure.plan_defer``）；
+    devops 既有语义不动，此处只是把同一判据接到成员队列 worker 的出队处置上。
+    """
+    if outcome is None:
+        return None
+    from .drain import _bandwidth_defer_plan
+
+    return _bandwidth_defer_plan(outcome, item, now)
 
 
 def _notify(
@@ -174,7 +195,12 @@ def _notify(
 def run_worker(
     member: str, run_log: Path, *, dry: bool = False, root: Path | None = None
 ) -> dict[str, Any]:
-    """FIFO 消化该成员队列（持锁运行；异常/结束均释放锁并写 ``.done`` 摘要）。"""
+    """FIFO 消化该成员队列（持锁运行；异常/结束均释放锁并写 ``.done`` 摘要）。
+
+    §3.3：写侧接线——登记活跃会话 + 守护线程心跳（长 job 阻塞在 ``do_dispatch`` 里也有
+    心跳、不被判死）；出队单点先过延期判据；带宽类失败回队挂 ``defer_until``，到期自动重取，
+    双闸触顶则停止本队列并上报（发 CHANNEL-STOP 事件）。
+    """
     paths = member_paths(member, root=root)
     q = queues.queue_path(member, root=root)
     if acquire_lock(orchestration_rel(run_log), paths) is None:
@@ -185,6 +211,14 @@ def run_worker(
         "items": [],
         "run_log": str(run_log),
     }
+    # 死会话条目（注册表过期）与死队列条目（in_progress 孤儿）各清各的，不重复回收。
+    backpressure.prune_stale(now=time.time())
+    sess = backpressure.LiveSession(
+        member,
+        sid=run_log.stem,
+        tier=_seed_tier({"member": member}),
+        purpose="queue-worker",
+    ).start()
     try:
         orphans = workq.reset_orphans(q)
         if orphans:
@@ -193,10 +227,51 @@ def run_worker(
             if _consume_stop_request(paths):
                 summary["stopped"] = "cooperative"
                 break
-            item = workq.take_next(q)  # **出队点单点**（m6 将在此接延期检查）
+            item = queues.take_ready(member, root=root)  # 出队单点：过延期判据
             if item is None:
+                wait = 0.0 if dry else queues.next_defer_s(member, root=root)
+                if wait > 0:
+                    _drain._sleep(min(wait, float(DEFER_MAX_SLEEP_S)))
+                    continue
                 break
-            status, result = _execute(item, dry=dry)
+            status, result, outcome = _execute(item, dry=dry)
+            plan = _defer_plan(outcome, item, time.time())
+            if plan is not None and not plan.exhausted:
+                nth = plan.attempt + 1
+                used = float(item.get("defer_elapsed_s") or 0.0) + plan.delay_s
+                queues.defer(
+                    member,
+                    str(item["id"]),
+                    until=plan.until,
+                    count=nth,
+                    elapsed_s=used,
+                    note=(
+                        f"带宽延期第 {nth} 次（等 {plan.delay_s}s 后重试）"
+                        "——带宽不足是瞬态，不换席不停链；预算触顶则停止本队列并上报"
+                    ),
+                    root=root,
+                )
+                summary["items"].append({"id": str(item["id"]), "status": "deferred"})
+                continue
+            if plan is not None and plan.exhausted:
+                # 双闸触顶仍未愈 → 停止本队列并上报（沿 devops 语义；发渠道级停止事件）
+                workq.finish(
+                    q,
+                    str(item["id"]),
+                    workq.STATUS_FAILED,
+                    {**result, "saturated": True, "exhausted": plan.reason},
+                )
+                summary["items"].append(
+                    {"id": str(item["id"]), "status": "channel_saturated"}
+                )
+                summary["stopped"] = "channel_saturated"
+                events.emit(
+                    events.CHANNEL_STOP,
+                    subject=str(item["id"]),
+                    detail=f"{member} job 带宽延期触顶仍未愈（{plan.reason}）→ 停止本队列",
+                    action="渠道恢复后重新入队/唤醒；orch status 看延期读数",
+                )
+                break
             workq.finish(q, str(item["id"]), status, result)
             summary["items"].append({"id": str(item["id"]), "status": status})
             if status == workq.STATUS_DONE:
@@ -213,6 +288,7 @@ def run_worker(
     except Exception as exc:  # noqa: BLE001 - 异常也要写 .done（不留黑洞）
         summary["error"] = f"{type(exc).__name__}: {exc}"
     finally:
+        sess.stop()  # 退场注销活跃会话（先于释放锁，读数面不留幽灵）
         release_lock(run_log, paths)
         summary["completed"] = workq._now()
         summary["count"] = len(summary["items"])

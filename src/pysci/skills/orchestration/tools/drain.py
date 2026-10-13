@@ -63,6 +63,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
+from . import backpressure as _bp
 from . import channels as _channels
 from . import events as _events
 from . import presets, procs, workflow
@@ -1876,6 +1877,11 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                         f"[!] 旧隔离面无法确认干净 → 异名重建：{oid} → {name}"
                         "（新一代隔离面，禁止复用旧名）",
                     )
+    # §3.3 写侧接线：登记活跃会话 + 守护线程心跳（长 drain 不被判死）；死会话条目先清。
+    _bp.prune_stale(now=time.time())
+    sess = _bp.LiveSession(
+        "devops", sid=run_log.stem, tier="devops", purpose="drain"
+    ).start()
     try:
         while True:
             if _consume_stop_request():
@@ -1948,6 +1954,23 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
             )
         except Exception:  # noqa: BLE001 - 事件面绝不阻塞 drain（§0.6）
             pass
+        # 带宽延期触顶回升的全局停止（channel_saturated）→ 一条渠道级停止事件（§3.3：
+        # 延期相关的终态事件要进统一事件层，供组长 drain 后处置）。写失败 fail-open。
+        if str(summary.get("stopped", "") or "") == "channel_saturated":
+            try:
+                _events.emit(
+                    _events.CHANNEL_STOP,
+                    subject=run_log.stem,
+                    detail=(
+                        "devops 带宽延期触顶仍未愈 → 全局停止（"
+                        + str(summary.get("error", "") or "")[:80]
+                        + "）"
+                    ),
+                    action="渠道恢复后重新唤醒 drain；orch status 看延期读数",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        sess.stop()  # 退场注销活跃会话（读数面不留幽灵）
     _log(
         run_log,
         f"[√] drain 结束：处理 {summary['count']} 项，耗时 {summary['elapsed_s']}s "

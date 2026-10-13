@@ -142,6 +142,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     print("== 成员队列 ==")
     for line in _queues.water_lines():
         print(line)
+    # 带宽延期读数（§3.3/M6）：devops backlog + 成员队列两链合并（单一源，见 mirror._line_defer）。
+    print(f"  {_mirror._line_defer()}")
 
     # Tier A 阈值扫描（README §5.4）在读取待办清单**之前**跑：本次新立的案要立刻
     # 出现在下面的 [建议] 列表里，否则「机械重算」与「呈现」之间差一拍，组长永远看的是

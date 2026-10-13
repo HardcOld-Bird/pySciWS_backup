@@ -18,6 +18,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +32,11 @@ REGISTRY_PATH: Path = ORCH_STATE_ROOT / "active-sessions.json"
 
 #: 心跳过期阈值（秒）：超过它没更新的条目视为**死条目**（worker 被杀/进程没了）。
 STALE_S: int = 600  # 10min
+
+#: worker 心跳周期（秒）：**显著小于** :data:`STALE_S`（判死阈值 10min）——§3.3 建议 ≤3min。
+#: 长 job 阻塞在 ``do_dispatch`` 里时由 :class:`LiveSession` 的守护线程按此周期刷心跳，
+#: 故 >10min 的 job 也不会被判死。
+HEARTBEAT_INTERVAL_S: int = 120
 
 #: 延期退避基数（秒）：第一次延 2 分钟，其后翻倍。
 DEFER_BASE_S: int = 120
@@ -169,6 +176,141 @@ def prune_stale(*, now: float, stale_s: int = STALE_S, path: Path | None = None)
     if dropped:
         write_registry(kept, path)
     return dropped
+
+
+def active_count(
+    *, now: float, stale_s: int = STALE_S, path: Path | None = None
+) -> int:
+    """当前**活跃**会话数（未过期条目）——「有 worker 在跑吗」的一行读数。"""
+    return len(live_entries(now=now, stale_s=stale_s, path=path))
+
+
+class LiveSession:
+    """worker 的活跃会话生命周期（§3.3 **写侧接线**）：登记 + 周期心跳 + 退场注销。
+
+    用法（持锁之后立刻包住整段消化循环）::
+
+        sess = LiveSession("devops", sid=run_log.stem, tier="devops", purpose="drain").start()
+        try:
+            ...
+        finally:
+            sess.stop()
+
+    进入即 :func:`note_session`；``start_thread`` 为真时起一个**守护线程**按
+    :data:`HEARTBEAT_INTERVAL_S` 刷心跳——worker 阻塞在 ``do_dispatch``（长 job）里也有
+    心跳，不被 :data:`STALE_S` 判死。退出（含异常）停线程并 :func:`drop_session`。
+
+    ``start_thread=False`` + :meth:`heartbeat_now` 是**测试注入口**：假时钟下手工推进心跳，
+    免真起线程/真等（长 job 续命的确定性验证）。
+    """
+
+    def __init__(
+        self,
+        worker: str,
+        *,
+        sid: str = "",
+        tier: str = "",
+        purpose: str = "",
+        interval_s: int = HEARTBEAT_INTERVAL_S,
+        path: Path | None = None,
+        now: Any = time.time,
+        start_thread: bool = True,
+    ) -> None:
+        self.worker = str(worker)
+        self.sid = str(sid) or self.worker
+        self.tier = str(tier)
+        self.purpose = str(purpose)
+        self.interval_s = max(1, int(interval_s))
+        self.path = path
+        self._now = now
+        self.start_thread = start_thread
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._started = False
+
+    def _stamp(self, now: Any = None) -> float:
+        return float(self._now() if now is None else now)
+
+    def start(self) -> LiveSession:
+        """登记会话并按需起心跳线程（幂等：重复调用不重复起线程）。"""
+        if self._started:
+            return self
+        self._started = True
+        note_session(
+            self.worker,
+            sid=self.sid,
+            tier=self.tier,
+            purpose=self.purpose,
+            now=self._stamp(),
+            path=self.path,
+        )
+        if self.start_thread:
+            self._thread = threading.Thread(
+                target=self._loop, daemon=True, name=f"hb-{self.worker}"
+            )
+            self._thread.start()
+        return self
+
+    def heartbeat_now(self, now: Any = None) -> bool:
+        """刷一次心跳（可注入 ``now``）。线程循环与测试注入口共用。"""
+        return heartbeat(self.worker, self.sid, now=self._stamp(now), path=self.path)
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self.interval_s):
+            try:
+                self.heartbeat_now()
+            except Exception:  # noqa: BLE001 - 心跳线程绝不炸 worker（观察面写）
+                pass
+
+    def stop(self) -> None:
+        """停心跳线程并注销会话（幂等；工作线程阻塞时线程取守护，join 有超时不挂）。"""
+        if not self._started:
+            return
+        self._started = False
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+        drop_session(self.worker, self.sid, path=self.path)
+
+    def __enter__(self) -> LiveSession:
+        return self.start()
+
+    def __exit__(self, *exc: Any) -> bool:
+        self.stop()
+        return False
+
+
+# ---------------------------------------------------------------------------
+# 延期读侧共享 helper（devops backlog / 成员队列 / bencher 共用，避免各写各的）
+# ---------------------------------------------------------------------------
+def item_deferred(item: dict[str, Any], now: float) -> bool:
+    """该条目是否仍处在延期待重试窗口内（``defer_until`` 在未来）。"""
+    try:
+        return float(item.get("defer_until") or 0) > float(now)
+    except (TypeError, ValueError):
+        return False
+
+
+def deferred_items(items: list[dict[str, Any]], *, now: float) -> list[dict[str, Any]]:
+    """``pending`` 且仍在延期窗内的条目（调度侧据此跳过与睡眠）。"""
+    return [
+        it for it in items if it.get("status") == "pending" and item_deferred(it, now)
+    ]
+
+
+def deferred_count(items: list[dict[str, Any]], *, now: float) -> int:
+    """仍在延期窗内的 ``pending`` 条目数（观察面读数口径）。"""
+    return len(deferred_items(items, now=now))
+
+
+def next_defer_s(items: list[dict[str, Any]], *, now: float) -> float:
+    """到**最近一个**延期条目到期的秒数；没有 → ``0.0``（worker 靠它睡到最近到期再查）。"""
+    waits = [
+        float(it.get("defer_until") or 0) - float(now)
+        for it in deferred_items(items, now=now)
+    ]
+    return max(0.0, min(waits)) if waits else 0.0
 
 
 # ---------------------------------------------------------------------------
