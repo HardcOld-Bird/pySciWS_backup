@@ -256,3 +256,12 @@ def test_remove_worktree_keeps_branch_on_failure(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "未能摘除" in out and "分支已删除" not in out
     assert _git(main, "branch", "--list", "wt-dirty") != ""  # 分支保留
+
+
+def test_clean_guidance_names_the_real_flag(tmp_path, monkeypatch, capsys):
+    """指引文本必须报**真旗标名** `--discard`——`--force` 已被跨树自检全局占用，
+    报错旗标会让组长敲一个空动作（本单自查实测到的文本缺陷）。"""
+    main = _merged_then_dirty(tmp_path, monkeypatch)
+    _clean(main, apply=False)
+    out = capsys.readouterr().out
+    assert "--discard" in out and "--force" not in out
