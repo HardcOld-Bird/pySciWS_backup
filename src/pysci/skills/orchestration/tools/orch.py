@@ -269,6 +269,14 @@ def cmd_status(args: argparse.Namespace) -> int:
                 f"    - {b['id']}: {str(b.get('summary', ''))[:50]}"
                 + (f"（累计失败 {n} 次，勿原样重派）" if n else "")
             )
+            if b.get(_workflow.AWAITING_DECISION_KEY):
+                # 「因缺授权/缺裁决 blocked」闭环（backlog 20261013-193058-devops）：这类条目
+                # 重派前须先补授权，否则 worker 会照同一成因再 blocked 一次。把「补没补」摆到
+                # 组长最常敲的命令上，别让它只活在任务书里。
+                print(
+                    "        上轮因缺授权/裁决 blocked（待补授权后重排）；补授权写进条目 note，"
+                    "重排任务书会带「原点名 ↔ 本次补齐」对照行"
+                )
             if "merge_intersect" in b:
                 # 交集类：重派无用（成因是 main 的脏面）。这里必须把「清哪个文件」直接
                 # 摆到组长的 status 读数上，否则处置线索埋在 note 全文里等于没有。

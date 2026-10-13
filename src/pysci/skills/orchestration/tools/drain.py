@@ -67,6 +67,7 @@ from . import channels as _channels
 from . import presets, procs, workflow
 from .registry import Registry, note_hop_pid, orchestration_rel, refresh_models
 from .workflow import (
+    AWAITING_DECISION_KEY,
     backlog_batch_text,
     backlog_complete,
     backlog_needs_leader,
@@ -1636,6 +1637,15 @@ def _drain_batch(
     # 交集类失败（main 脏面与本次合并相交）单独分流：成因不在被派者的树上，重派一个
     # worker 改变不了它 → 抢救进度但**停链**（不立续作单），待清清单挂回原条目。
     isect, offenders = merge_intersect_cause(outcome)
+    extra: dict[str, Any] = {}
+    if isect:
+        extra["merge_intersect"] = offenders
+    # 「因缺授权/缺裁决 blocked」闭环（backlog 20261013-193058-devops）：条目挂标记 + 存
+    # 原点名原文，重排时任务书注入「原点名 ↔ 本次补齐」对照行。判据＝交付自带的成因档位
+    # （reason=needs_decision，受控词表），不猜正文——其余成因（余量/环境/上游）不需要授权。
+    if str(getattr(outcome, "reason", "") or "") == "needs_decision":
+        extra[AWAITING_DECISION_KEY] = True
+        extra["blocked_report"] = full[:400]
     backlog_needs_leader(
         seed_id,
         note=(
@@ -1644,7 +1654,7 @@ def _drain_batch(
             f"【全文已留审计副本：pods/{outcome.member or 'devops'}/outbox/delivery-*.xml】"
             + (_intersect_hold_text(worktree_name(seed), offenders) if isect else "")
         ),
-        extra={"merge_intersect": offenders} if isect else None,
+        extra=extra or None,
     )
     salv = _salvage_progress(
         seed,

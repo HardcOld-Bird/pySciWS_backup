@@ -775,6 +775,38 @@ def _remedy_shape_instruction(item: dict) -> str:
     )
 
 
+#: 「因缺授权/缺裁决 blocked」的条目标记（backlog 20261013-193058-devops）：drain 在
+#: 交付 `<blocked reason="needs_decision">` 时置上（同 extra 落 ``blocked_report`` 存原点名
+#: 原文）。任务书据此注入「原点名事项 ↔ 本次补齐情况」对照，让「执行端点名要授权 → 组长
+#: 补授权 → 重排」这条闭环在机械面上可见，而不只靠人记得写附注。
+AWAITING_DECISION_KEY = "awaiting_decision"
+
+
+def _awaiting_decision_instruction(item: dict) -> str:
+    """「补授权/补裁决」重排提示：**原点名事项 ↔ 本次补齐情况**的对照行。
+
+    为什么值得单独一行：被 `<blocked reason="needs_decision">` 挡下的条目，重排时若授权仍
+    缺，worker 只会照同一成因再 blocked 一次——白烧一跳。把「上轮点名了什么、这次补没补」
+    直接摆进任务书，worker 与组长在**同一行**上对账。本次补齐情况取条目当前 ``note``
+    （组长补授权应写在此；空=未补，出声提示）。
+    """
+    named = (
+        str(item.get("blocked_report") or "").strip()
+        or "（见条目 note 的上轮 blocked 全文）"
+    )
+    note = str(item.get("note") or "").strip()
+    filled = note or "（空——授权/裁决尚未补；重排会再次白烧，请先写入 note 再派）"
+    return (
+        "**本条为「补授权/补裁决」重排**：上一轮交付 "
+        '`<blocked reason="needs_decision">` 而停链——此时重派改变不了「缺授权」，'
+        "须组长补授权/判决后才有意义。\n"
+        f"· 原点名事项（上轮 blocked 原文）：{named}\n"
+        f"· 本次补齐情况（条目当前附注）：{filled}\n"
+        "先确认授权/裁决已齐再实施；若仍缺，按同一成因交付 "
+        '`<blocked reason="needs_decision">` 再上报，不要重复实施。\n\n'
+    )
+
+
 def backlog_task_text(item: dict) -> str:
     """由 backlog 条目生成 devops 派发任务书正文。
 
@@ -802,6 +834,8 @@ def backlog_task_text(item: dict) -> str:
     if sal:
         # 抢救事实进任务书：worker 不必猜「上次到哪了」，指令里直接给它续作面与提交
         head += _salvage_instruction(sal, wt)
+    if item.get(AWAITING_DECISION_KEY):
+        head += _awaiting_decision_instruction(item)
     head += _remedy_shape_instruction(item)
     return head + (
         "要求：以 worktree 隔离实施，**worktree 名用这里给出的隔离面名**"
