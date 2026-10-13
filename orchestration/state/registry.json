@@ -185,7 +185,7 @@
   },
   "channel_note": "用户裁决 2026-10-12 22:4x（backlog 20261012-225500-leader）：档位模式（max/flash）退役，改**提供商预设**——data/pysci_settings.toml [model] preset 一键切换，预设打包 main/pro 席位表与仲裁团构成；观察期默认 mimo（组员主力=Mimo-V2.6-Flash，pro 席四人组）。席位不可用沿 #80 有序回退链粘滞降级（跳过故障席→内置默认，调用者+mirror 双面告警）；minimum 压测档独立不随预设走（E3-live 实测火山方舟不可行，维持 Mimo-Flash→内置）。上一轮注记（2026-10-12 21:1x 三级链）的机制被本单直接复用，未推翻。",
   "presets": {
-    "_note": "提供商预设的席位表（用户裁决 2026-10-12 22:4x，backlog 20261012-225500-leader）：data/pysci_settings.toml [model] preset 选预设（qwen/mimo/deepseek），本块给该预设的 main/pro 席位链（UUID=账号级 BYOK，选型权归用户，整链覆盖代码出厂表 presets.PRESETS）。仲裁团构成（glm/kimi/mimo|qwen 家族）与 pro 成员名单在代码出厂表，随预设整体换血；席的端点/型号在 registry.jury.seats。deepseek 空链=过渡期未回填 BYOK、预设不可激活；minimum 压测档独立（models/model_chains），不随预设走。",
+    "_note": "提供商预设的席位表（用户裁决 2026-10-12 22:4x，backlog 20261012-225500-leader）：data/pysci_settings.toml [model] preset 选预设（qwen/mimo/deepseek），本块给该预设的 main/pro 席位链（UUID=账号级 BYOK，选型权归用户，整链覆盖代码出厂表 presets.PRESETS）。仲裁团构成（glm/kimi/mimo|qwen 家族）与 pro 成员名单在代码出厂表，随预设整体换血；席的端点/型号在 registry.jury.seats。deepseek 席已回填（2026-10-13 用户供 Key）：UUID 首席+内置同名回退落代码出厂表（同名消歧须 UUID 在场），本块不覆盖即生效；整链覆盖为空=未配置、预设不可激活（presets.preset_gate）。minimum 压测档独立（models/model_chains），不随预设走。",
     "qwen": {
       "main": [
         "ed6f5996-0992-479f-86a8-3f29ce0e794c",
@@ -205,10 +205,6 @@
         "99127e47-626d-421f-b0cb-02ffdbf1ada7",
         "Qwen3.8-Flash"
       ]
-    },
-    "deepseek": {
-      "main": [],
-      "pro": []
     }
   }
 }

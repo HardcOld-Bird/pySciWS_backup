@@ -12,8 +12,10 @@
   火山方舟不可行，维持现有链）；
 - **pro 席名单由预设自带**（qwen 刻意只给 twin，mimo 给四人组——两预设不对称是用户
   2026-10-12 确认的有意设计，不是漏配）；
-- **deepseek 过渡期不可激活**：BYOK 精确名尚未回填（toml 注释标 ⚠）。空席表 + 未配置
-  声明 → 派发拒发、status 出声，**不**静默落到别的预设上烧错渠道。
+- **激活闸 = 席表非空**（用户 2026-10-13 回填裁决）：deepseek 席已回填——BYOK
+  ``1a54cc57-e614-4521-80cc-447de31dc896``（用户供 Key）与内置 ``DeepSeek-Flash`` **同名**，
+  故 UUID 首席消歧、内置降回退席；该预设该档的席位表没一席就拒绝激活
+  （:func:`preset_gate`，覆盖在位以覆盖为准），**不**静默落到别的预设上烧错渠道。
 """
 
 from __future__ import annotations
@@ -43,14 +45,13 @@ class Preset:
     jury: tuple[str, ...] = ()
     #: 本预设下取 pro 席的成员 id 名单。
     pro_members: tuple[str, ...] = ()
-    #: 非空 = 过渡期不可激活的原因（派发拒发 / status 告警共读这一句）。
-    unavailable: str = ""
     #: 设计注记（status 与文档引用，说明「为什么是这几家」）。
     note: str = ""
 
 
 #: 出厂预设表（席位值=人类名/BYOK 名；跟踪 registry.json 的 ``presets`` 块可整链覆盖，
-#: 生产账号的 BYOK UUID 落那里——选型权归用户，代码不内置账号级 ID）。
+#: 生产账号的 BYOK UUID 落那里——选型权归用户。唯一例外：deepseek 首席 UUID 由用户
+#: 2026-10-13 明示回填进本表，因 BYOK 与内置同名必须 UUID 在场才能消歧）。
 PRESETS: dict[str, Preset] = {
     "qwen": Preset(
         name="qwen",
@@ -70,15 +71,14 @@ PRESETS: dict[str, Preset] = {
     ),
     "deepseek": Preset(
         name="deepseek",
-        main=(),
+        main=("1a54cc57-e614-4521-80cc-447de31dc896", "DeepSeek-Flash"),
         pro=(),
         jury=("glm", "kimi", "mimo"),
         pro_members=(),
-        unavailable=(
-            "BYOK 精确名待回填（data/pysci_settings.toml [model] 注释标 ⚠；"
-            "--list-models 现无 DeepSeek-V4-Flash 条目）"
+        note=(
+            "全员同档无 pro 席；仲裁团排除 DeepSeek 同族；"
+            "BYOK 与内置同名 'DeepSeek-Flash' → UUID 首席消歧（用户 2026-10-13 供 Key）"
         ),
-        note="全员同档无 pro 席；仲裁团排除 DeepSeek 同族",
     ),
 }
 
@@ -91,15 +91,6 @@ class ActivePreset:
     name: str
     #: 读配置时攒下的警告（文件缺席 / 非法串），随读数面一起出声。
     warnings: tuple[str, ...] = field(default_factory=tuple)
-
-    @property
-    def available(self) -> bool:
-        """过渡期预设（席表未配置）= 不可激活。"""
-        return not self.preset.unavailable
-
-    @property
-    def unavailable_reason(self) -> str:
-        return self.preset.unavailable
 
     def chain(self, role: str) -> list[str]:
         """该角色的出厂席位链（跟踪 registry 覆盖在 registry 侧合并，本函数只给出厂值）。"""
@@ -149,6 +140,59 @@ def role_chain_source(role: str) -> str:
     return "pro" if role == "pro" else "main"
 
 
+def seat_table_authority(reg: Any, role: str) -> list[str]:
+    """本预设该角色的**席位表读数**（判据面，不是派发用链）。
+
+    来源优先级与 ``Registry._preset_chain`` 一致：跟踪 registry 的
+    ``presets.<预设>.<role>`` 整链覆盖在位 → 以覆盖为准；否则以出厂表为准。
+    与 ``model_chain`` 的区别是**这里的空就是空**：``model_chain`` 空链会回落
+    ``[""]``（＝不传 ``-m``，走用户级默认渠道，旧部署/异机的既定语义），而激活闸要问的是
+    「这个预设到底有没有配席」，把那个回落算成有席就会让闸永不触发。
+    """
+    key = role_chain_source(role)
+    tracked = getattr(reg, "data", None) or {}
+    face = tracked.get("presets")
+    if isinstance(face, dict):
+        table = face.get(active().name)
+        if isinstance(table, dict) and key in table:
+            return [s for s in (table[key] or []) if s]
+    return [s for s in active().chain(role) if s]
+
+
+def preset_gate(reg: Any, tier: str) -> str:
+    """激活闸（用户 2026-10-13 回填裁决）：**席表非空即放行**。
+
+    判据是预设的席位表（:func:`seat_table_authority`——跟踪面整链覆盖在位时以覆盖为准，
+    否则以出厂表为准），不再是 :class:`Preset` 上写死的「过渡期」旗标：回填后的 deepseek
+    照常派发，而任何被清空席表的预设（含跟踪面把一链置空）照样拒。``minimum`` 恒放行
+    （独立链，不随预设）。dispatch 与 drain 共读本闸，口径不许分叉。
+
+    Args:
+        reg: 已加载的 registry（只要求 ``data`` 面，避免 import 环）。
+        tier: 角色（``main``/``pro``/``minimum``）。
+
+    Returns:
+        ``""`` = 可派发；否则拒绝原因（含预设名与「席表为空」判据，调用方原样入 error）。
+    """
+    if tier == "minimum":
+        return ""
+    if seat_table_authority(reg, tier):
+        return ""
+    name = active().name
+    other = "main" if tier == "pro" else "pro"
+    if seat_table_authority(reg, other):
+        # 预设本身有席、只是这一档没席（deepseek「全员同档无 pro 席」是用户的刻意设计）：
+        # 说「未激活」会把设计说成故障，处置也指错路。
+        return (
+            f"预设 {name} 的 {tier} 席表为空（本预设可能刻意无该档席）——"
+            "去掉 --model-tier 覆盖回默认档，或改用有该席的预设"
+        )
+    return (
+        f"预设 {name} 未激活：席表为空"
+        "（出厂预设表与 registry 跟踪覆盖都没席——回填席位或改回有席的预设）"
+    )
+
+
 def _chain_text(reg: Any, role: str) -> str:
     """席位链的展示串（席显示名经 ``seat_label`` 反查；空链显式出声，不留空串骗人）。"""
     seats = reg.model_chain(role)
@@ -176,8 +220,10 @@ def status_lines(reg: Any) -> list[str]:
         out.append("  pro 席：—（本预设全员同档）")
     out.append(f"  仲裁团构成：{'+'.join(preset.jury)}（预设同族排除）")
     out.append(f"  minimum（独立，不随预设走）：{_chain_text(reg, 'minimum')}")
-    if not act.available:
-        out.append(f"[!] 预设 {act.name} 未激活：{act.unavailable_reason}")
+    if not seat_table_authority(reg, "main") and not seat_table_authority(reg, "pro"):
+        # 判据与 preset_gate 同源（共读 seat_table_authority）：status 出声、派发拒发、
+        # drain 拒开工三处必须是同一件事，不能一边报警一边照常烧。
+        out.append(f"[!] 预设 {act.name} 未激活：席表为空（出厂表与跟踪覆盖都没席）")
     for warn in act.warnings:
         out.append(f"[!] {warn}")
     return out

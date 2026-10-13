@@ -20,9 +20,9 @@
 #       仲裁团 = GLM + KIMI + Qwen 三族旗舰
 #
 #   "deepseek"
-#       主力  = BYOK "DeepSeek-V4-Flash"     （全员同一档，无 pro 席）
-#              ⚠ 待确认精确名：--list-models 现无此 BYOK 条目，
-#                若实为内置 "DeepSeek-Flash" 或待加 BYOK，以实名为准回填。
+#       主力  = BYOK "DeepSeek-Flash"（UUID 1a54cc57-e614-4521-80cc-447de31dc896，
+#               用户 2026-10-13 供 Key；BYOK 与内置同名 → UUID 首席消歧）
+#              → 内置 "DeepSeek-Flash" 回退席     （全员同一档，无 pro 席）
 #       仲裁团 = GLM + KIMI + MIMO 三族旗舰
 #
 #   共通语义：席位不可用时短窗粘滞降级（跳过故障席→内置默认，双面告警）；

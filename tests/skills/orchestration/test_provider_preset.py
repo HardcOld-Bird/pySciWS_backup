@@ -4,7 +4,8 @@ success_criteria 落点：
 - 三预设切换 = 改 ``data/pysci_settings.toml`` **一行** → 席位表/status 换血 → 派发取到
   该预设的席（台账 model 字段即证据）；pro 席成员按预设名单取 pro 席；
 - 仲裁团构成随预设换血且排除同族（家族名面板，配置核验 + 读数行证据）；
-- deepseek 过渡期**拒绝激活**（派发拒发 / drain 拒绝开工 / status 出声，不静默回落）；
+- deepseek 预设**已回填激活**（BYOK UUID 首席与内置同名 → UUID 消歧；激活闸=席表非空：
+  整链覆盖为空仍拒发/拒开工/status 出声，不静默回落）；
 - minimum 独立链不随预设走；#80 粘滞降级在预设链上照常（机制不推翻）；
 - inspector on/off 改写 toml 且 status 读数一致。
 
@@ -43,6 +44,10 @@ A = "seat-a"
 B = "seat-b"
 P1 = "seat-pro"
 BUILTIN = "Qwen3.8-Flash"
+#: deepseek 回填（用户 2026-10-13 供 Key）：BYOK 与内置同名 "DeepSeek-Flash" → UUID 首席消歧。
+DS_UUID = "1a54cc57-e614-4521-80cc-447de31dc896"
+#: 与 BYOK **同名**的内置回退席（正主，别拿 Qwen 的 BUILTIN 顶——两席同名才是要消歧的点）。
+DS_BUILTIN = "DeepSeek-Flash"
 OK_BODY = "<result>完工，commit abc1234 已合并。</result>"
 QUOTA_TEXT = (
     "You've reached your credit usage limit. Please upgrade your "
@@ -94,7 +99,10 @@ def test_three_preset_seat_tables():
     assert mimo.main == ("Mimo-V2.6-Flash", BUILTIN)
     assert mimo.pro == ("Mimo-V2.6-Pro", BUILTIN)
     assert mimo.pro_members == ("reviewer", "deputy", "inspector", "twin")
-    assert deepseek.main == () and deepseek.unavailable, "空链+原因=过渡期不可激活"
+    assert deepseek.main == (DS_UUID, DS_BUILTIN), (
+        "回填席表：BYOK UUID 首席（同名消歧）→ 内置同名回退席"
+    )
+    assert deepseek.pro == (), "deepseek 全员同档无 pro 席（用户设计）"
     assert qwen.jury == ("glm", "kimi", "mimo") and mimo.jury == ("glm", "kimi", "qwen")
     assert deepseek.jury == ("glm", "kimi", "mimo"), "三预设都排除预设同族"
 
@@ -136,11 +144,22 @@ def test_status_lines_show_preset_and_chains(iso_registry):
     assert "未激活" not in out
 
 
-def test_status_lines_warn_when_preset_unavailable(iso_state, iso_registry):
+def test_status_lines_deepseek_activated(iso_state, iso_registry):
+    """回填后 deepseek 照常出声面：席链读数含 BYOK UUID 与内置回退，无「未激活」。"""
     write_preset("deepseek")
     reg = registry.Registry.load()
     out = "\n".join(presets.status_lines(reg))
-    assert "[!] 预设 deepseek 未激活" in out and "BYOK" in out
+    assert "预设 deepseek" in out and "未激活" not in out
+    assert DS_UUID in out and DS_BUILTIN in out, "main 席链=UUID → 内置同名回退"
+
+
+def test_status_lines_warn_when_seats_emptied(iso_state, iso_dispatch):
+    """整链覆盖为空仍=未配置：status 出声（与 preset_gate 同一判据）。"""
+    set_presets(iso_dispatch, deepseek={"main": [], "pro": []})
+    write_preset("deepseek")
+    reg = registry.Registry.load()
+    out = "\n".join(presets.status_lines(reg))
+    assert "[!] 预设 deepseek 未激活" in out and "席表为空" in out
 
 
 # ---------------------------------------------------------------------------
@@ -217,22 +236,101 @@ def test_unknown_role_refuses_without_dispatch(iso_dispatch, monkeypatch):
     assert calls == [], "非法角色在派发前硬拦，不白烧一跳"
 
 
-def test_deepseek_preset_refuses_dispatch(iso_dispatch, monkeypatch, capsys):
-    """过渡期预设拒绝激活：不派发、不落台账、原因可读（不静默换别的预设）。"""
+def test_deepseek_preset_refuses_dispatch_when_seats_emptied(
+    iso_dispatch, monkeypatch, capsys
+):
+    """整链覆盖为空 → 拒绝激活：不派发、不落台账、原因可读（不静默换别的预设）。"""
     _seed_dispatch_presets(iso_dispatch)
     write_preset("deepseek")
     calls = fake_headless(monkeypatch, lambda n, cmd: envelope(OK_BODY, rc=0))
     o = dispatch.do_dispatch("quotamember", text="出图", quiet=False, no_checks=True)
     out = capsys.readouterr().out
     assert o.code == 2 and o.kind == "run_failed"
-    assert "未激活" in o.error and "BYOK" in o.error
+    assert "未激活" in o.error and "席表为空" in o.error
     assert "未激活" in out and "pysci_settings.toml" in out
     assert calls == []
     assert not (iso_dispatch / "ledger.jsonl").exists(), "拒发不写无意义台账行"
 
 
-def test_drain_refuses_start_under_unavailable_preset(iso_state, monkeypatch):
-    """drain 在**拿锁之前**拒开工：整队列不被标成失败，错误读数淹没不了处置动作。"""
+def test_deepseek_activation_uses_uuid_first_for_same_name(iso_dispatch, monkeypatch):
+    """回填激活面：registry presets 块在但不含 deepseek 键 → 走代码出厂表；
+    BYOK 与内置同名，派发必须取 UUID 首席（消歧），status 席链两席俱在。"""
+    set_presets(iso_dispatch, mimo={"main": ["M1", BUILTIN], "pro": ["P1", BUILTIN]})
+    write_preset("deepseek")
+    calls = fake_headless(
+        monkeypatch,
+        lambda n, cmd: envelope(OK_BODY, is_error=False, stop="end_turn", rc=0),
+    )
+    o = dispatch.do_dispatch("quotamember", text="自检", quiet=True, no_checks=True)
+    assert o.kind == "result" and cmd_model(calls[0]) == DS_UUID, (
+        "同名消歧=UUID 首席命中"
+    )
+    line = (iso_dispatch / "ledger.jsonl").read_text(encoding="utf-8")
+    assert f'"model": "{DS_UUID}"' in line, (
+        "台账 model 记 UUID 读数（success_criteria 那条）"
+    )
+    out = "\n".join(presets.status_lines(registry.Registry.load()))
+    assert DS_UUID in out and DS_BUILTIN in out and "未激活" not in out
+
+
+def test_deepseek_byok_failure_demotes_to_same_named_builtin(iso_dispatch, monkeypatch):
+    """同名回退席照常 #80 粘滞：BYOK 席额度失败 → 本跳落到内置 DeepSeek-Flash。"""
+    set_presets(iso_dispatch, mimo={"main": ["M1", BUILTIN], "pro": ["P1", BUILTIN]})
+    write_preset("deepseek")
+    calls = fake_headless(
+        monkeypatch,
+        lambda n, cmd: (
+            envelope(QUOTA_TEXT)
+            if n == 1
+            else envelope(OK_BODY, is_error=False, stop="end_turn", rc=0)
+        ),
+    )
+    o = dispatch.do_dispatch("quotamember", text="出图", quiet=True, no_checks=True)
+    assert o.kind == "result"
+    assert [cmd_model(c) for c in calls] == [DS_UUID, DS_BUILTIN], (
+        "BYOK 失败沿同名回退席下探——两席同名但值不同，dedupe 不得吞掉内置席"
+    )
+
+
+def test_preset_gate_seats_nonempty_rule(iso_dispatch):
+    """激活闸口径（dispatch/drain 共读）：生效链非空=放行；整链覆盖为空=拒绝；minimum 恒放行。
+
+    判据读的是**合并后的生效链**而非出厂表：跟踪面把 deepseek 整链置空，照样拒——
+    否则「代码表已回填」会把配置面的清空事故盖过去。
+    """
+    _seed_dispatch_presets(iso_dispatch)  # mimo/qwen 有席，deepseek 两链皆空
+    write_preset("mimo")
+    assert presets.preset_gate(registry.Registry.load(), "main") == "", "有席即放行"
+    write_preset("deepseek")
+    reason = presets.preset_gate(registry.Registry.load(), "main")
+    assert "deepseek" in reason and "席表为空" in reason
+    assert presets.preset_gate(registry.Registry.load(), "minimum") == "", (
+        "minimum 独立链不随预设走"
+    )
+
+
+def test_gate_no_pro_seat_is_design_not_fault(iso_dispatch):
+    """回填后的 deepseek：main 有席、pro 无席（用户刻意「全员同档」）。
+
+    显式 ``--model-tier pro`` 仍该拒（不静默回落烧到别的档），但读数必须说「本预设无该档席」
+    而不是「预设未激活」——把设计报成故障会把处置指到「去回填席位」上去。
+    """
+    set_presets(
+        iso_dispatch, qwen={"main": ["Q1"], "pro": ["Q2"]}
+    )  # 无 deepseek 键=用出厂表
+    write_preset("deepseek")
+    reg = registry.Registry.load()
+    assert presets.preset_gate(reg, "main") == "", "回填后 main 席放行（激活成功）"
+    pro = presets.preset_gate(reg, "pro")
+    assert pro and "未激活" not in pro and "刻意无该档席" in pro
+
+
+def test_drain_refuses_start_under_empty_seats(iso_state, iso_dispatch, monkeypatch):
+    """drain 在**拿锁之前**拒开工：整队列不被标成失败，错误读数淹没不了处置动作。
+
+    场景用「跟踪面把 deepseek 整链置空」构造（回填后出厂表本非空，只有覆盖能置空）——
+    与派发面共读 :func:`presets.preset_gate`，两侧判据不许分叉。
+    """
     seed_backlog(
         iso_state,
         [
@@ -240,6 +338,7 @@ def test_drain_refuses_start_under_unavailable_preset(iso_state, monkeypatch):
             {"id": "d2", "status": "pending", "summary": "s", "member": "devops"},
         ],
     )
+    set_presets(iso_dispatch, deepseek={"main": [], "pro": []})
     write_preset("deepseek")
     dispatched = []
     monkeypatch.setattr(dispatch, "do_dispatch", lambda *a, **k: dispatched.append(a))
