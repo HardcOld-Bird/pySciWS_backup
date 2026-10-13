@@ -421,7 +421,7 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 - **谷时隐性 DeepSeek 覆盖（用户设计 2026-10-13，路由 v3，backlog 20261013-093000-leader）**：
   DeepSeek 官方价分峰谷（峰 2 倍价），故**谷时自动把 qwen/mimo 预设的 main 席链换成
   DeepSeek**，`[model] preset` 那一行不动（不新增第四个预设，「隐性」即此）：
-  - **判据**（真源 `data/pysci_settings.toml` `[routing]` 块；`orch status`「路由模式」段、
+  - **判据**（真源 `data/pysci_settings.toml` 的 `[model]` 节内路由键；`orch status`「路由模式」段、
     mirror 概览「路由」项、派发路由行三处同读一份）：峰 = 工作日 9:00–12:00、14:00–18:00；
     谷 = ① 周六日**全天**（调休上班的周末照样算谷——按星期几判）② 法定节假日全天
     ③ 工作日其余时段（含午休与夜间）。节假日库 `chinesecalendar`（pip 离线内嵌

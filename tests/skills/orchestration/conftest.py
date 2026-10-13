@@ -151,16 +151,19 @@ def write_routing(**kv) -> pathlib.Path:
     """
     path = settings.SETTINGS_PATH
     data = settings.read_settings()
-    preset = str((data.get("model") or {}).get("preset") or "mimo")
     inspector = data.get("inspector") or {"enabled": True}
-    face = {k: v for k, v in (data.get("routing") or {}).items()}
-    face.update(kv)
-    body = [f'[model]\npreset = "{preset}"\n', "[inspector]"]
-    for key, value in inspector.items():
+    # 路由键已并入 `[model]`（用户 2026-10-13「模型类设置集中一处」）→ 既有用例写新位置；
+    # 旧位置 `[routing]` 的兼容读由专门用例覆盖，别把兼容路径混进常规用例（那会让
+    # 「回落告警」在几十个用例里反复出现，掩盖真正该看的那条）。
+    model = {k: v for k, v in (data.get("model") or {}).items()}
+    model.setdefault("preset", "mimo")
+    model.update(kv)
+    body = ["[model]"]
+    for key, value in model.items():
         body.append(f"{key} = {_toml_value(value)}")
     body.append("")
-    body.append("[routing]")
-    for key, value in face.items():
+    body.append("[inspector]")
+    for key, value in inspector.items():
         body.append(f"{key} = {_toml_value(value)}")
     path.write_text("\n".join(body) + "\n", encoding="utf-8")
     return path
