@@ -1449,6 +1449,38 @@
       "needs_leader_at": "2026-10-13T10:21:52+08:00"
     },
     {
+      "id": "20261013-124017-salvage",
+      "member": "leader",
+      "summary": "（续作 20261013-093000-leader）**（路由 v3，用户设计 2026-10-13）隐性 DeepSeek 谷时模式 + minimum 改 Mimo-Flash**",
+      "kind": "usability",
+      "success_criteria": "见单内五组判据（判定矩阵/切换时机/第三席链/观测面/minimum）全绿",
+      "evidence": "orchestration/state/suggestions/approved/20261013-093000-leader.md",
+      "source": "salvage",
+      "salvage": {
+        "worktree": "20261013-093000-leader",
+        "branch": "wt-20261013-093000-leader",
+        "commit": "7e9a075",
+        "path": ".qoder/worktrees/20261013-093000-leader",
+        "reason": "run_failed",
+        "entry": "20261013-093000-leader",
+        "registered": true,
+        "present": true,
+        "uncommitted": false,
+        "unmerged_before": 0,
+        "salvaged_at": "2026-10-13T12:40:17+08:00",
+        "from": "20261013-093000-leader",
+        "gen": 1
+      },
+      "status": "done",
+      "proposed": "2026-10-13T12:40:17+08:00",
+      "note": "drain 批量销账（commit caf0348）",
+      "started_at": "2026-10-13T12:40:17+08:00",
+      "worktree": "20261013-124017-salvage",
+      "done_at": "2026-10-13T13:15:05+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-124017-salvage"
+    },
+    {
       "id": "20261013-102153-salvage",
       "member": "leader",
       "summary": "（续作 20261013-101705-salvage）（续作 20261013-101105-salvage）（续作 20261013-072000-leader）**（REFACTOR 收官，v1.0 §12 收尾阶段）生效机制并入 README + 删除 REFACTOR.md + 裁决登记**",
@@ -1471,10 +1503,10 @@
         "from": "20261013-101705-salvage",
         "gen": 3
       },
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T10:21:53+08:00",
       "note": "drain 跳过（交付=blocked）：**卡点（第 4 跳、抢救链 gen3 = 最后一跳自动续作）：main 的 `orchestration/pods/｜组长处置：堵点已清（inspector AGENTS.md 蒸馏已入库），gen3 续作放行",
-      "started_at": "2026-10-13T10:21:53+08:00",
+      "started_at": "2026-10-13T13:15:05+08:00",
       "worktree": "20261013-102153-salvage",
       "needs_leader_at": "2026-10-13T10:29:00+08:00"
     },
@@ -1501,12 +1533,13 @@
       "kind": "usability",
       "success_criteria": "见单内五组判据（判定矩阵/切换时机/第三席链/观测面/minimum）全绿",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-093000-leader.md",
-      "status": "in_progress",
+      "status": "needs_leader",
       "proposed": "2026-10-13T11:17:44+08:00",
-      "note": "｜组长调度：用户指示优先生效，移至队首（--solo 单发）",
+      "note": "drain 跳过（交付=run_failed）：tool_use\n【全文已留审计副本：pods/devops/outbox/delivery-*.xml】｜已自动立续作单 20261013-124017-salvage",
       "solo": true,
       "started_at": "2026-10-13T11:19:46+08:00",
-      "worktree": "20261013-093000-leader"
+      "worktree": "20261013-093000-leader",
+      "needs_leader_at": "2026-10-13T12:40:17+08:00"
     },
     {
       "id": "20261013-071759-devops",
@@ -1539,6 +1572,17 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261013-102152-devops.md",
       "status": "pending",
       "proposed": "2026-10-13T12:39:17+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-130000-leader",
+      "member": "leader",
+      "summary": "**（inspector v2，用户设计 2026-10-13）会话记录审计：transcript 工具链（list/scan/fetch）+ 三态游标 + 优先级调度**",
+      "kind": "usability",
+      "success_criteria": "见单内四组判据（三态矩阵/优先级/真实巡检全链/噪声过滤与预算）全绿",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-130000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T13:26:33+08:00",
       "note": ""
     }
   ]
