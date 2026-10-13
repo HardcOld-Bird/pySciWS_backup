@@ -66,9 +66,10 @@ def touch_session(
             必须有跨进程的基准点（backlog 20261010-ledger-est-tokens）。水位与本跳实测
             起点不一致 = 期间存在 orch 记账外的增长（手动 --resume 等）。
         ctx_ratio: 本跳结束时的**上下文占用比**（envelope 的 ``context_usage_ratio``）。
-            记它是为了让跨进程的下一次 ``session="latest"`` 选择知道这具会话离压缩悬崖
-            还有多远（``dispatch.FRESH_CTX_RATIO`` 水位闸）——ctx 是会话态只增不减，不落
-            池就永远只能事后在台账里看到 81%/87% 那种腰斩读数。
+            纯观测落池：ctx 是会话态只增不减，不落池就永远只能事后在台账里看到 81%/87%
+            那种腰斩读数。**不参与会话选择**——原 FRESH_CTX_RATIO 水位闸经用户审查裁决
+            已回退（策略变更不得绕判决通道）；重启类似机制须经判决包并以真实账单/缓存
+            读数为依据。
     """
     member.update_session(sid, last_active=_now())
     for s in member.sessions:

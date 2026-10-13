@@ -211,6 +211,26 @@ def _line_acceptance() -> str:
     return "待用户验收的最终交付 = 占位（E6 后续单）"
 
 
+def _line_inspector_decisions() -> str:
+    """inspector 决策水位（用户 2026-10-13 06:2x 裁决：重要决策必须汇总进概览）。
+
+    本条目就是「免判决自动晋升」的教训面——ctx 水位闸类决策若早在这里亮出来，
+    用户审计就不必等事后联系组长。免判决+change>0 时置顶高亮。
+    """
+    from .inspectd import decision_counts  # 延迟导入：inspectd 引整条 worker 链
+
+    c = decision_counts()
+    hot = (
+        f"〔重点〕免判决+change={c['free_change']} 待审计"
+        if c["free_change"]
+        else "免判决+change=0"
+    )
+    return (
+        f"inspector 决策：自动晋升={c['promoted']} 待审计={c['open']} {hot} "
+        f"判决类={c['judged']}（全貌 `pysci-mirror decisions`）"
+    )
+
+
 #: 概览项登记表（§10 注册纪律·硬要求）：任何新增「需用户关注事项类型」必须加进这里。
 STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("盲审", _line_review),
@@ -219,6 +239,7 @@ STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("队列", _line_queues),
     ("仲裁", _line_jury),
     ("回退", _line_fallback),
+    ("决策", _line_inspector_decisions),
     ("趋势", _line_trend),
     ("待决", _line_pending),
     ("验收", _line_acceptance),
@@ -246,6 +267,53 @@ def cmd_status(args: argparse.Namespace) -> int:
             "  → twin 通道休眠：确认 PREFERENCE.md 草案后置 taste_enabled=true 才对外服务"
         )
     print('[NEXT] 口述偏好或指令：pysci-mirror journal "……"（编号菜单分流）')
+    return 0
+
+
+# ---------------------------------------------------------------- decisions
+def cmd_decisions(args: argparse.Namespace) -> int:
+    """``pysci-mirror decisions``：inspector 决策链全貌（用户审计入口，§10 注册纪律）。
+
+    只读拼装，零新状态面。免判决+change 类**置顶**（最需审计者优先）——「发现 → class →
+    remedy_shape → 判决记录 → 实施 commit → 核验状态」一屏看全；E7 后 twin 代理裁决面
+    同接口扩展进本命令（用户审计入口统一）。
+    """
+    from .inspectd import decision_rows  # 延迟导入：inspectd 引整条 worker 链
+
+    rows = decision_rows(
+        days=int(args.days or 0), cls=args.cls or "", shape=args.shape or ""
+    )
+    if not rows:
+        print("（无匹配的 inspector 决策记录）")
+        return 0
+    print(
+        f"== inspector 决策全貌（{len(rows)} 条；只读拼装：findings × backlog "
+        "× run 摘要 × jury 案卷 × 决策日志）=="
+    )
+    for r in rows:
+        flag = "[!]" if r["attention"] else "[i]"
+        bl = r["backlog_status"] or "未晋升"
+        print(
+            f"{flag} {r['id']}  {r['ts']}  "
+            f"[{r['class']}/remedy_shape={r['remedy_shape']}]"
+        )
+        print(f"     发现：{str(r['title'])[:80]}")
+        ruling = f"｜{r['ruling'][:60]}" if r["ruling"] else ""
+        print(f"     判决：{r['verdict_ref']}{ruling}")
+        impl = f"实施：{r['commit'][:8]}" if r["commit"] else "实施：（无 commit 读数）"
+        verify = f"核验：{r['verify']}" if r["verify"] else f"backlog={bl}"
+        print(f"     {impl}  {verify}")
+        if r.get("note"):
+            print(f"     留痕：{str(r['note'])[:90]}")
+    if any(r["attention"] for r in rows):
+        print(
+            "  [!] 置顶项=免判决+change（未经判决改变了声明行为/策略）——优先审计；"
+            "改判后应补 J/twin 判决记录留痕"
+        )
+    print(
+        "[NEXT] 过滤：--days N（近 N 天）/ --class mechanical|judgment / "
+        "--shape restore|change"
+    )
     return 0
 
 
@@ -336,6 +404,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="跳过菜单直接分流：1=偏好 2=行动指令 1,2=两者（非交互环境必填）",
     )
     p.set_defaults(func=cmd_journal)
+    p = sub.add_parser(
+        "decisions",
+        help="inspector 决策链全貌（发现→class→remedy_shape→判决→commit→核验）",
+    )
+    p.add_argument("--days", type=int, default=0, help="只看近 N 天（0=不限）")
+    p.add_argument(
+        "--class",
+        dest="cls",
+        default="",
+        choices=["mechanical", "judgment"],
+        help="按发现类别过滤",
+    )
+    p.add_argument(
+        "--shape",
+        default="",
+        choices=["restore", "change"],
+        help="按修复形状过滤",
+    )
+    p.set_defaults(func=cmd_decisions)
     return ap
 
 
@@ -354,6 +441,7 @@ __all__ = [
     "append_preference",
     "charter_path",
     "charter_state",
+    "cmd_decisions",
     "cmd_journal",
     "cmd_status",
     "main",

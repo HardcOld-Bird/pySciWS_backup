@@ -1,15 +1,15 @@
-"""会话上下文水位闸（backlog insp-20261012-224853-mechanical / 020358-mechanical-002）。
+"""会话 ctx 观测面 + fe68a40 水位闸回退（用户 2026-10-13 05:5x 审查裁决，backlog 20261013-060000-leader）。
 
-根因（两案同因）：``session="latest"`` 无条件续上一跳的会话，而 ctx 只在台账里事后可见，
-运行态会话池从未记过它。于是会话一路爬到压缩悬崖（devops 实测 81%→87%）后接 run_failed /
-rc=1 腰斩，inspector 再把这读数捡回成案。修复：``dispatch.touch_session`` 把末跳
-``context_usage_ratio`` 落进会话池，``session="latest"`` 据 ``FRESH_CTX_RATIO`` 水位决定
-续/新——过崖即起新会话（记忆已按 charter 蒸馏进只读层与台账，续作靠任务书不靠会话记忆）。
+fe68a40 曾给 ``session="latest"`` 加过 60% 自动换会话闸——经授权链审计确认它绕过了全部
+判决通道（策略变更属 J/M/twin 管辖），且压缩防溢出使闸的宣称收益无效，用户异议=回退授权。
+**保留**其良性附带：``dispatch.touch_session`` 把末跳 ``context_usage_ratio`` 落进会话池
+（纯观测，有单测钉住）；**回退**主体：``session="latest"`` 恢复「续最近活跃会话」，哪怕
+末跳 ctx 已过 60% 也不断续（重启类似机制须经判决包 + 真实账单/缓存读数）。
 
 量的是**真实读路**：env 的 ctx 嵌在 ``usage`` 块（runner.Envelope.parse 唯一取处），
 ``fake_headless`` 桩只管派生、不碰判据。``iso_dispatch`` 夹具 no-op 了 ``Registry.save``
 （防写真实 registry.json），故跨跳的水位不靠「跑一跳自然累计」——直接写
-``sessions-runtime.json``（``write_runtime``）预置，闸读的是磁盘面，不被 no-op 骗过。
+``sessions-runtime.json``（``write_runtime``）预置，读的是磁盘面，不被 no-op 骗过。
 """
 
 from __future__ import annotations
@@ -76,37 +76,44 @@ def test_touch_session_records_ctx_ratio_on_failure(iso_dispatch, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# ② 水位闸：低于阈值续、过崖起新会话
+# ② 回退实测：水位高低都不拦 latest 续（fe68a40 主体已撤销）
 # ---------------------------------------------------------------------------
 def test_latest_resumes_below_watermark(iso_dispatch, monkeypatch):
-    """末跳 ctx 未过 FRESH_CTX_RATIO → 照旧续同一会话（不改变健康路径语义）。"""
+    """末跳 ctx 低 → 续旧会话（健康路径语义不变）。"""
     set_models(iso_dispatch, flash=BUILTIN)
     fake_headless(monkeypatch, _ok(0.2))
     o1 = dispatch.do_dispatch(
         MEMBER, text="出图", quiet=True, no_checks=True, session="new"
     )
-    # 夹具 no-op save → 水位不自然累计，直接预置一具低水位会话（闸读磁盘面）
+    # 夹具 no-op save → 水位不自然累计，直接预置一具低水位会话（读磁盘面）
     _seed_session(iso_dispatch, o1.sid, ctx=0.2, last_active="9999")
     fake_headless(monkeypatch, _ok(0.3))
     o2 = dispatch.do_dispatch(MEMBER, text="续跑", quiet=True, no_checks=True)
-    assert o2.sid == o1.sid, "低于水位应续旧会话"
+    assert o2.sid == o1.sid, "低水位应续旧会话"
 
 
-def test_latest_starts_fresh_when_past_watermark(iso_dispatch, monkeypatch):
-    """末跳 ctx 已过 FRESH_CTX_RATIO → 不再续，起新会话（记忆已蒸馏进只读层与台账）。"""
+def test_latest_resumes_even_past_60pct(iso_dispatch, monkeypatch):
+    """回退实测（success_criteria）：末跳 ctx 65%（含 87% 高位）→ **仍续**原会话。
+
+    fe68a40 的 60% 自动换会话属策略变更、绕过了判决通道，用户审查裁决回退。
+    """
     set_models(iso_dispatch, flash=BUILTIN)
-    fake_headless(monkeypatch, _ok(0.87))
+    fake_headless(monkeypatch, _ok(0.65))
     o1 = dispatch.do_dispatch(
         MEMBER, text="出图", quiet=True, no_checks=True, session="new"
     )
-    _seed_session(iso_dispatch, o1.sid, ctx=0.87, last_active="9999")
-    fake_headless(monkeypatch, _ok(0.1))
+    _seed_session(iso_dispatch, o1.sid, ctx=0.65, last_active="9999")
+    fake_headless(monkeypatch, _ok(0.7))
     o2 = dispatch.do_dispatch(MEMBER, text="续跑", quiet=True, no_checks=True)
-    assert o2.sid != o1.sid, "过崖的会话不该被续"
+    assert o2.sid == o1.sid, "65% 水位不得断续原会话（闸已回退）"
+
+    _seed_session(iso_dispatch, o1.sid, ctx=0.87, last_active="9999")
+    o3 = dispatch.do_dispatch(MEMBER, text="再续", quiet=True, no_checks=True)
+    assert o3.sid == o1.sid, "87% 同样续（回退=恢复无条件续最近活跃会话）"
 
 
-def test_session_new_ignores_watermark(iso_dispatch, monkeypatch):
-    """显式 session="new" 不受闸约束（用户/组长显式要新会话，水位不拦）。"""
+def test_session_new_still_starts_fresh(iso_dispatch, monkeypatch):
+    """显式 session="new" 每次新起（与水位无关，语义不因回退而变）。"""
     set_models(iso_dispatch, flash=BUILTIN)
     fake_headless(monkeypatch, _ok(0.9))
     o1 = dispatch.do_dispatch(
@@ -121,7 +128,7 @@ def test_session_new_ignores_watermark(iso_dispatch, monkeypatch):
 
 
 def test_no_record_session_still_resumes(iso_dispatch, monkeypatch):
-    """无 ctx 记录（首次/崩溃跳）不拦：fail-open 续，别把「没读数」当「过崖」。"""
+    """无 ctx 记录（首次/崩溃跳）照续：观测面缺失不该影响选择。"""
     set_models(iso_dispatch, flash=BUILTIN)
     fake_headless(monkeypatch, _ok(0.0))
     o1 = dispatch.do_dispatch(
@@ -130,11 +137,11 @@ def test_no_record_session_still_resumes(iso_dispatch, monkeypatch):
     _seed_session(iso_dispatch, o1.sid, ctx=None, last_active="9999")
     fake_headless(monkeypatch, _ok(0.0))
     o2 = dispatch.do_dispatch(MEMBER, text="续跑", quiet=True, no_checks=True)
-    assert o2.sid == o1.sid, "无读数=fail-open 续，不误判成过崖"
+    assert o2.sid == o1.sid
 
 
-def test_fresh_gate_is_visible_in_report(iso_dispatch, monkeypatch, capsys):
-    """闸触发时报告面要说清「为何起新会话」——静默换会话会让组长以为记忆丢了。"""
+def test_no_gate_message_on_past_watermark(iso_dispatch, monkeypatch, capsys):
+    """回退后不再有「起新会话」闸播报——静默/显式切换都该与 fe68a40 前一致。"""
     set_models(iso_dispatch, flash=BUILTIN)
     fake_headless(monkeypatch, _ok(0.87))
     first = dispatch.do_dispatch(
@@ -144,4 +151,6 @@ def test_fresh_gate_is_visible_in_report(iso_dispatch, monkeypatch, capsys):
     fake_headless(monkeypatch, _ok(0.1))
     dispatch.do_dispatch(MEMBER, text="续跑", quiet=False, no_checks=True)
     out = capsys.readouterr().out
-    assert "起新会话" in out, f"闸要可见，实际输出未提新会话：{out[-400:]}"
+    assert "压缩悬崖前兆" not in out and "起新会话" not in out, (
+        f"水位闸播报已随闸回退，实际仍出现：{out[-400:]}"
+    )

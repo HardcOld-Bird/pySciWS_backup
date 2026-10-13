@@ -70,12 +70,6 @@ SYSTEMIC_TEXT: dict[str, tuple[str, str]] = {
     "channel_error": ("渠道级失败", "模型渠道级故障（channel_error）"),
 }
 
-#: 上下文水位闸：上一跳末 ``ctx_ratio`` 达到此值的会话，``session="latest"`` 不再续、改起
-#: 新会话（记忆已按 charter 蒸馏进只读层与台账，续作靠任务书不靠会话记忆）。取 0.6=60%：
-#: 与巡检清单「ctx_ratio 持续 >60% 的成员→提请组长归档」同一把尺（devops 实测 81%/87% 两跳
-#: 后接 run_failed/rc=1 腰斩，续上去就是把它推过压缩悬崖）。低于此值才续，留一跳余量。
-FRESH_CTX_RATIO: float = 0.6
-
 
 def _sid_inflight(m: Member, sid: str) -> dict[str, Any] | None:
     """目标 sid 的**上一跳进程仍活着**的证据（在途闸判据，184000 修复面④）。
@@ -509,22 +503,11 @@ def do_dispatch(
     if session == "new":
         sid, resume = new_session_id(), False
     elif session == "latest":
-        # 上下文水位闸（backlog insp-20261012-224853-mechanical）：上一跳末 ctx_ratio 已过
-        # FRESH_CTX_RATIO 水位的会话不再续——resume 是在那个水位之上起步，只涨不降，续上去
-        # 就是把它推过压缩/腰斩悬崖（devops 实测 81%→87% 后接 run_failed/rc=1，两案同因）。
-        # 手动 `--session new` 照旧不受此闸约束；无记录（崩溃跳/首次）也不拦，fail-open。
+        # fe68a40 的 FRESH_CTX_RATIO 水位闸已回退（用户 2026-10-13 审查裁决：策略变更
+        # 绕过了全部判决通道，且压缩防溢出使闸的宣称收益无效）。ctx_ratio 仍随 touch_session
+        # 落池（观测面），恢复「续最近活跃会话」语义；重启类似机制须经判决包。
         active = m.active_sessions
-        fresh = [
-            s for s in active if float(s.get("ctx_ratio") or 0.0) < FRESH_CTX_RATIO
-        ]
-        if active and not fresh:
-            print(
-                f"[i] 最近 {len(active)} 个会话的末跳 ctx_ratio 均 ≥"
-                f" {FRESH_CTX_RATIO:.0%}（压缩悬崖前兆）→ 本跳起新会话；记忆已按"
-                " charter 蒸馏进只读层与台账"
-            )
-        pick = fresh[0] if fresh else None
-        sid, resume = (pick["sid"], True) if pick else (new_session_id(), False)
+        sid, resume = (active[0]["sid"], True) if active else (new_session_id(), False)
     else:
         found = m.find_session(session)
         if found is None:

@@ -602,6 +602,41 @@ def _salvage_instruction(sal: dict, wt: str) -> str:
     return f"**续作指令（自动抢救）**：{how}{tail}\n\n"
 
 
+def _remedy_shape_instruction(item: dict) -> str:
+    """修复形状分流约束注入任务书（用户 2026-10-13 审查裁决，backlog 20261013-060000-leader）。
+
+    只管 inspector 来源的条目：``restore``=复原既有声明行为，免判决通道照旧；``change``
+    =改声明行为/策略/权衡面——mechanical 通道（无判决记录）时 devops 必须交付 blocked
+    上报而非实施。判决记录的机械判据=channel 不是免判决的 ``mechanical``（judgment 类经
+    J 晋升时 channel=jury，计票已进决策日志）。缺 remedy_shape 字段的旧条目不注入
+    （分流只执法于新形状体系，不追溯）。
+    """
+    if str(item.get("source") or "") not in ("inspector", "inspectd"):
+        return ""
+    shape = str(item.get("remedy_shape") or "")
+    if not shape:
+        return ""
+    channel = str(item.get("channel") or "mechanical")
+    if shape == "change" and channel == "mechanical":
+        return (
+            "\n**修复形状约束（remedy_shape=change，免判决通道——先读这一段）**：\n"
+            "本条经 inspector mechanical 通道入账，无 J/M/twin 判决记录，而其修复形状="
+            "「改变声明行为/策略/权衡面」。按修复形状分流规则，实施前必须先过判决包"
+            "（`pysci-orch jury` 或 consult-twin）。**未经判决不得实施**：若本任务书未附"
+            "判决记录（案卷 id/计票），直接交付 <blocked>（正文注明「remedy_shape=change "
+            "缺判决记录」），由组长补判决后重派。\n"
+        )
+    if shape == "change":
+        return (
+            "\n修复形状=change（改声明行为/策略/权衡面），判决记录已在案"
+            f"（channel={channel}）——照常实施，交付仍须过 success_criteria 机械验收。\n"
+        )
+    return (
+        "\n修复形状=restore（复原既有声明行为：恢复被删行、修断正则、回滚误删配置之类）"
+        "——免判决通道照常实施，仍须过 success_criteria 机械验收。\n"
+    )
+
+
 def backlog_task_text(item: dict) -> str:
     """由 backlog 条目生成 devops 派发任务书正文。
 
@@ -629,6 +664,7 @@ def backlog_task_text(item: dict) -> str:
     if sal:
         # 抢救事实进任务书：worker 不必猜「上次到哪了」，指令里直接给它续作面与提交
         head += _salvage_instruction(sal, wt)
+    head += _remedy_shape_instruction(item)
     return head + (
         "要求：以 worktree 隔离实施，**worktree 名用这里给出的隔离面名**"
         "（默认=本条目 id，孤儿回收升代后带 ``-r<代>`` 后缀）——"

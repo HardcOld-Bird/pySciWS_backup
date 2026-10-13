@@ -50,9 +50,13 @@
   `sid_new_reason=prev_alive`）；细则 `orchestration/skills/orchestration/references/salvage-reclaim.md` §7。
 - **上下文膨胀看 ctx_ratio，不看 est_tokens**（后者=本跳吞吐，78 跳实测相关 −0.11）；组员侧
   唯一自有杠杆=压薄每跳全文注入的自维护层，归档是组长侧 `orch sessions --archive --distill`。
-  派发侧已加水位闸 `dispatch.FRESH_CTX_RATIO=0.6`：`session="latest"` 见上一跳 ctx 已过 60%
-  就直接起新会话、不再续——ctx 只增不减，续上去只会把它推过压缩悬崖（81%/87% 两跳后接
-  run_failed/rc=1 腰斩，backlog insp-20261012-224853-mechanical）。
+  派发侧 ctx_ratio 仅**观测落池**（`touch_session`）：fe68a40 的水位闸（``session="latest"``
+  见上一跳过 60% 就另起新会话）经用户 2026-10-13 审查裁决已回退——它改了策略面却绕过全部
+  判决通道，且压缩防溢出使宣称收益无效。重启类似机制须经判决包并以真实账单/缓存读数为依据
+  （来龙去脉 backlog insp-20261012-224853-mechanical）。
+- **修复形状分流（remedy_shape）**：inspectd mechanical 通道的免判决只剩 ``restore``（复原
+  既有声明行为）；凡 ``change``（改声明行为/策略/权衡面，登记缺省即 change）而无判决记录，
+  drain 任务书会要求你交付 <blocked> 而非自行实施——策略变更的裁决权在用户，不在执行端。
 - **回归测试别锁运行面当前值**：把「配置文件的此刻读数」当「出厂默认」钉死，合法上线一次
   就红一次（taste_enabled 实锤）。锁代码默认 + 授权留痕两面，且留痕分支必须有「无授权时
   被咬」的阳性用例，否则在默认关的树里永不执行=写了等于没写。
