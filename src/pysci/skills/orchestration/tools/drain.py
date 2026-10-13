@@ -1464,6 +1464,17 @@ def _drain_batch(
     # 自己冒到屏幕上。不抄这一行，谷时批次在日志里就与平时长得一模一样——而账单不是。
     if outcome.route:
         _log(run_log, f"{outcome.route}（批次 {label}）")
+    # 边界避让与同席重试同理：do_dispatch 走 quiet 通路，两条读数都不会自己冒到屏幕上。
+    # 避让不进 run 日志就没人知道「这一跳等了 4 分钟」（台账 hold_s 有数但没人逐行看）；
+    # 同席重试不进日志则「渠道在抖」这件事在批次账上是隐形的，只剩台账字段可查。
+    if outcome.hold:
+        _log(run_log, f"{outcome.hold}（批次 {label}）")
+    if outcome.same_seat_retries:
+        _log(
+            run_log,
+            f"[!] 渠道瞬态故障同席重试 {outcome.same_seat_retries} 次"
+            f"（{outcome.same_seat_retry_ms / 1000:.0f}s）（批次 {label}）",
+        )
     elapsed = round(time.time() - t0, 1)
     # 规格 4a「run 日志」面：do_dispatch 走 quiet 通路，换席告警不会自己打到屏幕上，
     # 于是降级跑完的批次在日志里看起来就像「首席好好的」——回退必须进日志，否则

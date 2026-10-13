@@ -305,13 +305,23 @@ ledger 流水、`state/devops.{lock,cancel}` / `state/devops-runs/` / `state/wat
    回复中直接给出下一步**（决策选项，或已自动完成的机械接力说明）。
 
 失败处理：超时/非零退出 → 自动重试一次（同会话 resume，注入错误上下文）；再失败 →
-呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。**例外**：席位不可用
+呈组长决策（改任务书重派 / `orch consult` 副组长 / 上报用户）。**席位不可用**
 （`dispatch.SYSTEMIC_KINDS` 的 `quota_exhausted`/`channel_error`，加上「启动即失败」）
-→ 不做**同席**重试，沿该档**有序回退链**逐席下探（一席一跳，§3.5）；全链耗尽 → 沿用
+→ 沿该档**有序回退链**逐席下探（一席一跳，§3.5）；其中 `channel_error` **先同席
+resume 自救**（瞬态中断重试大概率即愈、且零工作损失——会话逐回合持久化；次数闸
+`model_fallback.same_seat_retry` 缺省 10 次 + 壁钟预算闸 `budget_s` 缺省 1800s，
+**双闸都过才换席**，付费席因此降为后手）。`quota_exhausted`（确定性耗尽）与启动即失败
+（席位根本不存在）**不自救**，直接换席。自救不写「渠道回退」事件面（重试不是降级），
+但次数/耗时入台账 `same_seat_retries`/`same_seat_retry_ms` 与 run 日志（backlog
+20261013-143000-leader）。全链耗尽 → 沿用
 该 kind（drain 据此全局停止）：
 额度类（`quota_exhausted`，envelope/stderr 含『credit usage limit』类文案）[NEXT] 提示
 检查 registry models 回退链 / 等待额度重置；渠道级（`channel_error`，固定文案 **∧** 会话档
 末轮合成故障形状合取，backlog 20261012-194500-leader）等渠道恢复即可，不必充值。
+**边界避让**：距峰谷切换点不足 `routing.boundary_hold_s`（缺省 300s、硬钳制 ≤300s）时
+**先睡过界再派**——席链随时间走（§3.5），卡在边界前几秒出发＝整跳落在将过期的窗口里，
+而等待期零 LLM 成本；`--no-hold` 跳过（草稿/调试），等待秒数入台账 `hold_s`（backlog
+20261013-144500-leader）。
 
 ### 3.4 交付协议（XML 标记块 + delivery-gate 强制）
 
@@ -1218,6 +1228,8 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **批准单单一源纪律机械化**（backlog 20261013-071759-devops）：批准可被追加段写成自相矛盾而无人能发现（`20261012-164601-leader` 的 `taste_enabled` 实案）。新增 `dispatch.criteria_conflicts` 只判**同一配置键的相反布尔值**（精度优先：义务/禁止反差不判，误报=噪声=没人读），approve 告警 + 派发时把矛盾与取舍规则嵌进任务书；单一源登记=`superseded` 且点名该键。全语料 78 份建议实测：1 处真阳、0 误报 | 组长采纳 + devops 实施 |
 | 2026-10-13 | **交集类失败停链**（backlog 20261013-102152-devops）：词表增 `merge_dirty_face`，drain 认此成因→抢救照做、续作单不立，待清清单进 `merge_intersect` 并渲染 `orch status`（§9 恢复面例外闸）；任务书尾部教组员贴清单。实测三连跳树哈希逐字节相同=续作链空转 | 组长采纳 + devops 实施 |
 | 2026-10-13 | **lint 幻影抗体扩面到 13 charter**（backlog 20261013-085045-devops）：「harness 注入的 lint/告警含 `file:line` 先对盘核验」此前只在 8 面在册，其余 5 名组员同样会被平台幻影误导；快照测试钉 13 charter + 2 技能面（清单长度与文件数双锁） | 组长批准（`229a238`）+ devops 实施 |
+| 2026-10-13 | **channel_error 同席重试先于换席**（backlog 20261013-143000-leader）：旧策略「席位不可用一律不重试、首败即换席」在瞬态故障下把抖动落成付费席（Mimo 平台侧算力不足，当日 4 起）。改为**先自救**：同会话 resume 续跑（会话逐回合持久化故零工作损失），**双闸**=次数 `model_fallback.same_seat_retry.channel_error`（缺省 10）+ 壁钟预算 `budget_s`（缺省 1800s，次数闸挡不住「真下线」——每次失败数分钟时 10 次会拖住串行队列近小时）都过才换席。`quota_exhausted`（确定性）与启动即失败（席位不存在）不自救；自救**不进**「渠道回退」事件面（重试不是降级），次数/耗时入台账 `same_seat_retries`/`same_seat_retry_ms` 与 run 日志。测试口径在 `conftest.iso_dispatch` 把次数压到 1（既有用例量的是换席次序） | 用户裁决 + devops 实施 |
+| 2026-10-13 | **边界避让派发**（backlog 20261013-144500-leader）：席链随时间走（§3.5 谷时隐性 DeepSeek），卡在峰谷切换点前几秒出发=整跳落在将过期的窗口里，成本错配。派发前读 `routing.next_switch`，距切换 < `routing.boundary_hold_s`（缺省 300s、**硬钳制 ≤300s**）→ 睡到过点再派（等待期零 LLM 成本）；`--no-hold` 跳过（草稿/调试），等待秒数入台账 `hold_s`、读数入 run 日志。落点在解析角色**之前**——等过界后再读，读到的才是新窗口的链 | 用户裁决 + devops 实施 |
 
 ## 14. 已知代价与风险
 

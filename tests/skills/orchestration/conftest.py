@@ -63,6 +63,22 @@ def set_routing_clock(monkeypatch, moment: datetime) -> datetime:
 
 
 @pytest.fixture(autouse=True)
+def no_real_backoff_sleep(monkeypatch):
+    """退避/避让的真实等待在测试里一律换 no-op（同席重试 45s×10、避让 ≤300s）。
+
+    抽象落点是 ``dispatch._sleep``（调度层唯一等待出口），patch 一处即覆盖两条新通路：
+    channel_error 同席重试（backlog 20261013-143000-leader）与峰谷边界避让
+    （backlog 20261013-144500-leader）。留痕面不随之消失——重试次数/耗时走台账字段
+    ``same_seat_retries``/``same_seat_retry_ms``，避让走 ``hold_s``，两者都仍被断言。
+
+    需要验**等待时长本身**的用例（test_same_seat_retry 的退避/预算组）自行再 patch 一次
+    记录秒数——monkeypatch 后写覆盖前写，且都在用例作用域内回收，互不串味。不这么做
+    每个碰到渠道故障的用例都得自己记着补 patch，漏一个就拖 45s（实测 timeout）。
+    """
+    monkeypatch.setattr(dispatch, "_sleep", lambda seconds: None)
+
+
+@pytest.fixture(autouse=True)
 def freeze_routing_clock(monkeypatch, tmp_path):
     """默认冻结在峰段——隐性 DeepSeek 态是**时间驱动**的配置面覆盖，测试必须自己选时刻。
 
@@ -534,6 +550,18 @@ def iso_dispatch(tmp_path, monkeypatch):
                     }
                 },
                 "checks": {},
+                # 同席重试（backlog 20261013-143000-leader）测试口径：出厂缺省 10 次，
+                # 但既有用例量的是**换席次序**，重试次数随缺省走会让每个渠道故障用例
+                # 多出 10 跳、且漏算一次就红。故压到 1：「先自救再换席」的骨架不变，
+                # 用例只需在首跳后多认一跳。验次数闸/壁钟闸本身的用例自行覆盖写
+                # （Registry 每次调用重读盘，后写胜出）。
+                "model_fallback": {
+                    "same_seat_retry": {
+                        "channel_error": 1,
+                        "backoff_s": 0,
+                        "budget_s": 0,
+                    }
+                },
             },
             ensure_ascii=False,
         ),

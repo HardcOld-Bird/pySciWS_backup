@@ -77,6 +77,29 @@ RUNTIME_SEAT_NAMES_KEY: str = "model_seat_names"
 #: ``event_tail``：mirror/status 面「最近 N 条」的 N。
 DEFAULT_MODEL_FALLBACK: dict[str, int] = {"skip_window_s": 3600, "event_tail": 5}
 
+#: 同席重试默认参数（``model_fallback.same_seat_retry`` 块可逐键覆盖，fail-open）。
+#: 只给 ``channel_error`` 一档是有意设计（用户裁决 2026-10-13，backlog
+#: 20261013-143000-leader）：渠道级故障是**瞬态**的（Mimo 平台侧算力不足，今日 4 起），
+#: 同会话 resume 续跑大概率即愈且零工作损失（会话逐回合持久化）；而 ``quota_exhausted``
+#: 是确定性耗尽、启动即失败是席位根本不存在——两者同席重试都是白烧，故不入表。
+#: ``channel_error``：重试次数上限；``backoff_s``：两次重试之间的退避；
+#: ``budget_s``：**壁钟预算**（0=不设限）——次数闸挡不住「真下线」：每次失败若耗时数
+#: 分钟，10 次就会拖住串行队列近小时，双闸并用才既吃满瞬态抖动、又不被死渠道占住队列。
+DEFAULT_SAME_SEAT_RETRY: dict[str, int] = {
+    "channel_error": 10,
+    "backoff_s": 45,
+    "budget_s": 1800,
+}
+
+#: 边界避让的缺省阈值（``routing.boundary_hold_s`` 可覆盖，0=禁用）：距峰谷切换点
+#: 不足该秒数就先睡过界再派（用户裁决 2026-10-13，backlog 20261013-144500-leader）。
+#: 席链随时间走（路由 v3 谷时隐性 DeepSeek），卡在边界前几秒出发=整跳落在将要过期的
+#: 窗口里，成本错配；等待期零 LLM 成本，5 分钟很值。
+DEFAULT_BOUNDARY_HOLD_S: int = 300
+
+#: 边界避让的**硬钳制**上限：配置写得再大也压到 300s——「稍等过界」不是「排队等窗口」。
+BOUNDARY_HOLD_CAP_S: int = 300
+
 #: 脏跟踪面哨兵扫描的相对路径（见 :func:`dirty_tracked_state`）。
 STATE_REL_PATH: str = "orchestration/state"
 
@@ -766,6 +789,48 @@ class Registry:
             if number >= 0:
                 out[key] = number
         return out
+
+    @property
+    def same_seat_retry(self) -> dict[str, int]:
+        """同席重试参数（``model_fallback.same_seat_retry`` 可逐键覆盖，fail-open）。
+
+        口径同 :attr:`fallback_policy`：读不到/非法值 → 回落出厂默认。**表里只有
+        ``channel_error`` 一档**——额度耗尽与启动即失败不适用同席重试（见
+        :data:`DEFAULT_SAME_SEAT_RETRY` 注释），故本表没有它们的键，调用方也别加。
+        """
+        raw = self.data.get("model_fallback") or {}
+        out = dict(DEFAULT_SAME_SEAT_RETRY)
+        if not isinstance(raw, dict):
+            return out
+        raw = raw.get("same_seat_retry")
+        if not isinstance(raw, dict):
+            return out
+        for key in DEFAULT_SAME_SEAT_RETRY:
+            try:
+                number = int(raw.get(key))
+            except (TypeError, ValueError):
+                continue
+            if number >= 0:
+                out[key] = number
+        return out
+
+    @property
+    def routing_hold_s(self) -> int:
+        """边界避让阈值（``routing.boundary_hold_s``，0=禁用；硬钳制 ≤300s）。
+
+        与 :attr:`fallback_policy` 同为 fail-open：读不到/非法 → 缺省 300s；写超上限
+        → 压到 :data:`BOUNDARY_HOLD_CAP_S`（「稍等过界」不是「排队等窗口」）。
+        """
+        raw = self.data.get("routing") or {}
+        if not isinstance(raw, dict):
+            return DEFAULT_BOUNDARY_HOLD_S
+        try:
+            number = int(raw.get("boundary_hold_s"))
+        except (TypeError, ValueError):
+            return DEFAULT_BOUNDARY_HOLD_S
+        if number < 0:
+            return DEFAULT_BOUNDARY_HOLD_S
+        return min(number, BOUNDARY_HOLD_CAP_S)
 
     @property
     def seat_failures(self) -> dict[str, dict[str, dict[str, Any]]]:

@@ -80,6 +80,17 @@ class LedgerEntry:
     #: 台账留痕：批次自动换 sid 与人工拒绝都必须在读数面可见（184000 修复面④）。
     sid_new_reason: str = ""
     error: str = ""
+    # 同席重试读数（用户裁决 2026-10-13，backlog 20261013-143000-leader）：
+    # ``same_seat_retries`` = 本跳在原席上 resume 重试了几次（0=没重试）；
+    # ``same_seat_retry_ms`` = 这些重试累计跑了多久（ms，含退避）。
+    # 落台账而不入「渠道回退」事件面（重试不是降级）——但抖动频率与预算触顶要有统计原料，
+    # 「今天 channel_error 重试了 37 次」正是判断「渠道在抖 vs 渠道已死」的读数。
+    same_seat_retries: int = 0
+    same_seat_retry_ms: int = 0
+    # 边界避让：本跳出发前等了多少秒对齐峰谷边界（0=没等；用户裁决 2026-10-13，
+    # backlog 20261013-144500-leader）。台账留这个字段是为了统计「避让节省」——
+    # 等待本身不产生成本（零 LLM 调用），但要知道它发生了、发生了多少次。
+    hold_s: int = 0
 
 
 def _now() -> str:
