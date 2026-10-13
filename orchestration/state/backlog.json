@@ -1558,6 +1558,28 @@
       "worktree": "20261013-071759-devops"
     },
     {
+      "id": "20261013-143000-leader",
+      "member": "leader",
+      "summary": "**（dispatch 层，用户 2026-10-13）channel_error 同席重试先于换席：瞬态中断先自救，付费席降为后手**",
+      "kind": "usability",
+      "success_criteria": "见单内两组判据（分类处置单测矩阵/真实续跑全链）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-143000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T13:55:53+08:00",
+      "note": "｜组长调度：用户指示模型链路改动前置（免费慢通道拖队）"
+    },
+    {
+      "id": "20261013-144500-leader",
+      "member": "leader",
+      "summary": "**（dispatch 层，用户 2026-10-13）边界避让派发：距峰谷切换点 <5 分钟时稍等过界再派**",
+      "kind": "usability",
+      "success_criteria": "见单内两组判据（边界场景实测/对照组与放行口）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-144500-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T14:02:19+08:00",
+      "note": "｜组长调度：用户指示模型链路改动前置（免费慢通道拖队）"
+    },
+    {
       "id": "20261013-085045-devops",
       "member": "devops",
       "summary": "**lint 幻影抗体句只覆盖 8/13 charter，其余 5 个组员同样会受害**",
@@ -1588,28 +1610,6 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261013-130000-leader.md",
       "status": "pending",
       "proposed": "2026-10-13T13:26:33+08:00",
-      "note": ""
-    },
-    {
-      "id": "20261013-143000-leader",
-      "member": "leader",
-      "summary": "**（dispatch 层，用户 2026-10-13）channel_error 同席重试先于换席：瞬态中断先自救，付费席降为后手**",
-      "kind": "usability",
-      "success_criteria": "见单内两组判据（分类处置单测矩阵/真实续跑全链）",
-      "evidence_file": "orchestration/state/suggestions/approved/20261013-143000-leader.md",
-      "status": "pending",
-      "proposed": "2026-10-13T13:55:53+08:00",
-      "note": ""
-    },
-    {
-      "id": "20261013-144500-leader",
-      "member": "leader",
-      "summary": "**（dispatch 层，用户 2026-10-13）边界避让派发：距峰谷切换点 <5 分钟时稍等过界再派**",
-      "kind": "usability",
-      "success_criteria": "见单内两组判据（边界场景实测/对照组与放行口）",
-      "evidence_file": "orchestration/state/suggestions/approved/20261013-144500-leader.md",
-      "status": "pending",
-      "proposed": "2026-10-13T14:02:19+08:00",
       "note": ""
     }
   ]
