@@ -22,7 +22,9 @@
   blocked。细则 `orchestration/skills/orchestration/references/verdict-package.md`。
 - **档位映射自愈只写运行态** `models_resolved`，不写跟踪面；遮蔽时只报不写
   （`references/registry-runtime.md`）。
-- **worktree sync 台账**：tree_hash 行尾无关，但 pod 副本 gitignored ⇒ 合并后在 main 跑
+- **worktree sync 台账**：tree_hash 行尾无关；`sync` 落盘后台账**确有变更即自动提交**
+  （生成物不留脏面——backlog 20261013-203724-devops，消除了「改真本 vs 合并交集闸」互斥；
+  失败 fail-soft 打一行、部署不连带失败）。pod 副本 gitignored ⇒ 合并后在 main 跑
   `sync --check` 到全等。doctor：[*]=台账漂移、[!]=副本漂移。
 - **uvx 型 MCP 的 mcp 2.x 断供**：mcp.json args 前插 `--with mcp<2`；诊断 `echo '' | uvx <pkg>`。
 - **主树 sync 一律 `pysci-dev venv-sync`**：裸 uv sync 撞运行中 exe 会先删光其余入口；
