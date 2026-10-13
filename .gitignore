@@ -38,6 +38,10 @@ __pycache__/
 #（真本在 orchestration/skills/orchestration/，orch sync 再生）。
 /orchestration/state/ledger/
 /.qoder/skills/orchestration/
+# 组长 Stop 钩子（watch 自动挂载，README §4.5 2026-10-13 v2）的运行态文件：
+# 运行日志 + 「最新在听者」token（每次回合重写，纯运行态）
+/.qoder/hooks/watch-arm.log
+/.qoder/hooks/watch-holder.token
 /orchestration/state/backups/
 # cp 备份（worktree merge 的 <name>.bak-<ts>）：本地面的历史副本，永不跨树、也不入库
 /orchestration/state/*.bak-*

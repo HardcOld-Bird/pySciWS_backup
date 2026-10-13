@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/watch-arm.sh",
+            "name": "watch-arm",
+            "asyncRewake": true,
+            "rewakeMessage": "[watch 自动续挂]",
+            "rewakeSummary": "drain 事件到达",
+            "timeout": 15000
+          }
+        ]
+      }
+    ]
+  }
+}

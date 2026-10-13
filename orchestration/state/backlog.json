@@ -1859,11 +1859,14 @@
       "kind": "usability",
       "success_criteria": "见单内判据（单节读数不变/兼容读告警/全量绿）",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-190000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:35:23+08:00",
-      "note": "组长再排：blocked 系会话余量耗尽（已连续 9 单）非规格障碍——护栏级配置面拒绝半做是正确的；新一轮余量充足时消化。",
-      "started_at": "2026-10-13T19:11:08+08:00",
-      "worktree": "20261013-190000-leader"
+      "note": "drain 批量销账（commit d375d09）",
+      "started_at": "2026-10-13T19:16:59+08:00",
+      "worktree": "20261013-190000-leader",
+      "done_at": "2026-10-13T19:24:41+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-190000-leader"
     },
     {
       "id": "20261013-192000-leader",
@@ -1872,11 +1875,14 @@
       "kind": "defect",
       "success_criteria": "见单内判据（两行读数一致快照/待决清单可增删/全量绿）",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-192000-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T18:42:02+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 869bb09）",
       "started_at": "2026-10-13T19:12:13+08:00",
-      "worktree": "20261013-192000-leader"
+      "worktree": "20261013-192000-leader",
+      "done_at": "2026-10-13T19:16:59+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-192000-leader"
     },
     {
       "id": "20261013-193000-leader",
@@ -1885,9 +1891,14 @@
       "kind": "usability",
       "success_criteria": "见单内判据（注册表生命周期/延期矩阵/停链用例照绿=零行为变更/全量绿）",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-193000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:43:27+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 9403d5b）",
+      "started_at": "2026-10-13T19:24:41+08:00",
+      "worktree": "20261013-193000-leader",
+      "done_at": "2026-10-13T19:30:06+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-193000-leader"
     },
     {
       "id": "20261013-193500-leader",
@@ -1896,9 +1907,15 @@
       "kind": "usability",
       "success_criteria": "见单内判据（拆三例测试/浅回退实测/B5 用例/端到端 defer/全量绿）",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-193500-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:43:27+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 90da54f）",
+      "started_at": "2026-10-13T19:58:18+08:00",
+      "worktree": "20261013-193500-leader",
+      "requeued_at": "2026-10-13T19:57:48+08:00",
+      "done_at": "2026-10-13T20:23:39+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-193500-leader"
     },
     {
       "id": "20261013-183521-devops",
@@ -1907,9 +1924,14 @@
       "kind": "usability",
       "success_criteria": "关键词表改为使用时读取（或热重载）：运行中进程改表即生效，实测两进程同表读一致；既有分类单测不回归；全量绿",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-183521-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:43:39+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 9817242）",
+      "started_at": "2026-10-13T19:30:59+08:00",
+      "worktree": "20261013-183521-devops",
+      "done_at": "2026-10-13T19:36:11+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-183521-devops"
     },
     {
       "id": "20261013-184040-devops",
@@ -1918,9 +1940,95 @@
       "kind": "defect",
       "success_criteria": "remedy_shape 单一真源（执法与呈现同源）；组长改正 findings/条目任一后任务书一致；构造双源冲突用例被消解；全量绿",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-184040-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:43:40+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 5b40bff）",
+      "started_at": "2026-10-13T19:36:11+08:00",
+      "worktree": "20261013-184040-devops",
+      "done_at": "2026-10-13T19:41:10+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-184040-devops"
+    },
+    {
+      "id": "20261013-184213-devops",
+      "member": "devops",
+      "summary": "**场景**：`inspector` 的 mechanical 免判决通道会把「**期望动作在组长侧**」的发现一并推进 backlog、排给 devops。本单是活样本：findings 行 `remedy_shape=change / judgment=None`，其 `expect` 却是 `orch sessions devops --archive <sid> --distill`（`o",
+      "kind": "usability",
+      "success_criteria": "构造一条 expect 含 orch sessions … --archive 的 mechanical finding → 晋升后不进入 devops 派发队列（或任务书首行明示「动作在组长侧」）；同类 finding 不再产生空转跳。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-184213-devops.md",
+      "status": "done",
+      "proposed": "2026-10-13T19:58:16+08:00",
+      "note": "drain 批量销账（commit 3ca7b27）",
+      "started_at": "2026-10-13T20:23:39+08:00",
+      "worktree": "20261013-184213-devops",
+      "done_at": "2026-10-13T20:29:43+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-184213-devops"
+    },
+    {
+      "id": "20261013-184842-devops",
+      "member": "devops",
+      "summary": "**缺陷：技能文档把「回退席纳入拒庭判据」当规则写着，等于给缺陷背了书——代码与文档同错，改代码时才发现**",
+      "kind": "defect",
+      "success_criteria": "修改映射表内某源文件时，该命令输出对应文档面路径（单测钉：touch tools/jury.py → 输出含 jury-channels.md）；非映射内文件零输出。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-184842-devops.md",
+      "status": "done",
+      "proposed": "2026-10-13T19:58:17+08:00",
+      "note": "drain 批量销账（commit 6428490）",
+      "started_at": "2026-10-13T20:29:43+08:00",
+      "worktree": "20261013-184842-devops",
+      "done_at": "2026-10-13T20:37:24+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-184842-devops"
+    },
+    {
+      "id": "20261013-191213-devops",
+      "member": "devops",
+      "summary": "**场景**：本会话我连续多跳把「侦察结论 + 落地路径」写在 `<blocked>` 里交付（本单与 `180500` 两例）。这类「**已侦察、未实施**」的 blocked 与「撞上障碍、不知怎么办」的 blocked 在体系里**没有任何机械区分**：drain 的抢救链只看 `<blocked>` 与 `tags`，`orch status` 也只报「谁被挡了」。于是组长要读完正文才知道",
+      "kind": "usability",
+      "success_criteria": "blocked 可带受控 reason= 档位（词表外退回）；orch status 与 drain 的 .done 按档位分列计数（构造两条不同档位 → 两档各计 1）；未标注仍合法。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-191213-devops.md",
+      "status": "done",
+      "proposed": "2026-10-13T19:58:21+08:00",
+      "note": "drain 批量销账（commit 08638f2）",
+      "started_at": "2026-10-13T20:37:24+08:00",
+      "worktree": "20261013-191213-devops",
+      "done_at": "2026-10-13T20:51:06+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-191213-devops"
+    },
+    {
+      "id": "20261013-193058-devops",
+      "member": "devops",
+      "summary": "**场景**：`20261013-193500-leader` 的 approved 里有一个**很好的东西**——「组长裁决（devops 点名要的授权）」段，把执行端在上一轮 blocked 里点名的授权（bandwidth 反转熔断、兜底回升 kind 名、outage 不动、unknown 二级判据）一次性写全了。这正是「拆单」应有的形态：拒绝半做的报告 → 组长把授权补齐 → 重派即可执",
+      "kind": "usability",
+      "success_criteria": "条目带「上轮因缺授权 blocked」标记时，重派任务书含一行「原点名事项/本次补齐情况」对照（单测钉）；或 approve 对这类条目空附注给提醒。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-193058-devops.md",
+      "status": "done",
+      "proposed": "2026-10-13T19:58:21+08:00",
+      "note": "drain 批量销账（commit 301e16f）",
+      "started_at": "2026-10-13T20:51:06+08:00",
+      "worktree": "20261013-193058-devops",
+      "done_at": "2026-10-13T20:57:02+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-193058-devops"
+    },
+    {
+      "id": "20261013-203724-devops",
+      "member": "devops",
+      "summary": "场景：`orchestration/state/skills-deployed.json` 是**git 跟踪**面、又由 `pysci-dev sync` 在**改任一技能真本后**自动重写。实测本单入场时 main 上它已带 `184213` 单 inspector 真本改动的未提交条目——即「改真本」这个动作本身就会在 main 留一个**台账脏项**，而台账又恰是下次「改真本」的单必须更新",
+      "kind": "usability",
+      "success_criteria": "台账更新与合并闸不再互斥：skills-deployed.json 归入 merge 交集闸的降级告警类（生成物非人工编辑面），或 sync 后自动提交该文件，使「改真本」保持单笔原子；可实测钉：改一技能真本 → sync → 该文件不再拦阻 worktree merge。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-203724-devops.md",
+      "status": "needs_leader",
+      "proposed": "2026-10-13T21:36:30+08:00",
+      "note": "drain 跳过（交付=blocked）：backlog id=20261013-203724-devops\n\n## 合并被 main 脏面挡住（交集类）\n\n`pysci-dev worktree merge 20261013-203724-devops` 打印（原样）：\n\n```\n== 合并前交集检查（本次提交面 ∩ main 未提交面）==\n  本次提交面 4 文件（merge-base 起算） / main 未提交 19 项\n  [✗] 交集 1 项——合并会覆盖 main 工作区的未提交改动，中止（未 cp、未 merge）：\n      orchestration/README.md\n  处置：组长先提交或还原上述文件后重跑；与本单无关的脏项不会走到这里\n```\n\n**成因（不在我的树上，重派改变不了）**：main 的 `orchestration/README.md` 带**组长未提交的 WIP**——「watch 自动挂载硬化 v2」（§4.5 段落 + §13 那一行，实证教训 20:57 QUEUE-COMPLETE 唤醒丢失），与本单无关，是组长在编辑中。我的分支也要动同一文件（追加本单的 §13 裁决表行）→ 命中交集。已核对：我这次对 README 的编辑确实落在 worktree（`grep 即写即提交` main 侧 = 0、worktree 侧 = 1），**不是**上次那种跨树误写。\n\n**本单进度已保住**（未丢，无需重做）：worktree `20261013-203724-devops` 与分支 `wt-20261013-203724-devops` **原地保留未删**，全部改动已提交为 `6dfa597`，等组长清面后手动合并即可。\n\n## 组长处置\n\n1. 提交或还原 main 的 `orchestration/README.md`（清掉 watch-v2 那笔未提交改动）；\n2. `pysci-dev worktree merge 20261013-203724-devops`（分支已就绪，合并即带上本单 §13 行）；\n3. `pysci-dev worktree remove 20261013-203724-devops`。\n\n## 已完成的改动清单（在分支 6dfa597 上）\n\n| 文件 | 要点 |\n|---|---|\n| `src/pysci/skills/orchestration/tools/sync.py` | `sync()` 落盘后**确有变更即自动提交**台账（新增 `autocommit=True` 参数 + `_commit_ledger`/`_git`）：cz 规范提交信息、**只 `git add` 台账**、`check_only` 永不提交、fail-soft（非 git 仓/未跟踪/add·commit 失败各打一行提示，**不让部署连带失败**） |\n| `tests/skills/devops/test_sync_ledger_commit.py`（新，7 用例） | 变更即提交（真 git 仓，断言台账不再脏 + 历史含该提交）/ 无变更不提交 / `check_only` 不提交 / `autocommit=False` 退出口 / 未跟踪·非仓·提交失败三路 fail-soft |\n| `orchestration/pods/devops/AGENTS.md` | 记忆更新：sync 落盘即提交台账、不再与合并交集闸互斥 |\n| `orchestration/README.md` | §13 裁决表行（**即交集成因**；合并时带入） |\n\n**选型说明**：success_criteria 给了两条路，取「sync 自动提交」而非「合并闸降级告警」——后者只解一半：`git merge` 自身仍会因脏文件拒合并，而丢弃 main 侧待提交的台账又退回旧哈希、下次 sync 再留脏面，闭环合不上。（已写入 README §13 行。）\n\n## 验证证据（全绿，均在本单 worktree 上跑）\n\n- `pytest tests/skills/devops/test_sync_ledger_commit.py -q` → `7 passed`；\n- **全量 worktree 套件** → `2914 passed, 39 skipped, 6 deselected, 0 failed`；\n- `ruff format`/`check` 通过；`mdgen-check`（README、AGENTS.md）`钩子改写 0 个`；\n- AGENTS.md `6844B ≤ 8192`（harness 预算内）。\n【全文已留审计副本：pods/devops/outbox/delivery-*.xml】\n【停链判定=成因是 main 脏面与本次合并相交，重跑无用】待清文件：orchestration/README.md；处置：在 main 提交或还原上述文件后 `pysci-dev worktree merge 20261013-203724-devops`（分支 wt-20261013-203724-devops 与抢救提交已保住进度，无需再派 worker 重做）",
+      "started_at": "2026-10-13T21:36:32+08:00",
+      "worktree": "20261013-203724-devops",
+      "needs_leader_at": "2026-10-13T21:44:14+08:00",
+      "merge_intersect": [
+        "orchestration/README.md"
+      ]
     }
   ]
 }
