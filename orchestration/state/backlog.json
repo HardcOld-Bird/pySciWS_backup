@@ -1600,6 +1600,17 @@
       "status": "pending",
       "proposed": "2026-10-13T13:55:53+08:00",
       "note": ""
+    },
+    {
+      "id": "20261013-144500-leader",
+      "member": "leader",
+      "summary": "**（dispatch 层，用户 2026-10-13）边界避让派发：距峰谷切换点 <5 分钟时稍等过界再派**",
+      "kind": "usability",
+      "success_criteria": "见单内两组判据（边界场景实测/对照组与放行口）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-144500-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T14:02:19+08:00",
+      "note": ""
     }
   ]
 }
