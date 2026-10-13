@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "discipline": "失败三分类器的关键词表（user 设计 2026-10-13，backlog 20261013-180000-leader）。**文件形状即协议**：{\"version\":1,\"discipline\":\"…\",\"classes\":{\"<类>\":{\"definition\":\"…\",\"patterns\":[正则…]}}}。三类 + 隐含的 unknown（无匹配）。增补 pattern **须附/保持 definition 非空**（同 failure-tags.json 纪律）：词表改动会改变全队的失败分类面与延期/回退策略，不是本地偏好。库侧唯一读取口：pysci.skills.orchestration.tools.failure_classes.load_classes()；dispatch 的 quota/channel 识别与后续延期机制都**只**从这里取词，不在别处硬编码。**precedence** 见模块常量：quota > bandwidth > outage——同一段原文多类同现时取更硬的那个（额度耗尽要充值、带宽不足只要等）。",
+  "precedence": ["quota", "bandwidth", "outage"],
+  "classes": {
+    "bandwidth": {
+      "definition": "带宽/限流类：并发与速率上限、TPM/RPM 配额、429、上游过载——**瞬态**，正确处置是等待或延期，不是切更贵的席位。本项目实测的典型面是 mimo 的 10 RPM/10M TPM 限流文案。",
+      "patterns": [
+        "custom model service error",
+        "please retry later",
+        "retry later or switch to another model",
+        "please retry",
+        "rate[ _-]?limit",
+        "too many requests",
+        "concurrency",
+        "\\b429\\b",
+        "\\bTPM\\b",
+        "\\bRPM\\b",
+        "overload(ed)?",
+        "capacity"
+      ]
+    },
+    "outage": {
+      "definition": "渠道真不可用类：鉴权失败、模型/端点不存在、5xx、连接被拒——**非瞬态**，重试无意义，正确处置是换席或停链。",
+      "patterns": [
+        "unauthorized",
+        "invalid api key",
+        "authentication failed",
+        "model not found",
+        "unknown model",
+        "does not exist",
+        "no such model",
+        "connection refused",
+        "connection reset",
+        "bad gateway",
+        "service unavailable",
+        "gateway timeout",
+        "internal server error",
+        "\\b(500|502|503|504)\\b"
+      ]
+    },
+    "quota": {
+      "definition": "额度耗尽类：账户级 credit/余额用尽——**确定性**，重试无用，须充值或换渠道。pattern 与原 dispatch.QUOTA_ERROR_RE 逐字一致（重构不改行为）。",
+      "patterns": [
+        "credit usage limit",
+        "out of credits?",
+        "insufficient credits?"
+      ]
+    }
+  }
+}
