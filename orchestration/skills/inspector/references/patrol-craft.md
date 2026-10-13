@@ -7,7 +7,7 @@ SKILL.md 只留决策面；本文放**怎么取证**与**哪些读数是假的**
 | 类别 | 起手命令 | 看什么 |
 |---|---|---|
 | `doctor-sweep` | `pysci-dev doctor` | 每条 [!] 是否可复现；复现不了的别报（可能是本机脏树所致，见 §2 首条） |
-| `transcript-audit` | 取 `~/.qoder-cn/projects/<pod键>/<sid>.jsonl`，grep `pod-guard` | 拦截记录之后有没有「换工具/换路径」把同一件事做成的痕迹 |
+| `transcript-audit` | 工具链（见 §6）：`transcript list` → `scan` → `fetch` | 拦截记录之后有没有「换工具/换路径」把同一件事做成的痕迹；交付正文与台账读数是否自相矛盾 |
 | `self-maint-audit` | 读 pod 的 `AGENTS.md` + `.qoder/rules/*.md` | 文中承诺的动作在代码里是否还存在；`wc -c` 是否触 8192 |
 | `code-walk` | 选一个 `src/pysci/**.py` 读全文 | 静默 `except Exception: pass`、`if False else` 式兼容垫片、fail-open 吞 guard 自身 bug |
 | `pipeline-self` | 读 `tools/{orch,drain,benchd,inspectd,verdict,jury}.py` 与 guards | **文档承诺但代码没实现**的条款（最坏的一类漂移） |
@@ -58,3 +58,36 @@ SKILL.md 只留决策面；本文放**怎么取证**与**哪些读数是假的**
 - 「建议加更多文档」——除非你能指出哪一条不读就会做错事（basic.md 的收录门槛）。
 
 发现数量不是绩效。**一轮零发现是合法交付**。
+
+## 6. 会话审计工具链（transcript-audit 的动线）
+
+旧形态是「随机挑一个 jsonl grep pod-guard」——盲读，命中靠运气。现改为**摘要先行、
+锚点深挖**：
+
+```bash
+pysci-inspect transcript list                 # 优先级头部，每轮 ≤3 个
+pysci-inspect transcript scan <sid> --verbose # 简版索引 + 行锚，定位疑点
+pysci-inspect transcript fetch --anchor <sid>.jsonl:L<a>-L<b>
+```
+
+- **list 的优先级**：leader 会话 > 组员；同组内新 > 旧（按会话档最后活跃）。预算 3
+  在排序**之后**截断——先排序再取头部，拿到的是最该看的；
+- **scan 的简版**已滤掉注入噪声（`<synthetic>` 合成回合、attachment 等簿记行），
+  思考与工具调用折叠为单行（`[thinking]`/`[tool: 名称, 尺寸]`），只留 user 与
+  assistant 正式回复；超长正文截断并**标注实际字数**（看到标注就知道自己读的是片段）；
+- **fetch 有界**：单次上限 2 万字，工具结果截断并标注原大小；不够就缩小锚区间再取。
+  `--sid X --grep 模式` 可先找行、拿到所在回合的锚再 fetch；
+- **finding 的 `--repro` 直接引行锚**（`<sid>.jsonl:L<a>-L<b>`）——比转述可复现，
+  用户已确认会话内容可原样引用。
+
+**三态游标**（`state/inspector/transcript-cursor.json`，gitignored 运行态）：
+
+- **可检查** = 回合数 ≥5 且从未检过（首次达 5 即转可检）；
+- `scan` 过的会话记「已检查」（`checked_at`/`rounds_seen`），下轮 list 不再顶出来；
+- **重可检**两条通路：新增回合 ≥5；**或**会话静止 2h（每有新回合刷新计时器）且期间
+  新增 ≥1 回合——静止会话即使只多一轮也值得复看（大概率已收尾，是干净的审计样本）；
+- 短于 5 回合且未静止 → 不检查（**持续活跃不误判**：不能因为它在跑就一直重检）。
+
+`scan --save` 把简版落 `state/inspector/transcript/`（缓存，保留最近 20 期自动清理；
+缓存丢了不心疼，重跑即可）。**回合定义**：一位 user 记录 + 其后至下一 user 前的
+assistant/工具段 = 一回合；工具结果回灌也走 `type=user`，但**不算**新回合。

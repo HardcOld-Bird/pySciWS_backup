@@ -12,17 +12,27 @@
 - ``submit <finding> --jury`` —— 判断类**必经** J 仲裁后晋升。本命令的参数表里没有
   ``--override``：§5.2 的「inspector 无自裁面」是代码事实，不是纪律条款。
 
-另附 ``gate`` 读当前资源闸门（开关/让路/迟滞）——组员据此知道「现在能不能产出」，
-但放行与否由引擎在 :func:`inspectd.activation_gate` 一处决定，本 CLI 无写权。
+另附：
+
+- ``gate`` 读当前资源闸门（开关/让路/迟滞）——组员据此知道「现在能不能产出」，
+  但放行与否由引擎在 :func:`inspectd.activation_gate` 一处决定，本 CLI 无写权；
+- ``transcript list|scan|fetch`` —— **会话记录审计工具链**（用户设计 2026-10-13，
+  backlog 20261013-130000-leader）：list 按优先级列可检会话 → scan 拿简版定位疑点 →
+  fetch 按行锚取原文。**纯 agent 导向**：返回值即阅读面（用户查聊天用 Qoder CLI 本身）。
+  实现全在 :mod:`orchestration.tools.transcript`，本文件只装配参数与呈现读数。
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from typing import Any
 
+from pysci.paths import PROJECT_ROOT
 from pysci.skills.orchestration.tools import inspectd as _insp
+from pysci.skills.orchestration.tools import registry as _reg
+from pysci.skills.orchestration.tools import transcript as _tr
 
 
 def _require(fid: str) -> dict[str, Any]:
@@ -168,6 +178,89 @@ def cmd_gate(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# transcript：会话记录审计工具链（backlog 20261013-130000-leader）
+# ---------------------------------------------------------------------------
+def _leader_key() -> str:
+    """leader 项目键 = 仓库根目录的会话键（leader 的 TUI 跑在仓库根）。"""
+    return _reg.pod_session_key(PROJECT_ROOT)
+
+
+def cmd_transcript_list(args: argparse.Namespace) -> int:
+    """``transcript list``：按优先级列可检会话（leader 先、新先，头部 ≤ 预算）。"""
+    refs = _tr.list_sessions(
+        leader_key=_leader_key(),
+        budget=args.limit,
+        only_checkable=not args.all,
+    )
+    if not refs:
+        print("  （无可检查会话：新增回合 <5 或已全检；`--all` 看全量状态）")
+        return 0
+    for ref in refs:
+        when = (
+            datetime.fromtimestamp(ref.last_active).astimezone().strftime("%m-%d %H:%M")
+            if ref.last_active
+            else "-"
+        )
+        print(
+            f"  {ref.state:<9} {ref.kind:<6} {ref.sid[:8]}  回合={ref.rounds:<4} "
+            f"最后活跃={when}  {ref.project}"
+        )
+    print(
+        f"  —— 共 {len(refs)} 个"
+        f"（预算 {args.limit if args.limit else '不限'}；scan 一个再 fetch 深挖）"
+    )
+    return 0
+
+
+def cmd_transcript_scan(args: argparse.Namespace) -> int:
+    """``transcript scan``：简版索引（+``--verbose`` 正文）——摘要先行。"""
+    path = _tr.find_session(args.sid)
+    if path is None:
+        print(f"[✗] 找不到会话 {args.sid}（或前缀有歧义）：先 `transcript list` 选靶")
+        return 2
+    turns: tuple[int, int] | None = None
+    if args.turns:
+        try:
+            lo, hi = (int(x) for x in str(args.turns).split("-", 1))
+        except ValueError:
+            print(f"[✗] --turns 形状非法：{args.turns!r}（应为 a-b，如 3-7）")
+            return 2
+        turns = (lo, hi)
+    text = _tr.scan_session(path, turns=turns, verbose=args.verbose)
+    print(text)
+    if args.save:
+        saved = _tr.save_cache(path.stem, text)
+        print(f"  [i] 简版已缓存：{_insp.orchestration_rel(saved)}")
+    # 检查过就该记「已检查」——否则下轮 list 还会把同一会话顶出来
+    cursor = _tr.load_cursor()
+    ref = _tr.SessionRef(
+        sid=path.stem,
+        project=path.parent.name,
+        kind=_tr.session_kind(path.parent.name, leader_key=_leader_key()),
+        rounds=len(_tr.build_rounds(path)),
+        last_active=path.stat().st_mtime,
+        state=_tr.CHECKED,
+    )
+    _tr.mark_checked(
+        cursor, ref, now_iso=datetime.now().astimezone().isoformat(timespec="seconds")
+    )
+    _tr.save_cursor(cursor)
+    return 0
+
+
+def cmd_transcript_fetch(args: argparse.Namespace) -> int:
+    """``transcript fetch``：按行锚（或按模式）从原始 jsonl 精确取段（有界返回）。"""
+    if args.anchor:
+        print(_tr.fetch_anchor(args.anchor))
+        return 0
+    if args.sid and args.grep:
+        print(_tr.fetch_grep(args.sid, args.grep))
+        return 0
+    print("[✗] 需要 `--anchor <sid:L_a-L_b>`，或 `--sid <sid> --grep <模式>` 之一")
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="pysci-inspect",
@@ -243,6 +336,39 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("gate", help="读当前资源闸门（开关/让路/迟滞）")
     p.set_defaults(fn=cmd_gate)
+
+    # ---- transcript：会话记录审计工具链（摘要先行、锚点深挖）----
+    p = sub.add_parser("transcript", help="会话记录审计工具链（list/scan/fetch）")
+    tsub = p.add_subparsers(dest="tcmd", required=True)
+
+    tl = tsub.add_parser("list", help="按优先级列可检会话（leader 先、新先）")
+    tl.add_argument(
+        "--limit",
+        type=int,
+        default=_tr.ROUND_BUDGET,
+        help=f"头部保留数（缺省每轮预算 {_tr.ROUND_BUDGET}；0=不限）",
+    )
+    tl.add_argument(
+        "--all", action="store_true", help="连同非可检会话一起列出（看全量状态）"
+    )
+    tl.set_defaults(fn=cmd_transcript_list)
+
+    ts = tsub.add_parser("scan", help="会话简版：每回合一行索引（+行锚）")
+    ts.add_argument("sid", help="会话 id（或其唯一前缀）")
+    ts.add_argument("--turns", default="", help="回合区间 a-b（缺省全部）")
+    ts.add_argument(
+        "--verbose", action="store_true", help="附简版正文（折叠思考/工具调用）"
+    )
+    ts.add_argument(
+        "--save", action="store_true", help="落缓存（state/inspector 内，可丢）"
+    )
+    ts.set_defaults(fn=cmd_transcript_scan)
+
+    tf = tsub.add_parser("fetch", help="按行锚/模式取原始段（有界返回）")
+    tf.add_argument("--anchor", default="", help="<sid>.jsonl:L<a>-L<b>")
+    tf.add_argument("--sid", default="", help="配合 --grep：在哪个会话里找")
+    tf.add_argument("--grep", default="", help="正则模式（配合 --sid）")
+    tf.set_defaults(fn=cmd_transcript_fetch)
     return ap
 
 

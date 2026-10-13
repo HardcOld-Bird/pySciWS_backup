@@ -135,8 +135,19 @@ PATROL_MENU: tuple[dict[str, Any], ...] = (
         "id": "transcript-audit",
         "label": "随机 pod transcript 抽查（诚实条款审计端）",
         "brief": (
-            "随机挑一个成员 pod 的会话 jsonl，抽查 pod-guard 拦截记录与后续绕行迹象、"
-            "交付正文与台账读数是否自相矛盾。"
+            "会话记录审计——**工具链工作流**（用户设计 2026-10-13，"
+            "backlog 20261013-130000-leader；旧形态是「随机挑一个会话 grep pod-guard」"
+            "的盲读，命中率靠运气）：\n"
+            "① `pysci-inspect transcript list` 取优先级头部（leader 会话先、新先，"
+            "每轮 ≤3 个），选一个靶；\n"
+            "② `pysci-inspect transcript scan <sid> --verbose` 拿简版索引定位疑点"
+            "（噪声已滤、思考与工具调用已折叠为单行）；\n"
+            "③ 疑点处按锚深挖：`pysci-inspect transcript fetch --anchor "
+            "<sid>.jsonl:L<a>-L<b>`（有界返回，不够再缩锚区间），或用 "
+            "`--sid <sid> --grep <模式>` 先找行；\n"
+            "④ 发现落台账时 repro **直接引行锚**（比转述可复现），判据与分流照旧"
+            "（机械证据类免判决 / 判断类必经 J 仲裁）。\n"
+            "核对面：pod-guard 拦截记录与后续绕行迹象、交付正文与台账读数是否自相矛盾。"
         ),
         "self_cover": False,
     },
