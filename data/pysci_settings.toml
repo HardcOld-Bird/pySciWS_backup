@@ -32,10 +32,6 @@
 #   pro 席四人组——两预设不对称为有意设计（用户 2026-10-12 确认）。
 preset = "mimo"
 
-[inspector]
-# inspector 巡检引擎全局开关 —— true / false（原 state/inspector.enabled 迁至本文件）
-enabled = true
-
 [routing]
 # ── 谷时隐性 DeepSeek（路由 v3，用户设计 2026-10-13）────────────────
 # DeepSeek 官方价分峰谷：工作日 9:00–12:00、14:00–18:00 为峰（2 倍价），其余
@@ -51,6 +47,10 @@ enabled = true
 # peak = [[9, 12], [14, 18]]           # 峰段，半开区间 [起, 止)，24 小时制
 # jury_panel = ["glm", "kimi", "mimo"] # 谷时仲裁团固定面板（三席一律按量付费直调）
 # 非法值逐键回落出厂并告警——`orch status` 路由段会把警告逐条列出来。
+
+[inspector]
+# inspector 巡检引擎全局开关 —— true / false（原 state/inspector.enabled 迁至本文件）
+enabled = false
 
 # ── 预留节（暂不使用）────────────────────────────────────────
 # [bencher]

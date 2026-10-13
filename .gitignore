@@ -88,3 +88,6 @@ __pycache__/
 # 都可能改写（跨进程比对才看得见切换），纯过程态。切换事件本身的永久审计在
 # preference-journal.jsonl（kind=routing）与 drain run 日志。
 /orchestration/state/routing-last.json
+
+# 瞬时工作区（每个 worktree 是一次任务的全量检出，数万文件；用后即弃、可再生）
+/.qoder/worktrees/

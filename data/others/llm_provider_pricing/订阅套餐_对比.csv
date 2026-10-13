@@ -1,0 +1,25 @@
+﻿核实日期,提供商,套餐,档位,月付刊例,限时价,额度,覆盖模型,透明度,备注
+2026-10-12,阿里云百炼,Token Plan 个人版,Lite,60.0,39.0,"11,500 Credits/月",qwen3.8-max/flash、qwen3.7/3.6、deepseek-v4、kimi、glm、MiniMax-M2.5、万相、语音等,不透明（Credits↔token 无公开统一汇率）,无 API 生产自动化权限；夜间部分模型限时折扣
+2026-10-12,阿里云百炼,Token Plan 个人版,Essential,120.0,79.0,"25,500 Credits/月",同上,不透明,
+2026-10-12,阿里云百炼,Token Plan 个人版,Standard,180.0,139.0,"45,000 Credits/月",同上,不透明,附赠 AgentStudio 免费额度+后付费88折
+2026-10-12,阿里云百炼,Token Plan 个人版,Pro,600.0,499.0,"180,000 Credits/月",同上,不透明,"同上权益；用量包 100元/20,000 Credits（≤5个）"
+2026-10-12,阿里云百炼,Token Plan 团队版,标准/高级/尊享座席,198.0,150.0,"25,000 / 100,000 / 250,000 Credits/座席/月",与个人版相同模型池,不透明,"高级限时550、尊享1398；共享用量包 5000元/625,000 Credits"
+2026-10-12,千问AI平台,Token Plan,与百炼同构,,,同百炼,同百炼（Qwen 为主）,不透明,用户已知与百炼几乎完全相同；千问3.8-Max 首发尝鲜、新用户赠 1亿+ tokens
+2026-10-12,智谱,GLM Coding Plan（积分制）,Lite,118.0,,"2,000 积分/5h + 10,000 积分/周",GLM-5.3、GLM-5-Turbo、GLM-4.7,透明（官方公式：积分=(输入×系数+缓存×系数+输出×系数)/10000；GLM-5.3=6.9/1.7/24，Flash=2.3/0.56/8，4.7=4.6/1.2/16）,非高峰（除工作日14-18点）按50%扣；MCP 1.2积分/次；仅限官方指定工具
+2026-10-12,智谱,GLM Coding Plan,Pro,538.0,,"12,000 积分/5h + 60,000 积分/周",同上,透明,GLM-5.3 约合 2.9–5.8亿 tokens/周（95%+缓存）
+2026-10-12,智谱,GLM Coding Plan,Max,1078.0,,"28,000 积分/5h + 140,000 积分/周",同上,透明,"团队版：标准598元/席（66,000积分/周）、高级1198元/席（155,000积分/周）"
+2026-10-12,Kimi,Kimi Coding Plan（会员制）,Andante,49.0,,约 28M tokens/月（年付468）,K3、K2.7 Code、K2.8 Preview 等；1M 上下文，最高260 tok/s,半透明（官方给月度 token 上限，模型倍率细节未完全公开）,需预约、长期限购
+2026-10-12,Kimi,Kimi Coding Plan,Moderato,99.0,,约 108M tokens/月（年付948）,同上,半透明,4倍额度、Agent 多任务并行
+2026-10-12,Kimi,Kimi Coding Plan,Allegretto,199.0,,约 540M tokens/月（年付1908）,同上,半透明,送 Kimi-Claw
+2026-10-12,Kimi,Kimi Coding Plan,Allegro,699.0,,约 1600M tokens/月（年付6708）,同上,半透明,60倍入门额度
+2026-10-12,MiniMax,M Plan（2026-09-29 上线，承接 Token Plan；后者停售新购）,Go,49.0,,基准量（1x），月额度制,M3.1 Flash Preview、图像、音频（Music 已停服）,不透明（相对用量制）,连续包月首月半价活动至 10-14；年付 490
+2026-10-12,MiniMax,M Plan,Explore,119.0,,Go 的 3 倍,Go + H3 视频,不透明,"年付 1,190"
+2026-10-12,MiniMax,M Plan,Build,469.0,,Go 的 12 倍,Explore + 高峰优先通行,不透明,"年付 4,690；原 Token Plan 参考量：Plus≈6亿 / Max≈18亿 / Ultra≈71亿 M3 tokens/月"
+2026-10-12,小米MiMo,MiMo Token Plan,Lite,39.0,,41亿 Credits/月,MiMo-V2.5 系列 8 款（含 ASR/TTS/VoiceClone/VoiceDesign）；【2026-10-09 下线通知】V2.5/V2.5-Pro 名称 10-21 失效并自动转 V2.6-Flash/Pro 按新版计价 → 池覆盖是否随之更名须核实,透明（官方扣减表：V2.5 缓存2/未命中100/输出200 Credits每token；V2.5-Pro 2.5/300/600；V2.6 系扣减表未公布，沿用 API 定价但池内系数须核实）,无 5 小时限额；年付 411.84（约12%折扣）
+2026-10-12,小米MiMo,MiMo Token Plan,Standard,99.0,,110亿 Credits/月,同上,透明,"年付 1,045.44"
+2026-10-12,小米MiMo,MiMo Token Plan,Pro,329.0,,380亿 Credits/月,同上,透明,"年付 3,474.24"
+2026-10-12,小米MiMo,MiMo Token Plan,Max,659.0,,820亿 Credits/月,同上,透明,"年付 6,959.04"
+2026-10-12,火山方舟,Coding Plan,Lite,40.0,9.9,"1,200 次/5h，18,000 次/月（实测约 250M tokens/月）",Doubao-Seed-2.0/2.1、DeepSeek-V4、GLM-5.2、Kimi-K2.7、MiniMax-M3，可 Auto 调度,不透明（按请求次数+模型抵扣倍率）,首两月2.5折活动至 11-08；Kimi-K3 暂不支持；【第三方实测】「次数」并非纯按请求扣：高系数旗舰模型＋长上下文会加速蒸发，且额度规则两个月内动过三次（GLM-5.2 曾缩至 1/4）→ 本表的「250M tokens/月」是经验均值，不是承诺容量
+2026-10-12,火山方舟,Coding Plan,Pro,200.0,49.9,"6,000 次/5h，90,000 次/月（实测约 1,249M tokens/月）",同上,不透明,同活动；容量均值同 Lite 注
+2026-10-12,火山方舟,Agent Plan（个人版）,Small/Medium/Large/Max,40.0,,2万/10万/25万/50万 Agent燃料值（AFP）/月（1x/5x/12.5x/25x），四档单价同为 0.002 元/AFP,含 Doubao-Seed-Evolving、GLM-5.2/5.3、DeepSeek-V4 系、Kimi-K3/K2.8-Preview 及全模态与豆包搜索 Harness；Auto 模式系数 0.5（活动至 11-08）,透明（AFP 公式＋逐模型抵扣系数表官方公布）,"档位价 40/200/500/1000 元；AFP＝（输入token×输入系数＋输出token×输出系数）/10,000，**公式无缓存命中项** → 缓存命中的输入 token 疑似仍按输入系数全额扣（须实测）；系数（输入=输出）：doubao-seed-2.0-mini 0.25、2.1-turbo 2.5、glm-5.2/5.3 4.5、deepseek-v4-pro 5.5、kimi-k3 10；接入：专属 API Key（与方舟平台 Key 不同）＋ OpenAI 兼容 https://ark.cn-beijing.volces.com/api/plan/v3 或 Anthropic 兼容 /api/plan；官方适用工具列 OpenCode/OpenClaw/TRAE/Hermes/Codex CLI/Cline/Cursor 等（**未点名 Qoder，须核条款**）"
+2026-10-12,SiliconFlow,（无订阅套餐）,—,,,—,—,—,仅按量付费（预充值余额制）

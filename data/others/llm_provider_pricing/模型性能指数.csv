@@ -1,0 +1,78 @@
+﻿核实日期,提供商,模型,AA模型名,智能指数,可比性,备注,按量模拟月价,每智能指点月成本
+2026-10-12,阿里云百炼,qwen3.8-max,Qwen3.8 Max (0902),45.0,同榜,阿里旗舰,4117.0,91.5
+2026-10-12,阿里云百炼,qwen3.8-flash,Qwen3.8-Flash-Next,40.0,同榜,flash 名对应关系待官方确认,279.2,7.0
+2026-10-12,阿里云百炼,qwen3.7-max,—,,未评测,本快照未收录上一代 max,20425.9,
+2026-10-12,阿里云百炼,qwen3.7-plus,Qwen3.7-Plus,25.0,同榜,,3435.9,137.4
+2026-10-12,阿里云百炼,qwen3.7-flash,—,,未评测,本快照未收录,515.4,
+2026-10-12,阿里云百炼,ZHIPU/GLM-5.3（智谱直供）,GLM-5.3 (max),45.0,同榜,同模型，渠道不同,4361.0,96.9
+2026-10-12,阿里云百炼,kimi-k3,Kimi K3 (max),44.0,同榜,,34674.6,788.1
+2026-10-12,阿里云百炼,kimi-k2.7-code,Kimi K2.7 Code,26.0,同榜,,11182.4,430.1
+2026-10-12,阿里云百炼,kimi-k2.5,—,,未评测,本快照未收录,6950.7,
+2026-10-12,阿里云百炼,vanchin/deepseek-v4-pro（万擎直供）,DeepSeek-V4-Pro (max),36.0,同榜,同模型，第三方直供,20236.5,562.1
+2026-10-12,阿里云百炼,vanchin/deepseek-v4.1-flash（万擎直供）,DeepSeek V4.1 Flash (max),39.0,同榜,同模型，第三方直供,3435.9,88.1
+2026-10-12,阿里云百炼,siliconflow/deepseek-v3.2（硅基流动直供）,—,,未评测,V3.2 未进本快照,3357.0,
+2026-10-12,千问AI平台,qwen3.8-max,Qwen3.8 Max (0902),45.0,同榜,同源同模型,4117.0,91.5
+2026-10-12,千问AI平台,qwen3.8-flash,Qwen3.8-Flash-Next,40.0,同榜,同上,279.2,7.0
+2026-10-12,智谱,GLM-5.3,GLM-5.3 (max),45.0,同榜,低推理档 GLM-5.3 (low)=34,4361.0,96.9
+2026-10-12,智谱,GLM-5.3-Flash,GLM-5.3-Flash,42.0,同榜,,482.7,11.5
+2026-10-12,智谱,GLM-5.3-FlashX,—,,未评测,本快照未单列，应略低于 42,1199.0,
+2026-10-12,智谱,GLM-5.2,GLM-5.2 (max),34.0,异源,取自镜像 2026-09-13 榜单；旧文章 v4.1 口径报 51，不可与 45 并列比较,4361.0,
+2026-10-12,智谱,GLM-5.1（输入<32K / ≥32K）,—,,未评测,本快照未收录,3007.5,
+2026-10-12,智谱,GLM-5-Turbo（输入<32K）,—,,未评测,本快照未收录,2719.0,
+2026-10-12,智谱,GLM-5（输入<32K）,—,,未评测,本快照未收录,2243.7,
+2026-10-12,智谱,GLM-4.7（输入<32K，输出<0.2K）,—,,未评测,上一代，本快照未收录,950.7,
+2026-10-12,Kimi,kimi-k3,Kimi K3 (max),44.0,同榜,低推理档 Kimi K3 (low)=30,6716.4,152.6
+2026-10-12,Kimi,kimi-k2.7-code,Kimi K2.7 Code,26.0,同榜,,3105.6,119.4
+2026-10-12,Kimi,kimi-k2.7-code-highspeed,Kimi K2.7 Code,26.0,同榜,同模型极速档，性能视为等同,6211.2,238.9
+2026-10-12,Kimi,kimi-k2.6,Kimi K2.6,43.0,异源,取自 v4.0/v4.1 文章口径；本快照未收录，与 44/45 不可直接比较,2795.0,
+2026-10-12,Kimi,kimi-k2.5,—,,未评测,本快照未收录,6950.7,
+2026-10-12,MiniMax,MiniMax-M3（输入≤512K）,MiniMax M3,29.0,同榜,镜像 09-13 报 30、旧文 v4.1 报 44，版本漂移明显,998.3,34.4
+2026-10-12,MiniMax,MiniMax-M2.7,—,,未评测,本快照未收录,998.3,
+2026-10-12,MiniMax,MiniMax-M2.7-highspeed,—,,未评测,本快照未收录,1344.1,
+2026-10-12,MiniMax,MiniMax-M2.5 / M2.1 / M2,—,,未评测,AA 有 M2.5 条目但本快照未抓到分数,672.1,
+2026-10-12,MiniMax,MiniMax-M3.1-Flash-Preview,—,,未评测,预览模型，AA 尚未评测,,
+2026-10-12,DeepSeek,deepseek-flash（V4.1-Flash）闲时,DeepSeek V4.1 Flash (max),39.0,同榜,非推理档=25,293.7,7.5
+2026-10-12,DeepSeek,deepseek-v4-pro 闲时,DeepSeek-V4-Pro (max),36.0,同榜,高推理档；(high)=30,1354.7,37.6
+2026-10-12,小米MiMo,MiMo-V2.6-Pro,MiMo-V2.6-Pro (Xiaomi),46.0,同榜,本快照国产最高分之一,438.3,9.5
+2026-10-12,小米MiMo,MiMo-V2.6-Flash,MiMo-V2.6-Flash (Xiaomi),38.0,同榜,,164.2,4.3
+2026-10-12,小米MiMo,MiMo-V2.6-Pro-UltraSpeed,MiMo-V2.6-Pro,46.0,同榜,同模型极速档,4382.6,95.3
+2026-10-12,小米MiMo,MiMo-V2.5（输入<256K）,—,,未评测,本快照未收录,1375.2,
+2026-10-12,小米MiMo,MiMo-V2.5-Pro（输入<256K）,MiMo-V2.5-Pro,54.0,异源,v4.0 口径（当时排名第 10）；与 v4.3.x 不可比,3217.0,
+2026-10-12,火山方舟,doubao-seed-evolving（输入≤1024K）,—,,未评测,AA 无此条目,2946.9,
+2026-10-12,火山方舟,doubao-seed-2.1-pro（输入≤1024K）,—,,未评测,AA 无此条目；第三方报 Terminal-Bench 2.1=71.0（GPT-5.5=73.8），口径不可比,2946.9,
+2026-10-12,火山方舟,doubao-seed-2.1-turbo（输入≤256K）,—,,未评测,AA 无此条目,1473.4,
+2026-10-12,火山方舟,doubao-seed-2.1-lite（输入≤1024K）,—,,未评测,AA 无此条目,372.4,
+2026-10-12,火山方舟,doubao-seed-2.0-pro（≤32K / 32-128K / 128-256K）,—,,未评测,AA 无此条目,1571.7,
+2026-10-12,火山方舟,doubao-seed-2.0-lite（≤32K）,—,,未评测,AA 无此条目,304.2,
+2026-10-12,火山方舟,doubao-seed-2.0-mini（≤32K）,—,,未评测,AA 无此条目；唯一相关条目 Doubao Seed Code=17 系另一型号,114.0,
+2026-10-12,火山方舟,doubao-seed-character（≤32K）,—,,未评测,角色专用模型，AA 不评,361.3,
+2026-10-12,火山方舟,glm-5.3-flash（方舟渠道）,GLM-5.3-Flash,42.0,同榜,同模型，渠道不同,482.7,11.5
+2026-10-12,火山方舟,glm-5.2（方舟渠道）,GLM-5.2 (max),34.0,异源,同智谱行口径,4361.0,
+2026-10-12,火山方舟,deepseek-v4.1-flash（方舟渠道）闲时,DeepSeek V4.1 Flash (max),39.0,同榜,,293.7,7.5
+2026-10-12,火山方舟,deepseek-v4-pro 正式版（方舟渠道）,DeepSeek-V4-Pro (max),36.0,同榜,,1806.3,50.2
+2026-10-12,火山方舟,deepseek-v4-flash 正式版（方舟渠道）,—,,未评测,V4-Flash 正式版未进本快照；同族 V4.1-Flash=39,602.1,
+2026-10-12,SiliconFlow,GLM-5.3-Flash,GLM-5.3-Flash,42.0,同榜,同模型，渠道不同,482.7,11.5
+2026-10-12,SiliconFlow,GLM-5.3 / GLM-5.2,GLM-5.3 (max),45.0,同榜,取该行的 GLM-5.3 身份,4361.0,96.9
+2026-10-12,SiliconFlow,GLM-5.1 (Pro),—,,未评测,本快照未收录,3007.5,
+2026-10-12,SiliconFlow,GLM-4.5V / GLM-4.5-Air,—,,未评测,上一代，本快照未收录,1749.5,
+2026-10-12,SiliconFlow,Hy4 preview（混元）,—,,未评测,本快照仅列 Hy3=25,1359.5,
+2026-10-12,SiliconFlow,Hunyuan-A13B-Instruct,—,,未评测,本快照未收录,1503.2,
+2026-10-12,SiliconFlow,DeepSeek-V4-Flash,—,,未评测,同方舟 V4-Flash 行,608.5,
+2026-10-12,SiliconFlow,DeepSeek-V4-Pro,DeepSeek-V4-Pro (max),36.0,同榜,,3150.9,87.5
+2026-10-12,SiliconFlow,DeepSeek-V3.2 / V3.2 (Pro),—,,未评测,本快照未收录,1122.3,
+2026-10-12,SiliconFlow,LongCat-2.0（美团）,LongCat 2.0,19.0,同榜,,978.9,51.5
+2026-10-12,SiliconFlow,Kimi-K2.7-Code,Kimi K2.7 Code,26.0,同榜,,3105.6,119.4
+2026-10-12,SiliconFlow,Kimi-K2.6 (Pro),Kimi K2.6,43.0,异源,v4.0/v4.1 口径,2795.0,
+2026-10-12,SiliconFlow,Qwen3.8-27B（开源版）,Qwen3.8-27B (xhigh),34.0,同榜,medium=28、low=26、非推理=20；与商业版 3.8-max/flash 非同模型,5153.8,151.6
+2026-10-12,SiliconFlow,Qwen3.5-35B-A3B（输入<128K）,—,,未评测,本快照仅有 Qwen3.6-35B-A3B=18,712.4,
+2026-10-12,SiliconFlow,Qwen3.5-122B-A10B（输入<128K）,Qwen3.5 122B A10B,18.0,同榜,推理档 16、非推理档 18,1424.9,79.2
+2026-10-12,SiliconFlow,0.7/2.8 档（Qwen3-VL-30B-A3B、Qwen3-Omni-30B-A3B（Instruct/Thinking/Captioner）、Qwen3-Coder-30B-A3B、Qwen3-30B-A3B-Instruct-2507）,Qwen3-Omni-30B-A3B,10.0,同榜,该档多为 30B-A3B 开源小模型，AA 条目 6–10 分区间,1202.6,120.3
+2026-10-12,SiliconFlow,Qwen3-VL-32B-Instruct / Qwen3-32B,—,,未评测,本快照未收录,1717.9,
+2026-10-12,SiliconFlow,Qwen3-VL-32B-Thinking,—,,未评测,本快照未收录,1812.7,
+2026-10-12,SiliconFlow,Qwen3-VL-8B-Thinking,—,,未评测,本快照未收录,906.3,
+2026-10-12,SiliconFlow,Qwen3-VL-Embedding / Reranker-8B,—,,不适用,AA 另有 embedding/reranker 专榜,1158.4,
+2026-10-12,SiliconFlow,Qwen3-Embedding/Reranker 8B·4B·0.6B,—,,不适用,同上,463.3,
+2026-10-12,SiliconFlow,Qwen2.5-72B-Instruct（含 128K 版）,—,,未评测,上一代开源模型,6899.5,
+2026-10-12,SiliconFlow,Step-3.5-Flash / Ling-flash-2.0 / Ling-mini-2.0 / Seed-OSS-36B / Xing4.0-29B,—,,未评测,本快照有 Step 5 Preview=44、Ring-flash-2.0=7，但与该行合并型号非一一对应,1191.5,
+2026-10-12,SiliconFlow,bge-m3 / bge-reranker-v2-m3 / bge-large-zh·en-v1.5,—,,不适用,embedding/reranker，不入智能指数,0.0,
+2026-10-12,SiliconFlow,Z-Image-Turbo / Wan2.2-I2V（图像/视频）,—,,不适用,图像/视频生成，不入智能指数,,
