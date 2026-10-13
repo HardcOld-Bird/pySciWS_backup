@@ -52,7 +52,7 @@ trigger: always_on
 
 ## CLI 范式
 
-- 首选裸命令（`pysci-dev` / `pysci-orch` 等），不存在时 fallback `uv run pysci-X`，
+- 首选裸命令（`pysci-dev` / `pysci-orch` 等），不存在时 fallback `uv run --no-sync pysci-X`，
   裸名只试一次；shell 是 Git Bash；多词参数单引号。
 - worktree 内的 Python 环境策略见 devops 技能「worktree 作业规程」。
 

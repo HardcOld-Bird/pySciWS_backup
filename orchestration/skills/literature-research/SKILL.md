@@ -38,8 +38,8 @@ note and `library`/`refs` print a notice.
 
 ## Invocation
 
-From the **project root**: `uv run --no-sync pysci-research <command> [options]`, below abbreviated to `research …`.
-(Not installed? `python -m pysci.skills.literature_research.tools.research`.)
+From the **project root**: `pysci-research <command> [options]`, below abbreviated to `research …`.
+(Not installed? `uv run --no-sync python -m pysci.skills.literature_research.tools.research`.)
 
 > **PowerShell:** this CLI prints Chinese — apply `.qoder/rules/basic.md` §3 or you read mojibake.
 

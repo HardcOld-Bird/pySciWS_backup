@@ -47,7 +47,7 @@ trigger: always_on
 ## CLI 范式（全员统一，README §11）
 
 - 首选裸命令：`pysci-compose <子命令>`；若提示命令不存在，fallback
-  `uv run pysci-compose <子命令>`——**裸名只试一次，禁止重试循环**；
+  `uv run --no-sync pysci-compose <子命令>`——**裸名只试一次，禁止重试循环**；
 - 你的 shell 是 Git Bash：多词参数用单引号；不要调用 PowerShell；
 - 专业知识来源：部署技能 document-writing（经 Skill 工具调用）与你的 AGENTS.md。
 

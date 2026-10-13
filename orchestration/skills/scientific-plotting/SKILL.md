@@ -20,11 +20,11 @@ pipeline script** (`build_figure`) under the research's asset dir, so figures it
 Run from the **project root**. The skill installs a console script `pysci-figures`:
 
 ```
-uv run --no-sync pysci-figures <command> [options]
+pysci-figures <command> [options]
 ```
 
-Below, `figures …` is shorthand for `uv run --no-sync pysci-figures …`. (Fallback if the script isn't
-installed / offline: `uv run --no-sync python -m pysci.skills.scientific_plotting.tools.figures …`.)
+Below, `figures …` is shorthand for `pysci-figures …`. (Fallback if the entry is missing / offline:
+`uv run --no-sync python -m pysci.skills.scientific_plotting.tools.figures …`.)
 
 > **PowerShell:** this CLI prints Chinese — apply `.qoder/rules/basic.md` §3 or you read mojibake.
 

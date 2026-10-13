@@ -17,7 +17,7 @@ to bring an orchestrator back: [backends.md](references/backends.md). The backen
 
 ## Invocation
 
-From the **project root**: `uv run --no-sync pysci-imagine <command> [options]`, below `imagine …` (fallback:
+From the **project root**: `pysci-imagine <command> [options]`, below `imagine …` (fallback:
 `uv run --no-sync python -m pysci.skills.ai_drawing.tools.imagine …`). This CLI prints Chinese — apply
 `.qoder/rules/basic.md` §3 or read mojibake. Setup: `ARK_API_KEY=<key>` in project-root `.env`
 ([walkthrough](references/backends-02-provider-options-pluggable.md)); OpenCV / scikit-image operators also

@@ -18,7 +18,7 @@ numerical pipelines, eigenvalue analysis, topology exploration, lightweight plot
 
 ## Invocation
 
-From the **project root**: `uv run --no-sync pysci-theory <command> [options]`, below `theory …` (fallback:
+From the **project root**: `pysci-theory <command> [options]`, below `theory …` (fallback:
 `uv run --no-sync python -m pysci.skills.theoretical_computation.tools.theory …`).
 
 > **PowerShell:** this CLI prints Chinese — apply `.qoder/rules/basic.md` §3 or you read mojibake.

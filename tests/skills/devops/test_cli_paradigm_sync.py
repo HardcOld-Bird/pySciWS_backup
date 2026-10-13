@@ -36,16 +36,7 @@ _BAD = re.compile(rf"uv run\s+(?!--no-sync\s*){_TARGET}")
 _HANGING = re.compile(r"uv run\s*$")
 
 #: 组员无写权限、须组长代落的只读面（pod id）。落定后从这里删掉。
-READONLY_PENDING = {
-    "devops",
-    "drawing",
-    "figure",
-    "lit",
-    "model3d",
-    "sim",
-    "theory",
-    "writing",
-}
+READONLY_PENDING: set[str] = set()
 
 
 def logical_lines(text: str) -> list[tuple[int, str]]:
