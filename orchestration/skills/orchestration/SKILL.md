@@ -17,7 +17,8 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
    完成通知自动唤醒；**禁止 sleep-轮询**与反复读输出文件。
 4. **不必记忆 sid/型号/参数**：orch 全代管，[NEXT] 给下一步与决策选项。
 5. 任务书**延迟书写**：计划阶段只写环节粗描述（brief），推进到该环节才写完整任务书
-   （自包含：目标/路径/交付/白名单/验收预期——组员看不到你的会话上下文）。
+   （自包含：目标/路径/交付/白名单/验收预期——组员看不到你的会话上下文）。白名单含
+   **新建**运行态目录时一并列 `.gitignore`（lint 会提示，免合并交集闸）。
 6. **判断 drain/后台 worker 状态只用 `pysci-orch status`**，禁手敲 `tasklist` 等原始
    命令（Git Bash 把 `/FI` 转成路径 → **假阴性**）。信号冲突按 basic.md §2 报
    「状态不确定」，**不得升格为「崩溃」**。
@@ -44,7 +45,7 @@ pysci-orch watch [--timeout 14400]
         # 等 drain 六类事件（drain-watch.md §2）；后台挂起，漏挂由 status 补账
 pysci-orch reject <建议id> --override "<判决依据>"   # 否决：依据必填、留痕（J/M 判决的驳回不计）
 pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
-pysci-orch consult-twin <案卷.md>       # 咨询 twin（taste_enabled=false 即拒 rc=2）
+pysci-orch consult-twin <案卷.md>  # 咨询 twin（未启用即拒 rc=2）
 pysci-orch review <产物> --origin <member> [--rubric generic]
         [--goal-from <原生产任务书> | --goal "<目标陈述>"]  # --goal* 供 reviewer G2 独立核验
         # 审查链：VERDICT → FAIL 回派返工 → 复审一次 → 二次 FAIL 升级仲裁
@@ -60,8 +61,8 @@ pysci-orch bench-up [--dry] | bench-queue [--all] | bench-seen <id> | bench-stop
 pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（§9 冷启动+宪章注入；未生效即拒，twin-taste-mirror.md）
 pysci-orch inspector-up [--dry|--force] | inspector-status | inspector-patrol [--target 菜单id]
         [--start] | inspector-assign --brief T [--start] | inspector-on|off
-        # 巡检引擎（§7）：拉起即内嵌 status/approve/dispatch（幂等；旋钮在代码/registry，无 CLI）
-        # 见 references/inspector-engine.md
+        # 巡检引擎（§7）：拉起即内嵌 status/approve/dispatch（幂等；旋钮在代码/registry）。见
+        # references/inspector-engine.md
 pysci-orch stats [--plan id|--member m|--days N]
 # —— 底层命令面（降级/调试）——
 pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
@@ -78,8 +79,7 @@ bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 
 - **会话选择**：默认 latest（续最近活跃）；无关新工作 `--session new --name <slug>`；
   续更早会话先 `sessions` 查池再指定；
-- **白名单最小化**：`--dirs` 只给任务需要的目录（生产型组员涉代码镜像的例外见
-  README §2 脚注）；
+- **白名单最小化**：`--dirs` 只给必需目录（涉代码镜像例外见 README §2 脚注）；
 - **模型档位**：registry 里全部成员默认 **flash**；复杂环节/连续 blocked 升
   `--model-tier max`，压测按案卷降 `minimum`；
 - **devops 派发**：`dispatch devops --from-backlog`（自动取队首+交付后销账）；
@@ -87,10 +87,9 @@ bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 
 ## 交付判读与决策点
 
-- `<result>`=成功，`<blocked>`=失败（含卡点）；机械验收 FAIL 按 [NEXT] 回派返工，同指纹
-  连败 3 次停止回派升级决策；`<infra_suggestion>` 须带 `kind="defect|usability"`
-  （delivery-gate 强制），approve 连同 `success_criteria` 入 backlog；拿不准的送
-  `orch jury`（references/jury-panel.md）；
+- `<result>`=成功，`<blocked>`=失败；机械验收 FAIL 按 [NEXT] 回派返工，同指纹连败 3 次停止
+  回派升级决策；`<infra_suggestion>` 须带 `kind="defect|usability"`（gate 强制），approve
+  连同 `success_criteria` 入 backlog；拿不准送 `orch jury`；
 - **注入 lint/告警含 file:line → 先对盘核验**（wc/grep 实测行存在且相符），不符即噪声丢弃、
   不得据其改代码（Qoder 平台 lint 捏造实锤，仓外 #87）；
 - `<blocked tags="a,b" reason="…">`：tags 入台账/`orch stats` by_failure + 阈值自动立案；

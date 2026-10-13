@@ -130,7 +130,7 @@ def test_write_taskbook_clean_no_warning(tmp_path, monkeypatch, capsys):
 
 
 def test_repo_shipped_rules_file_valid():
-    """仓库随附规则表可解析、每条规则含 re+hint 且正则可编译。
+    """仓库随附规则表可解析、每条规则含 re+hint 且正则可编译（absent 可选亦须可编译）。
 
     护栏：devops 增补规则若写坏 JSON 或非法正则，fail-open 会**静默失效**——本测试
     在 CI 层面把「随附规则必须真的能触发」钉住（读真实 LINT_RULES_PATH）。
@@ -140,3 +140,75 @@ def test_repo_shipped_rules_file_valid():
     for r in rules:
         assert r.get("re") and r.get("hint"), f"规则缺 re/hint：{r}"
         re.compile(r["re"])  # 非法正则会抛，测试即失败
+        if r.get("absent"):
+            re.compile(r["absent"])
+
+
+# ---------------------------------------------------------------------------
+# absent 条件（backlog 20261014-012859-devops）：re 命中且 absent 不命中才告警
+# ---------------------------------------------------------------------------
+RUNTIME_DIR_RULE = {
+    "id": "new-runtime-dir-needs-gitignore",
+    "re": (
+        "(?:新建|新增|创建)[^\\n]{0,30}orchestration/state/"
+        "|orchestration/state/[A-Za-z0-9_.-]+/[^\\n]{0,30}(?:新建|新增|创建|运行态)"
+    ),
+    "absent": "\\.gitignore",
+    "hint": "白名单含运行态目录但未提 .gitignore",
+}
+
+
+def test_absent_rule_flags_when_gitignore_missing(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [RUNTIME_DIR_RULE])
+    warns = dispatch.lint_taskbook(
+        "白名单：src/**、orchestration/state/queues/（运行态新建）"
+    )
+    assert len(warns) == 1
+    assert warns[0].startswith("[new-runtime-dir-needs-gitignore]")
+
+
+def test_absent_rule_silent_when_gitignore_present(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [RUNTIME_DIR_RULE])
+    body = "白名单：orchestration/state/queues/（运行态新建）、.gitignore"
+    assert dispatch.lint_taskbook(body) == []
+
+
+def test_absent_rule_silent_on_plain_state_path_reference(tmp_path, monkeypatch):
+    """**防噪声**：普通 state 路径引用（非「新建/运行态」语境）不触发——否则几乎每单都告警。"""
+    _seed(tmp_path, monkeypatch, [RUNTIME_DIR_RULE])
+    body = "证据：orchestration/state/suggestions/approved/20261013-071759-devops.md"
+    assert dispatch.lint_taskbook(body) == []
+
+
+def test_absent_rule_silent_when_no_state_dir(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [RUNTIME_DIR_RULE])
+    assert dispatch.lint_taskbook("白名单：src/**、tests/**") == []
+
+
+def test_bad_absent_regex_skips_rule_only(tmp_path, monkeypatch):
+    _seed(
+        tmp_path,
+        monkeypatch,
+        [
+            {"id": "bad-absent", "re": "queues/", "absent": "([unclosed", "hint": "x"},
+            FIGURES_RULE,
+        ],
+    )
+    # 非法 absent 只跳过该条；其余规则照常
+    warns = dispatch.lint_taskbook("queues/ 与 pysci-figures build gain_ep fig1_x")
+    assert len(warns) == 1 and "figdir" in warns[0]
+
+
+def test_repo_rule_flags_new_runtime_dir_without_gitignore():
+    """随附规则：新运行态目录的任务书（正文无 .gitignore）应被点名告警。"""
+    warns = dispatch.lint_taskbook(
+        "白名单：src/**、orchestration/state/queues/（运行态新建）"
+    )
+    assert any("new-runtime-dir-needs-gitignore" in w for w in warns)
+
+
+def test_repo_rule_silent_when_gitignore_present():
+    warns = dispatch.lint_taskbook(
+        "白名单：orchestration/state/queues/（运行态新建）、.gitignore"
+    )
+    assert not any("new-runtime-dir-needs-gitignore" in w for w in warns)

@@ -374,7 +374,9 @@ def load_lint_rules() -> list[dict]:
 def lint_taskbook(body: str) -> list[str]:
     """扫任务书正文，返回命中的错误 CLI 范式告警（空=干净）。
 
-    **告警不阻断**：单条规则 regex 非法只跳过该条，不影响其余规则与派发。
+    **告警不阻断**：单条规则 regex 非法只跳过该条，不影响其余规则与派发。规则可选
+    ``absent``（第二正则）：只有 ``re`` 命中**且** ``absent`` **不**命中时才告警——用于
+    「正文提到 A 却没提 B」的条件判据（如白名单列了运行态目录却漏了 `.gitignore`）。
     """
     warnings: list[str] = []
     for rule in load_lint_rules():
@@ -382,11 +384,17 @@ def lint_taskbook(body: str) -> list[str]:
             pat = re.compile(rule["re"])
         except re.error:
             continue
-        if pat.search(body):
-            tag = f"[{rule['id']}] " if rule.get("id") else ""
-            warnings.append(
-                f"{tag}{rule.get('hint', '命中错误 CLI 范式 ' + rule['re'])}"
-            )
+        if not pat.search(body):
+            continue
+        absent = rule.get("absent")
+        if absent:
+            try:
+                if re.search(absent, body):
+                    continue
+            except re.error:
+                continue  # 非法 absent 只跳过本规则
+        tag = f"[{rule['id']}] " if rule.get("id") else ""
+        warnings.append(f"{tag}{rule.get('hint', '命中错误 CLI 范式 ' + rule['re'])}")
     return warnings
 
 
