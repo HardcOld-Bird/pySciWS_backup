@@ -18,7 +18,16 @@ pysci-inspect finding list [--status pending|promoted|rejected|queued|escalated]
 pysci-inspect promote <finding-id>            # 仅机械证据类
 pysci-inspect submit <finding-id> --jury      # 判断类唯一出口
 pysci-inspect gate                            # 读当前闸门（只读）
+# 会话记录审计工具链（transcript-audit 用；返回值即阅读面，落盘只是缓存）
+pysci-inspect transcript list [--all] [--limit N]        # 优先级头部（缺省 ≤3）
+pysci-inspect transcript scan <sid> [--turns a-b] [--verbose] [--save]
+pysci-inspect transcript fetch --anchor <sid>.jsonl:L<a>-L<b>   # 或 --sid X --grep 模式
 ```
+
+`transcript` 三件套把「随机盲读」换成**摘要先行、锚点深挖**：`list` 按优先级选靶
+（leader 会话 > 组员；新 > 旧），`scan` 出每回合一行索引（含**行锚**），`fetch` 按锚取
+原文。findings 的 `--repro` **直接引行锚**——比转述可复现。`scan` 会把该会话记成已检查
+（三态游标 `state/inspector/transcript-cursor.json`），可检判据见 references/patrol-craft.md。
 
 `pysci-inspect` **没有 `--override`**，判断类也没有免判决通道：这不是纪律条款，是参数表
 里根本没有这一项。别去试、也别指望组长替你自裁——`orch reject --override` 是组长的
@@ -41,8 +50,10 @@ pysci-inspect gate                            # 读当前闸门（只读）
 菜单在引擎侧，任务书里告诉你类别 id。八项的通用动作形状：**取证 → 判类 → 登记 → 分流**。
 
 - `doctor-sweep`：`pysci-dev doctor` 全域，逐条核对 [!] 与 [✗] 是否能复现；
-- `transcript-audit`：读 `~/.qoder-cn/projects/<pod键>/<sid>.jsonl`，找 pod-guard 拦截记录
-  与其后的绕行迹象；
+- `transcript-audit`：走**工具链**——`pysci-inspect transcript list` 取优先级头部（leader
+  会话先、新先，每轮 ≤3）→ `scan <sid> --verbose` 拿简版索引定位疑点 → 疑点按锚
+  `fetch --anchor <sid>.jsonl:L<a>-L<b>` 取原文（旧形态是随机 grep 盲读）；看 pod-guard
+  拦截记录与其后的绕行迹象；
 - `self-maint-audit`：随机 pod 的 `AGENTS.md`/自建 rules，对照代码看它还在讲什么已死的事；
 - `code-walk`：`src/pysci/` 挑一模块，找静默 except、兼容垫片、fail-open 吞掉自身 bug；
 - `pipeline-self`（§0.2 自覆盖）：查「文档承诺 vs 代码实现」是否一致；
