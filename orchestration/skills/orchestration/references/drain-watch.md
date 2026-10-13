@@ -13,8 +13,8 @@ SKILL.md 的命令面只留一行索引；本文放**为什么**与**踩过的�
 三条通道共用 `drain.WorkerPaths`（锁判活、stale 回收、released 墓碑、`.done` 身份三元组、
 协作停止信号）——单 worker 互斥由锁保证，故获锁一刻仍在 `in_progress` 的条目必是上一任
 被杀死时的孤儿，`reset_orphans()`/`reset_orphan_backlog()` 就地复位。**新通道不再另写一套
-事故硬化逻辑**（E4 的约束，也是 `WorkerPaths` 存在的全部理由）；队列面同理——三套队列的
-增删/取项/孤儿复位/裁剪都在 `workq.py` 一处（E5a 改为委派 benchd 自研队列，防双源漂移）。
+事故硬化逻辑**（`WorkerPaths` 存在的全部理由）；队列形状同理，增删/取项/孤儿复位/裁剪都在
+`workq.py` 一处（防双源漂移）。
 
 **孤儿复位管五面**（进程面 20261012-184000-leader，抢救面 20261012-234000-leader）：锁、条目、
 worktree 名、进程之外还有**进度**——回收不再默认销毁半成品：脏面（未合并/证据不足同理）→ 落
@@ -39,10 +39,11 @@ worktree 写，重派同名就是双写。`dispatch` 派生瞬间把会话 pid �
 - 漏挂/断唤的账由下次 `orch status` 补账，「忘了挂」≠「事件丢了」。
 - **测试/诊断性挂载前须确认无 live 挂载或先停**：`arm()` 覆写 `state/watch.json`，会抹掉
   在等那任的心跳与黑匣子；`recent`/`exit_reason` 是脱靶复盘的现场，status 读出其末帧。
-- 事件类型（六类）：`QUEUE-COMPLETE` / `NEEDS-LEADER` / `QUOTA-STOP` / `CHANNEL-STOP` /
-  `CRASH` / `SALVAGE`（抢救知会，不处置）。两类 STOP 都是**系统性故障全局停止**，
-  恢复动作不同（充值 vs 等渠道）。
-  `BENCH-DONE <run>` 属**可选挂载、默认不挂**——§5.1-B 明写测量完成不该即时打断组长。
+- 事件类型：基线差分六类 `QUEUE-COMPLETE`/`NEEDS-LEADER`/`QUOTA-STOP`/`CHANNEL-STOP`/`CRASH`/
+  `SALVAGE`（两类 STOP 是系统性故障全局停止：充值 vs 等渠道）；＋统一事件流 `state/events.jsonl`
+  生产者直发的 `JOB-DONE`/`STEP-REVIEW-DONE`/`QUEUE-EMPTY`/`TASKBOOK-NEW`（watch 按水位线读出即
+  唤醒）。醒来先 `orch events drain` 排空（幂等＝合并唤醒）→ 逐 plan `orch plan advance`。
+  `BENCH-DONE <run>` 可选挂载、默认不挂（§5.1-B）。
 
 ## 3. bench-* 使用要领（组长侧）
 
@@ -56,13 +57,12 @@ uv run --no-sync pysci-orch bench-seen <id>      # 看完摘掉（否则一直�
 uv run --no-sync pysci-orch bench-stop           # 协作停止：条目间隙干净退出，不 kill
 ```
 
-- **入队即返**：`bench-add` 不阻塞；`--start`（或随后 `bench-up`）派生分离 worker，
-  组长继续别的活。队列空时 worker 自毁，非常驻、不占资源。
+- **入队即返**：`bench-add` 不阻塞；`--start`（或随后 `bench-up`）派生分离 worker，组长继续
+  别的活。队列空时 worker 自毁，非常驻。
 - 待查看面是**判决的入口**：`ab` 项的 `改善/未改善/inconclusive`、`run` 项的
   `通过 n/m` 都在这一行里；细节看 `state/evals/ab/<label>.json` 与 run 日志。
-- `inconclusive` 恒带 `escalate=twin`：它不是平局，是「测量不可信」。此时先看污染提交
-  列表（`pollution`），要么换 ref 对，要么把混杂提交并入被测面，**不要**用 `--force`
-  把不可信的因果当成结论。
+- `inconclusive` 恒带 `escalate=twin`：不是平局而是「测量不可信」——先看污染提交（`pollution`），
+  换 ref 对或把混杂提交并入被测面，**不要**用 `--force` 把不可信因果当结论。
 - **系统性故障**（`dispatch.SYSTEMIC_KINDS`，drain/bench/inspect 三通道同族处置）：worker
   全局停止、剩余条目保持 pending 不烧账，`.done` 附 `stopped=<kind>`；两类**恢复动作不同**
   ——`quota_exhausted`=充值或换渠道；`channel_error`=渠道服务面故障，等恢复即可

@@ -1,11 +1,13 @@
-"""REFACTOR 收官并入 README 的快照断言（backlog 20261013-072000-leader，v1.0 §12 收尾）。
+"""REFACTOR 收官并入 README 的快照断言（backlog 20261013-072000-leader；M7 扩面）。
 
 三件事锁死：
-① 退役事实——orchestration/ 下的原设计文档（REFACTOR 文档，下称 REF）已删除，代码/文档
-   面零 REF 字面量悬空引用（口径=**旧路径** orchestration/REFACTOR.md；根目录另有 2026-10-14
-   的在役新蓝图 REFACTOR.md，引用它正当，2026-10-14 m1 收窄口径；state 台账与用户语料属留档面，不计）；
+① 退役事实——两份 REFACTOR 设计蓝图的**路径**都已删除、代码/文档面零悬空引用：
+   旧跑 `orchestration/REFACTOR.md`（v1.0 自改进体系，2026-10-13 收官）、新跑**根目录**
+   `REFACTOR.md`（2026-10-14 M 系列，M7 收官退役并并入 README）；state 台账与用户语料
+   属留档面，不计；
 ② 融合映射——README 各节含收官并入的新面（头部状态行、§1 三角色、§3.1 无记忆、
-   §4.1 改进机构面、§4.5 硬警示、§5.3–5.5、§6 五要素、§9 三闸、§12 收官段、§13 三行）；
+   §4.1 改进机构面/用户控制台、§4.5 硬警示、§5.3–5.5、§6 五要素、§9 三闸、§12 两段收官、
+   §13 裁决、§14 残余风险）；
 ③ 指针清零——README 内不得再有 `REFACTOR §N` 式节号指针（历史名提及不算指针）。
 """
 
@@ -16,12 +18,15 @@ from pathlib import Path
 
 from pysci.paths import PROJECT_ROOT
 
-#: 判据「代码/文档」面：这些根下任何文件都不得再出现 REF 字面量。
+#: 判据「代码/文档」面：这些根下任何文件都不得再出现退役蓝图文件名。
 #: 本测试文件自身豁免（判据字面量所在处），字面量经拼接避免自我命中。
-#: **口径收窄（2026-10-14，REFACTOR m1）**：只禁**被删除的旧文档路径** `orchestration/REFACTOR.md`
-#: ——v1.0 收官把它并入了 README，那条路径必须彻底清零。根目录另有**新的在役蓝图** `REFACTOR.md`
-#: （2026-10-14 用户批准，M 系列施工依据），引用它是正当的，不该被这条旧快照判据误伤。
-REF = "orchestration/REFACTOR" + ".md"
+#: **口径（M7 扩面）**：两份蓝图都退役（v1.0 的 `orchestration/REFACTOR.md` +
+#: 2026-10-14 M 系列的**根目录** `REFACTOR.md`），故判据取**裸文件名** `REFACTOR.md`
+#: ——两跑路径与任何悬空引用一并清零。
+REF = "REFACTOR" + ".md"
+#: 两跑的退役路径（供删除断言逐一点名）。
+REF_OLD_PATH = "orchestration/" + REF
+REF_NEW_PATH = REF  # 根目录相对路径
 CODE_DOC_ROOTS = (
     "src",
     "tests",
@@ -44,8 +49,9 @@ def _read(rel: str) -> str:
 
 
 def test_refactor_md_is_deleted():
-    """判据：原设计文档已删除（git log 可查；工作树不再存在）。"""
-    assert not (PROJECT_ROOT / "orchestration" / REF).exists()
+    """判据：两份原设计蓝图都已删除（git log 可查；工作树不再存在）。"""
+    assert not (PROJECT_ROOT / REF_OLD_PATH).exists(), REF_OLD_PATH
+    assert not (PROJECT_ROOT / REF_NEW_PATH).exists(), REF_NEW_PATH
 
 
 def test_no_dangling_refactor_md_reference_in_code_or_docs():
@@ -131,7 +137,7 @@ def test_command_surface_lists_improvement_institutions():
         "orch eval",
         "orch bench-add",
         "orch inspector-up",
-        "pysci-mirror",
+        "pysci",
     ):
         assert marker in sec, f"§4.1 缺命令摘要：{marker}"
 
@@ -175,7 +181,7 @@ def test_improvement_loop_has_five_closed_loop_faces():
         "绿色通道",
         "override 率",
         "双队列迟滞",
-        "pysci-mirror decisions",
+        "pysci decisions",
         "免判决+change 置顶",
     ):
         assert marker in sec, f"§6 缺要素：{marker}"
@@ -218,3 +224,33 @@ def test_verdict_register_has_closeout_rows():
     assert (
         "实施收官" in joined and "PREFERENCE v2" in joined and "修复形状分流" in joined
     )
+
+
+def test_readme_has_m_series_closeout_section():
+    """M7 扩面：§12 新增 REFACTOR-20261014（交互式控制台 + 全员 FIFO）收官段——
+    M1–M7 结果表 + M1 实机终端残余风险（如实记载）。"""
+    readme = _read("orchestration/README.md")
+    sec = readme[
+        readme.index("### 交互式控制台 + 全员 FIFO 队列化") : readme.index(
+            "## 13. 裁决记录"
+        )
+    ]
+    for marker in (
+        "| M1 |",
+        "| M4 |",
+        "| M7 |",
+        "残余风险",
+        "Pilot",
+        "Windows Terminal",
+    ):
+        assert marker in sec, f"§12 M 系列收官段缺要素：{marker}"
+
+
+def test_verdict_register_has_refactor_m_series_row():
+    """M7 扩面：§13 登记五项裁决（任务书落点/bencher 空唤醒/施工节奏/Textual/硬改名）。"""
+    readme = _read("orchestration/README.md")
+    sec = readme[readme.index("## 13. 裁决记录") :]
+    sec = sec[: sec.index("## 14.")]
+    joined = "\n".join(ln for ln in sec.splitlines() if ln.startswith("| 2026-10-14 |"))
+    for marker in ("data/taskbooks/", "bencher 唤醒", "Textual", "硬改名不留别名"):
+        assert marker in joined, f"§13 缺 M 系列裁决要素：{marker}"

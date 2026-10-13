@@ -75,7 +75,7 @@ PRIORITY: tuple[str, ...] = (
     "QUOTA-STOP",
     "CHANNEL-STOP",
     "NEEDS-LEADER",
-    # 用户投递大任务（REFACTOR.md §3.4）：**立即唤醒组长**。M5 收编——旧的最小差分
+    # 用户投递大任务（README §12）：**立即唤醒组长**。M5 收编——旧的最小差分
     # （`taskbook_ids` 基线）已删，改由 :mod:`taskbooks` 生产者直发、本模块从统一事件流
     # （:data:`events.STREAM_TYPES`）读出后唤醒。保留本优先级项供多事件同刻排序。
     "TASKBOOK-NEW",

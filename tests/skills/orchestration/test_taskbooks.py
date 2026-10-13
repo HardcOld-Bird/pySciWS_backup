@@ -1,4 +1,4 @@
-"""用户任务书：存储/状态机/程序化面/唤醒（REFACTOR.md §3.4，M3）。
+"""用户任务书：存储/状态机/程序化面/唤醒（README §12，M3）。
 
 落盘用**临时 data 根**（monkeypatch ``taskbooks.TASKBOOKS_DIR`` 与 ``pysci.paths.DATA_ROOT``
 ——后者是 ``assert_within_data`` 防 stray 护栏的判据源），绝不碰真实 ``data/taskbooks/``。

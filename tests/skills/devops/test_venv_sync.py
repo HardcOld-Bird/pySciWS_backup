@@ -34,7 +34,7 @@ def tree(tmp_path, monkeypatch):
         '[project]\nname = "pysci"\n\n[project.scripts]\n'
         'pysci-dev = "pysci.a:main"\n'
         'pysci-orch = "pysci.b:main"\n'
-        'pysci-mirror = "pysci.c:main"\n',
+        'pysci-bench = "pysci.c:main"\n',
         encoding="utf-8",
     )
     scripts = tmp_path / ".venv" / "Scripts"
@@ -167,7 +167,7 @@ def test_cmd_venv_sync_ok_when_all_entries_present(tree, monkeypatch, capsys):
     monkeypatch.setattr(
         dev,
         "run_uv_sync",
-        _fake_uv(scripts, ["pysci-dev", "pysci-orch", "pysci-mirror"]),
+        _fake_uv(scripts, ["pysci-dev", "pysci-orch", "pysci-bench"]),
     )
     assert dev.cmd_venv_sync(_Args(uv_args=[])) == 0
     assert "入口齐备" in capsys.readouterr().out
@@ -179,7 +179,7 @@ def test_cmd_venv_sync_reports_half_broken_as_rc2(tree, monkeypatch, capsys):
     monkeypatch.setattr(dev, "run_uv_sync", _fake_uv(scripts, ["pysci-dev"]))
     assert dev.cmd_venv_sync(_Args(uv_args=[])) == 2
     out = capsys.readouterr().out
-    assert "入口缺失" in out and "pysci-orch" in out and "pysci-mirror" in out
+    assert "入口缺失" in out and "pysci-orch" in out and "pysci-bench" in out
 
 
 def test_cmd_venv_sync_forwards_uv_args(tree, monkeypatch):
@@ -188,7 +188,7 @@ def test_cmd_venv_sync_forwards_uv_args(tree, monkeypatch):
 
     def run(extra):
         seen.append(list(extra))
-        for n in ("pysci-dev", "pysci-orch", "pysci-mirror"):
+        for n in ("pysci-dev", "pysci-orch", "pysci-bench"):
             (scripts / f"{n}.exe").write_bytes(b"MZ")
         return 0, "ok"
 
@@ -217,7 +217,7 @@ def test_cmd_venv_sync_survives_locked_entry(tree, monkeypatch, capsys):
                 f.unlink()
             except OSError:
                 raise AssertionError("被锁入口应先由让路步骤处理掉") from None
-        for n in ("pysci-dev", "pysci-orch", "pysci-mirror"):
+        for n in ("pysci-dev", "pysci-orch", "pysci-bench"):
             (scripts / f"{n}.exe").write_bytes(b"MZ-new")
         return 0, "Fake: uv sync 完成"
 
@@ -228,7 +228,7 @@ def test_cmd_venv_sync_survives_locked_entry(tree, monkeypatch, capsys):
         assert "已改名让路" in out and "入口齐备" in out
         assert all(
             (scripts / f"{n}.exe").read_bytes() == b"MZ-new"
-            for n in ("pysci-dev", "pysci-orch", "pysci-mirror")
+            for n in ("pysci-dev", "pysci-orch", "pysci-bench")
         )
     finally:
         proc.terminate()
@@ -270,7 +270,7 @@ def test_cmd_venv_sync_recycles_stale_residue(tree, monkeypatch, capsys):
     monkeypatch.setattr(
         dev,
         "run_uv_sync",
-        _fake_uv(scripts, ["pysci-dev", "pysci-orch", "pysci-mirror"]),
+        _fake_uv(scripts, ["pysci-dev", "pysci-orch", "pysci-bench"]),
     )
     assert dev.cmd_venv_sync(_Args(uv_args=[])) == 0
     out = capsys.readouterr().out
@@ -282,7 +282,7 @@ def test_cmd_venv_sync_recycles_stale_residue(tree, monkeypatch, capsys):
 def test_cmd_venv_sync_puts_back_when_uv_skips_rebuild(tree, monkeypatch, capsys):
     """让了路而 uv 没重建 ⇒ 自己把原件改回原名，别让解药变成肇事者。"""
     root, scripts = tree
-    for n in ("pysci-orch", "pysci-mirror"):  # 本例模拟「入口都在盘、uv 无事可做」
+    for n in ("pysci-orch", "pysci-bench"):  # 本例模拟「入口都在盘、uv 无事可做」
         (scripts / f"{n}.exe").write_bytes(b"MZ-old")
 
     def fake_aside(exe, ts):

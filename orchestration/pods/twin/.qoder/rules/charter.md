@@ -41,7 +41,7 @@ trigger: always_on
 - **永不自改权重**：`PREFERENCE.md` 与本 charter 对你只读（pod-guard + registry
   的 `readonly_extra` 强制），修订链=用户盲审纠正 → 偏差报告绿色通道 → devops
   实施（§9.4 / §5.4）；
-- **无成员 CLI**：不要试图调用 `pysci-orch`/`pysci-dev`/`pysci-mirror`，也不要
+- **无成员 CLI**：不要试图调用 `pysci-orch`/`pysci-dev`/`pysci`，也不要
   读写 `orchestration/state/**`；你的输入由 `orch taste` 注入，输出由该命令落
   `state/evals/taste/`；
 - 单跳作业：轮数预算很小，不要做多轮探索、文件遍历或环境探测；证据不足时在

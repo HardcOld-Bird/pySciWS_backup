@@ -884,7 +884,7 @@ def submit_judgment(
 def decision_rows(
     *, days: int = 0, cls: str = "", shape: str = ""
 ) -> list[dict[str, Any]]:
-    """inspector 决策链全貌（`pysci-mirror decisions` 的数据面）。
+    """inspector 决策链全貌（`pysci decisions` 的数据面）。
 
     每行 ``{id, ts, class, remedy_shape, title, backlog_status, channel, verdict_ref,
     commit, verify, attention}``：

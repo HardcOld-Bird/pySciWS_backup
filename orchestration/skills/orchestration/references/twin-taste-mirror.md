@@ -8,7 +8,7 @@
 ## 1. 一句话状态判读
 
 ```
-pysci-mirror status        # 用户侧全景：待盲审/宪章状态/taste_enabled/队列水位/待决事项
+pysci status        # 用户侧全景：待盲审/宪章状态/taste_enabled/队列水位/待决事项
 ```
 
 输出里 `taste_enabled = False` 就是「twin 还没被授权对外说话」；`orch taste` 在此状态下
@@ -61,12 +61,12 @@ twin pod 的写权限面：`PREFERENCE.md` 与 charter/settings/mcp/inbox 同属
 `twin/` 技能册违反「不创建未被要求的文件」。此判断由
 `test_twin_intentionally_has_no_manifest_target` 钉住，后续会话不必再猜。
 
-## 4. `pysci-mirror`——用户侧唯一关注入口
+## 4. `pysci`——用户侧唯一关注入口
 
 ```
-pysci-mirror status                      # 全景概览（§10 注册纪律：新增关注事项类型必须注册进这里）
-pysci-mirror journal "我讨厌为了格式再建一层抽象"      # 交互编号菜单分流
-pysci-mirror journal "<口述>" --select 1              # 非交互（脚本/测试）必须明示
+pysci status                      # 全景概览（§10 注册纪律：新增关注事项类型必须注册进这里）
+pysci journal "我讨厌为了格式再建一层抽象"      # 交互编号菜单分流
+pysci journal "<口述>" --select 1              # 非交互（脚本/测试）必须明示
 ```
 
 `journal` 的**写入时机械分流**（§10）：

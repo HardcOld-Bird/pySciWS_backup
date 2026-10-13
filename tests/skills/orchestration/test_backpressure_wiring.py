@@ -1,4 +1,4 @@
-"""M6：backpressure 写侧接线 + 全队列 defer 延期语义（REFACTOR.md §3.3 硬验收）。
+"""M6：backpressure 写侧接线 + 全队列 defer 延期语义（README §12 硬验收）。
 
 覆盖任务书验收：worker 活跃时 active-sessions 非空、完成清零；长 job 心跳续命不被判死；
 带宽失败→成员队列挂 defer_until、到期重取；次数/壁钟闸触顶→停止并上报；devops backlog

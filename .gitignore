@@ -68,16 +68,16 @@ __pycache__/
 /orchestration/state/inspector.lock
 /orchestration/state/inspector-runs/
 /orchestration/state/inspector.cancel
-# 成员 FIFO 队列与 worker 运行态（REFACTOR.md §3.1/M4，同 bencher/inspector 的 git 策略）：
+# 成员 FIFO 队列与 worker 运行态（README §12/M4，同 bencher/inspector 的 git 策略）：
 # 队列本体、每成员互斥锁、run 日志与 .done、协作取消信号。永久痕迹在 ledger + backlog +
 # delivery，队列只是「还没消化完的工作」，入库会让 main 工作区每跳必 dirty。
 /orchestration/state/queues/
 /orchestration/state/queues-runs/
-# 统一事件流与消费水位线（REFACTOR.md §3.2/M5）：生产者直发 + watch 差分镜像事件每跳都可能
+# 统一事件流与消费水位线（README §12/M5）：生产者直发 + watch 差分镜像事件每跳都可能
 # 新增，纯运行态（永久痕迹在 ledger/backlog/delivery 与 git 提交本身），入库会让 main 每跳必 dirty。
 /orchestration/state/events.jsonl
 /orchestration/state/events-seen.json
-# 活跃会话注册表（REFACTOR.md §3.3/M6，backpressure 写侧）：worker 拉起登记、周期心跳、
+# 活跃会话注册表（README §12/M6，backpressure 写侧）：worker 拉起登记、周期心跳、
 # 退场注销，每跳（心跳≤3min）都在变——纯运行态（「此刻谁在跑」的活体读数），入库会让
 # main 每跳必 dirty。永久痕迹在 ledger/events。
 /orchestration/state/active-sessions.json
@@ -107,7 +107,7 @@ __pycache__/
 # 都可能改写（跨进程比对才看得见切换），纯过程态。切换事件本身的永久审计在
 # preference-journal.jsonl（kind=routing）与 drain run 日志。
 /orchestration/state/routing-last.json
-# `pysci` 交互式控制台的主菜单更新水位（REFACTOR.md §2.2，2026-10-14 m2）：`{module: cursor}`，
+# `pysci` 交互式控制台的主菜单更新水位（README §12，2026-10-14 m2）：`{module: cursor}`，
 # 每次「进详情」即改写——纯运行态（谁看过什么，本机语义），入库会让 main 必 dirty。
 # 永久痕迹在每次进入详情这件事本身（用户看得见），本文件只是「上次看到哪」的记忆。
 /orchestration/state/mirror-seen.json
