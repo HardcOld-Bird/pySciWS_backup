@@ -1,4 +1,4 @@
-"""twin 判断通道（``orch taste``）：宪章注入 + 冷启动单跳 + 结构化留痕（REFACTOR §9，E6-prep）。
+"""twin 判断通道（``orch taste``）：宪章注入 + 冷启动单跳 + 结构化留痕（README §1/§3.1，E6-prep）。
 
 为什么长这样：
 
@@ -43,7 +43,7 @@ PREFERENCE_NAME = "PREFERENCE.md"
 #: 未生效时的拒绝语（一字不差地进 CLI 输出——success_criteria 的判据面）。
 DISABLED_HINT = (
     "twin 宪章未生效：PREFERENCE.md 仍是草案 v1，生效确认权归用户"
-    "（REFACTOR §9.4），已拒绝派发"
+    "（README §1 代理裁决：上线/下线宣告权归用户），已拒绝派发"
 )
 NEXT_HINT = (
     "[NEXT] 用户确认宪章草案后，把 registry.json 顶层 taste_enabled 置 true 即对外服务；"
@@ -117,7 +117,7 @@ def build_prompt(case: Case, preference: str) -> str:
         '{"choice": "A", "reason": "援引宪章条款编号（P-xx）与案卷证据的简短理由", '
         '"confidence": 0.62}\n\n'
         "- `choice` 只能是 `A` 或 `B`；**必须表态**，不许第三方案、不许「视情况而定」"
-        "（REFACTOR §0.5 终裁不给平局）；\n"
+        "（README §5.3 终裁不给平局）；\n"
         "- 把握不足用低 `confidence` 表达，而不是回避；\n"
         "- `reason` 点明依据的条款编号；宪章没有对应条款时写明「外推，宪章无既例」。"
     )
@@ -271,7 +271,7 @@ def _add_parser(sub: Any) -> None:
     """注册 ``orch taste`` 子命令（由 orch.py 门面调用，保持 CLI 装配单点）。"""
     p = sub.add_parser(
         "taste",
-        help="twin 审美孪生判断（REFACTOR §9）：宪章注入 + 冷启动单跳 → {选择,理由,置信度}",
+        help="twin 审美孪生判断（README §1/§3.1）：宪章注入 + 冷启动单跳 → {选择,理由,置信度}",
     )
     p.add_argument(
         "case_file", help="案卷文件（## 问题 / ## 选项 A / ## 选项 B [+ ## 证据]）"

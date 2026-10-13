@@ -3,9 +3,9 @@
 **状态**：v2.2 设计定稿；**Phase 0–4 已基本完成**（§12：验证冲刺、orch 骨架+figure
 纵切面、plan/改进循环/devops、reviewer+副组长、六 pod 脚手架+MCP 清零+basic.md 重写
 均实战验收）。**体系进入常态运行**：剩余事项 = 各 pod 随首个真实任务逐个战备验收、
-跨域双路径对比（随首个真实跨域任务）、可选加固项。**另线进行中**：评价驱动的
-自改进体系 REFACTOR v1.0 已定稿（2026-10-11 用户终审，E0–E7 实施中，权威文档
-`orchestration/REFACTOR.md`；完成后其生效机制并入本文）。本文档是编排体系的**唯一权威**：
+跨域双路径对比（随首个真实跨域任务）、可选加固项。**评价驱动自改进体系已收官
+（2026-10-13），机制已并入本文**（E0–E7 全链实证见 §12 收官段，逐项裁决见 §13；
+原设计文档经 git 历史可查）。本文档是编排体系的**唯一权威**：
 架构、目录契约、协议、阶段计划与裁决记录以本文为准。护栏级条款（红线、审批权、
 角色边界、门禁策略）的修改须用户明确授权；其余条款由组长（主代理）会同 devops
 组员修订并向用户报告。**阶段完成须当轮登记本文件**（Phase 3 咨询中副组长指出的
@@ -37,9 +37,10 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 | **专职组员** ×7 | `orchestration/pods/<id>/` + headless | 会话池（orch 管理，§3.2） | 各自领域的生产；自检属分内职责；交付时声明机械验收；积极提改进建议；**自维护记忆与轻量笔记型 harness**（§3.1） | 写权限见 §2 矩阵；禁改只读层（charter 规程、部署技能、settings/mcp） |
 | **副组长**（deputy） | `orchestration/pods/deputy/` + headless | 会话池 | ① 跨领域**简单**任务单体执行；② 组长的**技术顾问与平级协作者**；③ 全项目编辑权 | 持全部 7 技能（部署副本）；白名单宽（全项目，orchestration/** 与自身只读层除外） |
 | **reviewer** | `orchestration/pods/reviewer/` + headless | 会话池 | 期刊审稿人式**主观质量审查**（规范性/美观度/创新性），可执行昂贵文献对比；输出结构化 VERDICT | **默认不启用**——用户点名或组长主动（默认判断为不需要）时才派发 |
-| **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送；**src 测试**（`tests/`、CI、工具实现正确性） | **不使用 orch**（组长专属；REFACTOR §8 授权的 E2 过渡期例外 `orch eval run`/`eval set-baseline` 已随 E4 bencher 上线**退役**，harness 压测职责移交 bencher）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
-| **bencher** | `orchestration/pods/bencher/` + headless | 队列驱动非常驻（§8，`orch bench-*`） | **harness 实测专职工**（REFACTOR §3 Tier B/§8）：套件案卷与基线区所有权、套件运行、基线捕获、副本 A/B、组长/inspector 指派的核查跑；输出二元判决（通过/失败、改善/未改善）与污染识别 | 写权仅 `orchestration/state/evals/**`（案卷/基线/判决），**外部代码树零写权**（设施缺陷提 `<infra_suggestion>` 交 devops，不自己修）；harness 只读层与部署副本不可改；不使用 orch/pysci-dev；完成项走 `orch status` 待查看面，**不即时唤醒组长**；专属 CLI `pysci-bench` |
-| **inspector** | `orchestration/pods/inspector/` + headless | 闲时自主激活（REFACTOR §7，`orch inspector-*`；全局开关默认开、生产活跃时让路） | **闲时巡检员**：按引擎下发的巡检菜单抽查全域（doctor 全域 / transcript 诚实条款 / 自维护层 / 代码走查 / 改进管道自覆盖 / 设计意图一致性 / 设计审查 rubric / 基线缺口），产出 finding 并按类别分流——**机械证据类免判决**晋升 backlog（`source=inspector`）、**判断类必经 J 仲裁**；双队列迟滞节流（§5.2） | 全项目**只读**（代码树零写权；产出只落 `state/inspector/` 与 `state/evals/jury-cases/`）；**无 override 面**（§5.2：CLI 参数表里不存在该项，是代码事实而非纪律条款）；不使用 orch，也不用 pysci-dev 写面（doctor 只读可用）；专属 CLI `pysci-inspect`；**豁口**：`pysci-inspect` 自身不在巡检范围（§0.2）|
+| **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送；**src 测试**（`tests/`、CI、工具实现正确性） | **不使用 orch**（组长专属；§12 E2 过渡期例外 `orch eval run`/`eval set-baseline` 已随 E4 bencher 上线**退役**，harness 压测职责移交 bencher）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
+| **bencher** | `orchestration/pods/bencher/` + headless | 队列驱动非常驻（§5.5，`orch bench-*`） | **harness 实测专职工**（Tier B，§5.5）：套件案卷与基线区所有权、套件运行、基线捕获、副本 A/B、组长/inspector 指派的核查跑；输出二元判决（通过/失败、改善/未改善）与污染识别 | 写权仅 `orchestration/state/evals/**`（案卷/基线/判决），**外部代码树零写权**（设施缺陷提 `<infra_suggestion>` 交 devops，不自己修）；harness 只读层与部署副本不可改；不使用 orch/pysci-dev；完成项走 `orch status` 待查看面，**不即时唤醒组长**；专属 CLI `pysci-bench` |
+| **inspector** | `orchestration/pods/inspector/` + headless | 闲时自主激活（§6 改进循环，`orch inspector-*`；全局开关默认开、生产活跃时让路） | **闲时巡检员**：按引擎下发的巡检菜单抽查全域（doctor 全域 / transcript 诚实条款 / 自维护层 / 代码走查 / 改进管道自覆盖 / 设计意图一致性 / 设计审查 rubric / 基线缺口），产出 finding 并按类别分流——**机械证据类免判决**晋升 backlog（`source=inspector`）、**判断类必经 J 仲裁**（§5.3）；双队列迟滞节流（§6） | 全项目**只读**（代码树零写权；产出只落 `state/inspector/` 与 `state/evals/jury-cases/`）；**无 override 面**（§6：CLI 参数表里不存在该项，是代码事实而非纪律条款）；不使用 orch，也不用 pysci-dev 写面（doctor 只读可用）；专属 CLI `pysci-inspect`；**豁口**：`pysci-inspect` 自身不在巡检范围（自覆盖豁口，§6）|
+| **twin** | `orchestration/pods/twin/` + headless | 冷启动单跳（每次判断新会话，`orch taste`；§6） | **审美孪生 → 回退终裁者 + 用户代理**：① 可选咨询（仅建议）；② 客观通道模棱两可时回退终裁（强制、**不给平局**，§5.3）；③ 用户代理裁决（原「呈用户」的护栏级审批/升级仲裁/Phase 验收即时代理，**先决策后问责**，全量 mirror 留痕） | PREFERENCE.md 置 pod 内（readonly_extra 只读、护栏级）；**无记忆纪律**——冷启动，「记忆」只有 PREFERENCE.md 与决策日志（§3.1）；无成员 CLI（判断经 `orch taste`，训练审阅经 `pysci-mirror`）；永不自改权重、永不投客观质量票；**最终交付验收不代理**（用户本人） |
 
 **副组长平级协作条款（用户裁决）**：副组长与组长接近平级，不是从属关系。
 - 副组长**有权拒绝**派发任务（须附理由，典型情形：组长对复杂度估计误判）；拒绝经
@@ -254,6 +255,11 @@ ledger 流水、`state/devops.{lock,cancel}` / `state/devops-runs/` / `state/wat
   槽位只留 charter。执法三层：delivery-gate（组员交付时硬闸）、pre-commit（真本侧）、
   doctor（全域巡检）；
 - 组长侧：Qoder 自动记忆（交互式专属，用户已启用）+ orchestration 技能（编排规程）。
+- **twin 的例外——无记忆纪律**（§1 角色行）：twin 每次判断**冷启动新会话**（`orch taste`
+  单跳，`dispatch` 对 twin 硬拦会话复用），「记忆」只有两处：`orchestration/pods/twin/
+  PREFERENCE.md`（pod 内只读层、护栏级，修订走 §6 用户纠正链，twin 永不自改）与
+  决策日志 `state/preference-journal.jsonl`（§6 原料层）。设计意图：审美判断每案独立、
+  可盲审回测，不受历史会话污染。
 
 ### 3.2 会话池（原生能力 + orch 薄封装）
 
@@ -478,6 +484,22 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 绕过 plan 的习惯）：`dispatch`、`sessions`、`archive`、`check`（抽检机械验收）、
 `ledger`、`backlog`、`skills sync`。orch 瘫痪时全部可按附录 A 手动等价执行。
 
+**改进机构面**（自改进体系收官并入的子命令；配合 §5.3 判决包与 §6 改进循环使用，
+频次低于日常面）：
+
+| 命令 | 作用 | 输出给组长的东西 |
+|---|---|---|
+| `orch jury <案卷> [--dry]` | Tier C 仲裁团（§5.3 的 **J** 通道）：家族外三席直调、双序对局、阻塞 ≈1 min | 结构化裁决（选择/理由/置信度）落 `state/evals/jury/<case>.json`；平票/inconclusive 过半 → 自动回退 twin 终裁（§5.3） |
+| `orch taste <案卷>` | twin 审美判断（§1 角色行）：冷启动单跳、注入 PREFERENCE.md | `{选择,理由,置信度}` 落 `state/evals/taste/`，`pysci-mirror review` 可盲审 |
+| `orch eval run --case <id>` / `orch eval set-baseline` | Tier B harness 套件执行与基线回填（§5.5；组员侧同面 `pysci-bench`） | 二元判决 + 指标表入 `state/ledger/evals.jsonl` |
+| `orch bench-add` / `orch bench-queue` | bencher 队列指派与查看（§5.5） | 队列态与「待查看」结果（择机查看，不即时唤醒组长） |
+| `orch inspector-up` / `inspector-off` / `inspector-status` | 巡检引擎生命周期与细读（§6；`up` 幂等、内嵌常用入口自动拉起） | 引擎态、全局开关、双队列水位 |
+| `orch drain-stop` / `orch watch` | 后台 drain 协作式停止 / 事件等待器（§4.5） | 单行事件（QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP / CHANNEL-STOP / CRASH） |
+
+**用户控制台是另一个 CLI `pysci-mirror`**（非 orch，用户侧入口）：`status` 全景
+（用户唯一关注入口 + 注册纪律）、`review` 盲审（=训练）、`journal` 口述机械分流、
+`decisions` 决策链全貌（§6 审计面）。
+
 ### 4.2 计划驱动（plan-runner）
 
 组长的拆解结果**落成计划文件而非聊天记录**（对抗「近期消息淹没早期决策」）；推进时
@@ -628,7 +650,9 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   - `CRASH <run>`——锁 pid 已死且该 run 无 `.done`
 - **用法**：组长以 Bash `run_in_background` 启动，进程退出即原生完成通知唤醒本会话；一次
   watch 报一批事件即退，后续按需重挂（输出自带重挂命令）。`approve`（经 `wake_devops`）与
-  `dispatch --from-backlog` 的输出**固定追加挂载指令行**，不靠组长翻文档。
+  `dispatch --from-backlog` 的输出**固定追加挂载指令行**（`watch.mount_lines`），不靠组长翻文档。
+  **硬警示（mount_lines 首行）**：`orch watch` 必须作为后台 Bash 调用的**唯一顶层命令**——
+  禁止用 `&`/`&&`/管道把它嵌进别的命令，嵌入即被父任务连坐杀死、事件通知随之丢失。
 - **边界**：watch 随组长会话消亡，**不影响 detached drain**；基线快照与心跳落
   `state/watch.json`（gitignore：纯运行态）。**抑制帧与瞬态空值（`.done` 半写等）不推进
   基线**——被压住/读不出的身份保持原值，下一帧继续比较，绝不把账吞死。每帧现场（ts、
@@ -669,6 +693,63 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
 - FAIL→自动回派返工（附报告）→复审一次→再 FAIL 升级组长仲裁（改派副组长/换方案/
   呈报用户）；
 - rubric 存于 reviewer pod 只读层，修订须经用户（量表质量决定审查质量）。
+
+### 5.3 判决包（基建提案的判决通道；四态强制 + 例外通道 + 修复形状分流）
+
+**四态强制（用户裁决，实施前实测不可行故有此设计）**：组长 `orch approve/reject` 时
+判决包必居其一，缺参数 → 代码拒绝（rc≠0 + 列出合法选项）：
+
+- **J**：案卷送 Tier C 仲裁团（家族外三席官方直调、双序对局、并行单轮阻塞 ≈1 min、
+  结构化返回「选择+理由+置信度」、少数服从多数、材料由**撰写者侧**组装并自动附 git
+  diff/预算读数/台账行，`orch jury` 见 §4.1）→ 裁决自动 approve/reject，组长只写回复；
+- **M**：approve 并实施 + **基线捕获**（审批时 git worktree @ HEAD + gitignored harness
+  面物理归档进 `state/evals/baselines/<case>/`）+ 实施后 bencher **副本 A/B 实测**（§5.5）；
+- **J+M**：仲裁把关实施、实测核验效果，**实测覆盖仲裁**（仲裁 approve 但实测未改善 →
+  自动立案纠正）；
+- **都不选 = override**（approve 或 reject 均是）：附详细理由、`mirror` 留痕、计入
+  **override 率**（`orch stats` 判决包健康段 / `pysci-mirror status`）；`orch reject` 无
+  `--override` 参数即代码拒绝——**reject=override** 是数据事实，不是礼仪。
+
+**例外通道**：缺陷类 × 同条交付含 `<blocked>` → 当条工作本身即 in-vivo 实测，**默认
+approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 override。
+
+**修复形状分流（remedy_shape，用户裁决 2026-10-13）**：inspector 机械通道的**免判决
+只剩 `restore`**（复原既有声明行为：恢复被删行、修断正则、回滚误删配置）；凡
+**`change`**（改声明行为/策略/权衡面——会话生命周期、阈值语义、charter 条款、路由语义）
+而**无判决记录** → drain 任务书注入约束，devops 必须交付 `<blocked>` 上报而非自行实施
+（裁定权在判决包与用户，不在执行端）。落点三面：登记字段缺省 change、任务书模板注入、
+决策审计面高亮（§6 `pysci-mirror decisions`）。
+
+**核验闭环（零新裁决点）**：核验方式在审批时一次定死——机械判据永远由交付协议自动执行，
+重型 A/B 仅当审批选了 M 才跑；**实施前至多一次 J、实施后只实测不再仲裁**；改善 → 销账，
+未改善 → 自动生成纠正提案（`source=remediation`）进 §6 管道。**模棱两可回退**：bencher
+实测无显著指导意义、或 jury 平票/inconclusive 过半 → 自动回退 **twin 终裁**（不给平局，
+结果必为选项之一，全量 mirror 留痕）。
+
+### 5.4 Tier A：失败标签与阈值自动立案
+
+- 词表 `orchestration/state/failure-tags.json`（**单一源，护栏级**，devops 增补附定义）：
+  组员 `<blocked>` 可带 `tags="a,b"`（delivery-gate 校验词表，词表外退回、缺省不阻断）；
+  聚合读数 `orch stats` 的 by_failure 段——**同一标签反复出现 = 深层结构问题的客观信号**；
+- **阈值自动立案（硬性依赖，不指望组长「有空」）**：`orch status`/`approve` 入口机械
+  重算滑窗——同一 `(tag, member)` 14 天或 20 跳内 ≥3 次 → 自动注册基建提案
+  （`source=tier-a`，证据=台账行与计数，`success_criteria` 天然可测=销账时计数回落）
+  → 进 §6 改进管道。检查、计数、立案全代码完成，人只在强制选择点出现。
+
+### 5.5 Tier B：harness 测试套件（bencher 所有）
+
+- **两种测试的分野（用户裁决）**：普通测试（src，`tests/`，pytest）由 devops 管理；
+  **Agent harnessing 测试**（历史真实任务提炼的特殊套件）由 bencher 管理——命名同源
+  benchmark，清晰区隔；
+- **套件** `state/evals/harness/`（bencher 完全写权）：每案 = 任务书 + 白名单 + 机械
+  成功判据 + 预期指标基线；输出统一**二元判决**（通过/失败、改善/未改善），执行经
+  `dispatch` 特化封装（全新会话、`minimum` 压测档），结果入 `state/ledger/evals.jsonl`；
+- **基线与副本 A/B**：判决包选 M 时捕获基线 → devops 合并后 bencher 以合并 commit 另建
+  副本 → 双副本各跑关联案、对比台账、二元判决，用后即弃、无损回退；窗口期混入他人
+  harness 提交 → 判 `inconclusive` 附 git log 证据 → 回退 twin（不假装可信）；
+- **生命周期**：FIFO 队列（`orch bench-add`），非空拉起、消化完销毁（**非常驻**）；
+  完成项经 `orch status` **择机查看**，不即时唤醒组长；外部代码树零写权（设施缺陷提
+  `<infra_suggestion>` 交 devops）。
 
 ---
 
@@ -733,6 +814,35 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   的 watch 段一次性补账
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
 ```
+
+**提案三源与机构分工**（自改进体系收官并入；上图是组员源的判决包流）：
+
+- **组员 `<infra_suggestion>`** → 上图组长判决包流（§5.3）；
+- **inspector 发现（不经组长）**：机械证据类（harness 测试失败、doctor ✗、预算超限、
+  实锤复现）→ **自动晋升** backlog（`source=inspector`，附复现命令与实际输出 + 可证伪
+  success_criteria）；**判断类** → 强制判决包 {J, M, J+M}（§5.3）→ approve 后 inspector
+  自撰任务书派 devops，全程零组长介入；**inspector 无 override**（其提案被拒不阻塞任何
+  工作）；设计审查 rubric（社区优先 / 反冗余 / LLM 直觉友好）产出的发现属判断类；
+- **Tier A 阈值自动立案**（§5.4）→ 进 inspector 同一管道；
+- **偏差报告绿色通道（mirror 盲审 → 组长处理）**：用户盲审 twin 决策不一致 → 偏差报告
+  入队；「twin 不对」→ twin harness 改进**绿色通道默认通过**（用户反馈即仲裁结果），
+  组长二选一：写任务书派 devops ／ override 留痕（批量处理多个不一致案不算 override）；
+  「纠正现有结果」→ **强制写任务书派 devops，不得 override**。`mirror journal` 的行动
+  指令入同一队列、同「强制派发」待遇（§4.1 用户控制台）；
+- **留痕与审计面**：override 一律入决策日志并计入 **override 率**（`orch stats` 判决包
+  健康段；趋势意义，非绝对指标）；核验记录、twin 代理裁决与终裁自动入日志（原料层
+  `state/preference-journal.jsonl`）。**`pysci-mirror decisions` = 决策链全貌**（只读拼装：
+  findings × backlog × run 摘要 × jury 案卷 × 决策日志）——发现 → class → remedy_shape
+  → 判决记录 → 实施 commit → 核验状态，**免判决+change 置顶**（最需审计者优先）；
+  `mirror status` 的「决策」项实时报水位。重要决策必须汇总进概览并可一屏看全
+  （用户裁决 2026-10-13；ctx 水位闸绕过判决通道案即教训，§13 登记）。
+
+**双队列迟滞节流（用户裁决）**：inspector 监视 devops backlog pending 与 bencher 队列
+长度——任一 > 积压上限（backlog 12 / bench 6）→ **暂停产出**新提案（只读巡检继续）；
+两队列均回落至**恢复阈值**（8 / 4）→ 恢复。**恢复阈值严格低于暂停阈值 = 迟滞**，防振荡。
+
+**backlog 判据纪律（三权分立）**：条目必填可证伪 `success_criteria`——提案者写、判决
+案卷审定、devops 只执行；**无判据不入队**，判据同时是 M 实测的靶点（§5.3/§5.5）。
 
 **组长自提改进**：组长向用户交付成果时可一并提出自己的改进建议；用户回复认可后，
 组长以同一 approve 通道入 backlog。**此流程不设 orch 硬保护**（裁决理由：管理工具的
@@ -819,6 +929,17 @@ worktree 或仓库根为 cwd，因此不继承组长 harness。orch 是组长专
   把失效模式从「遗忘/失误」升级为「刻意违规」，后者经 transcript 审计发现（devops
   巡检职责）；
 - 组长侧不装硬 guard（用户在场的会话靠规程 + 报告义务 + 护栏授权红线）。
+- **恢复面三闸（收官并入）**：
+  - **WIP-salvage 自动抢救**：drain 获锁回收孤儿条目时**先抢救再清理**——把前任 worker
+    worktree 内未提交成果快照留档并自动开续作单（授权 devops 在遗留面上续完、不重做），
+    然后才 `worktree remove` 残留（worktree 名 = 条目 id，只清孤儿名不误删活跃面）；
+  - **sid 在途闸**：派发前对目标会话做**判活 + argv 双闸**——同一 sid 已有在途会话时
+    人工派发 rc=2 拒、批次派发自动换新 sid 并标 `sid_new_reason=prev_alive`；同理「一个
+    worktree 一个写者」（并发写者即停手上报），防双写互踩；
+  - **渠道级故障识别（CHANNEL-STOP）**：`channel_error` 判据 = 固定文案 ∧ 会话档末轮
+    故障形状**合取**（单看文案会被复盘它的任务书正文误报）；命中 → drain 全局停止（种子
+    复位 pending、释放锁），watch 打 `CHANNEL-STOP` 事件（§4.5）——恢复动作是**等渠道
+    恢复**，与额度类的充值/等待重置分列两事件。
 
 ---
 
@@ -1000,6 +1121,40 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 - [ ] （可选加固）组长侧 permission deny：禁 Write/Edit 于生产目录——暂缓（组长
       仍需写 orchestration/state 与本文档；deny 规则需精细豁免，收益/复杂度比待评估）
 
+### 自改进体系 E0–E7（原 REFACTOR，**收官**：2026-10-11 定稿 → 2026-10-13 全链完成并入本文）
+
+逐阶段成功判据与实施实录见 git 历史中的原设计文档；下表是收官状态（机制落点见括注）：
+
+- [x] **E0 纪律与原料层**：`success_criteria` 必填、`kind` 结构化、reject=override 强制
+      留痕、决策日志回灌、deputy/reviewer 降档（§5.3/§6）；
+- [x] **E1 Tier A 全链**：failure-tags 受控词表、`<blocked tags>` 解析、`orch stats`
+      by_failure、阈值自动立案（§5.4）；
+- [x] **E2 minimum 档 + harness 套件骨架**：`orch eval run`、`state/evals/harness/` 首批案、
+      baseline.json（§5.5）；
+- [x] **E3 仲裁团**：直连三席、双序对局多数解析、jury-brief「仅涉自身基建直通」规则、
+      Key 泄漏哨兵（§5.3 J 通道）；
+- [x] **E4 bencher**：pod/FIFO 非常驻、基线捕获、副本 A/B、择机查看型通知（§5.5）；
+- [x] **E5 决策流硬化**：判决包四态闸、inspector 全流程（自动晋升/双队列迟滞/全局开关/
+      设计审查 rubric）、E5b 交付后核验闭环与缺陷×blocked 例外通道（§5.3/§6）；
+- [x] **E6 twin + mirror + 回退链**：`orch taste` 冷启动、盲审/口述分流/偏差报告绿色
+      通道、`escalate=twin` 自动终裁、`pysci-mirror` 首批全景项（§3.1/§4.1/§6）；
+- [x] **E7 twin 上线**：代理裁决接入原「呈用户」升级点（护栏级审批/升级仲裁/Phase 验收），
+      最终交付验收仍呈用户本人；2026-10-13 PREFERENCE v2 经用户确认转正、twin 全量（§1/§13）；
+- [x] **收尾：融合与退役**——生效机制并入本文（§1 角色表、§3.1、§4.1、§4.5、§5.3–5.5、
+      §6、§9、§13），原设计文档删除、仅存 git 历史（即本轮收官单）。
+
+**实施期夜航要点（审计留痕，原委记录要点）**：
+- E0 首战四缺陷：registry lost-update（drain 陈旧快照回写抹配置）、watch QUEUE-COMPLETE
+  脱靶吞账、锁面 released 墓碑、`.done` 收尾硬证据否决判活——全部修复并有回归（§4.5/§6
+  同源纪律）；
+- 2026-10-12 00:04 E1+E2 组包 `run_failed(tool_use)`：E1 半成品经抢救单续作、E2 重排队
+  ——该次处置直接促成 §9 的 **WIP-salvage 先例**；
+- 委托期（10-11 23:2x → 10-12 07:00）到期撤销，期内自主决定全量可追溯于决策日志
+  （`kind=delegation`）；**后续愿景（用户裁决 2026-10-12）**：把「永不阻塞」做成受硬机制
+  保证的项目特性——除最终交付外系统不因等待用户停摆，代理授权点全量留痕、事后可追溯；
+- 2026-10-13 收官审查：ctx 水位闸绕过判决通道案 → 回退该闸 + **修复形状分流**（§5.3）+
+  **后台决策审计面** `pysci-mirror decisions`（§6）——三项均经用户裁决并落码。
+
 ---
 
 ## 13. 裁决记录
@@ -1043,9 +1198,12 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-10 | **修正 2026-10-09「credits 恒 0 根因=BYOK」判断**：实测 14 跳台账证明 BYOK 下 credits **依模型上报**——max 档（Qwen3.8-Max）正常计量（devops/reviewer/deputy 跳 13~1142 credits），flash 档（Qwen3.8-Flash）恒 0（figure/lit 跳）；usage tokens 两档均 0、唯 context_usage_ratio 恒有效。台账新增 `model` 字段 + `stats` 标注成本覆盖率（`format_credits`），使部分计量数据可解释。完整 token/账单核算仍按用户 2026-10-09 裁决留待未来（backlog 20261009-byok-cost-accounting 据此销账） | devops 实测（backlog 20261009-byok-cost-accounting） |
 | 2026-10-10 | **review 任务书嵌入目标陈述**（G2 独立性）：`orch review` 增 `--goal-from <原生产任务书>`/`--goal <文本>`，把组长撰写的目标陈述摘录嵌入审查任务书并登记进 review 记录（`goal_source`/`goal_excerpt`），使 reviewer 的 G2「与任务书目标一致」据组长原意独立核验、不再依赖生产者 notes.md 自述（消除与 charter 独立性纪律的张力）；缺省告警不中断。采纳 reviewer 建议 20261009-231455-reviewer | 组长采纳 + devops 实施（backlog 20261009-231455-reviewer） |
 | 2026-10-10 | **Harness 预算三层制 + 执法 + 身份锚定**：全量注入档每文件 ≤8 KB（charter/AGENTS.md）、常驻暴露档每类 description 合计 ≤8 KB、按需档单文件 ≤8 KB 总量不限；组员自建 rules 必须条件式（always_on 槽位只留 charter）。执法=delivery-gate 预算校验（组员侧）+ pre-commit（真本侧）+ doctor（巡检），条款入 basic.md §1、§3.1。既有 10 个超限 references 文件严格拆分一劳永逸（用户裁决「严格执行」）。插件 description 税与 MCP lazyLoad 列实测探索项。leader-only.md 增「身份锚定」条款加固新会话组长自我认知。MCP schema 不计入知识预算（属工具面）。全部基建改动入 backlog 六项（refs-split-8kb / budget-delivery-gate / budget-precommit / budget-doctor / plugin-tax-probe / mcp-lazyload-probe）交 devops | 用户三点裁决 + 组长实施 |
-| 2026-10-11 | **REFACTOR v1.0 定稿：评价驱动的自改进体系**（七轮迭代，用户终审通过；权威文档 `orchestration/REFACTOR.md`，E0–E7 分阶段实施）。核心裁决：① 目标优先级=客观优质>用户审美（审美为 tiebreaker/廉价替代）；② 不新增抽象层级、允许新增要素，改进管道自覆盖（豁口：inspector 不自巡其 CLI；twin 不自改权重）；③ 硬代码优先（教训：consult 软选项从不被使用）；④ 判决包连带决策：审批强制选 J（实施前仲裁：SiliconFlow 直连、非 Qwen 家族、阻塞≈1min、双序多数、材料撰写者侧组装）/M（基线捕获+实施后 bencher 副本 A/B 实测）/J+M（实测覆盖仲裁）/不选=override 留痕；「仅涉自身基建直通」原则移入 jury-brief（组长主观豁免取消）；⑤ 交付后核验零新裁决点、只实测不再仲裁、未改善自动立案纠正；⑥ 新成员 inspector（巡检找茬，「与用户视角相同但知识不同」，设计审查 rubric=社区优先/反冗余/LLM 直觉友好；双队列迟滞节流+全局开关；发现不经组长自行判决；无 override 权）、bencher（harness 实测，FIFO 非常驻，套件与基线区完全写权）、twin（审美孪生：冷启动无记忆、PREFERENCE.md 置 pod 内只读；客观通道模棱两可时回退终裁不给平局；吸收语料后免阈值直接上线，代理原需用户裁决事项——先决策后问责，上线/下线宣告权归用户；最终交付验收不代理）；⑦ 决策形式统一二选一，多选拆分为依序二元对局；⑧ Tier A 失败标签硬性接入（阈值自动立案，不指望组长有空）；⑨ 一成员一技能一 CLI，共享逻辑做库不做新 CLI（pysci-jury 撤销）；CLI 人体工学范本=Qoder CLI/commitizen；⑩ mirror 控制台（status 全景=用户唯一关注入口+注册纪律；review 盲审即训练→偏差报告绿色通道；journal 机械分流：偏好陈述→语料/行动指令→强制派发不得 override）；⑪ deputy/reviewer 降档 flash、新增 minimum 压测档（型号待选）；⑫ 每阶段自带可证伪成功判据，组件连续两 Phase 无改变决策的读数即退役 | 用户（七轮裁决）+ 组长起草 |
+| 2026-10-11 | **REFACTOR v1.0 定稿：评价驱动的自改进体系**（七轮迭代，用户终审通过；E0–E7 分阶段实施——2026-10-13 收官，生效机制已并入本文，见 §12 收官段）。核心裁决：① 目标优先级=客观优质>用户审美（审美为 tiebreaker/廉价替代）；② 不新增抽象层级、允许新增要素，改进管道自覆盖（豁口：inspector 不自巡其 CLI；twin 不自改权重）；③ 硬代码优先（教训：consult 软选项从不被使用）；④ 判决包连带决策：审批强制选 J（实施前仲裁：SiliconFlow 直连、非 Qwen 家族、阻塞≈1min、双序多数、材料撰写者侧组装）/M（基线捕获+实施后 bencher 副本 A/B 实测）/J+M（实测覆盖仲裁）/不选=override 留痕；「仅涉自身基建直通」原则移入 jury-brief（组长主观豁免取消）；⑤ 交付后核验零新裁决点、只实测不再仲裁、未改善自动立案纠正；⑥ 新成员 inspector（巡检找茬，「与用户视角相同但知识不同」，设计审查 rubric=社区优先/反冗余/LLM 直觉友好；双队列迟滞节流+全局开关；发现不经组长自行判决；无 override 权）、bencher（harness 实测，FIFO 非常驻，套件与基线区完全写权）、twin（审美孪生：冷启动无记忆、PREFERENCE.md 置 pod 内只读；客观通道模棱两可时回退终裁不给平局；吸收语料后免阈值直接上线，代理原需用户裁决事项——先决策后问责，上线/下线宣告权归用户；最终交付验收不代理）；⑦ 决策形式统一二选一，多选拆分为依序二元对局；⑧ Tier A 失败标签硬性接入（阈值自动立案，不指望组长有空）；⑨ 一成员一技能一 CLI，共享逻辑做库不做新 CLI（pysci-jury 撤销）；CLI 人体工学范本=Qoder CLI/commitizen；⑩ mirror 控制台（status 全景=用户唯一关注入口+注册纪律；review 盲审即训练→偏差报告绿色通道；journal 机械分流：偏好陈述→语料/行动指令→强制派发不得 override）；⑪ deputy/reviewer 降档 flash、新增 minimum 压测档（型号待选）；⑫ 每阶段自带可证伪成功判据，组件连续两 Phase 无改变决策的读数即退役 | 用户（七轮裁决）+ 组长起草 |
 
 | 2026-10-12 | **twin 初步上线宣告 + 渠道修订（用户裁决）**：① 用户审阅同意 PREFERENCE.md v1，指令优先吸收 prompts_storage「1近期」文件最新段后**初步上线**——「宁可粗糙但在用，先上线再说」（例外清单仅存的上线宣告权已交付，E7 接线单 #73）；② 仲裁渠道修订：三席官方直调 DEEPSEEK/GLM/KIMI（减平票）、SiliconFlow 降回退且回退必须案卷/status/mirror 三面告警、minimum 选型火山方舟 doubao-seed-2.0-mini（Key 载体=项目根 `.env` 非 OS 环境变量；需通用 Key/模型开通时用户指示联系）；③ basic.md §3 经用户授权修订：fallback 改 `uv run --no-sync`、改 pyproject 必先 `pysci-dev venv-sync`（隐式 sync 撞锁删入口事故固化）；④ 断点恢复实测通过（重启演练：孤儿回收/重派/黑匣子全绿）；⑤ 连环触顶根治立案：drain 组包不看任务尺寸（#72 --solo）、bencher A/B 空壳 done 无判决（#70 done 语义收紧）、E5a 续作含里程碑提交规程（#71） | 用户（四项）+ 组长立案 |
+| 2026-10-13 | **自改进体系实施收官（E0–E7 全链实证）**：各阶段成功判据逐项落地并经实战验证，生效机制全部并入本文（§1/§3.1/§4.1/§4.5/§5.3–5.5/§6/§9），原设计文档删除、仅存 git 历史；收官单=backlog 20261013-072000-leader | 用户终审授权 + 组长立案 |
+| 2026-10-13 | **PREFERENCE v2 生效 + twin 全量上线**：用户审阅确认 v2 转正（33 条语料蒸馏增量+4 修订入宪章），twin 判断通道由初步上线转全量；盲审/回测动线不变，下线权归用户 | 用户 |
+| 2026-10-13 | **修复形状分流 + 后台决策审计面（用户裁决）**：① 回退 ctx 水位闸（fe68a40 改了策略面却绕过判决通道、压缩防溢出使宣称收益无效——重启须经判决包并以真实账单/缓存读数为依据）；② 修复形状分流：inspector mechanical 免判决仅限 restore，change 无判决记录 → 任务书要求 devops 交付 blocked 上报（登记字段/任务书注入/charter 纪律三落点）；③ `mirror status` 注册「决策」项 + `pysci-mirror decisions` 决策链全貌（只读拼装、免判决+change 置顶） | 用户 |
 | 2026-10-13 | **路由 v3 谷时隐性 DeepSeek**（backlog 20261013-093000-leader）：DeepSeek 官方价分峰谷（峰 2 倍）→ 谷时自动把 qwen/mimo 预设的 **main** 席链换成 DeepSeek，`preset` 行不动（不新增预设）；判据 chinesecalendar（周末全天=含调休上班的周末、法定节假日全天、工作日其余时段；覆盖外年份/库缺席保守不切换并告警）；入谷即切、入峰提前 1 小时、**只影响新派发**（在途单跳台账 model 不变）。终裁修正：pro 席保持原预设升档席、仲裁团固定 GLM+KIMI+Mimo（矩阵 qwen/mimo/deepseek/隐性态四态定格）、**一律按量付费、TokenPlan 路径整个不做**（个人版条款禁 API 自动化调用）、缺 Key 席双面告警减员运行（平票 twin 终裁兜底）、被评模型同族回退席不上场；观测面 = `orch status` 路由段 + mirror 概览「路由」项 + 决策日志 `kind=routing`。附带：minimum 席链改 BYOK Mimo-V2.6-Flash（火山豆包调查关闭，P-25） | 用户设计 + 终裁 v4 |
 
 ## 14. 已知代价与风险

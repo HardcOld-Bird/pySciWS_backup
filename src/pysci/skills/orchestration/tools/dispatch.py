@@ -322,7 +322,7 @@ def _persist_suggestion(
     ``parse_suggestion_fields`` 无论建议正文是否自带 ``kind:`` 行都能读到权威分类
     （正文若自带则以头部这条为准——它来自被 gate 校验过的属性）。
 
-    E5b（REFACTOR §5.1 例外通道）：同处理由把**当条交付类型**也写成头部 ``delivery:``
+    E5b（README §5.3 例外通道）：同处理由把**当条交付类型**也写成头部 ``delivery:``
     标记行。「缺陷类且交付含 blocked」这个判据必须在落盘时就固化——组长审批时若只能靠
     台账反查那一跳，反查不到的（归档、清理）就一律走不到例外通道，而那是最该免检的一类。
 
@@ -412,7 +412,7 @@ def do_dispatch(
     禁止双进程同 sid 并发写会话历史（184000 修复面④/192119）。
 
     ``attach_replies=False``：不把组长的审批回复附进提示词、也不归档 ``sent/``
-    （REFACTOR §3：harness 压测跳必须与「生产跳」隔离，否则回复里的上下文会让
+    （README §5.5：harness 压测跳必须与「生产跳」隔离，否则回复里的上下文会让
     压测结果不可比——``orch eval run`` 走这一支）。
 
     ``eval_hop=True``（``orch eval run`` 的压测跳）：不写成员生产台账
@@ -450,7 +450,7 @@ def do_dispatch(
         return DispatchOutcome(
             code=2, kind="run_failed", member=member_id, error="pod 不存在"
         )
-    # 无记忆纪律（REFACTOR §9：twin 每次判断必须冷启动）：会话复用在此硬拦。写成
+    # 无记忆纪律（README §3.1：twin 每次判断必须冷启动）：会话复用在此硬拦。写成
     # 「charter 里劝一句」就必然被忘——纪律要落成 exit（§0.3 硬代码优先）。
     if m.raw.get("cold_start") and session != "new":
         if not quiet:

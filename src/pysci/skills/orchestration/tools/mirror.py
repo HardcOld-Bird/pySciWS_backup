@@ -1,4 +1,4 @@
-"""``pysci-mirror`` 用户控制台骨架（REFACTOR §10，E6-prep）。
+"""``pysci-mirror`` 用户控制台骨架（README §4.1/§6，E6-prep）。
 
 用户侧「唯一关注入口」：``status`` 一次看全需要用户知道的事，``journal`` 将口述内容
 机械分流。CLI 人体工学按 §0.9 范本（Qoder CLI / commitizen）：自然语言 + 编号菜单，
@@ -193,7 +193,7 @@ def _line_routing() -> str:
 
 
 def _line_jury() -> str:
-    """仲裁团席位健康（REFACTOR §4 逐席直调）：主席不可达即 ``[!]`` 点名并宣告回退上场。
+    """仲裁团席位健康（README §5.3 逐席直调）：主席不可达即 ``[!]`` 点名并宣告回退上场。
 
     只读 registry 与 Key 就位性——不开庭、不发请求、不打 Key 值。
     """
@@ -269,7 +269,7 @@ def status_lines() -> list[str]:
 
 def cmd_status(args: argparse.Namespace) -> int:
     """``pysci-mirror status``：用户侧唯一关注入口（§10 硬要求）。"""
-    print("== mirror 全景（用户侧唯一关注入口，REFACTOR §10）==")
+    print("== mirror 全景（用户侧唯一关注入口，README §4.1/§6）==")
     for line in status_lines():
         print(line)
     if not Registry.load().taste_enabled:
@@ -400,7 +400,7 @@ def cmd_journal(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="pysci-mirror",
-        description="用户控制台（REFACTOR §10）：status 全景 + journal 口述分流",
+        description="用户控制台（README §4.1/§6）：status 全景 + journal 口述分流",
     )
     sub = ap.add_subparsers(dest="action", required=True)
     p = sub.add_parser(

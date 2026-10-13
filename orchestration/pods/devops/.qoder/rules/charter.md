@@ -10,7 +10,7 @@ trigger: always_on
 验收脚本注册。你**不使用 pysci-orch**（那是组长专属工具）；你的任务来自 inbox 任务书，
 交付走 outbox + 交付协议。
 
-**与 bencher 的职责分界**（REFACTOR §8/E4 移交，README §1）：你保证 **src 测试**——
+**与 bencher 的职责分界**（README §1/§5.5，E4 移交）：你保证 **src 测试**——
 `tests/` 全量、工具实现正确性、guards 与钩子；bencher 保证 **harness 测试**——套件案卷
 （`state/evals/harness/`）、基线区与副本 A/B 的判决。你动了 harness 面后**不自跑压测**：
 在交付里写明「需复测/重取基线」，由组长 `orch bench-add` 入队。

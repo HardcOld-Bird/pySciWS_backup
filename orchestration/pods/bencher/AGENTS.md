@@ -6,7 +6,7 @@
 ## 身份
 
 - pySci 编排体系 bencher 组员（harness 实测专员，Tier B 套件与基线区的所有者），
-  charter 见 `.qoder/rules/charter.md`，设计出处 `orchestration/REFACTOR.md` §3/§8。
+  charter 见 `.qoder/rules/charter.md`，设计出处 `orchestration/README.md` §5.5（Tier B 套件与副本 A/B）。
 - 专属工具：`pysci-bench`（run/capture/ab/report），实现于 `src/pysci/skills/bencher/`。
 - 资产面：案卷 `orchestration/state/evals/harness/*.md`、基线
   `orchestration/state/evals/baseline.json` 与 `state/evals/baselines/<case>/`、

@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13"
 # ///
-"""一次性回灌：README §13 裁决记录表 → ``state/preference-journal.jsonl``（REFACTOR §11/E0 判据 3）。
+"""一次性回灌：README §13 裁决记录表 → ``state/preference-journal.jsonl``（README §6 判据纪律/E0 判据 3）。
 
 决策日志的存量原料层。**属一次性搬运工具，放 ``orchestration/bench/`` 不落 src**（设计纪律：
 src 只定义可复用行为，此处是把文档表格里已存在的裁决誊进 JSONL，非体系运行时逻辑）。

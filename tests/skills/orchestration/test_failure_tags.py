@@ -1,6 +1,6 @@
 """Tier A 失败标签全链（E1，backlog 20261011-233001-leader）：解析→台账→统计。
 
-覆盖 REFACTOR §2 的数据面（词表读取、``<blocked tags=…>`` 解析、台账持久化、
+覆盖 README §5.4 的数据面（词表读取、``<blocked tags=…>`` 解析、台账持久化、
 滑窗计数与呈现）；§2.4 的**立案**后果见 ``test_tier_a_filing.py``，guard 侧
 校验见 ``test_delivery_gate_tags.py``。
 

@@ -1,5 +1,5 @@
 // delivery-gate：交付协议格式强制 + 失败标签词表校验 + 组员自维护层 harness 预算硬闸
-//（README §3.4 / §9；basic.md §1 三档裁决；REFACTOR §2 tags）。
+//（README §3.4 / §9；basic.md §1 三档裁决；README §5.4 tags）。
 // Stop hook：① 最终回复缺 <result>/<blocked> → exit 2 退回改正；② <infra_suggestion> 的
 // kind、<blocked> 的 tags 若存在必须落在受控词表内 → exit 2 + 精确整改指令；③ pod 的
 // AGENTS.md / 自建 rules / 自建 skills 超预算或违规 always_on → exit 2 + 精确整改指令。
@@ -37,7 +37,7 @@ const ATTRS = String.raw`(?:"[^"\n]*"|'[^'\n]*'|[^>"'])*`;
 const TAG_RE = new RegExp(
   `<result\\b${ATTRS}>[\\s\\S]*</result>|<blocked\\b${ATTRS}>[\\s\\S]*</blocked>`,
 );
-// E0-B（REFACTOR §12 判据 1）：改进提案必须结构化分类。infra_suggestion 块非空时
+// E0-B（README §6 判据纪律）：改进提案必须结构化分类。infra_suggestion 块非空时
 // kind 属性必填且须落在词表内——这是后续判决包分流（E5）的地基。
 // 词表**只有一份**：state/failure-tags.json 的 infra_kinds 段（Python 侧
 // failure_tags.load_infra_kinds() 读同一段）。下面的清单仅是文件读不到时的兜底，
@@ -50,7 +50,7 @@ const INFRA_RE = new RegExp(
   `<infra_suggestion\\b(${ATTRS})>([\\s\\S]*?)</infra_suggestion>`,
   'g',
 );
-// E1（REFACTOR §2）：`<blocked tags="a,b">` 的失败标签受控词表。词表**只有一份**，
+// E1（README §5.4）：`<blocked tags="a,b">` 的失败标签受控词表。词表**只有一份**，
 // 落在 state/failure-tags.json（Python 侧 failure_tags.load_tags() 读同一文件）——
 // 这里不复制清单，否则两侧口径必然漂移（漂移的后果是组员被拦在两边不同的词表下）。
 const BLOCKED_RE = new RegExp(`<blocked\\b(${ATTRS})>([\\s\\S]*?)</blocked>`);
@@ -89,7 +89,7 @@ function run() {
     );
   }
 
-  // E0-B（REFACTOR §12 判据 1）：非空 <infra_suggestion> 必须带合法 kind 属性——
+  // E0-B（README §6 判据纪律）：非空 <infra_suggestion> 必须带合法 kind 属性——
   // 结构化分类是后续判决包分流（E5）的地基。块为空则不执法（无建议可分类）。
   // 逐块校验：解析器（delivery._INFRA_RE）只取第一块，所以「第一块合法、后块违规」的
   // 交付同样会让违规内容在队列里隐形——这里把每一块都过一遍词表。
@@ -116,7 +116,7 @@ function run() {
     }
   }
 
-  // E1（REFACTOR §2）：<blocked tags="a,b"> 的失败标签必须落在受控词表内——同一条
+  // E1（README §5.4）：<blocked tags="a,b"> 的失败标签必须落在受控词表内——同一条
   // 「分类必须结构化」的纪律（上面 kind 那条）之失败侧：没有标签，§2.4 的滑窗统计
   // 就没有原料，深层结构问题永远藏在单条 blocked 里。缺省不标注**合法**（空列表），
   // 只有标了才校验标得对不对——否则组员会被「不许沉默」和「不许标错」夹住。
@@ -233,7 +233,7 @@ function budgetProblems(pod, out) {
 }
 
 // ---------------------------------------------------------------------------
-// 失败标签词表（E1，REFACTOR §2）
+// 失败标签词表（E1，README §5.4）
 // ---------------------------------------------------------------------------
 
 /** tags 属性值 → 标签数组：分隔符宽容（半/全角逗号、分号、空白）、小写化、去重。

@@ -46,14 +46,14 @@ __pycache__/
 /orchestration/state/devops.lock
 /orchestration/state/devops-runs/
 /orchestration/state/devops.cancel
-# bencher 测量 worker 运行态（REFACTOR §8/E4，同一套 git 策略）：FIFO 队列本体、
+# bencher 测量 worker 运行态（README §5.5/E4，同一套 git 策略）：FIFO 队列本体、
 # 互斥锁、run 日志与 .done、协作取消信号。永久审计在 git 提交 + ledger + A/B 判决文档，
 # 队列只是「还没消化完的工作」，随跑随变，入库会让 main 工作区每跳必 dirty。
 /orchestration/state/bencher/
 /orchestration/state/bencher.lock
 /orchestration/state/bencher-runs/
 /orchestration/state/bencher.cancel
-# inspector 巡检引擎运行态（REFACTOR §7/E5a，同一套 git 策略）：巡检队列、发现台账、
+# inspector 巡检引擎运行态（README §6/E5a，同一套 git 策略）：巡检队列、发现台账、
 # 迟滞闸当前态、晋升证据正文、互斥锁、run 日志与 .done、协作取消信号。发现要留下的
 # 永久痕迹都已外溢到 backlog.json + preference-journal.jsonl + ledger（晋升面），
 # findings.jsonl 本身是「本轮巡检的过程态」，入库会让 main 工作区每次自主巡检必 dirty。
@@ -68,7 +68,7 @@ __pycache__/
 # orch watch 的基线快照/心跳（backlog 20261010-orch-watch）：纯运行态观察面，
 # 事件已随 orch status 补账清算，无审计价值
 /orchestration/state/watch.json
-# Tier A 自动立案的指纹去重台账（REFACTOR §2.4，backlog 20261011-233001-leader）：
+# Tier A 自动立案的指纹去重台账（README §5.4，backlog 20261011-233001-leader）：
 # 每次 status/approve 都可能改写，纯运行态记忆（「同指纹 24h 内不重复立案」）。
 # 立案这件事本身记在 suggestions/ 与 backlog.json 里，审计价值在那两侧，故本文件不入库。
 /orchestration/state/tier-a-filed.json

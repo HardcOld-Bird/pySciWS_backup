@@ -1,4 +1,4 @@
-"""``pysci-bench``——bencher 组员的测量工具面（REFACTOR v1.0 §3/§8；E4）。
+"""``pysci-bench``——bencher 组员的测量工具面（README §5.5；E4）。
 
 四条命令面（**全部复用**共享库，本文件只做参数装配与读数呈现）：
 

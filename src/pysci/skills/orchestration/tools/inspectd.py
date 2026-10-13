@@ -1,4 +1,4 @@
-"""inspector 闲时巡检引擎（REFACTOR v1.0 §7/§5.2；E5a，backlog 20261012-120003-leader）。
+"""inspector 闲时巡检引擎（README §6；E5a，backlog 20261012-120003-leader）。
 
 **这个模块管的是「什么时候允许 inspector 花资源」，不是「巡检怎么做」**——后者是 inspector
 组员自己的会话工作（见 ``orchestration/pods/inspector/`` charter 与技能）。§7 的成本控制
@@ -78,7 +78,7 @@ FINDINGS_PATH: Path = STATE_DIR / "findings.jsonl"
 #: 每轮重算会把迟滞变成抖动（上一轮暂停、这一轮看不到自己曾暂停 → 立即恢复）。
 THROTTLE_PATH: Path = STATE_DIR / "throttle.json"
 
-#: 全局开关文件（REFACTOR §7「默认开启」⇒ **缺席=on**，显式写 ``false`` 才关）。
+#: 全局开关文件（README §6「默认开启」⇒ **缺席=on**，显式写 ``false`` 才关）。
 ENABLE_PATH: Path = ORCH_STATE_ROOT / "inspector.enabled"
 
 #: 巡检工作队列（§7①「queue-first」：组长指派核查与 Tier A 案文撰写排在这里）。

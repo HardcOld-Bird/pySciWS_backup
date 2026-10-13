@@ -1,4 +1,4 @@
-# Tier A 失败标签与阈值自动立案（REFACTOR v1.0 §2/§2.4）
+# Tier A 失败标签与阈值自动立案（README §5.4）
 
 组长侧只记调用面，本页是 `orch status` / `orch stats` 出现 tier-a 条目时的处置依据。
 

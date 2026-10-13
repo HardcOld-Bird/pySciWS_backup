@@ -83,7 +83,7 @@ STATE_REL_PATH: str = "orchestration/state"
 #: 角色 → 出厂首席型号（平读面 :attr:`Registry.models` 的保守底）。main/pro 的真实席位链
 #: **随预设**（:mod:`presets` 与跟踪 registry 的 ``presets`` 块），这里两个空串只在
 #: 「预设不可激活」时兜底——空 = 不传 ``-m``，宁窄不猜（未解析的人名当默认会让 exe 启动即失败）。
-#: ``minimum`` = harness 压测专用最低成本档（REFACTOR §1.1），**独立链、不随预设走**。
+#: ``minimum`` = harness 压测专用最低成本档（README §3.5），**独立链、不随预设走**。
 DEFAULT_MODELS: dict[str, str] = {
     "main": "",
     "pro": "",
@@ -188,7 +188,7 @@ _MODEL_LINE_RE = re.compile(
 #: 绝对值对外汇报，先按上面这条对照重新标定，别默认 0.6 是测量值。
 DEFAULT_TOKENS_PER_CHAR = 0.6
 
-#: Tier A 阈值自动立案参数（REFACTOR §2.4，用户裁决 v0.5）：同一 ``(标签, 成员)`` 在
+#: Tier A 阈值自动立案参数（README §5.4，用户裁决 v0.5）：同一 ``(标签, 成员)`` 在
 #: **滑窗内**（``window_days`` 天 或 ``window_hops`` 跳，取并集）失败标签出现
 #: ``threshold`` 次 → orch 在 status/approve 入口自动登记基建提案。设计要点：
 #: 计数、立案全代码完成，人只在强制选择点出现——「组长有空去看」不是机制。
@@ -200,7 +200,7 @@ DEFAULT_TIER_A: dict[str, int] = {
 }
 
 
-#: Tier C 仲裁团配置（REFACTOR §4；E3-prep 单渠道，E3-live 改**逐席 provider**）。
+#: Tier C 仲裁团配置（README §5.3；E3-prep 单渠道，E3-live 改**逐席 provider**）。
 #: **seats 默认空**：选型权归用户（各提供商的账号与付费面是用户的），代码只负责一条硬
 #: 规则——面板不得含**被评模型同族**型号（排除同族自恋偏差；「同族」随预设/谷时隐性态
 #: 相对化，见 :func:`.routing.producer_family`），不做模型能力判断也不内置候选清单。
@@ -273,12 +273,12 @@ def normalize_seat(raw: Any) -> dict[str, Any] | None:
 
 
 #: twin 判断通道（``orch taste``）的生效开关默认值。**False 是设计而不是缺省占位**：
-#: PREFERENCE.md v1 是草案，生效确认权归用户（REFACTOR §9.4「上线留用户」），故代码
+#: PREFERENCE.md v1 是草案，生效确认权归用户（README §1 代理裁决「上线留用户」），故代码
 #: 不替用户按下这个开关；用户确认草案后把 registry.json 顶层 ``taste_enabled`` 置 true。
 #: 值非布尔（笔误/字符串）→ 回落 False：这条通道宁可不开，不可误开。
 DEFAULT_TASTE_ENABLED = False
 
-#: inspector 闲时巡检引擎参数（REFACTOR §7/§5.2，E5a）。设计纪律同 :data:`DEFAULT_TIER_A`：
+#: inspector 闲时巡检引擎参数（README §6，E5a）。设计纪律同 :data:`DEFAULT_TIER_A`：
 #: 节流与预算是**成本控制机制**，读不到配置就按出厂值跑（fail-open），不许因笔误停摆。
 #: registry.json 顶层 ``inspector`` 块逐键覆盖。
 #:
@@ -888,7 +888,7 @@ class Registry:
 
     @property
     def tier_a(self) -> dict[str, int]:
-        """Tier A 滑窗与阈值（见 :data:`DEFAULT_TIER_A`，REFACTOR §2.4）。
+        """Tier A 滑窗与阈值（见 :data:`DEFAULT_TIER_A`，README §5.4）。
 
         逐键 fail-open：缺失/非数/非正 → 该键回落默认。统计与自动立案都靠这三个数
         决定「何时算反复出现」，读不到配置不该让它们停摆——宁可按出厂阈值跑。
@@ -911,7 +911,7 @@ class Registry:
 
     @property
     def jury(self) -> dict[str, Any]:
-        """Tier C 仲裁团配置（见 :data:`DEFAULT_JURY`，REFACTOR §4，E3-live 逐席 provider）。
+        """Tier C 仲裁团配置（见 :data:`DEFAULT_JURY`，README §5.3，E3-live 逐席 provider）。
 
         逐键 fail-open：类型不符 → 该键回落默认（宁按出厂值跑，不让配置笔误停摆）。
         ``seats`` 只保证「规范化席位表」这一形状，**不在此处过滤 Qwen**——硬规则的违约
@@ -967,7 +967,7 @@ class Registry:
 
     @property
     def inspector(self) -> dict[str, Any]:
-        """inspector 巡检引擎参数（见 :data:`DEFAULT_INSPECTOR`，REFACTOR §7/§5.2）。
+        """inspector 巡检引擎参数（见 :data:`DEFAULT_INSPECTOR`，README §6）。
 
         逐键 fail-open（非数/非正 → 该键回落默认），但迟滞四键是**成对校验**：
         ``resume_*`` 必须严格小于 ``pause_*``，否则整对回落出厂值——配成 ``pause<=resume``

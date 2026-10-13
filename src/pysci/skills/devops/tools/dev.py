@@ -188,7 +188,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     inbox 积压；外加「部署台账巡检」（联动 ``sync --check``，捕获 skills-deployed.json
     记录哈希相对真本的漂移（[*]）与副本漂移（[!]））与「harness 预算审计」（basic.md §1
     三档尺寸：真本与根 rules 每文件、pod 自维护层、技能 description 行合计）与
-    「API Key 泄漏哨兵」（扫 git 跟踪文件找疑似密钥形态，REFACTOR §14）。"""
+    「API Key 泄漏哨兵」（扫 git 跟踪文件找疑似密钥形态，README §14）。"""
     print("== pod 巡检 ==")
     pods = (
         [PODS_ROOT / args.pod]
@@ -287,7 +287,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     else:
         print("  [√] orchestration/state/** 跟踪面无未提交改动")
     print()
-    # API Key 泄漏哨兵（REFACTOR §14、E3-prep）：Key 只能由用户本人提供且永不入库，
+    # API Key 泄漏哨兵（README §14、E3-prep）：Key 只能由用户本人提供且永不入库，
     # 而「永不入库」一旦只是纪律就会随某次提交进 git 历史。扫 git 跟踪文件找疑似密钥
     # 形态（tests/ 豁免：假 Key 是阳性用例素材），命中即硬失败；git 不可用只 advisory。
     print("== API Key 泄漏哨兵 ==")

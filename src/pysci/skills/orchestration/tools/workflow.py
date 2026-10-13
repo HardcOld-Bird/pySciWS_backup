@@ -200,7 +200,7 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
                 continue
             if it.get("solo"):
                 # 大单不并批（backlog 20261012-170301-leader）：并批必触该跳 max_turns
-                # 腰斩，且「没做」伪装成「做了」比 blocked 危险（REFACTOR §14）
+                # 腰斩，且「没做」伪装成「做了」比 blocked 危险（README §14）
                 continue
             # 组包只吃**同档位**：一批只有一跳，effort 是跳级参数——混档会让被标的项
             # 按种子档位跑完，静默污染台账 A/B 数据（backlog 20261010-orch-effort-per-item）
@@ -345,7 +345,7 @@ def backlog_complete(
     batch_size/batch_seed：批量消化时记录本条目所属批次（同批一起 done 的条目数与
     种子 id），供 orch stats 批量大小分布与审计；单条消化时留空。
 
-    E5b（REFACTOR §5.6）：done 之后自动为带 M 通道（``--bench``）的条排出 A/B 核验项——
+    E5b（README §5.3 核验闭环）：done 之后自动为带 M 通道（``--bench``）的条排出 A/B 核验项——
     核验方式在审批时一次定死，交付后不再有人裁决，所以这一步必须机械发生。核验入队
     失败不能让销账本身失败（条目已交付是事实），故 fail-soft 打印并继续。
     """
@@ -783,7 +783,7 @@ def cmd_suggestions(args) -> int:
 
 def cmd_approve(args) -> int:
     """采纳建议：入 backlog FIFO + 写审批回复（下次派发自动附送）。"""
-    # Tier A 阈值扫描（REFACTOR §2.4）：每次审批入口机械重算，把越限的失败标签立成案。
+    # Tier A 阈值扫描（README §5.4）：每次审批入口机械重算，把越限的失败标签立成案。
     tier_a_sweep()
     sugg = _find_suggestion(args.suggestion_id)
     if sugg is None:
@@ -791,7 +791,7 @@ def cmd_approve(args) -> int:
         return 2
     member = _member_of(sugg)
     body = sugg.read_text(encoding="utf-8")
-    # E0-B（REFACTOR §12 判据 2/3）：backlog 条目须带结构化 kind 与可证伪 success_criteria。
+    # E0-B（README §6 判据纪律）：backlog 条目须带结构化 kind 与可证伪 success_criteria。
     # 从建议正文解析（约定标记行），success_criteria 可由 --criteria 补录；缺任一 → 拒绝入队。
     kind, criteria = parse_suggestion_fields(body)
     cli_criteria = (getattr(args, "criteria", "") or "").strip()
@@ -828,10 +828,10 @@ def cmd_approve(args) -> int:
             f"[!] 建议 '{sugg.stem}'（kind={kind}）缺可证伪成功判据，拒绝入队。\n"
             "    补写其一：① 在建议正文加 `success_criteria` 标记行 + 其后要点；"
             '② 或本次 approve 追加 --criteria "<做完后如何机械验证算成功>"。'
-            "（REFACTOR §12 判据 3：无判据的提案不可证伪，不进队。）"
+            "（README §6 判据纪律：无判据的提案不可证伪，不进队。）"
         )
         return 2
-    # ---- E5b 判决包闸（REFACTOR §5.1）：基建判断须与组长职责事实分离 ----
+    # ---- E5b 判决包闸（README §5.3）：基建判断须与组长职责事实分离 ----
     delivery = verdict.delivery_of(body)
     channel, gate_err = verdict.validate(args, kind=kind, delivery=delivery)
     if gate_err:
@@ -971,7 +971,7 @@ def cmd_approve(args) -> int:
     tail = ""
     if verify:
         tail = (
-            f"\n判决通道={channel}（REFACTOR §5.6）：基线 commit "
+            f"\n判决通道={channel}（README §5.3）：基线 commit "
             f"{verify['baseline_commit']}，已排基线捕获 {verify['baseline_item']}；"
             "本条合并销账时自动入 A/B 核验队列，判决直接落地（改善→销账、"
             "未改善→自动立案纠正提案、不可判→挂起呈组长）。\n"
@@ -996,7 +996,7 @@ def cmd_approve(args) -> int:
 
         _, msg = wake_devops()
         print(f"    {msg}")
-    # 巡检内嵌拉起之三（REFACTOR §7）：审批是组长「把一批工作交出去」的时刻，交完之后的
+    # 巡检内嵌拉起之三（README §6）：审批是组长「把一批工作交出去」的时刻，交完之后的
     # 空闲正是 inspector 的窗口。让路/迟滞由引擎判定，这里只负责「想起来要试」。
     from .inspectd import (
         ensure_inspector,  # 延迟导入：inspectd↔workflow 成环（晋升管道要写 backlog）
@@ -1057,7 +1057,7 @@ def _finalize_rejection(
 def cmd_reject(args) -> int:
     """否决建议：**必须附 ``--override`` 判决依据**（留痕入决策日志），否则非零退出。
 
-    REFACTOR v1.0 §5.1/E0——组长对组员基建提案的否决 = override（有判决依据的 reject
+    README §5.3/E0——组长对组员基建提案的否决 = override（有判决依据的 reject
     才算 override；无依据的否决不合规）。当前 approve 侧判决包（J/M/J+M）E5 才实装，
     故 E0 阶段一切 reject 均属 override，强制留痕。缺失 → 非零退出 + 可读提示；
     提供 → 正常否决（写回复 + 移入 rejected/）并自动追加 journal 行
@@ -1068,7 +1068,7 @@ def cmd_reject(args) -> int:
         print(
             "[!] 否决必须附判决依据（override 留痕）：orch reject <id> --override "
             '"<详细理由>"\n'
-            "    无 --override 的否决不合规（REFACTOR §5.1/E0：reject=override，须计入 "
+            "    无 --override 的否决不合规（README §5.3/E0：reject=override，须计入 "
             "override 率并落决策日志供审计回放）。"
         )
         return 2
@@ -1200,7 +1200,7 @@ def _print_backlog_stats() -> None:
 
 #: 立案指纹台账（运行态，gitignore）：``{"version":1,"filed":{fp: 立案时刻}}``。
 TIER_A_FILED_PATH = ORCH_STATE_ROOT / "tier-a-filed.json"
-#: 同一立案指纹的重复抑制窗（REFACTOR §2.4「同指纹 24h 内不重复立案」）。
+#: 同一立案指纹的重复抑制窗（README §5.4「同指纹 24h 内不重复立案」）。
 TIER_A_DEDUP_HOURS = 24
 
 
@@ -1247,7 +1247,7 @@ def tier_a_sweep(
 ) -> list[str]:
     """§2.4 阈值自动立案：同一 ``(标签, 成员)`` 在滑窗内达阈值 → 登记基建提案。
 
-    在 ``orch status`` / ``orch approve`` 入口机械调用（REFACTOR §0 设计纪律 1：统计必须
+    在 ``orch status`` / ``orch approve`` 入口机械调用（README §5.4 硬性依赖：统计必须
     被流程硬性依赖，不靠「组长有空去看」）。产出的是**待审批提案**
     ``suggestions/<ts>-tier-a.md``（``kind: defect`` + 正文 ``kind:``/``success_criteria``
     标记行齐备，故直接走现行 approve 面），而不是直接写 backlog——§5.1 把「是否接受
@@ -1390,7 +1390,7 @@ def _tier_a_proposal(
         f"kind: defect\n"
         f"**{member} 的 `{tag}` 类失败在 {params['window_days']} 天 / "
         f"{params['window_hops']} 跳滑窗内累计 {total} 次**"
-        f"（阈值 {params['threshold']}，REFACTOR §2.4 自动立案）\n\n"
+        f"（阈值 {params['threshold']}，README §5.4 自动立案）\n\n"
         f"source: tier-a\n"
         f"fingerprint: {fingerprint}\n\n"
         f"标签定义（词表 {orchestration_rel(TAGS_PATH)}）："
@@ -1409,7 +1409,7 @@ def _tier_a_proposal(
 
 
 def format_failure_section(entries: list, *, tier: dict[str, int] | None = None) -> str:
-    """Tier A 失败标签段（REFACTOR §2）：滑窗计数 + 阈值标注，渲染成可打印多行文本。
+    """Tier A 失败标签段（README §5.4）：滑窗计数 + 阈值标注，渲染成可打印多行文本。
 
     窗口与阈值都取自 registry ``tier_a``（:meth:`Registry.tier_a`），与 :func:`tier_a_sweep`
     的立案判定同一把尺——统计上看着达标的标签，立案逻辑必须同样够得着，两侧不许各算各的。

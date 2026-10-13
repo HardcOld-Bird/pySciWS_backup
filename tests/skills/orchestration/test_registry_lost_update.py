@@ -1,4 +1,4 @@
-"""registry 配置面磁盘权威（backlog 20261011-220621-leader，REFACTOR 首战缺陷）。
+"""registry 配置面磁盘权威（backlog 20261011-220621-leader，自改进体系首战缺陷）。
 
 实锤形状：21:05:57 drain worker 启动并 ``Registry.load()``（deputy/reviewer=max）→
 21:42:41 E0-C 批次合并降档 flash+tier_note（HEAD 正确）→ 22:04 实测工作树**回退为 max、
@@ -80,7 +80,7 @@ def test_stale_worker_runtime_write_keeps_merged_config(iso_registry):
 
     merged = _cfg()  # ← 21:42:41 E0-C 批次合并进磁盘
     merged["members"]["deputy"]["model_tier"] = "flash"
-    merged["members"]["deputy"]["tier_note"] = "2026-10-11 REFACTOR v1.0 §1.1 定稿降档"
+    merged["members"]["deputy"]["tier_note"] = "2026-10-11 模型策略 §1.1 定稿降档"
     merged["members"]["devops"]["effort"] = "high"
     merged_text = json.dumps(merged, ensure_ascii=False, indent=2)
     reg_file.write_text(merged_text, encoding="utf-8")

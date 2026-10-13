@@ -1,4 +1,4 @@
-"""inspector 巡检引擎的行为面回归（REFACTOR v1.0 §7/§5.2；E5a，backlog 20261012-120003-leader）。
+"""inspector 巡检引擎的行为面回归（README §6；E5a，backlog 20261012-120003-leader）。
 
 在位性（脚手架/注册表/CLI 入口/文档）由 ``test_inspector_pod.py`` 量；本文件量**闸门**：
 §7 的四类成本控制（全局开关、幂等拉起、单次激活预算到顶自停、让路）与 §5.2 的分流

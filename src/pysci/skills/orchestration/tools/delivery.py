@@ -3,7 +3,7 @@
 协议：``<result>`` 与 ``<blocked>`` 互斥且必居其一（delivery-gate hook 已在成员侧
 强制，本模块是第二道防线）；``<infra_suggestion>`` 可选；``<artifact>`` 内嵌于
 result，声明机械验收类型；``<blocked>`` 可选 ``tags="a,b"`` 失败标签（受控词表见
-:mod:`.failure_tags`，REFACTOR §2）。
+:mod:`.failure_tags`，README §5.4）。
 
 **协议扩展有滚动升级窗口**：解析器是派发进程**启动时 import** 的快照，本模块合并进
 HEAD 对此后**新起**的进程才生效。旧进程遇到新属性形态会整块看不见 → 判 ``parse_error``
@@ -91,7 +91,7 @@ class Delivery:
     infra_kind: str = (
         ""  # E0-B：非空 infra_suggestion 的 kind 属性（defect/usability/""）
     )
-    #: E1（REFACTOR §2）：<blocked> 的 tags 属性 → 失败标签列表（已规范化，未校词表——
+    #: E1（README §5.4）：<blocked> 的 tags 属性 → 失败标签列表（已规范化，未校词表——
     #: 校验在 gate 侧，本侧只负责把组员标的内容如实记进台账）。缺省空列表。
     tags: list[str] = field(default_factory=list)
     #: 宽松兜底命中时的告警（严格面什么都没扫到、宽松面扫到一块）。**空串=正常路径**，

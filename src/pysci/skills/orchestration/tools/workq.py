@@ -1,4 +1,4 @@
-"""成员工作队列的通用原语（REFACTOR §0.9：共享逻辑做库，不做第二套实现）。
+"""成员工作队列的通用原语（README §1「共享逻辑做库，不做第二套实现」）。
 
 bencher 的测量队列（§8）与 inspector 的巡检队列（§7）是**同一种东西**：FIFO 运行态 JSON
 文件，条目走 ``pending → in_progress → done|failed`` 状态机。E4 把这套读写写在
