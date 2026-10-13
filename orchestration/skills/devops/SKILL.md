@@ -30,7 +30,7 @@ PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
 # 4. 合并回 main（先在 worktree 内 commit；cz 规范、pre-commit 全过、禁 --no-verify）：
 pysci-dev worktree merge <任务名>   # 交集检查 → cp 运行态 → merge --no-ff → 会话数自检
                                     #   → **成功自动摘面**（失败/blocked 保留；--keep 留检视）
-                                    #   交集非空 rc=2 列文件（merge-base 起算，勿手算）
+                                    #   交集非空 rc=2 列文件（merge-base 起算）；--no-cp-state 不搬运行态
 # 5. 推送（跨平台超时 + 成败留痕；best-effort）
 pysci-dev push
 # 6. 清理：merge 已自动做；遗留面 `pysci-dev worktree clean [--apply]`（未合入拒绝；脏面 --discard）
@@ -39,7 +39,7 @@ pysci-dev push
 **主树同步入口/依赖一律 `pysci-dev venv-sync`**（裸 `uv sync`/`uv run` 遇运行中 exe 会先删光
 其余入口，半坏态静默；见 `references/uv-venv-sync.md`）。
 
-worktree 不含 gitignored 未跟踪重数据；需真数据时以绝对路径只读引用主树（同 README §7）。
+worktree 不含 gitignored 未跟踪重数据；需真数据时以绝对路径只读引用主树。
 
 **worktree 命名约定**：drain/backlog 派发用**条目 id**（或异名重建后的 `<id>-r<N>`）作
 `<任务名>`（孤儿回收五面含**进程**/**进度**，据此定位；细节见 `references/worktree-merge.md` §3）。

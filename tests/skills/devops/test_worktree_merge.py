@@ -296,6 +296,46 @@ def test_cmd_merge_propagates_git_failure(tmp_path, monkeypatch, fake_git):
     assert rc == 1
 
 
+def test_cmd_merge_thin_runtime_offers_no_cp_state_channel(
+    tmp_path, monkeypatch, fake_git, capsys
+):
+    """会话数倒退中止时，[NEXT] 必须给出「不搬运行态」通道（backlog 20261012-194305-devops）
+    ——不再逼使用者绕开工具手敲 `git merge --no-ff`。"""
+    wt, main = tmp_path / "wt", tmp_path / "main"
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(1))
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(41))
+    calls, _ = fake_git
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+
+    rc = dev.cmd_worktree_merge("foo", wt)
+
+    assert rc == 2
+    out = capsys.readouterr().out
+    assert "[NEXT]" in out and "--no-cp-state" in out
+    assert not any(c[0] == "merge" for c in calls), "中止早于 merge"
+
+
+def test_cmd_merge_no_cp_state_merges_and_keeps_main_runtime(
+    tmp_path, monkeypatch, fake_git, capsys
+):
+    """`--no-cp-state`：不搬运行态直接合并——跳过 cp 与会话数自检，main 版运行态原样保留。
+
+    这正是「分支已含 main 全部提交、只是运行态薄」的孤儿回收形状的合规通道。
+    """
+    wt, main = tmp_path / "wt", tmp_path / "main"
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(1))
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(41))
+    calls, _ = fake_git
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+
+    rc = dev.cmd_worktree_merge("foo", wt, no_cp_state=True)
+
+    assert rc == 0
+    assert ("merge", "--no-ff", "wt-foo") in calls  # 真走了 merge
+    assert dev._runtime_session_total(main) == 41  # main 运行态未被薄面覆盖
+    assert "保留 main 版" in capsys.readouterr().out
+
+
 def test_action_merge_routes_to_command(tmp_path, monkeypatch, fake_git):
     """cmd_worktree(action=merge) 分派到 cmd_worktree_merge，wt 不存在则 rc 2。"""
     monkeypatch.setattr(dev, "WORKTREES_ROOT", tmp_path / "worktrees")
