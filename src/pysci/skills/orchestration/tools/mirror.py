@@ -354,49 +354,67 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------- decisions
-def cmd_decisions(args: argparse.Namespace) -> int:
-    """``pysci-mirror decisions``：inspector 决策链全貌（用户审计入口，§10 注册纪律）。
+def decisions_detail_lines(
+    *, days: int = 0, cls: str = "", shape: str = ""
+) -> list[str]:
+    """inspector 决策链全貌的**只读拼装**（REFACTOR.md §2.5 数据层纯函数）。
 
-    只读拼装，零新状态面。免判决+change 类**置顶**（最需审计者优先）——「发现 → class →
-    remedy_shape → 判决记录 → 实施 commit → 核验状态」一屏看全；E7 后 twin 代理裁决面
-    同接口扩展进本命令（用户审计入口统一）。
+    ``pysci decisions`` 与 TUI「决策审计」详情视图**共用**本函数——同一能力不留两份实现。
+    免判决+change 类置顶（最需审计者优先）：发现 → class → remedy_shape → 判决记录 →
+    实施 commit → 核验状态一屏看全。零新状态面。
     """
     from .inspectd import decision_rows  # 延迟导入：inspectd 引整条 worker 链
 
-    rows = decision_rows(
-        days=int(args.days or 0), cls=args.cls or "", shape=args.shape or ""
-    )
+    rows = decision_rows(days=days, cls=cls, shape=shape)
     if not rows:
-        print("（无匹配的 inspector 决策记录）")
-        return 0
-    print(
+        return ["（无匹配的 inspector 决策记录）"]
+    out = [
         f"== inspector 决策全貌（{len(rows)} 条；只读拼装：findings × backlog "
         "× run 摘要 × jury 案卷 × 决策日志）=="
-    )
+    ]
     for r in rows:
         flag = "[!]" if r["attention"] else "[i]"
         bl = r["backlog_status"] or "未晋升"
-        print(
+        out.append(
             f"{flag} {r['id']}  {r['ts']}  "
             f"[{r['class']}/remedy_shape={r['remedy_shape']}]"
         )
-        print(f"     发现：{str(r['title'])[:80]}")
+        out.append(f"     发现：{str(r['title'])[:80]}")
         ruling = f"｜{r['ruling'][:60]}" if r["ruling"] else ""
-        print(f"     判决：{r['verdict_ref']}{ruling}")
+        out.append(f"     判决：{r['verdict_ref']}{ruling}")
         impl = f"实施：{r['commit'][:8]}" if r["commit"] else "实施：（无 commit 读数）"
         verify = f"核验：{r['verify']}" if r["verify"] else f"backlog={bl}"
-        print(f"     {impl}  {verify}")
+        out.append(f"     {impl}  {verify}")
         if r.get("note"):
-            print(f"     留痕：{str(r['note'])[:90]}")
+            out.append(f"     留痕：{str(r['note'])[:90]}")
     if any(r["attention"] for r in rows):
-        print(
+        out.append(
             "  [!] 置顶项=免判决+change（未经判决改变了声明行为/策略）——优先审计；"
             "改判后应补 J/twin 判决记录留痕"
         )
-    print(
+    out.append(
         "[NEXT] 过滤：--days N（近 N 天）/ --class mechanical|judgment / "
         "--shape restore|change"
     )
+    return out
+
+
+def decisions_count() -> int:
+    """决策记录条数（TUI 更新徽标计数用；与 :func:`decisions_detail_lines` 同一数据源）。"""
+    from .inspectd import decision_rows
+
+    try:
+        return len(decision_rows())
+    except Exception:  # noqa: BLE001 - 观察面绝不阻塞生产（§0.6）
+        return 0
+
+
+def cmd_decisions(args: argparse.Namespace) -> int:
+    """``pysci-mirror decisions``：inspector 决策链全貌（用户审计入口，§10 注册纪律）。"""
+    for line in decisions_detail_lines(
+        days=int(args.days or 0), cls=args.cls or "", shape=args.shape or ""
+    ):
+        print(line)
     return 0
 
 
@@ -527,6 +545,8 @@ __all__ = [
     "cmd_decisions",
     "cmd_journal",
     "cmd_status",
+    "decisions_count",
+    "decisions_detail_lines",
     "main",
     "pending_directives",
     "read_queue",
