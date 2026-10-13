@@ -2116,6 +2116,19 @@
       "done_at": "2026-10-13T22:55:24+08:00",
       "batch_size": 1,
       "batch_seed": "20261012-194305-devops"
+    },
+    {
+      "id": "20261013-022033-devops",
+      "member": "devops",
+      "summary": "**drain 孤儿回收重派未确认原会话死活即复用同名 worktree，两会话同目录并发（本单实测）**",
+      "kind": "defect",
+      "success_criteria": "三例回归：(a) 原会话存活期触发孤儿回收 → 不产生指向同一 worktree 的第二份任务书；(b) 原会话已死但 remove 未删净 → 新任务书 worktree 名带 -r<N>；(c) 原会话已死且清干净 → 仍用原名。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-022033-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-13T23:02:11+08:00",
+      "note": "由 worktree 清理的逐面核验回收（2026-10-13）；建议 devops 判重 184000",
+      "started_at": "2026-10-13T23:02:13+08:00",
+      "worktree": "20261013-022033-devops"
     }
   ]
 }
