@@ -101,7 +101,7 @@
     "resume_bench": 4
   },
   "jury": {
-    "_note": "Tier C 仲裁团三席官方直调（REFACTOR §4 用户裁决 2026-10-12 修订，E3-live）。型号=各提供商 /models 实测目录内的在架旗舰（10-12 实测：deepseek 2 个、bigmodel 11 个、moonshot 2 个）；base_url 逐家核官方 OpenAI 兼容端点。选型权归用户，改这里即可，代码不内置候选清单。\"pricing\" 故意留空：三家刊例（且用户可能挂套餐/Agent Plan）须由用户按账号实价填，缺席时留痕记 cost.amount=null 并附 note——不猜价。kimi 席 params.temperature=1 是实测必需（该型号只接受 1，写 0 即 400，见 references/jury-panel.md）。max_output_tokens=8000：三席皆推理型，真案卷（prompt≈4k）上 reasoning 是重尾的（实测 432～3986），额度不足会随机把正文截空；截断按渠道错误入队并点名席位，不记无效票。席内两局按「同端点+同 Key 变量」串行：DeepSeek 实测 max organization concurrency=1，同席并发必 429。路由 v3（backlog 20261013-093000-leader，终裁 v4 2026-10-13 定格）仲裁矩阵：qwen→glm+kimi+mimo；mimo→glm+kimi+qwen；deepseek→glm+kimi+mimo；谷时隐性 DeepSeek 态→glm+kimi+mimo（固定三席，不随预设漂）——面板构成随**被评模型**换血，deepseek 席因此在任何面板里都不出庭（它是被评方）。**一律按量付费**：TokenPlan 套餐端点整个不做（两家个人版条款禁止 API 自动化调用，违规封 Key），席位因此没有 endpoints/billing 键，一席一条端点。缺 Key 的席标 unavailable + 双面告警（调用者面+mirror 面），本庭减员照常开庭（平票由 twin 终裁兜底）；被评模型同族的回退席不上场（§4）。**待用户供**：MIMO_API_KEY、QWEN_API_KEY 及 qwen/mimo 旗舰的按量 base_url 与在架型号串——不猜端点也不猜型号，缺席时 orch status/mirror 的「面板缺席：mimo|qwen（registry.jury.seats 未配置）」一行就是催办信号。｜2026-10-13 组长按用户矩阵补 qwen 席（mimo 预设第三席=Qwen 旗舰；DashScope compatible-mode 探针实测通）。",
+    "_note": "Tier C 仲裁团三席官方直调（REFACTOR §4 用户裁决 2026-10-12 修订，E3-live）。型号=各提供商 /models 实测目录内的在架旗舰（10-12 实测：deepseek 2 个、bigmodel 11 个、moonshot 2 个）；base_url 逐家核官方 OpenAI 兼容端点。选型权归用户，改这里即可，代码不内置候选清单。\"pricing\" 故意留空：三家刊例（且用户可能挂套餐/Agent Plan）须由用户按账号实价填，缺席时留痕记 cost.amount=null 并附 note——不猜价。kimi 席 params.temperature=1 是实测必需（该型号只接受 1，写 0 即 400，见 references/jury-panel.md）。max_output_tokens=8000：三席皆推理型，真案卷（prompt≈4k）上 reasoning 是重尾的（实测 432～3986），额度不足会随机把正文截空；截断按渠道错误入队并点名席位，不记无效票。席内两局按「同端点+同 Key 变量」串行：DeepSeek 实测 max organization concurrency=1，同席并发必 429。路由 v3（backlog 20261013-093000-leader，终裁 v4 2026-10-13 定格）仲裁矩阵：qwen→glm+kimi+mimo；mimo→glm+kimi+qwen；deepseek→glm+kimi+mimo；谷时隐性 DeepSeek 态→glm+kimi+mimo（固定三席，不随预设漂）——面板构成随**被评模型**换血，deepseek 席因此在任何面板里都不出庭（它是被评方）。**一律按量付费**：TokenPlan 套餐端点整个不做（两家个人版条款禁止 API 自动化调用，违规封 Key），席位因此没有 endpoints/billing 键，一席一条端点。缺 Key 的席标 unavailable + 双面告警（调用者面+mirror 面），本庭减员照常开庭（平票由 twin 终裁兜底）；被评模型同族的回退席不上场（§4）。**待用户供**：MIMO_API_KEY、QWEN_API_KEY 及 qwen/mimo 旗舰的按量 base_url 与在架型号串——不猜端点也不猜型号，缺席时 orch status/mirror 的「面板缺席：mimo|qwen（registry.jury.seats 未配置）」一行就是催办信号。｜2026-10-13 组长按用户矩阵补 qwen 席（mimo 预设第三席=Qwen 旗舰；DashScope compatible-mode 探针实测通）。｜2026-10-13 组长补 mimo 席（按量直调 api.xiaomimimo.com/v1，探针实测通；谷时隐性面板 glm+kimi+mimo 与 deepseek 预设面板所需）。",
     "seats": [
       {
         "name": "deepseek",
@@ -129,6 +129,12 @@
         "key_env": "QWEN_API_KEY",
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "model": "qwen3.8-max"
+      },
+      {
+        "name": "mimo",
+        "key_env": "MIMO_API_KEY",
+        "base_url": "https://api.xiaomimimo.com/v1",
+        "model": "mimo-v2.6-pro"
       }
     ],
     "fallback": {
