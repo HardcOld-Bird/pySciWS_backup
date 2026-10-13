@@ -492,6 +492,8 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 | `orch approve/reject <reply-id> --note` | 审批 INFRA_SUGGESTION | 通过→入 backlog＋自动唤醒 devops＋watch 挂载指令；审批回复自动附送给提议人 |
 | `orch watch [--timeout 4h]` | 阻塞等待后台 drain 事件（§4.5）：以 Bash run_in_background 启动 | **单行**事件（QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP / CHANNEL-STOP / CRASH）或 TIMEOUT；退出即唤醒组长会话 |
 | `orch consult <问题>` | 快捷咨询副组长（平级协作条款生效） | 副组长意见（含异议） |
+| `orch requeue <id> [--note]` | 回排：needs_leader → pending **并唤醒 drain**（处理 needs_leader 的正门，取代直调内部 `wake_devops`） | 条目回队、devops FIFO 重新取到它；`--note` 覆盖附注（补授权写这里） |
+| `orch resolve <id> --note "<为何>"` | 销账：组长确认**已达标**的 needs_leader 条目 → done（须 `--note` 留痕） | 条目收尾；原 blocked 事实保留于 note 与 git 历史（取代直改 backlog.json 的野路子） |
 | `orch review <产物>` | 派发 reviewer | VERDICT；FAIL→自动回派返工+复审一次，再 FAIL 升级仲裁 |
 | `orch stats [--plan <id>]` | 统计（§4.4） | 任务/成员/历史三级耗时与 credits |
 
@@ -842,7 +844,7 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
   〔released 墓碑：已宣告收尾但文件删不掉〕与**残骸已收尾**〔该 run 已有 .done，连墓碑都写
   不进的极端残骸；pid 不作判活依据〕）、
   最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/渠道级故障/异常中断）、
-  needs_leader 提醒（组长据此重派/改任务书/上报）
+  needs_leader 提醒（组长据此 `orch requeue` 回排重派 / 改任务书 / `orch resolve` 销账 / 上报）
 → 组长的等待面（代码化，§4.5）：唤醒/采纳/交办三处输出固定附 `orch watch` 挂载指令；
   watch 后台阻塞轮询 state 文件与锁，命中 QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP /
   CHANNEL-STOP / CRASH 即单行退出唤醒会话；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
@@ -1272,6 +1274,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **`<blocked>` 成因档位 `reason="…"`**（backlog 20261013-191213-devops，devops 自提）：`<blocked>` **语义过载**——「已侦察待裁决」（重派无效，等判决）与「执行端余量不足」（补足余量后重派即落地）**最优处置相反**，却都长成同一个 blocked：drain 抢救链只看 `<blocked>`/`tags`、`orch status` 只报「谁被挡了」。加受控**单值**档位 `reason`（`needs_decision`/`capacity`/`blocked_by_env`/`blocked_by_upstream`，词表 `failure-tags.json` 的 `reasons` 段、gate 校验、词表外退回、缺省不标注合法，纪律同 tags）；与 tags 分工=「失败是哪一类」vs「该谁怎么处置」。**不切分**（`reason="capacity, foo"` 整串落词表外被退回，切分会把「标错」伪装成「标对」）。档位透传进 drain 的 `.done`（逐条 + `by_reason` 合计），`orch status` 分列计数（`待裁决=N 待排期=N`；词表外档位回落原键，不静默） | devops 自提 + 组长采纳 |
 | 2026-10-13 | **「缺授权 blocked → 补授权 → 重排」闭环**（backlog 20261013-193058-devops，devops 自提）：`20261013-193500-leader` 的 approved 里那段「组长裁决（devops 点名要的授权）」是拆单**应有**的形态，但它**只靠人记得写**——approve 默认产物无附注，而「执行端点名要授权 → 组长补授权」这条闭环在机械面上毫无痕迹（谁点名、要什么、补没补，只能靠人读上下文）。本单把闭环机械化：交付带 `reason="needs_decision"`（上一单的成因档位）的 blocked，drain 给条目挂 `awaiting_decision` + 存原点名原文；`orch status` 单列「待补授权」；重排任务书自动注入「**原点名事项 ↔ 本次补齐情况**」对照行（补齐情况取条目当前附注，空则出声「尚未补，重排会再白烧」）。按成因档位分流而非猜正文——余量/环境/上游成因不需要授权 | devops 自提 + 组长采纳 |
 | 2026-10-13 | **`sync` 台账即写即提交**（backlog 20261013-203724-devops，devops 自提）：`skills-deployed.json` 是 git 跟踪的**生成物**、又由「改任一技能真本」触发重写——不提交就在 main 留脏项，而它恰是下次「改真本」的单必须更新的共享面：分支内提交它撞合并交集闸（`git merge` 自身也拒覆盖脏文件），不提交则拆两笔、还要替上一单补登。改为 `sync` 落盘后**确有变更即自动提交**（cz 规范、只 `git add` 该文件、fail-soft 打一行）；`--check` 永不提交、未被跟踪/非 git 仓不擅自入库。「台账更新」与「合并闸」由此不再互斥。**为何不选「合并闸降级告警」那条**：把台账列为生成物、告警不拦只解一半——`git merge` 仍会因脏文件拒合并，而丢弃 main 侧待提交的台账又退回旧哈希、下次 sync 再留脏面，闭环合不上 | devops 自提 + 组长采纳 |
+| 2026-10-13 | **组长面两条正门 `orch requeue` / `orch resolve`**（backlog 20261013-215909-leader）：组长处理 needs_leader 条目缺干净 CLI——「重派」只能直调 drain 内部函数 `wake_devops`、「销账」只能直改 `state/backlog.json`（drain 在跑时有并发覆盖风险，本会话清 4 条已达标 needs_leader 全靠野路子）。补两条正门：`orch requeue <id> [--note]`＝needs_leader → pending **并唤醒 drain**（--note 覆盖附注，带 `awaiting_decision` 的条目即「本次补齐情况」）；`orch resolve <id> --note "<为何>"`＝组长确认**已达标** → done（--note 必填留痕、原 blocked 事实不删）。两命令共用**起点受控**迁移（`_backlog_transition`：只对 needs_leader 生效，起点不符即不动、rc=2） | 组长自提 + devops 实施 |
 
 ## 14. 已知代价与风险
 
