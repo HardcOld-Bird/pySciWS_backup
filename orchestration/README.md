@@ -826,7 +826,10 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
   · 成功 → 按交付 id 清单**逐 id 销账**（done，记 commit hash + batch_size/batch_seed）；
     组包中未选项保持 pending 留待下轮（devops 可只吃种子）
   · 失败（blocked/run_failed）→ 仅**种子** needs_leader、组包项保持 pending（**不连坐**，
-    一项卡住不阻塞全队列）
+    一项卡住不阻塞全队列）；其中交付带 `reason="needs_decision"`（已侦察待裁决）的条目额外
+    挂 `awaiting_decision` 标记——`orch status` 单列「待补授权」，重排任务书自动注入
+    「原点名事项 ↔ 本次补齐情况」对照行（backlog 20261013-193058-devops），使「执行端点名
+    要授权 → 组长补授权 → 重排」这条闭环在机械面上可见、不必靠人记得写附注
   · 系统性故障（`quota_exhausted` 额度耗尽 / `channel_error` 渠道级故障）→ **全局停止**：
     种子复位 pending（非 needs_leader）、组包与剩余条目保持 pending、释放锁、.done 注明
     停止类别；恢复后下次唤醒自动续消化（两类只恢复动作不同：充值/换渠道 vs 等渠道恢复）
@@ -1263,6 +1266,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **动作归属分拣：组长侧的发现不派 devops**（backlog 20261013-184213-devops，devops 自提）：mechanical 免判决通道原会把「期望动作在组长侧」的发现推给 devops——组员读完 `expect` 才发现无权执行（`orch` 是组长专属工具），白烧一跳，更坏是自作主张造「自动归档」类机制（该路已被用户回退）。晋升时按**廉价线索**分拣 `expect`/`success_criteria`（`pysci-orch`/`orch `/`--archive`/归档/重开/重取基线/组长裁定/approve），命中 → 不进 devops 队列、挂新状态 `leader_todo`（也离 pending 扫描面）；刻意粗，标错组长一眼能改、漏掉每跳白烧；**不看 repro**（复现命令常只是取证）。实测 6/14 命中且全为真组长侧 | devops 自提 + 组长采纳 |
 | 2026-10-13 | **改动驱动的文档面对盘 `pysci-dev doc-faces`**（backlog 20261013-184842-devops，devops 自提）：jury 同族拒庭判据被相对化（`producer_family`）后代码改了三处、`jury-channels.md`/`jury-panel.md` 两处没跟，文档还替旧行为背书（「含回退席…含 qwen」）——「代码改了、文档没改」是系统性滞后，README §6 的 `intent-drift` 是**抽样式**巡检，抓不到「谁改了 X 没看 X 的文档」。本单加**改动驱动**的廉价提示：`pysci-dev doc-faces <paths…\|--changed>` 按一张手维护的**小映射表**（`tools/jury.py → references/jury-*.md` 等 7 条，键用**后缀**以在 worktree 路径下也命中）打印「你动了 X，它的文档面是 Y/Z，请对盘」，命中即提示、不阻断、未映射零输出；表内路径由 `misconfigured()` 兜底（写错的映射会把人对盘到错文件，比没有更坏） | devops 自提 + 组长采纳 |
 | 2026-10-13 | **`<blocked>` 成因档位 `reason="…"`**（backlog 20261013-191213-devops，devops 自提）：`<blocked>` **语义过载**——「已侦察待裁决」（重派无效，等判决）与「执行端余量不足」（补足余量后重派即落地）**最优处置相反**，却都长成同一个 blocked：drain 抢救链只看 `<blocked>`/`tags`、`orch status` 只报「谁被挡了」。加受控**单值**档位 `reason`（`needs_decision`/`capacity`/`blocked_by_env`/`blocked_by_upstream`，词表 `failure-tags.json` 的 `reasons` 段、gate 校验、词表外退回、缺省不标注合法，纪律同 tags）；与 tags 分工=「失败是哪一类」vs「该谁怎么处置」。**不切分**（`reason="capacity, foo"` 整串落词表外被退回，切分会把「标错」伪装成「标对」）。档位透传进 drain 的 `.done`（逐条 + `by_reason` 合计），`orch status` 分列计数（`待裁决=N 待排期=N`；词表外档位回落原键，不静默） | devops 自提 + 组长采纳 |
+| 2026-10-13 | **「缺授权 blocked → 补授权 → 重排」闭环**（backlog 20261013-193058-devops，devops 自提）：`20261013-193500-leader` 的 approved 里那段「组长裁决（devops 点名要的授权）」是拆单**应有**的形态，但它**只靠人记得写**——approve 默认产物无附注，而「执行端点名要授权 → 组长补授权」这条闭环在机械面上毫无痕迹（谁点名、要什么、补没补，只能靠人读上下文）。本单把闭环机械化：交付带 `reason="needs_decision"`（上一单的成因档位）的 blocked，drain 给条目挂 `awaiting_decision` + 存原点名原文；`orch status` 单列「待补授权」；重排任务书自动注入「**原点名事项 ↔ 本次补齐情况**」对照行（补齐情况取条目当前附注，空则出声「尚未补，重排会再白烧」）。按成因档位分流而非猜正文——余量/环境/上游成因不需要授权 | devops 自提 + 组长采纳 |
 
 ## 14. 已知代价与风险
 
