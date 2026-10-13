@@ -469,11 +469,17 @@ def do_dispatch(
             code=2, kind="run_failed", member=member_id, error=str(exc)
         )
     active = presets.active()
-    if role != "minimum" and not active.available:
-        # 过渡期预设（席表未配置，如 deepseek 待回填 BYOK）：**拒绝激活**而不是悄悄落回
-        # 上一个预设——静默回落会让台账烧的是别的渠道，而用户以为切换已经生效。
+    tier = role
+    # 席位选择（沿 #80：角色 → **有序回退链**，首席在前）：链里落在降级粘滞窗内的席本跳
+    # 不探测（省跳数），但仍要逐席打出来——故障可查性不能换成安静。
+    plan = _channels.plan_seats(reg, tier)
+    chain = list(plan.usable)
+    gate = presets.preset_gate(reg, tier)
+    if gate:
+        # 本预设该档席表为空 = 没配席：**拒绝激活**而不是悄悄落回上一个预设——静默回落
+        # 会让台账烧的是别的渠道，而用户以为切换已经生效。
         if not quiet:
-            print(f"[!] 预设 {active.name} 未激活：{active.unavailable_reason}")
+            print(f"[!] {gate}")
             print(
                 "    处置：改 data/pysci_settings.toml 的 [model] preset（合法串见该文件注释）。"
             )
@@ -481,16 +487,11 @@ def do_dispatch(
             code=2,
             kind="run_failed",
             member=member_id,
-            error=f"预设 {active.name} 未激活：{active.unavailable_reason}",
+            error=gate,
         )
     if not quiet:
         for warn in active.warnings:  # 非法/缺配置回落出厂预设时必须出声
             print(f"[!] {warn}")
-    tier = role
-    # 席位选择（沿 #80：角色 → **有序回退链**，首席在前）：链里落在降级粘滞窗内的席本跳
-    # 不探测（省跳数），但仍要逐席打出来——故障可查性不能换成安静。
-    plan = _channels.plan_seats(reg, tier)
-    chain = list(plan.usable)
     model = chain[0] if chain else str(reg.models.get(tier, ""))
     if not quiet:
         for item in plan.skipped:

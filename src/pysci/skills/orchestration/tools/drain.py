@@ -1506,11 +1506,12 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         ``stopped=<kind>``（``quota_exhausted`` / ``channel_error``）与 ``error`` 说明。
     """
     done_path = run_log.with_suffix(".done")
-    # 预设未激活即拒绝开工（用户裁决 2026-10-12 22:4x：deepseek 过渡期不可选）：逐单派发
-    # 只会把整队列标成失败，让「改一行 toml」的真处置淹没在重复失败读数里。此门在拿锁之前。
-    act = presets.active()
-    if not act.available:
-        reason = f"预设 {act.name} 未激活：{act.unavailable_reason}"
+    # 预设的 main 席表为空（没配席：跟踪覆盖在位以覆盖为准，否则看出厂表）即拒绝开工
+    # （用户 2026-10-13 回填裁决，激活闸与派发共读 presets.preset_gate）：逐单派发只会把
+    # 整队列标成失败，让「改一行 toml」的真处置淹没在重复失败读数里。此门在拿锁之前。
+    gate = presets.preset_gate(Registry.load(), "main")
+    if gate:
+        reason = gate
         _log(
             run_log,
             f"[!] {reason}——drain 拒绝开工（改 data/pysci_settings.toml [model] preset 后重跑）",

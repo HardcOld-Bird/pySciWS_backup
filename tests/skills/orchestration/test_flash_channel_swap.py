@@ -118,13 +118,14 @@ def test_tracked_registry_is_ordered_chains():
     )
     assert "flash_fallback" not in models, "旧回退键已并入链，不该再留第二张表"
     face = data.get("presets", {})
-    assert {"qwen", "mimo", "deepseek"} <= set(face), "三预设齐备"
+    assert {"qwen", "mimo"} <= set(face), "账号级 BYOK 两预设齐备（deepseek 见下）"
     assert face["mimo"]["main"] == [MIMO_FLASH_UUID, BUILTIN_FLASH]
     assert face["mimo"]["pro"] == [MIMO_PRO_UUID, BUILTIN_FLASH]
     assert face["qwen"]["main"] == [BYOK_FLASH_UUID, BUILTIN_FLASH]
     assert face["qwen"]["pro"] == [BYOK_MAX_UUID, BUILTIN_FLASH]
-    assert face["deepseek"]["main"] == [] and face["deepseek"]["pro"] == [], (
-        "deepseek 空链=过渡期 BYOK 未回填、预设不可激活（toml ⚠ 同源）"
+    assert "deepseek" not in face, (
+        "deepseek 席已回填（UUID 首席+内置同名回退，2026-10-13 用户供 Key）落代码"
+        "出厂表——跟踪面不再留空链占位（留了=整链覆盖置空、预设反而不可激活）"
     )
     assert all("model_tier" not in m for m in data.get("members", {}).values()), (
         "成员条目的档位字段随档位模式一起退役"

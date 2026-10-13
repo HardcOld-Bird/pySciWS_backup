@@ -357,9 +357,13 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
     BYOK `Mimo-V2.6-Pro` → 内置，四人组 reviewer/deputy/inspector/twin；仲裁团 =
     GLM+KIMI+**Qwen**（排除 Mimo 同族）。**两预设 pro 席不对称是有意设计**
     （用户 2026-10-12 确认），不是漏配；
-  - `deepseek`：**过渡期不可激活**——BYOK 精确名待回填（toml 注释标 ⚠，`--list-models`
-    现无此条目）。派发拒发、drain 拒绝开工、status 出声，**不静默落回别的预设**烧错渠道；
-    回填席位表后即自动可选。
+  - `deepseek`：**已激活**（2026-10-13 用户供 Key 回填）——main = BYOK `DeepSeek-Flash`
+    （UUID `1a54cc57-e614-4521-80cc-447de31dc896`）→ 内置 `DeepSeek-Flash` 回退；BYOK 与
+    内置**同名**，故 UUID 首席消歧、内置降回退席（该 UUID 是「代码不内置账号级 ID」纪律的
+    唯一用户明示例外）；pro 空（全员同档）；仲裁团 = GLM+KIMI+**MIMO**（排除 DeepSeek
+    同族）。激活闸 = **席表非空即放行**（`presets.preset_gate`：该预设该档的席位表——
+    跟踪覆盖在位则以覆盖为准，否则以出厂表为准——没一席就拒绝：派发拒发、drain 拒绝开工、
+    status 出声，不静默落回别的预设烧错渠道；「无 pro 席」按设计而非故障出声）；
 - **成员默认角色 = pro 名单内取 pro 席，其余取 main 席**；`--model-tier pro|main` 逐跳覆盖
   （旧档名 `flash`→`main`、`max`→`pro` 自动归一，plan YAML/老案卷的旧值照常读；非法值在
   argparse 拒绝 rc=2）。**组长默认 = 预设 main 席**（与大部分组员同源；TUI 现场 `/model`
