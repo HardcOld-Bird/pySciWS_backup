@@ -37,6 +37,7 @@ from . import benchd as _benchd
 from . import channels as _channels
 from . import drain as _drain
 from . import eval as _eval
+from . import events as _events
 from . import inspectd as _inspectd
 from . import jury as _jury
 from . import mirror as _mirror
@@ -374,6 +375,12 @@ def cmd_status(args: argparse.Namespace) -> int:
     for line in _watch.status_lines():
         print(line)
 
+    # 统一事件流（REFACTOR §3.2，M5）：生产者直发 + watch 差分镜像都落 state/events.jsonl，
+    # 观察面读水位与最近事件——「积压没排空」是组长最该看见的一种盲区。
+    print("== 统一事件流（events.jsonl，§3.2）==")
+    for line in _events.status_lines():
+        print(line)
+
     print("== 台账（近 5 跳）==")
     for e in read_all()[-5:]:
         checks_s = ",".join(c["verdict"] for c in e.checks) or "-"
@@ -631,6 +638,40 @@ def cmd_queues(args: argparse.Namespace) -> int:
     return 2
 
 
+def cmd_events(args: argparse.Namespace) -> int:
+    """``orch events``：统一事件流的程序化面（REFACTOR.md §3.2，M5）。
+
+    ``drain`` **一次排空全部积压事件**（边沿触发/合并唤醒：组长每次醒来排空一次即清算，
+    多 worker 同时完工折合一个回合；**幂等**——再敲一次返回空）；``list`` 列水位与最近事件。
+    """
+    action = getattr(args, "e_action", "") or "drain"
+    if action == "drain":
+        pending = _events.unacked()
+        if not pending:
+            total = _events.latest_seq()
+            print(f"[=] 无积压事件（水位 seq={total} 已排空）。")
+            return 0
+        print(f"== events drain：排空 {len(pending)} 起积压事件 ==")
+        for ev in pending:
+            wake = _events.wake_label(str(ev.get("event", "")))
+            print(
+                f"  · {_events.format_event(ev)}"
+                + (f"  [唤醒策略：{wake}]" if wake else "")
+            )
+        _events.drain()  # 排空并推进水位线（幂等）
+        print(f"  水位线已推至 seq={_events.ack_seq()}；同命令再跑一次返回空。")
+        print('[NEXT] 逐 plan 推进：orch plan advance <id> --text "<下一环节任务书>"')
+        return 0
+    if action == "list":
+        print("== 统一事件流（events.jsonl，§3.2）==")
+        for line in _events.status_lines():
+            print(line)
+        print("[NEXT] events drain 一次排空积压（组员唤醒后清算全部）")
+        return 0
+    print(f"[!] 未知子命令：{action}（drain|list）")
+    return 2
+
+
 def cmd_taskbooks(args: argparse.Namespace) -> int:
     """``orch taskbooks``：用户大任务的**程序化查看面**（LLM 通道，REFACTOR.md §3.4）。
 
@@ -780,6 +821,7 @@ def _plan_router(action: str):
     handlers = {
         "new": _plans.cmd_plan_new,
         "run": _plans.cmd_plan_run,
+        "advance": _plans.cmd_plan_advance,
         "amend": _plans.cmd_plan_amend,
         "drop": _plans.cmd_plan_drop,
         "list": _plans.cmd_plan_list,
@@ -835,6 +877,28 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--max-turns", type=int)
     q.add_argument("--dirs", help="覆盖计划环节的白名单（逗号分隔）")
     q.set_defaults(func=_plan_router("run"))
+
+    q = psub.add_parser(
+        "advance",
+        help="[事件驱动] 下一环节入队成员队列即返回（完成事件驱动下一次 advance，§3.5）",
+    )
+    q.add_argument("id")
+    q.add_argument("--text", help="当前环节任务书正文（任务书延迟书写）")
+    q.add_argument("--task", help="当前环节任务书文件")
+    q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
+    q.add_argument(
+        "--model-tier",
+        type=_presets.normalize_role,
+        choices=list(_presets.ROLE_CHOICES),
+    )
+    q.add_argument(
+        "--effort",
+        choices=EFFORT_CHOICES,
+        help="本环节推理强度（覆盖计划 YAML；不传=跟随用户级默认=中）",
+    )
+    q.add_argument("--dirs", help="覆盖计划环节的白名单（逗号分隔）")
+    q.add_argument("--dry", action="store_true", help="只入队不起 worker（测试/演练）")
+    q.set_defaults(func=_plan_router("advance"))
 
     q = psub.add_parser("amend", help="编辑计划 YAML 后校验对账（按环节 id 保留状态）")
     q.add_argument("id")
@@ -1093,6 +1157,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     q.add_argument("--dry", action="store_true", help="只入队不起 worker（测试/演练）")
     q.set_defaults(func=cmd_queues)
+
+    p = sub.add_parser(
+        "events",
+        help="[底层] 统一事件流（drain 一次排空积压/幂等；list 看水位与最近事件）",
+    )
+    esub = p.add_subparsers(dest="e_action", required=True)
+    q = esub.add_parser("drain", help="一次排空全部积压事件（合并唤醒；幂等）")
+    q.set_defaults(func=cmd_events)
+    q = esub.add_parser("list", help="事件水位与最近事件（观察面）")
+    q.set_defaults(func=cmd_events)
 
     p = sub.add_parser(
         "_queue-worker",

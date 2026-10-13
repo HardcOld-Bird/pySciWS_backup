@@ -21,6 +21,7 @@ from pysci.skills.orchestration.tools import (
     channels,
     dispatch,
     drain,
+    events,
     failure_tags,
     inspectd,
     journal,
@@ -105,6 +106,18 @@ def freeze_routing_clock(monkeypatch, tmp_path):
 def valley_clock(monkeypatch):
     """把路由时钟搬到周六夜间（隐性态生效）的用例专用夹具。"""
     return set_routing_clock(monkeypatch, VALLEY_MOMENT)
+
+
+@pytest.fixture(autouse=True)
+def iso_events(tmp_path, monkeypatch):
+    """统一事件流落 tmp（M5，§3.2）：生产者（queueworker/drain/benchd/taskbooks）**逐个**都会
+    往 ``state/events.jsonl`` 追加，不隔离则任何跑到这些入口的用例都真写仓库 state。
+
+    autouse 兜全局：不这么做就得给每个可能触发事件的夹具（iso_state/iso_bench/iso_dispatch/
+    tbdir…）各补一行、漏一个就污染跟踪/运行面。要断言事件流的用例自行覆盖这两个常量。
+    """
+    monkeypatch.setattr(events, "EVENTS_LOG", tmp_path / "events.jsonl")
+    monkeypatch.setattr(events, "SEEN_PATH", tmp_path / "events-seen.json")
 
 
 # 2026-10-10 额度事故原文（会话 jsonl 实测）

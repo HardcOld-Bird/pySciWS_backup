@@ -13,7 +13,7 @@ import pytest
 from textual.widgets import Input, TextArea
 
 from pysci import paths as _paths
-from pysci.skills.orchestration.tools import orch, taskbooks, watch
+from pysci.skills.orchestration.tools import events, orch, taskbooks, watch
 from pysci.skills.orchestration.tools.tui import app as tui
 
 
@@ -152,25 +152,31 @@ def test_orch_taskbooks_list_show_link(tbdir, capsys):
 
 
 # ---------------------------------------------------------------------------
-# ④ TASKBOOK-NEW 唤醒（watch 最小扩展）
+# ④ TASKBOOK-NEW 唤醒（M5 收编进统一事件层 §3.2）
 # ---------------------------------------------------------------------------
 def test_taskbook_new_is_in_priority():
+    """事件名仍在 watch 优先级表（多事件同刻排序）与统一事件层词表（§3.2）。"""
     assert "TASKBOOK-NEW" in watch.PRIORITY
+    assert "TASKBOOK-NEW" in events.TYPES
+    assert "TASKBOOK-NEW" in events.STREAM_TYPES
 
 
-def test_detect_reports_new_taskbook_increment():
-    base = {"taskbook_ids": ["tb-1"]}
-    cur = {"taskbook_ids": ["tb-1", "tb-2"]}
-    evs = watch.detect_events(base, cur)
+def test_create_emits_taskbook_new_to_stream(tbdir):
+    """落盘即发 TASKBOOK-NEW（生产者直发统一事件流；M5 收编，替代旧基线差分）。"""
+    st = _make(title="唤醒我")
+    evs = events.read_all()
     assert [e["event"] for e in evs] == ["TASKBOOK-NEW"]
-    assert evs[0]["subject"] == "tb-2" and "taskbooks" in evs[0]["action"]
-    assert watch.detect_events({"taskbook_ids": ["tb-1"]}, base) == []  # 无增量不报
+    assert evs[0]["subject"] == st["id"]
 
 
-def test_taskbook_ids_reads_the_data_layer(tbdir):
+def test_watch_fires_on_stream_taskbook_new(tbdir):
+    """旧差分路径已删（收编）：watch 改从统一事件流按 ``events_seq`` 水位读出即唤醒。"""
     _make(title="z")
-    ids = watch._taskbook_ids()
-    assert len(ids) == 1 and ids[0].startswith("tb-")
+    evs = watch.detect_events({"events_seq": 0}, {"events_seq": events.latest_seq()})
+    assert [e["event"] for e in evs] == ["TASKBOOK-NEW"]
+    assert evs[0]["subject"].startswith("tb-") and "taskbooks" in evs[0]["action"]
+    # 水位线未推进（无新事件）→ 不报
+    assert watch.detect_events({"events_seq": 1}, {"events_seq": 1}) == []
 
 
 # ---------------------------------------------------------------------------
