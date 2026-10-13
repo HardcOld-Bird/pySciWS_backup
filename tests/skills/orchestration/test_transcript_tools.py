@@ -489,3 +489,83 @@ def test_cli_scan_unknown_sid_reports_target_hint(tmp_path, monkeypatch, capsys)
     rc = cli.main(["transcript", "scan", "nosuch"])
     out = capsys.readouterr().out
     assert rc == 2 and "transcript list" in out
+
+
+# ---------------------------------------------------------------------------
+# ⑦ session_stats 的廉价预筛（backlog 20261013-182427-devops）
+# ---------------------------------------------------------------------------
+def test_session_stats_matches_rounds_amid_bookkeeping_noise(tmp_path):
+    """预筛不改判定：掺大量簿记行后回合数仍与 build_rounds 一致。"""
+    p = _session(tmp_path / "noisy.jsonl", 4, with_noise=True)
+    with p.open("a", encoding="utf-8") as fh:
+        for i in range(50):  # 簿记行：与回合数无关，正是预筛要跳掉的那类
+            fh.write(json.dumps({"type": "active-leaf", "sid": "x", "n": i}) + chr(10))
+            fh.write(json.dumps({"type": "file-history-snapshot", "n": i}) + chr(10))
+
+    rounds, last = tr.session_stats(p)
+    assert rounds == len(tr.build_rounds(p)) == 4
+    assert last > 0
+
+
+def test_session_stats_last_active_is_the_latest_timestamp(tmp_path):
+    """「最后活跃」取档内**最后一个**时间戳（改读尾部窗口后不得变味）。"""
+    p = tmp_path / "t.jsonl"
+    lines = [
+        json.dumps(_user("早", ts="2026-10-13T08:00:00.000Z")),
+        json.dumps(_user("晚", ts="2026-10-13T09:30:00.000Z")),
+    ]
+    p.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+    assert tr.session_stats(p) == (2, tr._epoch("2026-10-13T09:30:00.000Z"))
+
+
+def test_stats_keeps_user_record_that_also_carries_tool_result(tmp_path):
+    """**保守性守卫**：同一条 user 记录里既有 tool_result 又有 text 块 ⇒ 仍须计入回合。
+
+    预筛靠「有 tool_result 且无 text」才跳过；这条钉住「含 text 就绝不跳」——
+    否则混合记录会被静默漏计（回合数少一，三态判定跟着错）。
+    """
+    p = tmp_path / "mixed.jsonl"
+    rec = {
+        "type": "user",
+        "timestamp": "2026-10-13T10:00:00.000Z",
+        "message": {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "t", "content": "out"},
+                {"type": "text", "text": "复核结论：继续"},
+            ],
+        },
+    }
+    p.write_text(json.dumps(rec) + chr(10), encoding="utf-8")
+    assert tr.session_stats(p)[0] == 1
+
+
+def test_stats_handles_spaced_json_and_bad_lines(tmp_path):
+    """带空格分隔的等价写法照样计；坏行跳过不炸。"""
+    p = tmp_path / "spaced.jsonl"
+    good = {
+        "type": "user",
+        "timestamp": "2026-10-13T10:00:00.000Z",
+        "message": {"role": "user", "content": "带空格的写法"},
+    }
+    tail = {
+        "type": "assistant",
+        "timestamp": "2026-10-13T10:00:01.000Z",
+        "message": {},
+    }
+    p.write_text(
+        json.dumps(good, ensure_ascii=False)
+        + chr(10)
+        + "{not json"
+        + chr(10)
+        + json.dumps(tail)
+        + chr(10),
+        encoding="utf-8",
+    )
+    rounds, last = tr.session_stats(p)
+    assert rounds == 1, "带空格分隔的 user 记录照样计"
+    assert last == tr._epoch("2026-10-13T10:00:01.000Z"), "坏行跳过、后面那行的戳仍读到"
+
+
+def test_stats_missing_file_is_fail_open(tmp_path):
+    assert tr.session_stats(tmp_path / "ghost.jsonl") == (0, 0.0)
