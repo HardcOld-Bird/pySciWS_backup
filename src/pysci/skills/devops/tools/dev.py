@@ -960,6 +960,31 @@ def cmd_mdgen_check(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # 门面
 # ---------------------------------------------------------------------------
+def cmd_doc_faces(args: argparse.Namespace) -> int:
+    """``pysci-dev doc-faces``：把你动过的源文件对盘到它的**文档面**。
+
+    只提示不阻断，**未映射文件零输出**（照抄自家的「没命中就静默」口径）。映射表在
+    :mod:`docfaces`；表里路径写错时另打一行告警——写错的映射比没有映射更坏。
+    """
+    from pysci.skills.devops.tools import docfaces as _df
+
+    paths = [str(x) for x in (args.paths or [])]
+    if args.changed:
+        rc, out = _run_git("diff", "--name-only", "HEAD")
+        if rc != 0:
+            print("[!] git diff 读不出改动面——请显式给路径")
+            return rc or 1
+        paths.extend(ln.strip() for ln in out.splitlines() if ln.strip())
+    missing = _df.misconfigured()
+    if missing:
+        print(
+            f"[!] 映射表含不存在的文档面（请修正 docfaces.DOC_FACES）：{'、'.join(missing)}"
+        )
+    for line in _df.report(paths):
+        print(line)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI 入口。"""
     parser = argparse.ArgumentParser(
@@ -1019,6 +1044,16 @@ def main(argv: list[str] | None = None) -> int:
         help="只复测不落台账（临时核查，不改动仓库）",
     )
     p.set_defaults(func=cmd_probe)
+
+    p = sub.add_parser(
+        "doc-faces",
+        help="把动过的源文件对盘到它的文档面（改动驱动的 intent-drift 提示；只提示不阻断）",
+    )
+    p.add_argument("paths", nargs="*", help="源文件路径（可给多个）")
+    p.add_argument(
+        "--changed", action="store_true", help="改从 git diff --name-only HEAD 取改动面"
+    )
+    p.set_defaults(func=cmd_doc_faces)
 
     p = sub.add_parser(
         "mdgen-check",

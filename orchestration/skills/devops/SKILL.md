@@ -6,8 +6,8 @@ description: devops 组员的作业规程：worktree 隔离实施、PYTHONPATH �
 # devops 作业规程
 
 角色边界与红线见 charter（`.qoder/rules/charter.md`）；本文放**操作知识**。
-专属 CLI：`pysci-dev`（doctor / sync / venv-sync / worktree / probe …）。
-不使用 pysci-orch（组长专属；E2 期的 eval 面过渡例外已随 E4 bencher 上线退役）。
+专属 CLI：`pysci-dev`（见下命令面）。
+不使用 pysci-orch（组长专属）。
 
 ## worktree 作业规程（一切代码改动）
 
@@ -76,7 +76,8 @@ pysci-dev doctor [--pod <id>]   # pod 巡检：hooks/leader 排除/charter/AGENT
                                  #   （advisory：脏=组员合并前检查会拦的东西）
 pysci-dev sync [--check]        # 技能部署
 pysci-dev worktree add|merge|remove|list [<name>]   # merge=搬运行态+--no-ff+会话数自检
-pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写、打印终态哈希
+pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写
+pysci-dev doc-faces <paths…|--changed>  # 动的源文件→文档面（改语义别忘对盘；不阻断）
 ```
 
 ## 新 pod 脚手架（只读层入库面）
