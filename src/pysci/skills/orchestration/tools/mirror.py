@@ -174,7 +174,9 @@ def taste_cases() -> int:
 def _line_review() -> str:
     n = taste_cases()
     return f"待盲审案件数 = {n}" + (
-        "〔盲审即训练，review 面属 E6 后续单〕" if n else "（twin 判断留痕尚未产生）"
+        "〔盲审即训练，盲审面后续单（twin/reviewer 域）〕"
+        if n
+        else "（twin 判断留痕尚未产生）"
     )
 
 
@@ -217,7 +219,7 @@ def _line_queues() -> str:
     n_jury = len(sorted(jury_q.glob("*.json"))) if jury_q.is_dir() else 0
     return (
         f"行动指令队列待处理 = {n_dir}  jury 待重裁 = {n_jury}"
-        "  偏差报告队列 = 占位（E6 后续单）"
+        "  偏差报告队列 = 后续单（twin 偏差报告动线，属审查面）"
     )
 
 
@@ -247,7 +249,7 @@ def _line_fallback() -> str:
 
 
 def _line_trend() -> str:
-    return "一致率 / override 率趋势 = 占位（overrides·stats 属 E6 后续单）"
+    return "一致率 / override 率趋势 = 后续单（属决策审计面：overrides/stats）"
 
 
 #: 待决事项清单落点（gitignored 运行态：它是「此刻谁在等用户」的活体读数，不是长期
@@ -280,7 +282,7 @@ def _line_pending(path: Path | None = None) -> str:
 
 
 def _line_acceptance() -> str:
-    return "待用户验收的最终交付 = 占位（E6 后续单）"
+    return "待用户验收的最终交付 = 后续单（用户验收动线，属任务书面）"
 
 
 def _line_inspector_decisions() -> str:

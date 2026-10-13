@@ -38,6 +38,23 @@ from .modules import Module, modules  # re-export：m1 的 `app.modules()` 仍�
 #: 无更新时的灰点（§2.2：`● NEW` / 数字 / 灰点）。
 _BADGE_NONE = "·"
 
+#: 各视图下**有可观察效果**的 action（f1：footer 只广告这些，广告的键必须真有效果）。
+#: 未列出的受管 action 在当前视图返回 `None`（不显示、也不生效）——与 `action_*` 的守卫一致。
+_ACTIONS_BY_VIEW: dict[str, frozenset[str]] = {
+    "menu": frozenset({"taskbooks", "journal"}),
+    "detail": frozenset({"taskbooks", "journal"}),
+    "journal": frozenset({"taskbooks"}),
+    "taskbooks": frozenset(
+        {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
+    ),
+    "tb-new": frozenset({"taskbooks"}),
+}
+
+#: 受本类视图闸管的 action（其余——`back`/`quit` 与 widget 内部动作——一律放行，不干预导航）。
+_GATED_ACTIONS: frozenset[str] = frozenset(
+    {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
+)
+
 
 class PysciTUI(App):
     """`pysci` 交互式控制台（主菜单 ↔ 详情 ↔ 口述）；可无头测试（tests 的 Pilot 用例）。"""
@@ -202,11 +219,24 @@ class PysciTUI(App):
         self._render_summary(self.selected)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Enter：主菜单 → 全屏详情；任务书列表 → 看正文（批复走 `a`/`r`）。"""
+        """Enter：主菜单 → 详情；「任务书」模块 → **专用面板**（＝`t`，f1 用户路径修复：
+        菜单→Enter→`n` 必须可用）；任务书列表 → 看正文（批复走 `a`/`r`）。"""
         if event.list_view.id == "menu":
-            self._open_detail(int(event.list_view.index or 0))
+            idx = int(event.list_view.index or 0)
+            if self._mods[idx].key == "taskbooks":
+                self._open_taskbooks()
+            else:
+                self._open_detail(idx)
         elif event.list_view.id == "tb-list":
             self._tb_show_body(int(event.list_view.index or 0))
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        """footer 键位广告与守卫一致化（f1）：受管 action 在当前视图无效果 → 返回 `False`
+        （Textual 语义：`False` = 禁用且**不显示**于 Footer；`None` 只是禁用但仍显示）。
+        其余 action（`back`/`quit` 与 widget 内部导航/提交）一律放行，绝不干预光标与输入。"""
+        if action not in _GATED_ACTIONS:
+            return True
+        return action in _ACTIONS_BY_VIEW.get(self.view, frozenset())
 
     def _tb_show_body(self, idx: int) -> None:
         from .. import taskbooks as _tb
@@ -335,6 +365,11 @@ class PysciTUI(App):
         self._hide_all_views()
         self.query_one("#taskbook", Vertical).display = True
         lv.focus()
+        # 进面板 = 进「任务书」模块视图 → 写该模块水位（§2.2「进入详情即写水位」；f1 起
+        # Enter 也走这里，故水位在这里写，不再依赖 _open_detail）。
+        mod = next((m for m in self._mods if m.key == "taskbooks"), None)
+        if mod is not None:
+            self._mark_seen(mod)
 
     def action_tb_new(self) -> None:
         if self.view != "taskbooks":
