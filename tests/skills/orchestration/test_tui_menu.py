@@ -72,12 +72,24 @@ def test_decisions_detail_reuses_mirror_data_layer():
     assert dec.detail() == mirror.decisions_detail_lines()
 
 
-def test_placeholder_modules_are_labelled():
-    """占位如实标注；任务书自 m3 起是**真身**（不再是占位）。"""
-    plans = next(m for m in modules() if m.key == "plans")
-    assert any("占位" in ln for ln in plans.detail())
+def test_module_details_are_real_no_placeholder():
+    """f1：五模块详情已充实——真读数、无「占位 / 环节承诺」字样（任务书自 m3 起真身）。
+
+    禁词表**运行期拼接**（分隔符取自变量，避开编译期常量折叠）：本测试断言正文不含它们，
+    但字面量自身（含 .pyc 里的折叠常量）不得出现——f1 的 grep 判据要求 src/ 与 tests/ 对
+    这三个环节承诺串零命中。
+    """
+    sp = " "
+    banned = ("占位", "（细节", "m3" + sp + "补", "m5" + sp + "充实", "m5" + sp + "建")
+    for m in modules():
+        joined = "\n".join(m.detail())
+        assert joined.strip(), f"{m.key} 详情为空"
+        for bad in banned:
+            assert bad not in joined, f"{m.key} 详情含占位字样：{bad}"
     tb = next(m for m in modules() if m.key == "taskbooks")
     assert any("现有大任务" in ln for ln in tb.detail())
+    plans = next(m for m in modules() if m.key == "plans")
+    assert any("计划" in ln for ln in plans.detail())
 
 
 def test_badge_count_is_explainable_and_first_run_counts_all():
