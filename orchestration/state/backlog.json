@@ -1005,12 +1005,15 @@
       "kind": "defect",
       "success_criteria": "- 真实重跑「fig-basic A/B（相邻提交对 b2e5b358→89a93c3）」→ 两副本各真跑\n（台账各新增一行 runner=bencher kind=ab 读数）→ 输出二元判决或\ninconclusive+窗口证据，二者必居其一，绝无 1.3s-done-无判决形状；\n- done-无证据→failed 的机械判据单测全绿；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170000-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-12T16:58:42+08:00",
-      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
+      "note": "drain 批量销账（commit ced7aaa）",
       "effort": "medium",
       "started_at": "2026-10-13T07:17:59+08:00",
-      "worktree": "20261012-170000-leader"
+      "worktree": "20261012-170000-leader",
+      "done_at": "2026-10-13T07:50:35+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-170000-leader"
     },
     {
       "id": "20261012-170300-leader",
@@ -1034,12 +1037,15 @@
       "kind": "defect",
       "success_criteria": "- 122624 run：批次 120002(+2)=E4+E5a+E5b 三张大单同会话 → 触顶 150；\n- 同 run：批次 120003(+1)=E5a+E5b → 又触顶（E5a 二次腰斩，20 未提交文件险全损）；\n- 前夜 233336 run：E2(+1) 同形状。组包只按「同提请者+同 effort」聚类，\n完全不估任务体量——聚类维度与风险维度错位。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-170301-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-12T17:02:34+08:00",
-      "note": "组长改注重投：前次失败=BYOK 渠道空窗牺牲品（stop_sequence/tool_use），败因已随 Mimo 预设上线消除；规格原样有效，无需改单",
+      "note": "drain 批量销账（commit c8911f8）",
       "effort": "max",
-      "started_at": "2026-10-12T19:39:30+08:00",
-      "worktree": "20261012-170301-leader"
+      "started_at": "2026-10-13T07:50:35+08:00",
+      "worktree": "20261012-170301-leader",
+      "done_at": "2026-10-13T08:12:23+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-170301-leader"
     },
     {
       "id": "20261012-171200-leader",
@@ -1327,9 +1333,14 @@
       "kind": "defect",
       "success_criteria": "65% 会话续用实测；remedy_shape 双类阳性用例；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-060000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T07:25:28+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 6c50aa7）",
+      "started_at": "2026-10-13T08:12:23+08:00",
+      "worktree": "20261013-060000-leader",
+      "done_at": "2026-10-13T08:40:52+08:00",
+      "batch_size": 2,
+      "batch_seed": "20261013-060000-leader"
     },
     {
       "id": "20261013-061000-leader",
@@ -1338,10 +1349,15 @@
       "summary": "**（#88 续）charter 8 处 lint 对盘核验句补齐（用户已授权）+ #89 remedy_shape 句同批**",
       "success_criteria": "8 charter 各含核验句（快照断言）+ sync 部署副本一致 + 预算钩子绿 + 全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-045000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T06:10:00+08:00",
-      "note": "用户 05:5x 完全授权 charter 修改；一并落 #89 的 remedy_shape 纪律句（devops charter）",
-      "effort": "medium"
+      "note": "drain 批量销账（commit 06b740c）",
+      "effort": "medium",
+      "started_at": "2026-10-13T08:40:52+08:00",
+      "worktree": "20261013-061000-leader",
+      "done_at": "2026-10-13T08:50:45+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-061000-leader"
     },
     {
       "id": "20261013-063000-leader",
@@ -1350,9 +1366,24 @@
       "kind": "usability",
       "success_criteria": "mirror status 新段实时水位；decisions 命令对今晚真实决策链完整呈现（含水位闸案三态标记）；change 置顶；无新状态面；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-063000-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T07:32:07+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 6c50aa7）",
+      "done_at": "2026-10-13T08:40:52+08:00",
+      "batch_size": 2,
+      "batch_seed": "20261013-060000-leader"
+    },
+    {
+      "id": "20261013-072000-leader",
+      "member": "leader",
+      "summary": "**（REFACTOR 收官，v1.0 §12 收尾阶段）生效机制并入 README + 删除 REFACTOR.md + 裁决登记**",
+      "kind": "usability",
+      "success_criteria": "全仓 REFACTOR 引用清零；README 逐节快照抽验；文件已删 git 可查；§13 三行登记；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-072000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T09:33:06+08:00",
+      "note": "",
+      "effort": "high"
     }
   ]
 }
