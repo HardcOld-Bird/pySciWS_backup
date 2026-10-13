@@ -992,7 +992,9 @@ def do_dispatch(
         failed = rc != 0 or env_json.is_error
         # 每轮**重新判**而不是 `or` 累积：重试跑通时必须把首轮的 channel_error 抹掉，
         # 否则成功交付会被首轮的判定拖成系统性故障（kind 错、drain 还会全局停）。
-        systemic = _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
+        systemic = (
+            _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
+        )
         broken = _seat_broken(env_json, rc, systemic)
     same_seat_retry_ms = int(round((_clock() - retry_started) * 1000))
     if same_seat_retries and not quiet and not (failed and broken):

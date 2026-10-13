@@ -262,9 +262,7 @@ def _one_same_seat_retry(monkeypatch, state):
     reg_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
-def test_do_dispatch_channel_error_retries_same_seat_first(
-    iso_dispatch, monkeypatch
-):
+def test_do_dispatch_channel_error_retries_same_seat_first(iso_dispatch, monkeypatch):
     """渠道故障**先**同席 resume 重试一次（席位不动），仍败才轮到换席通路。"""
     _one_same_seat_retry(monkeypatch, iso_dispatch)
     set_models(iso_dispatch, flash=BUILTIN, flash_fallback="")

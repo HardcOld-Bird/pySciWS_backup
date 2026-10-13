@@ -556,7 +556,11 @@ def iso_dispatch(tmp_path, monkeypatch):
                 # 用例只需在首跳后多认一跳。验次数闸/壁钟闸本身的用例自行覆盖写
                 # （Registry 每次调用重读盘，后写胜出）。
                 "model_fallback": {
-                    "same_seat_retry": {"channel_error": 1, "backoff_s": 0, "budget_s": 0}
+                    "same_seat_retry": {
+                        "channel_error": 1,
+                        "backoff_s": 0,
+                        "budget_s": 0,
+                    }
                 },
             },
             ensure_ascii=False,

@@ -171,12 +171,16 @@ def test_chain_exhausted_keeps_systemic_kind_and_records_exhaustion(
     o = dispatch.do_dispatch("quotamember", text="出图", quiet=True)
 
     assert o.kind == "channel_error", "全链坏了要说「渠道级故障」，drain 据此全局停止"
-    assert len(calls) == 2, "两席各一跳，不再同席重试"
+    # 同席重试（backlog 20261013-143000-leader，用户裁决 2026-10-13）：渠道级故障先在
+    # 原席自救一次（测试口径压到 1 次，见 conftest.iso_dispatch），仍败才换席——故是
+    # 首跳 + 1 次自救 + 次席一跳 = 3 跳，而不是旧语义的「两席各一跳」。
+    assert [cmd_model(c) for c in calls] == [A, A, B], "自救不换席，换席才动链"
+    assert o.same_seat_retries == 1, "自救次数必须在读数面上可见"
     events = _events(iso_dispatch)
     assert events[-1]["to"] == "" and events[-1]["to_label"] == "(全链耗尽)", (
         "「停止」这件事本身也要落账，否则观察面上它是隐形的"
     )
-    assert [e["to"] for e in events] == [B, ""]
+    assert [e["to"] for e in events] == [B, ""], "自救不进回退事件面，只有真实换席进"
 
 
 def test_drain_stops_and_logs_each_demote(iso_state, monkeypatch):

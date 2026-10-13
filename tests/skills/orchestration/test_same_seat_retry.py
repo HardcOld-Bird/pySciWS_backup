@@ -136,9 +136,7 @@ def test_backoff_is_honoured_between_retries(iso_state, iso_dispatch, monkeypatc
 # ---------------------------------------------------------------------------
 # ② quota 不重试 / 重试耗尽后换席 / 预算闸先于次数闸
 # ---------------------------------------------------------------------------
-def test_quota_exhaustion_never_enters_retry_loop(
-    iso_state, iso_dispatch, monkeypatch
-):
+def test_quota_exhaustion_never_enters_retry_loop(iso_state, iso_dispatch, monkeypatch):
     """额度是确定性耗尽：重试只是再烧一跳，直接走换席通路。"""
     _no_backoff(monkeypatch)
     _set_retry(iso_dispatch, channel_error=10, backoff_s=0, budget_s=0)
@@ -152,7 +150,9 @@ def test_quota_exhaustion_never_enters_retry_loop(
     assert o.same_seat_retries == 0, "额度耗尽不得计入同席重试读数"
 
 
-def test_retries_exhausted_then_falls_to_next_seat(iso_state, iso_dispatch, monkeypatch):
+def test_retries_exhausted_then_falls_to_next_seat(
+    iso_state, iso_dispatch, monkeypatch
+):
     """次数闸耗尽（渠道一直坏）→ 才换席；重试次数与回退事件两账分开。"""
     _no_backoff(monkeypatch)
     _set_retry(iso_dispatch, channel_error=2, backoff_s=0, budget_s=0)
@@ -214,7 +214,9 @@ def test_retry_counts_land_in_ledger(iso_state, iso_dispatch, monkeypatch):
     assert row["hold_s"] == 0, "没避让就记 0，不许留空串或缺字段"
 
 
-def test_quota_path_records_zero_retries_in_ledger(iso_state, iso_dispatch, monkeypatch):
+def test_quota_path_records_zero_retries_in_ledger(
+    iso_state, iso_dispatch, monkeypatch
+):
     """额度路径的台账行也必须带这几个字段（旧行缺字段会让统计面误读成 0 覆盖）。"""
     _no_backoff(monkeypatch)
     _set_retry(iso_dispatch, channel_error=10, backoff_s=0, budget_s=0)
