@@ -1485,11 +1485,14 @@
       "kind": "usability",
       "success_criteria": "deepseek 预设激活+UUID 消歧单测绿+真实派发读数可证+全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-080000-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T09:40:19+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit dc39475）",
       "started_at": "2026-10-13T10:29:00+08:00",
-      "worktree": "20261013-080000-leader"
+      "worktree": "20261013-080000-leader",
+      "done_at": "2026-10-13T11:19:46+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-080000-leader"
     },
     {
       "id": "20261013-093000-leader",
@@ -1498,10 +1501,12 @@
       "kind": "usability",
       "success_criteria": "见单内五组判据（判定矩阵/切换时机/第三席链/观测面/minimum）全绿",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-093000-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T11:17:44+08:00",
       "note": "｜组长调度：用户指示优先生效，移至队首（--solo 单发）",
-      "solo": true
+      "solo": true,
+      "started_at": "2026-10-13T11:19:46+08:00",
+      "worktree": "20261013-093000-leader"
     }
   ]
 }
