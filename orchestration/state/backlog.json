@@ -1503,12 +1503,15 @@
         "from": "20261013-101705-salvage",
         "gen": 3
       },
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T10:21:53+08:00",
-      "note": "drain 跳过（交付=blocked）：**卡点（第 4 跳、抢救链 gen3 = 最后一跳自动续作）：main 的 `orchestration/pods/｜组长处置：堵点已清（inspector AGENTS.md 蒸馏已入库），gen3 续作放行",
+      "note": "drain 批量销账（commit 383898c）",
       "started_at": "2026-10-13T13:15:05+08:00",
       "worktree": "20261013-102153-salvage",
-      "needs_leader_at": "2026-10-13T10:29:00+08:00"
+      "needs_leader_at": "2026-10-13T10:29:00+08:00",
+      "done_at": "2026-10-13T13:34:10+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-102153-salvage"
     },
     {
       "id": "20261013-080000-leader",
@@ -1548,9 +1551,11 @@
       "kind": "usability",
       "success_criteria": "批准单内判据段与补充段不再对同一配置项给相反要求；lint 告警面阳性用例；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-071759-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T12:39:11+08:00",
-      "note": ""
+      "note": "",
+      "started_at": "2026-10-13T13:34:10+08:00",
+      "worktree": "20261013-071759-devops"
     },
     {
       "id": "20261013-085045-devops",
@@ -1583,6 +1588,17 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261013-130000-leader.md",
       "status": "pending",
       "proposed": "2026-10-13T13:26:33+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-143000-leader",
+      "member": "leader",
+      "summary": "**（dispatch 层，用户 2026-10-13）channel_error 同席重试先于换席：瞬态中断先自救，付费席降为后手**",
+      "kind": "usability",
+      "success_criteria": "见单内两组判据（分类处置单测矩阵/真实续跑全链）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-143000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T13:55:53+08:00",
       "note": ""
     }
   ]
