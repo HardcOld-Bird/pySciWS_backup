@@ -49,6 +49,22 @@ enabled = true
 # jury_panel = ["glm", "kimi", "mimo"] # 谷时仲裁团固定面板（三席一律按量付费直调）
 # 非法值逐键回落出厂并告警——`orch status` 路由段会把警告逐条列出来。
 
+[priority]
+# ── 会话优先级表（带宽治理，用户裁决 2026-10-13）──────────────────
+# 用途：带宽不足时决定谁该让路/谁该延期（背压优先于付费改道）。
+# 形制：**数组的数组**——外层顺序＝优先级（前＝高），内层同数组＝**同档**。
+# 列表项是「档名」（活跃会话注册表 state/active-sessions.json 的 tier 字段），
+# 不是成员 id：「research」一档覆盖 7 位专职 + reviewer + deputy。
+# 未登记的档名一律取最低档（新档没进表就不插队）；仲裁团走独立按量渠道，不入表。
+order = [
+  ["leader"],               # 1 TUI 会话——不管，用户手动
+  ["research"],             # 2 7 专职 + reviewer + deputy
+  ["devops"],               # 3
+  ["bench-pressure"],       # 4 bencher 派生的 minimum 压测会话（产生更多会话，故高于本体）
+  ["bencher", "twin"],      # 5 同档
+  ["inspector"],            # 6
+]
+
 [inspector]
 # inspector 巡检引擎全局开关 —— true / false（原 state/inspector.enabled 迁至本文件）
 enabled = false

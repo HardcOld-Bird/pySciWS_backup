@@ -86,6 +86,58 @@ def inspector_flag(data: dict[str, Any] | None = None) -> bool | None:
     return str(raw).strip().lower() not in ("false", "0", "off", "no", "")
 
 
+#: ``[priority] order`` 的出厂优先级序（用户裁决 2026-10-13，backlog 20261013-193000-leader）：
+#: 外层列表序＝优先级（前＝高），内层同组＝**同档**。列表项是**档名**（活跃会话注册表的
+#: ``tier`` 字段），不是成员 id——「research」一档覆盖 7 专职 + reviewer + deputy。
+#: 未登记档名一律取最低档：新档没进表就不该插队（fail-open，且方向是保守的）。
+DEFAULT_PRIORITY_ORDER: tuple[tuple[str, ...], ...] = (
+    ("leader",),
+    ("research",),
+    ("devops",),
+    ("bench-pressure",),
+    ("bencher", "twin"),
+    ("inspector",),
+)
+
+
+def priority_order(data: dict[str, Any] | None = None) -> tuple[tuple[str, ...], ...]:
+    """读 ``[priority] order``：外层序＝优先级、内层同档；缺席/非法 → 出厂表。
+
+    值形是**数组的数组**（``[["leader"], ["bencher","twin"], …]``）——同档的档名写在同一个
+    内层数组里，否则「bencher 与 twin 同档」这条用户裁决会被列表顺序偷偷拆成两档。
+    单项数组也收（``["leader"]`` 与 ``"leader"`` 等价），免得写法收紧后旧配置突然失效。
+    """
+    if data is None:
+        data = read_settings()
+    try:
+        raw = data.get("priority", {}).get("order")
+    except AttributeError:
+        return DEFAULT_PRIORITY_ORDER
+    if not isinstance(raw, list) or not raw:
+        return DEFAULT_PRIORITY_ORDER
+    groups: list[tuple[str, ...]] = []
+    for item in raw:
+        names = item if isinstance(item, (list, tuple)) else [item]
+        cleaned = tuple(str(x).strip() for x in names if str(x).strip())
+        if cleaned:
+            groups.append(cleaned)
+    return tuple(groups) or DEFAULT_PRIORITY_ORDER
+
+
+def priority_rank(tier: str, data: dict[str, Any] | None = None) -> int:
+    """档名的优先级序（**小者高**）；未登记 → 末位（=最低档，不插队）。
+
+    未登记取末位而不是 0（最高）是刻意的：档名拼错/新档没进表时，宁可不给调度权重，
+    也不能让一个陌生名字压过 leader。
+    """
+    order = priority_order(data)
+    key = str(tier or "").strip()
+    for index, group in enumerate(order):
+        if key in group:
+            return index
+    return len(order)
+
+
 def _detect_eol(text: str) -> str:
     """取文件主导换行（新插入的行必须与既有行同制式，否则整文件被改脏）。"""
     match = re.search(r"\r\n|\n", text)
