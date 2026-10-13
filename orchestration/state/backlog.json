@@ -2132,6 +2132,17 @@
       "done_at": "2026-10-13T23:04:54+08:00",
       "batch_size": 1,
       "batch_seed": "20261013-022033-devops"
+    },
+    {
+      "id": "20261013-231756-leader",
+      "member": "leader",
+      "summary": "**背景（本会话两次实证）**：`pysci-dev worktree clean` 只扫**登记在册**（`git worktree list`）的 worktree。但 `.qoder/worktrees/` 下可能存在**未注册的陈旧目录**（不在 list 里，`git worktree prune` 也不动它）——而这类目录恰恰可能藏**未记录产物**：本会话从两个这样的目录里捞回 **",
+      "kind": "usability",
+      "success_criteria": "worktree clean 列出 .qoder/worktrees/ 下的未注册目录；空的可 --apply 清、有内容的列待确认并列出未记录产物；单测钉空/有内容两例。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-231756-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T23:18:05+08:00",
+      "note": ""
     }
   ]
 }
