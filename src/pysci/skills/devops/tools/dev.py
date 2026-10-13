@@ -19,6 +19,7 @@ import argparse
 import fnmatch
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -743,13 +744,69 @@ def merge_faces(branch: str) -> tuple[set[str], set[str]] | None:
         return None
 
 
-def _remove_worktree(name: str, wt: Path, *, force: bool = False) -> int:
-    """摘 worktree 目录 + 删其分支（``worktree remove`` 与 merge 成功收尾共用一处）。
+def _registered_worktrees() -> set[str]:
+    """``git worktree list`` 里登记在册的路径（小写 posix，便于跨平台比）。"""
+    rc, out = _run_git("worktree", "list", "--porcelain")
+    if rc != 0:
+        return set()
+    return {
+        ln[len("worktree ") :].strip().replace("\\", "/").lower()
+        for ln in out.splitlines()
+        if ln.startswith("worktree ")
+    }
+
+
+def _face_is_empty(wt: Path) -> bool:
+    """目录下**一个条目都没有**（含点文件）——空未注册目录可无损清。"""
+    try:
+        return not any(wt.iterdir())
+    except OSError:
+        return False
+
+
+def _undocumented_artifacts(wt: Path) -> list[str]:
+    """未注册面里**没进 main 的**建议/回复文件（供组长先回收再清）。
+
+    只扫 ``orchestration/state/{suggestions,replies}``——本会话两次实证遗失工单就藏在这两处
+    （`20261012-194305`→#134、`20261013-022033`→#135）。判据＝该相对路径在 main 树里**不存在**
+    （名字对不上即视为未记录）。
+    """
+    out: list[str] = []
+    for sub in ("orchestration/state/suggestions", "orchestration/state/replies"):
+        base = wt / sub
+        if not base.exists():
+            continue
+        try:
+            found = sorted(base.rglob("*.md"))
+        except OSError:
+            continue
+        for p in found:
+            rel = p.relative_to(wt)
+            if not (PROJECT_ROOT / rel).exists():
+                out.append(rel.as_posix())
+    return out
+
+
+def _remove_worktree(
+    name: str, wt: Path, *, force: bool = False, registered: bool = True
+) -> int:
+    """摘 worktree 目录（登记面再删其分支）；``worktree remove``/merge 收尾/clean 共用。
 
     **只有目录真被摘掉才删分支**（backlog 20261013-222531-leader 的实证）：此前无论
     ``remove`` 成败都去 ``branch -D``，脏面删不掉时打「分支删除跳过：used by worktree」
     ——半截动作 + 误导读数。失败即明确报因、面与分支都保留。
+
+    ``registered=False``（未注册的陈旧目录）：``git worktree remove`` 够不着（"not a
+    working tree"）→ 直接 ``rmtree``（无分支可删）。
     """
+    if not registered:
+        try:
+            shutil.rmtree(wt)
+        except OSError as exc:
+            print(f"  [!] 未能摘除未注册目录 {name}（{exc}）——目录保留")
+            return 1
+        print(f"  [√] 未注册目录已删：{name}")
+        return 0
     argv = ["worktree", "remove"]
     if force:
         argv.append("--force")
@@ -795,14 +852,23 @@ def _worktree_has_changes(wt: Path) -> bool:
 
 #: ``worktree clean`` 的分类桶——**分类即动作的唯一真源**（backlog 20261013-222531-leader：
 #: 任何面不许出现「说可清却删不掉」）。
-_CLEANABLE = "cleanable"  # 已合入 main 且盘内干净 → 可无损摘除
+_CLEANABLE = "cleanable"  # 已合入 main 且盘内干净（或未注册且空）→ 可无损摘除
 _NEEDS_CONFIRM = "dirty"  # 已合入但盘内有改动 → 默认拒绝（--discard 才删）
 _UNMERGED = "unmerged"  # 未合入 main → 拒绝（待抢救）
 _IN_FLIGHT = "in_flight"  # 分支 tip == main HEAD（无产出/在途）→ 不动
+_UNREGISTERED = "unregistered"  # 未注册（不在 git worktree list）且**有内容** → 待确认
 
 
-def _classify_face(name: str) -> tuple[str, str]:
-    """一个面的 ``(桶, 说明)``。顺序有意：先判「在途」再判「已合入」，见下。"""
+def _classify_face(name: str, *, registered: bool) -> tuple[str, str]:
+    """一个面的 ``(桶, 说明)``。**先判「未注册」**再判「在途/已合入」，见下。"""
+    wt = WORKTREES_ROOT / name
+    if not registered:
+        # 未注册面（不在 git worktree list）：`git worktree remove`/`prune` 都够不着它，
+        # 而目录可能藏着**未记录产物**（本会话两次实证遗失工单就藏在 suggestions/replies）
+        # ——clean 只认登记面时这类既不清也不报警（backlog 20261013-231756-leader）。
+        if _face_is_empty(wt):
+            return _CLEANABLE, "未注册且空目录（--apply 可清）"
+        return _UNREGISTERED, "未注册且有内容（可能藏未记录产物，--discard 才删）"
     branch = f"wt-{name}"
     rc, _ = _run_git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
     if rc != 0:
@@ -815,21 +881,22 @@ def _classify_face(name: str) -> tuple[str, str]:
         return _IN_FLIGHT, "分支未产出提交（在途/空面）"
     if not _branch_merged_into_main(branch):
         return _UNMERGED, "未合入 main（待抢救）"
-    if _worktree_has_changes(WORKTREES_ROOT / name):
+    if _worktree_has_changes(wt):
         return _NEEDS_CONFIRM, "已合入但盘内有未提交/未跟踪改动（--discard 才删）"
     return _CLEANABLE, "已合入 main 且盘内干净"
 
 
 def _clean_worktrees(*, apply: bool, force: bool = False) -> int:
-    """列出/清理遗留隔离面（backlog 20261013-215911-leader / -222531-leader）。
+    """列出/清理遗留隔离面（backlog 20261013-215911 / -222531 / -231756-leader）。
 
-    **分类与动作必须一致**：只把「已合入 + 盘内干净」列进可清并真删得掉；「已合入但盘内
-    有改动」默认**拒绝**（``--discard`` 才删——防误删未提交的手写改动）；未合入的一律拒绝
-    （待抢救）。缺省 dry-run（只列清单），``--apply`` 才真动。
+    扫描源＝``.qoder/worktrees/`` 的**目录面**（不是只看 ``git worktree list``）：
+    **分类与动作必须一致**——「已合入 + 盘内干净」与「**未注册且空**」列可清；「已合入但
+    盘内有改动」与「**未注册且有内容**」默认**拒绝**（``--discard`` 才删——后者可能藏未记录
+    产物，清单先顶出来供组长回收）；「未合入」一律拒绝（待抢救）。缺省 dry-run，``--apply`` 才真动。
 
     Returns:
         0（没有留下任何该清而未清的项）；2（有未合入、或未 ``--discard`` 的待确认项、
-        或清理失败——都属「分类—动作需人确认」）。
+        或清理失败）。
     """
     if not WORKTREES_ROOT.exists():
         print(f"  （无 {WORKTREES_ROOT.name}/ 目录，无遗留面）")
@@ -838,19 +905,28 @@ def _clean_worktrees(*, apply: bool, force: bool = False) -> int:
     if not names:
         print("  （无遗留隔离面）")
         return 0
+    registered = _registered_worktrees()
+    reg_of: dict[str, bool] = {}
     buckets: dict[str, list[str]] = {
         _CLEANABLE: [],
         _NEEDS_CONFIRM: [],
         _UNMERGED: [],
         _IN_FLIGHT: [],
+        _UNREGISTERED: [],
     }
     for n in names:
-        bucket, _why = _classify_face(n)
+        wt = WORKTREES_ROOT / n
+        try:
+            is_reg = wt.resolve().as_posix().lower() in registered
+        except OSError:
+            is_reg = wt.as_posix().lower() in registered
+        reg_of[n] = is_reg
+        bucket, _why = _classify_face(n, registered=is_reg)
         buckets[bucket].append(n)
     print(f"== worktree clean（{WORKTREES_ROOT.as_posix()}）==")
     if buckets[_CLEANABLE]:
         print(
-            f"  [√] 可清（已合入 + 盘内干净，{len(buckets[_CLEANABLE])}）："
+            f"  [√] 可清（已合入+盘内干净 / 未注册且空，{len(buckets[_CLEANABLE])}）："
             f"{'、'.join(buckets[_CLEANABLE])}"
         )
     if buckets[_NEEDS_CONFIRM]:
@@ -858,6 +934,15 @@ def _clean_worktrees(*, apply: bool, force: bool = False) -> int:
             f"  [!] 待确认（已合入但盘内有改动，{len(buckets[_NEEDS_CONFIRM])}，"
             f"--discard 才删）：{'、'.join(buckets[_NEEDS_CONFIRM])}"
         )
+    if buckets[_UNREGISTERED]:
+        print(
+            f"  [!] 未注册（不在 git worktree list，有内容 → 待确认，{len(buckets[_UNREGISTERED])}，"
+            f"--discard 才删）：{'、'.join(buckets[_UNREGISTERED])}"
+        )
+        for n in buckets[_UNREGISTERED]:
+            treasures = _undocumented_artifacts(WORKTREES_ROOT / n)
+            shown = "、".join(treasures) if treasures else "（未见未记录的建议/回复）"
+            print(f"      ↳ {n} 内含未记录产物（先回收再清）：{shown}")
     if buckets[_UNMERGED]:
         print(
             f"  [✗] 拒绝（未合入 main，待抢救，{len(buckets[_UNMERGED])}）："
@@ -868,24 +953,32 @@ def _clean_worktrees(*, apply: bool, force: bool = False) -> int:
             f"  [·] 在途/空面（分支未产出提交，不动，{len(buckets[_IN_FLIGHT])}）："
             f"{'、'.join(buckets[_IN_FLIGHT])}"
         )
+    pending_confirm = buckets[_NEEDS_CONFIRM] + buckets[_UNREGISTERED]
     if not apply:
-        print("  （dry-run：加 --apply 清「可清」；「待确认」需再加 --discard）")
-        return 2 if (buckets[_UNMERGED] or buckets[_NEEDS_CONFIRM]) else 0
+        print(
+            "  （dry-run：加 --apply 清「可清」；「待确认/未注册有内容」需再加 --discard）"
+        )
+        return 2 if (buckets[_UNMERGED] or pending_confirm) else 0
     targets = [(n, False) for n in buckets[_CLEANABLE]] + (
-        [(n, True) for n in buckets[_NEEDS_CONFIRM]] if force else []
+        [(n, True) for n in pending_confirm] if force else []
     )
     removed, failed = [], []
     for n, use_force in targets:
         print(f"  → 清理 {n}" + ("（--discard）" if use_force else ""))
-        if _remove_worktree(n, WORKTREES_ROOT / n, force=use_force) == 0:
+        if (
+            _remove_worktree(
+                n, WORKTREES_ROOT / n, force=use_force, registered=reg_of[n]
+            )
+            == 0
+        ):
             removed.append(n)
         else:
             failed.append(n)
-    kept_confirm = [n for n in buckets[_NEEDS_CONFIRM] if n not in removed]
+    kept_confirm = [n for n in pending_confirm if n not in removed]
     print(f"  [√] 已清理 {len(removed)} 个")
     if kept_confirm:
         print(
-            f"  [!] 待确认未清 {len(kept_confirm)}（盘内有改动，--discard 才删）："
+            f"  [!] 待确认未清 {len(kept_confirm)}（盘内有内容，--discard 才删）："
             f"{'、'.join(kept_confirm)}"
         )
     if failed:
@@ -1092,8 +1185,15 @@ def cmd_worktree(args: argparse.Namespace) -> int:
             no_cp_state=bool(getattr(args, "no_cp_state", False)),
         )
     if action == "remove":
+        try:
+            is_reg = wt_path.resolve().as_posix().lower() in _registered_worktrees()
+        except OSError:
+            is_reg = True
         return _remove_worktree(
-            args.name, wt_path, force=bool(getattr(args, "discard", False))
+            args.name,
+            wt_path,
+            force=bool(getattr(args, "discard", False)),
+            registered=is_reg,
         )
     print(f"[!] 未知 action：{action}")
     return 2

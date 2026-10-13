@@ -22,10 +22,12 @@
   面——走 `pysci-dev worktree merge <名> --no-cp-state`（不搬运行态、保留 main 版、跳自检）。
 - **收尾已机械化（backlog 20261013-215911-leader / -222531-leader）**：`worktree merge` **成功即
   自动摘面**（失败/blocked 保留供抢救；`--keep` 留检视；面盘内有改动则不自动摘、提示走 clean）。
-  `worktree clean [--apply]` **分类即动作**（不许「说可清却删不掉」）：**可清**=已合入+盘内干净、
-  **待确认**=已合入但有未提交/未跟踪改动（默认拒绝、`--discard` 才删）、**拒绝**=未合入（待抢救）、
-  **在途**=分支未产出（不动）；有拒绝/待确认即 rc 非 0。推送改 `pysci-dev push`（跨平台超时 +
-  成败留痕 `state/push-log.jsonl`，best-effort 但失败不静默）。
+  `worktree clean [--apply]` **分类即动作**（不许「说可清却删不掉」）：**可清**=已合入+盘内干净
+  （或未注册且空）、**待确认**=已合入但有未提交/未跟踪改动（默认拒绝、`--discard` 才删）、
+  **拒绝**=未合入（待抢救）、**在途**=分支未产出（不动）、**未注册**=目录不在 `git worktree list`
+  （**目录面也扫**；有内容则待确认并**顶出未记录的建议/回复**——防遗失工单静默消失）；有拒绝/
+  待确认/未注册未清即 rc 非 0。推送改 `pysci-dev push`（跨平台超时 + 成败留痕
+  `state/push-log.jsonl`，best-effort 但失败不静默）。
 - **判决包流**：approve 必带 `--jury`/`--bench`/`--override` 之一；例外通道=defect×当跳
   blocked。细则 `orchestration/skills/orchestration/references/verdict-package.md`。
 - **档位映射自愈只写运行态** `models_resolved`，不写跟踪面；遮蔽时只报不写
