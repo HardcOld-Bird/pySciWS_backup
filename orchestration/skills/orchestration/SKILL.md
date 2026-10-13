@@ -34,13 +34,13 @@ pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步
 pysci-orch plan list | plan drop <id>
 pysci-orch suggestions                   # 待审批改进建议
 pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<理由>")
-        [--note "..."] [--no-wake] [--criteria "<判据>"]  # 四态判决包必居其一（例外=缺陷类
-        # ×该跳 blocked）：J 出 B 自动驳回；M 锚基线、销账自动排 A/B。缺 kind/
-        # success_criteria 亦拒入队。规程 references/verdict-package.md
+        [--note "..."] [--no-wake] [--criteria "<判据>"] [--solo]  # 四态判决包必居其一
+        # （例外=缺陷类×该跳 blocked）：J 出 B 驳回；M 锚基线、销账排 A/B；缺 kind/判据
+        # 拒入队。判决包 verdict-package.md；大单 --solo 见 solo-batching.md
 pysci-orch watch [--timeout 14400]
         # 等 drain 六类事件（枚举见 references/drain-watch.md §2）；run_in_background
         # 挂起，漏挂由 status 补账
-pysci-orch reject <建议id> --override "<判决依据>"   # 自裁否决：依据必填、留痕（J/M 判决的驳回不计）
+pysci-orch reject <建议id> --override "<判决依据>"   # 否决：依据必填、留痕（J/M 判决的驳回不计）
 pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
 pysci-orch consult-twin <案卷.md>       # 咨询 twin（taste_enabled=false 即拒 rc=2）
 pysci-orch review <产物> --origin <member> [--rubric generic]

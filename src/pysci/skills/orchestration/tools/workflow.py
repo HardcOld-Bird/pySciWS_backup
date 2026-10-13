@@ -173,6 +173,9 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
         ``len(group) <= max_batch - 1``（护栏：单批 ≤ max_batch 项，含种子）。
         member 为空的条目不组包（按单项处理），兼容旧数据与手动入队条目。
         effort 标注不同的条目也不组包（一批只有一跳，跳级参数不能一档多标）。
+        ``solo: true`` 的条目**不并入组包也不作组包种子**（batch_size 恒 1）：大单并批
+        必触该跳 max_turns 腰斩，尺寸盲区的聚类就是 E4+E5a 连坏的形状（backlog
+        20261012-170301-leader）。
     """
     if not BACKLOG_PATH.exists():
         return None, []
@@ -187,13 +190,17 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
     member = seed.get("member")
     seed_effort = _effort_key(seed)
     group: list[dict] = []
-    if member and max_batch > 1 and not seed.get("salvage"):
+    if member and max_batch > 1 and not seed.get("salvage") and not seed.get("solo"):
         for it in items:
             if it is seed or it.get("status") != "pending":
                 continue
             if it.get("salvage"):
                 # 续作单各带自己的抢救面（一跳一树），不组包：合并实施会把两份
                 # 未收尾进度塞进同一棵树，指令里的「原地续完」就自相矛盾了
+                continue
+            if it.get("solo"):
+                # 大单不并批（backlog 20261012-170301-leader）：并批必触该跳 max_turns
+                # 腰斩，且「没做」伪装成「做了」比 blocked 危险（REFACTOR §14）
                 continue
             # 组包只吃**同档位**：一批只有一跳，effort 是跳级参数——混档会让被标的项
             # 按种子档位跑完，静默污染台账 A/B 数据（backlog 20261010-orch-effort-per-item）
@@ -899,6 +906,10 @@ def cmd_approve(args) -> int:
     level = normalize_effort(getattr(args, "effort", None))
     if level:
         entry["effort"] = level
+    # solo 是**入队时**的尺寸判断（pod 级/多子面大单）：drain 组包不并入此项、此项也不
+    # 作组包种子（batch_size 恒 1）——大单并批必触该跳 max_turns 腰斩（backlog 20261012-170301-leader）。
+    if getattr(args, "solo", False):
+        entry["solo"] = True
     if verify:
         entry["verify"] = verify
     n = _backlog_append(entry)
