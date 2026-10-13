@@ -1,4 +1,4 @@
-"""Tier C 仲裁团（REFACTOR §4）：家族外、直连、阻塞、双序、多数、材料冻结。
+"""Tier C 仲裁团（README §5.3 J 通道）：家族外、直连、阻塞、双序、多数、材料冻结。
 
 **共享库，不建独立 CLI**（§0.9）：``orch jury <case-file>`` 子命令封装本模块
 （:func:`cmd_jury`），E6 的 pysci-inspect 复用同一条通路。渠道 = **逐席 provider 直连**
@@ -1191,7 +1191,7 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
 
 
 def cmd_jury(args: argparse.Namespace) -> int:
-    """``orch jury <case-file> [--dry] [--timeout S]``——Tier C 仲裁团（REFACTOR §4）。
+    """``orch jury <case-file> [--dry] [--timeout S]``——Tier C 仲裁团（README §5.3 J 通道）。
 
     阻塞执行（并行单轮，默认整体上限 5 min）；退出码 0=已留痕（裁决或 escalate=twin）、
     1=渠道降级（案卷入队待重裁）、2=案卷不可用或违反硬规则（拒开庭）。

@@ -3,7 +3,7 @@
 # ///
 """一次性入库：用户 prompt 语料（倒序文本）→ ``state/preference-journal.jsonl``。
 
-E6b（REFACTOR v1.0 §11 来源②）twin 训练原料的最大增量源。语料在
+E6b（README §6 决策日志来源②）twin 训练原料的最大增量源。语料在
 ``data/others/prompts_storage/``（含个人表述，故该目录 ``.gitignore`` 排除——只把
 **截断引用**誊进跟踪的 journal，原文永不出本机）。**属一次性搬运工具，放
 ``orchestration/bench/`` 不落 src**（同 ``backfill_preference_journal.py`` 的纪律）。

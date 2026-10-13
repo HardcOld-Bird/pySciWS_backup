@@ -117,13 +117,13 @@ pysci-model3d = "pysci.skills.modeling3d.tools.model3d:main"
 pysci-orch = "pysci.skills.orchestration.tools.orch:main"
 # devops 组员工具（worktree/部署/巡检）：与 orch 严格分离——orch 服务组长，dev 服务 devops 组员。
 pysci-dev = "pysci.skills.devops.tools.dev:main"
-# 用户控制台（REFACTOR §10）：mirror 是**用户**侧入口（全景概览 + 口述分流），
+# 用户控制台（README §4.1/§6）：mirror 是**用户**侧入口（全景概览 + 口述分流），
 # 与 orch（组长）/dev（devops）分离；实现复用 orchestration 包内库（§0.9 共享逻辑做库）。
 pysci-mirror = "pysci.skills.orchestration.tools.mirror:main"
-# bencher 组员工具（REFACTOR §8，E4）：harness 测量面——跑案/捕获基线/副本 A/B/读数表。
+# bencher 组员工具（README §5.5，E4）：harness 测量面——跑案/捕获基线/副本 A/B/读数表。
 # 与 dev 一样是「组员自己的 CLI」，复用 orchestration 的 eval/replica 库，不复制判据。
 pysci-bench = "pysci.skills.bencher.tools.bench:main"
-# inspector 组员工具（REFACTOR §7，E5a）：发现登记与分流面——findings 台账读写、
+# inspector 组员工具（README §6，E5a）：发现登记与分流面——findings 台账读写、
 # 机械证据类免判决晋升、判断类必经 J 仲裁。**没有 override 参数**（§5.2 无自裁面的
 # 代码事实）。队列/预算/让路/迟滞等生命周期闸门在 orch 侧（inspectd），组员碰不到。
 pysci-inspect = "pysci.skills.inspector.tools.inspect:main"

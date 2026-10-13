@@ -20,7 +20,7 @@ SKILL.md 放决策与命令面；本文放**为什么这样设计**与**坏了�
 - **FIFO 单 worker**：互斥由锁保证，所以获锁一刻仍在 `in_progress` 的条目必是上一任被
   杀死时留下的孤儿 → `reset_orphans()` 就地复位为 pending。stale 判据与 devops drain
   共用 `WorkerPaths`（`drain.py`），不另写一套事故硬化的锁逻辑。
-- 完成项**不即时唤醒组长**（REFACTOR §5.1-B 择机查看）：终态条目留在「待查看」面，
+- 完成项**不即时唤醒组长**（README §5.5 择机查看）：终态条目留在「待查看」面，
   watch 事件 `BENCH-DONE <run>` 属可选挂载，默认不挂。
 - **系统性故障**（`quota_exhausted` 额度耗尽 / `channel_error` 渠道级故障）：全局停止、剩余
   条目保持 pending，`.done` 附 `stopped=<kind>` 与分列说明（两类处置相同、恢复动作不同）。

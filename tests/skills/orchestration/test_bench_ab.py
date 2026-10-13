@@ -7,7 +7,7 @@
 - 入口重锚：副本子进程按**主树 bench.py 文件**直跑（协议稳定、被测 harness 仍来自副本）；
 - 空壳闸：任一侧零真实读数 → run_ab 置 error、不出判决、不写台账；
 - done 机械判据：ab 判决必须有台账读数、capture 必有归档、run 必有判决行——证据缺失
-  一律 failed（静默完成比失败危险，REFACTOR §14）。
+  一律 failed（静默完成比失败危险，README §14）。
 
 真派发、真 worktree 一律桩掉；``_hop`` 的老 ref eval 兼容单独钉（协议层能力探测）。
 """

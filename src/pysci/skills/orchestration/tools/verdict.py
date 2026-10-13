@@ -1,4 +1,4 @@
-"""组长判决包（REFACTOR v1.0 §5.1/§5.6）——审批通道的机械闸 + 交付后核验闭环。
+"""组长判决包（README §5.3）——审批通道的机械闸 + 交付后核验闭环。
 
 §5.1 分流：缺陷类且当条交付含 ``blocked``（in-vivo 实测即依据）→ 保留「直接 approve」
 的现行为；其余提案必须落入四态之一——**J**（``--jury`` 阻塞仲裁，复用 :mod:`.jury`
@@ -115,7 +115,7 @@ def validate(args: Any, *, kind: str, delivery: str) -> tuple[str, str]:
     ch = channel_of(jury_on=jury_on, bench_on=bench_on, override_on=override_on)
     if ch == "conflict":
         return "", (
-            "[!] 判决包参数冲突：--override 是「不选 J/M」的分支（REFACTOR §5.1），"
+            "[!] 判决包参数冲突：--override 是「不选 J/M」的分支（README §5.3），"
             "不能与 --jury/--bench 同时给。\n"
             "    要用仲裁或实测就只给 --jury / --bench；要凭自己的判断直接定案就只给 "
             '--override "<理由>"。'
@@ -125,7 +125,7 @@ def validate(args: Any, *, kind: str, delivery: str) -> tuple[str, str]:
     if is_exception_channel(kind, delivery):
         return CHANNEL_EXCEPTION, ""
     return "", (
-        f"[!] 缺判决包，拒绝入队（REFACTOR §5.1：基建判断须与组长职责事实分离）。\n"
+        f"[!] 缺判决包，拒绝入队（README §5.3：基建判断须与组长职责事实分离）。\n"
         f"    建议 '{getattr(args, 'suggestion_id', '?')}' 的分类是 kind={kind}、"
         f"提请交付 delivery={delivery or '（无标记）'}，不在例外通道内"
         "（例外通道=缺陷类且当条交付含 blocked，那是 in-vivo 实测即依据）。\n"

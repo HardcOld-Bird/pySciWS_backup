@@ -1,4 +1,4 @@
-# 巡检引擎（inspector）生命周期与读数口径（REFACTOR §5.2/§7，E5a）
+# 巡检引擎（inspector）生命周期与读数口径（README §6，E5a）
 
 SKILL.md 的命令面只留一行索引；本文放**为什么这样设计**与**读数怎么解释**。
 引擎住在 `orchestration/tools/inspectd.py`（组长侧），组员侧门面是 `pysci-inspect`。

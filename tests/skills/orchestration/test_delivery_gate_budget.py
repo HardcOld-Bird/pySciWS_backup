@@ -337,7 +337,7 @@ def test_skill_dir_without_skill_md_is_ignored(pod):
 
 
 # ===========================================================================
-#  ⑤ E0-B：非空 <infra_suggestion> 的 kind 属性硬闸（REFACTOR §12 判据 1）
+#  ⑤ E0-B：非空 <infra_suggestion> 的 kind 属性硬闸（README §6 判据纪律）
 #  阳性用例：缺 kind / 非法 kind 必须被真 guard 拦截——fail-open 教训
 #  20261010-193601 要求「违规必拦截」用 node 直跑真 guard 锁死，不接受模拟。
 # ===========================================================================

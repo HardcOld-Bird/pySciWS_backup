@@ -18,7 +18,7 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     ... orch watch [--timeout S=4h] [--interval S=60]   # 后台挂起等 drain 事件（§4.5）
     ... orch sessions <member> [--all|--archive SID [--distill]|--prune SID]
     ... orch ledger [--member --days --stats] | sync [--check]
-    ... orch jury <case-file> [--dry] [--timeout S]   # Tier C 仲裁团（REFACTOR §4）
+    ... orch jury <case-file> [--dry] [--timeout S]   # Tier C 仲裁团（README §5.3）
     ... orch taste <case-file> [--dry]        # twin 审美判断通道（宪章生效后可用，§9）
     ... orch bench-add | bench-up | bench-queue | bench-seen | bench-stop   # bencher 测量队列（§8）
     ... orch inspector-up [--dry|--force] | inspector-status | inspector-patrol |
@@ -124,7 +124,7 @@ def cmd_status(args: argparse.Namespace) -> int:
             f"{latest_s}{pod_mark}"
         )
 
-    # Tier A 阈值扫描（REFACTOR §2.4）在读取待办清单**之前**跑：本次新立的案要立刻
+    # Tier A 阈值扫描（README §5.4）在读取待办清单**之前**跑：本次新立的案要立刻
     # 出现在下面的 [建议] 列表里，否则「机械重算」与「呈现」之间差一拍，组长永远看的是
     # 上一轮的状态（status 是组长最常敲的命令，正是 §0 设计纪律 1 要的硬依赖入口）。
     for sid in _workflow.tier_a_sweep():
@@ -141,7 +141,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         f"待附送回复={replies_n}"
     )
     # 用户经 pysci-mirror 口述的**行动指令**：与偏差报告「纠正现有结果」同类，
-    # 必须写任务书派 devops、不得 override（REFACTOR §5.4/§10）。不入本视野就等于
+    # 必须写任务书派 devops、不得 override（README §6 绿色通道/§4.1 journal）。不入本视野就等于
     # 没有队列——组长侧可见性是这条强制链的唯一执法点。
     pend = _mirror.pending_directives()
     if pend:
@@ -263,12 +263,12 @@ def cmd_status(args: argparse.Namespace) -> int:
                 + ("（旧面未提交部分待判读）" if sal.get("uncommitted") else "")
             )
 
-    print("== 判决包健康（REFACTOR §5.1/§5.6：基建判断的通道用量）==")
+    print("== 判决包健康（README §5.3：基建判断的通道用量）==")
     for line in _verdict.health_lines():
         print(line)
 
     bst = _benchd.bench_status()
-    print("== bencher worker（harness 专测队列，REFACTOR §8）==")
+    print("== bencher worker（harness 专测队列，README §5.5）==")
     block = bst["lock"]
     if block["state"] == "running":
         print(f"  ▶ running（pid {block['pid']}，启动 {block['started']}）")
@@ -297,7 +297,7 @@ def cmd_status(args: argparse.Namespace) -> int:
                 f"{str(line)[:70]}"
             )
 
-    print("== inspector 巡检引擎（闲时自主巡逻，REFACTOR §7）==")
+    print("== inspector 巡检引擎（闲时自主巡逻，README §6）==")
     for line in _inspectd.status_lines():
         print(line)
     # 内嵌拉起（§7「生命周期由代码保证」）：status 是组长最常敲的命令，把「记得去开
@@ -761,7 +761,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--override",
         default="",
-        help="否决判决依据（必填）：REFACTOR §5.1/E0 一切 reject 即 override，"
+        help="否决判决依据（必填）：README §5.3/E0 一切 reject 即 override，"
         "缺失则拒绝执行并非零退出；提供则写回复、移入 rejected/ 并追加 journal 行",
     )
     p.set_defaults(func=_workflow.cmd_reject)
@@ -898,7 +898,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "jury",
-        help="Tier C 仲裁团（REFACTOR §4）：案卷送家族外评审团双序对局，阻塞出裁决",
+        help="Tier C 仲裁团（README §5.3）：案卷送家族外评审团双序对局，阻塞出裁决",
     )
     p.add_argument(
         "case_file", help="案卷文件（## 问题 / ## 选项 A / ## 选项 B [+ ## 证据]）"
@@ -915,10 +915,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=_jury.cmd_jury)
 
-    # ---- taste：twin 审美判断通道（REFACTOR §9 / E6-prep）----
+    # ---- taste：twin 审美判断通道（README §1/§3.1，E6-prep）----
     _taste._add_parser(sub)
 
-    # ---- eval：Tier B harness 压测套件（REFACTOR §3 / E2）----
+    # ---- eval：Tier B harness 压测套件（README §5.5 / E2）----
     p = sub.add_parser(
         "eval",
         help="Tier B harness 压测套件：最小成本档跑案卷 → 二元判决 + 基线对照",
@@ -950,7 +950,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     pb.set_defaults(func=_eval.cmd_eval_set_baseline)
 
-    # ---- bench-*：bencher 专职测量员队列（REFACTOR §8 / E4）----
+    # ---- bench-*：bencher 专职测量员队列（README §5.5 / E4）----
     p = sub.add_parser(
         "bench-add",
         help="向 bencher 队列注入一个测量任务（run/capture/ab/check）；--start 顺手拉起 worker",
@@ -999,7 +999,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=_benchd.cmd_bench_stop)
 
-    # ---- inspector-*：闲时巡检引擎的生命周期面（REFACTOR §7 / E5a）----
+    # ---- inspector-*：闲时巡检引擎的生命周期面（README §6 / E5a）----
     # 组长侧只有「拉起/开关/读数/指派」四件事：巡检内容本身在 inspector pod 的会话里，
     # 发现的分流在 pysci-inspect（组员侧）。资源闸门（预算/让路/迟滞）没有 CLI 旋钮——
     # §7 要的是「代码保证」，可被随手关掉的成本控制等于没有。

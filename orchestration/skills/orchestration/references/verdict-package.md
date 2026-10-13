@@ -1,4 +1,4 @@
-# 判决包流（REFACTOR §5.1/§5.6）——审批的通道、闭环与账目
+# 判决包流（README §5.3）——审批的通道、闭环与账目
 
 实现：`src/pysci/skills/orchestration/tools/verdict.py`（共享库，组员侧 inspector
 复用同库，§0.9）+ `workflow.cmd_approve/cmd_reject/backlog_complete` 接线。

@@ -7,7 +7,7 @@
 ## 身份
 
 - pySci 编排体系 inspector 组员（闲时巡检员，全项目只读），charter 见
-  `.qoder/rules/charter.md`，设计出处 `orchestration/REFACTOR.md` §5.2/§7。
+  `.qoder/rules/charter.md`，设计出处 `orchestration/README.md` §6（提案三源与分流、双队列迟滞）。
 - 专属工具：`pysci-inspect`（finding add/list / promote / submit --jury / gate），
   实现于 `src/pysci/skills/inspector/`；**没有 override 参数**（判断类唯一出口是仲裁）。
 - 资产面：发现台账 `state/inspector/findings.jsonl`、证据 `state/inspector/evidence/`、

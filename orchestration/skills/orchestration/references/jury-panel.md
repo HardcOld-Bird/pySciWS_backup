@@ -1,9 +1,9 @@
 # Tier C 仲裁团（`orch jury`）调用面与处置依据
 
-> REFACTOR v1.0 §4；组卷/双序面=E3-prep（`20261011-233003-leader`），逐席 provider
+> 组卷/双序面=E3-prep（`20261011-233003-leader`），逐席 provider
 > 传输面=E3-live（`20261012-164600-leader`）。本页是**组长侧**读 `orch jury` 输出后的
 > 处置依据；**配置面/Key/回退告警/渠道纪律见 `references/jury-channels.md`**；权威设计
-> 与用户裁决原文见 `orchestration/REFACTOR.md` §4/§5。
+> 见 `orchestration/README.md` §5.3（判决包 J 通道与模棱两可回退）。
 
 ## 0. 定位与法院模式
 

@@ -1,6 +1,6 @@
 """E0-B：提案 kind 结构化 + backlog success_criteria 字段 + approve 硬校验。
 
-覆盖 backlog 20261011-210317-leader（REFACTOR §12 判据 2/3）三条：
+覆盖 backlog 20261011-210317-leader（README §6 判据纪律）三条：
 ② 新 approve 的 backlog 条目含**非空** kind 与 success_criteria；
 ③ 缺 kind 或缺判据的建议 → approve **拒绝入队**（非零退出 + 提示），
    判据缺失可经 ``--criteria`` 补录放行。

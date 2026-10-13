@@ -1,4 +1,4 @@
-"""API Key 泄漏哨兵（REFACTOR §14、§4 Key 安全；E3-prep backlog 20261011-233003-leader）。
+"""API Key 泄漏哨兵（README §14/§5.3 Key 安全；E3-prep backlog 20261011-233003-leader）。
 
 **为什么需要它**：SiliconFlow / 方舟这类 Key 只能由用户本人提供且永不入库，但「永不
 入库」是一条纪律，不是一道机制——把 Key 粘进 ``.env`` 之外的地方（配置示例、任务书、

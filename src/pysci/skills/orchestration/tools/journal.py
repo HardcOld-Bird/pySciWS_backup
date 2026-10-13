@@ -1,4 +1,4 @@
-"""决策日志（preference-journal）——评价驱动自改进体系的原料层（REFACTOR v1.0 §11，E0 启动）。
+"""决策日志（preference-journal）——评价驱动自改进体系的原料层（README §6，E0 启动）。
 
 单文件 JSONL：`orchestration/state/preference-journal.jsonl`，**每行一条判决记录**，
 schema 固定为 ``{ts, situation, options, choice, reason, source, kind}``。它是 twin 训练
@@ -26,7 +26,7 @@ from pysci.paths import ORCH_STATE_ROOT
 #: 决策日志文件（git 跟踪——长期资产，供 twin 训练与 override 审计回放）。
 JOURNAL_PATH: Path = ORCH_STATE_ROOT / "preference-journal.jsonl"
 
-#: 固定 schema（REFACTOR §11）；记录缺 ts 时 append 自动补，缺其余键写入空串保持行结构齐整。
+#: 固定 schema（README §6 原料层）；记录缺 ts 时 append 自动补，缺其余键写入空串保持行结构齐整。
 SCHEMA: tuple[str, ...] = (
     "ts",
     "situation",

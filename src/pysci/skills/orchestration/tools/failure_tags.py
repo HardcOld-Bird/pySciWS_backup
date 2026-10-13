@@ -1,4 +1,4 @@
-"""Tier A 失败标签：受控词表的读取、解析与滑窗计数（REFACTOR v1.0 §2/§2.4）。
+"""Tier A 失败标签：受控词表的读取、解析与滑窗计数（README §5.4）。
 
 词表落在 ``orchestration/state/failure-tags.json``（git 跟踪）。**文件形状即协议**：
 ``{"version": 1, "discipline": "...", "tags": {<tag>: <定义>}, "infra_kinds": {…}}``——
@@ -147,7 +147,7 @@ def within_window(
 
     Returns:
         入窗行（保持原顺序）。并集而非交集是刻意的：14 天窗口在新体系头几天根本
-        攒不出历史，而 20 跳窗口在长停摆后又太窄——REFACTOR §2.4 写「14 天或 20 跳」
+        攒不出历史，而 20 跳窗口在长停摆后又太窄——README §5.4 写「14 天或 20 跳」
         正是这个意思。两侧都关（非法参数）则返回全集（不做窗口约束）。
     """
     from datetime import datetime, timedelta

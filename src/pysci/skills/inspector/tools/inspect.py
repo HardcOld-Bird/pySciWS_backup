@@ -1,4 +1,4 @@
-"""``pysci-inspect``——inspector 组员的发现登记与分流工具面（REFACTOR v1.0 §5.2/§7；E5a）。
+"""``pysci-inspect``——inspector 组员的发现登记与分流工具面（README §6；E5a）。
 
 四条命令面（**全部复用** :mod:`orchestration.tools.inspectd` 库，本文件只做参数装配与
 读数呈现）：
@@ -172,7 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="pysci-inspect",
         description=(
-            "inspector 组员的发现登记与分流面（REFACTOR §5.2/§7）。"
+            "inspector 组员的发现登记与分流面（README §6）。"
             "**无 override 参数**——判断类只能经 J 仲裁，机械类才免判决。"
         ),
     )

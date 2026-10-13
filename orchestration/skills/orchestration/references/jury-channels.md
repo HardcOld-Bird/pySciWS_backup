@@ -1,6 +1,6 @@
 # 仲裁团渠道面（E3-live 逐席 provider、Key、回退告警）
 
-> REFACTOR v1.0 §4 渠道修订 + §14 单点条款告警化；backlog `20261012-164600-leader`
+> 渠道修订与单点条款告警化见 `orchestration/README.md` §5.3/§14；backlog `20261012-164600-leader`
 > （用户 2026-10-12 裁决：三席官方直调减平票、SiliconFlow 降回退且回退必须告警）。
 > 开庭流程与案卷格式见 `references/jury-panel.md`；本页只讲**传输面与配置面**。
 

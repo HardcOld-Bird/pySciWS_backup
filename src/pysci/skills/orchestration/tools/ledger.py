@@ -41,7 +41,7 @@ class LedgerEntry:
     # 字段→""。两字段合起来才读得全：kind 非空而未入库=被词表闸拒掉的那一跳，呈现面据此
     # 打「建议✗未入库」。供台账侧统计提案分布、也随交付落盘一份可追溯记录。
     infra_kind: str = ""
-    # E1（REFACTOR §2）：<blocked tags="a,b"> 解析出的失败标签（受控词表见
+    # E1（README §5.4）：<blocked tags="a,b"> 解析出的失败标签（受控词表见
     # state/failure-tags.json）。空列表=未标注（合法缺省）；旧行无此字段→[]。
     # 本字段是 §2.4 阈值自动立案的唯一原料：标签只在这里落一次盘，统计与立案都读
     # 台账，不再各自解析交付文本（两处解析迟早漂移）。
@@ -194,7 +194,7 @@ def summarize(entries: list[LedgerEntry]) -> dict[str, Any]:
         "est_tokens_metered_hops": est_hops,
         "by_member": by_member,
         "by_effort": by_effort,
-        # E1（REFACTOR §2）：标签×成员计数（只数带 tags 的行）。窗口由调用方决定——
+        # E1（README §5.4）：标签×成员计数（只数带 tags 的行）。窗口由调用方决定——
         # stats 用 --days/tier_a 滑窗，立案扫描用 registry 的 tier_a 窗，同一函数两种窗。
         "by_failure": failure_counts(entries),
     }

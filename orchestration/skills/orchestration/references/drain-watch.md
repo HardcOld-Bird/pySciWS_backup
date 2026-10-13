@@ -7,8 +7,8 @@ SKILL.md 的命令面只留一行索引；本文放**为什么**与**踩过的�
 | 通道 | 队列 | 锁/日志面 | 唤醒方式 |
 |---|---|---|---|
 | devops drain | `state/backlog.json` | `devops.lock` / `devops-runs/` / `devops.cancel` | `approve` 自动派生 + `orch watch` 事件即时唤醒 |
-| bencher worker（REFACTOR §8/E4） | `state/bencher/queue.json` | `bencher.lock` / `bencher-runs/` / `bencher.cancel` | **择机查看**：终态进 `orch status` 的「待查看」面，不即时打断 |
-| inspector worker（REFACTOR §7/E5a） | `state/inspector/queue.json` | `inspector.lock` / `inspector-runs/` / `inspector.cancel` | **不需要唤醒**：闲时自主激活，拉起内嵌在 status/approve/dispatch |
+| bencher worker（README §5.5，E4） | `state/bencher/queue.json` | `bencher.lock` / `bencher-runs/` / `bencher.cancel` | **择机查看**：终态进 `orch status` 的「待查看」面，不即时打断 |
+| inspector worker（README §6，E5a） | `state/inspector/queue.json` | `inspector.lock` / `inspector-runs/` / `inspector.cancel` | **不需要唤醒**：闲时自主激活，拉起内嵌在 status/approve/dispatch |
 
 三条通道共用 `drain.WorkerPaths`（锁判活、stale 回收、released 墓碑、`.done` 身份三元组、
 协作停止信号）——单 worker 互斥由锁保证，所以获锁一刻仍在 `in_progress` 的条目必是上一任
