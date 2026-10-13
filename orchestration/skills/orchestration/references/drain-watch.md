@@ -29,11 +29,14 @@ worktree 写，重派同名就是双写。`dispatch` 派生瞬间把会话 pid �
 `已不是会话…不动手` / `异名重建`；`.done` 的 `cleaned`/`regenerated`/`salvaged` 三键。
 `--dry` 一条都不执行。
 
-## 2. watch 挂载纪律（2026-10-12 夜航停摆 6h 的教训）
+## 2. watch 挂载：自动为主，手动兜底（机制全文 README §4.5 v2）
 
-- **`orch watch` 必须是该后台调用的唯一顶层命令**。用 `&`/`&&`/管道把它嵌进别的命令，
-  父任务终结会连坐杀死等待器——事件命中也没有唤醒通道。
-- 漏挂/断唤的账由下次 `orch status` 补账（fired 未确认逐条列明细），「忘了挂」≠「事件丢了」。
+- **自动（常态，2026-10-13 起）**：`Stop + asyncRewake` 钩子**每回合接管**挂 `orch watch`
+  （抢「最新在听者」token；命中 `exit 2` 唤醒、超时/异常 `exit 0`；旧钩子自查 token 让位）。
+  **无需组长手动挂**——交办/唤醒输出只回报「已自动挂载」。
+- **手动兜底（仅钩子不可用时）**：以 Bash `run_in_background` 启动 `orch watch`，且**必须是该
+  后台调用的唯一顶层命令**（`&`/`&&`/管道嵌入即被父任务连坐杀死——2026-10-12 夜航停摆 6h 的成因）。
+- 漏挂/断唤的账由下次 `orch status` 补账，「忘了挂」≠「事件丢了」。
 - **测试/诊断性挂载前须确认无 live 挂载或先停**：`arm()` 覆写 `state/watch.json`，会抹掉
   在等那任的心跳与黑匣子；`recent`/`exit_reason` 是脱靶复盘的现场，status 读出其末帧。
 - 事件类型（六类）：`QUEUE-COMPLETE` / `NEEDS-LEADER` / `QUOTA-STOP` / `CHANNEL-STOP` /
@@ -67,22 +70,18 @@ uv run --no-sync pysci-orch bench-stop           # 协作停止：条目间隙�
   assistant 回合说 "Custom model service error…"，故判据取**固定文案 ∧ 会话档末轮形状**合取；
   单特征会误伤复述该句的复盘任务）。恢复后条目照常 FIFO 续跑（drain 由下一次 `approve`
   接管，压测队列由 `bench-up`）。
-- **预设席位回退链**（用户 2026-10-12 21:1x 链化 / 22:4x 挂预设，README §3.5）：
-  `[model] preset` 选预设，角色（main/pro，`--model-tier` 覆盖，旧 flash/max 归一）取该
-  预设**有序链**，当前席不可用 → 沿链一席一跳降级；**全链耗尽**才保留系统性 kind 全局
-  停止。预设不可激活 → dispatch 拒发、drain **拿锁前**拒绝开工（`skipped=
-  preset_unavailable`）。**例外：`channel_error` 先自救**（用户 2026-10-13，backlog
-  20261013-143000-leader）——瞬态中断同会话 resume 大概率即愈且零工作损失，双闸（次数
-  `model_fallback.same_seat_retry` 缺省 10 + 壁钟 `budget_s` 缺省 1800s）都过才换席（付费席
-  降为后手）；`quota_exhausted` 与启动即失败不自救。自救**不进**回退事件面（重试不是降级），
-  次数/耗时走台账 `same_seat_retries` 与 run 日志。非系统性失败仍同席重试一次（换席白烧）。
-  两条面都必须看得见：调用者面逐条
-  `[!] 档位回退：<角色> 席<名>不可用 → 已切换 <新席>（原因 …）`（dispatch 输出 + run 日志），
-  观察面 `state/channel-events.jsonl`（mirror 概览项「回退」/`orch status` 健康段报计数与最近
-  几条）。**降级粘滞窗**（`registry.model_fallback.skip_window_s`，默认 3600s）：坏席进窗后
-  窗内不再探测它（每次派发仍打一行「席 X 跳过中」），过期自动恢复探测，跑通即销窗；全链都在
-  窗内时按**失败最早**（=最先到期）的一席强探一次，不停摆。换席后实际用了哪个渠道看台账
-  `model` 字段（记的是**实际所用席位**，不是配置里的首席）。
+- **预设席位回退链**（用户 2026-10-12 链化 / 22:4x 挂预设；全文 README §3.5）：
+  `[model] preset` 选预设，角色（main/pro，`--model-tier` 覆盖，旧 flash/max 归一）取该预设
+  **有序链**，当前席不可用 → 沿链一席一跳降级；**全链耗尽**才保留系统性 kind 全局停止。
+  预设不可激活 → dispatch 拒发、drain **拿锁前**拒绝开工（`skipped=preset_unavailable`）。
+  **例外：`channel_error` 先自救**（backlog 20261013-143000-leader）——同会话 resume 大概率
+  即愈、零工作损失，双闸（`model_fallback.same_seat_retry` 缺省 10 + `budget_s` 缺省 1800s）
+  都过才换席（付费席降为后手）；`quota_exhausted` 与启动即失败不自救；自救**不入**回退事件面，
+  次数/耗时走台账 `same_seat_retries`；非系统性失败仍同席重试一次（换席白烧）。**两条面**：
+  调用者面 `[!] 档位回退：… 已切换 <新席>`（dispatch 输出 + run 日志）+ 观察面
+  `state/channel-events.jsonl`（mirror / `orch status` 健康段报计数与最近几条）。**降级粘滞窗**
+  （`skip_window_s` 默认 3600s）：坏席进窗即跳过、过期自动复探、跑通即销；全链在窗内按**失败
+  最早**（最先到期）一席强探，不停摆。换席后实际用的渠道看台账 `model` 字段。
 - `approve` 时选 **M**（基线捕获 + 实施后副本 A/B）的判决包接口：E5a/E5b 未实施，
   目前由组长手动 `bench-add capture`/`bench-add ab` 完成同一效果（E4 只交付运行职责）。
 
