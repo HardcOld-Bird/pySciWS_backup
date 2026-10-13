@@ -78,17 +78,43 @@ def charter_path(reg: Registry | None = None, member_id: str = "twin") -> Path:
 
 
 def charter_state(reg: Registry | None = None) -> dict[str, Any]:
-    """宪章状态读数：存在性、落盘字节数、是否仍标「草案」（生效确认权归用户）。"""
+    """宪章状态读数：存在性、落盘字节数、**结构化状态标记**（生效确认权归用户）。
+
+    判据改**读顶部状态行**而非裸搜「草案」（backlog 20261013-192000-leader）：v2 顶注里有
+    「审阅 v2 增量草案并同意转正」这样的**叙述性**用词，逐文搜「草案」会把它误判成未生效
+    （实测：文件已是 v2 生效 8171 B，mirror 却报「草案 v1，待用户确认生效」）。约定标记形如
+    ``> **状态：v2 生效**``；解析不到标记时**保底**回落原子串判据——无标记的旧文件不得因此
+    被当成已生效。
+    """
     p = charter_path(reg)
     if not p.is_file():
-        return {"exists": False, "bytes": 0, "draft": True, "path": p}
+        return {"exists": False, "bytes": 0, "status": "", "draft": True, "path": p}
     text = p.read_text(encoding="utf-8")
+    status = _charter_status(text)
+    draft = ("草案" in status) if status else ("草案" in text)
     return {
         "exists": True,
         "bytes": len(text.encode("utf-8")),
-        "draft": "草案" in text,
+        "status": status,
+        "draft": draft,
         "path": p,
     }
+
+
+def _charter_status(text: str) -> str:
+    """取顶部状态行里的状态串（``v2 生效`` / ``v1 草案``…）；解析不到 → 空串。
+
+    只认**结构化标记**：``**状态：<串>**``。扫前若干行即可（状态行在顶注里），不全文搜——
+    正文里出现「草案」是叙述，不是状态。故意不用正则：这里要的字面是 ``**`` 与全角冒号，
+    用 split 更直白且不给转义留坑。
+    """
+    for line in text.splitlines()[:12]:
+        if "状态" not in line:
+            continue
+        tail = line.split("状态", 1)[1].lstrip("：:* ")
+        if "**" in tail:
+            return tail.split("**", 1)[0].strip()
+    return ""
 
 
 def read_queue(path: Path | None = None) -> list[dict[str, Any]]:
@@ -150,7 +176,13 @@ def _line_charter() -> str:
     c = charter_state()
     if not c["exists"]:
         return f"宪章缺失：{_rel(c['path'])}（twin 无依据不判断）"
-    state = "草案 v1，待用户确认生效" if c["draft"] else "已确认（草案标记已去）"
+    if c["status"]:
+        state = (
+            f"待确认 {c['status']}（草案态）" if c["draft"] else f"已生效 {c['status']}"
+        )
+    else:
+        # 无结构化标记的旧文件：保留原文案（别把「没标记」读成「未生效」）
+        state = "草案 v1，待用户确认生效" if c["draft"] else "已确认（草案标记已去）"
     return f"宪章 = {state}（{_rel(c['path'])}，{c['bytes']} B）"
 
 
@@ -212,8 +244,33 @@ def _line_trend() -> str:
     return "一致率 / override 率趋势 = 占位（overrides·stats 属 E6 后续单）"
 
 
-def _line_pending() -> str:
-    return "待决事项 = minimum 压测档型号选型（用户）；twin 上线宣告（用户）"
+#: 待决事项清单落点（gitignored 运行态：它是「此刻谁在等用户」的活体读数，不是长期
+#: 资产；写它的是组长/用户的裁决动线）。
+PENDING_PATH: Path = ORCH_STATE_ROOT / "mirror-pending.json"
+
+
+def pending_items(path: Path | None = None) -> list[str]:
+    """读待决清单（``["…", …]`` 或 ``{"items": [...]}``）；缺失/损坏 → 空表（fail-open）。"""
+    target = PENDING_PATH if path is None else path
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    items = raw.get("items") if isinstance(raw, dict) else raw
+    if not isinstance(items, list):
+        return []
+    return [str(x).strip() for x in items if str(x).strip()]
+
+
+def _line_pending(path: Path | None = None) -> str:
+    """待决事项：**数据驱动**（backlog 20261013-192000-leader）。
+
+    原实现把两项历史待决（minimum 选型 / twin 宣告）硬编码在代码里，两项都已解决、读数却
+    原地不动。真源＝``state/mirror-pending.json``（组长/用户增删），无真源或为空即显
+    「（无待决）」——**不许**在代码里留历史项冒充现状。
+    """
+    items = pending_items(path)
+    return "待决事项 = " + ("；".join(items) if items else "（无待决）")
 
 
 def _line_acceptance() -> str:
