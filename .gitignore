@@ -94,6 +94,10 @@ __pycache__/
 # 都可能改写（跨进程比对才看得见切换），纯过程态。切换事件本身的永久审计在
 # preference-journal.jsonl（kind=routing）与 drain run 日志。
 /orchestration/state/routing-last.json
+# `pysci` 交互式控制台的主菜单更新水位（REFACTOR.md §2.2，2026-10-14 m2）：`{module: cursor}`，
+# 每次「进详情」即改写——纯运行态（谁看过什么，本机语义），入库会让 main 必 dirty。
+# 永久痕迹在每次进入详情这件事本身（用户看得见），本文件只是「上次看到哪」的记忆。
+/orchestration/state/mirror-seen.json
 # push 成败留痕（backlog 20261013-215911-leader）：`pysci-dev push` 每次尝试追加一行
 # （成功记范围、失败记原因，做到「失败不静默」）。纯运行态——每次收尾都可能追加，
 # 入库会让 main 每跳必 dirty。永久审计在 git 提交本身与 remote 历史。
