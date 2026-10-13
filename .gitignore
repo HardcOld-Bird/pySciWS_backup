@@ -77,6 +77,10 @@ __pycache__/
 # 新增，纯运行态（永久痕迹在 ledger/backlog/delivery 与 git 提交本身），入库会让 main 每跳必 dirty。
 /orchestration/state/events.jsonl
 /orchestration/state/events-seen.json
+# 活跃会话注册表（REFACTOR.md §3.3/M6，backpressure 写侧）：worker 拉起登记、周期心跳、
+# 退场注销，每跳（心跳≤3min）都在变——纯运行态（「此刻谁在跑」的活体读数），入库会让
+# main 每跳必 dirty。永久痕迹在 ledger/events。
+/orchestration/state/active-sessions.json
 # 基线捕获的物理归档（§13 待决 2 的 E4 定案）：manifest.json 入库（=「当时依赖什么」的
 # 答案），pods/ 下的 gitignored 面副本不入库——它随时可由 git + 清单再生。
 /orchestration/state/evals/baselines/*/pods/

@@ -16,6 +16,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT, WORKTREES_ROOT
 
+from . import backpressure as _bp
 from . import journal, verdict
 from .delivery import parse_suggestion_fields
 from .dispatch import REPLIES_DIR, conflict_notice, criteria_conflicts, do_dispatch
@@ -231,48 +232,36 @@ def backlog_take_batch(
 
 
 def _is_deferred(item: dict, now_s: float) -> bool:
-    """该条目是否仍处在延期待重试窗口内（``defer_until`` 在未来）。"""
+    """该条目是否仍处在延期待重试窗口内（读侧判据单一源在 :mod:`backpressure`）。"""
+    return _bp.item_deferred(item, now_s)
+
+
+def _backlog_items() -> list[dict]:
+    """backlog.json 的 items（缺失/损坏 → 空表；fail-open，观察面不堵派发链）。"""
+    if not BACKLOG_PATH.exists():
+        return []
     try:
-        return float(item.get("defer_until") or 0) > now_s
-    except (TypeError, ValueError):
-        return False
+        data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    items = data.get("items") if isinstance(data, dict) else data
+    return items if isinstance(items, list) else []
 
 
 def next_defer_s(*, now: float | None = None) -> float:
     """到**最近一个**延期条目到期的秒数；没有延期条目 → ``0.0``。
 
     worker 在「全队皆未到期」时靠它睡到最近到期时刻再查（别空转烧 CPU，也别直接退出
-    让队列干等）。
+    让队列干等）。判据与成员队列共用 :func:`backpressure.next_defer_s`（§3.3 复用不重写）。
     """
     now_s = time.time() if now is None else float(now)
-    if not BACKLOG_PATH.exists():
-        return 0.0
-    try:
-        data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return 0.0
-    waits = [
-        float(it.get("defer_until") or 0) - now_s
-        for it in data.get("items", [])
-        if it.get("status") == "pending" and _is_deferred(it, now_s)
-    ]
-    return max(0.0, min(waits)) if waits else 0.0
+    return _bp.next_defer_s(_backlog_items(), now=now_s)
 
 
 def deferred_count(*, now: float | None = None) -> int:
     """仍处在延期待重试窗口内的 pending 条目数（mirror 观察面用）。"""
     now_s = time.time() if now is None else float(now)
-    if not BACKLOG_PATH.exists():
-        return 0
-    try:
-        data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return 0
-    return sum(
-        1
-        for it in data.get("items", [])
-        if it.get("status") == "pending" and _is_deferred(it, now_s)
-    )
+    return _bp.deferred_count(_backlog_items(), now=now_s)
 
 
 def backlog_defer(

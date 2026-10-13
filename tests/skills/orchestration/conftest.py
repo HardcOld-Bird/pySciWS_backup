@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from pysci.skills.orchestration.tools import (
+    backpressure,
     benchd,
     channels,
     dispatch,
@@ -118,6 +119,17 @@ def iso_events(tmp_path, monkeypatch):
     """
     monkeypatch.setattr(events, "EVENTS_LOG", tmp_path / "events.jsonl")
     monkeypatch.setattr(events, "SEEN_PATH", tmp_path / "events-seen.json")
+
+
+@pytest.fixture(autouse=True)
+def iso_backpressure(tmp_path, monkeypatch):
+    """活跃会话注册表落 tmp（M6，§3.3）:三个 worker（成员/drain/bench）写侧接线后会登记
+    会话，不隔离则任何跑到 worker 的用例都真写仓库 ``state/active-sessions.json``（实测会被
+    建出来——它就是本夹具存在的直接证据）。autouse 兜全局，要断言注册表的用例自行覆盖。
+    """
+    monkeypatch.setattr(
+        backpressure, "REGISTRY_PATH", tmp_path / "active-sessions.json"
+    )
 
 
 # 2026-10-10 额度事故原文（会话 jsonl 实测）

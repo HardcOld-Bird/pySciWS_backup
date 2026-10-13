@@ -38,9 +38,14 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
+from . import backpressure as _bp
+from . import drain as _drain
 from . import eval as _eval
 from . import events as _events
 from . import workq
+from .drain import (
+    DEFER_MAX_SLEEP_S as _DEFER_MAX_SLEEP_S,
+)
 from .drain import (
     DRY_ENV as _DRY_ENV,
 )
@@ -181,6 +186,20 @@ def _mutate(item_id: str, **fields: Any) -> dict[str, Any] | None:
 def take_next() -> dict[str, Any] | None:
     """取队首 pending 项并标记 ``in_progress``（无则 None）。"""
     return workq.take_next(QUEUE_PATH)
+
+
+def take_ready(*, now: float | None = None) -> dict[str, Any] | None:
+    """**出队单点**（§3.3）：先过 backpressure 延期判据再取（未到期不被取）。"""
+    now_s = time.time() if now is None else float(now)
+    return workq.take_next(
+        QUEUE_PATH, ready=lambda it: not _bp.item_deferred(it, now_s)
+    )
+
+
+def next_defer_s(*, now: float | None = None) -> float:
+    """到最近一个延期条目到期的秒数（worker 睡到到期用；无 → 0.0）。"""
+    now_s = time.time() if now is None else float(now)
+    return _bp.next_defer_s(workq.load(QUEUE_PATH), now=now_s)
 
 
 def reset_orphans() -> list[str]:
@@ -443,14 +462,23 @@ def bench_drain(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
     if orphans:
         summary["reclaimed"] = orphans
         _log(run_log, f"[i] 回收孤儿在途条目：{', '.join(orphans)}")
+    # §3.3 写侧接线：登记活跃会话 + 守护线程心跳（长测不被判死）；死会话条目先清。
+    _bp.prune_stale(now=time.time())
+    sess = _bp.LiveSession(
+        "bencher", sid=run_log.stem, tier="bench-pressure", purpose="bench"
+    ).start()
     try:
         while True:
             if _consume_stop_request(BENCH_PATHS):
                 summary["stopped"] = "cooperative"
                 _log(run_log, "[s] 收到协作停止信号，干净退出（条目间隙，无在途消费）")
                 break
-            item = take_next()
+            item = take_ready()  # 出队单点：过延期判据
             if item is None:
+                wait = 0.0 if dry else next_defer_s()
+                if wait > 0:
+                    _drain._sleep(min(wait, float(_DEFER_MAX_SLEEP_S)))
+                    continue
                 break
             _log(run_log, f"[→] 消化 {item['id']}: {item.get('summary', '')[:60]}")
             result = run_item(item, run_log, dry=dry)
@@ -497,6 +525,7 @@ def bench_drain(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
             )
         except Exception:  # noqa: BLE001 - 事件面绝不阻塞 bencher（§0.6）
             pass
+        sess.stop()  # 退场注销活跃会话（读数面不留幽灵）
     _log(
         run_log,
         f"[√] bencher worker 结束：处理 {summary['count']} 项，"

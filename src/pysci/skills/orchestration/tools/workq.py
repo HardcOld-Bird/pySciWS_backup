@@ -106,17 +106,52 @@ def mutate(queue_path: Path, item_id: str, **fields: Any) -> dict[str, Any] | No
     return None
 
 
-def take_next(queue_path: Path) -> dict[str, Any] | None:
-    """取队首 ``pending`` 项并标记 ``in_progress``（无则 ``None``）。"""
+def take_next(queue_path: Path, *, ready: Any = None) -> dict[str, Any] | None:
+    """取队首 ``pending`` 项并标记 ``in_progress``（无则 ``None``）。
+
+    ``ready``：可选**就绪判据**（入参为条目，返回是否可出队）——出队单点的唯一注入点
+    （§3.3 延期检查：``ready=lambda it: not backpressure.item_deferred(it, now)``）。
+    缺省 ``None`` = 旧行为（只看 pending）。
+    """
     for it in load(queue_path):
-        if it.get("status") == STATUS_PENDING:
-            return mutate(
-                queue_path,
-                str(it["id"]),
-                status=STATUS_IN_PROGRESS,
-                started_at=_now(),
-            )
+        if it.get("status") != STATUS_PENDING:
+            continue
+        if ready is not None and not ready(it):
+            continue
+        return mutate(
+            queue_path,
+            str(it["id"]),
+            status=STATUS_IN_PROGRESS,
+            started_at=_now(),
+        )
     return None
+
+
+def defer_item(
+    queue_path: Path,
+    item_id: str,
+    *,
+    until: float,
+    count: int,
+    elapsed_s: float,
+    note: str = "",
+) -> dict[str, Any] | None:
+    """把条目复位 ``pending`` 并挂延期（带宽类失败的主处置；语义同 backlog_defer）。
+
+    条目**带账单回队**（``defer_until`` / ``defer_count`` / ``defer_elapsed_s``），调度侧
+    据 :func:`~pysci.skills.orchestration.tools.backpressure.item_deferred` 跳过、睡到到期
+    再取。``started_at`` 清空——它不再是「在跑」，而是「在等」。
+    """
+    fields: dict[str, Any] = {
+        "status": STATUS_PENDING,
+        "started_at": "",
+        "defer_until": float(until),
+        "defer_count": int(count),
+        "defer_elapsed_s": float(elapsed_s),
+    }
+    if note:
+        fields["note"] = note
+    return mutate(queue_path, item_id, **fields)
 
 
 def reset_orphans(queue_path: Path) -> list[str]:

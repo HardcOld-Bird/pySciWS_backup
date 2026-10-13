@@ -299,17 +299,20 @@ def _line_inspector_decisions() -> str:
 
 #: 概览项登记表（§10 注册纪律·硬要求）：任何新增「需用户关注事项类型」必须加进这里。
 def _line_defer() -> str:
-    """带宽延期读数（用户裁决 2026-10-13，backlog 20261013-193500-leader 的观察面）。
+    """带宽延期读数（用户裁决 2026-10-13；§3.3/M6 推广到**全部队列**）。
 
     带宽类失败改「延期而非停链」之后，用户在概览上必须能看见「有活压着等」——否则
-    「队列看着空、其实有条目在退避」就是一块盲区。
+    「队列看着空、其实有条目在退避」就是一块盲区。devops backlog 与**成员队列**两条链
+    各挂各的 defer_until，读数合并呈现（bencher 无写侧，不入此计）。
     """
+    from . import queues as _q  # 延迟导入：mirror 是读数层，queues 是运行态数据层
     from . import workflow as _wf  # 延迟导入：workflow 引 dispatch，顶层引会成环
 
-    n = _wf.deferred_count()
+    n = _wf.deferred_count() + _q.deferred_count()
     if not n:
         return "带宽延期 = （无）"
-    wait = _wf.next_defer_s()
+    waits = [w for w in (_wf.next_defer_s(), _q.next_defer_s()) if w > 0]
+    wait = min(waits) if waits else 0.0
     return f"带宽延期 = {n} 条在等，最近 {wait:.0f}s 后到期"
 
 
