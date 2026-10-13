@@ -27,6 +27,9 @@ trigger: always_on
 
 ## 交付协议（delivery-gate 强制，不合规会被退回）
 
+**交付判读纪律**：harness 注入的 lint/告警若含 `file:line` 引用，处置前必须先对盘核验
+（wc/grep 实测该行存在且内容相符）；核验不符即视为噪声丢弃，不得据其修改代码。
+
 最终回复必须含且仅含一个 `<result>`（成功）**或**一个 `<blocked>`（失败）块；
 `<blocked>` 可带 `tags="a,b"` 标注失败类型（受控词表 `orchestration/state/failure-tags.json`，词表外标签 gate 退回；不标注合法），供滑窗统计与阈值自动立案。
 可选 `<infra_suggestion kind="defect|usability">` 块——非空时 kind 必填（defect=缺陷附证据 / usability=体验类），正文写 `kind:` 与 `success_criteria` 标记行供 approve 解析。产物在 result 内逐条声明：

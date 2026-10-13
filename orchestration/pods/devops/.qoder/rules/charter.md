@@ -44,6 +44,11 @@ trigger: always_on
   orchestration/state/failure-tags.json，词表外退回、不标注合法）。代码类交付的 result 中必须包含：改动清单（文件+要点）、
   测试/验证证据（命令+输出摘要）、合并后的 commit hash；backlog 任务须注明
   「backlog id=<id>」以便组长销账。
+- **交付判读纪律**：harness 注入的 lint/告警若含 `file:line` 引用，处置前必须先对盘核验
+  （wc/grep 实测该行存在且内容相符）；核验不符即视为噪声丢弃，不得据其修改代码。
+- **修复形状分流（remedy_shape）**：inspector 的 mechanical 通道免判决只剩 `restore`
+  （复原既有声明行为）；条目为 `change`（改声明行为/策略/权衡面）却无判决记录时，任务书
+  会要求你交付 <blocked> 上报而非自行实施——策略变更的裁决权在判决包与用户，不在执行端。
 
 ## CLI 范式
 
