@@ -582,6 +582,69 @@ def cmd_ledger(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_taskbooks(args: argparse.Namespace) -> int:
+    """``orch taskbooks``：用户大任务的**程序化查看面**（LLM 通道，REFACTOR.md §3.4）。
+
+    子命令：``list`` / ``show <id>`` / ``link <id> --plan <pid>`` / ``sync``。
+    **用户 accept/reject 只经 TUI**——本面不提供批复动作（用户裁决 ①）。
+    """
+    from . import taskbooks as _tb
+
+    action = getattr(args, "tb_action", "") or "list"
+    if action == "list":
+        secs = _tb.sections()
+        for name, items in (
+            ("现有大任务（new/planning/active）", secs["open"]),
+            ("已完成待批复（delivered）", secs["review"]),
+            ("历史（accepted / 带驳回批语）", secs["history"]),
+        ):
+            print(f"== {name} ==")
+            if not items:
+                print("  （无）")
+                continue
+            for d in items:
+                extra = f"  plan={d.get('plan_id')}" if d.get("plan_id") else ""
+                print(
+                    f"  [{d.get('status')}] {d.get('id')}  "
+                    f"{str(d.get('title', ''))[:50]}{extra}"
+                )
+        print(
+            "[NEXT] show <id> 看正文；link <id> --plan <pid> 拆解推进；sync 联动 delivered"
+        )
+        return 0
+    if action == "show":
+        st = _tb.load_state(args.id)
+        if not st:
+            print(f"[!] 无此任务书：{args.id}")
+            return 2
+        print(
+            f"== {st.get('id')}（status={st.get('status')}，"
+            f"source={st.get('source')}，ts={st.get('ts')}）=="
+        )
+        print(f"标题：{st.get('title')}")
+        if st.get("plan_id"):
+            print(f"plan：{st['plan_id']}")
+        for r in st.get("rejections") or []:
+            print(f"[历史批语 {r.get('ts')}] {r.get('note')}")
+        print("---- 正文 ----")
+        print(_tb.read_body(args.id))
+        return 0
+    if action == "link":
+        try:
+            st = _tb.link_plan(args.id, args.plan)
+        except ValueError as exc:
+            print(f"[!] {exc}")
+            return 2
+        print(f"[√] {st['id']} → planning（plan={st['plan_id']}）")
+        return 0
+    if action == "sync":
+        done = _tb.sync_delivered()
+        print(f"[√] 联动 delivered：{'、'.join(done) if done else '（无变化）'}")
+        return 0
+    print(f"[!] 未知子命令：{action}（list|show|link|sync）")
+    return 2
+
+
 def cmd_sync(args: argparse.Namespace) -> int:
     """技能真本 → 部署副本同步（--check 只报告）。"""
     report = _sync.sync(check_only=args.check)
@@ -939,6 +1002,23 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("sync", help="[底层] 技能真本 → 部署副本同步")
     p.add_argument("--check", action="store_true")
     p.set_defaults(func=cmd_sync)
+
+    p = sub.add_parser(
+        "taskbooks",
+        help="[底层] 用户任务书程序化面（list/show/link/sync；用户 accept/reject 只经 TUI）",
+    )
+    tbsub = p.add_subparsers(dest="tb_action", required=True)
+    q = tbsub.add_parser("list", help="三段列出：现有大任务 / 待批复 / 历史")
+    q.set_defaults(func=cmd_taskbooks)
+    q = tbsub.add_parser("show", help="看某件任务书的状态、批语与正文")
+    q.add_argument("id")
+    q.set_defaults(func=cmd_taskbooks)
+    q = tbsub.add_parser("link", help="链接 plan 并置 planning")
+    q.add_argument("id")
+    q.add_argument("--plan", required=True, help="orch plan id")
+    q.set_defaults(func=cmd_taskbooks)
+    q = tbsub.add_parser("sync", help="幂等对账：所链 plan 完成 → 置 delivered")
+    q.set_defaults(func=cmd_taskbooks)
 
     p = sub.add_parser(
         "drain-stop", help="请求后台 drain worker 协作式停止（写 devops.cancel）"

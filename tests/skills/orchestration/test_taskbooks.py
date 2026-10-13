@@ -1,0 +1,246 @@
+"""用户任务书：存储/状态机/程序化面/唤醒（REFACTOR.md §3.4，M3）。
+
+落盘用**临时 data 根**（monkeypatch ``taskbooks.TASKBOOKS_DIR`` 与 ``pysci.paths.DATA_ROOT``
+——后者是 ``assert_within_data`` 防 stray 护栏的判据源），绝不碰真实 ``data/taskbooks/``。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+
+import pytest
+from textual.widgets import Input, TextArea
+
+from pysci import paths as _paths
+from pysci.skills.orchestration.tools import orch, taskbooks, watch
+from pysci.skills.orchestration.tools.tui import app as tui
+
+
+def _run(coro):
+    return asyncio.run(coro)
+
+
+@pytest.fixture
+def tbdir(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    d = data / "taskbooks"
+    monkeypatch.setattr(taskbooks, "TASKBOOKS_DIR", d)
+    monkeypatch.setattr(_paths, "DATA_ROOT", data)  # 防 stray 护栏的判据源
+    return d
+
+
+def _make(title="大任务", body="正文若干", **kw) -> dict:
+    return taskbooks.create(title, body, **kw)
+
+
+# ---------------------------------------------------------------------------
+# ① 存储与元数据
+# ---------------------------------------------------------------------------
+def test_create_writes_two_files_with_metadata(tbdir):
+    st = _make(title="重做图管线", body="第一行\n第二行")
+    assert st["id"].startswith("tb-") and st["status"] == "new"
+    md = (tbdir / f"{st['id']}.taskbook.md").read_text(encoding="utf-8")
+    state = json.loads((tbdir / f"{st['id']}.state.json").read_text(encoding="utf-8"))
+    for key in ("id", "ts", "title", "status", "source"):
+        assert f"{key}:" in md, key
+    assert state["source"] == "mirror-tui" and state["plan_id"] == ""
+    assert taskbooks.read_body(st["id"]) == "第一行\n第二行"
+
+
+def test_write_outside_data_root_is_refused(tmp_path, monkeypatch):
+    """防 stray 护栏：任务书必须落在 data/ 里（§3.4 / basic.md §5）。"""
+    monkeypatch.setattr(taskbooks, "TASKBOOKS_DIR", tmp_path / "elsewhere")
+    with pytest.raises(ValueError):
+        taskbooks.create("x", "y")
+
+
+def test_id_shape_and_source_llm(tbdir):
+    st = _make(title="Hello World!", source="llm")
+    assert st["id"].split("-")[0] == "tb" and "hello-world" in st["id"]
+    assert st["source"] == "llm"
+
+
+# ---------------------------------------------------------------------------
+# ② 状态机
+# ---------------------------------------------------------------------------
+def test_legal_and_illegal_transitions(tbdir):
+    st = _make()
+    tid = st["id"]
+    assert taskbooks.link_plan(tid, "p1")["status"] == "planning"
+    assert taskbooks.transition(tid, "active")["status"] == "active"
+    assert taskbooks.transition(tid, "delivered")["status"] == "delivered"
+    with pytest.raises(ValueError):  # delivered → planning 非法
+        taskbooks.transition(tid, "planning")
+    assert taskbooks.accept(tid)["status"] == "accepted"
+    with pytest.raises(ValueError):  # accepted 终态
+        taskbooks.transition(tid, "new")
+
+
+def test_reject_records_note_and_returns_to_new(tbdir):
+    """success_criteria：**rejected 带批语回 new**，批语持久保留于 state.json。"""
+    tid = _make()["id"]
+    taskbooks.link_plan(tid, "p1")
+    taskbooks.transition(tid, "active")
+    taskbooks.transition(tid, "delivered")
+    st = taskbooks.reject(tid, "拆得不对，重来")
+    assert st["status"] == "new"  # 返工重拆解
+    again = taskbooks.load_state(tid)
+    assert again["rejections"][-1]["note"] == "拆得不对，重来"  # 批语持久
+    assert again["status"] == "new"
+    assert str(again["plan_id"]) in ("p1", "")  # 链接字段不丢
+
+
+def test_sync_delivered_follows_plan_completion(tbdir, monkeypatch):
+    """所链 plan 完成 → 幂等推进 delivered（组长程序化面的联动）。"""
+    from pysci.skills.orchestration.tools import plans as _plans
+
+    tid = _make()["id"]
+    taskbooks.link_plan(tid, "p-ok")
+    monkeypatch.setattr(_plans, "load_state", lambda pid: {"completed_at": "T"})
+    assert taskbooks.sync_delivered() == [tid]
+    assert taskbooks.load_state(tid)["status"] == "delivered"
+    assert taskbooks.sync_delivered() == []  # 幂等（已 delivered，不再重复推进）
+
+
+def test_sync_delivered_leaves_incomplete_plans_alone(tbdir, monkeypatch):
+    from pysci.skills.orchestration.tools import plans as _plans
+
+    tid = _make()["id"]
+    taskbooks.link_plan(tid, "p-run")
+    monkeypatch.setattr(_plans, "load_state", lambda pid: {})
+    assert taskbooks.sync_delivered() == []
+    assert taskbooks.load_state(tid)["status"] == "planning"
+
+
+def test_sections_split_three_ways(tbdir):
+    a = _make(title="a")["id"]
+    b = _make(title="b")["id"]
+    c = _make(title="c")["id"]
+    taskbooks.link_plan(a, "p")  # a: planning → 现有大任务
+    for tid in (b, c):  # b/c: new → active → delivered
+        taskbooks.transition(tid, "active")
+        taskbooks.transition(tid, "delivered")
+    taskbooks.accept(c)  # c: → 历史
+    secs = taskbooks.sections()
+    assert a in [d["id"] for d in secs["open"]]
+    assert b in [d["id"] for d in secs["review"]]
+    assert c in [d["id"] for d in secs["history"]]
+
+
+def test_rejected_item_appears_in_history_with_note(tbdir):
+    tid = _make()["id"]
+    taskbooks.transition(tid, "active")
+    taskbooks.transition(tid, "delivered")
+    taskbooks.reject(tid, "拆得不对")
+    assert tid in [d["id"] for d in taskbooks.sections()["history"]]  # 带批语进历史
+
+
+# ---------------------------------------------------------------------------
+# ③ 组长程序化面（orch taskbooks）
+# ---------------------------------------------------------------------------
+def test_orch_taskbooks_list_show_link(tbdir, capsys):
+    tid = _make(title="目标大任务")["id"]
+    assert orch.main(["taskbooks", "list"]) == 0
+    out = capsys.readouterr().out
+    assert tid in out and "现有大任务" in out
+    assert orch.main(["taskbooks", "show", tid]) == 0
+    assert "目标大任务" in capsys.readouterr().out
+    assert orch.main(["taskbooks", "link", tid, "--plan", "p9"]) == 0
+    assert taskbooks.load_state(tid)["plan_id"] == "p9"
+    assert orch.main(["taskbooks", "show", "tb-none"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# ④ TASKBOOK-NEW 唤醒（watch 最小扩展）
+# ---------------------------------------------------------------------------
+def test_taskbook_new_is_in_priority():
+    assert "TASKBOOK-NEW" in watch.PRIORITY
+
+
+def test_detect_reports_new_taskbook_increment():
+    base = {"taskbook_ids": ["tb-1"]}
+    cur = {"taskbook_ids": ["tb-1", "tb-2"]}
+    evs = watch.detect_events(base, cur)
+    assert [e["event"] for e in evs] == ["TASKBOOK-NEW"]
+    assert evs[0]["subject"] == "tb-2" and "taskbooks" in evs[0]["action"]
+    assert watch.detect_events({"taskbook_ids": ["tb-1"]}, base) == []  # 无增量不报
+
+
+def test_taskbook_ids_reads_the_data_layer(tbdir):
+    _make(title="z")
+    ids = watch._taskbook_ids()
+    assert len(ids) == 1 and ids[0].startswith("tb-")
+
+
+# ---------------------------------------------------------------------------
+# ⑤ TUI 面板（Pilot）：投递 + 批复
+# ---------------------------------------------------------------------------
+def _deliver(tid: str) -> None:
+    taskbooks.transition(tid, "active")
+    taskbooks.transition(tid, "delivered")
+
+
+def test_pilot_new_taskbook_lands_on_disk(tbdir):
+    """success_criteria：Pilot 驱动 TUI 新增 → data/taskbooks/ 落盘两文件、元数据齐全。"""
+
+    async def _go():
+        app = tui.PysciTUI()
+        async with app.run_test() as pilot:
+            await pilot.press("t")
+            assert app.view == "taskbooks"
+            await pilot.press("n")
+            assert app.view == "tb-new"
+            app.query_one("#tb-new-title-input", Input).value = "TUI 投递的大任务"
+            app.query_one("#tb-new-body", TextArea).text = "正文甲\n正文乙"
+            await pilot.click("#tb-new-submit")
+            assert app.last_created.startswith("tb-")
+            assert "已投递" in app.tb_new_msg
+
+    _run(_go())
+    st = taskbooks.list_all()
+    assert len(st) == 1
+    assert st[0]["title"] == "TUI 投递的大任务" and st[0]["source"] == "mirror-tui"
+    assert taskbooks.read_body(st[0]["id"]) == "正文甲\n正文乙"
+    assert (tbdir / f"{st[0]['id']}.taskbook.md").exists()
+    assert (tbdir / f"{st[0]['id']}.state.json").exists()
+
+
+def test_pilot_accept_and_reject_selected(tbdir):
+    """success_criteria：批复 Pilot——accept 终态；reject 带批语回 new。"""
+    a = _make(title="甲")["id"]
+    b = _make(title="乙")["id"]
+    for tid in (a, b):
+        _deliver(tid)
+    seen: dict[str, str] = {}
+
+    async def _go():
+        app = tui.PysciTUI()
+        async with app.run_test() as pilot:
+            await pilot.press("t")
+            assert len(app.tb_items) == 2
+            seen["first"] = str(app.tb_items[0]["id"])
+            seen["second"] = str(app.tb_items[1]["id"])
+            await pilot.press("a")  # 接受选中（第 0 项）
+            assert "accepted" in app.tb_msg and seen["first"] in app.tb_msg
+            await pilot.press("down")  # 重建后第 1 项
+            app.query_one("#tb-note", Input).value = "拆得不对"
+            await pilot.press("r")
+
+    _run(_go())
+    by_id = {d["id"]: d for d in taskbooks.list_all()}
+    assert by_id[seen["first"]]["status"] == "accepted"
+    assert by_id[seen["second"]]["status"] == "new"  # 驳回后回 new
+    assert by_id[seen["second"]]["rejections"][-1]["note"] == "拆得不对"
+
+
+def test_pilot_taskbook_panel_reachable_and_esc_returns(tbdir):
+    async def _go():
+        app = tui.PysciTUI()
+        async with app.run_test() as pilot:
+            await pilot.press("t")
+            assert app.view == "taskbooks"
+            await pilot.press("escape")
+            assert app.view == "menu"
+
+    _run(_go())

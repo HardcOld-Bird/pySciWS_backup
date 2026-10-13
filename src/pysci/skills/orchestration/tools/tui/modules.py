@@ -92,17 +92,70 @@ def _pending_count() -> int:
         return 0
 
 
+def _taskbook_secs() -> dict:
+    from .. import taskbooks as _tb  # 延迟导入：taskbooks 是叶子数据层
+
+    return _tb.sections()
+
+
+def _taskbook_summary() -> list[str]:
+    secs = _taskbook_secs()
+    return [
+        f"现有大任务 = {len(secs['open'])}",
+        f"待批复（delivered） = {len(secs['review'])}",
+        f"历史（accepted/带批语） = {len(secs['history'])}",
+    ]
+
+
+def _taskbook_detail() -> list[str]:
+    """列表三段（§2.4 #1 / §3.4）；写入口在 TUI 面板（`t`），此处只读。"""
+    secs = _taskbook_secs()
+    out: list[str] = []
+    for name, key in (
+        ("现有大任务（new/planning/active）", "open"),
+        ("已完成待批复（delivered）", "review"),
+        ("历史（accepted / 带驳回批语）", "history"),
+    ):
+        out.append(f"—— {name} ——")
+        items = secs[key]
+        if not items:
+            out.append("  （无）")
+            continue
+        for d in items:
+            rej = d.get("rejections") or []
+            tail = ""
+            if rej:
+                tail = f"｜批语：{str(rej[-1].get('note', ''))[:40]}"
+            elif d.get("plan_id"):
+                tail = f"｜plan={d['plan_id']}"
+            out.append(f"  [{d.get('status')}] {d.get('title')}{tail}")
+    out += [
+        "",
+        "按 `t` 进任务书面板：`n` 新增 / `a` 接受选中 / `r` 驳回选中（批语输入框）",
+    ]
+    return out
+
+
+def _taskbook_count() -> int:
+    """更新徽标：待批复（delivered）+ 新投递（new）即「值得关注」（§3.4）。"""
+    try:
+        secs = _taskbook_secs()
+        return len(secs["review"]) + sum(
+            1 for d in secs["open"] if d.get("status") == "new"
+        )
+    except Exception:  # noqa: BLE001 - 观察面绝不阻塞
+        return 0
+
+
 def modules() -> list[Module]:
     """主菜单七模块（§2.4 归并表顺序）；读数与详情全走 mirror 纯函数。"""
     return [
-        _fingerprint_module(
+        _count_module(
             "taskbooks",
             "任务书",
-            lambda: ["（占位）m3 建大任务列表 / 新增多行输入 / 批复返工"],
-            lambda: [
-                "（占位）任务书模块",
-                "m3 充实：大任务列表 / 新增多行输入 / 批复返工（REFACTOR §3.4）",
-            ],
+            _taskbook_summary,
+            _taskbook_detail,
+            _taskbook_count,
         ),
         _fingerprint_module(
             "plans",

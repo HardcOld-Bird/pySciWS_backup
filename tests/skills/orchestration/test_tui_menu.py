@@ -73,9 +73,11 @@ def test_decisions_detail_reuses_mirror_data_layer():
 
 
 def test_placeholder_modules_are_labelled():
-    for key in ("taskbooks", "plans"):
-        mod = next(m for m in modules() if m.key == key)
-        assert any("占位" in ln for ln in mod.detail()), key
+    """占位如实标注；任务书自 m3 起是**真身**（不再是占位）。"""
+    plans = next(m for m in modules() if m.key == "plans")
+    assert any("占位" in ln for ln in plans.detail())
+    tb = next(m for m in modules() if m.key == "taskbooks")
+    assert any("现有大任务" in ln for ln in tb.detail())
 
 
 def test_badge_count_is_explainable_and_first_run_counts_all():
