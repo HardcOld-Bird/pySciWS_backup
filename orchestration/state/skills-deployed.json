@@ -9,9 +9,9 @@
       }
     },
     "orchestration": {
-      "source_hash": "a517f59cd45e76ffb192116506abea4b6357c5f7012d9206c10f5dcaeec46b5a",
+      "source_hash": "cd4ca08ed3762debdd8b4df93b35a3abfc8dab41819eafd95ce53b1f9db0812d",
       "targets": {
-        ".qoder/skills/orchestration": "a517f59cd45e76ffb192116506abea4b6357c5f7012d9206c10f5dcaeec46b5a"
+        ".qoder/skills/orchestration": "cd4ca08ed3762debdd8b4df93b35a3abfc8dab41819eafd95ce53b1f9db0812d"
       }
     },
     "devops": {

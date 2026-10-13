@@ -8,24 +8,31 @@
 
 ```json
 {"version": 1, "discipline": "…", "tags": {"<tag>": "<定义>"},
- "infra_kinds": {"<kind>": "<定义>"}}
+ "infra_kinds": {"<kind>": "<定义>"}, "reasons": {"<reason>": "<定义>"}}
 ```
 
 初始 10 标签 + 增补 `merge_dirty_face`（2026-10-13）共 11：`whitelist_conflict`
 `cli_missing` `doc_stale` `tool_bug` `harness_gap` `model_capability` `quota` `env_broken`
-`design_smell` `unknown`。提案分类两值：`defect` `usability`。
+`design_smell` `unknown`。提案分类两值：`defect` `usability`。成因档位四值：`needs_decision`
+`capacity` `blocked_by_env` `blocked_by_upstream`。
 
 - 增补标签/分类 = 改文件（**须附定义**）并经 devops 交付，不改代码：Python 侧唯一读取口
-  `tools/failure_tags.load_tags()` / `load_infra_kinds()`，Node 侧
+  `tools/failure_tags.load_tags()` / `load_infra_kinds()` / `load_reasons()`，Node 侧
   `orchestration/guards/delivery-gate.mjs` 直接读同一文件，两侧口径必须一致；
-- 词表缺席/损坏 → 标签面 fail-open（不阻塞派发，只失去一次校验）；分类面回落
-  `DEFAULT_INFRA_KINDS` 兜底清单继续执法（两个值、协议文档写死，失去执法才是事故）。
+- 词表缺席/损坏 → 标签面 fail-open（不阻塞派发，只失去一次校验）；分类面与档位面回落
+  `DEFAULT_INFRA_KINDS`/`REASONS_DEFAULT` 兜底清单继续执法（值少且稳定，失去执法才是事故）。
 
 ## 交付面
 
 `<blocked tags="a,b">`：属性可选，缺省=空列表合法（不标注不阻断）；属性存在时
 gate 校验词表，含词表外标签 → exit 2 + 列出可用词表。分隔符半/全角逗号、分号、
 空白都收，大小写不敏感。`<result>` 上的 tags 一律忽略（只 blocked 携带失败语义）。
+
+`<blocked reason="…">`：**单值**成因档位，同样受控、gate 词表外退回、缺省不标注合法。
+`tags` 说「失败是哪一类」，`reason` 说「该谁怎么处置」——`needs_decision`（待裁决，重派无效）
+vs `capacity`（余量不足，补足可重派）处置相反，故 drain 写进 `.done`（含 `by_reason` 合计），
+`orch status` 分列「待裁决=N 待排期=N」。**不切分**（`reason="capacity, foo"` 整串落词表外，
+切分会把「标错」伪装成「标对」）。
 
 ## 标签的第二用途：有的标签会改链路
 

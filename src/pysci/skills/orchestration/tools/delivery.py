@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .failure_tags import parse_tags
+from .failure_tags import parse_reason, parse_tags
 
 #: 标签属性面（**引号感知**）。旧写法 ``[^>]*`` 把属性值里的 ``>`` 当标签结束——
 #: ``reason="优于 > 阈值"`` 会在引号内部提前停下，剩余部分被当成正文起点：kind 仍判
@@ -94,6 +94,11 @@ class Delivery:
     #: E1（README §5.4）：<blocked> 的 tags 属性 → 失败标签列表（已规范化，未校词表——
     #: 校验在 gate 侧，本侧只负责把组员标的内容如实记进台账）。缺省空列表。
     tags: list[str] = field(default_factory=list)
+    #: <blocked reason="…"> 的**成因档位**（backlog 20261013-191213-devops）：单值受控键
+    #: （needs_decision/capacity/blocked_by_env/blocked_by_upstream，词表见
+    #: state/failure-tags.json 的 reasons 段）。缺省空串=未标注（合法）。与 tags 同纪律：
+    #: 本侧只如实解析，校验在 gate 侧——drain/status 据它把 blocked **分列**计数。
+    reason: str = ""
     #: 宽松兜底命中时的告警（严格面什么都没扫到、宽松面扫到一块）。**空串=正常路径**，
     #: 非空即「解析器早于协议」：交付照样判读，但派发/巡检面必须打出一行提示重跑本单
     #: （backlog 20261012-002857-devops）。
@@ -167,16 +172,19 @@ def parse_delivery(result_text: str) -> Delivery:
     Returns:
         Delivery：kind 为 result/blocked/parse_error（两者皆缺或并存时 parse_error，
         正文取先出现者供人工判读）；``tags`` 取 <blocked> 的 tags 属性（result 交付
-        不带标签——标签是失败分类面，成功没有可分类的对象）；``warning`` 仅在严格面
-        全缺、宽松面救回时非空（见 :data:`PROTOCOL_LAG_HINT`）。
+        不带标签——标签是失败分类面，成功没有可分类的对象）；``reason`` 取 <blocked>
+        的成因档位（同上，只属于失败面）；``warning`` 仅在严格面全缺、宽松面救回时
+        非空（见 :data:`PROTOCOL_LAG_HINT`）。
     """
     result_body = _extract(result_text, "result")
     blocked = _strict_match(result_text, "blocked")
     blocked_body = blocked.group("body").strip() if blocked else None
     tags: list[str] = []
+    reason = ""
     if blocked is not None:
         blocked_attrs = {k: v for k, v in _ATTR_RE.findall(_attrs_of(blocked))}
         tags = parse_tags(blocked_attrs.get("tags", ""))
+        reason = parse_reason(blocked_attrs.get("reason", ""))
     infra = ""
     infra_kind = ""
     im = _INFRA_RE.search(result_text)
@@ -199,11 +207,13 @@ def parse_delivery(result_text: str) -> Delivery:
             warning = PROTOCOL_LAG_HINT
             if kind == "blocked":
                 tags = parse_tags(_loose_attr(attrs, "tags"))
+                reason = parse_reason(_loose_attr(attrs, "reason"))
         else:
             kind = "parse_error"
             body = result_body or blocked_body or ""
     if kind != "blocked":
         tags = []
+        reason = ""
 
     artifacts: list[Artifact] = []
     if kind == "result":
@@ -226,6 +236,7 @@ def parse_delivery(result_text: str) -> Delivery:
         infra_suggestion=infra,
         infra_kind=infra_kind,
         tags=tags,
+        reason=reason,
         warning=warning,
         raw=result_text,
     )
