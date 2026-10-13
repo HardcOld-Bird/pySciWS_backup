@@ -641,9 +641,9 @@ sleep-轮询循环**；等待期间不主动检查输出文件（通知会来）
 **后台 drain 的等待：`orch watch` 事件等待器**（backlog 20261010-orch-watch）。
 detached drain 不被任何前台进程持有，组长交办完即失去观察面——旧状只能靠「组长记得跑
 `orch status`」，属纪律而非保证。硬化理念（用户裁决 2026-10-10：能代码硬保证的不靠 LLM
-纪律；结构上限=唤醒注册只能由组长会话的工具发起，故代码能保证的是**事件判定全在代码 +
-挂载提示在唤醒当刻由代码注入**，残余软点=组长照 [NEXT] 挂一条后台命令，与体系既有最小
-软保证同级）：
+纪律；**事件判定全在代码 + 挂载提示在唤醒当刻由代码注入**；挂载动作自 2026-10-13 起由
+Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残余软点=组长照 [NEXT] 挂一条后台
+命令」就此收口）：
 
 - `pysci-orch watch [--timeout S=4h] [--interval S=60]` **阻塞轮询**（只读状态文件 +
   Python 侧判活，不起 shell 故 MSYS 路径转换问题免疫；间隔硬钳制 ≤60 s），命中即**单行**
@@ -662,8 +662,15 @@ detached drain 不被任何前台进程持有，组长交办完即失去观察�
   - `CHANNEL-STOP <run>`——渠道级故障全局停止（同上，run 日志的 `[C]` 痕迹早一拍）：
     两类停止动作相同、恢复动作不同（充值/换渠道 vs 等渠道恢复），故分列两个事件
   - `CRASH <run>`——锁 pid 已死且该 run 无 `.done`
-- **用法**：组长以 Bash `run_in_background` 启动，进程退出即原生完成通知唤醒本会话；一次
-  watch 报一批事件即退，后续按需重挂（输出自带重挂命令）。`approve`（经 `wake_devops`）与
+- **自动挂载（2026-10-13 硬化）**：组长回合结束由 `Stop + asyncRewake` 钩子
+  （`.qoder/hooks/watch-arm.sh`）自动充当等待器——已有活跃 watch（`watch.mounted` 且无
+  `last_exit`）则放行，否则本钩子阻塞跑 `orch watch`、命中即 `exit 2` 唤醒组长；超时/异常
+  一律 `exit 0`（不卡会话）。**实测推翻早先的「结构上限」登记**：「唤醒注册只能由组长会话
+  的工具发起」对 hook **分离进程**成立，但 `asyncRewake` 钩子由 harness 自身消费、**能**唤醒
+  模型，且实测在组长 TUI 下**后台**执行（回合即刻结束、钩子在后台阻塞）——故钩子内可跑长阻塞
+  watch。**watch 单发不再需要人续挂**，此前「残余软点=组长记得重挂」就此消除。
+- **手动用法（降级/兜底仍适用）**：组长以 Bash `run_in_background` 启动，进程退出即原生完成
+  通知唤醒本会话；一次 watch 报一批事件即退（输出自带重挂命令）。`approve`（经 `wake_devops`）与
   `dispatch --from-backlog` 的输出**固定追加挂载指令行**（`watch.mount_lines`），不靠组长翻文档。
   **硬警示（mount_lines 首行）**：`orch watch` 必须作为后台 Bash 调用的**唯一顶层命令**——
   禁止用 `&`/`&&`/管道把它嵌进别的命令，嵌入即被父任务连坐杀死、事件通知随之丢失。
@@ -1244,6 +1251,8 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **背压原语落地（带宽治理安全半）**（backlog 20261013-193000-leader = 原 #115 拆单 1/2）：#115 因「5 机制咬合 + 含熔断语义反转」被正确拒收后按拆解表拆两单，本单是**零接线**的那半——① `[priority] order` 六档优先级表（leader>research>devops>bench-pressure>bencher/twin>inspector；**数组的数组**＝内层同档，否则「bencher 与 twin 同档」会被列表序拆开）入 `pysci_settings.toml` + `settings` 读侧；② 活跃会话注册表 `state/active-sessions.json`（upsert 保留 started / heartbeat 只刷 updated / >10min 视为死条目 / 原子写）；③ 延期纯函数 `plan_defer`（2→4→8…分钟 + 次数与壁钟**双闸**，含「再延一次会超预算」的交互判据）。**不接 drain 主循环**（grep 零引用；既有 channel_error 停链用例照绿） | 用户设计 + 组长拆单 + devops 实施 |
 | 2026-10-13 | **失败词表按调用取表**（backlog 20261013-183521-devops，devops 自提）：`QUOTA_ERROR_RE`/`CHANNEL_ERROR_RE` 原为 **import 时编译的模块级常量** → 「改词表全链生效」只对新起进程成立，跑着的 drain/已 import 的 orch 看不到改动（「改了没生效」易被误读成分类器写错；同 §3.4「解析器早于协议」的启动快照族）。撤掉这两个快照，两条判据路径一律按调用读 `state/failure-classes.json`（选「每次读表」而非 mtime 失效：无陈旧窗口、实现更简，代价是失败跳多读一次约 2.5 KB） | devops 自提 + 组长采纳 |
 | 2026-10-13 | **`remedy_shape` 单一真源＝findings 行**（backlog 20261013-184040-devops，devops 自提）：执法（任务书注入）原读 **backlog 条目**上的形状，而那份只是晋升瞬间从 findings 行的拷贝——组长事后在 findings 行裁定 `restore` 不回流，任务书照旧注入「change 缺判决 → 交付 blocked」（实测 `045910`）。改为**按 id 反查 findings 行为准**、backlog 侧降为兜底，判决记录判据升级为「findings 行 `judgment` 有内容」，**两源不一致出声**（反向不一致会静默放行本该过判决的实施，是该缺陷更危险的一侧） | devops 自提 + 组长采纳 |
+| 2026-10-13 | **watch 自动挂载硬化（Stop + asyncRewake 钩子）**：`orch watch` 单发即退，「组长命中后记得重挂」是软纪律——2026-10-13 夜航停摆的直接成因（19:13 命中 NEEDS-LEADER 唤醒组长后未重挂，19:41 drain 自然收尾时无人唤醒）。新增 `.qoder/hooks/watch-arm.sh`（组长 Stop 钩子，asyncRewake）：回合结束若已有活跃 watch（`watch.mounted` 且无 `last_exit`）则放行，否则本钩子阻塞跑 `orch watch`、命中 `exit 2` 唤醒组长；超时/异常一律 `exit 0`（不卡会话）。**实测推翻早先「结构上限=唤醒注册只能由组长会话工具发起」的登记**——该限对 hook **分离进程**成立，但 asyncRewake 钩子由 harness 自身消费、**能**唤醒模型，且在组长 TUI 下**后台**执行（回合即刻结束、钩子在后台阻塞）。§4.5 同步改写 | 组长立案（实测驱动） |
+| 2026-10-13 | **带宽类延期不停链 + 兜底回升 + 浅回退**（backlog 20261013-193500-leader = 原 #115 拆单 2/2 语义半，组长裁决「熔断授权反转**仅限 bandwidth**」）：① `channel_error` 按 `failure_classes` 分流——bandwidth→**延期续跑**（回队挂 `defer_until`，不换席不停链）；**兜底**=延期预算（次数 6/壁钟 1800s）触顶仍不愈 → 回升**全局停止** `channel_saturated`（新 systemic kind，封死逐项烧跳）；outage→维持原停链；unknown→有更高优先级活会话则按 bandwidth、否则按 outage；② **浅回退**：隐性 DeepSeek 态带宽失败先回本预设主力席试一拍，该席亦爆才换席/延期；③ 观察面：mirror「延期」项 + run 日志 + `DispatchOutcome.error_text` 供 drain 分类；④ 全队延期时 worker 睡到最近到期（≤600s，睡醒回查停止信号） | 用户设计 + 组长裁决 + devops 实施 |
 
 ## 14. 已知代价与风险
 
