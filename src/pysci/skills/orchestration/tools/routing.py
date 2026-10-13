@@ -24,9 +24,10 @@
 时钟口径：按用户指示用**本机时间**判定（不联网校时），读数一律折到北京时间
 （:data:`CN_TZ_NAME`）；机器时区不是 UTC+8 时归一换算并注记一句。
 
-配置面（全部可选，非法值回落出厂并警告，读侧 fail-open）：``[routing]`` 块在
-``data/pysci_settings.toml``——``enabled`` / ``valley_preset`` / ``leadtime_s`` /
-``peak`` / ``jury_panel``。席位本身不在这里：谷时主席取 ``valley_preset`` 的席位链
+配置面（全部可选，非法值回落出厂并警告，读侧 fail-open）：路由键在
+``data/pysci_settings.toml`` 的 ``[model]`` 节——``enabled`` / ``valley_preset`` /
+``leadtime_s`` / ``peak`` / ``jury_panel``（原 ``[routing]`` 节，用户 2026-10-13「模型类
+设置集中一处」并入本节；旧位置逐键兼容读一次并告警请迁移）。席位本身不在这里：谷时主席取 ``valley_preset`` 的席位链
 （跟踪 ``registry.json presets.<name>`` 整链覆盖 ← 出厂表），仲裁团席位取
 ``registry.jury.seats``（三席一律**按量付费**直调，用户终裁 2026-10-13：TokenPlan 套餐
 路径整个不做——两家个人版条款禁止 API 自动化调用，违规封 Key）。
@@ -79,7 +80,7 @@ _WEEKDAYS: tuple[str, ...] = ("周一", "周二", "周三", "周四", "周五", 
 
 @dataclass(frozen=True)
 class Face:
-    """``[routing]`` 块的**已校验**读数（出厂值 + 警告，绝不为非法配置停摆）。"""
+    """路由键的**已校验**读数（出厂值 + 警告，绝不为非法配置停摆）。"""
 
     enabled: bool = True
     valley_preset: str = DEFAULT_VALLEY_PRESET
@@ -138,22 +139,51 @@ def _valid_pair(item: Any) -> tuple[int, int] | None:
     return (start, end) if 0 <= start < end <= 24 else None
 
 
+#: 路由块的全部键（``[model]`` 节内的同名键；用户 2026-10-13 裁决「模型类设置集中一处」）。
+#: 逐键回落到旧 ``[routing]`` 位置的判据就是它——增删键只改这一处。
+ROUTING_KEYS: tuple[str, ...] = (
+    "enabled",
+    "valley_preset",
+    "leadtime_s",
+    "peak",
+    "jury_panel",
+)
+
+
 def face(data: dict[str, Any] | None = None) -> Face:
-    """读 ``[routing]`` 块并逐键校验（非法键回落出厂值 + 一条警告，不影响其余键）。
+    """读 ``[model]`` 节内的路由键并逐键校验（非法键回落出厂值 + 一条警告，不影响其余键）。
 
     读侧 fail-open 与 :func:`.settings.preset_name` 同口径：一个手写的配置文件不该能把
     派发面卡死，但**回落必须出声**——静默回落等于「用户改了却没生效」。
     """
     if data is None:
         data = settings.read_settings()
-    raw = data.get("routing") if isinstance(data, dict) else None
-    if raw is None:
-        return Face()
-    if not isinstance(raw, dict):
+    model = data.get("model") if isinstance(data, dict) else None
+    legacy = data.get("routing") if isinstance(data, dict) else None
+    if legacy is not None and not isinstance(legacy, dict):
         return Face(
-            warnings=(f"[routing] 不是表（收到 {type(raw).__name__}）→ 全部回落出厂值",)
+            warnings=(
+                f"[routing] 不是表（收到 {type(legacy).__name__}）→ 全部回落出厂值",
+            )
         )
+    raw: dict[str, Any] = dict(model) if isinstance(model, dict) else {}
+    # 逐键回落旧位置（`[routing]`）：**不做整块切换**——半迁移的文件若按整块判，
+    # 落在旧位置的那几个键会被静默丢掉（用户以为改了，实际没生效）。缺哪个键才回落哪个。
+    fell_back = [
+        key
+        for key in ROUTING_KEYS
+        if key not in raw and isinstance(legacy, dict) and key in legacy
+    ]
+    if isinstance(legacy, dict):
+        for key in fell_back:
+            raw[key] = legacy[key]
     warn: list[str] = []
+    if fell_back:
+        warn.append(
+            "[!] [routing] 已并入 [model]（用户 2026-10-13）："
+            + "、".join(fell_back)
+            + " 仍写在旧位置，本次已回落读取——请迁进 [model] 节"
+        )
 
     enabled = raw.get("enabled", True)
     if not isinstance(enabled, bool):

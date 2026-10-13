@@ -76,7 +76,9 @@ def cn(day: date, hour: int, minute: int = 0) -> datetime:
 
 def config(preset: str = "mimo", **routing_kv) -> dict:
     """注入用的「配置面快照」（读盘替身）：``[model] preset`` 与 ``[routing]`` 同一份。"""
-    return {"model": {"preset": preset}, "routing": routing_kv or None}
+    model = {"preset": preset}
+    model.update(routing_kv)
+    return {"model": model}
 
 
 def reading(moment: datetime, preset: str = "mimo", **routing_kv):
@@ -196,7 +198,7 @@ def test_illegal_routing_keys_fall_back_loudly():
 
 def test_all_illegal_peak_windows_fall_back_to_factory():
     """peak 全非法 → 回落出厂双峰段（不能让「配错」读成「全天峰」或「全天谷」）。"""
-    f = routing.face({"routing": {"peak": [[12, 9], ["x", 3], [7]]}})
+    f = routing.face({"model": {"peak": [[12, 9], ["x", 3], [7]]}})
     assert f.peak == routing.DEFAULT_PEAK_WINDOWS
     assert len(f.warnings) == 4  # 三条丢弃 + 一条「无合法区间」整体回落
     assert any("无合法区间" in w for w in f.warnings)
@@ -626,3 +628,81 @@ def test_routing_config_on_toml_is_persisted_surface(iso_state):
     write_routing(peak=[[10, 13]], jury_panel=["kimi"])
     f2 = routing.face()
     assert f2.peak == ((10, 13),) and f2.jury_panel == ("kimi",)
+
+
+# ---------------------------------------------------------------------------
+# [routing] 并入 [model]（用户 2026-10-13「模型类设置集中一处」）
+# ---------------------------------------------------------------------------
+
+
+def _isolate_settings(tmp_path, monkeypatch):
+    """把 ``settings.SETTINGS_PATH`` 指到 tmp——**不隔离就会写掉所在树的真配置**。
+
+    本组新用例直接造配置文件；漏了这一步，测试会把 worktree 里的
+    ``data/pysci_settings.toml`` 改成用例夹具（实测：跑完一轮，真配置变成
+    「[model] preset + enabled / [routing] leadtime_s」的半迁移壳）。
+    """
+    from pysci.skills.orchestration.tools import settings as _settings
+
+    monkeypatch.setattr(_settings, "SETTINGS_PATH", tmp_path / "pysci_settings.toml")
+    return _settings
+
+
+def test_routing_keys_are_read_from_model_section(tmp_path, monkeypatch):
+    """新位置：路由键住在 [model] 节内（合并后的唯一形状）→ 零迁移告警。"""
+    _isolate_settings(tmp_path, monkeypatch)
+    write_routing(enabled=False, peak=[[10, 11]])
+    f = routing.face()
+    assert f.enabled is False and f.peak == ((10, 11),)
+    assert not any("已并入" in w for w in f.warnings)
+
+
+def test_legacy_routing_section_is_read_once_with_migration_warning(
+    tmp_path, monkeypatch
+):
+    """旧位置兼容读：仍写 [routing] 的文件照常生效，但**出声**请迁移（手写配置不该硬失败）。"""
+    _settings = _isolate_settings(tmp_path, monkeypatch)
+    _settings.SETTINGS_PATH.write_text(
+        "[model]"
+        + chr(10)
+        + 'preset = "mimo"'
+        + chr(10)
+        + chr(10)
+        + "[routing]"
+        + chr(10)
+        + 'valley_preset = "qwen"'
+        + chr(10)
+        + "leadtime_s = 60"
+        + chr(10),
+        encoding="utf-8",
+    )
+    f = routing.face()
+    assert f.valley_preset == "qwen" and f.leadtime_s == 60, "旧位置的键仍须生效"
+    assert any("已并入 [model]" in w and "valley_preset" in w for w in f.warnings)
+
+
+def test_partial_migration_does_not_silently_drop_legacy_keys(tmp_path, monkeypatch):
+    """**半迁移**：enabled 已进 [model]、leadtime_s 还在 [routing] → 两者都要生效。
+
+    逐键回落（而非整块二选一）就是为了防这一格：按整块判的话，落在旧位置的那几个键
+    会被静默丢掉——用户以为改了、实际没生效。"""
+    _settings = _isolate_settings(tmp_path, monkeypatch)
+    _settings.SETTINGS_PATH.write_text(
+        "[model]"
+        + chr(10)
+        + 'preset = "mimo"'
+        + chr(10)
+        + "enabled = false"
+        + chr(10)
+        + chr(10)
+        + "[routing]"
+        + chr(10)
+        + "leadtime_s = 120"
+        + chr(10),
+        encoding="utf-8",
+    )
+    f = routing.face()
+    assert f.enabled is False and f.leadtime_s == 120, (
+        "逐键回落：旧位置的键不许被静默丢掉"
+    )
+    assert any("leadtime_s" in w for w in f.warnings)
