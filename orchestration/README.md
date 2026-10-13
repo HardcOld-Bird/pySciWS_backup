@@ -393,9 +393,32 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 - **仲裁团构成随预设换血、排除同族**：面板 = 预设点名的三家族（qwen→glm+kimi+mimo、
   mimo→glm+kimi+qwen、deepseek→glm+kimi+mimo），配置里其余席**不入面板**但留痕报数
   （读数行「预设外未入面板：…」），面板缺席的家族点名让用户去补 `registry.jury.seats`
-  （「[!] 面板缺席：…」）；面板型号命中**当前预设同族** → 拒开庭（§4 硬规则已相对化自旧的
-  「绝对排除 Qwen」——mimo 预设的 Qwen 席是合法面板，qwen 预设的才拒）。席的端点/型号/Key
-  变量仍全在 `registry.jury.seats`（选型权归用户，代码不内置候选清单）；
+  （「[!] 面板缺席：…」）；面板型号命中**被评模型同族** → 拒开庭（§4 硬规则相对化过两次：
+  先是锚「当前预设」——mimo 预设的 Qwen 席合法、qwen 预设的才拒；路由 v3 再锚「被评
+  模型」——谷时被评 DeepSeek，Qwen/Mimo 旗舰回庭当第三席正是设计），且违约看**坐进本庭**、
+  不看席位表在册。席的端点/型号/Key 变量仍全在 `registry.jury.seats`（选型权归用户，代码
+  不内置候选清单）；
+- **谷时隐性 DeepSeek 覆盖（用户设计 2026-10-13，路由 v3，backlog 20261013-093000-leader）**：
+  DeepSeek 官方价分峰谷（峰 2 倍价），故**谷时自动把 qwen/mimo 预设的 main 席链换成
+  DeepSeek**，`[model] preset` 那一行不动（不新增第四个预设，「隐性」即此）：
+  - **判据**（真源 `data/pysci_settings.toml` `[routing]` 块；`orch status`「路由模式」段、
+    mirror 概览「路由」项、派发路由行三处同读一份）：峰 = 工作日 9:00–12:00、14:00–18:00；
+    谷 = ① 周六日**全天**（调休上班的周末照样算谷——按星期几判）② 法定节假日全天
+    ③ 工作日其余时段（含午休与夜间）。节假日库 `chinesecalendar`（pip 离线内嵌
+    2004–2026，含调休）；**覆盖外年份 / 库缺席 / 读数失败一律保守不切换并告警**（宁可多付
+    峰时价也不猜）。本机时钟不联网校时，读数按 `Asia/Shanghai` 归一；
+  - **切换时机**：入谷即时（12:00、18:00、周末/节假日起点），入峰**提前 1 小时**
+    （工作日 8:00、13:00——单跳不可中途换模型，宁可早切）；覆盖**只作用于新派发**，在途
+    单跳的台账 `model` 字段不变。跨过一次记一行 run 日志 + 决策日志 `kind=routing`，
+    `mirror status` 报「上次切换 X 由 A 切至 B」；
+  - **覆盖面**：只有 `main`——**pro 席保持原预设升档席**（用户终裁 2026-10-13：隐性态下
+    pro 不动，提高工作质量），`minimum` 独立链也不参与（规格 5：压测永远走自己的链）；
+  - **仲裁团换固定面板 GLM+KIMI+Mimo**（终裁 v4 矩阵：qwen→glm+kimi+mimo、
+    mimo→glm+kimi+qwen、deepseek→glm+kimi+mimo、隐性态→glm+kimi+mimo；**一律按量付费，
+    TokenPlan 套餐路径整个不做**——两家个人版条款均禁 API 自动化调用，违规封 Key，故席位
+    没有端点链/开关，一席一条按量端点）。被评模型 = DeepSeek，缺 Key 的席标 unavailable +
+    双面告警（调用者面 `Run.message` + `orch status`/mirror 读数行）+ **本庭减员照常开庭**
+    （平票由 `escalate="twin"` 终裁兜底）；被评模型同族的回退席不上场（§4）；
 - **模型映射自动刷新**（用户裁决 2026-10-10）：BYOK/自定义模型的人类名→UUID 目录只来自
   `--list-models`（账户级），故 orch 在 **drain 启动时**跑 `--list-models`，按**链模板**
   （档位退役后模板只剩 `minimum`：`DEFAULT_MODEL_CHAINS`，`registry.model_chains` 可覆盖；
@@ -1023,6 +1046,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-11 | **REFACTOR v1.0 定稿：评价驱动的自改进体系**（七轮迭代，用户终审通过；权威文档 `orchestration/REFACTOR.md`，E0–E7 分阶段实施）。核心裁决：① 目标优先级=客观优质>用户审美（审美为 tiebreaker/廉价替代）；② 不新增抽象层级、允许新增要素，改进管道自覆盖（豁口：inspector 不自巡其 CLI；twin 不自改权重）；③ 硬代码优先（教训：consult 软选项从不被使用）；④ 判决包连带决策：审批强制选 J（实施前仲裁：SiliconFlow 直连、非 Qwen 家族、阻塞≈1min、双序多数、材料撰写者侧组装）/M（基线捕获+实施后 bencher 副本 A/B 实测）/J+M（实测覆盖仲裁）/不选=override 留痕；「仅涉自身基建直通」原则移入 jury-brief（组长主观豁免取消）；⑤ 交付后核验零新裁决点、只实测不再仲裁、未改善自动立案纠正；⑥ 新成员 inspector（巡检找茬，「与用户视角相同但知识不同」，设计审查 rubric=社区优先/反冗余/LLM 直觉友好；双队列迟滞节流+全局开关；发现不经组长自行判决；无 override 权）、bencher（harness 实测，FIFO 非常驻，套件与基线区完全写权）、twin（审美孪生：冷启动无记忆、PREFERENCE.md 置 pod 内只读；客观通道模棱两可时回退终裁不给平局；吸收语料后免阈值直接上线，代理原需用户裁决事项——先决策后问责，上线/下线宣告权归用户；最终交付验收不代理）；⑦ 决策形式统一二选一，多选拆分为依序二元对局；⑧ Tier A 失败标签硬性接入（阈值自动立案，不指望组长有空）；⑨ 一成员一技能一 CLI，共享逻辑做库不做新 CLI（pysci-jury 撤销）；CLI 人体工学范本=Qoder CLI/commitizen；⑩ mirror 控制台（status 全景=用户唯一关注入口+注册纪律；review 盲审即训练→偏差报告绿色通道；journal 机械分流：偏好陈述→语料/行动指令→强制派发不得 override）；⑪ deputy/reviewer 降档 flash、新增 minimum 压测档（型号待选）；⑫ 每阶段自带可证伪成功判据，组件连续两 Phase 无改变决策的读数即退役 | 用户（七轮裁决）+ 组长起草 |
 
 | 2026-10-12 | **twin 初步上线宣告 + 渠道修订（用户裁决）**：① 用户审阅同意 PREFERENCE.md v1，指令优先吸收 prompts_storage「1近期」文件最新段后**初步上线**——「宁可粗糙但在用，先上线再说」（例外清单仅存的上线宣告权已交付，E7 接线单 #73）；② 仲裁渠道修订：三席官方直调 DEEPSEEK/GLM/KIMI（减平票）、SiliconFlow 降回退且回退必须案卷/status/mirror 三面告警、minimum 选型火山方舟 doubao-seed-2.0-mini（Key 载体=项目根 `.env` 非 OS 环境变量；需通用 Key/模型开通时用户指示联系）；③ basic.md §3 经用户授权修订：fallback 改 `uv run --no-sync`、改 pyproject 必先 `pysci-dev venv-sync`（隐式 sync 撞锁删入口事故固化）；④ 断点恢复实测通过（重启演练：孤儿回收/重派/黑匣子全绿）；⑤ 连环触顶根治立案：drain 组包不看任务尺寸（#72 --solo）、bencher A/B 空壳 done 无判决（#70 done 语义收紧）、E5a 续作含里程碑提交规程（#71） | 用户（四项）+ 组长立案 |
+| 2026-10-13 | **路由 v3 谷时隐性 DeepSeek**（backlog 20261013-093000-leader）：DeepSeek 官方价分峰谷（峰 2 倍）→ 谷时自动把 qwen/mimo 预设的 **main** 席链换成 DeepSeek，`preset` 行不动（不新增预设）；判据 chinesecalendar（周末全天=含调休上班的周末、法定节假日全天、工作日其余时段；覆盖外年份/库缺席保守不切换并告警）；入谷即切、入峰提前 1 小时、**只影响新派发**（在途单跳台账 model 不变）。终裁修正：pro 席保持原预设升档席、仲裁团固定 GLM+KIMI+Mimo（矩阵 qwen/mimo/deepseek/隐性态四态定格）、**一律按量付费、TokenPlan 路径整个不做**（个人版条款禁 API 自动化调用）、缺 Key 席双面告警减员运行（平票 twin 终裁兜底）、被评模型同族回退席不上场；观测面 = `orch status` 路由段 + mirror 概览「路由」项 + 决策日志 `kind=routing`。附带：minimum 席链改 BYOK Mimo-V2.6-Flash（火山豆包调查关闭，P-25） | 用户设计 + 终裁 v4 |
 
 ## 14. 已知代价与风险
 

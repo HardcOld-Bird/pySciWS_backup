@@ -30,7 +30,7 @@ from pysci.paths import ORCH_STATE_ROOT, PODS_ROOT, PROJECT_ROOT
 
 from . import channels as _channels
 from . import journal as _journal
-from . import jury
+from . import jury, routing
 from .registry import Registry
 from .taste import PREFERENCE_NAME, TASTE_DIR
 
@@ -183,6 +183,15 @@ def _line_queues() -> str:
     )
 
 
+def _line_routing() -> str:
+    """路由模式（路由 v3 规格 4）：当前生效预设、是否隐性 DeepSeek 态、判据读数、下次切换。
+
+    隐性态是**时间驱动的覆盖**：toml 那一行没改而烧的渠道改了。用户只看 ``[model] preset``
+    是看不出这件事的，所以它必须进「唯一关注入口」，而不是只进 ``orch status``。
+    """
+    return routing.summary_line()
+
+
 def _line_jury() -> str:
     """仲裁团席位健康（REFACTOR §4 逐席直调）：主席不可达即 ``[!]`` 点名并宣告回退上场。
 
@@ -237,6 +246,7 @@ STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("宪章", _line_charter),
     ("开关", _line_switches),
     ("队列", _line_queues),
+    ("路由", _line_routing),
     ("仲裁", _line_jury),
     ("回退", _line_fallback),
     ("决策", _line_inspector_decisions),

@@ -14,15 +14,24 @@
 - **面板构成随预设换血**（用户裁决 2026-10-12 22:4x）：本庭 = 当前预设点名的三家族
   （qwen→glm+kimi+mimo、mimo→glm+kimi+qwen、deepseek→glm+kimi+mimo），配置里其余席
   **不入面板**但留痕报数，面板缺席的家族在读数行点名让用户去补 ``registry.jury.seats``。
-- **预设同族硬规则**：面板型号命中**当前预设同族**即拒开庭（排除同族自恋偏差）——
+- **谷时隐性态换面板**（路由 v3 规格 3，backlog 20261013-093000-leader）：谷时主席是
+  DeepSeek，面板换成固定三席 :data:`~.routing.DEFAULT_JURY_PANEL`（GLM+KIMI+Mimo，用户
+  终裁 v4）——被评模型换了同族就换（:func:`.routing.producer_family`），否则庭里坐进的
+  就是被评方自己。
+- **仲裁团一律按量付费**（用户终裁 2026-10-13）：TokenPlan 套餐端点**整个不做**——两家
+  个人版条款都禁止 API 自动化调用（违规封 Key），而仲裁团正是自动化调用。故一席只有
+  「一条端点」一种形状：代码里不存端点链，也不写下探回退。
+- **预设同族硬规则**：面板型号命中**被评模型同族**即拒开庭（排除同族自恋偏差）——
   绝对化的「不得含 Qwen」已被 mimo 预设的合法 Qwen 席推翻，规则改为相对预设。选型权
   归用户，代码不内置候选清单、也不静默剔除——违约要被看见。
-- **逐席可用性**（§4 三席直调的减平票前提）：一席 Key 缺失只作废该席（标
-  unavailable），**不拖垮整案**——剩下有 Key 的席位照常开庭计票。全部主席不可达且
-  回退席也未就位时才降级入队。
+- **逐席可用性**（§4 三席直调的减平票前提）：一席 Key 缺失只作废该席（标 unavailable +
+  **双面告警**：调用者面 :func:`_court_alert`、读数面 :func:`readiness_summary`），
+  **不拖垮整案**——剩下两席照常开庭计票，平票由 ``escalate="twin"`` 终裁兜底。全部主席
+  不可达且回退席也未就位时才降级入队。
 - **回退席**（``registry.jury.fallback``，独立开关）：仅当 ≥1 主席不可达时上场，
   上场即 :data:`FALLBACK_NOTICE` 告警，三处可见（留痕案卷 / ``orch status`` 判决包健康段 /
-  mirror 概览）——回退是权宜，不是常态，用户必须知道主席掉了。
+  mirror 概览）——回退是权宜，不是常态，用户必须知道主席掉了。**被评模型同族的回退席不得
+  上场**：它一进场就是 §4 违约，会把「该降级」的案子误判成「拒开庭」。
 - **双序**：每裁判跑 AB 与 BA 两局。BA 局把两个选项内容对调、仍以 A/B 标签提问，
   答案经 :func:`flip` 映射回真实选项；两局映射不一致 → 该裁判记 inconclusive
   **不计票**（被位置偏好牵着走的裁判自动出局）。
@@ -55,7 +64,7 @@ from dotenv import dotenv_values
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
-from . import presets
+from . import presets, routing
 from .ledger import read_all
 from .registry import DEFAULT_JURY, Registry, orchestration_rel
 
@@ -411,6 +420,9 @@ class Seat:
     ``usable`` 由 :func:`seat_readiness` 判定（配置齐全 且 Key 就位）。不可用的席位照样
     进留痕与读数面并带 ``reason``：「这席这次没投票」必须能区分「没配好」「没 Key」「回退
     席待命」——混为一谈就没法处理主席。
+
+    一席只有一条端点（用户终裁 2026-10-13：仲裁团一律按量付费，TokenPlan 套餐路径整个
+    不做），所以没有端点链、没有下探，``base_url``/``model``/``key_env`` 就是本庭落点。
     """
 
     name: str
@@ -473,17 +485,19 @@ def seat_readiness(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     Returns:
         ``{"seats": [Seat…主席+已启用的回退席], "voting": [Seat…本庭实际开庭的席],
         "unavailable": [Seat…], "missing_primary": [Seat…], "fallback_enabled": bool,
-        "fallback_used": bool, "notice": str}``。**不返回 Key 值。**
+        "fallback_used": bool, "fallback_blocked": str, "notice": str}``。**不返回 Key 值。**
     """
     out = cfg if cfg is not None else load_config()
     act = presets.active()
-    panel = list(act.preset.jury)
+    panel = list(routing.jury_panel(act.preset.jury))
+    producer = routing.producer_family()
     all_primary = [_to_seat(raw, "primary") for raw in out["seats"]]
 
-    # 预设构成换血（用户裁决 2026-10-12 22:4x）：面板=预设点名的三家族。**认得出家族却
-    # 不在面板**的配置席不入 panel（仍留痕报数，静默剔除会让人以为庭里真有那席）；认不出
-    # 家族的席照常入 panel——名字不带族名（测试桩/人自起的席名）不构成换血证据，宁可放行
-    # 也不误伤。缺席的**已点名家族**要出声：那是用户该去补 registry.jury.seats 的信号。
+    # 预设构成换血（用户裁决 2026-10-12 22:4x）：面板=预设点名的三家族；谷时隐性态换成
+    # 固定三席 GLM+KIMI+Mimo（终裁 v4，见 :func:`.routing.jury_panel`）。**认得出家族却不在
+    # 面板**的配置席不入 panel（仍留痕报数，静默剔除会让人以为庭里真有那席）；认不出家族的席
+    # 照常入 panel——名字不带族名（测试桩/人自起的席名）不构成换血证据，宁可放行也不误伤。
+    # 缺席的**已点名家族**要出声：那是用户该去补 registry.jury.seats 的信号。
     def _family(s: Seat) -> str:
         return seat_family(s.name, s.model)
 
@@ -503,7 +517,15 @@ def seat_readiness(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
             s.usable = True
     missing = [s for s in seats if not s.usable]
     voting = [s for s in seats if s.usable]
-    fallback_used = fallback_enabled and bool(missing) and fallback.usable
+    # §4 同族硬规则对回退席同样成立：被评模型的同族回退席一进场就是违约，会把「该降级」
+    # 的案子变成 declined。缺席时宁可 2 席运行（平票由 twin 终裁兜底），也不请同族进来。
+    fallback_blocked = ""
+    if fallback_enabled and _family(fallback) and _family(fallback) == producer:
+        fallback.reason = f"被评模型 {producer} 同族，依 §4 不得入庭"
+        fallback_blocked = fallback.reason
+    fallback_used = (
+        fallback_enabled and bool(missing) and fallback.usable and not fallback_blocked
+    )
     if fallback_used:
         voting.append(fallback)
     return {
@@ -513,19 +535,51 @@ def seat_readiness(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         "missing_primary": missing,
         "fallback_enabled": fallback_enabled,
         "fallback_used": fallback_used,
+        #: 回退席被 §4 同族硬规则挡下的原因（''=没被挡）——缺席告警要说清「为何不上回退」
+        "fallback_blocked": fallback_blocked,
         "notice": FALLBACK_NOTICE if fallback_used else "",
         "panel": panel,
         "preset": act.name,
+        #: 被评模型家族（谷时=隐性预设，平时=toml 那一行）——同族硬规则的锚点
+        "producer": producer,
+        #: 谷时隐性态是否在生效（读数面据此说明「面板为什么不是预设自带的那三族」）
+        "hidden": bool(routing.hidden_valley_preset()),
         "out_of_panel": out_of_panel,
         "missing_panel": missing_panel,
     }
+
+
+def _absence_note(plan: dict[str, Any]) -> str:
+    """主席缺席的告警一句（调用者面 :func:`_court_alert` 与读数面 :func:`readiness_summary`
+    共用一份文案——双面告警说的是同一件事，两处各写一份必然漂移）。
+
+    终裁口径（2026-10-13）：缺 Key 的席**标 unavailable + 出声**，本庭减员运行，平票由
+    ``escalate="twin"`` 终裁兜底；回退席被同族硬规则挡下时一并说明**为什么不上回退**。
+    """
+    missing = plan.get("missing_primary") or []
+    if not missing or plan.get("fallback_used"):
+        # 回退席顶上了就不叫「缺席」——那句 FALLBACK_NOTICE 已点名不可达主席，
+        # 再报一遍「缺席 X」会让读数面像是同时回退又减员。
+        return ""
+    names = "、".join(f"{s.name}（{s.reason}）" for s in missing)
+    note = (
+        f"[!] 缺席 {names} → 本庭 {len(plan.get('voting') or [])} 席运行"
+        "（减员照常开庭，平票由 twin 终裁兜底）"
+    )
+    blocked = str(plan.get("fallback_blocked") or "")
+    if blocked:
+        note += f"｜回退席不上场：{blocked}"
+    return note
 
 
 def readiness_summary(plan: dict[str, Any]) -> str:
     """席位读数一行话（``orch status`` 判决包健康段与 mirror 概览共用，防两处文案漂移）。"""
     panel = plan.get("panel") or []
     panel_note = (
-        f"｜面板 {'+'.join(panel)}（预设 {plan.get('preset', '?')}）" if panel else ""
+        f"｜面板 {'+'.join(panel)}（预设 {plan.get('preset', '?')}"
+        f"{'，谷时隐性态换面板' if plan.get('hidden') else ''}）"
+        if panel
+        else ""
     )
     if not plan["seats"]:
         line = "仲裁团未选型（registry.jury.seats 为空，开庭即入队）"
@@ -547,9 +601,17 @@ def readiness_summary(plan: dict[str, Any]) -> str:
     if plan["fallback_used"]:
         dropped = "、".join(s.name for s in plan["missing_primary"])
         line += f"｜[!] {FALLBACK_NOTICE}（不可达主席：{dropped}）"
+    if absent := _absence_note(plan):
+        line += f"｜{absent}"
     line += panel_note
     if plan.get("out_of_panel"):
-        names = "、".join(s.name for s in plan["out_of_panel"])
+        producer = str(plan.get("producer") or "")
+        names = "、".join(
+            f"{s.name}（被评同族，依 §4 不得入庭）"
+            if seat_family(s.name, s.model) == producer
+            else s.name
+            for s in plan["out_of_panel"]
+        )
         line += f"｜预设外未入面板：{names}"
     if plan.get("missing_panel"):
         line += f"｜[!] 面板缺席：{'、'.join(plan['missing_panel'])}（registry.jury.seats 未配置）"
@@ -583,11 +645,13 @@ def scrub(text: str, *, secrets: tuple[str, ...] = ()) -> str:
 
 
 def family_violations(models: list[str], family: str) -> list[str]:
-    """§4 硬规则的**预设相对化**版：面板不得含**预设同族**型号（同族自恋偏差）。
+    """§4 硬规则的**被评模型相对化**版：本庭不得含被评模型同族型号（同族自恋偏差）。
 
     档位退役前这里写死「不得含 Qwen」——mimo 预设的面板恰恰要点名 Qwen 旗舰（用户裁决
-    2026-10-12 22:4x），绝对规则会把合法面板拒之门外。返回违约型号清单；``family`` 为空
-    （预设认不出）不判。
+    2026-10-12 22:4x），绝对规则会把合法面板拒之门外。路由 v3 再相对化一步：锚点从
+    「toml 那一行的预设」换成「本庭实际在评谁的模型」（:func:`.routing.producer_family`）
+    ——谷时被评的是 DeepSeek，请 Qwen/Mimo 旗舰回庭当第三席正是设计，不是违规。
+    返回违约型号清单；``family`` 为空（认不出被评模型）不判。
     """
     if not family:
         return []
@@ -957,11 +1021,19 @@ class Run:
 
 
 def _court_alert(plan: dict[str, Any]) -> str:
-    """回退席上场时的一句告警（进 Run.message 开头，也进留痕 ``fallback.notice``）。"""
-    if not plan["fallback_used"]:
-        return ""
-    dropped = "、".join(s.name for s in plan["missing_primary"])
-    return f"[!] {FALLBACK_NOTICE}（不可达主席：{dropped}）；"
+    """开庭告警一句（进 Run.message 开头，也进留痕 ``fallback.notice``）。
+
+    两件事都要出声：**主席掉线后回退席顶上了**，以及**主席缺席、本庭减员运行**（终裁
+    2026-10-13：缺 Key 席标 unavailable + 双面告警 + 剩余席照常开庭，平票由 twin 兜底）。
+    文案与读数面 :func:`readiness_summary` 共用 :func:`_absence_note`，防两处漂移。
+    """
+    out: list[str] = []
+    if plan["fallback_used"]:
+        dropped = "、".join(s.name for s in plan["missing_primary"])
+        out.append(f"[!] {FALLBACK_NOTICE}（不可达主席：{dropped}）")
+    if absent := _absence_note(plan):
+        out.append(absent)
+    return "".join(f"{line}；" for line in out)
 
 
 def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) -> Run:
@@ -1004,15 +1076,19 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
             path=enqueue(case, reason=cfg_error, key_hints=secrets),
         )
     preset_name = presets.active().name
-    # 硬规则看**配置了的**席（含被面板构成排除的）：同族席即使已被换血逻辑挡在面板外，
-    # 也必须「违约被看见」地拒开庭，而不是退化成无声的入队——E3 纪律：静默剔除会让人
-    # 以为庭里真没有那席（或以为配置没问题）。
-    configured = [s.model for s in plan["seats"] + plan["out_of_panel"]]
-    if bad := family_violations(configured, preset_name):
+    producer = plan["producer"]
+    # 硬规则的**实质条件**是「被评模型同族坐进了本庭」，不是「席位表里配了同族席」。
+    # 路由 v3 之前两者等价（三家族面板 = 全部席位），之后不再等价：席位表跨预设共用，
+    # 谷时 DeepSeek 是被评模型而 deepseek 席必然在册、又必然被面板（glm+kimi+本预设旗舰）
+    # 挡在庭外——拿「在册」当违约会把谷时每一庭都锁死成 declined，而 that 恰是本单要开的庭。
+    # 被挡在庭外的同族席照样在读数面点名（:func:`readiness_summary`），违约要被看见，
+    # 但看见的位置在「这席没进庭」那一段，不在拒庭那条上。
+    in_court = [s.model for s in plan["seats"]]
+    if bad := family_violations(in_court, producer):
         return Run(
             "declined",
-            f"拒开庭：评审团含预设 {preset_name} 同族型号 {bad}"
-            "（§4 硬规则，排除同族自恋偏差）",
+            f"拒开庭：本庭含被评模型 {producer} 的同族型号 {bad}"
+            f"（§4 硬规则，排除同族自恋偏差；配置预设 {preset_name}）",
         )
     if not cfg["seats"]:
         reason = "registry.jury.seats 未选型（席位清单为空）"
@@ -1077,6 +1153,14 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
             "hash": dossier_hash(brief),
         },
         "seats": [s.public() for s in plan["seats"]],
+        #: 路由面（谷时隐性态）：留痕要说得出「这一庭是谁开的庭」——面板构成随预设与
+        #: 峰谷换血，缺了这一段，事后无法核对裁判当时看的是哪套席。
+        "routing": {
+            "preset": preset_name,
+            "hidden": plan["hidden"],
+            "producer": producer,
+            "panel": plan["panel"],
+        },
         "fallback": {
             "enabled": plan["fallback_enabled"],
             "used": plan["fallback_used"],

@@ -19,7 +19,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import channels as _channels
-from . import presets, procs
+from . import presets, procs, routing
 from . import sessions as _sessions
 from . import sync as _sync
 from .checks import run_checks
@@ -222,6 +222,10 @@ class DispatchOutcome:
     #: sid 在途闸换新会话的原因（``prev_alive``=上一跳进程仍活；""=没换）。台账同名字段
     #: 留痕，drain 据此写 run 日志——人工拒绝与批次换新都必须可见（184000 修复面④）。
     sid_new_reason: str = ""
+    #: 本跳的**路由切换**读数（路由 v3 规格 2）：跨过一次峰谷界时是一句人读文案，平常空串。
+    #: drain 把它抄进 run 日志——「这一跳烧的是隐性 DeepSeek 席」必须留在批次账上，
+    #: 而不能只活在 toml 与 routing-last.json 里（组长读的是 run 日志）。
+    route: str = ""
 
 
 def collect_replies(member_id: str) -> tuple[str, list[Path]]:
@@ -457,6 +461,22 @@ def do_dispatch(
             member=member_id,
             error=f"cold_start 成员只允许 session='new'（收到 {session!r}）",
         )
+    # 路由切换检测（路由 v3 规格 2「切换时机」的记录面）：在**解析角色之前**读一次，
+    # 于是这一跳用的席链就是切换后的新链——「只影响新派发、在途单跳不换模型」正是这个
+    # 顺序保证的：已经在跑的那跳早已把 model 写进 argv，本行改的是它**下一跳**的读数。
+    # 返回值是「跨过一次峰谷界」才有文案，平常空串不进台账。
+    route_line = routing.note_switch()
+    if route_line and not quiet:
+        print(route_line)
+
+    def _out(**kw: Any) -> DispatchOutcome:
+        """本跳之后的每个出口都带上路由读数。
+
+        切换记录只在成功跳可见是不够的：谷时席表为空被激活闸拒掉的批次，恰恰最需要
+        看见「这一跳本来要落到 DeepSeek 席」——拒发的出口也得带着它的路由身份。
+        """
+        return DispatchOutcome(route=route_line, **kw)
+
     # 角色解析（档位模式退役，用户裁决 2026-10-12 22:4x）：覆盖（--model-tier / plan YAML
     # 的 model: / 案卷 tier:，旧档名 flash/max 归一）> 预设 pro 名单 > main。非法覆盖在此
     # 硬拦（code=2 不派发）——静默回落会把这一跳烧到用户没点名的档上去。
@@ -465,9 +485,7 @@ def do_dispatch(
     except ValueError as exc:
         if not quiet:
             print(f"[!] 角色/档位无效，未派发：{exc}")
-        return DispatchOutcome(
-            code=2, kind="run_failed", member=member_id, error=str(exc)
-        )
+        return _out(code=2, kind="run_failed", member=member_id, error=str(exc))
     active = presets.active()
     tier = role
     # 席位选择（沿 #80：角色 → **有序回退链**，首席在前）：链里落在降级粘滞窗内的席本跳
@@ -483,12 +501,7 @@ def do_dispatch(
             print(
                 "    处置：改 data/pysci_settings.toml 的 [model] preset（合法串见该文件注释）。"
             )
-        return DispatchOutcome(
-            code=2,
-            kind="run_failed",
-            member=member_id,
-            error=gate,
-        )
+        return _out(code=2, kind="run_failed", member=member_id, error=gate)
     if not quiet:
         for warn in active.warnings:  # 非法/缺配置回落出厂预设时必须出声
             print(f"[!] {warn}")
@@ -515,7 +528,7 @@ def do_dispatch(
             if not quiet:
                 print(f"[!] 会话 '{session}' 未在池中找到。当前池：")
                 print("\n".join(_sessions.format_pool(m)))
-            return DispatchOutcome(
+            return _out(
                 code=2,
                 kind="run_failed",
                 member=member_id,
@@ -543,7 +556,7 @@ def do_dispatch(
                 "待其退出后重试，或加 --force-new-session 改起新会话"
             )
             print(f"[!] {msg}")
-            return DispatchOutcome(
+            return _out(
                 code=2,
                 kind="run_failed",
                 member=member_id,
@@ -775,7 +788,7 @@ def do_dispatch(
             # ⑤ run_failed/系统性同样落审计副本——它们在 drain 也会产 needs_leader note，
             # 截断的残片证据同源。env_json.result 是组员原始输出（含 <blocked>/<result> 全文）。
             _audit_blocked_delivery(m.pod, env_json.result)
-        outcome = DispatchOutcome(
+        outcome = _out(
             code=2,
             kind=kind,
             member=member_id,
@@ -860,7 +873,7 @@ def do_dispatch(
 
     failed_checks = [c for c in check_results if c["verdict"] == "fail"]
     code = 0 if (delivery.kind == "result" and not failed_checks) else 2
-    outcome = DispatchOutcome(
+    outcome = _out(
         code=code,
         kind=delivery.kind,
         member=member_id,

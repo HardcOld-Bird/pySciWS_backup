@@ -42,6 +42,7 @@ from . import jury as _jury
 from . import mirror as _mirror
 from . import plans as _plans
 from . import presets as _presets
+from . import routing as _routing
 from . import sessions as _sessions
 from . import sync as _sync
 from . import taste as _taste
@@ -96,6 +97,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         print("  （无进行中计划）")
 
     for line in _presets.status_lines(Registry.load()):
+        print(line)
+
+    # 路由段紧跟预设段：预设那行报的是**配置**，这一段报的是**生效**（谷时被时间覆盖）。
+    # 分开放就看不出「toml 写着 mimo 而这一跳烧的是 DeepSeek」，而这正是最容易被误读的一面。
+    for line in _routing.status_lines():
         print(line)
 
     print("== 成员 ==")

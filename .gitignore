@@ -84,3 +84,7 @@ __pycache__/
 # 同构教训）。永久审计在 ledger 的 model 字段与 drain run 日志，本文件只是 mirror/
 # orch status 概览项的过程态读数源。
 /orchestration/state/channel-events.jsonl
+# 路由峰谷判定的上次读数（路由 v3，backlog 20261013-093000-leader 规格 2）：每跳派发
+# 都可能改写（跨进程比对才看得见切换），纯过程态。切换事件本身的永久审计在
+# preference-journal.jsonl（kind=routing）与 drain run 日志。
+/orchestration/state/routing-last.json

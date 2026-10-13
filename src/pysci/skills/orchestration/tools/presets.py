@@ -140,10 +140,22 @@ def role_chain_source(role: str) -> str:
     return "pro" if role == "pro" else "main"
 
 
+def factory_chain(name: str, role: str) -> list[str]:
+    """出厂预设表里**指名预设**某角色的席位链（谷时隐性态读 deepseek 那一行用）。
+
+    :class:`ActivePreset` 只包当前预设，而时间覆盖要读的是「另一个预设的席表」；按名取表
+    才不必为了读一行去伪造一个 ActivePreset。未知预设名 → 回落出厂默认预设（同
+    :func:`active`，宁可读成默认值也不空转）。
+    """
+    key = role_chain_source(role)
+    preset = PRESETS.get(name) or PRESETS.get(settings.DEFAULT_PRESET)
+    return list(getattr(preset, key) or ())
+
+
 def seat_table_authority(reg: Any, role: str) -> list[str]:
     """本预设该角色的**席位表读数**（判据面，不是派发用链）。
 
-    来源优先级与 ``Registry._preset_chain`` 一致：跟踪 registry 的
+    来源优先级与 ``Registry.preset_chain`` 一致：跟踪 registry 的
     ``presets.<预设>.<role>`` 整链覆盖在位 → 以覆盖为准；否则以出厂表为准。
     与 ``model_chain`` 的区别是**这里的空就是空**：``model_chain`` 空链会回落
     ``[""]``（＝不传 ``-m``，走用户级默认渠道，旧部署/异机的既定语义），而激活闸要问的是
@@ -204,21 +216,46 @@ def status_lines(reg: Any) -> list[str]:
 
     单一源（success_criteria 要求 status 与派发读同一张表）：链读数走
     ``Registry.model_chain``，预设读数走 :func:`active`，别处不得另拼一份。
+    谷时隐性态（路由 v3）在这里**如实标出**：链会显示 DeepSeek 席，若不说明「为何
+    mimo 预设烧的是 DeepSeek」，这一段就成了误导——覆盖必须与配置同屏出现。
     """
+    # 延迟导入：时段判定层只在读数面需要（也避开 presets↔routing 环）
+    from . import routing
+
     act = active()
     preset = act.preset
+    reading = routing.state()
     out = ["== 模型预设（真源 data/pysci_settings.toml [model] preset）=="]
-    out.append(f"  预设 {act.name}｜{_chain_source_note(preset)}")
+    note = _chain_source_note(preset)
+    if reading.hidden:
+        note = (
+            f"{note}｜⤷ 谷时隐性态生效：main 席链取 {reading.valley_preset}"
+            f"（{reading.basis}）；pro 席保持原席"
+        )
+    out.append(f"  预设 {act.name}｜{note}")
     out.append(
         f"  main 席（大部分成员+组长默认，现场 /model 优先）：{_chain_text(reg, 'main')}"
     )
     if preset.pro:
+        suffix = (
+            "｜隐性态不覆盖（用户终裁：pro 保原席，提高工作质量）"
+            if reading.hidden
+            else ""
+        )
         out.append(
-            f"  pro 席（{'/'.join(preset.pro_members)}）：{_chain_text(reg, 'pro')}"
+            f"  pro 席（{'/'.join(preset.pro_members)}）：{_chain_text(reg, 'pro')}{suffix}"
         )
     else:
         out.append("  pro 席：—（本预设全员同档）")
-    out.append(f"  仲裁团构成：{'+'.join(preset.jury)}（预设同族排除）")
+    panel = routing.jury_panel(preset.jury)
+    if reading.hidden:
+        panel_note = (
+            f"隐性态固定三席 {'+'.join(reading.jury_panel)}"
+            "（全按量；被评模型是 DeepSeek，庭内不得有同族席）"
+        )
+    else:
+        panel_note = "预设同族排除"
+    out.append(f"  仲裁团构成：{'+'.join(panel)}（{panel_note}）")
     out.append(f"  minimum（独立，不随预设走）：{_chain_text(reg, 'minimum')}")
     if not seat_table_authority(reg, "main") and not seat_table_authority(reg, "pro"):
         # 判据与 preset_gate 同源（共读 seat_table_authority）：status 出声、派发拒发、
