@@ -77,3 +77,77 @@ def test_lock_status_states(iso_state, monkeypatch):
     assert st["state"] == "running" and st["pid"] == 4242
     monkeypatch.setattr(drain, "_pid_alive", lambda pid: False)
     assert drain.lock_status()["state"] == "stale"
+
+
+# ---------------------------------------------------------------------------
+# 损坏锁的判读语义对齐（backlog insp-20261013-045910-mechanical，remedy_shape=restore）
+# ---------------------------------------------------------------------------
+def test_unknown_age_with_live_pid_reads_running_not_crashed(iso_state, monkeypatch):
+    """`started` 不可解析 + 持有者**存活** → running，且不得同时报 crashed。
+
+    修复前这里报 (stale, crashed=True, _lock_live=True)：观察面宣告「崩溃残骸、下一任
+    可接管」，锁面却因判活拒绝起锁——操作员照观察面去清锁/杀进程，杀的正是活 worker。
+    按 :func:`_lock_age_s` 的既定语义（未知 ≠ 超龄），未知龄不得单独构成 stale。
+    """
+    _write_lock(iso_state, pid=4242, started="not-a-date")
+    monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
+
+    st = drain.lock_status()
+    live = drain._lock_live(drain.read_lock(drain._devops_paths()))
+
+    assert (st["state"], st.get("crashed"), live) != ("stale", True, True), (
+        "这条组合就是本单要修的矛盾（观察面报崩溃残骸、锁面判活拒锁）"
+    )
+    assert st["state"] == "running", (
+        "未知龄＋存活进程按 running 报（判不出龄≠判得出死）"
+    )
+    assert st.get("crashed") is None and live is True
+
+
+def test_unknown_age_with_dead_pid_still_stale_and_crashed(iso_state, monkeypatch):
+    """另一方向不变：未知龄 + 持有者**已死** → 仍报 stale+crashed，且此时 `_lock_live`
+    为假——「真残骸被宣告崩溃」是正确读数，不构成矛盾。"""
+    _write_lock(iso_state, pid=4242, started="not-a-date")
+    monkeypatch.setattr(drain, "_pid_alive", lambda pid: False)
+
+    st = drain.lock_status()
+    live = drain._lock_live(drain.read_lock(drain._devops_paths()))
+
+    assert st["state"] == "stale" and st.get("crashed") is True
+    assert live is False, "死进程的锁不是活锁——与观察面一致"
+
+
+def test_lock_live_true_implies_running_across_matrix(iso_state, monkeypatch):
+    """**判据的不变量**（success_criteria 原文）：`_lock_live` 为 True 时 state 必为
+    running、crashed 不得为 True。跨「锁龄 × 存活」四格逐一验，防只修了样例那一格。"""
+    for started, alive in (
+        ("not-a-date", True),  # 未知龄 + 活（本单的 bug 格）
+        (drain._now(), True),  # 正常龄 + 活
+        ("not-a-date", False),  # 未知龄 + 死
+        (drain._now(), False),  # 正常龄 + 死
+    ):
+        _write_lock(iso_state, pid=4242, started=started)
+        monkeypatch.setattr(drain, "_pid_alive", lambda pid, _a=alive: _a)
+        st = drain.lock_status()
+        if drain._lock_live(drain.read_lock(drain._devops_paths())):
+            assert st["state"] == "running" and not st.get("crashed"), (
+                f"活锁却被读成 {st['state']}/crashed={st.get('crashed')}（started={started!r}）"
+            )
+
+
+def test_bencher_paths_share_the_fixed_semantics(iso_state, monkeypatch):
+    """bencher 经 ``BENCH_PATHS`` 复用同一套判读——修在 drain 一处，双面同愈。"""
+    from pysci.skills.orchestration.tools import benchd
+
+    paths = benchd.BENCH_PATHS
+    paths.lock.parent.mkdir(parents=True, exist_ok=True)
+    paths.lock.write_text(
+        json.dumps({"pid": 4242, "started": "not-a-date", "run_log": "r.log"}),
+        encoding="utf-8",
+    )
+    try:
+        monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
+        st = drain.lock_status(paths)
+        assert st["state"] == "running" and not st.get("crashed")
+    finally:
+        paths.lock.unlink(missing_ok=True)

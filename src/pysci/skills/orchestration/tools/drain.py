@@ -478,7 +478,14 @@ def lock_status(paths: WorkerPaths | None = None) -> dict[str, Any]:
             **base,
         }
     alive = _pid_alive(pid)
-    state = "running" if (alive and 0 <= age <= p.stale_s) else "stale"
+    # 锁龄未知（started 不可解析，:func:`_lock_age_s` 按既定语义返回 -1 = 未知≠超龄）
+    # 时**不得**据此判 stale：那条与 :func:`_lock_live` 直接矛盾（它只问 `age > stale_s`，
+    # 未知龄放行判活），于是同一份锁记录会「观察面报崩溃残骸、锁面拒起锁」，操作员照
+    # 观察面去清锁/杀进程，杀的正是在跑的 worker（backlog insp-20261013-045910-mechanical：
+    # 判读语义对齐，先例 #43/#44 家族）。未知龄与存活进程并存时按 running 报——判不出
+    # 龄不等于判得出死。
+    age_ok = age < 0 or age <= p.stale_s
+    state = "running" if (alive and age_ok) else "stale"
     out: dict[str, Any] = {"state": state, **base}
     if state == "stale":
         out["crashed"] = _stale_run_crashed(data)
