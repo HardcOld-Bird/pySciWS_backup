@@ -52,11 +52,15 @@ def cmd_finding_add(args: argparse.Namespace) -> int:
             kind=args.kind,
             criteria=args.criteria,
             source=args.source,
+            remedy_shape=args.remedy_shape,
         )
     except ValueError as exc:
         print(f"[✗] 登记被拒：{exc}")
         return 2
-    print(f"[√] 已登记发现 {rec['id']}（{rec['class']}，kind={rec['kind']}）")
+    print(
+        f"[√] 已登记发现 {rec['id']}（{rec['class']}，kind={rec['kind']}，"
+        f"remedy_shape={rec.get('remedy_shape', 'change')}）"
+    )
     if rec["class"] == "mechanical":
         print(
             f"    [NEXT] `pysci-inspect promote {rec['id']}` 免判决晋升；"
@@ -200,6 +204,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pa.add_argument(
         "--criteria", default="", help="可证伪成功判据（§6 总闸，缺则不晋升）"
+    )
+    pa.add_argument(
+        "--remedy-shape",
+        dest="remedy_shape",
+        default="",
+        choices=list(_insp.REMEDY_SHAPES),
+        help="修复形状：restore=复原既有声明行为（免判决照旧）；change=改声明行为/策略"
+        "（缺省 change；实施前须过判决包）",
     )
     pa.add_argument("--source", default="inspector", help="来源标记（默认 inspector）")
     pa.set_defaults(fn=cmd_finding_add)

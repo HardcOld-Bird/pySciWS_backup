@@ -34,6 +34,7 @@ import argparse
 import json
 import os
 import random
+import re
 import sys
 import time
 from datetime import datetime
@@ -98,6 +99,13 @@ QUEUE_KINDS: tuple[str, ...] = ("patrol", "assignment", "tier-a-draft")
 
 #: 发现类别（§5.2 分流）：机械证据=自动晋升；判断=必须经 J。
 FINDING_CLASSES: tuple[str, ...] = ("mechanical", "judgment")
+
+#: 修复形状（用户 2026-10-13 05:5x 审查裁决，backlog 20261013-060000-leader）：
+#: ``restore``=复原既有声明行为（免判决通道照旧放行）；``change``=改变声明行为/策略/
+#: 权衡面（会话生命周期、阈值语义、charter 条款、路由语义等）——mechanical 通道的
+#: 免判决**仅限 restore**；change 类无判决记录时 drain 任务书要求 devops 交付 blocked，
+#: 缺省值=change（保守走判决：没标形状就当策略变更对待）。
+REMEDY_SHAPES: tuple[str, ...] = ("restore", "change")
 
 #: 发现状态机。``queued``=仲裁渠道不可达（§4 降级），不是失败，下轮重投。
 FINDING_STATUSES: tuple[str, ...] = (
@@ -457,6 +465,8 @@ def patrol_brief(entry: dict[str, Any]) -> str:
         "- 每条发现先落台账：`pysci-inspect finding add --class mechanical|judgment "
         '--title "<一句话现象>" --symptom "<现象>" --repro "<复现命令>" '
         '--evidence "<实际输出>" --expect "<期望输出>"`；\n'
+        "- 登记时标修复形状 `--remedy-shape restore|change`：restore=复原既有声明行为"
+        "（免判决照旧）；change=改声明行为/策略/权衡面（缺省 change，实施前须过判决包）；\n"
         "- 机械证据类会自动晋升 backlog；判断类必须 "
         "`pysci-inspect submit <finding-id> --jury`（**没有 override 面**，"
         "凭印象自裁在这条通道上不存在）；\n"
@@ -533,6 +543,7 @@ def append_finding(
     kind: str = "usability",
     criteria: str = "",
     source: str = "inspector",
+    remedy_shape: str = "",
     stamp: str | None = None,
 ) -> dict[str, Any]:
     """登记一条发现（§7③：先落 ``findings.jsonl``，再按类别分流）。
@@ -541,15 +552,21 @@ def append_finding(
         cls: ``mechanical``（有复现命令与实际输出）或 ``judgment``（须经判决）。
         kind: 提案分类，进 backlog 条目的 ``kind`` 字段（受控词表 defect/usability）。
         criteria: 可证伪成功判据（§6 总闸：无判据不晋升）。
+        remedy_shape: 修复形状（:data:`REMEDY_SHAPES`；缺省 ``change``=保守走判决）。
         stamp: id 时间戳覆盖（测试注入）。
 
     Raises:
-        ValueError: 类别/分类不在词表，或缺 title。
+        ValueError: 类别/分类/修复形状不在词表，或缺 title。
     """
     if cls not in FINDING_CLASSES:
         raise ValueError(f"未知发现类别 {cls!r}；可用：{', '.join(FINDING_CLASSES)}")
     if kind not in ("defect", "usability"):
         raise ValueError(f"未知提案分类 kind={kind!r}（只接受 defect/usability）")
+    if remedy_shape and remedy_shape not in REMEDY_SHAPES:
+        raise ValueError(
+            f"未知修复形状 remedy_shape={remedy_shape!r}；可用：{', '.join(REMEDY_SHAPES)}"
+            "（restore=复原既有声明行为；change=改声明行为/策略，须过判决包）"
+        )
     if not title.strip():
         raise ValueError("发现必须有 title（一句话现象，进 backlog 摘要）")
     if cls == "mechanical" and not (repro.strip() and evidence.strip()):
@@ -577,6 +594,9 @@ def append_finding(
         "kind": kind,
         "success_criteria": criteria.strip(),
         "source": source,
+        # 修复形状一律落值（没标=change）：决策链呈现面要逐条可读，不能靠「缺省即 change」
+        # 的口头约定——缺字段与显式 change 在审计时必须长得一样。
+        "remedy_shape": remedy_shape or "change",
     }
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     with FINDINGS_PATH.open("a", encoding="utf-8") as fh:
@@ -661,6 +681,9 @@ def promote_finding(
         "evidence_file": orchestration_rel(ev),
         "class": rec.get("class"),
         "channel": channel,
+        # 修复形状强制带（用户 2026-10-13 审查裁决）：缺省 change=保守走判决——
+        # mechanical 免判决只对 restore 成立，change 类无判决记录时任务书要求 blocked。
+        "remedy_shape": str(rec.get("remedy_shape") or "change"),
         "status": "pending",
         "proposed": _now(),
         "note": ruling or "inspector 自主发现（§5.2 不经组长）",
@@ -771,6 +794,128 @@ def submit_judgment(
         note=f"仲裁模棱两可 → escalate=twin：{run.message}",
     )
     return {"outcome": "escalated", "reason": run.message}
+
+
+# ---------------------------------------------------------------------------
+# 决策审计面（用户 2026-10-13 06:2x 裁决，backlog 20261013-063000-leader）
+# 只读拼装：findings × backlog × run 摘要 × jury 案卷 × 决策日志——零新状态面。
+# ---------------------------------------------------------------------------
+def decision_rows(
+    *, days: int = 0, cls: str = "", shape: str = ""
+) -> list[dict[str, Any]]:
+    """inspector 决策链全貌（`pysci-mirror decisions` 的数据面）。
+
+    每行 ``{id, ts, class, remedy_shape, title, backlog_status, channel, verdict_ref,
+    commit, verify, attention}``：
+
+    - ``verdict_ref``：J 案卷（``evals/jury-cases/<id>.md``；twin 咨询（E7）以同一案卷
+      为输入，故同面覆盖，无需另立字段）→ 决策日志判决行 →
+      ``免判决（mechanical 通道）``；
+    - ``commit``：run 摘要里该条目的实施 commit（取最近一个可解析值）；
+    - ``attention=True``：**免判决 + change**——最需人工审计的形状，排序置顶。
+
+    只读拼装（findings.jsonl × backlog × devops-runs 摘要 × jury 案卷 × 决策日志），
+    不新增状态面——用户 2026-10-13 裁决：inspector 的重要决策必须可被审计。
+
+    Args:
+        days: 只看最近 N 天（0=不限）。
+        cls: 按发现类别过滤（``mechanical``/``judgment``；空=不分）。
+        shape: 按修复形状过滤（``restore``/``change``；空=不分）。
+
+    Returns:
+        排序后的行列表（attention 置顶，其余按发现时间倒序）。
+    """
+    from . import drain, journal, verdict, workflow  # 延迟导入：审计面非常驻路径
+
+    cutoff_ts = ""
+    if days > 0:
+        cutoff = datetime.now().astimezone().timestamp() - days * 86400
+        cutoff_ts = (
+            datetime.fromtimestamp(cutoff).astimezone().isoformat(timespec="seconds")
+        )
+    # 实施 commit：遍历 run 摘要按 id 收集（升序=旧到新，后者覆盖前者）
+    commits: dict[str, str] = {}
+    runs_dir = drain.DEVOPS_RUNS_DIR
+    if runs_dir.exists():
+        for p in sorted(runs_dir.glob("*.done")):
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            for it in data.get("items") or []:
+                if isinstance(it, dict) and it.get("id"):
+                    c = str(it.get("commit") or "")
+                    if c and c != "unresolved":
+                        commits[str(it["id"])] = c
+    rulings = {
+        str(r.get("finding_id", "")): r
+        for r in journal.read_records()
+        if r.get("finding_id")
+    }
+    out: list[dict[str, Any]] = []
+    for rec in findings():
+        fid = str(rec.get("id", ""))
+        if cls and rec.get("class") != cls:
+            continue
+        ts = str(rec.get("ts", ""))
+        if cutoff_ts and ts < cutoff_ts:
+            continue
+        shape_v = str(rec.get("remedy_shape") or "change")
+        if shape and shape_v != shape:
+            continue
+        entry = workflow.backlog_find(fid) or {}
+        channel = str(entry.get("channel") or "")
+        case_path = verdict.JURY_CASE_DIR / f"{fid}.md"
+        if case_path.exists():
+            verdict_ref = f"J 案卷 {orchestration_rel(case_path)}"
+        elif channel == "mechanical":
+            verdict_ref = "免判决（mechanical 通道）"
+        elif channel:
+            verdict_ref = f"J 已仲裁（channel={channel}）"
+        else:
+            verdict_ref = "未晋升（无 backlog 条目）"
+        note = str(entry.get("note") or "")
+        commit = (
+            commits.get(fid)
+            or str((entry.get("salvage") or {}).get("commit") or "")
+            or next(
+                (m.group(1) for m in re.finditer(r"commit ([0-9a-f]{7,40})", note)),
+                "",
+            )
+        )
+        attention = bool(channel == "mechanical" and shape_v == "change" and entry)
+        out.append(
+            {
+                "id": fid,
+                "ts": ts,
+                "class": str(rec.get("class", "")),
+                "remedy_shape": shape_v,
+                "title": str(rec.get("title", "")),
+                "finding_status": str(rec.get("status", "")),
+                "backlog_status": str(entry.get("status", "")),
+                "channel": channel,
+                "verdict_ref": verdict_ref,
+                "ruling": str(rulings.get(fid, {}).get("reason", "")),
+                "commit": commit,
+                "note": note,
+                "verify": str((entry.get("verify") or {}).get("stage", "")),
+                "attention": attention,
+            }
+        )
+    out.sort(key=lambda r: (bool(r["attention"]), str(r["ts"])), reverse=True)
+    return out
+
+
+def decision_counts() -> dict[str, int]:
+    """status 概览用的决策水位（与 :func:`decision_rows` 同一读路，不各算各的）。"""
+    rows = decision_rows()
+    open_status = ("pending", "in_progress", "needs_leader")
+    return {
+        "promoted": sum(1 for r in rows if r["backlog_status"]),
+        "open": sum(1 for r in rows if r["backlog_status"] in open_status),
+        "free_change": sum(1 for r in rows if r["attention"]),
+        "judged": sum(1 for r in rows if r["channel"] and r["channel"] != "mechanical"),
+    }
 
 
 # ---------------------------------------------------------------------------
