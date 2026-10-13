@@ -85,15 +85,23 @@ def test_repo_shipped_registry_devops_turns_above_80():
     assert "num_turns" in devops.get("turns_note", "")
 
 
-def test_orchestration_skill_carries_sole_top_level_mount_warning():
-    """代码与文档同源：mount_lines() 的硬警示必须同步进技能真本「交付判读与决策点」段
-    （组长读的是文档，命中事故时读的是那一段——backlog 20261012-073700-leader 要求 2）。"""
-    text = (ORCHESTRATION_ROOT / "skills" / "orchestration" / "SKILL.md").read_text(
+def test_manual_fallback_warning_lives_in_the_docs():
+    """手动兜底的硬警示在**文档**（不再在输出）：SKILL 报「唯一顶层命令」，
+    drain-watch.md §2 载完整警示（`&`/父任务）；code 侧输出不再背它
+    （自动挂载为主，backlog 20261013-222533-leader）。"""
+    skill = (ORCHESTRATION_ROOT / "skills" / "orchestration" / "SKILL.md").read_text(
         encoding="utf-8"
     )
-    assert "唯一顶层命令" in text
-    assert "`&`" in text and "父任务" in text
-    assert "唯一顶层命令" in "\n".join(watch.mount_lines())  # 两侧同源，不是各写一套
+    drain_watch = (
+        ORCHESTRATION_ROOT
+        / "skills"
+        / "orchestration"
+        / "references"
+        / "drain-watch.md"
+    ).read_text(encoding="utf-8")
+    assert "唯一顶层命令" in skill
+    assert "`&`" in drain_watch and "父任务" in drain_watch
+    assert "唯一顶层命令" not in "\n".join(watch.autowatch_lines())
 
 
 def test_run_checks_routes_orch_tests_without_path_placeholder(monkeypatch):

@@ -454,8 +454,9 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
         _workflow.backlog_complete(took_backlog_id, note="orch 自动销账")
         print(f"[√] backlog 条目 {took_backlog_id} 已标记完成")
     if took_backlog_id:
-        # 代码在「工作已交办」的当刻注入挂载指令，不靠组长记得去读文档（§4.5/§6）
-        for line in _watch.mount_lines(indent="  ", header=False):
+        # 等待已自动化（§4.5 v2：Stop 钩子每回合自动挂载）——只在交办当刻回报「已自动挂载」，
+        # 不再催组长手动挂（旧的 [NEXT] 挂载指令段已删，backlog 20261013-222533-leader）。
+        for line in _watch.autowatch_lines(indent="  "):
             print(line)
     # 巡检内嵌拉起之二（§7）：派完一跳，组长的手正空着读输出——inspector 的活路就在这
     # 个间隙里。让路/迟滞闸门由引擎自己判，这里只负责「想起来要试」。
@@ -953,8 +954,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser(
         "watch",
         help="阻塞等待 drain 事件（CRASH/QUOTA-STOP/CHANNEL-STOP/NEEDS-LEADER/"
-        "QUEUE-COMPLETE/SALVAGE）；"
-        "组长以 Bash run_in_background 启动，退出即唤醒本会话",
+        "QUEUE-COMPLETE/SALVAGE）；常态由 Stop 钩子自动挂载，本命令为手动**兜底**",
     )
     p.add_argument(
         "--timeout",

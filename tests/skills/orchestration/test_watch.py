@@ -1,8 +1,8 @@
 """orch watch 事件等待器（backlog 20261010-orch-watch）。
 
 覆盖六类事件的**代码判定**（差分规则 + 去重身份）、阻塞轮询的命中/超时两条出口、
-``state/watch.json`` 基线与心跳、``orch status`` 补账的一次性清算语义，以及三处
-[NEXT] 挂载指令注入（wake_devops / approve / dispatch --from-backlog）。
+``state/watch.json`` 基线与心跳、``orch status`` 补账的一次性清算语义，以及等待自动化
+（挂载指令不再注入输出——wake_devops / approve / dispatch 只回报「已自动挂载」）。
 
 不真等：:func:`watch.run_watch` 的 ``sleep``/``monotonic`` 为注入口，配合假时钟；
 不碰真实 state：``iso_state`` 夹具已把 lock/runs/backlog/watch.json 全部重定向。
@@ -274,11 +274,12 @@ def test_advance_base_holds_channel_run_identity():
     assert watch.advance_base(base, blank)["channel_run"] == ""
 
 
-def test_mount_lines_announces_every_priority_event():
-    """挂载文案必须列全事件名——组长按提示挂上后，看不见的事件等于没有。"""
-    text = "\n".join(watch.mount_lines())
-    for name in watch.PRIORITY:
-        assert name in text, f"mount_lines 漏列 {name}"
+def test_autowatch_lines_report_auto_not_manual():
+    """交办/唤醒当刻只回报「已自动挂载」——不再给挂载命令/事件名（那些属手动兜底）。"""
+    text = "\n".join(watch.autowatch_lines())
+    assert "自动挂载" in text
+    for gone in ("run_in_background", "唯一顶层命令", "pysci-orch watch --timeout"):
+        assert gone not in text, f"催挂文案残留：{gone}"
 
 
 def test_detect_priority_crash_beats_rest(iso_state):
@@ -325,7 +326,8 @@ def test_run_watch_returns_event_line_and_persists(iso_state, monkeypatch):
     )
     assert rc == 0
     assert out[0].startswith("QUEUE-COMPLETE run-a")
-    assert any("重挂：pysci-orch watch" in line for line in out)  # 按需重挂提示
+    assert any("自动重挂" in line for line in out)  # 退出提示：下回合自动重挂
+    assert not any("重挂：pysci-orch watch" in line for line in out)  # 不再催手动重挂
     st = watch.load_state()
     assert st["last_exit"] == "event"
     assert st["fired"][0]["event"] == "QUEUE-COMPLETE"
@@ -473,22 +475,24 @@ def test_load_state_tolerates_corruption(iso_state):
 # ---------------------------------------------------------------------------
 # [NEXT] 挂载指令注入（唤醒/采纳/交办三处，代码保证不靠纪律）
 # ---------------------------------------------------------------------------
-def test_wake_devops_message_carries_mount_lines(iso_state, monkeypatch):
+def test_wake_devops_message_reports_auto_mount(iso_state, monkeypatch):
     monkeypatch.setattr(drain, "_spawn_detached", lambda argv, **kw: None)
     spawned, msg = drain.wake_devops()
     assert spawned is True
-    assert "pysci-orch watch --timeout" in msg
-    assert "[NEXT]" in msg and "run_in_background" in msg
+    assert "自动挂载" in msg
+    assert "pysci-orch watch --timeout" not in msg  # 不再催挂
+    assert "run_in_background" not in msg
 
 
-def test_wake_devops_mount_lines_even_when_busy(iso_state, monkeypatch):
+def test_wake_devops_auto_note_even_when_busy(iso_state, monkeypatch):
     _seed_lock(iso_state, "busy")
     monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
     spawned, msg = drain.wake_devops()
-    assert spawned is False and "pysci-orch watch" in msg
+    assert spawned is False and "自动挂载" in msg
+    assert "pysci-orch watch --timeout" not in msg
 
 
-def test_approve_output_injects_mount_command(iso_state, monkeypatch, capsys):
+def test_approve_output_reports_auto_mount(iso_state, monkeypatch, capsys):
     sid = seed_suggestion(iso_state)
     monkeypatch.setattr(drain, "_spawn_detached", lambda argv, **kw: None)
     rc = workflow.cmd_approve(
@@ -502,11 +506,11 @@ def test_approve_output_injects_mount_command(iso_state, monkeypatch, capsys):
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "pysci-orch watch --timeout" in out
-    assert "QUEUE-COMPLETE" in out  # 事件类型一并告知
+    assert "自动挂载" in out
+    assert "pysci-orch watch --timeout" not in out  # 不再催挂
 
 
-def test_dispatch_from_backlog_injects_mount_command(iso_state, monkeypatch, capsys):
+def test_dispatch_from_backlog_reports_auto_mount(iso_state, monkeypatch, capsys):
     seed_backlog(iso_state, [{"id": "b1", "status": "pending", "summary": "s"}])
     calls: list[dict] = []
 
@@ -542,16 +546,15 @@ def test_dispatch_from_backlog_injects_mount_command(iso_state, monkeypatch, cap
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "pysci-orch watch --timeout" in out
+    assert "自动挂载" in out
+    assert "pysci-orch watch --timeout" not in out
     assert read_backlog(iso_state)[0]["status"] == "done"
 
 
-def test_mount_lines_header_toggle_and_indent():
-    headed = watch.mount_lines()
-    bare = watch.mount_lines(header=False, indent="  ")
-    assert headed[0].startswith("[NEXT]")
-    assert not bare[0].startswith("[NEXT]") and bare[0].startswith("  挂载事件等待器")
+def test_autowatch_lines_indent():
+    bare = watch.autowatch_lines(indent="  ")
     assert all(line.startswith("  ") for line in bare)
+    assert len(watch.autowatch_lines()) == 1  # 单行，不再展开成挂载指令段
 
 
 # ---------------------------------------------------------------------------
@@ -592,21 +595,14 @@ def _ev(event: str = "QUEUE-COMPLETE", ts: str | None = None) -> dict:
     }
 
 
-def test_mount_lines_warns_that_watch_must_be_sole_top_level_command():
-    """夜航停摆 6h 的形态必须写进挂载指令本身：`&` 嵌入=父任务终结连坐杀等待器。"""
-    warn = [line for line in watch.mount_lines() if "唯一顶层命令" in line]
-    assert len(warn) == 1
-    assert "`&`" in warn[0] and "父任务终结" in warn[0]
-    indented = [
-        line for line in watch.mount_lines(indent="    ") if "唯一顶层命令" in line
-    ]
-    assert indented[0].startswith("    ")  # 缩进面一并生效（并入他方 [NEXT] 段时对齐）
+def test_auto_lines_drop_the_manual_warning_from_output():
+    """「唯一顶层命令」硬警示已随手动降级搬进技能真本/README §4.5——输出里不再出现。"""
+    text = "\n".join(watch.autowatch_lines())
+    assert "唯一顶层命令" not in text
 
 
-def test_approve_next_section_carries_sole_command_warning(
-    iso_state, monkeypatch, capsys
-):
-    """快照断言（success_criteria 2）：approve 的 [NEXT] 段带着这行警示出。"""
+def test_approve_output_has_no_manual_mount_prompt(iso_state, monkeypatch, capsys):
+    """success_criteria：approve 输出不再出现催挂的 [NEXT] 段（改为「已自动挂载」）。"""
     sid = seed_suggestion(iso_state)
     monkeypatch.setattr(drain, "_spawn_detached", lambda argv, **kw: None)
     assert (
@@ -622,13 +618,12 @@ def test_approve_next_section_carries_sole_command_warning(
         == 0
     )
     out = capsys.readouterr().out
-    assert "[NEXT]" in out and "唯一顶层命令" in out
+    assert "唯一顶层命令" not in out and "pysci-orch watch --timeout" not in out
+    assert "自动挂载" in out
 
 
-def test_from_backlog_next_section_carries_sole_command_warning(
-    iso_state, monkeypatch, capsys
-):
-    """同上，走 dispatch --from-backlog 通道（交办当刻组长看到的就是这一段）。"""
+def test_from_backlog_output_has_no_manual_mount_prompt(iso_state, monkeypatch, capsys):
+    """同上，走 dispatch --from-backlog 通道（交办当刻不再出现催挂段）。"""
     seed_backlog(iso_state, [{"id": "b1", "status": "pending", "summary": "s"}])
 
     class _Stub:
@@ -660,7 +655,7 @@ def test_from_backlog_next_section_carries_sole_command_warning(
         )
         == 0
     )
-    assert "唯一顶层命令" in capsys.readouterr().out
+    assert "唯一顶层命令" not in capsys.readouterr().out
 
 
 def test_fired_unacked_listed_once_then_acked(iso_state, monkeypatch):

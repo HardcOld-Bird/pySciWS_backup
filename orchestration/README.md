@@ -677,9 +677,9 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   （harness 只认**最近一任**），致 2026-10-13 20:57 的 QUEUE-COMPLETE 唤醒丢失。v2 取消守卫、
   改为每回合接管。
 - **手动用法（降级/兜底仍适用）**：组长以 Bash `run_in_background` 启动，进程退出即原生完成
-  通知唤醒本会话；一次 watch 报一批事件即退（输出自带重挂命令）。`approve`（经 `wake_devops`）与
-  `dispatch --from-backlog` 的输出**固定追加挂载指令行**（`watch.mount_lines`），不靠组长翻文档。
-  **硬警示（mount_lines 首行）**：`orch watch` 必须作为后台 Bash 调用的**唯一顶层命令**——
+  通知唤醒本会话；一次 watch 报一批事件即退。**交办/唤醒/watch 输出不再催挂**（旧 `watch.mount_lines`
+  [NEXT] 段已删，backlog 20261013-222533-leader）——只回报「已自动挂载」。
+  **硬警示**：`orch watch` 必须作为后台 Bash 调用的**唯一顶层命令**——
   禁止用 `&`/`&&`/管道把它嵌进别的命令，嵌入即被父任务连坐杀死、事件通知随之丢失。
 - **边界**：watch 随组长会话消亡，**不影响 detached drain**；基线快照与心跳落
   `state/watch.json`（gitignore：纯运行态）。**抑制帧与瞬态空值（`.done` 半写等）不推进
@@ -1277,6 +1277,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **组长面两条正门 `orch requeue` / `orch resolve`**（backlog 20261013-215909-leader）：组长处理 needs_leader 条目缺干净 CLI——「重派」只能直调 drain 内部函数 `wake_devops`、「销账」只能直改 `state/backlog.json`（drain 在跑时有并发覆盖风险，本会话清 4 条已达标 needs_leader 全靠野路子）。补两条正门：`orch requeue <id> [--note]`＝needs_leader → pending **并唤醒 drain**（--note 覆盖附注，带 `awaiting_decision` 的条目即「本次补齐情况」）；`orch resolve <id> --note "<为何>"`＝组长确认**已达标** → done（--note 必填留痕、原 blocked 事实不删）。两命令共用**起点受控**迁移（`_backlog_transition`：只对 needs_leader 生效，起点不符即不动、rc=2） | 组长自提 + devops 实施 |
 | 2026-10-13 | **devops 收尾面硬化**（backlog 20261013-215911-leader，用户提案「常用功能整理硬化进基础设施；工作正常结束后自动提交并 push」）：收尾三处此前是软纪律/半自动——① **隔离面残留**：`worktree merge` 成功后不摘面，实测积压 7 个冗余面（且不区分「已完成 vs 待抢救」）；② **无 clean 入口**；③ **push 是裸 `timeout 25 git push`**（`timeout` 跨平台语义存疑；失败静默→成功完成的工作可能没推送也无人知）。改为：`worktree merge` **成功即自动摘除**已完成的面并删分支（失败/blocked 路径一律保留供抢救链；`--keep` 检视退出口）；新增 `pysci-dev worktree clean [--apply]`（`merge-base --is-ancestor` 判已合入 → 列/清；**未合入者拒绝并列名、rc 非 0**）；新增 `pysci-dev push`（Python 侧超时代劳 `timeout`，**每次尝试留痕** `state/push-log.jsonl`——成功记范围、失败记原因，**失败不静默**；push 仍是 best-effort，**未反转**用户 2026-10-10 的裁决） | 用户提案 + 组长立案 + devops 实施 |
 | 2026-10-13 | **`worktree clean` 分类—动作一致**（backlog 20261013-222531-leader，组长实证缺陷）：上一单的 clean 只看**分支是否已合入 main**就判「可清」，但 `git worktree remove` 因**盘内有未提交/未跟踪改动**拒删——清单说可清、真删却删不掉，且旧 `_remove_worktree` 无论成败都去 `branch -D`，打「分支删除跳过：used by worktree」的误导行（收尾只完成一半、不留解释）。改为：分类升为**四桶、分类即动作唯一真源**——**可清**（已合入+盘内干净）/ **待确认**（已合入但有脏 → 默认拒绝、`--discard` 才删，防误删手写改动）/ **拒绝**（未合入，待抢救）/ **在途**（分支 tip==main HEAD、无产出 → 不动；此前新建未产出的面会被误列「可清」，实测新面即中）；`_remove_worktree` 改为**只有目录真摘掉才删分支**、失败即报因；`parse` 加 `--discard`；merge 自动摘面遇脏面不 --discard、提示走 clean | 组长实证 + devops 实施 |
+| 2026-10-13 | **手动挂载催挂收尾**（backlog 20261013-222533-leader）：`orch watch` 挂载自 2026-10-13 起由 `Stop + asyncRewake` 钩子自动完成（§4.5 v2），但**手动挂载的催挂文案仍散落多个面**，与自动机制矛盾、会误导组长重复挂载。收尾：`watch.mount_lines`/`remount_lines` → `autowatch_lines`/`auto_remount_lines`（只回报「已自动挂载」/「下回合自动重挂」，不再给挂载命令与事件名）；`wake_devops`/`approve`/`dispatch --from-backlog` 输出、`orch status` 的 watch 段、watch 命中/超时输出一律改为自动化口径；**手动挂载降为兜底**（唯一顶层命令硬警示搬进 SKILL.md 与 `references/drain-watch.md` §2，不再进输出）；测试同步更新（催挂断言反转为「不再催挂」） | 组长立案 + devops 实施 |
 
 ## 14. 已知代价与风险
 

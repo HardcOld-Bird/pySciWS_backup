@@ -8,16 +8,15 @@
 - **事件判定全在代码**（本模块）：读状态文件 + Python 侧 ``_pid_alive``（不起 shell，
   故 MSYS 路径转换问题免疫），六类事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
   NEEDS-LEADER / QUEUE-COMPLETE / SALVAGE。
-- **挂载提示由代码在唤醒当刻注入**：``wake_devops`` / ``approve`` / ``--from-backlog``
-  的输出固定追加 :func:`mount_lines`，组长在需要等待的那一刻被明确告知挂什么命令。
+- **挂载自 2026-10-13 起自动化**（README §4.5 v2）：组长回合结束由 ``Stop + asyncRewake``
+  钩子（``.qoder/hooks/watch-arm.sh``）每回合抢「最新在听者」并挂 ``orch watch``——**无需
+  组长手动挂**；:func:`autowatch_lines` 只在交办/唤醒当刻回报「已自动挂载」。
 
-残余软点（已知且接受）：组长是否照 ``[NEXT]`` 真去后台起一条 ``orch watch``。弃
-Monitor 工具方案（会话侧监视器注册更重、且同样需要组长发起）。
-
-用法：组长以 Bash ``run_in_background`` 启动 ``pysci-orch watch``——进程阻塞轮询
-（默认 60 s，硬上限 60 s）直到命中事件或超时，打印**单行**事件后退出；退出即原生后台
-任务完成通知唤醒组长。watch 随组长会话消亡，**不影响 detached drain**；漏挂 / 会话
-中断期间的账由下次 ``orch status`` 经 :func:`reconcile` 补账（一次性清算并推进基线）。
+手动挂载降为**兜底**（仅钩子不可用时）：组长以 Bash ``run_in_background`` 启动
+``pysci-orch watch``（阻塞轮询，默认 60 s、硬上限 60 s），命中即原生后台通知唤醒本会话；
+**必须作为该后台调用的唯一顶层命令**（嵌入 ``&``/``&&``/管道会被连坐杀死）。watch 随组长
+会话消亡、**不影响 detached drain**；漏挂/会话中断期间的账由下次 ``orch status`` 经
+:func:`reconcile` 补账。
 
 状态落 ``state/watch.json``（人类可读 JSON）：基线快照 + 心跳 + 已发事件 + 黑匣子
 末帧（:data:`RECENT_MAX`），供 status 判断 watch 是否仍挂载（心跳新鲜=挂载中）。
@@ -655,46 +654,29 @@ def arm(
 
 
 # ---------------------------------------------------------------------------
-# 挂载指令文案（[NEXT] 注入与 watch 自述共用，防文案漂移）
+# 等待已自动化：不再催挂（手动挂载降为兜底，见 README §4.5 / references/drain-watch.md）
 # ---------------------------------------------------------------------------
 def watch_argv(*, timeout_s: int = DEFAULT_TIMEOUT_S) -> str:
-    """组长要挂的命令行串（裸名优先，README §11 CLI 范式）。"""
+    """手动**兜底**要挂的命令行串（裸名优先，README §11 CLI 范式）；自动挂载不经此串。"""
     return f"pysci-orch watch --timeout {timeout_s}"
 
 
-def mount_lines(*, indent: str = "", header: bool = True) -> list[str]:
-    """固定挂载指令行：工作交办/唤醒当刻由代码告知「该挂什么」，不靠组长记文档。
+def autowatch_lines(*, indent: str = "") -> list[str]:
+    """「等待已自动化」提示行：交办/唤醒当刻由代码回报——组长**无需手动挂载**。
 
-    Args:
-        indent: 每行前缀（并入他方 [NEXT] 段时缩进用）。
-        header: True 时首行自带 ``[NEXT]`` 标签（自成一段）；False 时作既有段落的
-            续行（``orch dispatch`` 已自行打过标签，勿重复）。
+    自动挂载（README §4.5 v2：``Stop + asyncRewake`` 钩子每回合接管）之后，这里不再给
+    挂载命令、也不再列事件名（那些属**手动兜底**，见技能真本 / ``references/drain-watch.md``）；
+    只回报「已自动挂载」，免得组长照旧提示重复挂一条。
     """
-    first = (
-        "[NEXT] 挂载事件等待器（Bash run_in_background 启动，退出即以原生通知唤醒"
-        "本会话，等待期零 token）："
-        if header
-        else "挂载事件等待器（Bash run_in_background，退出即以原生通知唤醒本会话）："
-    )
-    lines = [
-        first,
-        f"  {watch_argv()}",
-        "  命中单行退出：CRASH / QUOTA-STOP / CHANNEL-STOP / NEEDS-LEADER <id> / "
-        "QUEUE-COMPLETE / SALVAGE <id>；超时无事件打印 TIMEOUT。",
-        "  ⚠ 必须作为后台 Bash 调用的**唯一顶层命令**——禁止用 `&`/`&&`/管道把它嵌进"
-        "其他命令：父任务终结会连坐杀死等待器，事件命中也没有唤醒通道"
-        "（2026-10-12 夜航停摆 6h 的直接成因）。",
-        "  watch 随本会话消亡、不影响后台 drain；漏挂由下次 orch status 补账。",
-    ]
-    return [f"{indent}{line}" for line in lines]
-
-
-def remount_lines(*, indent: str = "") -> list[str]:
-    """命中/超时后的重挂提示（一次 watch 只报一批事件即退，后续须按需再挂）。"""
     return [
-        f"{indent}如需继续等待下一批事件，重挂：{watch_argv()}",
-        f"{indent}（不挂也行：状态已落盘，下次 orch status 会补账。）",
+        f"{indent}watch 等待已自动化（Stop 钩子每回合自动挂载，无需手动）；"
+        "钩子不可用时照 README §4.5 手动兜底。"
     ]
+
+
+def auto_remount_lines(*, indent: str = "") -> list[str]:
+    """watch 命中/超时退出后的提示：下一空闲回合由钩子自动重挂，无需手动。"""
+    return [f"{indent}（watch 已退；下一空闲回合由 Stop 钩子自动重挂，无需手动。）"]
 
 
 # ---------------------------------------------------------------------------
@@ -740,7 +722,7 @@ def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> Non
     echo(format_event(events[0]))
     for ev in events[1:]:
         echo(f"  同时：{format_event(ev)}")
-    for line in remount_lines():
+    for line in auto_remount_lines():
         echo(line)
 
 
@@ -799,7 +781,7 @@ def run_watch(
         f"（锁态={cur.get('lock_state', '?')}，pending={cur.get('pending', 0)}，"
         f"needs_leader={len(cur.get('needs_leader') or [])}）"
     )
-    for line in remount_lines():
+    for line in auto_remount_lines():
         echo(line)
     return 0
 
@@ -854,7 +836,7 @@ def reconcile() -> tuple[list[dict[str, Any]], bool]:
 
 
 def status_lines() -> list[str]:
-    """``orch status`` 的 watch 段文案（挂载态 + 补账 + 上一任遗言 + 挂载指令）。"""
+    """``orch status`` 的 watch 段文案（挂载态 + 补账 + 上一任遗言）。"""
     state = load_state()
     if not isinstance(state.get("base"), dict) or not state.get("base"):
         arm(
@@ -875,7 +857,7 @@ def status_lines() -> list[str]:
             # 刚命中/刚超时退出：心跳仍新鲜，但等待器已经不在了——别把「刚结束」读成「在等」
             return [
                 f"  ⊘ 上次运行已结束（{state['last_exit']}，心跳 {age:.0f}s 前）——"
-                f"继续等待请重挂：{watch_argv()}"
+                f"继续等待由 Stop 钩子自动重挂（无需手动；兜底命令 {watch_argv()}）"
             ] + fired_lines()
         return [
             f"  ▶ 已挂载（心跳 {age:.0f}s 前，每 {interval}s 轮询，已跑 "
@@ -897,12 +879,12 @@ def status_lines() -> list[str]:
         out.append("  （自上次基线以来无新事件）")
     out.extend(fired_lines())  # reconcile 之后：水位与基线各写各的，互不覆盖
     if _workflow.backlog_pending() or _drain.lock_status()["state"] == "running":
-        out.append("  等待 drain：后台运行 pysci-orch watch（退出即唤醒）")
+        out.append("  等待 drain：watch 由 Stop 钩子自动挂载（无需手动；退出即唤醒）")
     return out
 
 
 def cmd_watch(args: Any) -> int:
-    """``orch watch``：阻塞等待 drain 事件（组长经 Bash run_in_background 启动）。"""
+    """``orch watch``：阻塞等待 drain 事件（手动**兜底**用；常态由 Stop 钩子自动挂载）。"""
     return run_watch(
         timeout_s=getattr(args, "timeout", None),
         interval_s=getattr(args, "interval", None),
@@ -926,10 +908,10 @@ __all__ = [
     "format_event",
     "last_words_lines",
     "load_state",
-    "mount_lines",
+    "autowatch_lines",
     "push_recent",
     "reconcile",
-    "remount_lines",
+    "auto_remount_lines",
     "run_watch",
     "snapshot",
     "status_lines",

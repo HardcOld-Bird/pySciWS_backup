@@ -98,9 +98,9 @@ bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
   三态，`orch status`「判决包健康」段看用量与 override 率，`escalate=twin` 非空立即
   终裁；入 backlog 自动唤醒 devops FIFO（锁忙不重唤醒，单项失败标 needs_leader 跳过）；
   护栏级建议（README/角色边界/审批权/guards）**必须转呈用户**；
-- **挂 `orch watch` 等事件**（照 [NEXT]，`run_in_background`）：watch 必须是该后台调用的
-  **唯一顶层命令**（嵌进 `&`/`&&`/管道会被父任务连坐杀死）；
-  挂载纪律与 `bench-*` 见 references/drain-watch.md、salvage-reclaim.md（抢救面）；
+- **等待 drain 事件**：`orch watch` 由 `Stop` 钩子**每回合自动挂载**、无需手动；
+  兜底（钩子不可用时）：`run_in_background` 且为**唯一顶层命令**（嵌入即连坐被杀）；事件面与
+  `bench-*` 见 references/drain-watch.md、salvage-reclaim.md；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：改任务书重派，或终裁坚持原派（理由留痕）；
 - 交接处决策：一键继续 / plan amend 改后续 / drop 中止。
 

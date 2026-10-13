@@ -14,8 +14,8 @@ FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README
   （:func:`release_lock`，backlog 20261011-225933-devops + 20261011-231237-devops）。
 - **唤醒**（:func:`wake_devops`）：approve 成功后调用；锁忙则不重复 spawn（本项由
   当前 drain 循环接手），空闲则 Popen 分离进程运行内部命令 ``_drain-devops``。返回的
-  message 固定附 watch 事件等待器挂载指令（:mod:`watch`，README §4.5）——工作交棒的
-  当刻由代码把「怎么等」交给组长。
+  message 附一行「等待已自动化」（:mod:`watch` 的 :func:`~watch.autowatch_lines`）：挂载自
+  2026-10-13 起由 Stop 钩子自动完成（README §4.5 v2），不再催组长手动挂。
 - **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
   worker 遗留，重置 pending），并**四面**清干净它留下的写入者
   （:func:`reclaim_orphan_sessions` 终止仍活着的派生会话进程 →
@@ -2027,9 +2027,9 @@ def wake_devops(*, force_dry: bool | None = None) -> tuple[bool, str]:
     Returns:
         ``(spawned, message)``。``spawned=False`` 表示锁忙未唤醒（message 说明本项由
         当前 drain 循环接手）；``True`` 表示已派生分离进程（message 含日志路径）。
-        两种情况的 message 都**固定附带 watch 挂载指令行**（:func:`watch.mount_lines`）：
-        「工作已交办、开始等待」这个时刻由代码把等待方式交给组长，不靠其记得查文档
-        （backlog 20261010-orch-watch，README §4.5）。
+        两种情况的 message 都附一行「等待已自动化」（:func:`watch.autowatch_lines`）：
+        挂载自 2026-10-13 起由 Stop 钩子每回合自动完成（README §4.5 v2），不再催组长手动挂
+        （backlog 20261013-222533-leader 收尾；旧 [NEXT] 挂载指令段已删）。
     """
     st = lock_status()
     if st["state"] == "running":
@@ -2052,9 +2052,10 @@ def wake_devops(*, force_dry: bool | None = None) -> tuple[bool, str]:
 
 
 def _mount_block() -> str:
-    """唤醒 message 尾部追加的挂载指令块（换行分隔，首行为空 = 与正文自然断行）。"""
-    from .watch import (
-        mount_lines,  # 延迟导入：watch↔drain 环（watch 依赖 drain 的锁/摘要原语）
-    )
+    """唤醒 message 尾部追加的「等待已自动化」行（换行分隔，首行为空 = 与正文自然断行）。
 
-    return "\n" + "\n".join(mount_lines(indent="    "))
+    不再给挂载命令——挂载由 Stop 钩子自动完成（README §4.5 v2）；手动兜底见技能真本。
+    """
+    from .watch import autowatch_lines  # 延迟导入：watch↔drain 环
+
+    return "\n" + "\n".join(autowatch_lines(indent="    "))
