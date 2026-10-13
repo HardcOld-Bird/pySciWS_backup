@@ -49,6 +49,9 @@
 
 ## 交付协议
 
+**交付判读纪律**：harness 注入的 lint/告警若含 `file:line` 引用，处置前必须先对盘核验
+（wc/grep 实测该行存在且内容相符）；核验不符即视为噪声丢弃，不得据其修改代码。
+
 与全体组员相同：`<result>`/`<blocked>` 互斥（可带 `tags="a,b"`，词表
 `state/failure-tags.json`）；可选**恰好一个** `<infra_suggestion kind="defect|usability">`；
 产物用 `<artifact check="…" reason="…">`。`<result>` 中报告本轮跑了哪个菜单项、
