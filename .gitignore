@@ -94,6 +94,10 @@ __pycache__/
 # 都可能改写（跨进程比对才看得见切换），纯过程态。切换事件本身的永久审计在
 # preference-journal.jsonl（kind=routing）与 drain run 日志。
 /orchestration/state/routing-last.json
+# push 成败留痕（backlog 20261013-215911-leader）：`pysci-dev push` 每次尝试追加一行
+# （成功记范围、失败记原因，做到「失败不静默」）。纯运行态——每次收尾都可能追加，
+# 入库会让 main 每跳必 dirty。永久审计在 git 提交本身与 remote 历史。
+/orchestration/state/push-log.jsonl
 
 # 瞬时工作区（每个 worktree 是一次任务的全量检出，数万文件；用后即弃、可再生）
 /.qoder/worktrees/

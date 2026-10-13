@@ -18,6 +18,10 @@
 - **merge 前先播种运行态**：新面的 `sessions-runtime.json` 是空壳，merge 的「会话数不减」
   自检会 abort（实测 base=45 → 面侧 0）；先
   `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 再 merge。
+- **收尾已机械化（backlog 20261013-215911-leader）**：`worktree merge` **成功即自动摘面**（失败/
+  blocked 保留供抢救；`--keep` 留检视）；`worktree clean [--apply]` 列/清已合入的遗留面
+  （未合入者拒绝、rc 非 0）；推送改 `pysci-dev push`（跨平台超时 + 成败留痕
+  `state/push-log.jsonl`，best-effort 但失败不静默——「推上去了吗」看留痕末行）。
 - **判决包流**：approve 必带 `--jury`/`--bench`/`--override` 之一；例外通道=defect×当跳
   blocked。细则 `orchestration/skills/orchestration/references/verdict-package.md`。
 - **档位映射自愈只写运行态** `models_resolved`，不写跟踪面；遮蔽时只报不写
