@@ -360,3 +360,21 @@ def test_cmd_stats_prints_backlog_section(iso_state, monkeypatch, capsys):
     workflow.cmd_stats(argparse.Namespace(plan=None, member=None, days=None))
     out = capsys.readouterr().out
     assert "backlog 消化" in out and "批量大小分布" in out and "等待时长" in out
+
+
+def test_batch_task_text_states_the_accounting_clause():
+    """批量菜单必须显式写「每个已实施的 id 都要列」（backlog 20261013-180936-devops）。
+
+    实测缺口：菜单项的实现随同批合入 main，但交付只列了种子 id → 条目仍 pending 被重派，
+    而重派任务书读起来像从头做，下一位组员先花一跳才搞清真实缺口只是测试面。
+    """
+    from pysci.skills.orchestration.tools import workflow
+
+    text = workflow.backlog_batch_text(
+        {"id": "seed-1", "member": "leader", "summary": "s"},
+        [{"id": "menu-1", "summary": "m"}],
+        max_batch=4,
+    )
+    assert "每个已实施的 id" in text, "销账口径提示缺席"
+    assert "会被重派" in text, "要说出不列的后果"
+    assert "backlog id=" in text
