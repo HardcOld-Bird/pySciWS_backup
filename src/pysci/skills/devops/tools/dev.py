@@ -602,6 +602,41 @@ def _cp_ignored_state(wt: Path, main: Path, ts: str) -> list[tuple[str, str]]:
     return log
 
 
+def _seed_runtime_from_main(wt: Path) -> str:
+    """把 main 的运行态 ``sessions-runtime.json`` 播种进新 worktree（add 收尾自动做）。
+
+    **为什么必须播种**（backlog 20261013-131505-devops 实测）：``git worktree add`` 只给出
+    main 的**跟踪面**，运行态是 gitignored 的——于是新 worktree 的 ``sessions-runtime.json``
+    是空壳（1 member / 0 sessions），而 merge 的「会话数不减」自检（base=45）必判它「比
+    main 少」而中止。实测该中止**每次都要人工 ``cp`` 一次**才能过闸，且报错文案把成因说成
+    「worktree 是否 stale（应从最新 main 起 add）」——而当事人恰恰就是从最新 main 起的，
+    指引与真因不符。
+
+    只在 worktree 侧**确实更稀疏**时覆盖（等价于 merge 那条闸的判据），故重复调用无副作用、
+    也不会把已推进的 worktree 运行态打回去。
+
+    Returns:
+        一行读数（未播种时说明原因），供 add 的输出面打印。
+    """
+    src = _state_dir(PROJECT_ROOT) / "sessions-runtime.json"
+    if not src.exists():
+        return "[i] main 无运行态可播种（sessions-runtime.json 缺席）——跳过"
+    main_n = _runtime_session_total(PROJECT_ROOT)
+    wt_n = _runtime_session_total(wt)
+    if main_n is None:
+        return "[i] main 运行态读不出会话数——跳过播种"
+    if wt_n is not None and wt_n >= main_n:
+        return f"[=] worktree 运行态已不稀疏（{wt_n} ≥ main {main_n}）——跳过播种"
+    dst = _state_dir(wt) / "sessions-runtime.json"
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(src.read_bytes())
+    except OSError as exc:
+        # fail-open：播种失败不该让 add 失败——merge 侧那条闸仍会出声，只是又要人工 cp
+        return f"[!] 运行态播种失败（{exc}）——merge 前请人工 cp sessions-runtime.json"
+    return f"[√] 已播种运行态（会话数 {main_n}）→ 新 worktree 的首次 merge 无需人工 cp"
+
+
 def _runtime_session_total(root: Path) -> int | None:
     """读 root 侧 sessions-runtime.json 的会话总数。
 
@@ -742,7 +777,12 @@ def cmd_worktree_merge(name: str, wt: Path) -> int:
     if wt_n is not None and wt_n < base_n:
         print(
             f"[!] worktree 侧会话数 {wt_n} < main baseline {base_n}——cp 会覆盖更丰富的 main "
-            f"运行态、丢会话，中止；核对 worktree 是否 stale（应从最新 main 起 worktree add）"
+            f"运行态、丢会话，中止。**成因＝worktree 的运行态比 main 稀疏**，处置："
+            f"① 该面若来自 `pysci-dev worktree add` 之后，add 会自动播种，走到这里说明"
+            f"worktree 侧运行态后来被清空/回退过——查它在盘内容；"
+            f"② 或 main 在 add 之后新增了大量会话——以 main 为准，直接合并（本闸要防的是"
+            f"反向：拿稀疏面盖掉 richer 面）；"
+            f"③ 手动 `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 后重跑"
         )
         return 2
 
@@ -822,6 +862,9 @@ def cmd_worktree(args: argparse.Namespace) -> int:
         rc, out = _run_git("worktree", "add", "-b", f"wt-{args.name}", str(wt_path))
         print(out)
         if rc == 0:
+            # add 收尾播种运行态：否则首个 merge 必撞「会话数 0 < baseline」闸（backlog
+            # 20261013-131505-devops）——gitignore 的运行态不会随 worktree add 过来。
+            print(_seed_runtime_from_main(wt_path))
             print()
             print(
                 "[NEXT] 测试策略（PYTHONPATH 覆盖，免建环境；**cwd 须在 worktree 之外**）："

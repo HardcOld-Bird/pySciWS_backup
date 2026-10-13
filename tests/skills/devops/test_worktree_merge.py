@@ -547,3 +547,72 @@ def test_add_on_lingering_dir_points_to_next_generation(tmp_path, monkeypatch, c
     assert "残骸" in out and "worktree add gen-r2" in out
     assert "rm -rf" in out, "旧目录归组长处置，不能让组员就地删"
     assert not any(c[:2] == ("worktree", "add") for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# add 播种运行态（backlog 20261013-131505-devops）
+# ---------------------------------------------------------------------------
+def test_seed_runtime_from_main_into_fresh_worktree(tmp_path, monkeypatch):
+    """fresh worktree（运行态空壳）+ main richer → 播种，首次 merge 无需人工 cp。
+
+    复现的坑：`git worktree add` 只带跟踪面，gitignored 的 sessions-runtime.json 不过来，
+    于是新面是空壳（0 会话），merge 的「会话数不减」闸（base=N）必中止——实测每单都要
+    先人工 cp 一次才过闸。
+    """
+    main = tmp_path / "main"
+    wt = tmp_path / "wt"
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(45))
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(0))
+
+    line = dev._seed_runtime_from_main(wt)
+
+    assert line.startswith("[√]"), line
+    assert dev._runtime_session_total(wt) == dev._runtime_session_total(main) == 45
+    assert "45" in line, "读数要报出播种了多少会话"
+
+
+def test_seed_is_idempotent_and_never_thins_a_worktree(tmp_path, monkeypatch):
+    """第二次调用不再覆盖（worktree 已不稀疏）——播种不许把推进过的运行态打回去。"""
+    main = tmp_path / "main"
+    wt = tmp_path / "wt"
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(3))
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(0))
+    assert dev._seed_runtime_from_main(wt).startswith("[√]")
+
+    # worktree 侧此后推进到比 main 多（它才是 richer 的一方）
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(9))
+    line = dev._seed_runtime_from_main(wt)
+    assert line.startswith("[=]"), line
+    assert dev._runtime_session_total(wt) == 9, "更富的一面不许被播种覆盖"
+
+
+def test_seed_skips_when_main_has_no_runtime(tmp_path, monkeypatch):
+    """main 自己没有运行态 → 跳过且不造文件（别凭空写一个空壳进 worktree）。"""
+    main = tmp_path / "main"
+    wt = tmp_path / "wt"
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+    (main / "orchestration" / "state").mkdir(parents=True, exist_ok=True)
+    (wt / "orchestration" / "state").mkdir(parents=True, exist_ok=True)
+
+    line = dev._seed_runtime_from_main(wt)
+
+    assert "无运行态可播种" in line
+    assert not (wt / "orchestration" / "state" / "sessions-runtime.json").exists()
+
+
+def test_seed_fail_open_on_unwritable_target(tmp_path, monkeypatch):
+    """播种失败不许把 add 炸掉（fail-open）：返回一行提示，merge 侧仍会出声。"""
+    main = tmp_path / "main"
+    wt = tmp_path / "wt"
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(2))
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(0))
+
+    def _boom(self, data, **kw):  # pragma: no cover - 只在注入时走
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(Path, "write_bytes", _boom)
+    line = dev._seed_runtime_from_main(wt)
+    assert line.startswith("[!]") and "播种失败" in line
