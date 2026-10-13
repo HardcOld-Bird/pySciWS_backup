@@ -412,6 +412,7 @@ def cmd_dispatch(args: argparse.Namespace) -> int:
         step=args.step or "",
         no_checks=args.no_checks,
         no_retry=args.no_retry,
+        no_hold=getattr(args, "no_hold", False),
         force_new_session=getattr(args, "force_new_session", False),
     )
     if took_backlog_id and outcome.code == 0:
@@ -850,6 +851,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--step")
     p.add_argument("--no-checks", action="store_true")
     p.add_argument("--no-retry", action="store_true")
+    p.add_argument(
+        "--no-hold",
+        action="store_true",
+        help="跳过边界避让（距峰谷切换点 <5min 时默认先等过界再派；草稿/调试用）",
+    )
     p.add_argument(
         "--force-new-session",
         action="store_true",

@@ -242,53 +242,83 @@ def test_systemic_kinds_and_text_are_one_source():
 
 
 # ---------------------------------------------------------------------------
-# ③ do_dispatch 集成：不重试原渠道 / 换档一次 / 备用渠道仍坏 → channel_error
+# ③ do_dispatch 集成：同席重试先自救 / 换席是后手 / 备用渠道仍坏 → channel_error
 # ---------------------------------------------------------------------------
-def test_do_dispatch_channel_error_no_same_channel_retry(iso_dispatch, monkeypatch):
+# 本组三条的语义在 2026-10-13 反转过一次：旧裁决（backlog 20261012-194500-leader）判
+# channel_error 为首败即换席，实测发现它是**瞬态**的（Mimo 平台侧算力不足，一日 4 起），
+# 同会话 resume 大概率即愈；而换席落到 DeepSeek 付费席——付费席降为后手（用户裁决
+# 2026-10-13，backlog 20261013-143000-leader）。重试细则的单测在 test_same_seat_retry.py，
+# 这里只钉「先自救、后换席」的次序骨架，且一律把次数闸压到 1 次以免用例真睡 45s×N。
+def _one_same_seat_retry(monkeypatch, state):
+    """把退避换成 no-op + 次数闸压到 1：用例测**次序**，不测退避时长（那是同席重试组的活）。"""
+    monkeypatch.setattr(dispatch, "_sleep", lambda s: None)
+    reg_file = state / "registry.json"
+    data = json.loads(reg_file.read_text(encoding="utf-8"))
+    data.setdefault("model_fallback", {})["same_seat_retry"] = {
+        "channel_error": 1,
+        "backoff_s": 0,
+        "budget_s": 0,
+    }
+    reg_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def test_do_dispatch_channel_error_retries_same_seat_first(
+    iso_dispatch, monkeypatch
+):
+    """渠道故障**先**同席 resume 重试一次（席位不动），仍败才轮到换席通路。"""
+    _one_same_seat_retry(monkeypatch, iso_dispatch)
     set_models(iso_dispatch, flash=BUILTIN, flash_fallback="")
     calls = fake_headless(monkeypatch, _broken_channel(iso_dispatch))
     o = dispatch.do_dispatch("quotamember", text="出图", quiet=True)
     assert o.kind == "channel_error" and o.code == 2
-    assert len(calls) == 1, "渠道坏了再同渠道重试只会连排烧第二跳"
+    assert len(calls) == 2, "首跳 + 1 次同席重试；无下一席可换故止于此"
+    assert o.same_seat_retries == 1, "重试次数必须在读数面上可见"
     line = (iso_dispatch / "ledger.jsonl").read_text(encoding="utf-8").strip()
     assert '"channel_error"' in line
     assert "渠道级故障" in line, "台账 error 面须分得开 quota/channel 两类（要求 3）"
 
 
 def test_do_dispatch_channel_switches_to_fallback_once(iso_dispatch, monkeypatch):
-    """换档通路对渠道故障同样生效：第二跳走 <tier>_fallback，成功即正常交付。"""
+    """同席重试没救回来才换档：第二席走 <tier>_fallback，成功即正常交付。"""
+    _one_same_seat_retry(monkeypatch, iso_dispatch)
     set_models(iso_dispatch, flash=BUILTIN, flash_fallback=FB)
 
     def responder(n, cmd):
-        if n == 1:
+        if n <= 2:  # 首跳 + 同席重试都坏 → 才轮到 fallback 席
             return _broken_channel(iso_dispatch)(n, cmd)
         return envelope(OK_BODY, is_error=False, stop="end_turn", rc=0)
 
     calls = fake_headless(monkeypatch, responder)
     o = dispatch.do_dispatch("quotamember", text="出图", quiet=True, no_checks=True)
     assert o.kind == "result" and o.code == 0
-    assert len(calls) == 2
-    assert cmd_model(calls[0]) == BUILTIN and cmd_model(calls[1]) == FB
+    assert len(calls) == 3
+    assert cmd_model(calls[0]) == BUILTIN and cmd_model(calls[1]) == BUILTIN, (
+        "自救的那两跳必须停在原席——偷换席位就等于没测到降为后手"
+    )
+    assert cmd_model(calls[2]) == FB, "第三跳才是真实换席"
 
 
 def test_do_dispatch_channel_fallback_also_broken(iso_dispatch, monkeypatch):
-    """备用渠道同样故障 → channel_error（drain 全局停止语义），不再三跳。"""
+    """自救 + 换席都救不回 → channel_error（drain 全局停止语义），不再三跳。"""
+    _one_same_seat_retry(monkeypatch, iso_dispatch)
     set_models(iso_dispatch, flash=BUILTIN, flash_fallback=FB)
     calls = fake_headless(monkeypatch, _broken_channel(iso_dispatch))
     o = dispatch.do_dispatch("quotamember", text="出图", quiet=True)
     assert o.kind == "channel_error"
-    assert len(calls) == 2, "换档重试只给一次"
-    assert cmd_model(calls[1]) == FB
+    assert len(calls) == 3, "首跳 + 1 次自救 + 1 次换席；换席重试仍只给一次"
+    assert cmd_model(calls[2]) == FB
 
 
 def test_do_dispatch_channel_report_distinguishes_kind(
     iso_dispatch, monkeypatch, capsys
 ):
+    _one_same_seat_retry(monkeypatch, iso_dispatch)  # 不 patch 就真睡 45s 退避
     set_models(iso_dispatch, flash=BUILTIN, flash_fallback=FB)
     fake_headless(monkeypatch, _broken_channel(iso_dispatch))
     dispatch.do_dispatch("quotamember", text="出图", quiet=False)
     out = capsys.readouterr().out
     assert "渠道级失败（channel_error）" in out
+    assert "同席" in out, "报告面必须点名已经自救过，否则看着像直接跳了付费席"
     assert "额度" not in out.split("[NEXT]")[0], "报告面别把渠道故障说成额度耗尽"
     assert "[NEXT]" in out and "registry models" in out
 

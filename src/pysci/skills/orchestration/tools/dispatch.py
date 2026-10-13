@@ -11,6 +11,7 @@ import json
 import re
 import shutil
 import sys
+import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -118,6 +119,20 @@ def systemic_error_text(kind: str) -> str:
     return f"系统性故障：{label}——全局停止，全部条目保持 pending 待渠道恢复"
 
 
+def _sleep(seconds: float) -> None:
+    """真实等待（退避 / 边界避让共用一个落点，测试可整只替换）。
+
+    单独抽成函数不是洁癖：退避 45s、避让最多 300s 的等待**不能**在测试里真发生，
+    而两处等待的语义又都要被断言（等了多久、等了几次）。替换本函数即同时拿到两者。
+    """
+    time.sleep(seconds)
+
+
+def _clock() -> float:
+    """单调时钟读数（重试预算闸与避让判据的计时源，测试可替换）。"""
+    return time.monotonic()
+
+
 def _detect_quota_exhaustion(env: Envelope, out: str, err: str) -> bool:
     """识别额度类失败：文案可能出现在 envelope.result / stderr / stdout 全文。
 
@@ -185,6 +200,39 @@ def _seat_reason_text(reason: str) -> str:
     return SYSTEMIC_TEXT.get(reason, (reason, reason))[1]
 
 
+def _boundary_hold(reg: Registry, *, no_hold: bool) -> tuple[str, int]:
+    """距峰谷切换点不足阈值时睡到过点再派（边界避让，用户裁决 2026-10-13）。
+
+    为什么值得等（backlog 20261013-144500-leader）：席链随时间走（路由 v3 谷时隐性
+    DeepSeek），卡在切换点前几秒出发=整跳落在**将要过期**的窗口里，成本错配；而等待期
+    零 LLM 成本。必须在解析角色/席链**之前**调用——等过界后再读，读到的才是新窗口的链。
+
+    Args:
+        reg: 注册表（读 ``routing.boundary_hold_s``）。
+        no_hold: CLI ``--no-hold``（草稿/调试场景跳过等待）。
+
+    Returns:
+        ``(一行读数, 实际等待秒)``；不需避让/判不出 → ``("", 0)``。
+    """
+    if no_hold:
+        return "", 0
+    hold_s = int(reg.routing_hold_s)
+    if hold_s <= 0:
+        return "", 0
+    fv = routing.face()
+    if not fv.enabled:
+        return "", 0
+    now = routing.now_cn()
+    when, mode, _warn = routing.next_switch(now, fv)
+    if when is None:
+        return "", 0
+    wait = (when - now).total_seconds()
+    if not 0 < wait < hold_s:
+        return "", 0
+    _sleep(wait)
+    return f"[i] 边界避让：等待 {wait:.0f}s 对齐 {mode}（{when:%H:%M}）", int(wait)
+
+
 def _ts() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -226,6 +274,16 @@ class DispatchOutcome:
     #: drain 把它抄进 run 日志——「这一跳烧的是隐性 DeepSeek 席」必须留在批次账上，
     #: 而不能只活在 toml 与 routing-last.json 里（组长读的是 run 日志）。
     route: str = ""
+    #: 本跳出发前的**边界避让**读数（用户裁决 2026-10-13，backlog 20261013-144500-leader）：
+    #: 等了多少秒、对齐的是哪个窗口。没等时空串——drain 据此抄 run 日志。
+    hold: str = ""
+    hold_s: int = 0
+    #: **同席重试**读数（用户裁决 2026-10-13，backlog 20261013-143000-leader）：channel_error
+    #: 是瞬态的，先在原席上 resume 续跑自救，付费席降为后手。0/0 = 没重试。不进
+    #: ``fallbacks``（重试不是降级，mirror「渠道回退」只记真实换席），但次数与耗时
+    #: 必须留在台账与 run 日志上，否则「渠道在抖 vs 渠道已死」无从分辨。
+    same_seat_retries: int = 0
+    same_seat_retry_ms: int = 0
 
 
 def collect_replies(member_id: str) -> tuple[str, list[Path]]:
@@ -586,6 +644,7 @@ def do_dispatch(
     step: str = "",
     no_checks: bool = False,
     no_retry: bool = False,
+    no_hold: bool = False,
     quiet: bool = False,
     attach_replies: bool = True,
     eval_hop: bool = False,
@@ -616,6 +675,16 @@ def do_dispatch(
     相对用量（est_tokens）：本跳进出各测一次会话 jsonl 字符数，增量与换算值入台账，
     结束水位入 registry 会话条目（双渠道 usage 上报全为 0，绝对精度不可得——用户裁决
     2026-10-10 改做相对排名，backlog 20261010-ledger-est-tokens）。
+
+    ``no_hold=True``（CLI ``--no-hold``）：跳过**边界避让**——距峰谷切换点不足
+    ``routing.boundary_hold_s``（缺省 300s，硬钳制 ≤300s）时默认先睡过界再派，因为席链
+    随时间走，卡在边界前几秒出发等于整跳落在将过期的窗口里（backlog 20261013-144500-leader）。
+    草稿/调试场景才该跳过。
+
+    ``channel_error`` 走**同席 resume 重试**而非直接换席（次数+壁钟预算双闸，
+    ``model_fallback.same_seat_retry``，backlog 20261013-143000-leader）：渠道级故障是
+    瞬态的，会话逐回合持久化故续跑零工作损失；重试不写回退事件（不是降级），次数/耗时
+    入台账 ``same_seat_retries``/``same_seat_retry_ms``。额度耗尽与启动即失败不重试。
 
     Returns:
         DispatchOutcome（code=0 仅当 result 交付且声明的机械验收全过）。
@@ -649,6 +718,12 @@ def do_dispatch(
             member=member_id,
             error=f"cold_start 成员只允许 session='new'（收到 {session!r}）",
         )
+    # 边界避让（用户裁决 2026-10-13，backlog 20261013-144500-leader）：距峰谷切换点
+    # 不足阈值就先睡过界再派——席链随时间走，卡在边界前几秒出发=整跳落在将过期的窗口
+    # 里（成本错配），而等待期零 LLM 成本。必须在**解析角色之前**：等过界后再读，
+    # 读到的才是新窗口的链。避让本身不派发、不烧 token，故放在一切早退闸之后。
+    hold_line, hold_wait_s = _boundary_hold(reg, no_hold=no_hold)
+
     # 路由切换检测（路由 v3 规格 2「切换时机」的记录面）：在**解析角色之前**读一次，
     # 于是这一跳用的席链就是切换后的新链——「只影响新派发、在途单跳不换模型」正是这个
     # 顺序保证的：已经在跑的那跳早已把 model 写进 argv，本行改的是它**下一跳**的读数。
@@ -658,12 +733,15 @@ def do_dispatch(
         print(route_line)
 
     def _out(**kw: Any) -> DispatchOutcome:
-        """本跳之后的每个出口都带上路由读数。
+        """本跳之后的每个出口都带上路由读数与边界避让读数。
 
         切换记录只在成功跳可见是不够的：谷时席表为空被激活闸拒掉的批次，恰恰最需要
         看见「这一跳本来要落到 DeepSeek 席」——拒发的出口也得带着它的路由身份。
+        避让同理：拒发的那一跳也真的等过（队列被占了那么多秒），账要认。
         """
-        return DispatchOutcome(route=route_line, **kw)
+        return DispatchOutcome(
+            route=route_line, hold=hold_line, hold_s=hold_wait_s, **kw
+        )
 
     # 角色解析（档位模式退役，用户裁决 2026-10-12 22:4x）：覆盖（--model-tier / plan YAML
     # 的 model: / 案卷 tier:，旧档名 flash/max 归一）> 预设 pro 名单 > main。非法覆盖在此
@@ -821,9 +899,11 @@ def do_dispatch(
     )
     env_json = acc_env = Envelope.parse(out)
     failed = rc != 0 or env_json.is_error
-    # 席位不可用（额度耗尽 / 渠道级故障 / 启动即失败）**不做同席位重试**——同席位再跳
-    # 只会再烧一跳；出路是沿该档有序回退链换席（机制 2026-10-10 flash 回退，链形态与
-    # 「启动即失败也算席坏」的用户裁决 2026-10-12 21:1x，backlog 20261012-211500-leader）
+    # 席位不可用（额度耗尽 / 渠道级故障 / 启动即失败）**不做普通重试**（上面那段只吃
+    # 非系统性失败）；出路是下面的处置：渠道级故障先同席 resume 自救（用户裁决
+    # 2026-10-13），额度耗尽/启动即失败直接沿该档有序回退链换席（机制 2026-10-10 flash
+    # 回退，链形态与「启动即失败也算席坏」的用户裁决 2026-10-12 21:1x，
+    # backlog 20261012-211500-leader）
     systemic = _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
     broken = _seat_broken(env_json, rc, systemic)
 
@@ -858,6 +938,65 @@ def do_dispatch(
             _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
         )
         broken = _seat_broken(env_json, rc, systemic)
+
+    # 同席重试（用户裁决 2026-10-13，backlog 20261013-143000-leader）：channel_error 是
+    # **瞬态**的（平台侧算力不足，今日 4 起），同会话 resume 续跑大概率即愈且零工作损失
+    # （会话逐回合持久化）；而换席会落付费席。故付费席降为后手：先在原席自救，次数
+    # （缺省 10）与壁钟预算（缺省 1800s）双闸都过才换席。额度耗尽（确定性）与启动即失败
+    # （席位根本不存在）**不进本循环**——表里没有它们的键，同席重试只会白烧。
+    # 重试不写 note_fallback（规格 3：重试不是降级，不污染 mirror「渠道回退」事件面），
+    # 次数/耗时另走台账与 run 日志。
+    same_seat_retries = 0
+    same_seat_retry_ms = 0
+    policy = reg.same_seat_retry
+    retry_limit = int(policy.get("channel_error", 0))
+    retry_backoff_s = float(policy.get("backoff_s", 0))
+    retry_budget_s = float(policy.get("budget_s", 0))
+    retry_started = _clock()
+    while failed and broken == "channel_error" and same_seat_retries < retry_limit:
+        if retry_budget_s > 0 and _clock() - retry_started >= retry_budget_s:
+            # 次数闸挡不住「真下线」：每次失败若耗时数分钟，10 次会拖住串行队列近小时。
+            if not quiet:
+                print(
+                    f"[!] 同席重试预算触顶（{retry_budget_s:.0f}s 已耗）→ 转换席，"
+                    "不再在原席上等"
+                )
+            break
+        same_seat_retries += 1
+        if retry_backoff_s > 0:
+            _sleep(retry_backoff_s)
+        if not quiet:
+            print(
+                f"[!] 渠道瞬态故障，同席 resume 重试 "
+                f"{same_seat_retries}/{retry_limit}（席位不动，不烧换席）…"
+            )
+        rc, out, err = run_headless(
+            build_command(
+                m,
+                (
+                    f"上一次运行因渠道瞬态故障中断（rc={rc}）。已原席续跑，"
+                    f"请继续完成任务书 {taskbook}，按交付协议收尾。\n\n{PROTOCOL_REMINDER}"
+                ),
+                session_id=sid,
+                resume=True,
+                model=model,
+                max_turns=max_turns,
+                effort=level,
+            ),
+            cwd=PROJECT_ROOT,
+            env=env,
+            timeout_s=timeout or m.timeout_s,
+            on_spawn=_note_pid,
+        )
+        env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
+        failed = rc != 0 or env_json.is_error
+        # 每轮**重新判**而不是 `or` 累积：重试跑通时必须把首轮的 channel_error 抹掉，
+        # 否则成功交付会被首轮的判定拖成系统性故障（kind 错、drain 还会全局停）。
+        systemic = _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
+        broken = _seat_broken(env_json, rc, systemic)
+    same_seat_retry_ms = int(round((_clock() - retry_started) * 1000))
+    if same_seat_retries and not quiet and not (failed and broken):
+        print(f"[√] 渠道瞬态故障已同席自愈（重试 {same_seat_retries} 次）")
 
     # 沿链换席：一席一跳，跑通即止（规格 3）。每次降级都过一遍 note_fallback，它同时
     # 落两笔账：故障席进**粘滞窗**（窗内后续派发直接跳过，不再白烧探测跳——BYOK 渠道
@@ -965,6 +1104,9 @@ def do_dispatch(
                     step=step,
                     sid_new_reason=sid_new_reason,
                     error=err_text,
+                    same_seat_retries=same_seat_retries,
+                    same_seat_retry_ms=same_seat_retry_ms,
+                    hold_s=hold_wait_s,
                 )
             )
         _sessions.touch_session(
@@ -991,6 +1133,8 @@ def do_dispatch(
             sid_new_reason=sid_new_reason,
             error=err_text,
             fallbacks=fallbacks,
+            same_seat_retries=same_seat_retries,
+            same_seat_retry_ms=same_seat_retry_ms,
         )
         if not quiet:
             if systemic:
@@ -1046,6 +1190,9 @@ def do_dispatch(
         plan=plan,
         step=step,
         sid_new_reason=sid_new_reason,
+        same_seat_retries=same_seat_retries,
+        same_seat_retry_ms=same_seat_retry_ms,
+        hold_s=hold_wait_s,
     )
     if not eval_hop:
         append(entry)
@@ -1081,6 +1228,8 @@ def do_dispatch(
         envelope=env_json,
         sid_new_reason=sid_new_reason,
         fallbacks=fallbacks,
+        same_seat_retries=same_seat_retries,
+        same_seat_retry_ms=same_seat_retry_ms,
     )
     if not quiet:
         _report_success(outcome, failed_checks)
@@ -1115,6 +1264,13 @@ def _report_systemic(o: DispatchOutcome) -> None:
     headline = SYSTEMIC_TEXT.get(o.kind, (o.kind, o.kind))[0]
     print(f"[✗] {headline}（{o.kind}）：{(o.error or o.body)[:160]}")
     print(f"    envelope.result 原文（前 400 字）：\n{o.body[:400]}")
+    if o.same_seat_retries:
+        # 「先自救过了」必须可见：否则组长看到 channel_error 会以为直接跳到了付费席，
+        # 而实际已经把瞬态窗口等满（次数+预算双闸），这是判断「渠道在抖 vs 已死」的读数
+        print(
+            f"    [i] 已同席 resume 重试 {o.same_seat_retries} 次"
+            f"（{o.same_seat_retry_ms / 1000:.0f}s）仍未愈 → 才换席/停链"
+        )
     cause = (
         "模型渠道额度耗尽——充值或换渠道才恢复"
         if o.kind == "quota_exhausted"
@@ -1151,6 +1307,14 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
     if o.warning:
         # 协议扩展的滚动升级窗口：本跳交付由宽松兜底面救回，判读可用但不可当正常路径
         print(f"    [!] {o.warning}")
+    if o.hold:
+        # 边界避让是**等出来的**窗口对齐：不报这一行，组长看台账耗时会以为派发卡了
+        print(f"    {o.hold}")
+    if o.same_seat_retries:
+        print(
+            f"    [!] 渠道瞬态故障：同席 resume 重试 {o.same_seat_retries} 次"
+            f"（{o.same_seat_retry_ms / 1000:.0f}s）后{'仍未愈，已换席' if o.fallbacks else '自愈'}"
+        )
     if o.fallbacks:
         # 规格 4a「交付告警」：降级跑通的跳**也是**告警跳——只报成功不报路径，
         # 组长就会以为主力渠道还好着（事件流的账只有 mirror/status 面才去看）
