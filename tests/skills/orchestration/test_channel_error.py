@@ -14,7 +14,13 @@ from __future__ import annotations
 import json
 from argparse import Namespace
 
-from pysci.skills.orchestration.tools import dispatch, drain, orch, sessions
+from pysci.skills.orchestration.tools import (
+    dispatch,
+    drain,
+    failure_classes,
+    orch,
+    sessions,
+)
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 from pysci.skills.orchestration.tools.runner import Envelope
 
@@ -35,6 +41,11 @@ from .conftest import (
 BUILTIN = "Qwen3.8-Flash"  # 主档渠道
 FB = "byok-flash-id"  # 备用渠道（<tier>_fallback 的占位 modelID）
 OK_BODY = "<result>完工，commit fff9999 已合并。</result>"
+
+
+def _channel_re():
+    """provider 报错签名 regex：**按调用取表**（词表改了同进程即生效）。"""
+    return failure_classes.provider_error_re()
 
 
 def _broken_channel(state):
@@ -85,12 +96,7 @@ def test_shape_probe_reads_synthetic_failure_turn(iso_dispatch):
         model=sessions.SYNTHETIC_MODEL,
         text=CHANNEL_TEXT,
     )
-    assert (
-        sessions.channel_failure_turn(
-            _member(), "s1", text_re=dispatch.CHANNEL_ERROR_RE
-        )
-        is True
-    )
+    assert sessions.channel_failure_turn(_member(), "s1", text_re=_channel_re()) is True
 
 
 def test_shape_probe_false_for_real_model_turn(iso_dispatch):
@@ -100,10 +106,7 @@ def test_shape_probe_false_for_real_model_turn(iso_dispatch):
     """
     append_turn(iso_dispatch, "s2", model=REAL_MODEL_TURN, text=CHANNEL_TEXT)
     assert (
-        sessions.channel_failure_turn(
-            _member(), "s2", text_re=dispatch.CHANNEL_ERROR_RE
-        )
-        is False
+        sessions.channel_failure_turn(_member(), "s2", text_re=_channel_re()) is False
     )
 
 
@@ -117,20 +120,14 @@ def test_shape_probe_false_when_stop_sequence_not_empty(iso_dispatch):
         stop_sequence="\n</result>",
     )
     assert (
-        sessions.channel_failure_turn(
-            _member(), "s3", text_re=dispatch.CHANNEL_ERROR_RE
-        )
-        is False
+        sessions.channel_failure_turn(_member(), "s3", text_re=_channel_re()) is False
     )
 
 
 def test_shape_probe_none_when_session_absent(iso_dispatch):
     """会话档读不出 → None（判据缺席），调用方自行决定采信文案与否，探针不猜。"""
     assert (
-        sessions.channel_failure_turn(
-            _member(), "ghost", text_re=dispatch.CHANNEL_ERROR_RE
-        )
-        is None
+        sessions.channel_failure_turn(_member(), "ghost", text_re=_channel_re()) is None
     )
 
 
@@ -141,10 +138,7 @@ def test_shape_probe_skips_bookkeeping_lines_after_turn(iso_dispatch):
     p = iso_dispatch / "sessions" / f"{sid}.jsonl"
     with p.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({"type": "active-leaf", "sid": sid}) + "\n")
-    assert (
-        sessions.channel_failure_turn(_member(), sid, text_re=dispatch.CHANNEL_ERROR_RE)
-        is True
-    )
+    assert sessions.channel_failure_turn(_member(), sid, text_re=_channel_re()) is True
 
 
 def test_last_assistant_record_survives_window_truncation(iso_dispatch):
@@ -169,10 +163,7 @@ def test_last_assistant_record_survives_window_truncation(iso_dispatch):
     append_turn(iso_dispatch, sid, model=sessions.SYNTHETIC_MODEL, text=CHANNEL_TEXT)
     msg = sessions.last_assistant_record(_member(), sid)
     assert msg is not None and msg.get("model") == sessions.SYNTHETIC_MODEL
-    assert (
-        sessions.channel_failure_turn(_member(), sid, text_re=dispatch.CHANNEL_ERROR_RE)
-        is True
-    )
+    assert sessions.channel_failure_turn(_member(), sid, text_re=_channel_re()) is True
 
 
 # ---------------------------------------------------------------------------
@@ -227,8 +218,8 @@ def test_detect_systemic_empty_for_ordinary_failure(iso_dispatch):
 
 def test_channel_error_re_matches_measured_wording():
     """模式表吃实测原文（大小写与措辞逐字），改坏了就退回「识别不到」的老缺陷。"""
-    assert dispatch.CHANNEL_ERROR_RE.search(CHANNEL_TEXT)
-    assert dispatch.CHANNEL_ERROR_RE.search(
+    assert _channel_re().search(CHANNEL_TEXT)
+    assert _channel_re().search(
         "custom model service error, please retry later or switch to another model"
     )
 
