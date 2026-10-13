@@ -429,16 +429,17 @@ def test_twin_pod_scaffold_present():
     assert names == {"delivery-gate", "pod-guard"}
 
 
-def test_preference_draft_marked_and_within_budget():
-    """PREFERENCE.md：标注草案待确认 + 每文件 ≤8192 B（全量注入档，落盘字节口径）。
+def test_preference_effective_marked_and_within_budget():
+    """PREFERENCE.md：v2 生效态标注（用户 2026-10-13 确认）+ 每文件 ≤8192 B。
 
     不断言 LF：本机 `core.autocrlf=true`，checkout 出来必然是 CRLF——预算口径本来就是
     **落盘字节（CRLF 计税）**，所以量 `len(raw)` 即正确判据，行尾形态不是。
+    （原草案态断言「草案 v1/待用户确认生效」随用户确认转正而退役。）
     """
     p = PODS_ROOT / "twin" / "PREFERENCE.md"
     raw = p.read_bytes()
     text = raw.decode("utf-8")
-    assert "草案 v1" in text and "待用户确认生效" in text
+    assert "v2 生效" in text and "taste_enabled=true" in text
     assert len(raw) <= 8192, f"宪章超预算：{len(raw)} B"
 
 
