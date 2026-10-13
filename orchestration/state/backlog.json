@@ -1663,10 +1663,10 @@
       "class": "mechanical",
       "channel": "mechanical",
       "remedy_shape": "change",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T16:25:45+08:00",
       "note": "组长裁定（2026-10-13）：remedy_shape=restore（对齐判读语义，先例 #43/#44 家族），判决记录已入 findings 行；重排队列施工。",
-      "started_at": "2026-10-13T18:24:27+08:00",
+      "started_at": "2026-10-13T18:35:21+08:00",
       "worktree": "insp-20261013-045910-mechanical"
     },
     {
@@ -1676,11 +1676,14 @@
       "kind": "usability",
       "success_criteria": "见单内判据（error_text 落账/四类分类单测/quota-channel 回归不变/全量绿）",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-180000-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T18:25:12+08:00",
-      "note": "｜组长调度：带宽治理前置（inspector 已因带宽关闭，用户指示优先）",
+      "note": "drain 批量销账（commit 91190cf）",
       "started_at": "2026-10-13T18:25:49+08:00",
-      "worktree": "20261013-180000-leader"
+      "worktree": "20261013-180000-leader",
+      "done_at": "2026-10-13T18:35:21+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-180000-leader"
     },
     {
       "id": "20261013-180500-leader",
@@ -1805,6 +1808,17 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261013-180936-devops.md",
       "status": "pending",
       "proposed": "2026-10-13T18:26:55+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-190000-leader",
+      "member": "leader",
+      "summary": "**（配置面合并，用户 2026-10-13）`data/pysci_settings.toml` 的 `[routing]` 并入 `[model]`：模型类设置集中一处**",
+      "kind": "usability",
+      "success_criteria": "见单内判据（单节读数不变/兼容读告警/全量绿）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-190000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T18:35:23+08:00",
       "note": ""
     }
   ]
