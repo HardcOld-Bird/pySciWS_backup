@@ -211,7 +211,10 @@ def test_drain_stops_and_logs_each_demote(iso_state, monkeypatch):
             code=2,
             kind="channel_error",
             body="",
-            error="渠道级故障：custom model service error",
+            # **outage** 形状：带宽类自 20261013-193500-leader 起改走延期（不停链），
+            # 本用例钉的是「换席告警 + 全局停止」这条路径，故用 outage 文案。
+            error="渠道级故障：401 Unauthorized: invalid api key",
+            error_text="401 Unauthorized: invalid api key",
             fallbacks=[event],
         )
 

@@ -55,13 +55,24 @@ LINT_RULES_PATH: Path = ORCH_STATE_ROOT / "taskbook-lint.json"
 
 #: 系统性故障 kind 族——「不是任务书坏了，是渠道坏了」。三处消费面（drain / benchd /
 #: inspectd 的全局停止、watch 的事件、orch status 的提醒行）按这一份清单判，别各写各的。
-SYSTEMIC_KINDS: tuple[str, ...] = ("quota_exhausted", "channel_error")
+SYSTEMIC_KINDS: tuple[str, ...] = (
+    "quota_exhausted",
+    "channel_error",
+    # 带宽兜底（用户裁决 2026-10-13，backlog 20261013-193500-leader）：带宽类延期
+    # **触顶预算仍不愈** → 回升为全局停止。它防的是「分类器误判/文案漂移导致逐项
+    # 烧跳」（2026-10-12 连烧四单形态）：延期是让步，不是放弃熔断。
+    "channel_saturated",
+)
 
 #: kind → （报告面短标题, 长说明）。文案单一源：drain/bench/inspect 的 ``.done`` error、
 #: orch status、dispatch 报告面共读，避免「同一故障三副面孔」。
 SYSTEMIC_TEXT: dict[str, tuple[str, str]] = {
     "quota_exhausted": ("额度类失败", "模型渠道额度耗尽（quota_exhausted）"),
     "channel_error": ("渠道级失败", "模型渠道级故障（channel_error）"),
+    "channel_saturated": (
+        "带宽饱和",
+        "带宽类延期已触顶预算仍未愈（channel_saturated）——回升为全局停止",
+    ),
 }
 
 
@@ -296,6 +307,8 @@ class DispatchOutcome:
     suggestion_id: str = ""
     envelope: Envelope | None = None
     error: str = ""
+    #: provider 报错原文（与台账同源；drain 据此判失败类别——带宽类走延期而非停链）。
+    error_text: str = ""
     #: sid 在途闸换新会话的原因（``prev_alive``=上一跳进程仍活；""=没换）。台账同名字段
     #: 留痕，drain 据此写 run 日志——人工拒绝与批次换新都必须可见（184000 修复面④）。
     sid_new_reason: str = ""
@@ -655,6 +668,22 @@ def _accumulate_hop(final: Envelope, prev: Envelope) -> Envelope:
         context_usage_ratio=max(final.context_usage_ratio, prev.context_usage_ratio),
         permission_denials=[*prev.permission_denials, *final.permission_denials],
     )
+
+
+def _shallow_seat(reg: Registry, tier: str, *, current: str) -> str:
+    """隐性态下「生效预设」的主力席——**浅回退**的落点；取不到/与当前席相同 → 空串。
+
+    谷时 main 席链被隐性覆盖成 DeepSeek（路由 v3），而带宽打满的恰恰是它；此时先回
+    到用户配置的预设主力席试一拍（用户补充口径 2026-10-13，backlog 20261013-193500-leader），
+    比直接换到链上下一席更省、也更贴近「本预设本来该用的渠道」。
+    """
+    from . import presets as _presets
+
+    name = _presets.active().name
+    presets_face = reg.data.get("presets") if isinstance(reg.data, dict) else None
+    chain = (presets_face or {}).get(name, {}).get(tier) or []
+    seat = str(chain[0]) if chain else ""
+    return seat if seat and seat != current else ""
 
 
 def do_dispatch(
@@ -1029,6 +1058,46 @@ def do_dispatch(
     if same_seat_retries and not quiet and not (failed and broken):
         print(f"[√] 渠道瞬态故障已同席自愈（重试 {same_seat_retries} 次）")
 
+    # **浅回退一拍**（用户补充 2026-10-13，backlog 20261013-193500-leader）：隐性 DeepSeek
+    # 态下带宽失败，先回到「生效预设的主力席」试一跳；该席亦爆才走下面的换席链
+    # （而 drain 侧会把带宽类判成延期）。不写 note_fallback：这一跳不是「席位坏了」的
+    # 降级，而是「隐性覆盖席被带宽打满」时的回退，把它记成降级会污染渠道健康读数。
+    if broken == "channel_error" and not no_retry and routing.hidden_valley_preset():
+        shallow = _shallow_seat(reg, tier, current=model)
+        if shallow:
+            if not quiet:
+                print(
+                    f"[!] 隐性席带宽不足 → 浅回退到本预设主力席 {reg.seat_label(shallow)}"
+                )
+            model = shallow
+            rc, out, err = run_headless(
+                build_command(
+                    m,
+                    (
+                        "上一次运行因渠道带宽不足中断（隐性覆盖席）。已浅回退到本预设主力席，"
+                        f"请继续完成任务书 {taskbook}，按交付协议收尾。{chr(10)}{chr(10)}"
+                        + PROTOCOL_REMINDER
+                    ),
+                    session_id=sid,
+                    resume=True,
+                    model=model,
+                    max_turns=max_turns,
+                    effort=level,
+                ),
+                cwd=PROJECT_ROOT,
+                env=env,
+                timeout_s=timeout or m.timeout_s,
+                on_spawn=_note_pid,
+            )
+            env_json = acc_env = _accumulate_hop(Envelope.parse(out), acc_env)
+            failed = rc != 0 or env_json.is_error
+            systemic = (
+                _detect_systemic(env_json, out, err, member=m, sid=sid)
+                if failed
+                else ""
+            )
+            broken = _seat_broken(env_json, rc, systemic)
+
     # 沿链换席：一席一跳，跑通即止（规格 3）。每次降级都过一遍 note_fallback，它同时
     # 落两笔账：故障席进**粘滞窗**（窗内后续派发直接跳过，不再白烧探测跳——BYOK 渠道
     # 余额长期不可用是用户 21:3x 明示的现状）+ 渠道事件流一行（mirror/status 面的读数源）。
@@ -1164,6 +1233,7 @@ def do_dispatch(
             envelope=env_json,
             sid_new_reason=sid_new_reason,
             error=err_text,
+            error_text=_provider_error_text(env_json, out, err),
             fallbacks=fallbacks,
             same_seat_retries=same_seat_retries,
             same_seat_retry_ms=same_seat_retry_ms,

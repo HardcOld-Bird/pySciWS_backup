@@ -668,6 +668,16 @@ def latest_done(paths: WorkerPaths | None = None) -> dict[str, Any] | None:
 #: run 摘要 items 里「这一条目这次尝试失败」的状态读数。系统性故障（额度耗尽 /
 #: 渠道级故障）**不在**此列：那是渠道坏了、条目无罪复位，计入会把「渠道坏了」误读成
 #: 「任务书写坏了」（并污染 §2.4 的重复失败阈值立案）。
+#: 带宽延期的睡眠上限（秒）：全队皆未到期时睡到最近到期，但单次不许超过它——
+#: 过长会把「条目间隙检查协作停止」的那条纪律架空（10 分钟内必回来看一次信号）。
+DEFER_MAX_SLEEP_S: int = 600
+
+
+def _sleep(seconds: float) -> None:
+    """等待落点（测试可整只替换——真睡 600s 的用例没人跑得动）。"""
+    time.sleep(seconds)
+
+
 FAILED_ITEM_STATUSES: tuple[str, ...] = (
     "needs_leader",
     "blocked",
@@ -706,7 +716,7 @@ def _systemic_mark(kind: str) -> str:
     watch 的日志判据读的是 kind 串本身（不认标记），标记只为复盘时一眼分清这次是
     「该充值」还是「该等渠道恢复」——两类混成一个字母，黑匣子就白写了。
     """
-    return "C" if kind == "channel_error" else "Q"
+    return "C" if kind in ("channel_error", "channel_saturated") else "Q"
 
 
 def failure_counts(
@@ -1535,7 +1545,65 @@ def _drain_batch(
 
     # 系统性故障（额度耗尽 / 渠道级故障）：渠道坏了、不是任务书坏了 → 种子无罪复位
     # pending，组包保持 pending；调用方据此全局停止（不再逐单烧下一项）
+    # **带宽类失败先延期、不停链**（用户裁决 2026-10-13，backlog 20261013-193500-leader）：
+    # 渠道熔断的授权反转**仅限 bandwidth** —— 瞬态带宽不足的正确动作是等（背压），不是
+    # 换席/停链。但延期有兜底：预算（次数 / 壁钟）触顶仍不愈 → **回升为全局停止**
+    # （channel_saturated），封死「分类器误判/文案漂移导致逐项烧跳」。
     if outcome.kind in _systemic_kinds():
+        plan = _bandwidth_defer_plan(outcome, seed, time.time())
+        if plan is not None and plan.exhausted:
+            kind = "channel_saturated"
+            headline = _systemic_headline(kind)
+            err = (
+                "带宽延期触顶仍未愈（"
+                + plan.reason
+                + "）："
+                + (outcome.error or outcome.body[:120] or "")
+                .strip()
+                .replace(chr(10), " ")
+            )
+            backlog_requeue(seed_id, note=f"{headline}全局停止，复位待渠道恢复")
+            salv = _salvage_progress(seed, run_log, reason=kind)
+            _log(
+                run_log,
+                f"[{_systemic_mark(kind)}] 批次 {label} 带宽延期触顶 → 回升全局停止：{err[:120]}",
+            )
+            return [
+                {
+                    "id": seed_id,
+                    "status": kind,
+                    "error": err[:200],
+                    "salvage": (salv or {}).get("commit", ""),
+                    "elapsed_s": elapsed,
+                }
+            ]
+        if plan is not None:
+            nth = plan.attempt + 1
+            used = float(seed.get("defer_elapsed_s") or 0.0) + plan.delay_s
+            workflow.backlog_defer(
+                seed_id,
+                until=plan.until,
+                count=nth,
+                elapsed_s=used,
+                note=(
+                    f"带宽延期第 {nth} 次（等 {plan.delay_s}s 后重试）"
+                    "——带宽不足是瞬态，故不换席不停链；预算触顶则回升全局停止"
+                ),
+            )
+            _log(
+                run_log,
+                f"[i] 批次 {label} 带宽延期第 {nth} 次（等 {plan.delay_s}s）"
+                "→ 条目回队，继续吃下一项，**不停链**",
+            )
+            return [
+                {
+                    "id": seed_id,
+                    "status": "deferred",
+                    "defer_s": plan.delay_s,
+                    "defer_count": nth,
+                    "elapsed_s": elapsed,
+                }
+            ]
         kind = outcome.kind
         headline = _systemic_headline(kind)
         err = (outcome.error or outcome.body[:160] or "").strip().replace("\n", " ")
@@ -1604,6 +1672,62 @@ def _drain_batch(
         if salv.get("continuation"):
             item_out["continuation"] = salv["continuation"]
     return [item_out]
+
+
+def _seed_tier(item: dict) -> str:
+    """条目所属的**优先级档名**（优先级表用的是档名，不是成员 id）。
+
+    表里三档是成员名（leader/devops/inspector），另有两档是聚合名（research = 7 专职 +
+    reviewer + deputy；bench-pressure = bencher 派生的压测会话）。故：命中档名原样用，
+    其余成员归 ``research``（表的第 2 档就是这个聚合档）。
+    """
+    from . import settings as _settings
+
+    name = str(item.get("member") or "")
+    known = {t for grp in _settings.priority_order() for t in grp}
+    return name if name in known else "research"
+
+
+def _higher_priority_live(seed: dict, now: float) -> bool:
+    """注册表里是否**有更高优先级的活会话**（unknown 类的二级判据用）。
+
+    与 pid 判活互校是读侧的事：这里只排除心跳过期的死条目（:func:`backpressure.live_entries`）。
+    """
+    from . import backpressure as _bp
+    from . import settings as _settings
+
+    mine = _settings.priority_rank(_seed_tier(seed))
+    return any(
+        _settings.priority_rank(str(e.get("tier") or "")) < mine
+        for e in _bp.live_entries(now=now)
+    )
+
+
+def _bandwidth_defer_plan(outcome: Any, seed: dict, now: float):
+    """带宽类失败 → 延期判决；非带宽（或判不出且无更高优先级在场）→ ``None``。
+
+    分流口径（用户裁决 2026-10-13，backlog 20261013-193500-leader）：
+    ``bandwidth`` → 延期（跑通即止，不换席、不停链）；``outage``/``quota`` → 维持原
+    全局停止；``unknown`` → 二级判据：有更高优先级活会话在场按 bandwidth，否则按 outage。
+    """
+    if str(getattr(outcome, "kind", "")) != "channel_error":
+        return None
+    from . import backpressure as _bp
+    from . import failure_classes as _fc
+
+    text = str(
+        getattr(outcome, "error_text", "") or getattr(outcome, "error", "") or ""
+    )
+    cls = _fc.classify_failure(text, is_error=True)
+    if cls == _fc.UNKNOWN and _higher_priority_live(seed, now):
+        cls = "bandwidth"
+    if cls != "bandwidth":
+        return None
+    return _bp.plan_defer(
+        int(seed.get("defer_count") or 0),
+        float(seed.get("defer_elapsed_s") or 0.0),
+        now=now,
+    )
 
 
 def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
@@ -1743,6 +1867,16 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                 break
             seed, group = backlog_take_batch(BATCH_MAX)
             if seed is None:
+                wait = workflow.next_defer_s()
+                if wait > 0 and not dry:
+                    nap = min(wait, float(DEFER_MAX_SLEEP_S))
+                    _log(
+                        run_log,
+                        f"[i] 仅剩带宽延期条目：睡 {nap:.0f}s 到最近到期再查"
+                        f"（上限 {DEFER_MAX_SLEEP_S}s，期间收到协作停止信号会在下次检查时退）",
+                    )
+                    _sleep(nap)
+                    continue
                 break
             results = _drain_batch(seed, group, run_log, dry=dry)
             summary["items"].extend(results)
