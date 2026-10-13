@@ -101,10 +101,15 @@ ENOENT→fail-open 放行）。
 - **取 rc 别经管道**：`orch … | grep -v …` 后 `${PIPESTATUS[0]}` 是 grep 的 rc；同名建议归档
   后重跑必 rc=2「找不到」。取证=裸命令＋独立夹具副本。
 
-## 12. 上下文膨胀的正确读数（2026-10-12，本分册的由来）
+## 12. 上下文膨胀的正确读数（2026-10-12）
 
-est_tokens 量的是**吞吐**（本跳往会话档追加了多少字符），不是上下文占用：devops 78 跳实测
-与 `num_turns` 相关 **+0.81**、与 `ctx_ratio` 相关 **−0.11**。巡检引擎的读侧两支因此分开
-（`inspectd.check_cost_curve`=单跳工作量／`check_context_pressure`=末跳 ctx_ratio）。
-组员侧唯一自有杠杆是把每跳全文注入的自维护层压薄——AGENTS.md 曾贴 8192B 顶，本文件就是那
-次蒸馏的落点。会话归档本身是组长侧（`orch sessions <member> --archive <sid> --distill`）。
+est_tokens 量的是**吞吐**（本跳往会话档追加多少字符），不是上下文占用：devops 78 跳实测与
+`num_turns` 相关 **+0.81**、与 `ctx_ratio` 相关 **−0.11**。故巡检读侧两支分开
+（`check_cost_curve`=单跳工作量／`check_context_pressure`=末跳 ctx_ratio）。组员侧唯一自有
+杠杆是压薄自维护层（AGENTS.md 曾贴 8192B 顶，本文件即那次蒸馏的落点）。
+
+## 13. 可注入测试缝经模块属性调用
+
+orch 工具里「测试会 patch 的注入缝」（`_sleep`/`_spawn_detached` 等）禁 `from .drain import`
+值绑定，须写 `drain._sleep(...)`——绑定会让 monkeypatch 打不到调用点 → worker 真睡/挂死
+（`test_worker_seams.py` 钉住）。
