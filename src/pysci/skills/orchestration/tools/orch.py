@@ -42,6 +42,8 @@ from . import jury as _jury
 from . import mirror as _mirror
 from . import plans as _plans
 from . import presets as _presets
+from . import queues as _queues
+from . import queueworker as _queueworker
 from . import routing as _routing
 from . import sessions as _sessions
 from . import sync as _sync
@@ -133,6 +135,12 @@ def cmd_status(args: argparse.Namespace) -> int:
             f"  {mid:<10} 活跃会话={stats['active']} 归档={stats['archived']}  "
             f"{latest_s}{pod_mark}"
         )
+
+    # 成员 FIFO 队列水位（REFACTOR §3.1，M4）：观察面接入——「队列看着空、其实有积压」
+    # 是盲区，故与成员池并列呈现（只列非空队）。
+    print("== 成员队列 ==")
+    for line in _queues.water_lines():
+        print(line)
 
     # Tier A 阈值扫描（README §5.4）在读取待办清单**之前**跑：本次新立的案要立刻
     # 出现在下面的 [建议] 列表里，否则「机械重算」与「呈现」之间差一拍，组长永远看的是
@@ -582,6 +590,47 @@ def cmd_ledger(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_queues(args: argparse.Namespace) -> int:
+    """``orch queues``：成员 FIFO 队列的程序化面（REFACTOR.md §3.1，M4）。
+
+    ``list`` 列各成员队列水位；``enqueue <member>`` 入队一条 job（``--review`` 带复审附件）。
+    入队后自动尝试拉起该成员 worker（非常驻；锁忙则并入当前循环，不重复派生）。
+    """
+    action = getattr(args, "q_action", "") or "list"
+    if action == "list":
+        print("== 成员队列水位（FIFO，REFACTOR §3.1）==")
+        for line in _queues.water_lines():
+            print(line)
+        print('[NEXT] enqueue <member> --text "…" [--review] 入队；worker 自动派生')
+        return 0
+    if action == "enqueue":
+        member = str(args.member)
+        if member not in _queues.QUEUE_MEMBERS:
+            print(
+                f"[!] 非队列成员：{member}（合法：{'、'.join(_queues.QUEUE_MEMBERS)}）"
+            )
+            return 2
+        item = _queues.enqueue(
+            member,
+            text=str(args.text or ""),
+            task_file=str(args.task or ""),
+            dirs=[d.strip() for d in (args.dirs or "").split(",") if d.strip()],
+            model_tier=str(args.model_tier or ""),
+            effort=str(args.effort or ""),
+            plan=str(args.plan or ""),
+            step=str(args.step or ""),
+            session=str(args.session or "latest"),
+            review=bool(args.review),
+        )
+        pending = _queues.counts(member).get("pending", 0)
+        print(f"[√] 已入队：{item['id']}（{member}，待消化 {pending} 条）")
+        _, msg = _queueworker.wake_member(member, dry=bool(getattr(args, "dry", False)))
+        print(f"    {msg}")
+        return 0
+    print(f"[!] 未知子命令：{action}（list|enqueue）")
+    return 2
+
+
 def cmd_taskbooks(args: argparse.Namespace) -> int:
     """``orch taskbooks``：用户大任务的**程序化查看面**（LLM 通道，REFACTOR.md §3.4）。
 
@@ -1019,6 +1068,42 @@ def main(argv: list[str] | None = None) -> int:
     q.set_defaults(func=cmd_taskbooks)
     q = tbsub.add_parser("sync", help="幂等对账：所链 plan 完成 → 置 delivered")
     q.set_defaults(func=cmd_taskbooks)
+
+    p = sub.add_parser(
+        "queues",
+        help="[底层] 成员 FIFO 队列（list/enqueue；入队即尝试拉起 worker，非常驻）",
+    )
+    qsub = p.add_subparsers(dest="q_action", required=True)
+    q = qsub.add_parser("list", help="各成员队列水位（观察面）")
+    q.set_defaults(func=cmd_queues)
+    q = qsub.add_parser("enqueue", help="入队一条 job（生产组员一律不组包）")
+    q.add_argument(
+        "member", help="成员 id（sim/figure/writing/theory/lit/drawing/model3d/deputy）"
+    )
+    q.add_argument("--text", default="", help="任务文本（与 --task 二选一）")
+    q.add_argument("--task", default="", help="任务书文件路径")
+    q.add_argument("--dirs", default="", help="白名单目录（逗号分隔）")
+    q.add_argument("--model-tier", default="")
+    q.add_argument("--effort", default="")
+    q.add_argument("--plan", default="", help="m5 用：所属 plan id")
+    q.add_argument("--step", default="", help="m5 用：环节 id")
+    q.add_argument("--session", default="latest", help="会话复用策略：latest|new")
+    q.add_argument(
+        "--review", action="store_true", help="交付后自动投 reviewer 附属子 job"
+    )
+    q.add_argument("--dry", action="store_true", help="只入队不起 worker（测试/演练）")
+    q.set_defaults(func=cmd_queues)
+
+    p = sub.add_parser(
+        "_queue-worker",
+        help="[内部] 成员队列 FIFO worker（下划线前缀=内部命令，勿手调）",
+    )
+    p.add_argument("member")
+    p.add_argument(
+        "--run-log", default="", help="run 日志路径（唤醒时传入；默认自动生成）"
+    )
+    p.add_argument("--dry", action="store_true", help="干跑：不真派发，仅模拟销账")
+    p.set_defaults(func=_queueworker.cmd_queue_worker)
 
     p = sub.add_parser(
         "drain-stop", help="请求后台 drain worker 协作式停止（写 devops.cancel）"
