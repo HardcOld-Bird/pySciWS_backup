@@ -1507,6 +1507,39 @@
       "solo": true,
       "started_at": "2026-10-13T11:19:46+08:00",
       "worktree": "20261013-093000-leader"
+    },
+    {
+      "id": "20261013-071759-devops",
+      "member": "devops",
+      "summary": "**批准单可被写成自相矛盾，且没有机械面能发现**",
+      "kind": "usability",
+      "success_criteria": "批准单内判据段与补充段不再对同一配置项给相反要求；lint 告警面阳性用例；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-071759-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-13T12:39:11+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-085045-devops",
+      "member": "devops",
+      "summary": "**lint 幻影抗体句只覆盖 8/13 charter，其余 5 个组员同样会受害**",
+      "kind": "usability",
+      "success_criteria": "grep -c 对盘核验 全 13 pod charter 均 ≥1；清单断言扩到 13；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-085045-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-13T12:39:16+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-102152-devops",
+      "member": "devops",
+      "summary": "**merge 交集类 blocked 的抢救链在空转：建议按成因停链并把交集清单挂回原条目**",
+      "kind": "usability",
+      "success_criteria": "交集类 blocked 不再产生新 salvage 单且原条目 note 含 offenders；非交集成因链行为不变；全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-102152-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-13T12:39:17+08:00",
+      "note": ""
     }
   ]
 }
