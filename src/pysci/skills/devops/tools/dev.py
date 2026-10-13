@@ -534,6 +534,13 @@ MERGE_STATE_FILES = ("sessions-runtime.json", "registry.presplit.json", "watch.j
 #: 锁的现场性由判活面负责（drain ``lock_status`` 认墓碑/残骸），合并面一律不搬。
 MERGE_STATE_EXCLUDE_SUFFIXES = (".lock",)
 
+#: **备份文件同样永不跨树**：cp 阶段会在目标侧留 ``<name>.bak-<ts>``，它是**本地面**的
+#: 历史副本，搬过去只在对岸造垃圾——而它又恰好是下一次合并的「交集」候选，与「交集类
+#: 停链/交付形状」直接自相矛盾（backlog 20261013-143233-devops 实测：两次合并各留一个
+#: ``*.bak-<ts>``，且历史上有 6 个已被误提交进仓库）。带时间戳的名字 match 不上固定后缀，
+#: 故用**中缀**判。
+MERGE_STATE_EXCLUDE_INFIX = ".bak-"
+
 
 def _state_dir(root: Path) -> Path:
     """某仓根（main 或 worktree）下的 orchestration/state 目录。"""
@@ -575,6 +582,7 @@ def _cp_ignored_state(wt: Path, main: Path, ts: str) -> list[tuple[str, str]]:
         n
         for n in set(MERGE_STATE_FILES) | _ignored_state_names(wt)
         if not n.endswith(MERGE_STATE_EXCLUDE_SUFFIXES)
+        and MERGE_STATE_EXCLUDE_INFIX not in n
     }
     sd_wt = _state_dir(wt)
     sd_main = _state_dir(main)

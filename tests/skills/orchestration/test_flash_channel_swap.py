@@ -119,10 +119,22 @@ def test_tracked_registry_is_ordered_chains():
     assert "flash_fallback" not in models, "旧回退键已并入链，不该再留第二张表"
     face = data.get("presets", {})
     assert {"qwen", "mimo"} <= set(face), "账号级 BYOK 两预设齐备（deepseek 见下）"
-    assert face["mimo"]["main"] == [MIMO_FLASH_UUID, BUILTIN_FLASH]
-    assert face["mimo"]["pro"] == [MIMO_PRO_UUID, BUILTIN_FLASH]
-    assert face["qwen"]["main"] == [BYOK_FLASH_UUID, BUILTIN_FLASH]
-    assert face["qwen"]["pro"] == [BYOK_MAX_UUID, BUILTIN_FLASH]
+    # 席链断言**只锁形态不锁此刻读数**（backlog 20261013-143233-devops 缺陷 2）：
+    # 钉死整串会把**授权的配置变更**误报成代码回归——路由 v3 在 main/pro 链里插了
+    # DeepSeek 席（`987f80c`）之后，本测试就在 main 上恒红。中间席可有授权覆盖，
+    # 首尾两端才是出厂不变量。
+    assert _chain_shape_ok(face["mimo"]["main"], MIMO_FLASH_UUID, BUILTIN_FLASH), (
+        f"mimo.main 形态非法：{face['mimo']['main']}"
+    )
+    assert _chain_shape_ok(face["mimo"]["pro"], MIMO_PRO_UUID, BUILTIN_FLASH), (
+        f"mimo.pro 形态非法：{face['mimo']['pro']}"
+    )
+    assert _chain_shape_ok(face["qwen"]["main"], BYOK_FLASH_UUID, BUILTIN_FLASH), (
+        f"qwen.main 形态非法：{face['qwen']['main']}"
+    )
+    assert _chain_shape_ok(face["qwen"]["pro"], BYOK_MAX_UUID, BUILTIN_FLASH), (
+        f"qwen.pro 形态非法：{face['qwen']['pro']}"
+    )
     assert "deepseek" not in face, (
         "deepseek 席已回填（UUID 首席+内置同名回退，2026-10-13 用户供 Key）落代码"
         "出厂表——跟踪面不再留空链占位（留了=整链覆盖置空、预设反而不可激活）"
@@ -130,6 +142,41 @@ def test_tracked_registry_is_ordered_chains():
     assert all("model_tier" not in m for m in data.get("members", {}).values()), (
         "成员条目的档位字段随档位模式一起退役"
     )
+
+
+def _chain_shape_ok(chain: list[str], head: str, tail: str) -> bool:
+    """跟踪席链的**授权形态**：首席=预设出厂首席、末席=内置兜底、无重复。
+
+    为什么不锁「此刻读数」：见用例内注释（教训「回归测试别锁运行面当前值」）。
+    """
+    return (
+        bool(chain)
+        and chain[0] == head
+        and chain[-1] == tail
+        and len(set(chain)) == len(chain)
+    )
+
+
+def test_chain_shape_predicate_bites_on_unauthorized_face():
+    """**阳性对照**：形态判据必须能咬住非授权面——否则它只是恒真的装饰。
+
+    缺了这一支，`_chain_shape_ok` 写成 `return True` 也全绿（「阳性用例不红=没测到」）。
+    """
+    assert _chain_shape_ok(
+        [MIMO_FLASH_UUID, "1a54cc57-e614-4521-80cc-447de31dc896", BUILTIN_FLASH],
+        MIMO_FLASH_UUID,
+        BUILTIN_FLASH,
+    ), "中间插授权席（路由 v3 的 DeepSeek）应判合规"
+    assert not _chain_shape_ok(
+        ["foreign-id", BUILTIN_FLASH], MIMO_FLASH_UUID, BUILTIN_FLASH
+    )
+    assert not _chain_shape_ok([MIMO_FLASH_UUID, "x"], MIMO_FLASH_UUID, BUILTIN_FLASH)
+    assert not _chain_shape_ok(
+        [MIMO_FLASH_UUID, MIMO_FLASH_UUID, BUILTIN_FLASH],
+        MIMO_FLASH_UUID,
+        BUILTIN_FLASH,
+    )
+    assert not _chain_shape_ok([], MIMO_FLASH_UUID, BUILTIN_FLASH)
 
 
 # ---------------------------------------------------------------------------

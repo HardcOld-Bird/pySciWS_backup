@@ -39,6 +39,8 @@ __pycache__/
 /orchestration/state/ledger/
 /.qoder/skills/orchestration/
 /orchestration/state/backups/
+# cp 备份（worktree merge 的 <name>.bak-<ts>）：本地面的历史副本，永不跨树、也不入库
+/orchestration/state/*.bak-*
 # drain 运行态：互斥锁（含 pid，纯运行态）、每次 drain 的审计日志/摘要、协作式
 # 取消信号（drain-stop 写入；worker 消费后自删，中途死掉则留残）。永久审计在 git
 # 提交 + backlog.json（每项 commit hash）+ ledger，故运行态文件不入库（避免污染
