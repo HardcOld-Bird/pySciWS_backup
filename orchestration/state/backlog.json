@@ -1471,9 +1471,9 @@
         "from": "20261013-101705-salvage",
         "gen": 3
       },
-      "status": "needs_leader",
+      "status": "pending",
       "proposed": "2026-10-13T10:21:53+08:00",
-      "note": "drain 跳过（交付=blocked）：**卡点（第 4 跳、抢救链 gen3 = 最后一跳自动续作）：main 的 `orchestration/pods/inspector/AGENTS.md` 仍未清理，merge rc=2。本跳之后链达上限（SALVAGE_MAX_CHAIN=3），drain 将自动停链注记「须组长处置」——人工介入点。**\n\n**证据**：\n```\n$ pysci-dev worktree merge 20261013-102153-salvage\n  本次提交面 59 文件 / main 未提交 7 项\n  [✗] 交集 1 项：orchestration/pods/inspector/AGENTS.md（中止，未 cp、未 merge）\necho $? → 2\n```\n文件 mtime 仍为 `09:40:24`，40 分钟无写入；四跳工作区/测试/合并读数完全一致，重跑无新信息。\n\n**本跳进度**：面 `20261013-102153-salvage`，cherry-pick `7c82fba` → **`dc39475`**，树哈希第三次确认 **`b270e8cd` 逐字节一致**；全量 `pytest \"$WT/tests\" -q` → **2670 passed, 39 skipped, 6 deselected**（rc=0，钩子全绿）。\n\n**解锁动作（一次人工操作，四跳全部收尾）**：\n```\ncd <main>\ngit add orchestration/pods/inspector/AGENTS.md\ngit commit -m \"chore(pods): inspector AGENTS.md 经验段蒸馏入库\"\npysci-dev worktree merge 20261013-102153-salvage\ntimeout 25 git push origin main\n```\n（想丢弃 inspector 笔记则第 2 行换 `git checkout -- orchestration/pods/inspector/AGENTS.md`。）合并后 `backlog id=20261013-072000-leader,20261013-101105-salvage,20261013-101705-salvage,20261013-102153-salvage` 可一并销账（内容同源，以最终合并提交为准）。\n【全文已留审计副本：pods/devops/outbox/delivery-*.xml】｜抢救链已达上限 3，不再自动续作｜抢救续作：面=20261013-102153-salvage 分支=wt-20261013-102153-salvage 提交=dc39475 成因=blocked——须组长处置",
+      "note": "drain 跳过（交付=blocked）：**卡点（第 4 跳、抢救链 gen3 = 最后一跳自动续作）：main 的 `orchestration/pods/｜组长处置：堵点已清（inspector AGENTS.md 蒸馏已入库），gen3 续作放行",
       "started_at": "2026-10-13T10:21:53+08:00",
       "worktree": "20261013-102153-salvage",
       "needs_leader_at": "2026-10-13T10:29:00+08:00"
