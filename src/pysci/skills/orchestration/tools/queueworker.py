@@ -25,7 +25,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT
 
-from . import queues, workq
+from . import events, queues, workq
 from .drain import (
     WorkerPaths,
     _consume_stop_request,  # drain 的实现——按 §纪律「抽取共用」直接引用，不复制
@@ -121,6 +121,56 @@ def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any]]:
     return (workq.STATUS_DONE if code == 0 else workq.STATUS_FAILED), result
 
 
+def _notify(
+    q: Path,
+    item: dict[str, Any],
+    status: str,
+    result: dict[str, Any],
+    member: str,
+    *,
+    root: Path | None = None,
+) -> None:
+    """worker 消化处**直发**统一事件（§3.2）——JOB-DONE / STEP-REVIEW-DONE。
+
+    合并单元（§3.1）：带 ``review`` 的宿主 job 交付后**不**发 JOB-DONE，等 review 子 job
+    收尾时按 :func:`queues.completion` 判「宿主+review 均收尾」才发**一次**
+    ``STEP-REVIEW-DONE``。无 review 的普通 job 每件发 JOB-DONE。写失败 fail-open。
+    """
+    try:
+        if str(item.get("kind")) == "review":
+            host_id = str(item.get("parent") or "")
+            host_member = str(item.get("parent_member") or "")
+            state, why = queues.completion(host_id, host_member=host_member, root=root)
+            if state == queues.COMPLETE:
+                events.emit(
+                    events.STEP_REVIEW_DONE,
+                    subject=host_id,
+                    detail=f"{host_member} 环节 + review 合并完成（{why}）",
+                    action="orch events drain 后逐 plan 推进；orch status 看交付明细",
+                )
+            return
+        if item.get("review"):
+            state, why = queues.completion(
+                str(item["id"]), host_member=member, root=root
+            )
+            if state == queues.COMPLETE:  # 无子 job 或子 job 已收尾（宿主失败/已完成）
+                events.emit(
+                    events.STEP_REVIEW_DONE,
+                    subject=str(item["id"]),
+                    detail=f"{member} 环节 + review 合并完成（{why}）",
+                    action="orch events drain 后逐 plan 推进；orch status 看交付明细",
+                )
+            return  # AWAITING_REVIEW → 等 review 子 job 收尾时那一支发
+        events.emit(
+            events.JOB_DONE,
+            subject=str(item["id"]),
+            detail=f"{member} job 收尾：{status}（{result.get('kind', '')}）",
+            action="orch events drain 后接续下一份工作；orch plan advance 推进",
+        )
+    except Exception:  # noqa: BLE001 - 事件面绝不阻塞生产（§0.6）
+        pass
+
+
 def run_worker(
     member: str, run_log: Path, *, dry: bool = False, root: Path | None = None
 ) -> dict[str, Any]:
@@ -158,6 +208,7 @@ def run_worker(
                         summary["items"].append(
                             {"id": str(child["id"]), "status": "queued"}
                         )
+            _notify(q, item, status, result, member, root=root)
         workq.prune(q)
     except Exception as exc:  # noqa: BLE001 - 异常也要写 .done（不留黑洞）
         summary["error"] = f"{type(exc).__name__}: {exc}"

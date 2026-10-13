@@ -39,6 +39,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import eval as _eval
+from . import events as _events
 from . import workq
 from .drain import (
     DRY_ENV as _DRY_ENV,
@@ -485,6 +486,17 @@ def bench_drain(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
             )
         except OSError as exc:
             _log(run_log, f"[!] .done 写入失败：{exc}")
+        # 队列消化完 → 统一事件流一条 QUEUE-EMPTY（§3.2 裁决②：bencher 归此类）。fail-open。
+        try:
+            _events.note_queue_empty(
+                "bencher",
+                subject=run_log.stem,
+                count=summary["count"],
+                elapsed_s=summary.get("elapsed_s", "?"),
+                stopped=str(summary.get("stopped", "") or ""),
+            )
+        except Exception:  # noqa: BLE001 - 事件面绝不阻塞 bencher（§0.6）
+            pass
     _log(
         run_log,
         f"[√] bencher worker 结束：处理 {summary['count']} 项，"

@@ -73,6 +73,10 @@ __pycache__/
 # delivery，队列只是「还没消化完的工作」，入库会让 main 工作区每跳必 dirty。
 /orchestration/state/queues/
 /orchestration/state/queues-runs/
+# 统一事件流与消费水位线（REFACTOR.md §3.2/M5）：生产者直发 + watch 差分镜像事件每跳都可能
+# 新增，纯运行态（永久痕迹在 ledger/backlog/delivery 与 git 提交本身），入库会让 main 每跳必 dirty。
+/orchestration/state/events.jsonl
+/orchestration/state/events-seen.json
 # 基线捕获的物理归档（§13 待决 2 的 E4 定案）：manifest.json 入库（=「当时依赖什么」的
 # 答案），pods/ 下的 gitignored 面副本不入库——它随时可由 git + 清单再生。
 /orchestration/state/evals/baselines/*/pods/

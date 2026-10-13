@@ -64,6 +64,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import channels as _channels
+from . import events as _events
 from . import presets, procs, workflow
 from .registry import Registry, note_hop_pid, orchestration_rel, refresh_models
 from .workflow import (
@@ -1936,6 +1937,17 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
             )
         except OSError as exc:
             _log(run_log, f"[!] .done 写入失败：{exc}")
+        # 队列消化完 → 统一事件流一条 QUEUE-EMPTY（§3.2；唤醒组长一次）。写失败 fail-open。
+        try:
+            _events.note_queue_empty(
+                "devops",
+                subject=run_log.stem,
+                count=summary["count"],
+                elapsed_s=summary.get("elapsed_s", "?"),
+                stopped=str(summary.get("stopped", "") or ""),
+            )
+        except Exception:  # noqa: BLE001 - 事件面绝不阻塞 drain（§0.6）
+            pass
     _log(
         run_log,
         f"[√] drain 结束：处理 {summary['count']} 项，耗时 {summary['elapsed_s']}s "

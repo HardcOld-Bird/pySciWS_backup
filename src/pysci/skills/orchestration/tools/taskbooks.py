@@ -24,6 +24,8 @@ from typing import Any
 
 from pysci.paths import DATA_ROOT, assert_within_data
 
+from . import events
+
 #: 任务书目录（**入 git**；用户裁决 ① 的落点）。
 TASKBOOKS_DIR: Path = DATA_ROOT / "taskbooks"
 
@@ -127,6 +129,19 @@ def create(
     )
     _write(_md_path(ident), md)
     _write(_state_path(ident), json.dumps(state, ensure_ascii=False, indent=2) + "\n")
+    # 落盘即发 TASKBOOK-NEW（§3.4：用户投递任务书立即唤醒组长）。写失败 fail-open。
+    try:
+        events.emit(
+            events.TASKBOOK_NEW,
+            subject=ident,
+            detail=f"用户投递了新任务书：{title}（source={source}）",
+            action=(
+                "orch taskbooks list 查看 → taskbooks link <id> --plan <pid> 拆解推进"
+                "（用户 accept/reject 只经 TUI）"
+            ),
+        )
+    except Exception:  # noqa: BLE001 - 事件面绝不阻塞落盘（§0.6）
+        pass
     return state
 
 

@@ -6,10 +6,11 @@
 工具发起**（外部进程无法向 TUI 注入通知），故硬化到能硬的那一层：
 
 - **事件判定全在代码**（本模块）：读状态文件 + Python 侧 ``_pid_alive``（不起 shell，
-  故 MSYS 路径转换问题免疫），**七类**事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
-  NEEDS-LEADER / **TASKBOOK-NEW** / QUEUE-COMPLETE / SALVAGE（TASKBOOK-NEW 是 M3 的
-  最小扩展：只加事件名 + 检测函数 `_taskbook_ids` + 基线字段 `taskbook_ids`；**m5 收编**
-  进统一事件层，届时本支改为读事件流）。
+  故 MSYS 路径转换问题免疫），**六类**事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
+  NEEDS-LEADER / QUEUE-COMPLETE / SALVAGE（基线差分），**外加从统一事件流读取的生产者
+  直发事件** JOB-DONE / STEP-REVIEW-DONE / QUEUE-EMPTY / TASKBOOK-NEW（§3.2/M5 收编：
+  TASKBOOK-NEW 的旧基线差分 ``taskbook_ids`` 已删，改由 :mod:`taskbooks` 直发入流）。
+  差分命中的 legacy 事件另**镜像**入流（:func:`_mirror`）供记录面读出。
 - **挂载自 2026-10-13 起自动化**（README §4.5 v2）：组长回合结束由 ``Stop + asyncRewake``
   钩子（``.qoder/hooks/watch-arm.sh``）每回合抢「最新在听者」并挂 ``orch watch``——**无需
   组长手动挂**；:func:`autowatch_lines` 只在交办/唤醒当刻回报「已自动挂载」。
@@ -49,6 +50,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT
 
 from . import drain as _drain
+from . import events as _events
 from . import workflow as _workflow
 
 #: watch 自身状态文件（基线快照 / 心跳 / 已发事件）；仅 watch 写、status 读。
@@ -73,9 +75,13 @@ PRIORITY: tuple[str, ...] = (
     "QUOTA-STOP",
     "CHANNEL-STOP",
     "NEEDS-LEADER",
-    # 用户投递大任务（REFACTOR.md §3.4）：**立即唤醒组长**（M3 最小扩展——只加事件名、检测
-    # 函数与基线字段；m5 把它并入统一事件层，届时本支改为读事件流）。
+    # 用户投递大任务（REFACTOR.md §3.4）：**立即唤醒组长**。M5 收编——旧的最小差分
+    # （`taskbook_ids` 基线）已删，改由 :mod:`taskbooks` 生产者直发、本模块从统一事件流
+    # （:data:`events.STREAM_TYPES`）读出后唤醒。保留本优先级项供多事件同刻排序。
     "TASKBOOK-NEW",
+    "JOB-DONE",
+    "STEP-REVIEW-DONE",
+    "QUEUE-EMPTY",
     "QUEUE-COMPLETE",
     "SALVAGE",
 )
@@ -213,7 +219,7 @@ def snapshot() -> dict[str, Any]:
         "done_count": int((done or {}).get("count", 0) or 0),
         "done_elapsed_s": (done or {}).get("elapsed_s", "?"),
         "needs_leader": needs,
-        "taskbook_ids": _taskbook_ids(),
+        "events_seq": _events.latest_seq(),
         "salvage": salvaged,
         "pending": len(_workflow.backlog_pending()),
         "quota_run": systemic.get("quota_exhausted", ""),
@@ -308,20 +314,6 @@ def _in_progress(s: dict[str, Any]) -> bool:
     )
 
 
-def _taskbook_ids() -> list[str]:
-    """``data/taskbooks/`` 现有任务书 id（TASKBOOK-NEW 的**检测函数**；§3.4 M3 最小扩展）。
-
-    增量判据与 NEEDS-LEADER 同构：新 id（不在基线里）即「新落盘的任务书」→ 立即唤醒。
-    基线字段 = 快照的 ``taskbook_ids``（记进 ``state/watch.json``）。m5 收编进统一事件层。
-    """
-    from . import taskbooks as _tb  # 延迟导入：taskbooks 是叶子数据层
-
-    try:
-        return [str(d.get("id", "")) for d in _tb.list_all() if d.get("id")]
-    except Exception:  # noqa: BLE001 - 观察面绝不阻塞生产（§0.6）
-        return []
-
-
 def detect(
     base: dict[str, Any], cur: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -394,22 +386,6 @@ def detect(
                 }
             )
 
-    # 用户投递的大任务（REFACTOR.md §3.4，M3 最小扩展）：新 id 落盘即**立即唤醒**组长。
-    seen_tb = set(base.get("taskbook_ids") or [])
-    for tid in cur.get("taskbook_ids") or []:
-        if tid not in seen_tb:
-            out.append(
-                {
-                    "event": "TASKBOOK-NEW",
-                    "subject": tid,
-                    "detail": "用户投递了新任务书（data/taskbooks/，落盘即唤醒）",
-                    "action": (
-                        "orch taskbooks list 查看 → taskbooks link <id> --plan <pid> "
-                        "拆解推进（用户 accept/reject 只经 TUI）"
-                    ),
-                }
-            )
-
     # 抢救知会（backlog 20261012-234000-leader）：上次尝试的未收尾进度已被机器保住并
     # 自动接上了——这是「不必动手」的知会，报一次即可，队列自己在续完。
     seen_salvage = set(base.get("salvage") or [])
@@ -421,6 +397,26 @@ def detect(
                     "subject": bid,
                     "detail": "上次尝试的未收尾进度已抢救为提交，续作已自动接上（零手动）",
                     "action": "无需处置；想核实现场：orch status 的抢救段 / state/backlog.json",
+                }
+            )
+
+    # 统一事件流（§3.2/M5）：生产者**直发**的类型（JOB-DONE / STEP-REVIEW-DONE /
+    # QUEUE-EMPTY / TASKBOOK-NEW）从流里按水位线 ``events_seq`` 读出即为「新事件」——
+    # 边沿触发：多 worker 同时完工在本帧**一次全读出**（合并唤醒，防唤醒风暴）。legacy
+    # 类型（CRASH/QUOTA/CHANNEL/NEEDS-LEADER/SALVAGE）仍走上方的基线差分（native 唤醒），
+    # 不经流回读——否则同一事件被「直发」与「差分」各报一次（双触发）。
+    cur_seq = int(cur.get("events_seq", 0) or 0)
+    base_seq = int(base.get("events_seq", 0) or 0)
+    if cur_seq > base_seq:
+        for ev in _events.read_after(base_seq):
+            if str(ev.get("event")) not in _events.STREAM_TYPES:
+                continue
+            out.append(
+                {
+                    "event": str(ev.get("event")),
+                    "subject": str(ev.get("subject", "")),
+                    "detail": str(ev.get("detail", "")),
+                    "action": str(ev.get("action", "")),
                 }
             )
 
@@ -742,6 +738,28 @@ def _touch(
     push_recent(state, _frame(cur, str(verdict.get("why", "") or "")))
 
 
+def _mirror(events_list: list[dict[str, Any]]) -> None:
+    """把本帧差分命中、且属 legacy 类型的事件**镜像**入统一事件流（§3.2「沿现制迁入同一流」）。
+
+    只镜 :data:`events.MIRROR_TYPES`（CRASH/QUOTA/CHANNEL/NEEDS-LEADER/SALVAGE）；唤醒已由
+    上方差分 native 送出，这里只补记录面（供 ``orch events drain``/``orch status`` 读出）。
+    QUEUE-COMPLETE 不镜（与生产者的 QUEUE-EMPTY 是同一次收尾的两副名）。写失败 fail-open。
+    """
+    for ev in events_list:
+        name = str(ev.get("event", ""))
+        if name not in _events.MIRROR_TYPES:
+            continue
+        try:
+            _events.emit(
+                name,
+                str(ev.get("subject", "")),
+                str(ev.get("detail", "")),
+                str(ev.get("action", "")),
+            )
+        except Exception:  # noqa: BLE001 - 记录面写失败不炸等待器（§0.6）
+            pass
+
+
 def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> None:
     """命中收场：``fired`` 审计留痕（最近 :data:`FIRED_KEEP` 条）+ ``exit_reason`` + 单行呈现。
 
@@ -754,6 +772,7 @@ def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> Non
     state["fired"] = fired[-FIRED_KEEP:]
     state["last_exit"] = "event"
     state["exit_reason"] = "event:" + ",".join(str(e["event"]) for e in events)
+    _mirror(events)  # legacy 类型补流账（§3.2）；native 唤醒不受影响
     save_state(state)
     echo(format_event(events[0]))
     for ev in events[1:]:
@@ -867,6 +886,7 @@ def reconcile() -> tuple[list[dict[str, Any]], bool]:
     state["heartbeat_at"] = ""
     state["reconciled_at"] = _now()
     state["settled"] = events
+    _mirror(events)  # 补账命中的 legacy 事件同样补流账（§3.2）
     save_state(state)
     return events, True
 

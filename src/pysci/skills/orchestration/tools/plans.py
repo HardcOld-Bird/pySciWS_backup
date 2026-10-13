@@ -237,6 +237,149 @@ def _split_dirs(dirs) -> list[str]:
     return [str(d) for d in dirs]
 
 
+def _queue_item_for_step(plan_id: str, step_id: str, member: str) -> dict | None:
+    """环节在成员队列里的**最新** job 条目（按其 ``plan``/``step`` 反查；无则 ``None``）。
+
+    这是 advance 事件驱动闭环的接线点：``queueworker`` 消化时把结果写回条目，advance 每次
+    被唤醒后回读该条目判「在途环节收尾没有」——不必让 worker 直接改 plan 状态（解耦）。
+    """
+    from . import queues
+
+    if not member:
+        return None
+    hit = [
+        i
+        for i in queues.items(member)
+        if str(i.get("plan")) == plan_id and str(i.get("step")) == step_id
+    ]
+    return hit[-1] if hit else None
+
+
+def cmd_plan_advance(args) -> int:
+    """**事件驱动推进**（§3.5，M5）：把下一环节入队 m4 成员队列**即返回**。
+
+    与 ``plan run``（阻塞式，兼容形态）的区别：本命令不等待组员，入队后由 job 完成
+    **事件**触发组长再敲一次 advance。任务书延迟书写语义保留——advance 时给**当前环节**
+    任务书。多 plan 并行：各 active plan 各自 advance 互不阻塞；同一成员队列 FIFO 串行、
+    不同成员即并行（用户模型）。既有语义保留：交接暂停 / 机械验收 FAIL 回派 / blocked
+    由组长在 drain 后决策。
+
+    闭环：advance → 入队（环节置 ``queued``）→ worker 消化（发 JOB-DONE/STEP-REVIEW-DONE）
+    → 组长 ``orch events drain`` 醒来 → 再 advance：本命令先据队列条目结果把在途环节落终态，
+    再入队下一环节。
+    """
+    from . import queues, queueworker, workq
+
+    plan_id = args.id
+    if not _plan_path(plan_id).exists():
+        print(f"[!] 计划不存在：{plan_id}（orch plan list 查看）")
+        return 2
+    plan = _load_yaml(plan_id)
+    state = _reconcile(plan, _load_state(plan_id))
+    steps_yaml = {
+        str(sy.get("id") or f"s{i + 1}"): sy
+        for i, sy in enumerate(plan.get("steps") or [])
+    }
+
+    # ① 收尾在途环节：status=="queued" 的环节，回读它在成员队列里的 job 结果。
+    queued = next((s for s in state["steps"] if s.get("status") == "queued"), None)
+    if queued is not None:
+        member = str(steps_yaml.get(queued["id"], {}).get("member") or "")
+        item = _queue_item_for_step(plan_id, str(queued["id"]), member)
+        if item is None:
+            print(
+                f"[i] 环节 {queued['id']} 在 {member or '?'} 队列中无对应条目"
+                "（或被裁剪）——保守不推进；orch queues list 核实后重来。"
+            )
+            return 0
+        st = str(item.get("status", ""))
+        if st in (workq.STATUS_PENDING, workq.STATUS_IN_PROGRESS):
+            print(
+                f"[i] 环节 {queued['id']} 仍在 {member} 队列（{st}）——"
+                "等它完成的 JOB-DONE 事件驱动下一次 advance。"
+            )
+            return 0
+        kind = str((item.get("result") or {}).get("kind", ""))
+        if st == workq.STATUS_DONE:
+            queued["status"] = "done"
+            if steps_yaml.get(queued["id"], {}).get("review"):
+                queued["review"] = (
+                    "review_done"  # 合并单元：宿主已交付（review 走附属）
+                )
+        elif kind == "blocked":
+            queued["status"] = "blocked"
+        else:
+            queued["status"] = "failed"
+        queued["job_id"] = str(item.get("id"))
+        _save_state(plan_id, state)
+        if queued["status"] in ("blocked", "failed"):
+            print(
+                f"[!] 环节 {queued['id']} 的 job 以 {queued['status']} 收尾，需要决策："
+            )
+            _print_blocked_options(plan_id, queued, steps_yaml.get(queued["id"], {}))
+            return 2
+
+    # ② 下一未完成环节
+    cur = next((s for s in state["steps"] if s["status"] not in _DONE), None)
+    if cur is None:
+        if not state.get("completed_at"):
+            state["completed_at"] = _now()
+            _save_state(plan_id, state)
+        _report_plan_complete(plan_id, state)
+        return 0
+    if cur["status"] in ("blocked", "failed", "run_failed") and not (
+        args.text or args.task
+    ):
+        print(f"[!] 环节 {cur['id']} 上次状态为 {cur['status']}，需要决策：")
+        _print_blocked_options(plan_id, cur, steps_yaml.get(cur["id"], {}))
+        return 2
+    sy = steps_yaml.get(cur["id"], {})
+    if not (args.text or args.task) and not cur.get("task_file"):
+        _print_run_guidance(plan_id, cur, sy)
+        print("\n[!] 尚未提供本环节任务书（延迟书写：只强制当前环节）。")
+        return 2
+
+    member = str(sy.get("member") or "")
+    if member not in queues.QUEUE_MEMBERS:
+        print(
+            f"[!] 成员 {member} 非队列成员——plan advance 只覆盖 "
+            f"{'、'.join(queues.QUEUE_MEMBERS)}（基建/测量类条目走 devops backlog）"
+        )
+        return 2
+    item = queues.enqueue(
+        member,
+        text=str(args.text or ""),
+        task_file=str(args.task or ""),
+        dirs=_split_dirs(args.dirs.split(","))
+        if args.dirs
+        else _split_dirs(sy.get("dirs")),
+        model_tier=args.model_tier or (str(sy["model"]) if sy.get("model") else ""),
+        effort=args.effort or (str(sy["effort"]) if sy.get("effort") else ""),
+        plan=plan_id,
+        step=str(cur["id"]),
+        session=str(args.session or "latest"),
+        review=bool(sy.get("review")),
+        slug=f"{plan_id}-{cur['id']}",
+    )
+    cur["status"] = "queued"
+    cur["job_id"] = str(item["id"])
+    if args.task:
+        cur["task_file"] = args.task
+    _save_state(plan_id, state)
+
+    _, msg = queueworker.wake_member(member, dry=bool(getattr(args, "dry", False)))
+    print(
+        f"[√] 计划 {plan_id} 环节 {cur['id']}（{member}）已入队 job {item['id']}"
+        "——入队即返回，完成事件驱动下一次 advance"
+    )
+    print(f"    {msg}")
+    print(
+        f"[NEXT] 等 JOB-DONE/STEP-REVIEW-DONE 事件：orch events drain → "
+        f'orch plan advance {plan_id} --text "<下一环节任务书>"'
+    )
+    return 0
+
+
 def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
     sid8 = (step.get("session_id") or "")[:8]
     print()
