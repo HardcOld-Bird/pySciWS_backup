@@ -1239,6 +1239,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **修复形状两侧把关**（backlog 20261013-182549-devops，devops 自提）：mechanical 发现常带 `remedy_shape=None` 进 backlog，dispatch 按「缺省=change」保守处理 → drain 派给 devops 才发现是 change → **整跳白烧**（实测 13 条 findings 里 9 条 None）。修：① `finding add --class mechanical` **必填** `--remedy-shape`（缺则 rc=2 并说明后果——登记那一刻最清楚形状）；② `promote_finding` 在**晋升时刻**对「非 restore + 无判决」出声（写入返回值 `warn`，CLI 打印；**只告警不拦**，不掐「先晋升后补判决」的 §5.2 通路） | devops 自提 + 组长采纳 |
 | 2026-10-13 | **transcript session_stats 走廉价预筛**（backlog 20261013-182427-devops，devops 自提）：原实现逐行 `json.loads` 全量解析才数回合，而真实档案近一半行是与回合数无关的簿记（单档 105.9 MB / 23663 assistant + 23610 active-leaf + 1605 attachment）。两道**保守**预筛：二进制读 + bytes 子串筛后迟到解码；工具结果回灌（有 `tool_result` 且无 `text`）跳过——含 text 一律照常解析。「最后活跃」改读尾部窗口。实测 105.9 MB 单档 1.0s→**0.24s**、全域 99 档 2.8s→1.9s，**回合数逐值对拍 0 不一致** | devops 自提 + 组长采纳 |
 | 2026-10-13 | **批量菜单销账口径入任务书**（backlog 20261013-180936-devops，devops 自提）：菜单项实现随同批合入 main 但交付只列种子 id → 条目仍 pending 被重派，而重派任务书读起来像从头做（真实缺口可能只是测试面）。`backlog_batch_text` 的销账段加一句「菜单项与种子同批合入时，每个已实施的 id 都必须列——未列即视为未销账、会被重派」（纯提示面，不动销账逻辑） | devops 自提 + 组长采纳 |
+| 2026-10-13 | **mirror 两处读数矫正**（backlog 20261013-192000-leader，缺陷类）：① `charter_state` 用裸子串搜「草案」，被 PREFERENCE.md v2 顶注的叙述用词（「审阅 v2 增量草案并同意转正」）误命中 → 已生效却报「草案 v1」（改读顶部**结构化状态行** `**状态：v2 生效**`，无标记时保底回落原子串）；② `_line_pending` 硬编码「minimum 选型；twin 宣告」两项**均已解决**的历史待决 → 改**数据驱动** `state/mirror-pending.json`，无真源即「（无待决）」 | 用户实读 + 组长立案 + devops 实施 |
 
 ## 14. 已知代价与风险
 
