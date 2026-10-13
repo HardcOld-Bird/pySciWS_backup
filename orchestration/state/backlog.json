@@ -1695,9 +1695,9 @@
       "kind": "usability",
       "success_criteria": "见单内判据（仲裁器矩阵/注册表生命周期/派生会话标档/端到端延期/睡到到期续跑/全量绿）",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-180500-leader.md",
-      "status": "needs_leader",
+      "status": "done",
       "proposed": "2026-10-13T18:25:25+08:00",
-      "note": "drain 跳过（交付=blocked）：backlog id=20261013-180500-leader —— 未实施，按规模/语义面受阻上报（非环境问题）\n\n**卡点**：本单是 5 个**互相咬合**的机制捆成一条，其原子单位不是一个 worker 跳；且其中一条要求**反转既有的队列级安全行为**。把它做一半（例如只落优先级表与注册表、不接延期）会产出「文档承诺了延期、代码其实还在全局停链」的半成品——正是 charter 明令禁止的形态，也会让 §6 的停止语义在文档与代码间分裂。故不施工、不建 worktree（无残留面），上报请组长拆分或重派。\n\n**规格拆解（逐条与落点，已侦察）**\n\n| # | 规格 | 落点 | 为什么不能与其他条分开验 |\n|---|---|---|---|\n| B1 | `[priority]` 优先级表（6 档，缺省见 approved） | `data/pysci_settings.toml` + `settings.py:30 read_settings` | 纯配置面，可独立交付 |\n| B2 | 活跃会话注册表 `state/active-sessions.json`（写心跳/读侧/stale>10min 清理） | 新库 + 各 worker 跳开始/结束写点 | 独立，但**只有 B3 用它**才有意义 |\n| B3 | 延期机制：`bandwidth` → 回队 pending + 指数退避 `defer_until` 2→4→8…；预算 ≤6 次 / ≤30min；不占槽；worker 睡到最近到期（≤10min） | `drain.py:1609 drain_backlog` 批循环 + 条目状态机（`workq.py`）+ `drain.py:1240` 睡眠点 | **改写队列消费语义**，必须与 B4 一起验 |\n| B4 | #105 接线：`channel_error` 处置改为「分类器 `bandwidth`→延期；`outage`/`unknown`→同席重试→链回退」 | `drain.py` 的系统性故障分支 | ← **见下「语义反转」** |\n| B5 | 预防面：`bench-pressure`（tier4）派发前置检查 | benchd 派发点 | 依赖 B1/B2 |\n\n**这一单最需要你先看一眼的地方（语义反转）**：现状是 `channel_error` → **全局停止**（`drain.py:35-36` 明载「渠道坏了不是任务书坏了，**全局停止**」，`.done` 记 `stopped=channel_error`，run 日志 `[C]` 行）。B4 要求**同一 kind 在 bandwidth 类下不再停链、改为延期继续**。这不是加一条分支，而是把一个「队列级熔断」降级成「条目级换道」，代价是：分类器一旦把 outage 误判成 bandwidth（或 provider 改了文案），队列就从「停下来等人」变成「逐项烧跳」——正是 2026-10-12 连烧四单那次事故的形态。`failure_classes` 今天对 mimo 文案判 `bandwidth` 是**对**的（它确实是 10 RPM 限流），但让这个判定直接决定「停不停链」，需要一个明确的裁决：**谁有权放弃熔断**（以及误判时的兜底：例如同一 deadline 内同类延期累计 N 次就回升为停链）。\n\n**已尝试路径（只读，零副作用）**：读了 approved 规格全文与上一单 B 的判据；按表逐条定位了落点（行号见上）；确认 `drain_backlog` 的批循环与 `time.sleep` 点是唯一可插入处；确认现有测试面（`test_channel_error.py` 的 `test_drain_channel_error_stops_globally` 断言的是**停链**行为）——B4 落地即需改该用例，属行为变更的正例而非回归。\n\n**建议方向（拆两单，各 1 跳可完成）**\n\n- **`20261013-180500a`（安全半）**：B1 + B2 + B3 的**闲置原语**。交付物＝优先级解析 + 注册表生命周期 + `defer_until` 计算（指数退避 + 预算）作为**纯函数库**（不接 drain 主循环），判据＝approve 里的「注册表生命周期实测」「延期预算触顶」两条单测矩阵 + 全量无回归。此半**不改变任何现有行为**，风险≈0。\n- **`20261013-180500b`（语义半，需你先裁决）**：B4 + B5 + B3 接入主循环。判据＝「高优先级在场+bandwidth → 延期不换席」「无高优先级+unknown → 回退」「端到端延期而非回退（run 日志 + mirror 可见）」「worker 睡到到期续跑实测」。**开工前请裁决两点**：① 熔断降级是否可接受（见上）；② `test_drain_channel_error_stops_globally` 由「停链」改为「延期」是否就是你要的语义（它同时是 drain 的 `.done`/run 日志/mirror 三面读数源）。\n\n若你希望一口气交付，我可以在下一跳按 B-合并做，但需要你在任务书里明确上面两点裁决——否则我只能按现状的熔断语义保守实现，等于没交付 B4。\n\n**未选菜单项（留 pending，不连坐）**：`20261013-173000-leader`（jury 同族排除把回退席纳入拒开庭判据）与 `20261013-190000-leader`（`[routing]` 并入 `[model]` 的配置面合并）均未选：前者是 jury 面缺陷、后者是配置面重构，都与本单不同模块；本单既已受阻，不连坐。\n\n<artifact check=\"none\" reason=\"未实施任何改动、未建 worktree（无残留面）；核对证据均为只读侦察与源码行号定位\">orchestration/state/suggestions/approved/20261013-180500-leader.md</artifact>\n【全文已留审计副本：pods/devops/outbox/delivery-*.xml】",
+      "note": "组长销账（superseded）：devops 正确拒收（5 机制咬合+熔断反转），按拆解表拆为 20261013-193000（安全半）+ 20261013-193500（语义半，含熔断授权与兜底裁决）。",
       "started_at": "2026-10-13T18:40:40+08:00",
       "worktree": "20261013-180500-leader",
       "needs_leader_at": "2026-10-13T18:41:31+08:00"
@@ -1749,11 +1749,12 @@
       "class": "mechanical",
       "channel": "mechanical",
       "remedy_shape": "change",
-      "status": "in_progress",
+      "status": "needs_leader",
       "proposed": "2026-10-13T16:25:45+08:00",
-      "note": "inspector 自主发现（§5.2 不经组长）",
+      "note": "drain 跳过（交付=blocked）：`.\n\n<blocked>\nbacklog id=insp-20261013-093307-mechanical —— 未实施，上报（未建 worktree，无残留面）\n\n**卡点一（规则层面，任务书自身已写明）**：`remedy_shape=change 缺判决记录`。核对 state 面确认无判决：\n\n- `state/inspector/findings.jsonl` 该行：`class=mechanical, remedy_shape=change, judgment=None, channel=None`；\n- `state/evals/jury-cases/` 下**无**引用该 id 的案卷（grep 零命中）；\n- 组长附注亦明写「inspector 自主发现（§5.2 不经组长）」——即**本单从未经判决包**。\n\n按修复形状分流规则（README §13 / charter：策略变更的裁决权在判决包与用户，不在执行端）与任务书正文「若本任务书未附判决记录（案卷 id/计票），直接交付 <blocked>」，执行端不得自行实施。且这条正落在**会话生命周期/水位策略**面——该面上一次的策略变更（fe68a40 的 `FRESH_CTX_RATIO` 水位闸）已被用户 2026-10-13 审查裁决**回退**，并明确「重启类似机制须经判决包并以真实账单/缓存读数为依据」。故这里更不该由执行端顺手开工。\n\n**卡点二（更硬：本条不是 devops 能执行的动作）**：证据文件自己写的**期望**是「组长归档该成员会话后重开（`orch sessions devops --archive <sid> --distill`）」，`success_criteria` 是「devops 末跳 ctx_ratio ≤ 60%（`orch ledger --member devops` 可复核）**或**会话已归档重开」——**两半都是组长侧操作或读数观察，不含任何代码改动**。而 `orch` 是组长专属工具，charter 明写 devops **不使用 pysci-orch**：\n\n- 复现（证据给的原文读数）：`orch ledger --member devops --days 14` → `末跳 ctx=71.0%，尾部 3 跳=[0.215, 0.512, 0.71]，滑窗均值=49.2%，样本=95 跳`；\n- 判据要求的动作 `orch sessions devops --archive <sid> --distill` 属组长通道，devops 无权执行。\n\n即：**即便补了判决，本单的处置仍是「组长归档会话」而非「devops 改代码」**。派给 devops 属路由错误——devops 若强行动手，唯一能写的是「自动归档/水位闸」这类新机制，那恰好是被用户回退过的那条路。\n\n**已尝试路径（只读，零副作用）**：核 findings 行（remedy_shape/judgment/channel 三字段）→ 核案卷目录 → 读证据文件的 expect/success_criteria 与实测读数 → 未创建 worktree、未改任何文件。\n\n**建议方向**：本单请组长**作为运行态处置收口**，不作为基建任务重派——\n\n1. 按 findings 的 expect 对该会话执行 `orch sessions devops --archive <sid> --distill`（判据第一半即可复核：`orch ledger --member devops` 之后新会话起步水位回落）；\n2. 若组长认为需要**机制化**（而非一次性归档），那是一个新条目，且按上一轮回退裁决，必须先过判决包并以真实账单/缓存读数为依据——我可以据此实施，但需要先有裁决；\n3. 若组长决定不机制化，建议把该 finding 以 `rejected`（或\"已由归档处置\"）收口，避免它在下轮又被 FIFO 顶出来。\n\n**顺带一个可机械化的观察**（不属本单，供你判断是否立案）：`inspectd` 的 mechanical 通道把「期望=组长侧动作」的发现（本条、以及同类「归档/重开/清面」型）也推进 backlog 派给 devops。这类条目注定一跳白烧（devops 读到 expect 才发现无权执行）。判据可以是「findings 的 expect 里出现 `orch ` 前缀命令时，晋升改投组长待办面而非 devops 队列」。\n\n<artifact check=\"none\" reason=\"未实施任何改动、未建 worktree；核对证据均为只读命令（findings 行 / 案卷目录 grep / 证据文件读数）\">orchestration/state/inspector/findings.jsonl</artifact>\n【全文已留审计副本：pods/devops/outbox/delivery-*.xml】",
       "started_at": "2026-10-13T18:41:32+08:00",
-      "worktree": "insp-20261013-093307-mechanical"
+      "worktree": "insp-20261013-093307-mechanical",
+      "needs_leader_at": "2026-10-13T18:42:13+08:00"
     },
     {
       "id": "20261013-173000-leader",
@@ -1762,9 +1763,11 @@
       "kind": "defect",
       "success_criteria": "见单内三例阳性矩阵+重跑 131505 出真实判决+全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-173000-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T18:12:32+08:00",
-      "note": ""
+      "note": "",
+      "started_at": "2026-10-13T18:42:14+08:00",
+      "worktree": "20261013-173000-leader"
     },
     {
       "id": "20261013-131505-devops",
@@ -1841,6 +1844,50 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261013-192000-leader.md",
       "status": "pending",
       "proposed": "2026-10-13T18:42:02+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-193000-leader",
+      "member": "leader",
+      "summary": "**（带宽治理 B-安全半 = 原 #115 拆单 1/2）B1 优先级表 + B2 活跃会话注册表 + B3 延期纯函数库（零行为变更）**",
+      "kind": "usability",
+      "success_criteria": "见单内判据（注册表生命周期/延期矩阵/停链用例照绿=零行为变更/全量绿）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-193000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T18:43:27+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-193500-leader",
+      "member": "leader",
+      "summary": "**（带宽治理 B-语义半 = 原 #115 拆单 2/2）B4 熔断语义反转（带宽类延期不停链）+ 误判兜底 + B5 预防面 + 浅回退**",
+      "kind": "usability",
+      "success_criteria": "见单内判据（拆三例测试/浅回退实测/B5 用例/端到端 defer/全量绿）",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-193500-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T18:43:27+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-183521-devops",
+      "member": "devops",
+      "summary": "**场景**：`QUOTA_ERROR_RE`/`CHANNEL_ERROR_RE` 现在是**启动时**从 `state/failure-classes.json` 编译的快照（模块级常量，既有代码与测试都依赖这两个名字）。规格写的是「devops 可扩，改后全链生效」——实际只对**新起的进程**生效：正在跑的 drain worker 与已 import 的 orch 进程仍用旧词表。",
+      "kind": "usability",
+      "success_criteria": "关键词表改为使用时读取（或热重载）：运行中进程改表即生效，实测两进程同表读一致；既有分类单测不回归；全量绿",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-183521-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-13T18:43:39+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261013-184040-devops",
+      "member": "devops",
+      "summary": "**缺陷：`remedy_shape` 有**两个真源**（findings 台账行 vs backlog 条目），而执法只读后者——组长改了前者，任务书仍注入「change 缺判决 → 交付 blocked」的陈旧指令**",
+      "kind": "defect",
+      "success_criteria": "remedy_shape 单一真源（执法与呈现同源）；组长改正 findings/条目任一后任务书一致；构造双源冲突用例被消解；全量绿",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-184040-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-13T18:43:40+08:00",
       "note": ""
     }
   ]
