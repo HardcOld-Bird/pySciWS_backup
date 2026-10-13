@@ -2068,6 +2068,30 @@
       "done_at": "2026-10-13T22:13:45+08:00",
       "batch_size": 1,
       "batch_seed": "20261013-215911-leader"
+    },
+    {
+      "id": "20261013-222531-leader",
+      "member": "leader",
+      "summary": "**现象（本会话实证）**：`pysci-dev worktree clean` 把 `20261012-164600-leader` 判入「**已合入 main（可清）**」，但真清理时 `git worktree remove` **拒绝**——",
+      "kind": "defect",
+      "success_criteria": "有脏的已合并面：clean 结果与分类一致（带 force 真删，或改判拒绝并说明）；无「说可清却删不掉」；单测钉该分支。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-222531-leader.md",
+      "status": "in_progress",
+      "proposed": "2026-10-13T22:25:54+08:00",
+      "note": "",
+      "started_at": "2026-10-13T22:25:56+08:00",
+      "worktree": "20261013-222531-leader"
+    },
+    {
+      "id": "20261013-222533-leader",
+      "member": "leader",
+      "summary": "**背景**：`orch watch` 的挂载自 2026-10-13 起由 `Stop + asyncRewake` 钩子**自动完成**（README §4.5 v2，已跨重启实测通过）。但「**手动挂载**」仍作为**规范指引**残留在多个面，与自动机制矛盾、且会误导组长重复挂载。该收尾。",
+      "kind": "usability",
+      "success_criteria": "approve/dispatch/status/watch 输出不再有催挂 [NEXT] 段；技能真本以自动挂载为正文、手动降为兜底；sync 后部署副本一致；全量无回归。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-222533-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T22:25:54+08:00",
+      "note": ""
     }
   ]
 }
