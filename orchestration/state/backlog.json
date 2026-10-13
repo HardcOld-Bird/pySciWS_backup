@@ -2140,9 +2140,11 @@
       "kind": "usability",
       "success_criteria": "worktree clean 列出 .qoder/worktrees/ 下的未注册目录；空的可 --apply 清、有内容的列待确认并列出未记录产物；单测钉空/有内容两例。",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-231756-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T23:18:05+08:00",
-      "note": ""
+      "note": "",
+      "started_at": "2026-10-13T23:18:07+08:00",
+      "worktree": "20261013-231756-leader"
     }
   ]
 }
