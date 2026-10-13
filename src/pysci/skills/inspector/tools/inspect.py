@@ -49,7 +49,21 @@ def _require(fid: str) -> dict[str, Any]:
 # finding add / list
 # ---------------------------------------------------------------------------
 def cmd_finding_add(args: argparse.Namespace) -> int:
-    """``pysci-inspect finding add``：登记一条发现（先落台账，分流由类别决定）。"""
+    """``pysci-inspect finding add``：登记一条发现（先落台账，分流由类别决定）。
+
+    **mechanical 类必须显式给 `--remedy-shape`**（backlog 20261013-182549-devops）：
+    形状未登记的发现进 backlog 后由 dispatch 按「缺省=change」保守处理，于是 drain 派给
+    devops 才发现它其实是 change → **整跳白烧**（只能交付 blocked 等判决）。实测 13 条
+    findings 里 9 条 `remedy_shape=None`，即默认路径上多数条目都在重复这条弯路。
+    登记那一刻是**最清楚**「这是改行为还是复原行为」的时刻——错过就只剩派发端猜。
+    """
+    if args.cls == "mechanical" and not (args.remedy_shape or "").strip():
+        print(
+            "[✗] mechanical 类必须显式 `--remedy-shape restore|change`："
+            "形状不登记，drain 会按「缺省=change」保守处理而把整跳烧在等判决上。"
+            "restore=复原既有声明行为（免判决）；change=改声明行为/策略（须先过判决包）。"
+        )
+        return 2
     try:
         rec = _insp.append_finding(
             cls=args.cls,
@@ -129,6 +143,10 @@ def cmd_promote(args: argparse.Namespace) -> int:
         )
         if out.get("wake"):
             print(f"    [▶] {out['wake']}")
+        if out.get("warn"):
+            # 晋升这一刻就把「缺判决的 change」说出来（backlog 20261013-182549-devops）：
+            # 等到派发端才发现，那一跳必然白烧。
+            print(f"    [!] {out['warn']}")
         return 0
     if action == "duplicate":
         print(f"[i] {out['backlog_id']} 已在 backlog 中（不重复立案）")

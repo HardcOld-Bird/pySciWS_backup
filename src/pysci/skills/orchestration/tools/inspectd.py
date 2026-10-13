@@ -643,6 +643,25 @@ def _evidence_file(rec: dict[str, Any]) -> Path:
     return path
 
 
+def _shape_warn(rec: dict[str, Any], channel: str) -> str:
+    """晋升时刻的修复形状告警（空串=无话可说）。
+
+    ``mechanical`` + 形状非 ``restore`` + 无判决记录 ⇒ 这一条派给 devops 必然要求
+    交付 blocked（策略变更的裁决权在判决包）。与其让组员跑一趟才发现，不如在晋升时点名。
+    """
+    if channel != "mechanical":
+        return ""
+    shape = str(rec.get("remedy_shape") or "")
+    if shape == "restore":
+        return ""
+    if str(rec.get("judgment") or "").strip():
+        return ""
+    return (
+        "修复形状未登记或为 change 且无判决记录 → 派发后 devops 只能交付 blocked 等判决"
+        "（`pysci-orch jury` 或 consult-twin 补上判决/形状后再派，避免白烧一跳）"
+    )
+
+
 def promote_finding(
     rec: dict[str, Any],
     *,
@@ -718,6 +737,11 @@ def promote_finding(
     out = {
         "action": "promoted",
         "backlog_id": bid,
+        # 形状未登记/为 change 且无判决 → 在**晋升这一刻**就出声（backlog
+        # 20261013-182549-devops）：等到派发端才发现「缺判决的 change」，那一跳必然
+        # 白烧（组员 read→核对→blocked）。只告警不拦——拦会把「先晋升、后由组长补判决」
+        # 这条 §5.2 明定的通路掐掉。
+        "warn": _shape_warn(rec, channel),
         "position": pos,
         "evidence_file": entry["evidence_file"],
     }
