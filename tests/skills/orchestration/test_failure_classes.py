@@ -158,10 +158,10 @@ def test_dispatch_regexes_come_from_the_same_word_table():
     """**单一真源**：dispatch 的两个 regex 都由词表拼出（不是各存一份关键词）。"""
     table = fc.load_classes()
     for pat in table["quota"]:
-        assert pat in dispatch.QUOTA_ERROR_RE.pattern, pat
+        assert pat in fc.combined_re("quota").pattern, pat
     # channel 文本支 = 带宽 ∪ 故障（有意放宽）
     for pat in table["bandwidth"] + table["outage"]:
-        assert pat in dispatch.CHANNEL_ERROR_RE.pattern, pat
+        assert pat in fc.provider_error_re().pattern, pat
 
 
 def test_config_edit_reaches_dispatch_view():
@@ -170,7 +170,7 @@ def test_config_edit_reaches_dispatch_view():
 
     injected = "throttled by gateway"
     table = fc.load_classes()
-    assert injected not in dispatch.CHANNEL_ERROR_RE.pattern
+    assert injected not in fc.provider_error_re().pattern
     extended = fc.combined_re("bandwidth", extra=(injected,))
     assert extended.search("upstream throttled by gateway")
     assert pathlib.Path(fc.CLASSES_PATH).exists(), (
@@ -180,12 +180,12 @@ def test_config_edit_reaches_dispatch_view():
 
 
 def test_provider_error_re_matches_measured_wording():
-    """既有用例的实测原文仍命中（CHANNEL_ERROR_RE 的对外行为不回归）。"""
-    assert dispatch.CHANNEL_ERROR_RE.search(MIMO_TEXT)
-    assert dispatch.CHANNEL_ERROR_RE.search(
+    """既有用例的实测原文仍命中（provider 签名 regex 的对外行为不回归）。"""
+    assert fc.provider_error_re().search(MIMO_TEXT)
+    assert fc.provider_error_re().search(
         "custom model service error, please retry later or switch to another model"
     )
-    assert dispatch.QUOTA_ERROR_RE.search(QUOTA_TEXT)
+    assert fc.combined_re("quota").search(QUOTA_TEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -260,3 +260,44 @@ def test_ledger_field_defaults_for_old_rows():
     from pysci.skills.orchestration.tools.ledger import LedgerEntry
 
     assert LedgerEntry(ts="", member="m", session_id="s").error_text == ""
+
+
+# ---------------------------------------------------------------------------
+# 词表改动**同进程即生效**（backlog 20261013-183521-devops）
+# ---------------------------------------------------------------------------
+def test_word_table_edit_takes_effect_without_restart(tmp_path, monkeypatch):
+    """改一条 pattern → **不重启**、同进程再调即命中新类。
+
+    原先 quota/channel 的 regex 是 `dispatch` 启动时编译的模块级常量，改词表只对新起进程
+    生效——跑着的 drain worker 与已 import 的 orch 进程看不到，于是「改了没生效」会被误读成
+    「分类器写错了」。现在两条判据路径都按调用取表，这条用例把该性质钉住。
+    """
+    p = tmp_path / "failure-classes.json"
+    p.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "discipline": "t",
+                "precedence": ["quota", "bandwidth", "outage"],
+                "classes": {"bandwidth": {"definition": "d", "patterns": ["zzz-only"]}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(fc, "CLASSES_PATH", p)
+
+    assert fc.classify_failure("zzz-only!") == "bandwidth", "新词表当次即可用"
+    assert fc.provider_error_re().search("zzz-only!")
+
+    # 再把该 pattern 撤掉（同进程）→ 立刻不再命中
+    p.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "discipline": "t",
+                "classes": {"bandwidth": {"definition": "d", "patterns": ["other"]}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert fc.classify_failure("zzz-only!") == fc.UNKNOWN, "撤掉后同进程立刻不再命中"

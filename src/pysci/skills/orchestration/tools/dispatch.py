@@ -45,21 +45,13 @@ REPLIES_DIR = ORCH_STATE_ROOT / "replies"
 #: 组长手写任务书易把错误 CLI 范式传染给照抄的组员，落盘前扫一遍作机械护栏。
 LINT_RULES_PATH: Path = ORCH_STATE_ROOT / "taskbook-lint.json"
 
-#: 额度类失败文案（2026-10-10 事故原文 "You've reached your credit usage limit…"）。
-#: 匹配面故意收窄到 credit 类短语——误判为额度故障会全局停 drain（fail-safe 方向），
-#: 但宽匹配（如裸 "usage limit"）会把速率限制等可自愈故障也停掉。
-#: **词表已外置**（user 设计 2026-10-13，backlog 20261013-180000-leader）：pattern 取自
-#: ``state/failure-classes.json`` 的 ``quota`` 类，本行只是启动时的编译快照——增删关键词
-#: 改配置面即可（对**新起进程**生效，与既有 regex 语义相同），不再改代码。
-QUOTA_ERROR_RE = failure_classes.combined_re("quota")
-
-#: 渠道级失败的固定句（2026-10-12 实测：BYOK 渠道 token-plan 月额度耗尽 / 传输层故障时，
-#: CLI 不写 credit 文案、也不给非零退出码，而是合成一条 assistant 回合说这句话）。
-#: 与 quota 文案**分列**：两类故障的恢复动作不同（充值 vs 等待/换渠道），台账读数须可辨。
-#: 同批外置，且**有意放宽**为「带宽 ∪ 故障」的联合签名（原先只认 mimo 那一句）——
-#: 真正分开「渠道级故障」与「组员复述错误串」的是形状支，文本支只需回答像不像 provider
-#: 报错（见 :func:`failure_classes.provider_error_re`）。
-CHANNEL_ERROR_RE = failure_classes.provider_error_re()
+#: **失败词表不是本模块的快照**（backlog 20261013-183521-devops）：quota / channel 的判据
+#: 一律**按调用时**读 ``state/failure-classes.json``。原先这里是两个启动时编译的模块级常量
+#: （``QUOTA_ERROR_RE`` / ``CHANNEL_ERROR_RE``），于是规格承诺的「devops 可扩、改后全链生效」
+#: 只对**新起进程**成立——正在跑的 drain worker 与已 import 的 orch 进程仍用旧词表，改一条
+#: pattern 却像「没生效」（与 §3.4「解析器早于协议」同族的启动快照陷阱）。
+#: 现在两条判据路径（:func:`_detect_quota_exhaustion` 与 :func:`_detect_channel_exhaustion`
+#: 的文本支/形状支）都经 :mod:`failure_classes` 的函数按调用取表，**改词表下一跳即生效**。
 
 #: 系统性故障 kind 族——「不是任务书坏了，是渠道坏了」。三处消费面（drain / benchd /
 #: inspectd 的全局停止、watch 的事件、orch status 的提醒行）按这一份清单判，别各写各的。
@@ -159,7 +151,7 @@ def _detect_quota_exhaustion(env: Envelope, out: str, err: str) -> bool:
     重分类。
 
     走共享分类器（backlog 20261013-180000-leader）：判据即「分类器判成 quota」，
-    与 :data:`QUOTA_ERROR_RE` 同源（同一份 config），不再各持一份关键词表。
+    与词表同源（同一份 config），不再各持一份关键词表；**按调用取表**，改词表即生效。
     """
     return any(
         failure_classes.classify_failure(s, is_error=True) == "quota"
@@ -182,7 +174,7 @@ def _detect_channel_exhaustion(
     再逐单空烧一轮，正是本单要修的缺陷（backlog 20261012-194500-leader 证据段）。
 
     文本支走共享分类器（backlog 20261013-180000-leader）：判成 ``bandwidth``/``outage``
-    即算 provider 报错签名，与 :data:`CHANNEL_ERROR_RE` 同源。分类器 precedence 让
+    即算 provider 报错签名（形状支的 regex 同样按调用取）。分类器 precedence 让
     ``quota`` 优先——与 :func:`_detect_systemic`「额度面先判」一致，两处不会对同一跳
     给出不同归类。
     """
@@ -191,7 +183,9 @@ def _detect_channel_exhaustion(
         for s in (env.result, err, out)
         if s
     )
-    shape = _sessions.channel_failure_turn(member, sid, text_re=CHANNEL_ERROR_RE)
+    shape = _sessions.channel_failure_turn(
+        member, sid, text_re=failure_classes.provider_error_re()
+    )
     return bool(text_hit) if shape is None else shape
 
 
