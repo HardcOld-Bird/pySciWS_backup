@@ -1241,6 +1241,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **批量菜单销账口径入任务书**（backlog 20261013-180936-devops，devops 自提）：菜单项实现随同批合入 main 但交付只列种子 id → 条目仍 pending 被重派，而重派任务书读起来像从头做（真实缺口可能只是测试面）。`backlog_batch_text` 的销账段加一句「菜单项与种子同批合入时，每个已实施的 id 都必须列——未列即视为未销账、会被重派」（纯提示面，不动销账逻辑） | devops 自提 + 组长采纳 |
 | 2026-10-13 | **mirror 两处读数矫正**（backlog 20261013-192000-leader，缺陷类）：① `charter_state` 用裸子串搜「草案」，被 PREFERENCE.md v2 顶注的叙述用词（「审阅 v2 增量草案并同意转正」）误命中 → 已生效却报「草案 v1」（改读顶部**结构化状态行** `**状态：v2 生效**`，无标记时保底回落原子串）；② `_line_pending` 硬编码「minimum 选型；twin 宣告」两项**均已解决**的历史待决 → 改**数据驱动** `state/mirror-pending.json`，无真源即「（无待决）」 | 用户实读 + 组长立案 + devops 实施 |
 | 2026-10-13 | **`[routing]` 并入 `[model]`**（backlog 20261013-190000-leader，用户裁决）：「[model] 与 [routing] 都是模型设置，集中在一类就够」。路由键迁入 `[model]` 单节；`routing.face()` 改读该节，**逐键**回落旧位置并告警「请迁移」（逐键而非整块——半迁移文件按整块判会把旧位置的键**静默丢掉**）；文档与测试注入面同步；旧位置兼容读由专门用例覆盖 | 用户裁决 + devops 实施 |
+| 2026-10-13 | **背压原语落地（带宽治理安全半）**（backlog 20261013-193000-leader = 原 #115 拆单 1/2）：#115 因「5 机制咬合 + 含熔断语义反转」被正确拒收后按拆解表拆两单，本单是**零接线**的那半——① `[priority] order` 六档优先级表（leader>research>devops>bench-pressure>bencher/twin>inspector；**数组的数组**＝内层同档，否则「bencher 与 twin 同档」会被列表序拆开）入 `pysci_settings.toml` + `settings` 读侧；② 活跃会话注册表 `state/active-sessions.json`（upsert 保留 started / heartbeat 只刷 updated / >10min 视为死条目 / 原子写）；③ 延期纯函数 `plan_defer`（2→4→8…分钟 + 次数与壁钟**双闸**，含「再延一次会超预算」的交互判据）。**不接 drain 主循环**（grep 零引用；既有 channel_error 停链用例照绿） | 用户设计 + 组长拆单 + devops 实施 |
 
 ## 14. 已知代价与风险
 
