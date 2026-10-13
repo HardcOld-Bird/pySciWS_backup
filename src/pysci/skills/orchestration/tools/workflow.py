@@ -610,23 +610,60 @@ def _salvage_instruction(sal: dict, wt: str) -> str:
     return f"**续作指令（自动抢救）**：{how}{tail}\n\n"
 
 
+def _shape_sources(item: dict) -> tuple[str, bool, str]:
+    """``(形状, 是否已有判决记录, 两源不一致的告警行)``——**findings 行为准**。
+
+    `remedy_shape` 曾有两个真源，而执法只读 backlog 条目那个（backlog
+    20261013-184040-devops，实测 `insp-20261013-045910-mechanical`）：backlog 条目上的值是
+    **晋升瞬间从 findings 行拷过来的**，组长事后在 findings 行上裁定 `restore` 不会回流，
+    于是任务书照旧注入「change 缺判决 → 交付 blocked」，组员若照做就白烧一跳；反向
+    （findings 已是 change 而 backlog 还是 restore）更危险——那是**静默放行**一段本该过
+    判决的实施，直接绕过免判决通道的边界。
+
+    故：inspector 来源的条目**以 findings 行为准**（可按 id 反查），backlog 条目那份降为
+    兜底（findings 行不在/无该字段时用）。两源不一致时出声，而不是默默按某一侧走。
+    """
+    shape = str(item.get("remedy_shape") or "")
+    judged = bool(str(item.get("judgment") or "").strip()) or (
+        str(item.get("channel") or "mechanical") != "mechanical"
+    )
+    if str(item.get("source") or "") not in ("inspector", "inspectd"):
+        return shape, judged, ""
+    from . import inspectd as _insp  # 延迟导入：inspectd 顶层引整条 worker 链，避免成环
+
+    row = _insp.finding_by_id(str(item.get("id") or ""))
+    if not isinstance(row, dict):
+        return shape, judged, ""
+    fresh = str(row.get("remedy_shape") or "") or shape
+    judged = judged or bool(str(row.get("judgment") or "").strip())
+    note = ""
+    if shape and fresh and shape != fresh:
+        note = (
+            f"\n[!] 修复形状两源不一致：findings 行 = `{fresh}`，backlog 条目 = `{shape}`"
+            f"——**以 findings 行为准**（组长在那一侧裁定）；建议顺手把 backlog 条目改正。\n"
+        )
+    return fresh, judged, note
+
+
 def _remedy_shape_instruction(item: dict) -> str:
     """修复形状分流约束注入任务书（用户 2026-10-13 审查裁决，backlog 20261013-060000-leader）。
 
     只管 inspector 来源的条目：``restore``=复原既有声明行为，免判决通道照旧；``change``
-    =改声明行为/策略/权衡面——mechanical 通道（无判决记录）时 devops 必须交付 blocked
-    上报而非实施。判决记录的机械判据=channel 不是免判决的 ``mechanical``（judgment 类经
-    J 晋升时 channel=jury，计票已进决策日志）。缺 remedy_shape 字段的旧条目不注入
+    =改声明行为/策略/权衡面——**无判决记录**时 devops 必须交付 blocked 上报而非实施。
+    判决记录的判据＝findings 行的 ``judgment`` 字段有内容（组长裁定留痕），或该条目经
+    非免判决通道（channel≠``mechanical``，如 judgment 类经 J 晋升）进来。
+
+    形状与判决记录**都按 :func:`_shape_sources` 以 findings 行为准**（backlog
+    20261013-184040-devops）；backlog 条目上的那份只是兜底。缺 remedy_shape 的旧条目不注入
     （分流只执法于新形状体系，不追溯）。
     """
     if str(item.get("source") or "") not in ("inspector", "inspectd"):
         return ""
-    shape = str(item.get("remedy_shape") or "")
+    shape, judged, note = _shape_sources(item)
     if not shape:
-        return ""
-    channel = str(item.get("channel") or "mechanical")
-    if shape == "change" and channel == "mechanical":
-        return (
+        return note
+    if shape == "change" and not judged:
+        return note + (
             "\n**修复形状约束（remedy_shape=change，免判决通道——先读这一段）**：\n"
             "本条经 inspector mechanical 通道入账，无 J/M/twin 判决记录，而其修复形状="
             "「改变声明行为/策略/权衡面」。按修复形状分流规则，实施前必须先过判决包"
@@ -635,11 +672,12 @@ def _remedy_shape_instruction(item: dict) -> str:
             "缺判决记录」），由组长补判决后重派。\n"
         )
     if shape == "change":
-        return (
+        return note + (
             "\n修复形状=change（改声明行为/策略/权衡面），判决记录已在案"
-            f"（channel={channel}）——照常实施，交付仍须过 success_criteria 机械验收。\n"
+            "（findings 行的 judgment，或经非免判决通道晋升）——照常实施，"
+            "交付仍须过 success_criteria 机械验收。\n"
         )
-    return (
+    return note + (
         "\n修复形状=restore（复原既有声明行为：恢复被删行、修断正则、回滚误删配置之类）"
         "——免判决通道照常实施，仍须过 success_criteria 机械验收。\n"
     )

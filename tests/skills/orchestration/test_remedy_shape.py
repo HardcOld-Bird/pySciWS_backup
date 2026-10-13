@@ -191,3 +191,63 @@ def test_cli_finding_add_rejects_bad_shape(iso_state, capsys):
         )
     assert ei.value.code == 2, "argparse choices 在登记前拦住"
     assert inspectd.findings() == [], "被拒的形状不得留下半条发现"
+
+
+# ===========================================================================
+#  4. 两源一致：形状以 findings 行为准（backlog 20261013-184040-devops）
+# ===========================================================================
+def test_taskbook_follows_findings_row_over_backlog_item(iso_state, iso_remedy):
+    """组长在 findings 行裁定 restore → 重派任务书**不再**注入矛盾的 blocked 指令。
+
+    复现路径（实测 `insp-20261013-045910-mechanical`）：backlog 条目上的形状是晋升瞬间
+    从 findings 行拷来的，组长事后改 findings 行不会回流；执法只读 backlog，于是任务书
+    照旧要求「change 缺判决 → blocked」，组员照做就白烧一跳。
+    """
+    rec = seed_mechanical(remedy_shape="restore", stamp="20261013-184041")
+    item = _item(id=rec["id"], remedy_shape="change")  # backlog 侧是陈旧拷贝
+
+    text = workflow.backlog_task_text(item)
+    assert "直接交付 <blocked>" not in text, (
+        "findings 行已裁定 restore，不该再要求 blocked"
+    )
+    assert "修复形状=restore" in text
+    assert "两源不一致" in text, "两源不一致必须出声，不许默默按某一侧走"
+
+
+def test_taskbook_still_blocks_change_without_judgment(iso_state, iso_remedy):
+    """两源一致为 change 且无判决 → 仍要求 blocked（不放松原闸）。"""
+    rec = seed_mechanical(stamp="20261013-184042")  # 缺省 change
+    text = workflow.backlog_task_text(_item(id=rec["id"]))
+    assert "直接交付 <blocked>" in text
+    assert "两源不一致" not in text
+
+
+def test_taskbook_unblocks_when_findings_has_judgment(iso_state, iso_remedy):
+    """findings 行有 `judgment` 留痕 → change 也照常实施（判决记录已在案）。"""
+    rec = seed_mechanical(stamp="20261013-184043")
+    inspectd._mutate_finding(rec["id"], judgment="leader-ruling@2026-10-13：已裁定")
+
+    text = workflow.backlog_task_text(_item(id=rec["id"]))
+    assert "直接交付 <blocked>" not in text
+    assert "判决记录已在案" in text
+
+
+def test_reverse_mismatch_blocks_and_surfaces(iso_state, iso_remedy):
+    """**反向**不一致（findings=change、backlog=restore）也要出声并回到 change 支。
+
+    这一向更危险：只读 backlog 会**静默放行**一段本该过判决的实施，直接绕过免判决通道的
+    边界（缺陷报告里的后果②）。
+    """
+    rec = seed_mechanical(stamp="20261013-184044")  # findings 侧是 change（缺省）
+    item = _item(id=rec["id"], remedy_shape="restore")  # backlog 侧陈旧为 restore
+
+    text = workflow.backlog_task_text(item)
+    assert "直接交付 <blocked>" in text, "以 findings 行为准 → 仍是 change 无判决"
+    assert "两源不一致" in text
+
+
+def test_shape_falls_back_to_backlog_when_findings_row_absent(iso_state, iso_remedy):
+    """findings 行不在（旧条目/已清理）→ 回落 backlog 字段，行为与修前一致。"""
+    text = workflow.backlog_task_text(_item(id="insp-20260101-000000-mechanical"))
+    assert "直接交付 <blocked>" in text
+    assert "两源不一致" not in text
