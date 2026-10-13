@@ -6,8 +6,10 @@
 工具发起**（外部进程无法向 TUI 注入通知），故硬化到能硬的那一层：
 
 - **事件判定全在代码**（本模块）：读状态文件 + Python 侧 ``_pid_alive``（不起 shell，
-  故 MSYS 路径转换问题免疫），六类事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
-  NEEDS-LEADER / QUEUE-COMPLETE / SALVAGE。
+  故 MSYS 路径转换问题免疫），**七类**事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
+  NEEDS-LEADER / **TASKBOOK-NEW** / QUEUE-COMPLETE / SALVAGE（TASKBOOK-NEW 是 M3 的
+  最小扩展：只加事件名 + 检测函数 `_taskbook_ids` + 基线字段 `taskbook_ids`；**m5 收编**
+  进统一事件层，届时本支改为读事件流）。
 - **挂载自 2026-10-13 起自动化**（README §4.5 v2）：组长回合结束由 ``Stop + asyncRewake``
   钩子（``.qoder/hooks/watch-arm.sh``）每回合抢「最新在听者」并挂 ``orch watch``——**无需
   组长手动挂**；:func:`autowatch_lines` 只在交办/唤醒当刻回报「已自动挂载」。
@@ -71,6 +73,9 @@ PRIORITY: tuple[str, ...] = (
     "QUOTA-STOP",
     "CHANNEL-STOP",
     "NEEDS-LEADER",
+    # 用户投递大任务（REFACTOR.md §3.4）：**立即唤醒组长**（M3 最小扩展——只加事件名、检测
+    # 函数与基线字段；m5 把它并入统一事件层，届时本支改为读事件流）。
+    "TASKBOOK-NEW",
     "QUEUE-COMPLETE",
     "SALVAGE",
 )
@@ -208,6 +213,7 @@ def snapshot() -> dict[str, Any]:
         "done_count": int((done or {}).get("count", 0) or 0),
         "done_elapsed_s": (done or {}).get("elapsed_s", "?"),
         "needs_leader": needs,
+        "taskbook_ids": _taskbook_ids(),
         "salvage": salvaged,
         "pending": len(_workflow.backlog_pending()),
         "quota_run": systemic.get("quota_exhausted", ""),
@@ -302,6 +308,20 @@ def _in_progress(s: dict[str, Any]) -> bool:
     )
 
 
+def _taskbook_ids() -> list[str]:
+    """``data/taskbooks/`` 现有任务书 id（TASKBOOK-NEW 的**检测函数**；§3.4 M3 最小扩展）。
+
+    增量判据与 NEEDS-LEADER 同构：新 id（不在基线里）即「新落盘的任务书」→ 立即唤醒。
+    基线字段 = 快照的 ``taskbook_ids``（记进 ``state/watch.json``）。m5 收编进统一事件层。
+    """
+    from . import taskbooks as _tb  # 延迟导入：taskbooks 是叶子数据层
+
+    try:
+        return [str(d.get("id", "")) for d in _tb.list_all() if d.get("id")]
+    except Exception:  # noqa: BLE001 - 观察面绝不阻塞生产（§0.6）
+        return []
+
+
 def detect(
     base: dict[str, Any], cur: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -371,6 +391,22 @@ def detect(
                     "subject": bid,
                     "detail": "drain 判定该条目须组长处理（已跳过，不阻塞队列）",
                     "action": "查 state/backlog.json 的 note 后重派 / 改任务书 / 上报用户",
+                }
+            )
+
+    # 用户投递的大任务（REFACTOR.md §3.4，M3 最小扩展）：新 id 落盘即**立即唤醒**组长。
+    seen_tb = set(base.get("taskbook_ids") or [])
+    for tid in cur.get("taskbook_ids") or []:
+        if tid not in seen_tb:
+            out.append(
+                {
+                    "event": "TASKBOOK-NEW",
+                    "subject": tid,
+                    "detail": "用户投递了新任务书（data/taskbooks/，落盘即唤醒）",
+                    "action": (
+                        "orch taskbooks list 查看 → taskbooks link <id> --plan <pid> "
+                        "拆解推进（用户 accept/reject 只经 TUI）"
+                    ),
                 }
             )
 

@@ -19,6 +19,7 @@ import sys
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import (
+    Button,
     Footer,
     Header,
     Input,
@@ -26,6 +27,7 @@ from textual.widgets import (
     ListView,
     SelectionList,
     Static,
+    TextArea,
 )
 from textual.widgets.selection_list import Selection
 
@@ -43,6 +45,10 @@ class PysciTUI(App):
     TITLE = "pysci 控制台"
     BINDINGS = [
         ("escape", "back", "返回/退出"),
+        ("t", "taskbooks", "任务书"),
+        ("n", "tb_new", "新增任务书"),
+        ("a", "tb_accept", "接受选中"),
+        ("r", "tb_reject", "驳回选中"),
         ("j", "journal", "口述"),
         ("q", "quit", "退出"),
     ]
@@ -56,6 +62,13 @@ class PysciTUI(App):
     #detail { height: 1fr; padding: 0 1; }
     #journal { height: 1fr; padding: 0 1; border: round $warning; }
     #journal-result { color: $success; }
+    #taskbook { height: 1fr; padding: 0 1; border: round $accent; }
+    #tb-list { height: 1fr; }
+    #tb-list > ListItem.-highlight { background: $accent; text-style: bold; }
+    #tb-msg { color: $success; }
+    #tb-new { height: 1fr; padding: 0 1; border: round $warning; }
+    #tb-new-body { height: 1fr; }
+    #tb-new-msg { color: $success; }
     """
 
     def __init__(self, *, mods: list[Module] | None = None, seen_path=None) -> None:
@@ -68,6 +81,10 @@ class PysciTUI(App):
         self.selected = 0
         self.detail_text = ""
         self.journal_result = ""
+        self.tb_items: list[dict] = []
+        self.tb_msg = ""
+        self.tb_new_msg = ""
+        self.last_created = ""
         self.badge_texts: dict[str, str] = {
             m.key: self._badge_text(m) for m in self._mods
         }
@@ -101,6 +118,23 @@ class PysciTUI(App):
                     placeholder="口述内容…（Enter 记录；Esc 返回）", id="journal-text"
                 )
                 yield Static("", id="journal-result")
+            with Vertical(id="taskbook"):
+                yield Static(
+                    "任务书：↑↓ 选；n 新增；a 接受选中（delivered→accepted）；"
+                    "r 驳回选中（批语取下方输入框）",
+                    id="tb-title",
+                )
+                yield ListView(id="tb-list")
+                yield Input(placeholder="驳回批语（按 r 驳回选中项）", id="tb-note")
+                yield Static("", id="tb-msg")
+            with Vertical(id="tb-new"):
+                yield Static(
+                    "新增任务书（标题 + 多行正文；点「投递」落盘）", id="tb-new-title"
+                )
+                yield Input(placeholder="标题", id="tb-new-title-input")
+                yield TextArea(id="tb-new-body")
+                yield Button("投递", id="tb-new-submit")
+                yield Static("", id="tb-new-msg")
         yield Footer()
 
     def _rows(self) -> list[ListItem]:
@@ -125,6 +159,8 @@ class PysciTUI(App):
     def on_mount(self) -> None:
         self.query_one("#detail", Static).display = False
         self.query_one("#journal", Vertical).display = False
+        self.query_one("#taskbook", Vertical).display = False
+        self.query_one("#tb-new", Vertical).display = False
         self._render_summary(0)
         self.query_one("#menu", ListView).focus()
 
@@ -166,12 +202,23 @@ class PysciTUI(App):
         self._render_summary(self.selected)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Enter → 全屏详情视图。"""
-        self._open_detail(int(event.list_view.index or 0))
+        """Enter：主菜单 → 全屏详情；任务书列表 → 看正文（批复走 `a`/`r`）。"""
+        if event.list_view.id == "menu":
+            self._open_detail(int(event.list_view.index or 0))
+        elif event.list_view.id == "tb-list":
+            self._tb_show_body(int(event.list_view.index or 0))
+
+    def _tb_show_body(self, idx: int) -> None:
+        from .. import taskbooks as _tb
+
+        if idx >= len(self.tb_items):
+            return
+        tid = str(self.tb_items[idx].get("id"))
+        self._set_tb_msg(f"—— {tid} 正文 ——\n{_tb.read_body(tid)[:400]}")
 
     def action_back(self) -> None:
-        """Esc/←：详情/口述 → 主菜单；主菜单 → 退出。"""
-        if self.view in ("detail", "journal"):
+        """Esc/←：任何子视图（详情/口述/任务书）→ 主菜单；主菜单 → 退出。"""
+        if self.view != "menu":
             self._show_menu()
         else:
             self.exit()
@@ -189,11 +236,24 @@ class PysciTUI(App):
             lines = [f"读数失败：{type(exc).__name__}: {exc}"]
         self.query_one("#summary", Static).update("\n".join(lines) or "（无读数）")
 
+    def _hide_all_views(self) -> None:
+        for sel in (
+            "#menu",
+            "#summary",
+            "#detail",
+            "#journal",
+            "#taskbook",
+            "#tb-new",
+        ):
+            try:
+                self.query_one(sel).display = False
+            except Exception:  # noqa: BLE001 - 组合面容忍缺件
+                continue
+
     def _show_menu(self) -> None:
         self.view = "menu"
         self.detail_text = ""
-        self.query_one("#detail", Static).display = False
-        self.query_one("#journal", Vertical).display = False
+        self._hide_all_views()
         self.query_one("#menu", ListView).display = True
         self.query_one("#summary", Static).display = True
         self._refresh_badges()
@@ -253,6 +313,96 @@ class PysciTUI(App):
     def _set_journal_result(self, text: str) -> None:
         self.journal_result = text
         self.query_one("#journal-result", Static).update(text)
+
+    # ---- 任务书面板（§3.4 / §2.4 #1）---------------------------------------
+    def action_taskbooks(self) -> None:
+        self._open_taskbooks()
+
+    def _open_taskbooks(self) -> None:
+        from .. import taskbooks as _tb  # 延迟导入：数据层叶子
+
+        self.view = "taskbooks"
+        try:
+            self.tb_items = _tb.list_all()
+        except Exception:  # noqa: BLE001 - 读数失败不该塌面板
+            self.tb_items = []
+        lv = self.query_one("#tb-list", ListView)
+        lv.clear()
+        for d in self.tb_items:
+            lv.append(ListItem(Static(f"[{d.get('status')}] {d.get('title')}")))
+        lv.index = 0  # 重建后选中态回到首项（clear/append 后 index 可能为 None）
+        self._set_tb_msg("")
+        self._hide_all_views()
+        self.query_one("#taskbook", Vertical).display = True
+        lv.focus()
+
+    def action_tb_new(self) -> None:
+        if self.view != "taskbooks":
+            return
+        self.view = "tb-new"
+        self._hide_all_views()
+        self.query_one("#tb-new", Vertical).display = True
+        self.query_one("#tb-new-title-input", Input).value = ""
+        self.query_one("#tb-new-body", TextArea).text = ""
+        self._set_tb_new_msg("")
+        self.query_one("#tb-new-title-input", Input).focus()
+
+    def action_tb_accept(self) -> None:
+        self._tb_act(accept=True)
+
+    def action_tb_reject(self) -> None:
+        self._tb_act(accept=False)
+
+    def _tb_act(self, *, accept: bool) -> None:
+        """对**选中项**批复：accept / reject＋批语（批语取 ``#tb-note``）。"""
+        if self.view != "taskbooks":
+            return
+        from .. import taskbooks as _tb
+
+        idx = int(self.query_one("#tb-list", ListView).index or 0)
+        if idx >= len(self.tb_items):
+            return
+        tid = str(self.tb_items[idx].get("id"))
+        try:
+            if accept:
+                _tb.accept(tid)
+                msg = f"[√] {tid} → accepted"
+            else:
+                note = self.query_one("#tb-note", Input).value.strip()
+                _tb.reject(tid, note)
+                msg = f"[√] {tid} → rejected（批语已记），已回 new 待重拆解"
+        except ValueError as exc:
+            self._set_tb_msg(f"[!] {exc}")
+            return
+        self._open_taskbooks()  # 重建列表（状态已变）——随后再落读数（重建会清空）
+        self._set_tb_msg(msg)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """「投递」：程序化组装元数据并落盘（TASKBOOK-NEW 由 watch 增量报出）。"""
+        if event.button.id != "tb-new-submit" or self.view != "tb-new":
+            return
+        from .. import taskbooks as _tb
+
+        title = self.query_one("#tb-new-title-input", Input).value.strip()
+        body = self.query_one("#tb-new-body", TextArea).text
+        if not title:
+            self._set_tb_new_msg("✗ 标题不能为空")
+            return
+        try:
+            st = _tb.create(title, body, source="mirror-tui")
+        except ValueError as exc:
+            self._set_tb_new_msg(f"✗ {exc}")
+            return
+        self.last_created = str(st["id"])
+        self._set_tb_new_msg(f"已投递：{st['id']}（TASKBOOK-NEW 唤醒组长）")
+
+    def _set_tb_msg(self, text: str) -> None:
+        self.tb_msg = text
+        self.query_one("#tb-msg", Static).update(text)
+
+    def _set_tb_new_msg(self, text: str) -> None:
+        self.tb_new_msg = text
+        self.query_one("#tb-new-msg", Static).update(text)
 
 
 def _is_tty() -> bool:
