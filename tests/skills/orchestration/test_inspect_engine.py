@@ -632,7 +632,12 @@ def test_readonly_checks_register_and_promote_engine_findings(monkeypatch, iso_e
     found = inspectd.findings()
     assert found and found[0]["source"] == "inspectd"
     assert any(f["id"] in summary.get("findings", []) for f in found)
-    assert found[0]["status"] == "promoted", "引擎侧机械证据类免判决"
+    # 本支的读数异常来自 check_cost_curve，其修复面是「组长归档该会话后重开」——
+    # 属**组长侧动作**，故自 20261013-184213-devops 起挂 leader_todo 而不派 devops。
+    # 这里要证的是「引擎侧机械证据类同样被自动处理（不是留 pending）」；
+    # 免判决晋升进 backlog 那条路径由 test_remedy_shape 覆盖。
+    assert found[0]["status"] == "leader_todo", "引擎侧发现照常收口（组长侧动作挂起）"
+    assert found[0]["id"] in summary.get("findings", [])
 
     set_inspect_busy(monkeypatch, ["devops-drain"])
     n_before = len(inspectd.findings())

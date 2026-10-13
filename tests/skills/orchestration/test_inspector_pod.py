@@ -298,6 +298,8 @@ def test_inspect_queue_and_finding_vocabularies_match_spec():
         "rejected",
         "queued",
         "escalated",
+        # 动作在组长侧 → 不派 devops，挂起等组长（backlog 20261013-184213-devops）
+        "leader_todo",
     )
     assert inspectd.QUEUE_PATH.name == "queue.json"
     assert inspectd.FINDINGS_PATH.name == "findings.jsonl"
