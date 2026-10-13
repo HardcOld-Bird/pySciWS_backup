@@ -241,18 +241,96 @@ def build_rounds(path: Path) -> list[Round]:
     return rounds
 
 
+#: 「这行可能是真实 user 记录」的廉价标记（**先子串筛、再 JSON 解析**）。
+#: 原生档案是紧凑 JSON（实测 ``{"type":"user",...}``，冒号后无空格），两种分隔都收，
+#: 免得平台哪天改成带空格的写法就静默退化成「0 回合」。
+_USER_MARKERS: tuple[str, ...] = ('"type":"user"', '"type": "user"')
+#: 同上，bytes 形态（二进制读路径用；见 :func:`session_stats`）。
+_USER_MARKERS_B: tuple[bytes, ...] = (b'"type":"user"', b'"type": "user"')
+
+#: 取「最后活跃」用的尾部窗口（同 :data:`sessions.TAIL_BYTES` 的量级）：档尾才是最新
+#: 时间戳，读全档只为拿一个时间戳不值。
+STATS_TAIL_BYTES: int = 1 << 18
+
+
+def _looks_like_user(line: str) -> bool:
+    """行级廉价预筛：不含 user 类型标记的行**不必** JSON 解析。
+
+    为什么值得加（backlog 20261013-182427-devops 实测）：真实档案里簿记行占近半——
+    devops 单档 105.9 MB / 23663 assistant + 23610 ``active-leaf`` + 1605 ``attachment``，
+    而后两类与回合数**无关**。原实现逐行 ``json.loads`` 全量解析，1.0s/档，而 inspector
+    每轮都要跑一次。预筛是**保守**的（宁可多解析几行，绝不漏掉真回合），只在筛出候选后
+    才付解析代价。
+    """
+    return any(marker in line for marker in _USER_MARKERS)
+
+
 def session_stats(path: Path) -> tuple[int, float]:
-    """某会话档的 ``(回合数, 最后活跃 epoch 秒)``（读不出 → ``(0, 0.0)``）。"""
-    records = read_records(path)
-    rounds = [rec for _, rec in records if is_real_user(rec)]
-    last = 0.0
-    for _, rec in reversed(records):
-        raw = rec.get("timestamp")
-        stamp = _epoch(raw)
-        if stamp:
-            last = stamp
-            break
-    return len(rounds), last
+    """某会话档的 ``(回合数, 最后活跃 epoch 秒)``（读不出 → ``(0, 0.0)``）。
+
+    单次顺序读 + 行级预筛（:func:`_looks_like_user`）：只对候选行做 JSON 解析；
+    「最后活跃」改读**尾部窗口**（最新时间戳必在档尾），不再为它全量解析一遍。
+    回合数与全量实现逐值一致（预筛只跳行、不改判定：命中子串的行仍走
+    :func:`is_real_user` 的完整判据）。
+    """
+    rounds = 0
+    try:
+        # **二进制读 + 迟到解码**：105 MB 档全量 decode 成 str 本身就要 ~0.3s，而我们
+        # 只对候选行付解码与解析——先在 bytes 上做子串筛，命中的行才 decode。
+        with path.open("rb") as fh:
+            for raw in fh:
+                if not any(marker in raw for marker in _USER_MARKERS_B):
+                    continue
+                # 工具结果回灌也走 type=user，但**不含 text 块** ⇒ 必非真实 user 回合
+                # （:func:`is_real_user` 只认含 text 块的 user 记录）。带 text 块的记录
+                # 照常解析，故这条跳过是**保守**的：含 text 就绝不跳。
+                if b'"type":"tool_result"' in raw and b'"type":"text"' not in raw:
+                    continue
+                try:
+                    rec = json.loads(raw.decode("utf-8", errors="replace"))
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if isinstance(rec, dict) and is_real_user(rec):
+                    rounds += 1
+    except OSError:
+        return 0, 0.0
+    return rounds, _last_timestamp(path)
+
+
+def _last_timestamp(path: Path) -> float:
+    """档内**最后一个**可解析时间戳（先读尾部窗口；窗口内没有才退回全量）。
+
+    尾部窗口起点可能切断一行（残片不是合法 JSON）——按 :func:`read_records` 的老规矩
+    丢掉首行即可。回退分支只在「尾部窗口里一个时间戳都没有」这种异常档上走，属罕见路径，
+    故保留全量兜底以**不改变**旧语义。
+    """
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as fh:
+            fh.seek(max(0, size - STATS_TAIL_BYTES))
+            chunk = fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return 0.0
+    lines = chunk.splitlines()
+    if size > STATS_TAIL_BYTES and lines:
+        lines = lines[1:]
+    for line in reversed(lines):
+        if '"timestamp"' not in line:
+            continue
+        try:
+            rec = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(rec, dict):
+            stamp = _epoch(rec.get("timestamp"))
+            if stamp:
+                return stamp
+    if size > STATS_TAIL_BYTES:
+        for _, rec in reversed(read_records(path)):
+            stamp = _epoch(rec.get("timestamp"))
+            if stamp:
+                return stamp
+    return 0.0
 
 
 def _epoch(raw: Any) -> float:
