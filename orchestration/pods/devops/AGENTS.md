@@ -15,6 +15,9 @@
 - **worktree 内跑测试**：cwd 须在 worktree **之外**，`PYTHONPATH="<wt>/src" uv run --no-sync
   pytest "<wt>/tests" -q`；worktree 内禁 `git checkout -- .`（抹光未提交改动）。
   配方 `references/worktree-merge.md` §1-§2。
+- **merge 前先播种运行态**：新面的 `sessions-runtime.json` 是空壳，merge 的「会话数不减」
+  自检会 abort（实测 base=45 → 面侧 0）；先
+  `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 再 merge。
 - **判决包流**：approve 必带 `--jury`/`--bench`/`--override` 之一；例外通道=defect×当跳
   blocked。细则 `orchestration/skills/orchestration/references/verdict-package.md`。
 - **档位映射自愈只写运行态** `models_resolved`，不写跟踪面；遮蔽时只报不写
