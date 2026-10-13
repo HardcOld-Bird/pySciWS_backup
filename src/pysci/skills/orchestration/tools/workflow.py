@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -159,7 +160,9 @@ def _effort_key(item: dict) -> str:
         return str(item.get("effort") or "").strip().lower()
 
 
-def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
+def backlog_take_batch(
+    max_batch: int = 4, *, now: float | None = None
+) -> tuple[dict | None, list[dict]]:
     """取队首 pending 为**种子**（标记 in_progress），收集同 member（提请者）的 pending
     为**组包**（批量消化，backlog 20261010-batch-digest）。
 
@@ -181,7 +184,18 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
         return None, []
     data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
     items = data.get("items", [])
-    seed = next((it for it in items if it.get("status") == "pending"), None)
+    # **跳过未到期的延期条目**（带宽类失败的主处置，backlog 20261013-193500-leader）：
+    # 带宽不足时正确动作是「等」而非换席/烧跳——条目回队并挂 defer_until，
+    # 到期前不再被取。不跳就会立刻重取同一条 → 空转。
+    now_s = time.time() if now is None else float(now)
+    seed = next(
+        (
+            it
+            for it in items
+            if it.get("status") == "pending" and not _is_deferred(it, now_s)
+        ),
+        None,
+    )
     if seed is None:
         return None, []
     seed["status"] = "in_progress"
@@ -204,6 +218,8 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
                 continue
             # 组包只吃**同档位**：一批只有一跳，effort 是跳级参数——混档会让被标的项
             # 按种子档位跑完，静默污染台账 A/B 数据（backlog 20261010-orch-effort-per-item）
+            if _is_deferred(it, now_s):
+                continue  # 延期条目到期前不进组包（同上：不许拿去烧跳）
             if it.get("member") == member and _effort_key(it) == seed_effort:
                 group.append(it)
                 if len(group) >= max_batch - 1:
@@ -212,6 +228,82 @@ def backlog_take_batch(max_batch: int = 4) -> tuple[dict | None, list[dict]]:
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     return seed, group
+
+
+def _is_deferred(item: dict, now_s: float) -> bool:
+    """该条目是否仍处在延期待重试窗口内（``defer_until`` 在未来）。"""
+    try:
+        return float(item.get("defer_until") or 0) > now_s
+    except (TypeError, ValueError):
+        return False
+
+
+def next_defer_s(*, now: float | None = None) -> float:
+    """到**最近一个**延期条目到期的秒数；没有延期条目 → ``0.0``。
+
+    worker 在「全队皆未到期」时靠它睡到最近到期时刻再查（别空转烧 CPU，也别直接退出
+    让队列干等）。
+    """
+    now_s = time.time() if now is None else float(now)
+    if not BACKLOG_PATH.exists():
+        return 0.0
+    try:
+        data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0.0
+    waits = [
+        float(it.get("defer_until") or 0) - now_s
+        for it in data.get("items", [])
+        if it.get("status") == "pending" and _is_deferred(it, now_s)
+    ]
+    return max(0.0, min(waits)) if waits else 0.0
+
+
+def deferred_count(*, now: float | None = None) -> int:
+    """仍处在延期待重试窗口内的 pending 条目数（mirror 观察面用）。"""
+    now_s = time.time() if now is None else float(now)
+    if not BACKLOG_PATH.exists():
+        return 0
+    try:
+        data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    return sum(
+        1
+        for it in data.get("items", [])
+        if it.get("status") == "pending" and _is_deferred(it, now_s)
+    )
+
+
+def backlog_defer(
+    item_id: str,
+    *,
+    until: float,
+    count: int,
+    elapsed_s: float,
+    note: str = "",
+) -> None:
+    """把 in_progress 条目复位 pending 并挂上延期（带宽类失败的主处置）。
+
+    与 :func:`backlog_requeue` 的区别：那个是「渠道整体坏了，原地等恢复」；这个是「这一项
+    撞上带宽上限，退避一会儿再来」——条目**带账单回队**（``defer_count`` / ``defer_elapsed_s``
+    / ``defer_until``），调度侧据此跳过与睡眠，超预算时由调用方改走停止/上报。
+    """
+    if not BACKLOG_PATH.exists():
+        return
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    for item in data.get("items", []):
+        if item.get("id") == item_id:
+            item["status"] = "pending"
+            item.pop("started_at", None)
+            item["defer_until"] = float(until)
+            item["defer_count"] = int(count)
+            item["defer_elapsed_s"] = float(elapsed_s)
+            if note:
+                item["note"] = note
+    BACKLOG_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def worktree_name(item: dict) -> str:

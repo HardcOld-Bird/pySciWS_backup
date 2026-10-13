@@ -226,7 +226,13 @@ def test_channel_error_re_matches_measured_wording():
 
 def test_systemic_kinds_and_text_are_one_source():
     """kind 清单与文案同源：三处消费面（drain/bench/inspect 停止、watch、status）共读。"""
-    assert dispatch.SYSTEMIC_KINDS == ("quota_exhausted", "channel_error")
+    # 第三条是带宽兜底（用户裁决 2026-10-13，backlog 20261013-193500-leader）：
+    # 带宽类延期触顶预算仍未愈 → 回升为全局停止，防「逐项烧跳」。
+    assert dispatch.SYSTEMIC_KINDS == (
+        "quota_exhausted",
+        "channel_error",
+        "channel_saturated",
+    )
     assert set(dispatch.SYSTEMIC_TEXT) == set(dispatch.SYSTEMIC_KINDS)
     assert "渠道" in dispatch.SYSTEMIC_TEXT["channel_error"][0]
     assert "channel_error" in dispatch.systemic_error_text("channel_error")
@@ -330,11 +336,18 @@ def test_channel_success_mentioning_text_not_reclassified(iso_dispatch, monkeypa
 # ④ drain 全局停止 + 不连坐；status 读数分列
 # ---------------------------------------------------------------------------
 def _channel_outcome():
+    """**渠道真不可用**（outage）形状：本条断言的是「停链」语义。
+
+    带宽类（mimo 那句 retry later）自 backlog 20261013-193500-leader 起改走**延期**，
+    其三支分流（bandwidth 延期 / outage 停链 / 预算触顶 channel_saturated）在
+    ``test_bandwidth_defer.py`` 里按裁决拆成三例；此处保留 outage 支作为原断言保号。
+    """
     return DispatchOutcome(
         code=2,
         kind="channel_error",
         body="",
-        error="渠道级故障：custom model service error",
+        error="渠道级故障：invalid api key",
+        error_text="401 Unauthorized: invalid api key",
     )
 
 

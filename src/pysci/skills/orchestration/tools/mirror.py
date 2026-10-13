@@ -298,6 +298,21 @@ def _line_inspector_decisions() -> str:
 
 
 #: 概览项登记表（§10 注册纪律·硬要求）：任何新增「需用户关注事项类型」必须加进这里。
+def _line_defer() -> str:
+    """带宽延期读数（用户裁决 2026-10-13，backlog 20261013-193500-leader 的观察面）。
+
+    带宽类失败改「延期而非停链」之后，用户在概览上必须能看见「有活压着等」——否则
+    「队列看着空、其实有条目在退避」就是一块盲区。
+    """
+    from . import workflow as _wf  # 延迟导入：workflow 引 dispatch，顶层引会成环
+
+    n = _wf.deferred_count()
+    if not n:
+        return "带宽延期 = （无）"
+    wait = _wf.next_defer_s()
+    return f"带宽延期 = {n} 条在等，最近 {wait:.0f}s 后到期"
+
+
 STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("盲审", _line_review),
     ("宪章", _line_charter),
@@ -307,6 +322,7 @@ STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("仲裁", _line_jury),
     ("回退", _line_fallback),
     ("决策", _line_inspector_decisions),
+    ("延期", _line_defer),
     ("趋势", _line_trend),
     ("待决", _line_pending),
     ("验收", _line_acceptance),

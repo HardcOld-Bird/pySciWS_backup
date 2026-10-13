@@ -76,6 +76,14 @@ def no_real_backoff_sleep(monkeypatch):
     每个碰到渠道故障的用例都得自己记着补 patch，漏一个就拖 45s（实测 timeout）。
     """
     monkeypatch.setattr(dispatch, "_sleep", lambda seconds: None)
+    # 带宽延期的等待与「睡到最近到期」同理：真睡 600s/次没人跑得动，而睡被垫成
+    # no-op 后时钟不动 → 「全队皆延期」那一支会**原地空转**（实测挂住整套）。
+    # 故测试里默认让到期查询恒返 0（等价「已到期，无活可等」）；要验那一支的用例
+    # （test_bandwidth_defer）自行覆盖本桩返回值的序列。
+    from pysci.skills.orchestration.tools import workflow as _wf
+
+    monkeypatch.setattr(drain, "_sleep", lambda seconds: None)
+    monkeypatch.setattr(_wf, "next_defer_s", lambda **_kw: 0.0)
 
 
 @pytest.fixture(autouse=True)
