@@ -758,3 +758,118 @@ def test_assignment_items_use_given_brief_without_menu(monkeypatch, iso_engine):
     assert latest["target"] in inspectd.PATROL_BY_ID, (
         "空 target 的巡检项是死信（组员无素材可做）"
     )
+
+
+# ---------------------------------------------------------------------------
+# 修复形状在登记/晋升两侧把关（backlog 20261013-182549-devops）
+# ---------------------------------------------------------------------------
+def test_cli_mechanical_requires_remedy_shape(iso_state, capsys):
+    """mechanical 登记必须显式给形状——否则整跳烧在「等判决」上。"""
+    from pysci.skills.inspector.tools import inspect as cli
+
+    rc = cli.main(
+        [
+            "finding",
+            "add",
+            "--class",
+            "mechanical",
+            "--title",
+            "x",
+            "--criteria",
+            "- 判据",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 2 and "remedy-shape" in out, out
+    assert "burn" not in out.lower()
+
+
+def test_cli_mechanical_with_shape_is_accepted(iso_state, capsys):
+    """给了形状就照常登记（本单只加一道必填，不改其余）。"""
+    from pysci.skills.inspector.tools import inspect as cli
+
+    rc = cli.main(
+        [
+            "finding",
+            "add",
+            "--class",
+            "mechanical",
+            "--remedy-shape",
+            "restore",
+            "--title",
+            "x",
+            "--criteria",
+            "- 判据",
+            "--repro",
+            "cmd",
+            "--evidence",
+            "out",
+        ]
+    )
+    assert rc == 0 and "已登记" in capsys.readouterr().out
+
+
+def test_judgment_class_still_needs_no_shape(iso_state, capsys):
+    """判断类不经免判决通道，形状非必填（它本来就要过 J）。"""
+    from pysci.skills.inspector.tools import inspect as cli
+
+    rc = cli.main(
+        [
+            "finding",
+            "add",
+            "--class",
+            "judgment",
+            "--title",
+            "x",
+            "--criteria",
+            "- 判据",
+        ]
+    )
+    assert rc == 0
+
+
+def test_shape_warn_covers_the_three_states():
+    """晋升时刻的形状告警：restore 静音、change+无判决出声、有判决静音、判断类静音。"""
+    from pysci.skills.orchestration.tools import inspectd
+
+    assert inspectd._shape_warn({"remedy_shape": "restore"}, "mechanical") == ""
+    assert inspectd._shape_warn({"remedy_shape": "change"}, "mechanical") != ""
+    assert inspectd._shape_warn({}, "mechanical") != "", "形状未登记同样要出声"
+    assert (
+        inspectd._shape_warn(
+            {"remedy_shape": "change", "judgment": "leader-ruling@x"}, "mechanical"
+        )
+        == ""
+    ), "有判决记录的 change 是正常路径"
+    assert inspectd._shape_warn({"remedy_shape": "change"}, "jury") == "", (
+        "判断类经 J 晋升，形状告警不适用"
+    )
+
+
+def test_promote_surfaces_shape_warn_in_returns(iso_state, monkeypatch):
+    """告警要经 promote_finding 的返回值到调用者面（CLI 直接打印它）。"""
+    from pysci.skills.orchestration.tools import inspectd
+
+    monkeypatch.setattr(
+        inspectd,
+        "activation_gate",
+        lambda p=None: {"allow_dispatch": True, "reason": ""},
+    )
+    from pathlib import Path as _P
+
+    from pysci.skills.orchestration.tools import workflow as _wf
+
+    monkeypatch.setattr(_wf, "backlog_find", lambda bid: None)
+    monkeypatch.setattr(_wf, "_backlog_append", lambda entry: {"position": 1})
+    monkeypatch.setattr(inspectd, "_evidence_file", lambda rec: _P("ev.md"))
+    rec = {
+        "id": "insp-test-shape",
+        "title": "t",
+        "kind": "usability",
+        "class": "mechanical",
+        "success_criteria": "- 判据",
+        "remedy_shape": "change",
+        "evidence": "e",
+    }
+    out = inspectd.promote_finding(rec, channel="mechanical", wake=False)
+    assert "warn" in out and out["warn"], out
