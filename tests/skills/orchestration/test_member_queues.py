@@ -1,4 +1,4 @@
-"""成员 FIFO 队列 + worker 生命周期（REFACTOR.md §3.1，M4）。
+"""成员 FIFO 队列 + worker 生命周期（README §12，M4）。
 
 队列形状走 ``workq``；worker 的锁/停止/run 名走 ``drain.WorkerPaths`` 一族（抽取共用）。
 测试用**临时 state 根** + mock ``do_dispatch``（真 LLM 派发不在本环节验收范围）。

@@ -1,4 +1,10 @@
-"""``pysci-mirror`` 用户控制台骨架（README §4.1/§6，E6-prep）。
+"""``pysci`` 用户控制台——**LLM 静态通道**（README §4.1/§6、§12 M7）。
+
+`pysci` 是用户的唯一入口：**人类交互正道 = 裸 `pysci` 进 TUI**（`tools/tui/`）；
+本模块承载其**静态子命令面**（``status`` / ``journal`` / ``decisions``），面向
+**LLM / 脚本**（非 tty 裸调用亦回落到 `status`，见 `tui/app.py` 入口分派）——输出
+向机器可读优化：稳定的 ``[key] value`` 行（:data:`STATUS_ITEMS` 顺序即契约）+ 语义化
+退出码（0=正常、2=用法/输入错）。人类不需要背这些子命令。
 
 用户侧「唯一关注入口」：``status`` 一次看全需要用户知道的事，``journal`` 将口述内容
 机械分流。CLI 人体工学按 §0.9 范本（Qoder CLI / commitizen）：自然语言 + 编号菜单，
@@ -293,7 +299,7 @@ def _line_inspector_decisions() -> str:
     )
     return (
         f"inspector 决策：自动晋升={c['promoted']} 待审计={c['open']} {hot} "
-        f"判决类={c['judged']}（全貌 `pysci-mirror decisions`）"
+        f"判决类={c['judged']}（全貌 `pysci decisions`）"
     )
 
 
@@ -333,7 +339,7 @@ STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
 
 
 def status_lines() -> list[str]:
-    """全景读数（``pysci-mirror status`` 打印；每项独立容错，坏一项不塌全貌）。"""
+    """全景读数（``pysci status`` 打印；每项独立容错，坏一项不塌全貌）。"""
     out: list[str] = []
     for name, fn in STATUS_ITEMS:
         try:
@@ -344,15 +350,20 @@ def status_lines() -> list[str]:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """``pysci-mirror status``：用户侧唯一关注入口（§10 硬要求）。"""
-    print("== mirror 全景（用户侧唯一关注入口，README §4.1/§6）==")
+    """``pysci status``：用户侧唯一关注入口（§10 硬要求）——**LLM 静态通道**。
+
+    输出为稳定的 ``[key] value`` 行（顺序即 :data:`STATUS_ITEMS` 契约），供 LLM/脚本逐行
+    解析；人类无需敲它（裸 `pysci` 进 TUI 即得同一批读数的交互面）。退出码恒 0（读数面
+    单项容错，坏一项不塌全貌）。
+    """
+    print("== pysci 全景 [LLM 通道]（用户侧唯一关注入口，README §4.1/§6）==")
     for line in status_lines():
         print(line)
     if not Registry.load().taste_enabled:
         print(
             "  → twin 通道休眠：确认 PREFERENCE.md 草案后置 taste_enabled=true 才对外服务"
         )
-    print('[NEXT] 口述偏好或指令：pysci-mirror journal "……"（编号菜单分流）')
+    print('[NEXT] 口述偏好或指令：pysci journal "……"（编号菜单分流）')
     return 0
 
 
@@ -360,7 +371,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 def decisions_detail_lines(
     *, days: int = 0, cls: str = "", shape: str = ""
 ) -> list[str]:
-    """inspector 决策链全貌的**只读拼装**（REFACTOR.md §2.5 数据层纯函数）。
+    """inspector 决策链全貌的**只读拼装**（README §12 数据层纯函数）。
 
     ``pysci decisions`` 与 TUI「决策审计」详情视图**共用**本函数——同一能力不留两份实现。
     免判决+change 类置顶（最需审计者优先）：发现 → class → remedy_shape → 判决记录 →
@@ -413,7 +424,7 @@ def decisions_count() -> int:
 
 
 def cmd_decisions(args: argparse.Namespace) -> int:
-    """``pysci-mirror decisions``：inspector 决策链全貌（用户审计入口，§10 注册纪律）。"""
+    """``pysci decisions``：inspector 决策链全貌（用户审计入口，§10 注册纪律）。"""
     for line in decisions_detail_lines(
         days=int(args.days or 0), cls=args.cls or "", shape=args.shape or ""
     ):
@@ -467,10 +478,10 @@ def route(text: str, selects: list[int]) -> dict[str, Any]:
 
 
 def cmd_journal(args: argparse.Namespace) -> int:
-    """``pysci-mirror journal <文本> [--select 1,2]``：写入时机械分流（§10）。"""
+    """``pysci journal <文本> [--select 1,2]``：写入时机械分流（§10）。"""
     text = " ".join(args.text).strip() if args.text else ""
     if not text:
-        print('✗ 缺少口述内容：pysci-mirror journal "……"')
+        print('✗ 缺少口述内容：pysci journal "……"')
         return 2
     selects = _parse_select(args.select) if args.select else _menu()
     if not selects:
@@ -493,15 +504,21 @@ def cmd_journal(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
-        prog="pysci-mirror",
-        description="用户控制台（README §4.1/§6）：status 全景 + journal 口述分流",
+        prog="pysci",
+        description=(
+            "pysci 用户控制台 · **LLM 静态通道**（README §4.1/§6；人类交互请裸跑 `pysci` 进 TUI）："
+            "status 全景 + journal 口述分流 + decisions 决策审计"
+        ),
+        epilog="输出为稳定的 `[key] value` 行（机器可读）；退出码：0=正常、2=用法/输入错。",
     )
     sub = ap.add_subparsers(dest="action", required=True)
     p = sub.add_parser(
-        "status", help="全景概览（待盲审/宪章/开关/队列/仲裁席位/待决事项）"
+        "status", help="[LLM 通道] 全景概览（待盲审/宪章/开关/队列/仲裁席位/待决事项）"
     )
     p.set_defaults(func=cmd_status)
-    p = sub.add_parser("journal", help="口述内容编号分流：①偏好→日志 ②指令→强制队列")
+    p = sub.add_parser(
+        "journal", help="[LLM 通道] 口述内容编号分流：①偏好→日志 ②指令→强制队列"
+    )
     p.add_argument("text", nargs="*", help="口述正文（可多词，合并为一行）")
     p.add_argument(
         "--select",
@@ -510,7 +527,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_journal)
     p = sub.add_parser(
         "decisions",
-        help="inspector 决策链全貌（发现→class→remedy_shape→判决→commit→核验）",
+        help="[LLM 通道] inspector 决策链全貌（发现→class→remedy_shape→判决→commit→核验）",
     )
     p.add_argument("--days", type=int, default=0, help="只看近 N 天（0=不限）")
     p.add_argument(

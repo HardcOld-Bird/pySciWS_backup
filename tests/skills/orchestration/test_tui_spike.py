@@ -1,4 +1,4 @@
-"""`pysci` TUI 骨架 spike（REFACTOR.md M1）：Pilot 无头键盘导航 + 入口分派。
+"""`pysci` TUI 骨架 spike（README §12，M1）：Pilot 无头键盘导航 + 入口分派。
 
 Pilot 覆盖的是**交互逻辑**（选中态 / 视图切换 / Esc 返回 / 干净退出）；实机终端
 （Git Bash/mintty、Windows Terminal、PowerShell 5.1）的渲染与键盘事件是 Pilot **够不到**的
@@ -18,7 +18,7 @@ def _run(coro):
 
 
 def test_module_list_matches_refactor_clause():
-    """主菜单 = REFACTOR.md §2.4 的七模块（顺序与标题）。"""
+    """主菜单 = README §12 的七模块（顺序与标题）。"""
     mods = tui.modules()
     assert [m.key for m in mods] == [
         "taskbooks",
@@ -81,7 +81,7 @@ def test_pilot_starts_renders_and_exits_cleanly():
 
 
 # ---------------------------------------------------------------------------
-# 入口分派（REFACTOR.md §2.1）
+# 入口分派（README §12）
 # ---------------------------------------------------------------------------
 def test_non_tty_no_subcommand_is_status(monkeypatch, capsys):
     """非 tty + 无子命令 → 等价 `pysci status` 静态输出，退出码 0，绝不阻塞等输入。"""

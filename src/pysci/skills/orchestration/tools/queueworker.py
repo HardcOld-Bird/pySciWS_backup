@@ -1,4 +1,4 @@
-"""成员队列 worker（REFACTOR.md §3.1，M4）：每成员一个**非常驻** FIFO worker。
+"""成员队列 worker（README §12，M4）：每成员一个**非常驻** FIFO worker。
 
 推广 devops drain 的生命周期模式——**抽取共用，不复制粘贴**（§纪律）：锁/墓碑/收尾证据/
 run 名同秒顺延全部走 :mod:`drain` 的 ``WorkerPaths`` + ``acquire_lock``/``release_lock``/

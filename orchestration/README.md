@@ -40,7 +40,7 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 | **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送；**src 测试**（`tests/`、CI、工具实现正确性） | **不使用 orch**（组长专属；§12 E2 过渡期例外 `orch eval run`/`eval set-baseline` 已随 E4 bencher 上线**退役**，harness 压测职责移交 bencher）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
 | **bencher** | `orchestration/pods/bencher/` + headless | 队列驱动非常驻（§5.5，`orch bench-*`） | **harness 实测专职工**（Tier B，§5.5）：套件案卷与基线区所有权、套件运行、基线捕获、副本 A/B、组长/inspector 指派的核查跑；输出二元判决（通过/失败、改善/未改善）与污染识别 | 写权仅 `orchestration/state/evals/**`（案卷/基线/判决），**外部代码树零写权**（设施缺陷提 `<infra_suggestion>` 交 devops，不自己修）；harness 只读层与部署副本不可改；不使用 orch/pysci-dev；完成项走 `orch status` 待查看面，**不即时唤醒组长**；专属 CLI `pysci-bench` |
 | **inspector** | `orchestration/pods/inspector/` + headless | 闲时自主激活（§6 改进循环，`orch inspector-*`；全局开关默认开、生产活跃时让路） | **闲时巡检员**：按引擎下发的巡检菜单抽查全域（doctor 全域 / transcript 诚实条款 / 自维护层 / 代码走查 / 改进管道自覆盖 / 设计意图一致性 / 设计审查 rubric / 基线缺口），产出 finding 并按类别分流——**机械证据类免判决**晋升 backlog（`source=inspector`）、**判断类必经 J 仲裁**（§5.3）；双队列迟滞节流（§6） | 全项目**只读**（代码树零写权；产出只落 `state/inspector/` 与 `state/evals/jury-cases/`）；**无 override 面**（§6：CLI 参数表里不存在该项，是代码事实而非纪律条款）；不使用 orch，也不用 pysci-dev 写面（doctor 只读可用）；专属 CLI `pysci-inspect`；**豁口**：`pysci-inspect` 自身不在巡检范围（自覆盖豁口，§6）|
-| **twin** | `orchestration/pods/twin/` + headless | 冷启动单跳（每次判断新会话，`orch taste`；§6） | **审美孪生 → 回退终裁者 + 用户代理**：① 可选咨询（仅建议）；② 客观通道模棱两可时回退终裁（强制、**不给平局**，§5.3）；③ 用户代理裁决（原「呈用户」的护栏级审批/升级仲裁/Phase 验收即时代理，**先决策后问责**，全量 mirror 留痕） | PREFERENCE.md 置 pod 内（readonly_extra 只读、护栏级）；**无记忆纪律**——冷启动，「记忆」只有 PREFERENCE.md 与决策日志（§3.1）；无成员 CLI（判断经 `orch taste`，训练审阅经 `pysci-mirror`）；永不自改权重、永不投客观质量票；**最终交付验收不代理**（用户本人） |
+| **twin** | `orchestration/pods/twin/` + headless | 冷启动单跳（每次判断新会话，`orch taste`；§6） | **审美孪生 → 回退终裁者 + 用户代理**：① 可选咨询（仅建议）；② 客观通道模棱两可时回退终裁（强制、**不给平局**，§5.3）；③ 用户代理裁决（原「呈用户」的护栏级审批/升级仲裁/Phase 验收即时代理，**先决策后问责**，全量 mirror 留痕） | PREFERENCE.md 置 pod 内（readonly_extra 只读、护栏级）；**无记忆纪律**——冷启动，「记忆」只有 PREFERENCE.md 与决策日志（§3.1）；无成员 CLI（判断经 `orch taste`，训练审阅经 `pysci`）；永不自改权重、永不投客观质量票；**最终交付验收不代理**（用户本人） |
 
 **副组长平级协作条款（用户裁决）**：副组长与组长接近平级，不是从属关系。
 - 副组长**有权拒绝**派发任务（须附理由，典型情形：组长对复杂度估计误判）；拒绝经
@@ -404,7 +404,7 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
     drain run 日志逐条打
     `[!] 档位回退：<角色> 席<名>不可用 → 已切换 <新席>（原因 …）`；
     b. **观察面**——事件流落 `state/channel-events.jsonl`（gitignored 过程态），
-    `pysci-mirror status` 概览项「回退」与 `orch status` 判决包健康段报「近 7 日 N 起」
+    `pysci status` 概览项「回退」与 `orch status` 判决包健康段报「近 7 日 N 起」
     加最近几条（时刻/角色/原席→新席/原因）；
   - **降级粘滞窗**：某席探测失败后进窗（`registry.model_fallback.skip_window_s`，默认
     3600s），窗内不再重复探测它、直接落到下一席，但每次派发仍打一行「席 X 跳过中
@@ -488,6 +488,7 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 | `orch status` | 全景：进行中计划、成员会话池摘要、backlog、待审批回复 | 需关注事项清单 |
 | `orch plan new <file>` / `--adhoc "<单步任务>"` | 登记计划（§4.2）；计划外事项也应建（单步）计划 | 计划概览 + 首环节派发建议 |
 | `orch plan run <id>` | 推进计划：执行当前环节，交接处暂停 | 环节结果 + **下一环节原文 recall** + 决策选项（一键继续/修改/中止） |
+| `orch plan advance <id> [--text/--task]` | **事件驱动**推进（§12 M5）：把下一环节**入队成员队列即返回**，job 完成事件触发下一次 advance（同成员 FIFO 串行、异成员并行＝多 plan 并行） | 入队回执 + 下一环节任务书提示；**不阻塞组长** |
 | `orch plan amend <id>` | 修改未执行环节（增删改、review 旗标、模型角色） | 更新后计划 |
 | `orch approve/reject <reply-id> --note` | 审批 INFRA_SUGGESTION | 通过→入 backlog＋自动唤醒 devops＋watch 挂载指令；审批回复自动附送给提议人 |
 | `orch watch [--timeout 4h]` | 阻塞等待后台 drain 事件（§4.5）：以 Bash run_in_background 启动 | **单行**事件（QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP / CHANNEL-STOP / CRASH）或 TIMEOUT；退出即唤醒组长会话 |
@@ -507,15 +508,27 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
 | 命令 | 作用 | 输出给组长的东西 |
 |---|---|---|
 | `orch jury <案卷> [--dry]` | Tier C 仲裁团（§5.3 的 **J** 通道）：家族外三席直调、双序对局、阻塞 ≈1 min | 结构化裁决（选择/理由/置信度）落 `state/evals/jury/<case>.json`；平票/inconclusive 过半 → 自动回退 twin 终裁（§5.3） |
-| `orch taste <案卷>` | twin 审美判断（§1 角色行）：冷启动单跳、注入 PREFERENCE.md | `{选择,理由,置信度}` 落 `state/evals/taste/`，`pysci-mirror review` 可盲审 |
+| `orch taste <案卷>` | twin 审美判断（§1 角色行）：冷启动单跳、注入 PREFERENCE.md | `{选择,理由,置信度}` 落 `state/evals/taste/`，`pysci review` 可盲审 |
 | `orch eval run --case <id>` / `orch eval set-baseline` | Tier B harness 套件执行与基线回填（§5.5；组员侧同面 `pysci-bench`） | 二元判决 + 指标表入 `state/ledger/evals.jsonl` |
 | `orch bench-add` / `orch bench-queue` | bencher 队列指派与查看（§5.5） | 队列态与「待查看」结果（择机查看，不即时唤醒组长） |
 | `orch inspector-up` / `inspector-off` / `inspector-status` | 巡检引擎生命周期与细读（§6；`up` 幂等、内嵌常用入口自动拉起） | 引擎态、全局开关、双队列水位 |
 | `orch drain-stop` / `orch watch` | 后台 drain 协作式停止 / 事件等待器（§4.5） | 单行事件（QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP / CHANNEL-STOP / CRASH） |
 
-**用户控制台是另一个 CLI `pysci-mirror`**（非 orch，用户侧入口）：`status` 全景
-（用户唯一关注入口 + 注册纪律）、`review` 盲审（=训练）、`journal` 口述机械分流、
-`decisions` 决策链全貌（§6 审计面）。
+**任务书 / 全员队列 / 事件面**（§12 M3–M6 落地；配合用户经 TUI 投递大任务与事件驱动推进）：
+
+| 命令 | 作用 | 输出给组长的东西 |
+|---|---|---|
+| `orch taskbooks list\|show <id>\|link <id> --plan <pid>\|sync` | 用户大任务书（`data/taskbooks/`）的程序化查看/拆解/对账面（**LLM 通道**；用户经 TUI 投递与 accept/reject） | 任务书列表/正文/状态；link 后转 planning |
+| `orch queues list` / `orch queues enqueue <member> --text "…" [--review] [--dry]` | 成员 FIFO 队列（`state/queues/<member>.json`）水位 / 入队即尝试拉起该成员 worker（**非常驻**，队空即销毁） | 各队水位 + 入队回执 + worker 唤醒结果 |
+| `orch events drain` / `orch events list` | 统一事件流（`state/events.jsonl`，§3.2）**一次排空全部积压**（幂等＝合并唤醒）/ 水位与最近事件 | 积压事件逐条 + 水位线；随后逐 plan `plan advance` |
+| `orch plan advance <id>` | 见上表：事件驱动的下一环节入队（`plan run` 保留为兼容阻塞形态） | 入队回执（不阻塞） |
+
+**用户控制台是另一个 CLI `pysci`**（非 orch，用户侧入口；§12 M1–M7 落地）：
+- **人类交互正道＝裸 `pysci`**（tty → Textual TUI 主菜单，↑↓ 切换 / Enter 进详情 / Esc 返回；
+  非 tty 自动回落 `status` 静态输出，**绝不阻塞等输入**）；
+- **LLM 专用通道＝`pysci status|journal|decisions`**（静态、机器可读的 `[key] value` 行 +
+  语义化退出码）：`status` 全景（用户唯一关注入口 + 注册纪律）、`journal` 口述机械分流、
+  `decisions` 决策链全貌（§6 审计面）。旧控制台入口已于 M7 **硬改名不留别名**并入裸 `pysci`（§13 裁决⑤）。
 
 ### 4.2 计划驱动（plan-runner）
 
@@ -553,6 +566,12 @@ steps:
 - `orch plan run` 逐环节执行；**交接处暂停**呈报组长：本环节摘要 + 下一环节粗描述
   recall + 选项（书写任务书继续 / amend 修改后续 / 中止）——组长可基于至今情况随时
   变通；
+- **事件驱动推进（§12 M5）**：`orch plan advance <id> [--text/--task]` 把**下一环节入队
+  成员队列即返回**——组长不再阻塞等环节；job 完成事件（`orch events drain` 一次排空）
+  驱动下一次 advance。同成员队列天然 FIFO 串行、异成员即并行 → **多 plan 并行是一等
+  能力**（两个大任务不共用成员就真并行）。`orch plan run` 保留为**兼容阻塞形态**
+  （内部等价循环 advance+等待），既有调用与脚本不回归。环节 `review: true` 走 reviewer
+  附属语义（通知单元＝宿主+review 合并完成时的 `STEP-REVIEW-DONE`）；
 - 自动机械接力（不占组长注意力）：交接物路径注入、reviewer FAIL 回派、机械验收 FAIL
   回派、审批回复附送；
 - 计划状态持久于 `state/plans/`——组长会话即使被压缩/重开，`plan run` 从断点继续。
@@ -735,7 +754,7 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
 - **J+M**：仲裁把关实施、实测核验效果，**实测覆盖仲裁**（仲裁 approve 但实测未改善 →
   自动立案纠正）；
 - **都不选 = override**（approve 或 reject 均是）：附详细理由、`mirror` 留痕、计入
-  **override 率**（`orch stats` 判决包健康段 / `pysci-mirror status`）；`orch reject` 无
+  **override 率**（`orch stats` 判决包健康段 / `pysci status`）；`orch reject` 无
   `--override` 参数即代码拒绝——**reject=override** 是数据事实，不是礼仪。
 
 **例外通道**：缺陷类 × 同条交付含 `<blocked>` → 当条工作本身即 in-vivo 实测，**默认
@@ -746,7 +765,7 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
 **`change`**（改声明行为/策略/权衡面——会话生命周期、阈值语义、charter 条款、路由语义）
 而**无判决记录** → drain 任务书注入约束，devops 必须交付 `<blocked>` 上报而非自行实施
 （裁定权在判决包与用户，不在执行端）。落点三面：登记字段缺省 change、任务书模板注入、
-决策审计面高亮（§6 `pysci-mirror decisions`）。
+决策审计面高亮（§6 `pysci decisions`）。
 
 **核验闭环（零新裁决点）**：核验方式在审批时一次定死——机械判据永远由交付协议自动执行，
 重型 A/B 仅当审批选了 M 才跑；**实施前至多一次 J、实施后只实测不再仲裁**；改善 → 销账，
@@ -868,7 +887,7 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
   指令入同一队列、同「强制派发」待遇（§4.1 用户控制台）；
 - **留痕与审计面**：override 一律入决策日志并计入 **override 率**（`orch stats` 判决包
   健康段；趋势意义，非绝对指标）；核验记录、twin 代理裁决与终裁自动入日志（原料层
-  `state/preference-journal.jsonl`）。**`pysci-mirror decisions` = 决策链全貌**（只读拼装：
+  `state/preference-journal.jsonl`）。**`pysci decisions` = 决策链全貌**（只读拼装：
   findings × backlog × run 摘要 × jury 案卷 × 决策日志）——发现 → class → remedy_shape
   → 判决记录 → 实施 commit → 核验状态，**免判决+change 置顶**（最需审计者优先）；
   `mirror status` 的「决策」项实时报水位。重要决策必须汇总进概览并可一屏看全
@@ -1180,7 +1199,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 - [x] **E5 决策流硬化**：判决包四态闸、inspector 全流程（自动晋升/双队列迟滞/全局开关/
       设计审查 rubric）、E5b 交付后核验闭环与缺陷×blocked 例外通道（§5.3/§6）；
 - [x] **E6 twin + mirror + 回退链**：`orch taste` 冷启动、盲审/口述分流/偏差报告绿色
-      通道、`escalate=twin` 自动终裁、`pysci-mirror` 首批全景项（§3.1/§4.1/§6）；
+      通道、`escalate=twin` 自动终裁、`pysci` 首批全景项（§3.1/§4.1/§6）；
 - [x] **E7 twin 上线**：代理裁决接入原「呈用户」升级点（护栏级审批/升级仲裁/Phase 验收），
       最终交付验收仍呈用户本人；2026-10-13 PREFERENCE v2 经用户确认转正、twin 全量（§1/§13）；
 - [x] **收尾：融合与退役**——生效机制并入本文（§1 角色表、§3.1、§4.1、§4.5、§5.3–5.5、
@@ -1196,7 +1215,33 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
   （`kind=delegation`）；**后续愿景（用户裁决 2026-10-12）**：把「永不阻塞」做成受硬机制
   保证的项目特性——除最终交付外系统不因等待用户停摆，代理授权点全量留痕、事后可追溯；
 - 2026-10-13 收官审查：ctx 水位闸绕过判决通道案 → 回退该闸 + **修复形状分流**（§5.3）+
-  **后台决策审计面** `pysci-mirror decisions`（§6）——三项均经用户裁决并落码。
+  **后台决策审计面** `pysci decisions`（§6）——三项均经用户裁决并落码。
+
+### 交互式控制台 + 全员 FIFO 队列化（REFACTOR-20261014，**收官**：M1–M7）
+
+> 蓝图＝施工期根目录的 REFACTOR 蓝图（M0 用户批准五项裁决后开工；**收官后蓝图退役**，
+> 裁决并入 §13、结果并入本节）。用户提案两部分：`pysci` 交互式控制台 + 全员 FIFO
+> 队列化与统一事件/唤醒。
+
+| 阶段 | 结果 |
+|---|---|
+| M1 | TUI spike：**Textual 8.2.8 定案**（退路 rich+prompt_toolkit 未启用）；裸 `pysci` 入口（tty→TUI / 非 tty→status） |
+| M2 | TUI 主菜单七模块 + 更新水位（`state/mirror-seen.json`）+ 详情视图框架 + 模块归并迁移 |
+| M3 | 用户任务书：`data/taskbooks/` 落盘 + 状态机（`new→planning→active→delivered→accepted\|rejected`）+ `TASKBOOK-NEW` 唤醒 |
+| M4 | 成员 FIFO 队列（7 专职+deputy+reviewer，基于 `workq` 原语）+ worker 生命周期（非常驻、per-member 锁、孤儿回收、队空写 `.done`）+ reviewer 附属语义（宿主+review 合并=1 通知单元） |
+| M5 | 统一事件/唤醒层（`state/events.jsonl`：JOB-DONE / STEP-REVIEW-DONE / QUEUE-EMPTY / TASKBOOK-NEW＋legacy 迁入）+ `plan advance` 事件驱动 + 多 plan 并行；`plan run` 保留兼容 |
+| M6 | backpressure 写侧接线（活跃会话注册表 + 周期心跳）+ 全队列 defer 延期（带宽类失败回挂 `defer_until`、双闸触顶停链上报） |
+| M7 | 改名清扫（旧 `pysci-*` 控制台入口退役、全仓活面零命中）+ 命令式面转 LLM 通道 + 文档并入 + 蓝图退役 |
+
+**残余风险（如实记载）**：M1 的交互验证全在 **Pilot 无头驱动**下完成——它证明的是**交互
+逻辑**，**不等于**真实终端的渲染与键盘事件可用。Git Bash/mintty、Windows Terminal、
+PowerShell 5.1 下的**实机验证待用户**（devops 会话非 tty）；若实机发现 Textual 不兼容，
+按**既定退路**（rich + prompt_toolkit）换栈并改写 M1 结论。
+
+**实施要点（审计留痕）**：队列形状全部走 `workq.py` 原语、锁/停止/run 名复用
+`drain.WorkerPaths` 族（§0.9 共享逻辑做库，不留第二套）；事件层单一流、`events drain`
+幂等＝**合并唤醒**（防唤醒风暴）；向后兼容硬要求满足——`plan run`/`dispatch` 阻塞路径与
+既有 watch 事件语义零改动。
 
 ---
 
@@ -1246,7 +1291,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-12 | **twin 初步上线宣告 + 渠道修订（用户裁决）**：① 用户审阅同意 PREFERENCE.md v1，指令优先吸收 prompts_storage「1近期」文件最新段后**初步上线**——「宁可粗糙但在用，先上线再说」（例外清单仅存的上线宣告权已交付，E7 接线单 #73）；② 仲裁渠道修订：三席官方直调 DEEPSEEK/GLM/KIMI（减平票）、SiliconFlow 降回退且回退必须案卷/status/mirror 三面告警、minimum 选型火山方舟 doubao-seed-2.0-mini（Key 载体=项目根 `.env` 非 OS 环境变量；需通用 Key/模型开通时用户指示联系）；③ basic.md §3 经用户授权修订：fallback 改 `uv run --no-sync`、改 pyproject 必先 `pysci-dev venv-sync`（隐式 sync 撞锁删入口事故固化）；④ 断点恢复实测通过（重启演练：孤儿回收/重派/黑匣子全绿）；⑤ 连环触顶根治立案：drain 组包不看任务尺寸（#72 --solo）、bencher A/B 空壳 done 无判决（#70 done 语义收紧）、E5a 续作含里程碑提交规程（#71） | 用户（四项）+ 组长立案 |
 | 2026-10-13 | **自改进体系实施收官（E0–E7 全链实证）**：各阶段成功判据逐项落地并经实战验证，生效机制全部并入本文（§1/§3.1/§4.1/§4.5/§5.3–5.5/§6/§9），原设计文档删除、仅存 git 历史；收官单=backlog 20261013-072000-leader | 用户终审授权 + 组长立案 |
 | 2026-10-13 | **PREFERENCE v2 生效 + twin 全量上线**：用户审阅确认 v2 转正（33 条语料蒸馏增量+4 修订入宪章），twin 判断通道由初步上线转全量；盲审/回测动线不变，下线权归用户 | 用户 |
-| 2026-10-13 | **修复形状分流 + 后台决策审计面（用户裁决）**：① 回退 ctx 水位闸（fe68a40 改了策略面却绕过判决通道、压缩防溢出使宣称收益无效——重启须经判决包并以真实账单/缓存读数为依据）；② 修复形状分流：inspector mechanical 免判决仅限 restore，change 无判决记录 → 任务书要求 devops 交付 blocked 上报（登记字段/任务书注入/charter 纪律三落点）；③ `mirror status` 注册「决策」项 + `pysci-mirror decisions` 决策链全貌（只读拼装、免判决+change 置顶） | 用户 |
+| 2026-10-13 | **修复形状分流 + 后台决策审计面（用户裁决）**：① 回退 ctx 水位闸（fe68a40 改了策略面却绕过判决通道、压缩防溢出使宣称收益无效——重启须经判决包并以真实账单/缓存读数为依据）；② 修复形状分流：inspector mechanical 免判决仅限 restore，change 无判决记录 → 任务书要求 devops 交付 blocked 上报（登记字段/任务书注入/charter 纪律三落点）；③ `mirror status` 注册「决策」项 + `pysci decisions` 决策链全貌（只读拼装、免判决+change 置顶） | 用户 |
 | 2026-10-13 | **路由 v3 谷时隐性 DeepSeek**（backlog 20261013-093000-leader）：DeepSeek 官方价分峰谷（峰 2 倍）→ 谷时自动把 qwen/mimo 预设的 **main** 席链换成 DeepSeek，`preset` 行不动（不新增预设）；判据 chinesecalendar（周末全天=含调休上班的周末、法定节假日全天、工作日其余时段；覆盖外年份/库缺席保守不切换并告警）；入谷即切、入峰提前 1 小时、**只影响新派发**（在途单跳台账 model 不变）。终裁修正：pro 席保持原预设升档席、仲裁团固定 GLM+KIMI+Mimo（矩阵 qwen/mimo/deepseek/隐性态四态定格）、**一律按量付费、TokenPlan 路径整个不做**（个人版条款禁 API 自动化调用）、缺 Key 席双面告警减员运行（平票 twin 终裁兜底）、被评模型同族回退席不上场；观测面 = `orch status` 路由段 + mirror 概览「路由」项 + 决策日志 `kind=routing`。附带：minimum 席链改 BYOK Mimo-V2.6-Flash（火山豆包调查关闭，P-25） | 用户设计 + 终裁 v4 |
 | 2026-10-13 | **批准单单一源纪律机械化**（backlog 20261013-071759-devops）：批准可被追加段写成自相矛盾而无人能发现（`20261012-164601-leader` 的 `taste_enabled` 实案）。新增 `dispatch.criteria_conflicts` 只判**同一配置键的相反布尔值**（精度优先：义务/禁止反差不判，误报=噪声=没人读），approve 告警 + 派发时把矛盾与取舍规则嵌进任务书；单一源登记=`superseded` 且点名该键。全语料 78 份建议实测：1 处真阳、0 误报 | 组长采纳 + devops 实施 |
 | 2026-10-13 | **交集类失败停链**（backlog 20261013-102152-devops）：词表增 `merge_dirty_face`，drain 认此成因→抢救照做、续作单不立，待清清单进 `merge_intersect` 并渲染 `orch status`（§9 恢复面例外闸）；任务书尾部教组员贴清单。实测三连跳树哈希逐字节相同=续作链空转 | 组长采纳 + devops 实施 |
@@ -1281,6 +1326,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **`worktree merge --no-cp-state`：不搬运行态的合并通道**（backlog 20261012-194305-devops，devops 自提缺陷）：`worktree merge` 把「cp gitignored 运行态」与「merge」捆在一条路径上，而会话数自检在「worktree 运行态比 main 薄」时按设计拒绝 cp——于是**分支已含 main 全部提交、只是运行态薄**的形状（孤儿回收单 / 先 `git merge main` 同步过代码面的单）下，唯一被文档认可的合并面被堵死，使用者只能绕开工具手敲 `git merge --no-ff`（合并顺序、判据、脏面保护恰是工具存在的理由）。改为：`--no-cp-state` 跳过 cp 与会话数自检（保留 main 版运行态、继续 merge，打印「保留 main 版」）；默认路径仍中止（防「拿稀疏面盖掉 richer 面」），但中止时**返回非零 rc 且在 `[NEXT]` 里给出该通道**，不再逼使用者绕开工具 | devops 自提 + 组长回收采纳 |
 | 2026-10-13 | **判重：孤儿回收双写一条 = 184000 已覆盖，不另立改**（backlog 20261013-022033-devops，组长点名「判重 184000」）：该建议的症状（drain 孤儿回收重派遣**未确认原会话死活即复用同名 worktree** → 两会话同目录并发）与 `20261012-184000-leader` **同根同修**——184000 已实装「进程面」五面之一（`procs.py` 判活/身份核对/终止进程树 + `drain.reclaim_orphan_sessions`）与「异名重建」（`workflow.bump_worktree_generation` / `worktree_name`：未能确认旧写者离场 → 条目升一代 `<id>-r<gen>`，`_next_generation` 读**盘上残留**最大世代）。该建议的三例判据（a 活写者 → 新任务书**不指向同一 worktree**；b 死但没删净 → 带 `-r<N>`；c 死且清干净 → 仍用原名）与「现场重放」均已由 `test_orphan_process_takeover.py` 钉住（`rebuilds_when_writer_wont_die` / `rebuilds_on_lingering_dir` / `kills_then_reuses_name` / `generation_name_flows_into_task_text` / `generation_advances_from_disk_not_counter`），实测全绿。**结论=重复单，无新改动**（建议散文中「活则**等其交付**」未被实现采纳；184000 的设计选了异名重建，判据以「不指向同一 worktree」为准，已满足） | devops 判重 + 组长裁决 |
 | 2026-10-13 | **`worktree clean` 增扫未注册目录面**（backlog 20261013-231756-leader）：旧 clean 按**分支**分类，**不在 `git worktree list` 的陈旧目录**（`git worktree prune` 也够不着）要么落「无对应分支」一笔带过、要么其内**未记录产物**（遗失工单）静默消失——本会话两次实证从两个这样的目录里捞回 2 张遗失工单（`20261012-194305`→#134、`20261013-022033`→#135）。改为**同扫目录面**、新增**未注册**档：**空**未注册 → 可清（`--apply` 即 `rmtree`，`git worktree remove` 够不着它）；**有内容** → 待确认 + **顶出未记录的建议/回复清单**（判据＝该相对路径不在 main 树里），供组长先回收再 `--discard` 清。分类—动作仍一致（有拒绝/待确认/未注册未清即 rc 非 0） | devops 自提 + 组长立案 |
+| 2026-10-14 | **REFACTOR-20261014 定稿：交互式控制台 + 全员 FIFO 队列化**（用户批准五项裁决；M1–M7 施工收官，结果并入 §12、蓝图退役）：① 用户**任务书落点 `data/taskbooks/`**（入 git、用户可见可编辑）；② **bencher 唤醒＝队列空时唤醒一次**（与 devops 同类）；③ **施工节奏**＝蓝图定稿经用户审阅后开工（M1–M7 逐环节）；④〔取舍〕**TUI 选型 Textual 主选**、rich+prompt_toolkit 兜底（M1 spike 实测定案）；⑤〔取舍〕**旧控制台 CLI 硬改名不留别名**、命令式子命令保留为 **LLM 专用通道**、人类交互正道＝TUI | 用户 |
 
 ## 14. 已知代价与风险
 
@@ -1302,7 +1348,11 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 - **yolo + guard 组合的失败面**：Bash 绕过（诚实条款 §9）；transcript 审计是唯一事后
   手段；
 - **PATH 持久化的边界**：仅覆盖 Git Bash 新会话；PowerShell 手动使用需另配 profile
-  （可选）；旧会话快照不含新 PATH（fallback uv run 兜底）。
+  （可选）；旧会话快照不含新 PATH（fallback uv run 兜底）；
+- **TUI 实机终端兼容待验（§12 M1 残余风险）**：`pysci` 交互面（主菜单 / 详情 / 键盘事件）
+  的验证全在 **Pilot 无头驱动**下完成，证明的是交互逻辑、**不等于**真机可用；
+  Git Bash/mintty、Windows Terminal、PowerShell 5.1 的实机渲染与按键**待用户实测**——
+  若 Textual 不兼容，按蓝图退路换 rich + prompt_toolkit 并改写 M1 结论。
 
 ---
 

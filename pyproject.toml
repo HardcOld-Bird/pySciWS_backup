@@ -87,13 +87,13 @@ dependencies = [
     #   MODELING3D_BLENDER；交互通道为 blender-mcp addon + MCP server，均社区维护）。
     "build123d>=0.13",
     "trimesh>=5",
-    # 交互式控制台（REFACTOR.md §2.3，2026-10-14 用户批准）：`pysci` 裸名 TUI 的 TUI 栈。
+    # 交互式控制台（README §12，2026-10-14 用户批准）：`pysci` 裸名 TUI 的 TUI 栈。
     # ADR（选什么/弃什么/为什么，决策记录写在决策发生的文件里）：
     #   选 **textual**——Textualize 出品（rich 作者的社区标准 TUI 框架），自带
     #   Pilot 无头键盘测试驱动、焦点/视图模型与主题，免手搓终端渲染与事件循环（§2 不手搓框架）。
     #   弃 **rich + prompt_toolkit**——能画静态富文本/取输入，但没有组件与视图栈，「主菜单↔详情」
     #   的状态机得自己写，与 §2.5 的模块化详情视图走向相悖；仅作 M1 spike 不兼容时的退路。
-    #   M1 已本地实测（复现与结论见 REFACTOR.md §2.3）。
+    #   M1 已本地实测（复现与结论见 README §12）。
     "textual",
 ]
 
@@ -110,9 +110,9 @@ imaging = ["scikit-image", "opencv-python-headless"]
 # ------------------------------------------------------------
 # 控制台脚本：各 skill 的统一 CLI 门面（均为 module:main 形态，main(argv=None)->int）。
 # 惯例是加前缀 pysci- 避免与全局工具重名；`uv sync` 后在 .venv/Scripts 生成 pysci-*.exe。
-# **例外（REFACTOR.md §2.1，2026-10-14 用户批准）**：`pysci` 裸名留给**用户交互式控制台**
-# ——原 `pysci-mirror` 改裸 `pysci`（tty→TUI / 非 tty→status），面向人而非 agent，裸名即产品名；
-# 本机无同名全局工具故不冲突；`pysci-mirror` 待 m7 统一清扫（本环节保留）。
+# **例外（README §12，2026-10-14 用户批准）**：`pysci` 裸名留给**用户交互式控制台**
+# （tty→TUI / 非 tty→status 静态输出），面向人而非 agent，裸名即产品名；本机无同名全局
+# 工具故不冲突。旧控制台入口于 M7 **硬改名不留别名**并入裸 `pysci`（§2.1 裁决⑤）。
 # 等价兜底调用：`uv run --no-sync python -m <入口模块>`（模块路径见各 SKILL.md 的 Invocation）。
 # ------------------------------------------------------------
 [project.scripts]
@@ -130,11 +130,9 @@ pysci-orch = "pysci.skills.orchestration.tools.orch:main"
 pysci-dev = "pysci.skills.devops.tools.dev:main"
 # 用户控制台（README §4.1/§6）：mirror 是**用户**侧入口（全景概览 + 口述分流），
 # 与 orch（组长）/dev（devops）分离；实现复用 orchestration 包内库（§0.9 共享逻辑做库）。
-# REFACTOR.md §2.1：裸 `pysci` = 新的用户交互式控制台（tty→TUI / 非 tty→status 静态输出）；
-# 子命令 `pysci status|journal|decisions …` 保持静态、作 LLM 专用通道。m1 先落 TUI 骨架。
+# README §12：裸 `pysci` = 用户交互式控制台（tty→TUI / 非 tty→status 静态输出）；
+# 子命令 `pysci status|journal|decisions …` 保持静态、作 **LLM 专用通道**。
 pysci = "pysci.skills.orchestration.tools.tui.app:main"
-# 旧用户控制台：m1 保留不动，m7 统一清扫（§2.5）。
-pysci-mirror = "pysci.skills.orchestration.tools.mirror:main"
 # bencher 组员工具（README §5.5，E4）：harness 测量面——跑案/捕获基线/副本 A/B/读数表。
 # 与 dev 一样是「组员自己的 CLI」，复用 orchestration 的 eval/replica 库，不复制判据。
 pysci-bench = "pysci.skills.bencher.tools.bench:main"

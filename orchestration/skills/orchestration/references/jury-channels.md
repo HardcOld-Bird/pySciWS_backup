@@ -51,7 +51,7 @@
 `{seats, voting, unavailable, missing_primary, fallback_enabled, fallback_used, notice}`，
 其中 `voting`＝本庭实际开庭的席＝可用主席 +(若启用且可用) 回退席。
 
-读数一行话由 `readiness_summary()` 独家产出（`orch status` 与 `pysci-mirror status`
+读数一行话由 `readiness_summary()` 独家产出（`orch status` 与 `pysci status`
 共用同一函数，防两处文案漂移）：
 
 ```
@@ -70,7 +70,7 @@
 | --- | --- |
 | 案卷 | `state/evals/jury/<case>.json` 的 `fallback{enabled,used,notice,missing_primary}`；`[!]` 段并进 `orch jury` stdout |
 | status | `orch status` 判决包健康段（`verdict.seat_alert_lines`） |
-| mirror | `pysci-mirror status` 的「仲裁」行 |
+| mirror | `pysci status` 的「仲裁」行 |
 
 告警与「是否真的用上了回退席」**解耦**：`missing_primary` 非空即报——主席掉了而回退席
 也挂（本庭 0 席，入队），同样是须用户处理的事故，不能因为没用上回退席就哑掉。

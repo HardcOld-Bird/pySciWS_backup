@@ -349,7 +349,7 @@ def test_journal_menu_eof_without_traceback(twin_face, monkeypatch, capsys):
     """tty 但 stdin 无内容（agent 会话常态）：干净拒绝，不抛 EOFError traceback。
 
     上面那条非交互用例走不到这一支——它的 stdin 不是 tty，在 isatty 处就返回了。
-    真跑 ``pysci-mirror journal`` 时 stdin 常是「伪 tty + 空管道」，两条路都得封。
+    真跑 ``pysci journal`` 时 stdin 常是「伪 tty + 空管道」，两条路都得封。
     """
     monkeypatch.setattr(mirror.sys.stdin, "isatty", lambda: True)
 

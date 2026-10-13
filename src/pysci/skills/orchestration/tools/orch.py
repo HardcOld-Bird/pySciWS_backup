@@ -161,7 +161,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         f"== 队列 == 待审批建议={len(sugg)}  backlog待办={len(back)}  "
         f"待附送回复={replies_n}"
     )
-    # 用户经 pysci-mirror 口述的**行动指令**：与偏差报告「纠正现有结果」同类，
+    # 用户经 pysci 口述的**行动指令**：与偏差报告「纠正现有结果」同类，
     # 必须写任务书派 devops、不得 override（README §6 绿色通道/§4.1 journal）。不入本视野就等于
     # 没有队列——组长侧可见性是这条强制链的唯一执法点。
     pend = _mirror.pending_directives()
@@ -600,7 +600,7 @@ def cmd_ledger(args: argparse.Namespace) -> int:
 
 
 def cmd_queues(args: argparse.Namespace) -> int:
-    """``orch queues``：成员 FIFO 队列的程序化面（REFACTOR.md §3.1，M4）。
+    """``orch queues``：成员 FIFO 队列的程序化面（README §12，M4）。
 
     ``list`` 列各成员队列水位；``enqueue <member>`` 入队一条 job（``--review`` 带复审附件）。
     入队后自动尝试拉起该成员 worker（非常驻；锁忙则并入当前循环，不重复派生）。
@@ -641,7 +641,7 @@ def cmd_queues(args: argparse.Namespace) -> int:
 
 
 def cmd_events(args: argparse.Namespace) -> int:
-    """``orch events``：统一事件流的程序化面（REFACTOR.md §3.2，M5）。
+    """``orch events``：统一事件流的程序化面（README §12，M5）。
 
     ``drain`` **一次排空全部积压事件**（边沿触发/合并唤醒：组长每次醒来排空一次即清算，
     多 worker 同时完工折合一个回合；**幂等**——再敲一次返回空）；``list`` 列水位与最近事件。
@@ -675,7 +675,7 @@ def cmd_events(args: argparse.Namespace) -> int:
 
 
 def cmd_taskbooks(args: argparse.Namespace) -> int:
-    """``orch taskbooks``：用户大任务的**程序化查看面**（LLM 通道，REFACTOR.md §3.4）。
+    """``orch taskbooks``：用户大任务的**程序化查看面**（LLM 通道，README §12）。
 
     子命令：``list`` / ``show <id>`` / ``link <id> --plan <pid>`` / ``sync``。
     **用户 accept/reject 只经 TUI**——本面不提供批复动作（用户裁决 ①）。

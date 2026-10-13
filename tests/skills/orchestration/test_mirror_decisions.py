@@ -1,7 +1,7 @@
 """inspector 决策审计面（用户 2026-10-13 06:2x 裁决，backlog 20261013-063000-leader）。
 
 ctx 水位闸教训：inspector 免判决自动晋升的重要决策对用户隐蔽。两面执法：
-``mirror status`` 增「决策」水位段（§10 注册纪律）；``pysci-mirror decisions`` 按决策链
+``mirror status`` 增「决策」水位段（§10 注册纪律）；``pysci decisions`` 按决策链
 呈现全貌——发现 → class → remedy_shape → 判决记录 → 实施 commit → 核验状态，
 免判决+change 置顶。只读拼装（findings × backlog × run 摘要 × jury 案卷 × 决策日志），
 不新增状态面。

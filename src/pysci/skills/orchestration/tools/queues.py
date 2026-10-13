@@ -1,4 +1,4 @@
-"""成员工作队列（REFACTOR.md §3.1，M4）：全员统一 FIFO 的**队列层**。
+"""成员工作队列（README §12，M4）：全员统一 FIFO 的**队列层**。
 
 每成员一队 ``orchestration/state/queues/<member>.json``，**队列形状全部走** :mod:`workq`
 （纪律：同一能力不留两份实现）。本模块只定义「条目长什么样、入队/查队/父子关联怎么算」；

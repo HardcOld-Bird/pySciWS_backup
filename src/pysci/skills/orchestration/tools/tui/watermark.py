@@ -1,4 +1,4 @@
-"""主菜单更新水位的落盘面（REFACTOR.md §2.2）——真源 ``state/mirror-seen.json``。
+"""主菜单更新水位的落盘面（README §12）——真源 ``state/mirror-seen.json``。
 
 形状：``{"version": 1, "modules": {<module key>: <cursor>}}``。``cursor`` 由各模块自定
 （记录流=条数、状态读数=内容指纹）；读侧 :func:`load_seen` **fail-open**（缺失/坏 JSON/

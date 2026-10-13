@@ -1,4 +1,4 @@
-"""统一事件/唤醒层 + plan advance 事件驱动（REFACTOR.md §3.2/§3.5，M5）。
+"""统一事件/唤醒层 + plan advance 事件驱动（README §12，M5）。
 
 覆盖任务书验收：worker 完成→JOB-DONE；宿主+review 合并只发一次 STEP-REVIEW-DONE；
 队空发 QUEUE-EMPTY（devops/bencher）；events drain 一次排空且幂等；plan advance 入队即
