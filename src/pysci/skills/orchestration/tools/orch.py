@@ -260,6 +260,12 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(
             f"  [!] needs_leader 条目 {len(needs_leader)}（drain 跳过，待组长处理）："
         )
+        # 处理正门就摆在清单上方（backlog 20261013-215909-leader）：此前组长只能直调
+        # drain 内部函数回排 / 直改 backlog.json 销账，命令存在与否决定了会不会走野路子。
+        print(
+            "      正门：`orch requeue <id> [--note]` 回排重派（并唤醒 drain） · "
+            '`orch resolve <id> --note "<为何>"` 确认达标销账'
+        )
         repeat_fails = {
             k: v for k, v in _drain.failure_counts().items() if v >= 2
         }  # 阈值 2：一次失败是常态，两次才说明「原样重派」大概率再失败
@@ -807,6 +813,28 @@ def main(argv: list[str] | None = None) -> int:
         "缺失则拒绝执行并非零退出；提供则写回复、移入 rejected/ 并追加 journal 行",
     )
     p.set_defaults(func=_workflow.cmd_reject)
+
+    p = sub.add_parser(
+        "requeue",
+        help="回排：needs_leader → pending 并唤醒 drain（组长面正门，取代直调内部函数）",
+    )
+    p.add_argument("item_id", help="backlog 条目 id（须当前 status=needs_leader）")
+    p.add_argument(
+        "--note",
+        default="",
+        help="回排说明（覆盖条目附注；补授权写这里，重排任务书会引用）",
+    )
+    p.set_defaults(func=_workflow.cmd_requeue)
+
+    p = sub.add_parser(
+        "resolve",
+        help="销账：组长确认已达标的 needs_leader 条目 → done（须 --note 留痕）",
+    )
+    p.add_argument("item_id", help="backlog 条目 id（须当前 status=needs_leader）")
+    p.add_argument(
+        "--note", required=True, help="为何销账（留痕；原 blocked 事实保留）"
+    )
+    p.set_defaults(func=_workflow.cmd_resolve)
 
     p = sub.add_parser("consult", help="咨询副组长（平级协作：异议义务提醒自动注入）")
     p.add_argument("question")

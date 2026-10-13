@@ -495,6 +495,84 @@ def backlog_requeue(item_id: str, note: str = "") -> None:
     )
 
 
+def _backlog_transition(
+    item_id: str,
+    *,
+    allowed_from: set[str],
+    to_status: str,
+    note: str = "",
+    stamp: str = "",
+) -> dict | None:
+    """受控状态迁移：**仅当**条目当前 status ∈ ``allowed_from`` 时改 ``to_status``。
+
+    与 :func:`backlog_requeue`（只看 in_progress）不同，本函数给组长面的
+    `orch requeue`/`orch resolve` 共用——那两个动作都必须**核对起点状态**（别把 pending 的
+    条目 "销账"、别对已 done 的条目 "回排"），故起点不在允许集就**不动**、返回 None。
+    ``note`` 非空才覆盖（留空=保留原附注）；``stamp`` 非空记一个时间戳字段。
+
+    Returns:
+        迁移后的条目（磁盘副本）；未找到 / 起点状态不符 → None（未写盘）。
+    """
+    if not BACKLOG_PATH.exists():
+        return None
+    data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
+    target: dict | None = None
+    for item in data.get("items", []):
+        if str(item.get("id")) != str(item_id):
+            continue
+        if str(item.get("status")) not in allowed_from:
+            return None
+        item["status"] = to_status
+        if stamp:
+            item[stamp] = _now()
+        if note:
+            item["note"] = note
+        target = item
+        break
+    if target is None:
+        return None
+    BACKLOG_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return target
+
+
+def backlog_requeue_needs_leader(item_id: str, *, note: str = "") -> dict | None:
+    """``orch requeue``：needs_leader → pending，供组长回排重派（backlog 20261013-215909-leader）。
+
+    与 :func:`backlog_requeue`（系统性故障的 in_progress→pending 复位）分工：本函数专治
+    组长对 **needs_leader** 条目的回排。``--note`` 覆盖条目附注（补授权/重排说明）——带
+    ``awaiting_decision`` 的条目，note 即重排任务书里「本次补齐情况」的来源
+    （:func:`_awaiting_decision_instruction`）；不传则保留原附注（drain 的失败全文）。
+    原 needs_leader 事实不抹（``needs_leader_at`` 等字段原样留着，git 历史另有记录）。
+
+    Returns:
+        迁移后的条目；未找到 / 状态不是 needs_leader → None。
+    """
+    return _backlog_transition(
+        item_id, allowed_from={"needs_leader"}, to_status="pending", note=note
+    )
+
+
+def backlog_resolve(item_id: str, *, note: str = "") -> dict | None:
+    """``orch resolve``：组长确认 needs_leader 条目**已达标** → done（backlog 20261013-215909-leader）。
+
+    「原 blocked 事实」不删：只改 status 并追加销账 note（stamp ``done_at``），
+    ``needs_leader_at``/``blocked_report`` 等字段原样留着。这是「组长手动把已消解条目
+    收尾」的正门，取代直改 ``state/backlog.json`` 的野路子（drain 在跑时有并发覆盖风险）。
+
+    Returns:
+        迁移后的条目；未找到 / 状态不是 needs_leader → None。
+    """
+    return _backlog_transition(
+        item_id,
+        allowed_from={"needs_leader"},
+        to_status="done",
+        note=note,
+        stamp="done_at",
+    )
+
+
 # ---------------------------------------------------------------------------
 # 抢救续作面（backlog 20261012-234000-leader：崩溃/腰斩留下的未收尾进度自动接手续完）
 # ---------------------------------------------------------------------------
@@ -1298,6 +1376,57 @@ def cmd_reject(args) -> int:
     print(
         f"[√] 已否决 {sugg.stem}（override 留痕入决策日志）；"
         f"理由将在下次派发 {member} 时附送。"
+    )
+    return 0
+
+
+def cmd_requeue(args) -> int:
+    """``orch requeue <id> [--note]``：needs_leader → pending **并唤醒 drain**。
+
+    组长面缺的那条正门（backlog 20261013-215909-leader）：把一个被 block 的条目回排重派
+    ——此前只能直调 drain 内部函数 ``wake_devops``（或直改 backlog.json），本命令把
+    「迁移状态 + 唤醒」收成一条可测动作。回排只对**本就 needs_leader** 的条目有效（起点
+    状态受控，见 :func:`backlog_requeue_needs_leader`）；``--note`` 写回排说明，
+    带 ``awaiting_decision`` 的条目即「本次补齐情况」。
+    """
+    item = backlog_requeue_needs_leader(args.item_id, note=(args.note or ""))
+    if item is None:
+        print(
+            f"[!] 未找到 status=needs_leader 的条目 '{args.item_id}'——"
+            "回排只对 needs_leader 有效（orch status 看清单）"
+        )
+        return 2
+    print(
+        f"[√] {item['id']} 已回排 pending（needs_leader → pending），"
+        "devops FIFO 将重新取到它"
+    )
+    from .drain import (
+        wake_devops,  # 延迟导入：workflow↔drain 环（drain 依赖 workflow）
+    )
+
+    _, msg = wake_devops()
+    print(f"    {msg}")
+    return 0
+
+
+def cmd_resolve(args) -> int:
+    """``orch resolve <id> --note "<为何销账>"``：组长确认**已达标** → done。
+
+    把一条已被 drain 挂成 needs_leader、但组长判定已消解的条目收尾（backlog
+    20261013-215909-leader）——此前只能直改 ``state/backlog.json``（drain 在跑时有并发
+    覆盖风险）。原 blocked/needs_leader 事实**不删**：保留在 note 与 git 历史。只对
+    needs_leader 起点有效。
+    """
+    item = backlog_resolve(args.item_id, note=(args.note or "").strip())
+    if item is None:
+        print(
+            f"[!] 未找到 status=needs_leader 的条目 '{args.item_id}'——"
+            "销账只对 needs_leader 有效（orch status 看清单）"
+        )
+        return 2
+    print(
+        f"[√] {item['id']} 已销账 done（组长确认达标）；"
+        "原 needs_leader 事实保留于 note 与 git 历史"
     )
     return 0
 
