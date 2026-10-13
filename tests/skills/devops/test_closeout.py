@@ -265,3 +265,65 @@ def test_clean_guidance_names_the_real_flag(tmp_path, monkeypatch, capsys):
     _clean(main, apply=False)
     out = capsys.readouterr().out
     assert "--discard" in out and "--force" not in out
+
+
+# ---------------------------------------------------------------------------
+# ⑤ 未注册目录面（backlog 20261013-231756-leader）：clean 不只看 git worktree list
+# ---------------------------------------------------------------------------
+def _ghost(main: Path, name: str, files: dict[str, str] | None = None) -> Path:
+    """造一个**未注册**的陈旧目录（不经 `git worktree add`，故 git/prune 都够不着）。"""
+    d = main / ".qoder" / "worktrees" / name
+    d.mkdir(parents=True)
+    for rel, text in (files or {}).items():
+        p = d / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+    return d
+
+
+def test_clean_lists_and_clears_empty_unregistered_dir(tmp_path, monkeypatch, capsys):
+    """空未注册目录：被 clean 列出（不依赖 git worktree list）且 `--apply` 可清。"""
+    main = _main_repo(tmp_path)
+    _ghost(main, "ghost-empty")
+    _bind(monkeypatch, main)
+
+    assert _clean(main, apply=False) == 0
+    out = capsys.readouterr().out
+    assert "ghost-empty" in out and "未注册" in out
+
+    assert _clean(main, apply=True) == 0
+    assert not (main / ".qoder" / "worktrees" / "ghost-empty").exists()
+
+
+def test_clean_unregistered_with_content_confirms_and_surfaces_artifacts(
+    tmp_path, monkeypatch, capsys
+):
+    """有内容的未注册目录 → 待确认 + 顶出**未记录产物清单**；`--discard` 才删。"""
+    main = _main_repo(tmp_path)
+    _ghost(main, "stale", {"orchestration/state/suggestions/LOST-1.md": "# 遗失工单\n"})
+    _bind(monkeypatch, main)
+
+    _clean(main, apply=False)
+    out = capsys.readouterr().out
+    assert "未注册" in out and "stale" in out
+    assert "orchestration/state/suggestions/LOST-1.md" in out  # 未记录产物被顶出
+
+    assert _clean(main, apply=True) != 0  # 无 --discard → 拒绝、rc 非 0
+    assert (main / ".qoder" / "worktrees" / "stale").exists()
+
+    assert _clean(main, apply=True, discard=True) == 0
+    assert not (main / ".qoder" / "worktrees" / "stale").exists()
+
+
+def test_unregistered_artifact_detection_ignores_recorded_files(tmp_path, monkeypatch):
+    """已进 main 的建议文件不算「未记录」——不该误报（判据＝main 树里同名不存在）。"""
+    main = _main_repo(tmp_path)
+    (main / "orchestration" / "state" / "suggestions").mkdir(parents=True)
+    (main / "orchestration" / "state" / "suggestions" / "KNOWN.md").write_text(
+        "x\n", encoding="utf-8"
+    )
+    _git(main, "add", "-A")
+    _git(main, "commit", "-q", "-m", "known suggestion")
+    _ghost(main, "stale", {"orchestration/state/suggestions/KNOWN.md": "x\n"})
+    _bind(monkeypatch, main)
+    assert dev._undocumented_artifacts(main / ".qoder" / "worktrees" / "stale") == []

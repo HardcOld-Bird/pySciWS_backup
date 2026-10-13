@@ -33,7 +33,7 @@ pysci-dev worktree merge <任务名>   # 交集检查 → cp 运行态 → merge
                                     #   交集非空 rc=2 列文件（merge-base 起算）；--no-cp-state 不搬运行态
 # 5. 推送（跨平台超时 + 成败留痕；best-effort）
 pysci-dev push
-# 6. 清理：merge 已自动做；遗留面 `pysci-dev worktree clean [--apply]`（未合入拒绝；脏面 --discard）
+# 6. 清理：merge 已自动做；遗留面 `pysci-dev worktree clean [--apply]`（未合入拒绝；脏面/未注册 --discard）
 ```
 
 **主树同步入口/依赖一律 `pysci-dev venv-sync`**（裸 `uv sync`/`uv run` 遇运行中 exe 会先删光
