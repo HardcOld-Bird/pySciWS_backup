@@ -1380,10 +1380,23 @@
       "kind": "usability",
       "success_criteria": "全仓 REFACTOR 引用清零；README 逐节快照抽验；文件已删 git 可查；§13 三行登记；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-072000-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T09:33:06+08:00",
       "note": "",
-      "effort": "high"
+      "effort": "high",
+      "started_at": "2026-10-13T09:33:08+08:00",
+      "worktree": "20261013-072000-leader"
+    },
+    {
+      "id": "20261013-080000-leader",
+      "member": "leader",
+      "summary": "**（预设回填，用户 2026-10-13 08:0x 供 Key）DeepSeek 预设激活：BYOK DeepSeek-Flash 精确席位回填**",
+      "kind": "usability",
+      "success_criteria": "deepseek 预设激活+UUID 消歧单测绿+真实派发读数可证+全量无回归",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-080000-leader.md",
+      "status": "pending",
+      "proposed": "2026-10-13T09:40:19+08:00",
+      "note": ""
     }
   ]
 }
