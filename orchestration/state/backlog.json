@@ -2108,11 +2108,14 @@
       "kind": "defect",
       "success_criteria": "分支已含 main 全部提交但 gitignored 运行态比 main 薄时，worktree merge 仍有一条不搬运行态的合并通道（新旗标或自动跳过 cp 并继续 merge），中止时返回非零 rc 并在 [NEXT] 给出该通道；判据=一次真实孤儿回收单在该形状下能走工具面合并。",
       "evidence_file": "orchestration/state/suggestions/approved/20261012-194305-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T22:49:23+08:00",
-      "note": "该建议由 worktree clean 的安全拒删守护而下、组长回收（2026-10-13）",
+      "note": "drain 批量销账（commit 193f9d1）",
       "started_at": "2026-10-13T22:49:25+08:00",
-      "worktree": "20261012-194305-devops"
+      "worktree": "20261012-194305-devops",
+      "done_at": "2026-10-13T22:55:24+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261012-194305-devops"
     }
   ]
 }
