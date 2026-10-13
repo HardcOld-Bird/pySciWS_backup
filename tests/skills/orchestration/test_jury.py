@@ -648,3 +648,114 @@ def test_cmd_jury_dry_prints_dossier_and_calls_nothing(iso_jury, monkeypatch, ca
     assert rc == 0 and calls == []
     assert "## 自动附着材料" in out and "材料哈希" in out
     assert not jury.record_path("case-1").exists()
+
+
+# ---------------------------------------------------------------------------
+# 回退席不参与拒庭判据（backlog 20261013-173000-leader，J 通道首次真实开庭实测）
+# ---------------------------------------------------------------------------
+def _seed_panel(iso_jury, monkeypatch, seats, fallback, *, absent_key=""):
+    """注 Key + 写 jury 席位块（回退席可传 None 表示不启用回退）。"""
+    monkeypatch.setenv(SEAT_KEY_ENV, KEY)
+    if absent_key:
+        monkeypatch.delenv(absent_key, raising=False)
+    extra = {"fallback": fallback} if fallback else {}
+    set_jury_panel(iso_jury.parent / "registry.json", seats, **extra)
+
+
+def test_same_family_fallback_does_not_refuse_court(iso_jury, monkeypatch):
+    """**a) 主席全就绪 + 回退席命中被评族 → 正常开庭**（本单复现即绿）。
+
+    实测误判（2026-10-13 17:2x `approve 131505 --jury`）：三主席 glm/kimi/qwen 全就绪，
+    却因回退席 `deepseek-ai/DeepSeek-V4-Pro` 命中被评族被拒庭。回退席同族时**已被 §4
+    钉在庭外、永不上场**，拿它拒庭＝「没上场也拒庭」——正是 jury.py 自身注释预警的形态。
+    """
+    _seed_panel(
+        iso_jury,
+        monkeypatch,
+        [
+            {"name": "glm", "model": "glm-5.3"},
+            {"name": "kimi", "model": "kimi-k2.6"},
+            {"name": "qwen", "model": "Qwen3.8-Max-Preview"},
+        ],
+        {
+            "enabled": True,
+            "name": "mimo-fb",
+            "model": "Mimo-V2.6-Pro",  # 与被评族（预设 mimo）同族
+            "base_url": "https://stub.invalid/v1",
+            "key_env": SEAT_KEY_ENV,
+        },
+    )
+    monkeypatch.setattr(jury, "chat_once", prefer_juror(LIKE))
+
+    plan = jury.seat_readiness()
+    assert plan["producer"] == "mimo"
+    assert plan["fallback_blocked"], "同族回退席应被 §4 钉在庭外（该席禁用，不是拒庭）"
+    assert plan["fallback_used"] is False, "主席全就绪 → 回退席本就不该上场"
+
+    run = jury.adjudicate(jury.parse_case(seed_case(iso_jury)))
+    assert run.status == "recorded", (
+        f"回退席不参与拒庭判据 → 应正常开庭，实际 {run.status}：{run.message}"
+    )
+
+
+def test_missing_primary_with_same_family_fallback_not_refusal(iso_jury, monkeypatch):
+    """**b) 一主席不可达 + 回退同族 → 非拒庭**（回退席被禁，本庭减员开庭/twin 兜底）。"""
+    absent = "PYSCI_JURY_ABSENT_KEY"
+    _seed_panel(
+        iso_jury,
+        monkeypatch,
+        [
+            {"name": "glm", "model": "glm-5.3"},
+            {"name": "kimi", "model": "kimi-k2.6"},
+            {"name": "qwen", "model": "Qwen3.8-Max-Preview", "key_env": absent},
+        ],
+        {
+            "enabled": True,
+            "name": "mimo-fb",
+            "model": "Mimo-V2.6-Pro",
+            "base_url": "https://stub.invalid/v1",
+            "key_env": SEAT_KEY_ENV,
+        },
+        absent_key=absent,
+    )
+    monkeypatch.setattr(jury, "chat_once", prefer_juror(LIKE))
+
+    plan = jury.seat_readiness()
+    assert plan["fallback_blocked"] and plan["fallback_used"] is False
+    run = jury.adjudicate(jury.parse_case(seed_case(iso_jury)))
+    assert run.status != "declined", "回退席被禁不等于拒庭：本庭减员照常开庭"
+
+
+def test_panel_containing_producer_family_still_refuses(iso_jury, monkeypatch):
+    """**c) 主席面板本身含被评族 → 仍拒开庭**（原规则保留），且零调用。
+
+    构造面说明：出厂三预设的面板**本就不含被评族**（qwen 预设→glm+kimi+mimo，被评 qwen），
+    故「面板含被评族」只能由 `[routing] jury_panel` 覆盖造出——而该覆盖只在**谷时隐性态**
+    生效（:func:`routing.jury_panel`：非隐性态原样返回预设自带面板）。故本支在谷时开庭：
+    被评族=valley_preset（deepseek），把 deepseek 点进面板即违规。
+    """
+    set_routing_clock(monkeypatch, VALLEY_MOMENT)
+    write_routing(jury_panel=["glm", "kimi", "deepseek"])
+    _seed_panel(
+        iso_jury,
+        monkeypatch,
+        [
+            {"name": "glm", "model": "glm-5.3"},
+            {"name": "kimi", "model": "kimi-k2.6"},
+            {"name": "deepseek", "model": "deepseek-v4-pro"},
+        ],
+        {"enabled": False},
+    )
+
+    def _boom(*a, **kw):  # pragma: no cover - 拒庭时绝不该被调到
+        raise AssertionError("拒开庭的庭不许发起任何 API 调用")
+
+    monkeypatch.setattr(jury, "chat_once", _boom)
+    plan = jury.seat_readiness()
+    assert plan["producer"] == "deepseek" and "deepseek" in plan["panel"], (
+        f"构造未生效：panel={plan['panel']} producer={plan['producer']}"
+    )
+    run = jury.adjudicate(jury.parse_case(seed_case(iso_jury)))
+    assert run.status == "declined" and "同族" in run.message, (
+        f"status={run.status} msg={run.message[:200]}"
+    )

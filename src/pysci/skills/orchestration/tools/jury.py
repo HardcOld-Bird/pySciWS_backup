@@ -1083,7 +1083,15 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
     # 挡在庭外——拿「在册」当违约会把谷时每一庭都锁死成 declined，而 that 恰是本单要开的庭。
     # 被挡在庭外的同族席照样在读数面点名（:func:`readiness_summary`），违约要被看见，
     # 但看见的位置在「这席没进庭」那一段，不在拒庭那条上。
-    in_court = [s.model for s in plan["seats"]]
+    #
+    # **回退席不参与本判据**（backlog 20261013-173000-leader）：它同族时已被
+    # :func:`_plan_court` 按 §4 钉在庭外（``fallback_blocked``）、**永远不会投票**，
+    # 而 ``plan["seats"]`` 是「主席 + 已启用的回退席」的规划面——照它审就等于
+    # 「没上场也拒庭」。实测 2026-10-13 17:2x `approve 131505 --jury` 正是该误判：
+    # 三主席 glm/kimi/qwen 全就绪，却因回退席 `deepseek-ai/DeepSeek-V4-Pro` 命中被评族
+    # 被拒庭（jury.py 自身注释早已预警该形态）。回退席同族时的正确处理是**该席禁用**
+    # （真需要回退时按设计走降级入队 + 双面告警），不是拒开庭。
+    in_court = [s.model for s in plan["seats"] if s.role != "fallback"]
     if bad := family_violations(in_court, producer):
         return Run(
             "declined",
