@@ -895,8 +895,18 @@ def _clean_worktrees(*, apply: bool, force: bool = False) -> int:
     return 2 if (buckets[_UNMERGED] or kept_confirm or failed) else 0
 
 
-def cmd_worktree_merge(name: str, wt: Path, *, keep: bool = False) -> int:
+def cmd_worktree_merge(
+    name: str, wt: Path, *, keep: bool = False, no_cp_state: bool = False
+) -> int:
     """worktree merge 主体：交集检查 → cp gitignored 运行态 → 会话数校验 → merge --no-ff → 自检。
+
+    Args:
+        keep: 成功后保留 worktree 与分支（默认成功即自动摘面）。
+        no_cp_state: **不搬运行态**的合并通道（backlog 20261012-194305-devops）——跳过 cp 与
+            会话数自检，main 侧运行态原样保留。用于「分支**已含 main 全部提交**、只是 worktree
+            的 gitignored 运行态更薄」的形状（孤儿回收/先 `git merge main` 同步过代码面的单）：
+            旧行为把 cp 与 merge 捆死，该形状下唯一被文档认可的合并面被堵死，使用者只能绕开
+            工具手敲 `git merge --no-ff`——而合并顺序、判据、脏面保护恰是工具存在的理由。
 
     Returns:
         0 成功；2 硬阻塞（与 main 未提交面有交集 / worktree 缺失 / 会话数会倒退）；
@@ -935,32 +945,42 @@ def cmd_worktree_merge(name: str, wt: Path, *, keep: bool = False) -> int:
     wt_n = _runtime_session_total(wt)
     # 仅当 worktree 确实带来一个更稀疏的运行态（会覆盖 main 的更丰富数据）才中止；
     # worktree 无运行态（从未派发/加载）时 cp 对 sessions-runtime.json 是 no-op，不该误挡。
-    if wt_n is not None and wt_n < base_n:
+    # no_cp_state 走「不搬运行态」通道：本闸只防「拿稀疏面盖掉 richer 面」，不搬即无此风险。
+    if not no_cp_state and wt_n is not None and wt_n < base_n:
         print(
             f"[!] worktree 侧会话数 {wt_n} < main baseline {base_n}——cp 会覆盖更丰富的 main "
             f"运行态、丢会话，中止。**成因＝worktree 的运行态比 main 稀疏**，处置："
             f"① 该面若来自 `pysci-dev worktree add` 之后，add 会自动播种，走到这里说明"
             f"worktree 侧运行态后来被清空/回退过——查它在盘内容；"
-            f"② 或 main 在 add 之后新增了大量会话——以 main 为准，直接合并（本闸要防的是"
-            f"反向：拿稀疏面盖掉 richer 面）；"
-            f"③ 手动 `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 后重跑"
+            f"② 或 main 在 add 之后新增了大量会话——以 main 为准；"
+            f"③ 分支**已含 main 全部提交**、只是运行态薄（先 `git merge main` 同步过代码面的"
+            f"孤儿回收单）→ 走**不搬运行态**通道：`--no-cp-state`；"
+            f"④ 或手动 `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 后重跑"
+        )
+        print(
+            f"[NEXT] 不搬运行态直接合并：`pysci-dev worktree merge {name} --no-cp-state`"
+            f"——保留 main 版运行态、继续 merge，不必绕开工具手敲 `git merge --no-ff`"
         )
         return 2
 
-    log = _cp_ignored_state(wt, PROJECT_ROOT, ts)
-    print("== cp gitignored 运行态（worktree → main）==")
-    if log:
-        for nm, tag in log:
-            print(f"  [√] orchestration/state/{nm}（{tag}）")
+    if no_cp_state:
+        print("== 运行态保留 main 版（--no-cp-state）：跳过 cp，main 侧运行态不动 ==")
     else:
-        print("  （无候选文件需搬）")
+        log = _cp_ignored_state(wt, PROJECT_ROOT, ts)
+        print("== cp gitignored 运行态（worktree → main）==")
+        if log:
+            for nm, tag in log:
+                print(f"  [√] orchestration/state/{nm}（{tag}）")
+        else:
+            print("  （无候选文件需搬）")
 
     print(f"== git merge --no-ff {branch} ==")
     rc, out = _run_git("merge", "--no-ff", branch)
     print(out)
     if rc != 0:
         print(
-            f"[!] merge 失败 rc={rc}——cp 已落；main 侧冲突请人工处理，运行态文件不受影响"
+            f"[!] merge 失败 rc={rc}——main 侧冲突请人工处理"
+            + ("" if no_cp_state else "（cp 已落；运行态文件不受影响）")
         )
         return rc
 
@@ -1066,7 +1086,10 @@ def cmd_worktree(args: argparse.Namespace) -> int:
             print(f"[!] worktree 不存在：{wt_path}")
             return 2
         return cmd_worktree_merge(
-            args.name, wt_path, keep=bool(getattr(args, "keep", False))
+            args.name,
+            wt_path,
+            keep=bool(getattr(args, "keep", False)),
+            no_cp_state=bool(getattr(args, "no_cp_state", False)),
         )
     if action == "remove":
         return _remove_worktree(
@@ -1282,6 +1305,12 @@ def main(argv: list[str] | None = None) -> int:
         "--discard",
         action="store_true",
         help="clean/remove：连「盘内有未提交改动」的已合入面也强删（默认拒绝，防误删手写改动）",
+    )
+    p.add_argument(
+        "--no-cp-state",
+        action="store_true",
+        help="merge：**不搬运行态**的合并通道——跳过 cp 与会话数自检，保留 main 版运行态"
+        "（用于「分支已含 main 全部提交、只是 worktree 运行态更薄」的单，免绕开工具手敲 git merge）",
     )
     p.set_defaults(func=cmd_worktree)
 

@@ -17,7 +17,9 @@
   配方 `references/worktree-merge.md` §1-§2。
 - **merge 前先播种运行态**：新面的 `sessions-runtime.json` 是空壳，merge 的「会话数不减」
   自检会 abort（实测 base=45 → 面侧 0）；先
-  `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 再 merge。
+  `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 再 merge。若**分支
+  已含 main 全部提交、只是运行态薄**（孤儿回收单 / 先 `git merge main` 同步过代码面），别重建
+  面——走 `pysci-dev worktree merge <名> --no-cp-state`（不搬运行态、保留 main 版、跳自检）。
 - **收尾已机械化（backlog 20261013-215911-leader / -222531-leader）**：`worktree merge` **成功即
   自动摘面**（失败/blocked 保留供抢救；`--keep` 留检视；面盘内有改动则不自动摘、提示走 clean）。
   `worktree clean [--apply]` **分类即动作**（不许「说可清却删不掉」）：**可清**=已合入+盘内干净、
