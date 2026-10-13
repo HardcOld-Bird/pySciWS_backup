@@ -2036,6 +2036,38 @@
       "done_at": "2026-10-13T21:48:12+08:00",
       "batch_size": 1,
       "batch_seed": "20261013-203724-devops"
+    },
+    {
+      "id": "20261013-215909-leader",
+      "member": "leader",
+      "summary": "**场景（本会话实证）**：组长要处理 needs_leader 条目时，**缺干净 CLI**——",
+      "kind": "usability",
+      "success_criteria": "orch requeue <id> 把 needs_leader 转 pending 并唤醒 drain；orch resolve <id> --note 转 done；两者单测钉。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-215909-leader.md",
+      "status": "done",
+      "proposed": "2026-10-13T21:59:36+08:00",
+      "note": "drain 批量销账（commit 8a4b67d）",
+      "started_at": "2026-10-13T21:59:37+08:00",
+      "worktree": "20261013-215909-leader",
+      "done_at": "2026-10-13T22:05:23+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-215909-leader"
+    },
+    {
+      "id": "20261013-215911-leader",
+      "member": "leader",
+      "summary": "**来源**：用户提案（2026-10-13）——「devops 的常用功能该整理并硬化进它的基础设施；每次工作正常结束后自动提交并 push」。",
+      "kind": "usability",
+      "success_criteria": "merge 成功后 worktree/分支不残留（失败路径保留）；worktree clean 清已合并遗留、拒未合并（阳性/阴性各一）；成功结束 commit+push 确定性且失败留痕。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261013-215911-leader.md",
+      "status": "done",
+      "proposed": "2026-10-13T21:59:36+08:00",
+      "note": "drain 批量销账（commit 0bf210e）",
+      "started_at": "2026-10-13T22:05:23+08:00",
+      "worktree": "20261013-215911-leader",
+      "done_at": "2026-10-13T22:13:45+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-215911-leader"
     }
   ]
 }
