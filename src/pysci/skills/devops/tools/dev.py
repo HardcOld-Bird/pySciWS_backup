@@ -743,25 +743,38 @@ def merge_faces(branch: str) -> tuple[set[str], set[str]] | None:
         return None
 
 
-def _remove_worktree(name: str, wt: Path) -> int:
-    """摘 worktree 目录 + 删其分支（``worktree remove`` 与 merge 成功收尾共用一处）。"""
-    rc, out = _run_git("worktree", "remove", str(wt))
-    print(out.strip() or f"[√] worktree 已移除：{wt.name}")
+def _remove_worktree(name: str, wt: Path, *, force: bool = False) -> int:
+    """摘 worktree 目录 + 删其分支（``worktree remove`` 与 merge 成功收尾共用一处）。
+
+    **只有目录真被摘掉才删分支**（backlog 20261013-222531-leader 的实证）：此前无论
+    ``remove`` 成败都去 ``branch -D``，脏面删不掉时打「分支删除跳过：used by worktree」
+    ——半截动作 + 误导读数。失败即明确报因、面与分支都保留。
+    """
+    argv = ["worktree", "remove"]
+    if force:
+        argv.append("--force")
+    rc, out = _run_git(*argv, str(wt))
+    if rc != 0:
+        tail = out.strip().splitlines()
+        print(
+            f"  [!] 未能摘除 {name}（{tail[-1] if tail else 'git 拒绝'}）——面与分支保留"
+        )
+        return rc
+    print(out.strip() or f"  [√] worktree 已移除：{wt.name}")
     rc2, out2 = _run_git("branch", "-D", f"wt-{name}")
     if rc2 == 0:
-        print(f"[√] 分支已删除：wt-{name}")
+        print(f"  [√] 分支已删除：wt-{name}")
     else:
         tail = out2.strip().splitlines()
-        print(f"[i] 分支删除跳过：{tail[-1] if tail else ''}")
-    return rc
+        print(f"  [i] 分支删除跳过：{tail[-1] if tail else ''}")
+    return 0
 
 
 def _branch_merged_into_main(branch: str) -> bool:
     """分支是否已**完整并入 main**（``merge-base --is-ancestor``；分支不存在 → False）。
 
-    这是「已完成 vs 待抢救」的机械分界（backlog 20261013-215911-leader）：已合入的面内容
-    在 main、清理安全；未合入的是崩溃/blocked 留下的进度，**一律保留**。分支不存在
-    （没建起来 / 已删）也算 False——判不出已合入就不敢清。
+    「已完成 vs 待抢救」的机械分界：已合入的面内容在 main、清理安全；未合入的是崩溃/
+    blocked 留下的进度，**一律保留**。分支不存在（没建起来 / 已删）也算 False。
     """
     rc, _ = _run_git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
     if rc != 0:
@@ -770,14 +783,53 @@ def _branch_merged_into_main(branch: str) -> bool:
     return rc == 0
 
 
-def _clean_worktrees(*, apply: bool) -> int:
-    """列出/清理「已合入 main」的遗留隔离面（backlog 20261013-215911-leader）。
+def _worktree_has_changes(wt: Path) -> bool:
+    """worktree 盘内有没有未提交/未跟踪改动（``status --porcelain``；gitignored 不算）。
 
-    只清**已合入**的（内容在 main、可再生）；**未合入**的一律拒绝并列名、退出码非 0
-    ——那是待抢救的进度，误删即丢。缺省 dry-run（只列清单），``--apply`` 才真摘。
+    这正是 ``git worktree remove``（不带 ``--force``）拒删的成因——分类必须先问它，
+    好让「可清」与「真删得掉」同一口径（backlog 20261013-222531-leader）。
+    """
+    proc = _git_proc("-C", str(wt), "status", "--porcelain")
+    return proc.returncode == 0 and bool(proc.stdout.strip())
+
+
+#: ``worktree clean`` 的分类桶——**分类即动作的唯一真源**（backlog 20261013-222531-leader：
+#: 任何面不许出现「说可清却删不掉」）。
+_CLEANABLE = "cleanable"  # 已合入 main 且盘内干净 → 可无损摘除
+_NEEDS_CONFIRM = "dirty"  # 已合入但盘内有改动 → 默认拒绝（--force 才删）
+_UNMERGED = "unmerged"  # 未合入 main → 拒绝（待抢救）
+_IN_FLIGHT = "in_flight"  # 分支 tip == main HEAD（无产出/在途）→ 不动
+
+
+def _classify_face(name: str) -> tuple[str, str]:
+    """一个面的 ``(桶, 说明)``。顺序有意：先判「在途」再判「已合入」，见下。"""
+    branch = f"wt-{name}"
+    rc, _ = _run_git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
+    if rc != 0:
+        return _UNMERGED, "无对应分支（残骸）"
+    rc_m, main_tip = _run_git("rev-parse", "main")
+    rc_b, tip = _run_git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
+    if rc_m == 0 and rc_b == 0 and tip == main_tip:
+        # 分支 tip == main HEAD：没产出过自己的提交（刚建/在途）——不能当「已合入的遗留」
+        # （那会把**正在作业**的面判成可清，实测新面 `worktree add` 后即被误列）。
+        return _IN_FLIGHT, "分支未产出提交（在途/空面）"
+    if not _branch_merged_into_main(branch):
+        return _UNMERGED, "未合入 main（待抢救）"
+    if _worktree_has_changes(WORKTREES_ROOT / name):
+        return _NEEDS_CONFIRM, "已合入但盘内有未提交/未跟踪改动（--force 才删）"
+    return _CLEANABLE, "已合入 main 且盘内干净"
+
+
+def _clean_worktrees(*, apply: bool, force: bool = False) -> int:
+    """列出/清理遗留隔离面（backlog 20261013-215911-leader / -222531-leader）。
+
+    **分类与动作必须一致**：只把「已合入 + 盘内干净」列进可清并真删得掉；「已合入但盘内
+    有改动」默认**拒绝**（``--force`` 才删——防误删未提交的手写改动）；未合入的一律拒绝
+    （待抢救）。缺省 dry-run（只列清单），``--apply`` 才真动。
 
     Returns:
-        0（无未合入项）；2（存在未合入项——拒绝清理它们）。
+        0（没有留下任何该清而未清的项）；2（有未合入、或未 ``--force`` 的待确认项、
+        或清理失败——都属「分类—动作需人确认」）。
     """
     if not WORKTREES_ROOT.exists():
         print(f"  （无 {WORKTREES_ROOT.name}/ 目录，无遗留面）")
@@ -786,23 +838,61 @@ def _clean_worktrees(*, apply: bool) -> int:
     if not names:
         print("  （无遗留隔离面）")
         return 0
-    merged = [n for n in names if _branch_merged_into_main(f"wt-{n}")]
-    unmerged = [n for n in names if n not in merged]
+    buckets: dict[str, list[str]] = {
+        _CLEANABLE: [],
+        _NEEDS_CONFIRM: [],
+        _UNMERGED: [],
+        _IN_FLIGHT: [],
+    }
+    for n in names:
+        bucket, _why = _classify_face(n)
+        buckets[bucket].append(n)
     print(f"== worktree clean（{WORKTREES_ROOT.as_posix()}）==")
-    if merged:
-        print(f"  [√] 已合入 main（可清，{len(merged)}）：{'、'.join(merged)}")
-    if unmerged:
+    if buckets[_CLEANABLE]:
         print(
-            f"  [✗] 未合入 main（**拒绝**，留待抢救，{len(unmerged)}）：{'、'.join(unmerged)}"
+            f"  [√] 可清（已合入 + 盘内干净，{len(buckets[_CLEANABLE])}）："
+            f"{'、'.join(buckets[_CLEANABLE])}"
+        )
+    if buckets[_NEEDS_CONFIRM]:
+        print(
+            f"  [!] 待确认（已合入但盘内有改动，{len(buckets[_NEEDS_CONFIRM])}，"
+            f"--force 才删）：{'、'.join(buckets[_NEEDS_CONFIRM])}"
+        )
+    if buckets[_UNMERGED]:
+        print(
+            f"  [✗] 拒绝（未合入 main，待抢救，{len(buckets[_UNMERGED])}）："
+            f"{'、'.join(buckets[_UNMERGED])}"
+        )
+    if buckets[_IN_FLIGHT]:
+        print(
+            f"  [·] 在途/空面（分支未产出提交，不动，{len(buckets[_IN_FLIGHT])}）："
+            f"{'、'.join(buckets[_IN_FLIGHT])}"
         )
     if not apply:
-        print("  （dry-run：加 --apply 真清理上面的「可清」项）")
-        return 2 if unmerged else 0
-    for n in merged:
-        print(f"  → 清理 {n}")
-        _remove_worktree(n, WORKTREES_ROOT / n)
-    print(f"  [√] 已清理 {len(merged)} 个；未合入 {len(unmerged)} 个保留")
-    return 2 if unmerged else 0
+        print("  （dry-run：加 --apply 清「可清」；「待确认」需再加 --force）")
+        return 2 if (buckets[_UNMERGED] or buckets[_NEEDS_CONFIRM]) else 0
+    targets = [(n, False) for n in buckets[_CLEANABLE]] + (
+        [(n, True) for n in buckets[_NEEDS_CONFIRM]] if force else []
+    )
+    removed, failed = [], []
+    for n, use_force in targets:
+        print(f"  → 清理 {n}" + ("（--force）" if use_force else ""))
+        if _remove_worktree(n, WORKTREES_ROOT / n, force=use_force) == 0:
+            removed.append(n)
+        else:
+            failed.append(n)
+    kept_confirm = [n for n in buckets[_NEEDS_CONFIRM] if n not in removed]
+    print(f"  [√] 已清理 {len(removed)} 个")
+    if kept_confirm:
+        print(
+            f"  [!] 待确认未清 {len(kept_confirm)}（盘内有改动，--force 才删）："
+            f"{'、'.join(kept_confirm)}"
+        )
+    if failed:
+        print(
+            f"  [!] 清理失败 {len(failed)}（分类与动作不一致，请查）：{'、'.join(failed)}"
+        )
+    return 2 if (buckets[_UNMERGED] or kept_confirm or failed) else 0
 
 
 def cmd_worktree_merge(name: str, wt: Path, *, keep: bool = False) -> int:
@@ -888,7 +978,11 @@ def cmd_worktree_merge(name: str, wt: Path, *, keep: bool = False) -> int:
         print(f"[i] --keep：保留 worktree 与分支 wt-{name}（供检视）")
     else:
         print("== 收尾：摘除已完成的隔离面 ==")
-        _remove_worktree(name, wt)
+        if _remove_worktree(name, wt) != 0:
+            print(
+                "  [i] 面盘内有未提交/未跟踪改动，未自动摘（不 --force，免误删未提交改动）"
+                "——处置：`pysci-dev worktree clean` 查看，确认可弃后 `--apply --force`"
+            )
     return 0
 
 
@@ -931,7 +1025,10 @@ def cmd_worktree(args: argparse.Namespace) -> int:
         print(out)
         return rc
     if action == "clean":
-        return _clean_worktrees(apply=bool(getattr(args, "apply", False)))
+        return _clean_worktrees(
+            apply=bool(getattr(args, "apply", False)),
+            force=bool(getattr(args, "discard", False)),
+        )
     if not args.name:
         print(f"[!] {action} 需要 <name>")
         return 2
@@ -972,7 +1069,9 @@ def cmd_worktree(args: argparse.Namespace) -> int:
             args.name, wt_path, keep=bool(getattr(args, "keep", False))
         )
     if action == "remove":
-        return _remove_worktree(args.name, wt_path)
+        return _remove_worktree(
+            args.name, wt_path, force=bool(getattr(args, "discard", False))
+        )
     print(f"[!] 未知 action：{action}")
     return 2
 
@@ -1178,6 +1277,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument(
         "--apply", action="store_true", help="clean：真清理（缺省只列 dry-run 清单）"
+    )
+    p.add_argument(
+        "--discard",
+        action="store_true",
+        help="clean/remove：连「盘内有未提交改动」的已合入面也强删（默认拒绝，防误删手写改动）",
     )
     p.set_defaults(func=cmd_worktree)
 
