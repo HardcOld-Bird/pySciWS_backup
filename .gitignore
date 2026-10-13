@@ -68,6 +68,11 @@ __pycache__/
 /orchestration/state/inspector.lock
 /orchestration/state/inspector-runs/
 /orchestration/state/inspector.cancel
+# 成员 FIFO 队列与 worker 运行态（REFACTOR.md §3.1/M4，同 bencher/inspector 的 git 策略）：
+# 队列本体、每成员互斥锁、run 日志与 .done、协作取消信号。永久痕迹在 ledger + backlog +
+# delivery，队列只是「还没消化完的工作」，入库会让 main 工作区每跳必 dirty。
+/orchestration/state/queues/
+/orchestration/state/queues-runs/
 # 基线捕获的物理归档（§13 待决 2 的 E4 定案）：manifest.json 入库（=「当时依赖什么」的
 # 答案），pods/ 下的 gitignored 面副本不入库——它随时可由 git + 清单再生。
 /orchestration/state/evals/baselines/*/pods/
