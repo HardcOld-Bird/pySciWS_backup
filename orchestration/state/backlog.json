@@ -2076,11 +2076,14 @@
       "kind": "defect",
       "success_criteria": "有脏的已合并面：clean 结果与分类一致（带 force 真删，或改判拒绝并说明）；无「说可清却删不掉」；单测钉该分支。",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-222531-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T22:25:54+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit c2bdd1c）",
       "started_at": "2026-10-13T22:25:56+08:00",
-      "worktree": "20261013-222531-leader"
+      "worktree": "20261013-222531-leader",
+      "done_at": "2026-10-13T22:36:01+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-222531-leader"
     },
     {
       "id": "20261013-222533-leader",
@@ -2089,9 +2092,27 @@
       "kind": "usability",
       "success_criteria": "approve/dispatch/status/watch 输出不再有催挂 [NEXT] 段；技能真本以自动挂载为正文、手动降为兜底；sync 后部署副本一致；全量无回归。",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-222533-leader.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T22:25:54+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit fddd339）",
+      "started_at": "2026-10-13T22:36:01+08:00",
+      "worktree": "20261013-222533-leader",
+      "done_at": "2026-10-13T22:47:47+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-222533-leader"
+    },
+    {
+      "id": "20261012-194305-devops",
+      "member": "devops",
+      "summary": "success_criteria：`pysci-dev worktree merge <name>` 在「分支已含 main 全部提交、但 worktree 的 gitignored 运行态比 main 薄」时，仍有一条**不搬运行态**的合并通道（新旗标如 `--no-cp-state`，或自动跳过 cp 并继续 merge），且中止时返回非零 rc 并在 `[NEXT]` 里给出该通道——不再",
+      "kind": "defect",
+      "success_criteria": "分支已含 main 全部提交但 gitignored 运行态比 main 薄时，worktree merge 仍有一条不搬运行态的合并通道（新旗标或自动跳过 cp 并继续 merge），中止时返回非零 rc 并在 [NEXT] 给出该通道；判据=一次真实孤儿回收单在该形状下能走工具面合并。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261012-194305-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-13T22:49:23+08:00",
+      "note": "该建议由 worktree clean 的安全拒删守护而下、组长回收（2026-10-13）",
+      "started_at": "2026-10-13T22:49:25+08:00",
+      "worktree": "20261012-194305-devops"
     }
   ]
 }
