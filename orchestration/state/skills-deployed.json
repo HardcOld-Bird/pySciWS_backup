@@ -9,9 +9,9 @@
       }
     },
     "orchestration": {
-      "source_hash": "efff5c55266d24b6b6858bbb1b2f2f60eca9bc44dc3b31e73b688d45aca0e601",
+      "source_hash": "a517f59cd45e76ffb192116506abea4b6357c5f7012d9206c10f5dcaeec46b5a",
       "targets": {
-        ".qoder/skills/orchestration": "efff5c55266d24b6b6858bbb1b2f2f60eca9bc44dc3b31e73b688d45aca0e601"
+        ".qoder/skills/orchestration": "a517f59cd45e76ffb192116506abea4b6357c5f7012d9206c10f5dcaeec46b5a"
       }
     },
     "devops": {
@@ -69,9 +69,9 @@
       }
     },
     "inspector": {
-      "source_hash": "102b33a8a1cfcb12bea15357cb83dfc0aa4eb18aadcb102672ac6bef51d66e05",
+      "source_hash": "bdf20abf5a88e1d5db8375d57a98c1bb3e99ec59ef8ca2352e20ec0dc37e427d",
       "targets": {
-        "orchestration/pods/inspector/.qoder/skills/inspector": "102b33a8a1cfcb12bea15357cb83dfc0aa4eb18aadcb102672ac6bef51d66e05"
+        "orchestration/pods/inspector/.qoder/skills/inspector": "bdf20abf5a88e1d5db8375d57a98c1bb3e99ec59ef8ca2352e20ec0dc37e427d"
       }
     }
   }

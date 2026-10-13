@@ -1763,11 +1763,14 @@
       "kind": "defect",
       "success_criteria": "见单内三例阳性矩阵+重跑 131505 出真实判决+全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-173000-leader.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-13T18:12:32+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 93fb7f5）",
       "started_at": "2026-10-13T18:42:14+08:00",
-      "worktree": "20261013-173000-leader"
+      "worktree": "20261013-173000-leader",
+      "done_at": "2026-10-13T18:48:42+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-173000-leader"
     },
     {
       "id": "20261013-131505-devops",
@@ -1776,9 +1779,14 @@
       "kind": "usability",
       "success_criteria": "worktree add 后 sessions-runtime 与 main 等富（或 merge 识别空壳跳过 cp）；fresh worktree 一次 merge 零人工 cp；闸触发文案与成因一致；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-131505-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:12:40+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit e83b569）",
+      "started_at": "2026-10-13T18:48:42+08:00",
+      "worktree": "20261013-131505-devops",
+      "done_at": "2026-10-13T18:52:37+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-131505-devops"
     },
     {
       "id": "20261013-143233-devops",
@@ -1787,9 +1795,14 @@
       "kind": "defect",
       "success_criteria": "MERGE_STATE_EXCLUDE_SUFFIXES/.gitignore 收 .bak-* 且 6 个已跟踪者清理；test_tracked_registry_is_ordered_chains 改断结构不变量（任意合法链变更不红）；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-143233-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:12:41+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 3bafc0d）",
+      "started_at": "2026-10-13T18:52:37+08:00",
+      "worktree": "20261013-143233-devops",
+      "done_at": "2026-10-13T18:57:30+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-143233-devops"
     },
     {
       "id": "20261013-182549-devops",
@@ -1798,9 +1811,14 @@
       "kind": "usability",
       "success_criteria": "finding add mechanical 晋升时 remedy_shape 必填（缺省拒收并给改正指令）；构造 None 案例被拦阳性用例；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-182549-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:26:54+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 3e770d6）",
+      "started_at": "2026-10-13T18:57:30+08:00",
+      "worktree": "20261013-182549-devops",
+      "done_at": "2026-10-13T19:02:34+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-182549-devops"
     },
     {
       "id": "20261013-182427-devops",
@@ -1809,9 +1827,14 @@
       "kind": "defect",
       "success_criteria": "scan/session_stats 跳过 active-leaf/file-history-snapshot 等簿记类；大样本实测耗时下降且读数不变；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-182427-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:26:54+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit e0c9cad）",
+      "started_at": "2026-10-13T19:02:34+08:00",
+      "worktree": "20261013-182427-devops",
+      "done_at": "2026-10-13T19:07:34+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-182427-devops"
     },
     {
       "id": "20261013-180936-devops",
@@ -1820,9 +1843,14 @@
       "kind": "usability",
       "success_criteria": "§13 边界避让行补测试面；交付含菜单实现时的 id 列全（任务书模板/规程一处）；全量无回归",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-180936-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-13T18:26:55+08:00",
-      "note": ""
+      "note": "drain 批量销账（commit 4ddd361）",
+      "started_at": "2026-10-13T19:07:34+08:00",
+      "worktree": "20261013-180936-devops",
+      "done_at": "2026-10-13T19:11:08+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261013-180936-devops"
     },
     {
       "id": "20261013-190000-leader",
@@ -1833,7 +1861,9 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261013-190000-leader.md",
       "status": "pending",
       "proposed": "2026-10-13T18:35:23+08:00",
-      "note": ""
+      "note": "组长再排：blocked 系会话余量耗尽（已连续 9 单）非规格障碍——护栏级配置面拒绝半做是正确的；新一轮余量充足时消化。",
+      "started_at": "2026-10-13T19:11:08+08:00",
+      "worktree": "20261013-190000-leader"
     },
     {
       "id": "20261013-192000-leader",
@@ -1842,9 +1872,11 @@
       "kind": "defect",
       "success_criteria": "见单内判据（两行读数一致快照/待决清单可增删/全量绿）",
       "evidence_file": "orchestration/state/suggestions/approved/20261013-192000-leader.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-13T18:42:02+08:00",
-      "note": ""
+      "note": "",
+      "started_at": "2026-10-13T19:12:13+08:00",
+      "worktree": "20261013-192000-leader"
     },
     {
       "id": "20261013-193000-leader",
