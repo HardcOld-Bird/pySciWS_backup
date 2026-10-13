@@ -337,6 +337,7 @@ resume 自救**（瞬态中断重试大概率即愈、且零工作损失——�
 
 <blocked>
 无法解决的问题：卡点 + 已尝试路径 + 建议方向。可附部分完成的工作及位置。
+可带 tags="a,b"（失败标签）与 reason="…"（成因档位）两个**受控词表**属性（§5.4）。
 </blocked>
 
 <infra_suggestion>
@@ -752,6 +753,12 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
 - 词表 `orchestration/state/failure-tags.json`（**单一源，护栏级**，devops 增补附定义）：
   组员 `<blocked>` 可带 `tags="a,b"`（delivery-gate 校验词表，词表外退回、缺省不阻断）；
   聚合读数 `orch stats` 的 by_failure 段——**同一标签反复出现 = 深层结构问题的客观信号**；
+- **成因档位 `reason="…"`**（同一词表的 `reasons` 段，backlog 20261013-191213-devops）：
+  `<blocked>` **语义过载**——「已侦察、待裁决」（`needs_decision`，重派改变不了它，停链等
+  裁决）与「执行端余量不足」（`capacity`，补足余量后重派即可落地）**最优处置相反**，却都
+  长成同一个 blocked；`tags` 说「失败是哪一类」、`reason` 说「该谁怎么处置」，二者分开。
+  档位随交付落进 drain 的 `.done`，`orch status` 与之**分列**计数（`待裁决=N 待排期=N`），
+  链路策略亦可按档分化；缺省不标注合法（同 tags 纪律）。
 - **阈值自动立案（硬性依赖，不指望组长「有空」）**：`orch status`/`approve` 入口机械
   重算滑窗——同一 `(tag, member)` 14 天或 20 跳内 ≥3 次 → 自动注册基建提案
   （`source=tier-a`，证据=台账行与计数，`success_criteria` 天然可测=销账时计数回落）
@@ -1255,6 +1262,7 @@ pod）中裸 `pysci-X` 直接可用；已实测新登录 shell 解析成功。
 | 2026-10-13 | **带宽类延期不停链 + 兜底回升 + 浅回退**（backlog 20261013-193500-leader = 原 #115 拆单 2/2 语义半，组长裁决「熔断授权反转**仅限 bandwidth**」）：① `channel_error` 按 `failure_classes` 分流——bandwidth→**延期续跑**（回队挂 `defer_until`，不换席不停链）；**兜底**=延期预算（次数 6/壁钟 1800s）触顶仍不愈 → 回升**全局停止** `channel_saturated`（新 systemic kind，封死逐项烧跳）；outage→维持原停链；unknown→有更高优先级活会话则按 bandwidth、否则按 outage；② **浅回退**：隐性 DeepSeek 态带宽失败先回本预设主力席试一拍，该席亦爆才换席/延期；③ 观察面：mirror「延期」项 + run 日志 + `DispatchOutcome.error_text` 供 drain 分类；④ 全队延期时 worker 睡到最近到期（≤600s，睡醒回查停止信号） | 用户设计 + 组长裁决 + devops 实施 |
 | 2026-10-13 | **动作归属分拣：组长侧的发现不派 devops**（backlog 20261013-184213-devops，devops 自提）：mechanical 免判决通道原会把「期望动作在组长侧」的发现推给 devops——组员读完 `expect` 才发现无权执行（`orch` 是组长专属工具），白烧一跳，更坏是自作主张造「自动归档」类机制（该路已被用户回退）。晋升时按**廉价线索**分拣 `expect`/`success_criteria`（`pysci-orch`/`orch `/`--archive`/归档/重开/重取基线/组长裁定/approve），命中 → 不进 devops 队列、挂新状态 `leader_todo`（也离 pending 扫描面）；刻意粗，标错组长一眼能改、漏掉每跳白烧；**不看 repro**（复现命令常只是取证）。实测 6/14 命中且全为真组长侧 | devops 自提 + 组长采纳 |
 | 2026-10-13 | **改动驱动的文档面对盘 `pysci-dev doc-faces`**（backlog 20261013-184842-devops，devops 自提）：jury 同族拒庭判据被相对化（`producer_family`）后代码改了三处、`jury-channels.md`/`jury-panel.md` 两处没跟，文档还替旧行为背书（「含回退席…含 qwen」）——「代码改了、文档没改」是系统性滞后，README §6 的 `intent-drift` 是**抽样式**巡检，抓不到「谁改了 X 没看 X 的文档」。本单加**改动驱动**的廉价提示：`pysci-dev doc-faces <paths…\|--changed>` 按一张手维护的**小映射表**（`tools/jury.py → references/jury-*.md` 等 7 条，键用**后缀**以在 worktree 路径下也命中）打印「你动了 X，它的文档面是 Y/Z，请对盘」，命中即提示、不阻断、未映射零输出；表内路径由 `misconfigured()` 兜底（写错的映射会把人对盘到错文件，比没有更坏） | devops 自提 + 组长采纳 |
+| 2026-10-13 | **`<blocked>` 成因档位 `reason="…"`**（backlog 20261013-191213-devops，devops 自提）：`<blocked>` **语义过载**——「已侦察待裁决」（重派无效，等判决）与「执行端余量不足」（补足余量后重派即落地）**最优处置相反**，却都长成同一个 blocked：drain 抢救链只看 `<blocked>`/`tags`、`orch status` 只报「谁被挡了」。加受控**单值**档位 `reason`（`needs_decision`/`capacity`/`blocked_by_env`/`blocked_by_upstream`，词表 `failure-tags.json` 的 `reasons` 段、gate 校验、词表外退回、缺省不标注合法，纪律同 tags）；与 tags 分工=「失败是哪一类」vs「该谁怎么处置」。**不切分**（`reason="capacity, foo"` 整串落词表外被退回，切分会把「标错」伪装成「标对」）。档位透传进 drain 的 `.done`（逐条 + `by_reason` 合计），`orch status` 分列计数（`待裁决=N 待排期=N`；词表外档位回落原键，不静默） | devops 自提 + 组长采纳 |
 
 ## 14. 已知代价与风险
 

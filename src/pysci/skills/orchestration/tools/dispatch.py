@@ -297,6 +297,9 @@ class DispatchOutcome:
     infra_suggestion: str = ""
     infra_kind: str = ""  # E0-B：交付 XML 上的 kind 属性（defect/usability/""）
     tags: list[str] = field(default_factory=list)  # E1：<blocked tags="a,b"> 失败标签
+    #: <blocked reason="…"> 的成因档位（backlog 20261013-191213-devops，单值受控词表）。
+    #: 空串=未标注。drain 据它把 blocked 分列进 .done，供 orch status 分列计数。
+    reason: str = ""
     #: 解析器版本错位告警（delivery.parse：严格面全缺、宽松面救回时非空）。判读照常，
     #: 但组长/drain 必须看见这一行——交付是在「旧解析器读新协议」的窗口里被兜底救下的
     #: （backlog 20261012-002857-devops）。空串=解析器与协议同版。
@@ -1280,6 +1283,7 @@ def do_dispatch(
         infra_suggestion=bool(suggestion_id),
         infra_kind=delivery.infra_kind,
         tags=delivery.tags,
+        reason=delivery.reason,
         num_turns=env_json.num_turns,
         duration_ms=env_json.duration_ms,
         credits=env_json.total_credits,
@@ -1325,6 +1329,7 @@ def do_dispatch(
         infra_suggestion=delivery.infra_suggestion,
         infra_kind=delivery.infra_kind,
         tags=delivery.tags,
+        reason=delivery.reason,
         warning=delivery.warning,
         suggestion_id=suggestion_id,
         envelope=env_json,

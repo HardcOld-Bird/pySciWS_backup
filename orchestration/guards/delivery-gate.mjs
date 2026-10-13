@@ -55,6 +55,16 @@ const INFRA_RE = new RegExp(
 // 这里不复制清单，否则两侧口径必然漂移（漂移的后果是组员被拦在两边不同的词表下）。
 const BLOCKED_RE = new RegExp(`<blocked\\b(${ATTRS})>([\\s\\S]*?)</blocked>`);
 const VOCAB_REL = ['orchestration', 'state', 'failure-tags.json'];
+// <blocked reason="…"> 的成因档位（backlog 20261013-191213-devops）：单值受控词表，落在
+// state/failure-tags.json 的 reasons 段（Python 侧 failure_tags.load_reasons() 读同一段）。
+// 与 infra_kinds 同策略：文件读不到时回落下面这份兜底清单（而非放行）——分类只有几个稳定
+// 值，失去执法才是要防的病灶。与文件键集的一致性由 tests/.../test_failure_reason.py 钉住。
+const REASONS_DEFAULT = [
+  'needs_decision',
+  'capacity',
+  'blocked_by_env',
+  'blocked_by_upstream',
+];
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -138,6 +148,25 @@ function run() {
               `    ${vocab.join(', ')}`
           );
         }
+      }
+    }
+  }
+
+  // <blocked reason="…"> 的成因档位（backlog 20261013-191213-devops）：单值受控词表，同
+  // 「分类必须结构化」纪律之失败侧——缺省不标注合法，只有标了才校验标得对不对。它与 tags
+  // 关注面不同：tags 说「失败是什么类」，reason 说「该由谁、怎么处置」，故 drain/status
+  // 据 reason 把 blocked **分列**（待裁决 vs 待排期）。
+  if (blockedMatch) {
+    const reasonM = (blockedMatch[1] || '').match(/\breason\s*=\s*"([^"]*)"/);
+    const reason = (reasonM ? reasonM[1] : '').trim().toLowerCase();
+    if (reason) {
+      const vocab = readReasons();
+      if (vocab !== null && !vocab.includes(reason)) {
+        problems.push(
+          `<blocked reason> 取值 "${reason}" 不在受控词表内。动作：改用下列档位之一，` +
+            `或删掉 reason 属性（不标注合法）；词表在 orchestration/state/failure-tags.json 的 ` +
+            `reasons 段：\n    ${vocab.join(', ')}`
+        );
       }
     }
   }
@@ -280,6 +309,17 @@ function readInfraKinds() {
   } catch (e) {
     failOpen('提案分类词表读取（改用兜底清单）', e);
     return INFRA_KINDS_DEFAULT;
+  }
+}
+
+// blocked 成因档位词表：口径同 readInfraKinds——读不到文件时回落兜底清单而不是「不执法」。
+function readReasons() {
+  try {
+    const keys = Object.keys((vocabData() || {}).reasons || {});
+    return keys.length ? keys : REASONS_DEFAULT;
+  } catch (e) {
+    failOpen('blocked 成因档位词表读取（改用兜底清单）', e);
+    return REASONS_DEFAULT;
   }
 }
 

@@ -1424,7 +1424,7 @@ def _drain_batch(
 
     Returns:
         per-id 结果字典列表（写入 .done 的 items）：种子/每个完成组包项各一条
-        ``{id, status, commit?, kind?, batch_size?, batch_seed?, elapsed_s}``。
+        ``{id, status, commit?, kind?, reason?, batch_size?, batch_seed?, elapsed_s}``。
     """
     seed_id = str(seed.get("id", ""))
     group_ids = [str(g.get("id", "")) for g in group if g.get("id")]
@@ -1665,6 +1665,11 @@ def _drain_batch(
         "error": err[:200],
         "elapsed_s": elapsed,
     }
+    # blocked 的成因档位（backlog 20261013-191213-devops）：透传进 .done 逐条，
+    # 供 orch status 分列计数「待裁决 / 待排期」。未标注（空串）不落字段——缺省合法。
+    reason = str(getattr(outcome, "reason", "") or "")
+    if reason:
+        item_out["reason"] = reason
     if isect:
         item_out["merge_intersect"] = offenders
     if salv:
@@ -1740,7 +1745,8 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
     Returns:
         .done 摘要字典：``{started, completed, count, elapsed_s, items, run_log}``；
         协作停止时附 ``stopped="cooperative"``；系统性故障全局停止时附
-        ``stopped=<kind>``（``quota_exhausted`` / ``channel_error``）与 ``error`` 说明。
+        ``stopped=<kind>``（``quota_exhausted`` / ``channel_error``）与 ``error`` 说明；
+        有 blocked 标注了成因档位时另附 ``by_reason``（``{reason: 次数}``，供 orch status 分列）。
     """
     done_path = run_log.with_suffix(".done")
     # 预设的 main 席表为空（没配席：跟踪覆盖在位以覆盖为准，否则看出厂表）即拒绝开工
@@ -1899,6 +1905,16 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         summary["error"] = _log_exception(run_log, exc, "drain 异常中断")
     finally:
         summary["count"] = len(summary["items"])
+        # blocked 成因档位分列计数（backlog 20261013-191213-devops）：让「待裁决」与
+        # 「待排期」在 .done 与 orch status 上分开读——两类最优处置相反但都长成 blocked。
+        # 只数**标注了** reason 的 items；未标注是合法缺省，不入任何档。
+        by_reason: dict[str, int] = {}
+        for it in summary["items"]:
+            r = str(it.get("reason") or "")
+            if r:
+                by_reason[r] = by_reason.get(r, 0) + 1
+        if by_reason:
+            summary["by_reason"] = by_reason
         summary["completed"] = _now()
         summary["elapsed_s"] = round(time.time() - t0, 1)
         release_lock(run_log)

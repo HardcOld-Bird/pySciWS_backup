@@ -46,6 +46,11 @@ class LedgerEntry:
     # 本字段是 §2.4 阈值自动立案的唯一原料：标签只在这里落一次盘，统计与立案都读
     # 台账，不再各自解析交付文本（两处解析迟早漂移）。
     tags: list[str] = field(default_factory=list)
+    #: <blocked reason="…"> 的成因档位（backlog 20261013-191213-devops，单值受控词表见
+    #: state/failure-tags.json 的 reasons 段）。空串=未标注（合法缺省）；旧行无此字段→""。
+    #: 与 tags 分开记：tags 说「失败是哪一类」，reason 说「该谁怎么处置」——把
+    #: 语义过载的 <blocked> 分档，让「待裁决」与「待排期」在读数面可辨。
+    reason: str = ""
     num_turns: int = 0
     duration_ms: int = 0
     credits: float = 0.0

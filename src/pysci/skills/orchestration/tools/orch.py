@@ -70,6 +70,16 @@ from .runner import EFFORT_ALIASES, VALID_EFFORTS
 #: 层级覆盖：旗标 > 计划环节/条目 effort > registry 成员 effort（README §3.5）。
 EFFORT_CHOICES: list[str] = [*VALID_EFFORTS, *EFFORT_ALIASES]
 
+#: blocked 成因档位（``<blocked reason="…">``）→ status 显示短标签（backlog 20261013-191213-devops）。
+#: **仅供人读**：档位的合法性与语义以 ``state/failure-tags.json`` 的 reasons 段为准（同一份
+#: 词表由 gate 执法）。表里没有的档位回落显示原键——新档位在读数面可见、不会被静默吞掉。
+_REASON_LABEL: dict[str, str] = {
+    "needs_decision": "待裁决",
+    "capacity": "待排期",
+    "blocked_by_env": "环境受阻",
+    "blocked_by_upstream": "上游缺失",
+}
+
 
 # ---------------------------------------------------------------------------
 # status
@@ -232,7 +242,18 @@ def cmd_status(args: argparse.Namespace) -> int:
         )
         for it in done.get("items", [])[-5:]:
             extra = f" commit={it['commit']}" if it.get("commit") else ""
-            print(f"    - {it.get('id')}: {it.get('status')}{extra}")
+            rsn = f" reason={it['reason']}" if it.get("reason") else ""
+            print(f"    - {it.get('id')}: {it.get('status')}{rsn}{extra}")
+        # blocked 成因分列计数（backlog 20261013-191213-devops）：把语义过载的 blocked
+        # 分档呈现——「待裁决」（重派无效，等判决）与「待排期」（补余量后重派可落地）
+        # 混在一行就丢了这个读数。只列标注了 reason 的档位。
+        by_reason = done.get("by_reason") or {}
+        if by_reason:
+            parts = " ".join(
+                f"{_REASON_LABEL.get(k, k)}={v}"
+                for k, v in sorted(by_reason.items(), key=lambda kv: (-kv[1], kv[0]))
+            )
+            print(f"    失败档位分列：{parts}")
     needs_leader = _workflow.backlog_by_status("needs_leader")
     repeat_fails: dict[str, int] = {}
     if needs_leader:

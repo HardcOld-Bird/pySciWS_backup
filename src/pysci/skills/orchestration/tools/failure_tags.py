@@ -45,6 +45,17 @@ DEFAULT_TAGS: dict[str, str] = {
 #: 非法 kind 的占位空壳曾绕过 gate 直达审批队列）。
 DEFAULT_INFRA_KINDS: dict[str, str] = {"defect": "", "usability": ""}
 
+#: ``<blocked reason="…">`` 成因档位的兜底键集（backlog 20261013-191213-devops）。``reason``
+#: 把语义过载的 ``<blocked>`` 分档：``needs_decision``（待裁决，重派无效须停链等）与
+#: ``capacity``（执行端余量不足，补足可重派）的最优处置相反，却都长成同一个 ``<blocked>``。
+#: 键集与随附文件的一致性由 `test_failure_reason.py` 钉住（改一边必改另一边）。
+DEFAULT_REASONS: dict[str, str] = {
+    "needs_decision": "",
+    "capacity": "",
+    "blocked_by_env": "",
+    "blocked_by_upstream": "",
+}
+
 #: tags 属性的分隔符：半/全角逗号分号与空白都收（组员在中文语境里手打，别逼他改符号）。
 #: 与 guard 侧 ``splitTags`` 的字符集必须一致，否则「gate 放行、统计另算」会出现。
 _SPLIT_RE = re.compile(r"[,，;；\s]+")
@@ -89,6 +100,11 @@ def load_infra_kinds(path: Path | None = None) -> dict[str, str]:
     return _read_section("infra_kinds", DEFAULT_INFRA_KINDS, path)
 
 
+def load_reasons(path: Path | None = None) -> dict[str, str]:
+    """读取 blocked 成因档位词表：``{reason: 定义}``（读取与回落口径同 :func:`load_tags`）。"""
+    return _read_section("reasons", DEFAULT_REASONS, path)
+
+
 def parse_tags(value: str | None) -> list[str]:
     """把 ``tags="a, b"`` 属性值解析成标签列表：小写化、去空、按首次出现去重。
 
@@ -111,6 +127,17 @@ def unknown_tags(tags: list[str], vocab: dict[str, str] | None = None) -> list[s
     """返回不在词表内的标签（保持输入顺序）；``vocab`` 缺省现场读取。"""
     table = load_tags() if vocab is None else vocab
     return [t for t in tags if t not in table]
+
+
+def parse_reason(value: str | None) -> str:
+    """``reason="…"`` 属性值 → 单个成因键（小写化、去引号与首尾空白）。
+
+    reason 是**单值档位**（不是 :func:`parse_tags` 那样的列表）：整串即一个键。出现分隔符
+    或第二个词即判非法（落到词表外，由 gate 退回）——**不切分**，否则
+    ``reason="capacity, foo"`` 会静默丢掉 ``foo`` 又放行 ``capacity``，把「标错」伪装成
+    「标对」。缺省空串=未标注（合法）。
+    """
+    return (value or "").strip().strip("\"'").lower()
 
 
 def failure_counts(entries: list[Any]) -> dict[str, dict[str, int]]:
