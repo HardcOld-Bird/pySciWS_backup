@@ -146,7 +146,24 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  [建议] {p.stem}")
     for b in back[:5]:
         eff = f" [effort={b['effort']}]" if b.get("effort") else ""
-        print(f"  [backlog] {b['id']}: {str(b.get('summary', ''))[:60]}{eff}")
+        solo = " [solo]" if b.get("solo") else ""
+        print(f"  [backlog] {b['id']}: {str(b.get('summary', ''))[:60]}{eff}{solo}")
+    # 疑似组包过载提醒（backlog 20261012-170301-leader）：聚类维度与风险维度错位的两处
+    # 读数——pending 超组包上限（并批概率高），或连续两批 run_failed（腰斩已成模式）。
+    overload: list[str] = []
+    if len(back) > _drain.BATCH_MAX:
+        overload.append(
+            f"pending={len(back)} > 组包上限 {_drain.BATCH_MAX}：大单未标 --solo 会被"
+            "同提请者并批，触该跳 max_turns 腰斩"
+        )
+    if _drain.run_failed_streak() >= 2:
+        overload.append(
+            "连续 ≥2 批 run_failed：疑似组包过载——大单补标 --solo 重派（approve --solo）"
+        )
+    if overload:
+        print("  [!] 疑似组包过载：")
+        for line in overload:
+            print(f"    - {line}")
 
     print("== devops worker ==")
     lst = _drain.lock_status()
@@ -699,6 +716,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=EFFORT_CHOICES,
         help="按项标注该待办的推理强度（写入 backlog 条目，drain 消化时透传；"
         "不标=跟随用户级默认=中）",
+    )
+    p.add_argument(
+        "--solo",
+        action="store_true",
+        help="大单标记：drain 组包不并入此项、此项也不作组包种子（batch_size 恒 1）。"
+        "pod 级/多子面大单必带——并批会触该跳 max_turns 腰斩（细则 references/solo-batching.md）",
     )
     p.add_argument(
         "--criteria",

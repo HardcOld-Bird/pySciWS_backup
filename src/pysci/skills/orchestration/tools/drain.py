@@ -738,6 +738,36 @@ def failure_counts(
     return out
 
 
+def run_failed_streak(*, paths: WorkerPaths | None = None) -> int:
+    """**倒序**遍历 run 摘要，返回尾部连续含 ``run_failed`` 条目的批次数（fail-soft）。
+
+    「组包过载」的读数面（backlog 20261012-170301-leader）：多张大单并批 → 该跳
+    max_turns 触顶 → 种子 run_failed——连续两批同形状就不是巧合。系统性故障不计入
+    （渠道坏了条目无罪，语义同 :data:`FAILED_ITEM_STATUSES` 旁注）。坏文件断链不计
+    也不续（无法读取的批次无资格证明任何事）。
+    """
+    runs = (paths or _devops_paths()).runs
+    if not runs.exists():
+        return 0
+    streak = 0
+    for p in reversed(sorted(runs.glob("*.done"))):
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            break
+        items = data.get("items") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            break
+        if any(
+            isinstance(it, dict) and str(it.get("status", "")) == "run_failed"
+            for it in items
+        ):
+            streak += 1
+        else:
+            break
+    return streak
+
+
 def _extract_commit(body: str) -> str:
     """从交付正文尽力提取 commit hash（``commit ... <hex>``）；无则空串。"""
     m = _COMMIT_RE.search(body or "")
