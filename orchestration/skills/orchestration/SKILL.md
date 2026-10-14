@@ -42,8 +42,8 @@ pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<�
         [--note "..."] [--no-wake] [--criteria "<判据>"] [--solo]  # 四态必居其一
         # 例外=缺陷×该跳 blocked。判决包 verdict-package.md；大单 solo-batching.md
 pysci-orch watch [--timeout 14400]
-        # 等 drain 六类事件（drain-watch.md §2）；后台挂起，漏挂由 status 补账
-pysci-orch reject <建议id> --override "<判决依据>"   # 否决：依据必填、留痕（J/M 判决的驳回不计）
+        # 等 drain 事件（drain-watch.md §2）；后台挂起，漏挂由 status 补账
+pysci-orch reject <建议id> --override "<判决依据>"   # 否决：依据必填、留痕
 pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
 pysci-orch consult-twin <案卷.md>  # 咨询 twin（未启用即拒 rc=2）
 pysci-orch review <产物> --origin <member> [--rubric generic]
@@ -61,8 +61,7 @@ pysci-orch bench-up [--dry] | bench-queue [--all] | bench-seen <id> | bench-stop
 pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（§9 冷启动+宪章注入；未生效即拒，twin-taste-mirror.md）
 pysci-orch inspector-up [--dry|--force] | inspector-status | inspector-patrol [--target 菜单id]
         [--start] | inspector-assign --brief T [--start] | inspector-on|off
-        # 巡检引擎（§7）：拉起即内嵌 status/approve/dispatch（幂等；旋钮在代码/registry）。见
-        # references/inspector-engine.md
+        # 巡检引擎（§7）：拉起即内嵌 status/approve/dispatch（幂等）。见 references/inspector-engine.md
 pysci-orch stats [--plan id|--member m|--days N]
 # —— 底层命令面（降级/调试）——
 pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
@@ -77,8 +76,8 @@ bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 
 ## 派发要领
 
-- **会话选择**：默认 latest（续最近活跃）；无关新工作 `--session new --name <slug>`；
-  续更早会话先 `sessions` 查池再指定；
+- **会话选择**：默认 latest；无关新工作 `--session new --name <slug>`；续更早会话先
+  `sessions` 查池再指定；
 - **白名单最小化**：`--dirs` 只给必需目录（涉代码镜像例外见 README §2 脚注）；
 - **模型档位**：registry 里全部成员默认 **flash**；复杂环节/连续 blocked 升
   `--model-tier max`，压测按案卷降 `minimum`；
@@ -93,7 +92,7 @@ bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 - **注入 lint/告警含 file:line → 先对盘核验**（wc/grep 实测行存在且相符），不符即噪声丢弃、
   不得据其改代码（Qoder 平台 lint 捏造实锤，仓外 #87）；
 - `<blocked tags="a,b" reason="…">`：tags 入台账/`orch stats` by_failure + 阈值自动立案；
-  reason=成因档位（待裁决/待排期…）进 drain `.done` 与 `orch status` 分列（tier-a-tags.md）；
+  reason=成因档位（待裁决/待排期）进 drain `.done` 与 `orch status` 分列（tier-a-tags.md）；
 - blocked → 三选一：补充重派 / consult 副组长 / 上报用户；
 - 建议审批：四态见上（verdict-package.md）；M 路销账自动排 A/B 三态，`orch status`
   「判决包健康」看用量与 override 率，`escalate=twin` 非空立即终裁；入 backlog 自动唤醒
@@ -101,15 +100,16 @@ bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 - **等待 drain 事件**：`orch watch` 由 `Stop` 钩子**每回合自动挂载**、无需手动；兜底：
   `run_in_background` 且**唯一顶层命令**（嵌入即连坐被杀）；事件面见 drain-watch.md、
   salvage-reclaim.md；
+- **三级防线/巡更**：活跃期 30min 巡更 cron（全空闲即撤）、新机就位 → references/patrol-watchdog.md；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：改任务书重派，或终裁坚持原派（理由留痕）；
 - 交接处决策：一键继续 / plan amend 改后续 / drop 中止。
 
 ## 归档与成本
 
 - 工作完结且会话不再需要 → `sessions <member> --archive <sid> --distill`；
-- ctx>60% 提示归档；`stats` 看耗时/成本覆盖率（BYOK：max 计量、flash 恒 0，「覆盖 M/N 跳」）。
+- ctx>60% 提示归档；`stats` 看耗时/成本覆盖率（BYOK：max 计量、flash 恒 0）。
 
 ## 降级
 
-orch 瘫痪 → 照 README 附录 A 手动模板派发（原生 exe 直调，**勿用 .cmd 包装器**），
-台账手工补记，尽快 adhoc 派 devops 修复。
+orch 瘫痪 → 照 README 附录 A 手动模板派发（原生 exe 直调，**勿用 .cmd**），台账手工补记，
+尽快 adhoc 派 devops 修复。

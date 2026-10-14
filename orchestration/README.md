@@ -724,6 +724,16 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
     [√] 看门狗退出（已释放锁）
   监听替身是否被真实拉起：是
   ```
+- **三级防线（谁在哪一级兜底，a1–a3 定型）**：
+  1. **会话级·watch 钩子**——`Stop` 钩子每回合接管 `watch-arm.sh`（token 竞争、循环 `orch watch`）：有监听时命中即 `exit 2` 唤醒。主路，**零轮询**。
+  2. **会话级·巡更 cron**（harness `CronCreate`，30 min）——兜「**没有事件但状态该看**」：漏挂、wake 送达失败、队列悄悄积压。组长**活跃期**挂；**连续 2 次全空闲即 `CronDelete` 撤**（cron 触发一轮 LLM，空转即浪费）。prompt 模板与就位步骤见 orchestration 技能 `references/patrol-watchdog.md`。它与铁律「禁止 sleep-轮询」**不冲突**——禁的是拿轮询**等工作完成**，巡更只是低频读一次状态面、驱动仍靠 ①。
+  3. **机器级·`pysci-watchdog`**（`orch watchdog start|stop|status`）——listener/watchdog 被无声杀死、会话消亡连坐时于阈值内重臂。**注册/卸载**（重启/重登后自动点火）：
+     ```
+     powershell -ExecutionPolicy Bypass -File orchestration\scripts\watchdog-scheduler.ps1 -Mode install
+     powershell -ExecutionPolicy Bypass -File orchestration\scripts\watchdog-scheduler.ps1 -Mode uninstall
+     ```
+     该 PS1 **纯 ASCII** 有意为之（PowerShell 5.1 对无 BOM UTF-8 按 ANSI 解码，CJK 被解成反引号转义下一行 → ParserError；仓库内 `.ps1` 一律遵守）。
+  三层**互相独立**：任何一层坏掉，另两层仍在。
 - **日志完整化（hook v3）**：环境缺失 / token 写失败 / token 自抢分支均留痕，另加 `TERM/INT` 陷阱留痕（SIGKILL 无法拦，故由看门狗按心跳判死重臂）。
 - **已知残余风险**：① SIGKILL 类外部终止由看门狗兜底，但**阈值 300 s 内**仍有真空（心跳新鲜期不会重臂）；② 看门狗本身若被同一类外部杀手干掉，只有 `watchdog-scheduler.ps1`（OS 任务计划）能在下一个 5 min 点重臂——未注册该任务时，重启后看门狗不在场；③ `schtasks` 默认当前用户交互令牌，**用户未登录时任务不跑**（此时也无组长会话可唤醒，影响面为零）。
 - **手动用法（降级/兜底仍适用）**：组长以 Bash `run_in_background` 启动，进程退出即原生完成
