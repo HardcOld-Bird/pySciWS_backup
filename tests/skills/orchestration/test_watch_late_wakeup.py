@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import datetime
 
@@ -238,10 +239,16 @@ def test_start_watchdog_refuses_when_already_running(state, monkeypatch):
     drain.release_lock(wp.runs / "held.log", wp)
 
 
-def test_stop_watchdog_when_idle_reports_nothing_to_stop(state):
-    """空闲时 stop 不误报成功、不写残留信号（危及下一个守护者）。"""
+def test_stop_watchdog_broadcasts_even_when_lock_idle(state):
+    """空闲时 stop 改为**广播纪元**（backlog 20261014-135935-devops）：锁空闲也投递。
+
+    旧语义「空闲不写信号」在孤儿场景下失效——不持锁的 ``_watchdog-loop`` 永远收不到停
+    信（2026-10-14 实测：两实例同跑、一次 stop 只停一个）。现广播恒写、按启动时刻比较，
+    新实例不受旧纪元误停（该性质由 test_watchdog_stop.py 单测）。
+    """
     wp = watchdog.WATCHDOG_PATHS
     wp.runs.mkdir(parents=True, exist_ok=True)
     ok, msg = watchdog.stop_watchdog()
-    assert ok is False and "无需停止" in msg
-    assert not wp.cancel.exists()
+    assert ok is True and "广播" in msg
+    data = json.loads(wp.cancel.read_text(encoding="utf-8"))
+    assert data["scope"] == "all" and data["requested_at"]

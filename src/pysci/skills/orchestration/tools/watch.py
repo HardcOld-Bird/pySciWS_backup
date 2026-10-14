@@ -227,12 +227,30 @@ def _member_worker_live(member: str, qw: Any) -> bool:
         return False
 
 
+def _devops_dispatch_inflight() -> bool:
+    """devops 成员队列是否有**在途**条目（批次/直派正在被消化——组长注 13:xx 的场景）。
+
+    与「worker 在跑」互校：worker 持锁但正阻塞在一次长派发里时，队列条目带 in_progress；
+    两者任一为真即「有活且有人干」，backlog pending 属**正常在途**而非告警。
+    """
+    try:
+        from . import queues as _queues
+
+        return any(
+            str(i.get("status")) == "in_progress" for i in _queues.items("devops")
+        )
+    except Exception:  # noqa: BLE001 - 读数失败按「无在途」保守处理（宁可报）
+        return False
+
+
 def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     """队列压力读数（PENDING-WORK / STALL 判据的**单一实现**，§纪律「同一能力不留两份」）。
 
     「非空」= 有活却没人干，五条任一成立即真：
 
-    1. devops backlog 有 ``pending``；
+    1. devops backlog 有 ``pending``**且无 devops FIFO worker 在跑、也无在途条目**
+       （backlog-fifo-20261014：执行归 FIFO，worker 在场/有在途时 pending 是正常在途——
+       降噪为 ``notes`` 里的**标注**而非告警，此即 144 注记与组长注 13:xx 的场景）；
     2. 任一**成员**队列（:data:`queues.QUEUE_MEMBERS`，9 队）有 ``pending``，且该成员
        **无存活 worker**（worker 在场时队列有活是常态，不该叫醒组长）；
     3. **支撑席**队列有 ``pending`` 且无 worker：bencher 常驻；inspector 仅**开关开启时**计入
@@ -241,14 +259,16 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     4. 统一事件流有超一个巡更周期未排空的事件（:func:`events.unacked`）；
     5. ``data/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）。
 
-    ``stall`` 单列：任一队列条目 ``in_progress`` 且距 ``started_at`` 超过阈值。
+    ``stall`` 单列：任一队列条目 ``in_progress`` 且距 ``started_at`` 超阈值**且该成员无
+    心跳新鲜的活会话**（慢而不死不报，backlog-fifo-20261014）。
 
     Returns:
-        ``{"pending": bool, "reasons": [...], "stall": [...], "signature": str}``。
+        ``{"pending": bool, "reasons": [...], "notes": [...], "stall": [...], "signature": str}``。
     """
     moment = time.time() if now is None else float(now)
     cfg = _watch_cfg()
     reasons: list[str] = []
+    notes: list[str] = []
     stall: list[str] = []
     # 活跃会话心跳面（backlog-fifo-20261014）：STALL 判活着读它——「in_progress 超期」若
     # 该成员仍有心跳新鲜的 worker 会话，是**慢而不死**（重型环节正当耗时），不告警。
@@ -270,10 +290,16 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
         backlog = _workflow.backlog_pending()
     except Exception:  # noqa: BLE001
         backlog = []
-    # 有 devops 队列 worker 在跑即降噪（backlog-fifo-20261014）：批次执行已归 FIFO，
-    # 计划器/worker 在场时「backlog 有 pending」是**正常在途**，不是「有活却没人干」。
-    if backlog and not devops_worker_live:
-        reasons.append(f"devops backlog {len(backlog)} 项 pending")
+    # 有 devops 队列 worker 在跑**或**有在途条目即降噪（backlog-fifo-20261014 + 组长注
+    # 13:xx）：批次执行已归 FIFO，待消化期间 backlog 有 pending 是**正常在途**——降噪为
+    # 标注（notes，非告警），由 orch status 呈现；两者皆无才真告警。
+    if backlog:
+        if devops_worker_live or _devops_dispatch_inflight():
+            notes.append(
+                f"devops backlog {len(backlog)} 项 pending：等待在途消化完成后续（非告警）"
+            )
+        else:
+            reasons.append(f"devops backlog {len(backlog)} 项 pending")
     try:
         from . import queues as _queues
 
@@ -339,6 +365,7 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     return {
         "pending": bool(reasons),
         "reasons": reasons,
+        "notes": notes,
         "stall": stall,
         "signature": "; ".join(sorted([*reasons, *stall])),
     }
@@ -484,6 +511,7 @@ def snapshot() -> dict[str, Any]:
         "queue_pending": bool(pressure["pending"]),
         "queue_signature": str(pressure["signature"]),
         "queue_reasons": list(pressure["reasons"]),
+        "queue_notes": list(pressure.get("notes") or []),
         "queue_stall": list(pressure["stall"]),
     }
 
@@ -737,7 +765,8 @@ def detect(
                     "event": _events.PENDING_WORK,
                     "subject": "队列非空",
                     "detail": "有活却没人干："
-                    + "；".join(cur.get("queue_reasons") or []),
+                    + "；".join(cur.get("queue_reasons") or [])
+                    + "".join(f"｜{n}" for n in (cur.get("queue_notes") or [])),
                     "action": (
                         "orch status 看队列/backlog/任务书明细；"
                         "必要时 approve 唤醒 drain、queues enqueue 补 worker、或拆解 new 任务书"

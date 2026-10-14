@@ -39,10 +39,12 @@ from . import drain as _drain
 from . import inspectd as _inspectd
 from . import watch as _watch
 from .drain import (
+    STOP_SCOPE_ALL,
     WorkerPaths,
     _consume_stop_request,
     _spawn_detached,
     acquire_lock,
+    cancel_status,
     lock_status,
     new_run_log,
     release_lock,
@@ -149,12 +151,17 @@ def run_watchdog(
     sleeps: Any = None,
     now: Any = time.time,
 ) -> dict[str, Any]:
-    """监督循环（持锁运行）：心跳新鲜不动，stale 即重臂。**测试注入口** ``now``/``sleeps``。"""
+    """监督循环（持锁运行）：心跳新鲜不动，stale 即重臂。**测试注入口** ``now``/``sleeps``。
+
+    停止消费按**广播纪元**判定（``started_at`` = 本实例启动时刻）：纪元晚于它才退出，
+    早于它的陈旧纪元不误停（backlog 20261014-135935-devops）。
+    """
     if acquire_lock(orchestration_rel(run_log), WATCHDOG_PATHS) is None:
         return {"skipped": "lock_busy"}
     sleep = _drain._sleep if sleeps is None else sleeps
+    started_iso = _now()
     summary: dict[str, Any] = {
-        "started": _now(),
+        "started": started_iso,
         "checks": 0,
         "rearms": 0,
         "run_log": str(run_log),
@@ -166,7 +173,7 @@ def run_watchdog(
     _log(f"[▶] 看门狗启动（心跳{'新鲜' if last_live else 'stale'}）", run_log)
     try:
         while True:
-            if _consume_stop_request(WATCHDOG_PATHS):
+            if _consume_stop_request(WATCHDOG_PATHS, started_at=started_iso):
                 summary["stopped"] = "cooperative"
                 break
             sleep(interval_s)
@@ -251,8 +258,14 @@ def start_watchdog(
 
 
 def stop_watchdog() -> tuple[bool, str]:
-    """协作式停止看门狗（写 cancel 信号；它在下一轮自查点干净退出）。"""
-    return request_stop(WATCHDOG_PATHS)
+    """协作式停止看门狗（**广播停止纪元**；各实例在下一轮自查点干净退出）。
+
+    backlog 20261014-135935-devops：**一次 stop 停全部实例**（含不持锁的孤儿）——
+    旧实现只对锁持有者 pid 投递、锁空闲时干脆不写信号，孤儿实例会把信号当「陈旧」
+    清掉继续跑（2026-10-14 实测：两实例同跑，一次 stop 只停一个）。广播纪元不删文件、
+    按启动时刻比较，故锁空闲也照投、新实例不受旧纪元误停。
+    """
+    return request_stop(WATCHDOG_PATHS, broadcast=True)
 
 
 def status_lines(
@@ -262,11 +275,18 @@ def status_lines(
     st = lock_status(WATCHDOG_PATHS)
     age = heartbeat_age_s(now=now)
     age_txt = "∞（无心跳）" if age == float("inf") else f"{age:.0f}s"
-    return [
+    out = [
         f"  看门狗 = {st.get('state')}",
         f"  watch 心跳 age = {age_txt}（判死阈值 {stale_s}s）",
         f"  listener = {'活着' if age <= stale_s else 'stale/无（看门狗将重臂）'}",
     ]
+    epoch = cancel_status(WATCHDOG_PATHS)
+    if epoch and str(epoch.get("scope") or "") == STOP_SCOPE_ALL:
+        out.append(
+            f"  停止纪元 = {epoch.get('requested_at', '?')}"
+            "（早于它的实例将退出；新实例不受影响）"
+        )
+    return out
 
 
 def cmd_watchdog_loop(args: Any) -> int:
