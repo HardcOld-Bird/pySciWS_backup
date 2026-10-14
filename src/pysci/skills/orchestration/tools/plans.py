@@ -427,6 +427,12 @@ def cmd_plan_run(args) -> int:
     tree = _tree(plan)
     steps_yaml = _leaf_map(plan)
 
+    if tpl := template_violations(plan):
+        print("[!] plan run 被拒：rework 模板必留节点缺失/乱序（PSEP_3 §4.3 #1）——")
+        for v in tpl:
+            print(f"  - {v}")
+        return 2
+
     # ①② 收尾全部已终态条目 + 等在途全部收尾（run 的阻塞语义）
     settled = _wait_all_inflight(plan_id, plan, state)
     for s_done, o_done in settled:
@@ -483,6 +489,9 @@ def cmd_plan_run(args) -> int:
         return 2
 
     sy = steps_yaml.get(cur["id"], {})
+    # 送审 gate（§4.3 #2/#3）：gate_jury 叶子须案卷 verdict=A 才派单
+    if (gate := _gate_blocks(plan_id, plan, state, cur, sy)) is not None:
+        return gate
     # kind:self 组长环节：不入成员队列，引导书写 + evidence 收尾
     if str(sy.get("kind") or "dispatch") == KIND_SELF:
         return _guide_self_step(plan_id, plan, state, cur, sy)
@@ -722,6 +731,12 @@ def cmd_plan_advance(args) -> int:
     tree = _tree(plan)
     steps_yaml = _leaf_map(plan)
 
+    if tpl := template_violations(plan):
+        print("[!] advance 被拒：rework 模板必留节点缺失/乱序（PSEP_3 §4.3 #1）——")
+        for v in tpl:
+            print(f"  - {v}")
+        return 2
+
     # ① 收尾**全部**已终态队列条目（多 job 乱序到达：一次结清，逐项交接决策点）
     settled = _settle_terminal_jobs(plan_id, plan, state)
     if settled:
@@ -776,6 +791,9 @@ def cmd_plan_advance(args) -> int:
         _print_worklist(plan_id, plan, state)
         return 2
     sy = steps_yaml.get(cur["id"], {})
+    # 送审 gate（§4.3 #2/#3）：gate_jury 叶子须案卷 verdict=A 才派单
+    if (gate := _gate_blocks(plan_id, plan, state, cur, sy)) is not None:
+        return gate
     # kind:self 组长环节：不入成员队列，引导书写 + evidence 收尾
     if str(sy.get("kind") or "dispatch") == KIND_SELF:
         return _guide_self_step(plan_id, plan, state, cur, sy)
@@ -926,11 +944,298 @@ def _report_plan_complete(plan_id: str, state: dict) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# 返工流骨架（PSEP_3 §4.1/§4.2/§4.3）：模板三档 / 必留节点 lint / 送审 gate
+# ---------------------------------------------------------------------------
+MODE_FULL = "full"
+MODE_NO_INSPECTOR = "no_inspector"
+MODE_REWORK_ONLY = "rework_only"
+REWORK_MODES: tuple[str, ...] = (MODE_FULL, MODE_NO_INSPECTOR, MODE_REWORK_ONLY)
+
+#: 各档**必留叶子**（DFS 序＝骨架顺序；缺失/乱序 → advance 拒绝，§4.3 #1）。
+REWORK_REQUIRED: dict[str, tuple[str, ...]] = {
+    MODE_FULL: (
+        "A.a1",
+        "A.a2",
+        "A.a3",
+        "A.a4",
+        "A.a5",
+        "BC.B.b1",
+        "BC.B.b2",
+        "BC.B.b_last",
+        "BC.C.c1",
+        "BC.C.c2",
+        "BC.C.c3",
+        "BC.C.c4",
+    ),
+    MODE_NO_INSPECTOR: (
+        "A.a1",
+        "A.a2",
+        "A.a3",
+        "A.a4",
+        "A.a5",
+        "B.b1",
+        "B.b2",
+        "B.b_last",
+    ),
+    MODE_REWORK_ONLY: ("B.b1", "B.b2", "B.b_last"),
+}
+
+
+def rework_required_leaves(mode: str) -> tuple[str, ...]:
+    return REWORK_REQUIRED.get(mode or MODE_FULL, REWORK_REQUIRED[MODE_FULL])
+
+
+def template_violations(plan: dict) -> list[str]:
+    """template=rework 计划的**必留节点 lint**（缺失/乱序即违规）；非模板计划恒空。"""
+    if str(plan.get("template") or "") != "rework":
+        return []
+    required = list(rework_required_leaves(str(plan.get("rework_mode") or MODE_FULL)))
+    actual = _tree(plan).leaf_paths()
+    out: list[str] = []
+    missing = [p for p in required if p not in actual]
+    if missing:
+        out.append("必留节点缺失：" + "、".join(missing))
+    present = [p for p in actual if p in required]
+    if present != required:
+        out.append(
+            "必留节点乱序（应 "
+            + " → ".join(required)
+            + "；实 "
+            + " → ".join(present)
+            + "）"
+        )
+    return out
+
+
+def _rework_A(tb_id: str) -> dict:
+    """A 综合项目改进（serial superstep）：a1 成因分析 → … → a5 改进实施。"""
+    return {
+        "id": "A",
+        "mode": "serial",
+        "children": [
+            {
+                "id": "a1",
+                "kind": "self",
+                "brief": "成因分析报告",
+                "evidence_sections": ["成因分析", "结论"],
+            },
+            {
+                "id": "a2",
+                "kind": "self",
+                "brief": "解决方案报告",
+                "evidence_sections": ["解决方案", "结论"],
+            },
+            {
+                "id": "a3",
+                "kind": "self",
+                "brief": f"送审 jury（改进后状态 vs 现状；案卷 {tb_id}-jury）",
+                "evidence_sections": ["送审结论"],
+            },
+            {
+                "id": "a4",
+                "kind": "self",
+                "brief": "拆解改进派单",
+                "gate_jury": f"{tb_id}-jury",
+            },
+            {"id": "a5", "member": "devops", "brief": "改进实施"},
+        ],
+    }
+
+
+def _rework_B(node_id: str, tb_id: str) -> dict:
+    """B 返工执行（serial superstep）：b1 重拆解 → b2 返工生产 → b_last 全流程报告。"""
+    return {
+        "id": node_id,
+        "mode": "serial",
+        "children": [
+            {"id": "b1", "kind": "self", "brief": "重拆解返工"},
+            {"id": "b2", "member": "devops", "brief": "返工生产环节"},
+            {"id": "b_last", "kind": "self", "brief": "全流程报告组装"},
+        ],
+    }
+
+
+def _rework_C(tb_id: str) -> dict:
+    """C 监察改进（serial superstep）：可发现性送审 → 方案 → 派单 → 实施。"""
+    return {
+        "id": "C",
+        "mode": "serial",
+        "children": [
+            {
+                "id": "c1",
+                "kind": "self",
+                "brief": f"可发现性案卷送审（案卷 {tb_id}-discoverability）",
+                "evidence_sections": ["可发现性判断"],
+            },
+            {"id": "c2", "kind": "self", "brief": "改进方案（若判需改进）"},
+            {
+                "id": "c3",
+                "kind": "self",
+                "brief": "拆解派单",
+                "gate_jury": f"{tb_id}-discoverability",
+            },
+            {"id": "c4", "member": "devops", "brief": "改进实施"},
+        ],
+    }
+
+
+def build_rework_plan(tb_id: str, *, mode: str = MODE_FULL, goal: str = "") -> dict:
+    """生成返工 plan **骨架**（PSEP_3 §4.2 三档）。
+
+    结构：A、BC 顶层 serial（A 全 done → B 起）；BC 并行组内 B id 靠前、C 靠后（B 派发后
+    C 即可推进＝派发级）；B 是串行链（重拆解→返工生产→全流程报告）。
+
+    Raises:
+        ValueError: 未知模式。
+    """
+    if mode not in REWORK_MODES:
+        raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(REWORK_MODES)}）")
+    if mode == MODE_FULL:
+        steps = [
+            _rework_A(tb_id),
+            {
+                "id": "BC",
+                "mode": "parallel",
+                "children": [_rework_B("B", tb_id), _rework_C(tb_id)],
+            },
+        ]
+    elif mode == MODE_NO_INSPECTOR:
+        steps = [_rework_A(tb_id), _rework_B("B", tb_id)]
+    else:  # rework_only
+        steps = [_rework_B("B", tb_id)]
+    return {
+        "goal": goal or f"返工：{tb_id}",
+        "template": "rework",
+        "rework_mode": mode,
+        "taskbook": tb_id,
+        "steps": steps,
+    }
+
+
+def _jury_case_ruling(case_id: str) -> tuple[str, str]:
+    """读 jury 案卷留痕的**确定裁决**：返回 ``(verdict∈{"A","B",""}, 裁决书文本)``。"""
+    from . import jury as _jury
+
+    p = _jury.record_path(case_id)
+    try:
+        rec = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "", ""
+    v = str(rec.get("final_verdict") or rec.get("verdict") or "")
+    text = str((rec.get("verdict_summary") or {}).get("text") or "")
+    return (v if v in ("A", "B") else ""), text
+
+
+def _abandon_for_gate(
+    plan_id: str, plan: dict, state: dict, leaf: dict, fails: list[dict]
+) -> int:
+    """两次送审不过 → 中止计划（abandoned）＋任务书 failed ＋附两轮裁决书（§4.3 #3）。"""
+    state["abandoned_at"] = _now()
+    state["abandon_reason"] = f"两次送审不过（{leaf['id']} gate）"
+    state["gate_rulings"] = fails
+    _save_state(plan_id, state)
+    tb = str(plan.get("taskbook") or state.get("taskbook") or "")
+    if tb:
+        try:
+            from . import taskbooks as _tb
+
+            _tb.transition(
+                tb, _tb.STATUS_FAILED, note="两次送审不过，已中止（附两轮裁决书）"
+            )
+        except Exception:  # noqa: BLE001 - 中止链绝不因台账写失败而回退
+            pass
+    print(f"== 计划 {plan_id} 已中止（abandoned）：两次送审不过（{leaf['id']}）==")
+    for i, f in enumerate(fails, 1):
+        print(f"  第 {i} 轮裁决书：{f.get('text') or f.get('case')}")
+    if tb:
+        print(f"  任务书 {tb} → failed（待用户补充指引；附两轮裁决书于 plan 状态）")
+    return 2
+
+
+def _gate_blocks(
+    plan_id: str, plan: dict, state: dict, leaf: dict, sy: dict
+) -> int | None:
+    """送审 gate（§4.3 #2/#3）：``gate_jury`` 叶子派发前置校验——案卷 ``verdict=A`` 才放行。
+
+    Returns ``None``＝放行；否则返回拒绝码（``2``）——两次 verdict=B 时中止计划并返回。
+    """
+    case_id = str(sy.get("gate_jury") or "")
+    if not case_id:
+        return None
+    verdict, ruling = _jury_case_ruling(case_id)
+    if verdict == "A":
+        return None
+    sid = str(leaf["id"])
+    fails = state.setdefault("gate_fails", {}).setdefault(sid, [])
+    if verdict == "B":
+        fails.append({"ts": _now(), "case": case_id, "text": ruling})
+        if len(fails) >= 2:
+            return _abandon_for_gate(plan_id, plan, state, leaf, fails)
+        _save_state(plan_id, state)
+        print(
+            f"[!] 送审 gate 未过（第 {len(fails)} 次 verdict=B，案卷 {case_id}）"
+            f"——拒绝派发 {sid}"
+        )
+        print(f"    裁决书：{ruling or '（未读得裁决书）'}")
+        _print_worklist(plan_id, plan, state)
+        return 2
+    print(
+        f"[!] 送审 gate：案卷 {case_id} 未落/未裁决（verdict 非 A）"
+        f"——先送审（orch jury）再派单 {sid}"
+    )
+    _print_worklist(plan_id, plan, state)
+    return 2
+
+
+def cmd_plan_rework(args) -> int:
+    """``orch plan rework <tb-id> [--mode …]``：由返工任务书生成三档骨架并登记（§4.2）。"""
+    tb_id = args.id
+    mode = str(getattr(args, "mode", None) or MODE_FULL)
+    if mode not in REWORK_MODES:
+        print(f"[!] 未知返工模式：{mode}（合法：{'、'.join(REWORK_MODES)}）")
+        return 2
+    goal = str(getattr(args, "goal", "") or "")
+    try:
+        plan = build_rework_plan(tb_id, mode=mode, goal=goal)
+    except ValueError as exc:
+        print(f"[!] {exc}")
+        return 2
+    plan_id = str(getattr(args, "plan_id", "") or f"rework-{tb_id}")
+    if _plan_path(plan_id).exists() and not getattr(args, "force", False):
+        print(f"[!] 计划 {plan_id} 已存在（覆盖用 --force）；续跑用 plan run {plan_id}")
+        return 2
+    PLANS_DIR.mkdir(parents=True, exist_ok=True)
+    plan["id"] = plan_id
+    _plan_path(plan_id).write_text(
+        yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    _save_state(plan_id, _reconcile(plan, {"plan_id": plan_id, "created": _now()}))
+    print(
+        f"[√] 返工计划已登记：{plan_id}（模式 {mode}，模板骨架 {len(plan['steps'])} 顶层节点）"
+    )
+    print(f"    任务书 {tb_id}；必留叶子：{'、'.join(rework_required_leaves(mode))}")
+    tree = _tree(plan)
+    for leaf in tree.leaves:
+        indent = "  " * leaf.path.count(".")
+        who = leaf.yaml.get("member") or (
+            "self（组长）" if leaf.kind == KIND_SELF else "?"
+        )
+        gate = (
+            f"  [gate:{leaf.yaml['gate_jury']}]" if leaf.yaml.get("gate_jury") else ""
+        )
+        print(
+            f"    - {indent}{leaf.path}: {who} | {str(leaf.yaml.get('brief', ''))[:50]}{gate}"
+        )
+    return 0
+
+
 def cmd_plan_amend(args) -> int:
     """amend = 直接编辑计划 YAML（组长文件工具可写 plans/*.yaml）；本命令做校验与状态对账。
 
     护栏（PSEP_3 §2.4）：**已 started 的 superstep 结构冻结**——删/挪已派发（或已 started
-    子树内）节点即拒绝（rc=2，不改状态）；未派发部分放行。附带打印结构 lint（软提示，不阻断）。
+    子树内）节点即拒绝（rc=2，不改状态）；未派发部分放行。template=rework 计划另加**必留节点**
+    lint（模板节点删除/乱序即拒，§4.3 #1）。附带打印结构 lint（软提示，不阻断）。
     """
     plan_id = args.id
     if not _plan_path(plan_id).exists():
@@ -938,6 +1243,13 @@ def cmd_plan_amend(args) -> int:
         return 2
     plan = _load_yaml(plan_id)
     old = _load_state(plan_id)
+    tpl = template_violations(plan)
+    if tpl:
+        print("[!] amend 被拒：rework 模板必留节点不完整（PSEP_3 §4.3 #1）——")
+        for v in tpl:
+            print(f"  - {v}")
+        print("  （返工模板节点不可删/不可乱序）")
+        return 2
     violations = freeze_violations(
         {str(s["id"]): str(s.get("status") or "pending") for s in old.get("steps", [])},
         _tree(plan).leaf_paths(),

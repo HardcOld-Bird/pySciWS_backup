@@ -25,6 +25,8 @@ from textual.widgets import (
     Input,
     ListItem,
     ListView,
+    RadioButton,
+    RadioSet,
     SelectionList,
     Static,
     TextArea,
@@ -51,12 +53,23 @@ _ACTIONS_BY_VIEW: dict[str, frozenset[str]] = {
         {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
     ),
     "tb-new": frozenset(),
+    "tb-reject": frozenset(),
 }
 
 #: 受本类视图闸管的 action（其余——`back`/`quit` 与 widget 内部动作——一律放行，不干预导航）。
 _GATED_ACTIONS: frozenset[str] = frozenset(
     {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
 )
+
+#: 返工三档模式 / 优先级在 TUI 里的**显示序**（RadioSet 下标 → 数据层取值）。
+_REWORK_MODE_BY_INDEX: tuple[str, ...] = ("full", "no_inspector", "rework_only")
+_REWORK_MODE_LABELS: tuple[str, ...] = (
+    "① 完整（综合项目改进＋监察改进＋返工执行）",
+    "② 无监察改进（A→B）",
+    "③ 仅返工（B，快速返工）",
+)
+_PRIORITY_BY_INDEX: tuple[str, ...] = ("high", "normal", "low")
+_PRIORITY_LABELS: tuple[str, ...] = ("优先级 高", "优先级 中（默认）", "优先级 低")
 
 # ---------------------------------------------------------------------------
 # 主题常量（f2 美学统一）：**一处定义**，全 TUI 面板的 CSS 一律插值引用。
@@ -134,6 +147,9 @@ class PysciTUI(App):
     #tb-new-title {{ {_T_TITLE} }}
     #tb-new-body {{ height: 1fr; }}
     #tb-new-msg {{ color: $success; }}
+    #tb-reject {{ height: 1fr; {_T_INSET} {_T_BORDER_SOFT} {_T_BG} }}
+    #tb-reject-title {{ {_T_TITLE} }}
+    #tb-reject-msg {{ color: $success; }}
     """
 
     def __init__(self, *, mods: list[Module] | None = None, seen_path=None) -> None:
@@ -153,7 +169,10 @@ class PysciTUI(App):
         self.tb_items: list[dict] = []
         self.tb_msg = ""
         self.tb_new_msg = ""
+        self.tb_reject_msg = ""
         self.last_created = ""
+        self.last_rework = ""
+        self.reject_target = ""
         self.badge_texts: dict[str, str] = {
             m.key: self._badge_text(m) for m in self._mods
         }
@@ -193,20 +212,49 @@ class PysciTUI(App):
             with Vertical(id="taskbook"):
                 yield Static(
                     "任务书：↑↓ 选；n 新增；a 接受选中（delivered→accepted）；"
-                    "r 驳回选中（批语取下方输入框）",
+                    "r 驳回选中（三段式：① 模式 → ② 优先级 → ③ 批语）",
                     id="tb-title",
                 )
                 yield ListView(id="tb-list")
-                yield Input(placeholder="驳回批语（按 r 驳回选中项）", id="tb-note")
                 yield Static("", id="tb-msg")
             with Vertical(id="tb-new"):
                 yield Static(
-                    "新增任务书（标题 + 多行正文；点「投递」落盘）", id="tb-new-title"
+                    "新增任务书（① 选优先级 → 标题 + 多行正文 → 点「投递」落盘）",
+                    id="tb-new-title",
+                )
+                yield RadioSet(
+                    *(
+                        RadioButton(lbl, value=lbl.endswith("（默认）"))
+                        for lbl in _PRIORITY_LABELS
+                    ),
+                    id="tb-new-priority",
                 )
                 yield Input(placeholder="标题", id="tb-new-title-input")
                 yield TextArea(id="tb-new-body")
                 yield Button("投递", id="tb-new-submit")
                 yield Static("", id="tb-new-msg")
+            with Vertical(id="tb-reject"):
+                yield Static(
+                    "驳回交付（返工=新大任务）：① 返工模式 → ② 优先级 → ③ 批语",
+                    id="tb-reject-title",
+                )
+                yield RadioSet(
+                    *(
+                        RadioButton(lbl, value=(i == 0))
+                        for i, lbl in enumerate(_REWORK_MODE_LABELS)
+                    ),
+                    id="tb-reject-mode",
+                )
+                yield RadioSet(
+                    *(
+                        RadioButton(lbl, value=lbl.endswith("（默认）"))
+                        for lbl in _PRIORITY_LABELS
+                    ),
+                    id="tb-reject-priority",
+                )
+                yield Input(placeholder="批语（完整批复要求）", id="tb-note")
+                yield Button("确认驳回并生成返工任务书", id="tb-reject-submit")
+                yield Static("", id="tb-reject-msg")
         yield Footer()
 
     def _rows(self) -> list[ListItem]:
@@ -233,6 +281,7 @@ class PysciTUI(App):
         self.query_one("#journal", Vertical).display = False
         self.query_one("#taskbook", Vertical).display = False
         self.query_one("#tb-new", Vertical).display = False
+        self.query_one("#tb-reject", Vertical).display = False
         self._render_summary(0)
         self.query_one("#menu", ListView).focus()
         # 详情倒计时**每秒跳动**（「距下次切换还有 X 分 X 秒」，用户 2026-10-14 实测反馈）：
@@ -333,6 +382,7 @@ class PysciTUI(App):
             "#journal",
             "#taskbook",
             "#tb-new",
+            "#tb-reject",
         ):
             try:
                 self.query_one(sel).display = False
@@ -467,6 +517,7 @@ class PysciTUI(App):
         self.view = "tb-new"
         self._hide_all_views()
         self.query_one("#tb-new", Vertical).display = True
+        self._set_radio("#tb-new-priority", 1)  # 默认「中」
         self.query_one("#tb-new-title-input", Input).value = ""
         self.query_one("#tb-new-body", TextArea).text = ""
         self._set_tb_new_msg("")
@@ -476,12 +527,31 @@ class PysciTUI(App):
         self._tb_act(accept=True)
 
     def action_tb_reject(self) -> None:
-        self._tb_act(accept=False)
-
-    def _tb_act(self, *, accept: bool) -> None:
-        """对**选中项**批复：accept / reject＋批语（批语取 ``#tb-note``）。"""
+        """`r`：对**选中交付项**开三段式驳回面板（模式→优先级→批语，PSEP_3 §4.1）。"""
         if self.view != "taskbooks":
             return
+        idx = int(self.query_one("#tb-list", ListView).index or 0)
+        if idx >= len(self.tb_items):
+            return
+        self._open_reject_panel(str(self.tb_items[idx].get("id")))
+
+    def _open_reject_panel(self, tb_id: str) -> None:
+        self.view = "tb-reject"
+        self.reject_target = tb_id
+        self._hide_all_views()
+        self.query_one("#tb-reject", Vertical).display = True
+        # 复位：模式回①、优先级回中（默认）、批语清空
+        self._set_radio("#tb-reject-mode", 0)
+        self._set_radio("#tb-reject-priority", 1)
+        self.query_one("#tb-note", Input).value = ""
+        self._set_tb_reject_msg(f"驳回 {tb_id}：请依次选 ① 模式 → ② 优先级 → ③ 批语")
+        self.query_one("#tb-reject-mode", RadioSet).focus()
+
+    def _tb_act(self, *, accept: bool) -> None:
+        """对**选中项**批复：accept（驳回走三段式面板，见 :meth:`action_tb_reject`）。"""
+        if self.view != "taskbooks":
+            return
+        del accept
         from .. import taskbooks as _tb
 
         idx = int(self.query_one("#tb-list", ListView).index or 0)
@@ -489,37 +559,72 @@ class PysciTUI(App):
             return
         tid = str(self.tb_items[idx].get("id"))
         try:
-            if accept:
-                _tb.accept(tid)
-                msg = f"[√] {tid} → accepted"
-            else:
-                note = self.query_one("#tb-note", Input).value.strip()
-                _tb.reject(tid, note)
-                msg = f"[√] {tid} → rejected（批语已记），已回 new 待重拆解"
+            _tb.accept(tid)
         except ValueError as exc:
             self._set_tb_msg(f"[!] {exc}")
             return
         self._open_taskbooks()  # 重建列表（状态已变）——随后再落读数（重建会清空）
-        self._set_tb_msg(msg)
+        self._set_tb_msg(f"[√] {tid} → accepted")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """「投递」：程序化组装元数据并落盘（TASKBOOK-NEW 由 watch 增量报出）。"""
-        if event.button.id != "tb-new-submit" or self.view != "tb-new":
+        """按钮：``#tb-new-submit`` 投递（带优先级）；``#tb-reject-submit`` 三段式驳回。"""
+        if event.button.id == "tb-new-submit" and self.view == "tb-new":
+            self._submit_new_taskbook()
             return
+        if event.button.id == "tb-reject-submit" and self.view == "tb-reject":
+            self._submit_reject()
+
+    def _radio_index(self, selector: str, default: int) -> int:
+        """RadioSet 选中下标（`pressed_index` 为 None 时回落默认位）。"""
+        idx = self.query_one(selector, RadioSet).pressed_index
+        return default if idx is None else int(idx)
+
+    def _set_radio(self, selector: str, index: int) -> None:
+        """程序化选中 RadioSet 第 ``index`` 项（``pressed_index`` 只读，改各按钮 value）。"""
+        for i, btn in enumerate(self.query_one(selector, RadioSet).query(RadioButton)):
+            btn.value = i == index
+
+    def _submit_new_taskbook(self) -> None:
+        """「投递」：程序化组装元数据（含优先级）并落盘（TASKBOOK-NEW 由 watch 增量报出）。"""
         from .. import taskbooks as _tb
 
         title = self.query_one("#tb-new-title-input", Input).value.strip()
         body = self.query_one("#tb-new-body", TextArea).text
+        priority = _PRIORITY_BY_INDEX[self._radio_index("#tb-new-priority", 1)]
         if not title:
             self._set_tb_new_msg("✗ 标题不能为空")
             return
         try:
-            st = _tb.create(title, body, source="mirror-tui")
+            st = _tb.create(title, body, source="mirror-tui", priority=priority)
         except ValueError as exc:
             self._set_tb_new_msg(f"✗ {exc}")
             return
         self.last_created = str(st["id"])
-        self._set_tb_new_msg(f"已投递：{st['id']}（TASKBOOK-NEW 唤醒组长）")
+        self._set_tb_new_msg(
+            f"已投递：{st['id']}（优先级 {priority}；TASKBOOK-NEW 唤醒组长）"
+        )
+
+    def _submit_reject(self) -> None:
+        """三段式驳回落盘（模式→优先级→批语）→ 生成返工任务书（PSEP_3 §4.1）。"""
+        from .. import taskbooks as _tb
+
+        tb_id = self.reject_target
+        mode = _REWORK_MODE_BY_INDEX[self._radio_index("#tb-reject-mode", 0)]
+        priority = _PRIORITY_BY_INDEX[self._radio_index("#tb-reject-priority", 1)]
+        note = self.query_one("#tb-note", Input).value.strip()
+        try:
+            new = _tb.create_rework(tb_id, mode=mode, priority=priority, note=note)
+        except ValueError as exc:
+            self._set_tb_reject_msg(f"[!] {exc}")
+            return
+        self.last_rework = str(new["id"])
+        msg = (
+            f"[√] {tb_id} → rejected（留档）；已生成返工任务书 {new['id']}"
+            f"（模式 {mode}，优先级 {priority}，第 {new['rework_round']} 轮）"
+        )
+        self._set_tb_reject_msg(msg)
+        self._open_taskbooks()  # 回列表并重建（原项状态已变）
+        self._set_tb_msg(msg)
 
     def _set_tb_msg(self, text: str) -> None:
         self.tb_msg = text
@@ -528,6 +633,10 @@ class PysciTUI(App):
     def _set_tb_new_msg(self, text: str) -> None:
         self.tb_new_msg = text
         self.query_one("#tb-new-msg", Static).update(text)
+
+    def _set_tb_reject_msg(self, text: str) -> None:
+        self.tb_reject_msg = text
+        self.query_one("#tb-reject-msg", Static).update(text)
 
 
 def _is_tty() -> bool:

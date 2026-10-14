@@ -207,13 +207,14 @@ def test_pilot_new_taskbook_lands_on_disk(tbdir):
     st = taskbooks.list_all()
     assert len(st) == 1
     assert st[0]["title"] == "TUI 投递的大任务" and st[0]["source"] == "mirror-tui"
+    assert st[0]["priority"] == "normal"  # 修订⑦：默认中
     assert taskbooks.read_body(st[0]["id"]) == "正文甲\n正文乙"
     assert (tbdir / f"{st[0]['id']}.taskbook.md").exists()
     assert (tbdir / f"{st[0]['id']}.state.json").exists()
 
 
 def test_pilot_accept_and_reject_selected(tbdir):
-    """success_criteria：批复 Pilot——accept 终态；reject 带批语回 new。"""
+    """批复 Pilot——accept 终态；reject 走**三段式**（模式→优先级→批语）生成返工任务书。"""
     a = _make(title="甲")["id"]
     b = _make(title="乙")["id"]
     for tid in (a, b):
@@ -230,14 +231,26 @@ def test_pilot_accept_and_reject_selected(tbdir):
             await pilot.press("a")  # 接受选中（第 0 项）
             assert "accepted" in app.tb_msg and seen["first"] in app.tb_msg
             await pilot.press("down")  # 重建后第 1 项
+            await pilot.press("r")  # 开三段式驳回面板
+            assert app.view == "tb-reject"
+            app._set_radio("#tb-reject-mode", 1)  # 无监察改进
+            app._set_radio("#tb-reject-priority", 2)  # 低
             app.query_one("#tb-note", Input).value = "拆得不对"
-            await pilot.press("r")
+            await pilot.click("#tb-reject-submit")
+            assert app.last_rework.startswith("tb-")
+            assert "rework" in app.tb_reject_msg.lower() or "返工" in app.tb_reject_msg
+            seen["rework"] = app.last_rework
 
     _run(_go())
     by_id = {d["id"]: d for d in taskbooks.list_all()}
     assert by_id[seen["first"]]["status"] == "accepted"
-    assert by_id[seen["second"]]["status"] == "new"  # 驳回后回 new
+    assert by_id[seen["second"]]["status"] == "rejected"  # 原项终态留档（不再回 new）
     assert by_id[seen["second"]]["rejections"][-1]["note"] == "拆得不对"
+    rw = by_id[seen["rework"]]
+    assert rw["status"] == "new" and rw["source"] == "mirror-tui"
+    assert rw["rework_of"] == seen["second"] and rw["rework_round"] == 1
+    assert rw["mode"] == "no_inspector" and rw["priority"] == "low"
+    assert rw["title"] == "乙"  # 继承原名
 
 
 def test_pilot_taskbook_panel_reachable_and_esc_returns(tbdir):
