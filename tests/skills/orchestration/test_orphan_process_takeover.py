@@ -40,7 +40,14 @@ from pysci.skills.orchestration.tools import (
 )
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import FAKE_HOP_PID, GitFaces, envelope, read_backlog, seed_backlog
+from .conftest import (
+    FAKE_HOP_PID,
+    GitFaces,
+    drain_once,
+    envelope,
+    read_backlog,
+    seed_backlog,
+)
 
 OID = "20261012-184000-leader"
 SID = "11111111-2222-3333-4444-555555555555"
@@ -463,12 +470,13 @@ def test_drain_takeover_kills_then_reuses_name(takeover, monkeypatch):
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
 
     run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once(log=run_log)
+    plan = summary["plan"]  # 开工扫尾/升代是**计划侧**读数（执行账在 worker）
 
-    assert summary["reclaimed"] == [OID]
+    assert plan["reclaimed"] == [OID]
     assert killed == [FAKE_HOP_PID]
-    assert "worktrees_regenerated" not in summary, "已确认干净却改了单号"
-    assert summary["worktrees_cleaned"] == [OID] and git.commits == []
+    assert "worktrees_regenerated" not in plan, "已确认干净却改了单号"
+    assert plan["worktrees_cleaned"] == [OID] and git.commits == []
     assert _hop(takeover)["pid"] == 0, "处置完不留陈在途标记"
     text = run_log.read_text(encoding="utf-8")
     assert "终止孤儿会话进程" in text and "异名重建" not in text
@@ -491,9 +499,9 @@ def test_drain_takeover_rebuilds_when_writer_wont_die(takeover, monkeypatch):
     fake = _FakeDispatch()
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
 
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
 
-    assert summary["worktrees_regenerated"] == {OID: f"{OID}-r2"}
+    assert summary["plan"]["worktrees_regenerated"] == {OID: f"{OID}-r2"}
     assert git.commits == [], "干净面隔离中也不该被打成抢救提交"
     assert f"worktree add {OID}-r2`" in fake.texts[0]
     assert read_backlog(takeover.state)[0]["worktree"] == f"{OID}-r2"
@@ -515,10 +523,11 @@ def test_drain_takeover_rebuilds_on_lingering_dir(takeover, monkeypatch):
     fake = _FakeDispatch()
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
 
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
 
-    assert summary["worktrees_regenerated"] == {OID: f"{OID}-r2"}
-    assert summary["worktrees_salvaged"] == [OID], "升代不等于销毁：读数得交回队列"
+    plan = summary["plan"]
+    assert plan["worktrees_regenerated"] == {OID: f"{OID}-r2"}
+    assert plan["worktrees_salvaged"] == [OID], "升代不等于销毁：读数得交回队列"
     assert not [c for c in git.calls if c[:1] == ("-C",)], "残骸目录不进去写"
     assert ("branch", "-D", f"wt-{OID}") not in git.calls, "未合并的分支就是进度本体"
     assert "cherry-pick --no-commit c0ffee12" in fake.texts[0]

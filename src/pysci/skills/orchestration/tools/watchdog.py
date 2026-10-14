@@ -124,6 +124,10 @@ def _rearm(run_log: Path | None = None) -> bool:
         _log(f"[!] 监听循环脚本缺失：{ARM_SCRIPT}", run_log)
         return False
     env = {**os.environ, "QODER_PROJECT_DIR": str(PROJECT_ROOT)}
+    # 重臂实例无主：剥掉派生方携带的 owner 身份（owner 钩子 spawn 的看门狗会继承
+    # ``PYSCI_WAKE_OWNER``——漏剥则替身 watch 盖上 owner 的 ``armed_by``、冒充「owner
+    # 自己的 watch」把 stale 接管永久挡死；watch-arm.sh 侧另有 unset 双保险）。
+    env.pop(_watch.WATCH_OWNER_ENV, None)
     spawn_log = (run_log or (WATCHDOG_PATHS.runs / "watchdog.log")).with_suffix(
         ".spawn.log"
     )

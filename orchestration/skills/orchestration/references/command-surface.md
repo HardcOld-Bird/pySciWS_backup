@@ -20,6 +20,8 @@ pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<�
         # 例外=缺陷×该跳 blocked。判决包 verdict-package.md；大单 solo-batching.md
 pysci-orch watch [--timeout 14400]
         # 等 drain 事件（drain-watch.md §2）；后台挂起，漏挂由 status 补账
+pysci-orch wake-claim [status] [--force [--session-id id]]
+        # 唤醒权归属读数与应急面；归属本体由钩子按载荷 session_id 自动完成（README §4.5）
 pysci-orch reject <建议id> --override "<判决依据>"   # 否决：依据必填、留痕（J/M 判决的驳回不计）
 pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
 pysci-orch consult-twin <案卷.md>  # 咨询 twin（未启用即拒 rc=2）

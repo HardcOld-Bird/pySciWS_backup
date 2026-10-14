@@ -700,27 +700,44 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   （harness 只认**最近一任**），致 2026-10-13 20:57 的 QUEUE-COMPLETE 唤醒丢失。v2 取消守卫、
   改为每回合接管。
 
-**唤醒权认领（`wake-claim`；用户设计 2026-10-14 晚，钩子 v5）**：v2 的「最新在听者胜」
-在**主会话 + 次要会话并用**时会被抢——次要会话一有回合即抢走唤醒权，drain/事件的 `exit 2`
-被投到次要会话（污染其上下文，用户明确要避免；凌晨「被取代却无接任」的谜之日志疑为同源）。
-改法是**认领制**：主会话跑一次 `pysci-orch wake-claim [--name main]` 把唤醒权锁给自己
-（真源 `state/wake-claim.json`，记认领时刻 + 会话身份）；钩子每回合先 `wake-claim --check`：
+**唤醒权自动归属（`wake-claim`；用户设计定稿 2026-10-14 晚，钩子 v6——「机制优于纪律」）**：
+v2 的「最新在听者胜」在**主会话 + 次要会话并用**时会被抢——次要会话一有回合即抢走唤醒权，
+drain/事件的 `exit 2` 被投到次要会话（污染其上下文，用户明确要避免；凌晨「被取代却无接任」
+的谜之日志疑为同源）。第一版**认领制**（手工 `wake-claim` 认领 + env 取证身份）被判「硬保证
+退化成软步骤」废弃；现行**零人工自动归属**：钩子不再丢弃 stdin 载荷——解析 `session_id` /
+`hook_event_name`，真源 `state/wake-owner.json`（`session_id` + `claimed_at` +
+`last_turn_at`），判定单一实现在 `wake-claim --check`：
 
-| 判定 | 钩子行为 |
+| 情形（载荷判定） | 钩子行为 |
 |---|---|
-| 未认领 / legacy 认领 / **本会话 = owner** | 照旧抢 token、挂 watch、命中 `exit 2` |
-| **异会话（非 owner）** | **不监听、不抢 token、绝不 `exit 2`**（直接 `exit 0`） |
-| 检查本身失败（旧二进制 / 环境坏） | fail-open 按 legacy 监听并留痕（唤醒链不塌） |
+| **无 owner → 自动认领**（首会话即主会话，零人工） | 抢 token、挂 watch，照常 `exit 2` 唤醒 |
+| **owner = 我 → 续心跳** | 照常抢 token、挂 watch |
+| **owner ≠ 我 → 永不抢占**（次要会话自动排除） | **不监听、不抢 token、绝不 `exit 2`**（`exit 0`，留痕） |
+| **owner stale → 自动接管**：心跳断供 >30 min **且** owner 自己的 watch 已死 | 新会话认领为 owner，照常监听 |
+| **SessionEnd**（`SessionEnd` 钩子接线 `.qoder/hooks/watch-arm.sh`） | owner 显式释放真源后退出；非 owner 结束不误释放 |
+| 空载荷（看门狗重臂）/ 解析失败 / 无 `session_id` / 判定命令本身失败 | **fail-open 走旧 token 语义**并留痕（唤醒链不塌） |
 
+- **接管的 watch 判据带身份**：钩子把 owner 的 `session_id` export 给 `orch watch`
+  （`watch.json` 的 `armed_by`）——只有 **owner 自己**的 watch 挡接管；看门狗重臂的
+  无主替身（`armed_by` 空）不冒充，否则接管条款在看门狗常开的环境里永远触发不了。
 - **不存在「转投其他会话」语义**（那正是本单要根治的）：owner 不在场时事件**不丢**——
-  持久水位 + 迟到唤醒由 owner 下次挂载补上；owner 永久迁移 = 新会话再跑一次 claim 接管；
-  `pysci-orch wake-claim status` 查看，`… release` 退回 legacy。
-- **会话身份取证**：候选表 `watch.SESSION_ENV_KEYS = (WT_SESSION, QODER_SESSION_ID,
-  QODER_SESSION)`——本机 env 枚举实测 `WT_SESSION`（Windows Terminal 窗格 GUID）逐会话
-  不同、可用；`QODERCN_*`/`DISPATCHER`/`PYSCI_*`/`PATH` 各会话恒同故不入表。**两端都
-  取不到 → 认领记 legacy**（宁可退化，也不能把 owner 自己的钩子静默禁掉；认领输出会写明
-  这一局限）。钩子首回合把可见的会话变量一次性写进 `watch-arm.log`（`session-env.seen`
-  标记），供后续复核判据。
+  持久水位 + 迟到唤醒由 owner 下次挂载补上。`pysci-orch wake-claim status` 读当前 owner
+  与 stale 判定；`wake-claim --force [--session-id <id>]` 是**应急强制迁移**（缺省=释放，
+  下一钩子自动认领），**非常规步骤**——常规归属全部由钩子按载荷自动完成。
+- **实测留痕**（2026-10-14 17:51–18:11，隔离 ROOT + 双 session_id 载荷喂真实钩子）：
+  ```
+  [17:51:36] 归属判定：claim：无 owner → 本会话自动认领（sid=sess-A）        ← 首会话零人工
+  [17:52:20] 归属判定：deny：非 owner（owner=sess-A，心跳 44s…）→ 不监听不抢，退出
+  [17:53:38] 空载荷（看门狗重臂/无 stdin）→ fail-open 走旧 token 语义        ← 重臂无主替身
+  [17:55:38] 被取代（现持 174918-…）→ 让位退出                              ← v2 自仲裁仍成立
+  [18:08:27] 归属判定：takeover：owner stale（心跳 11307s > 1800s 且其 watch
+             已死）→ 自动接管（sess-A → sess-B）                            ← 替身在场也不挡接管
+  [18:11:07] SessionEnd：release：owner 会话结束 → 显式释放（sid=sess-B）→ 钩子退出不监听
+  [18:11:23] 归属判定：claim：无 owner → 本会话自动认领（sid=sess-C）        ← 干净迁移
+  ```
+  实测当场抓到并修掉一个接线缺陷：看门狗重臂实例会**继承**派生方的 `PYSCI_WAKE_OWNER`
+  （替身 watch 盖上 owner 的 `armed_by` → 把接管永久挡死）——现由钩子 `unset` +
+  `watchdog._rearm` 剥离双保险（各有回归测试钉住）。
 
 **迟到唤醒 + 看门狗（2026-10-14 自动化加固 a1；用户实测发现 02:30–07:30 五小时唤醒真空）**：
 
@@ -896,10 +913,15 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
 → 组长裁决 approve（入 backlog FIFO；推理密集项可 `--effort high` 按项标注，§3.5）
   / reject（附理由）
 → 审批回复存 state/replies/，下次派发该成员时自动附送（闭环告知）
-→ approve 默认**自动唤醒** devops：分离后台进程 `_drain-devops` 持 state/devops.lock
-  锁 FIFO 串行消化整个 backlog（组长零阻塞、零轮询，对齐 §4.5 等待模型）
-  · --no-wake 只入队不唤醒；锁忙（已有 worker）不重复 spawn，本项由当前 drain 接手
-  · 锁 stale（持有进程死 / 锁龄 >6h）自动接管，防 worker 崩溃后死锁
+→ approve 默认**自动唤醒** devops **batch 计划器**：分离后台进程 `_drain-devops` 持
+  state/devops.lock 组包并把批次**入队** `state/queues/devops.json`（`kind=backlog-batch`），
+  再由 **devops FIFO worker**（`orch _queue-worker devops`）逐个执行——**执行只留队列
+  worker 一份实现**（backlog-fifo-20261014：drain 自持的 do_dispatch 循环退役；组长
+  零阻塞、零轮询，对齐 §4.5 等待模型）
+  · --no-wake 只入队不唤醒；计划器锁忙不重复 spawn——条目在**持久 backlog**里由在跑那位
+    一并计划/FIFO 排队消化（**锁忙语义消失：排队而非丢弃待拾**）；计划器**一次一批**，
+    下一批由 worker 收尾后的续计划链上（未取项保持 pending）
+  · 锁 stale（持有进程死 / 锁龄 >6h）自动接管，防计划器崩溃后死锁
   · 释放锁时 unlink 删不掉（Windows 他方持句柄 → 共享冲突）**不得静默**：锁记录改写为
     `released` **墓碑** + run 日志留一行 `[!]`。墓碑不作互斥（`_lock_live` 判非活、
     `lock_status` 报 stale 且非 crashed），下一任 drain 就地改写接管——否则「删不掉的残骸
@@ -917,14 +939,18 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
     清理其残留 worktree/branch（`git worktree remove --force wt-<id>` + `branch -D` +
     `prune` 兜底）——worktree 名 = 条目 id（take_first 记录、任务书指定），只清孤儿名、
     不误删活跃/手动 worktree
-  · `orch drain-stop` 协作式停止：写 state/devops.cancel（指向当前锁持有者 pid），worker
-    每项间隙消费→干净退出（释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；
-    陈旧信号（pid≠本进程）清除且不误停接棒 worker；锁空闲时 drain-stop 不写信号（no-op）
-→ drain 每批：取队首为**种子** + 收集同提请者(member)**且同 effort 档位**的 pending 为
+  · `orch drain-stop` 协作式停止：写**计划器** state/devops.cancel **与 devops worker**
+    state/queues/devops.cancel（指向各自锁持有者 pid），两侧在条目间隙消费→干净退出
+    （释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；陈旧信号（pid≠本进程）
+    清除且不误停接棒 worker；锁空闲不写信号（no-op）
+→ 计划器每批：取队首为**种子** + 收集同提请者(member)**且同 effort 档位**的 pending 为
   **组包**（含种子 ≤4 项，同提请者≈同模块/同视角；一跳只有一个跳级档位，混档会静默
   改变被标项的强度）→ 批量任务书（种子必做 + 组包菜单，devops 自主选取合并实施，
-  单 worktree=种子 id）→ dispatch devops（§7）→ 测试验证 → git 提交（+ `timeout 25 git
-  push origin main` best-effort，失败忽略，用户裁决 2026-10-10）→ 交付列 `backlog id=<ids>`
+  单 worktree=种子 id）→ 批次正文**入队**（含元数据）→ **worker 执行**：dispatch devops
+  （§7）→ 测试验证 → git 提交（+ `timeout 25 git push origin main` best-effort，失败忽略，
+  用户裁决 2026-10-10）→ 交付列 `backlog id=<ids>`；**账务**（销账/needs_leader/延期/系统性
+  停止/抢救）在 worker 侧结算（单一实现 `drain._settle_outcome`，计划器 dry 支与 worker
+  真派发支共用）；选组包项保持 pending 的项由 worker 收尾后的**续计划**当新种子再入队
   · 成功 → 按交付 id 清单**逐 id 销账**（done，记 commit hash + batch_size/batch_seed）；
     组包中未选项保持 pending 留待下轮（devops 可只吃种子）
   · 失败（blocked/run_failed）→ 仅**种子** needs_leader、组包项保持 pending（**不连坐**，
@@ -935,15 +961,18 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
   · 系统性故障（`quota_exhausted` 额度耗尽 / `channel_error` 渠道级故障）→ **全局停止**：
     种子复位 pending（非 needs_leader）、组包与剩余条目保持 pending、释放锁、.done 注明
     停止类别；恢复后下次唤醒自动续消化（两类只恢复动作不同：充值/换渠道 vs 等渠道恢复）
-→ run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
-  态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕、**残留已标记**
-  〔released 墓碑：已宣告收尾但文件删不掉〕与**残骸已收尾**〔该 run 已有 .done，连墓碑都写
-  不进的极端残骸；pid 不作判活依据〕）、
-  最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/渠道级故障/异常中断）、
+→ **两本账**（backlog-fifo-20261014）：**计划账** devops-runs/<ts>.{log,done}
+  （`kind="plan"`：计划了 N 批；watch 对 plan-done 不报 QUEUE-COMPLETE）；**执行账**
+  queues-runs/devops/<ts>.{log,done}（销账/停止/by_reason 档位分列在此）。orch status
+  展示：计划器 worker 态（running/idle/stale，stale 再分**崩溃**〔pid 死且缺该 run 的
+  .done〕、**残留已标记**〔released 墓碑〕与**残骸已收尾**〔该 run 已有 .done〕）、
+  **devops FIFO worker 态 + 队列水位行**（待/在做/完成/失败）、
+  最近 run 摘要（**执行账优先**；含停止方式：自然跑完/协作停止/额度耗尽/渠道级故障/异常中断）、
   needs_leader 提醒（组长据此 `orch requeue` 回排重派 / 改任务书 / `orch resolve` 销账 / 上报）
 → 组长的等待面（代码化，§4.5）：唤醒/采纳/交办三处输出固定附 `orch watch` 挂载指令；
   watch 后台阻塞轮询 state 文件与锁，命中 QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP /
-  CHANNEL-STOP / CRASH 即单行退出唤醒会话；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
+  CHANNEL-STOP / CRASH 即单行退出唤醒会话（devops backlog 的**完成唤醒自 backlog-fifo 起
+  走事件流 `QUEUE-EMPTY`**，由执行侧 worker 退出时发）；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
   的 watch 段一次性补账
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
 ```

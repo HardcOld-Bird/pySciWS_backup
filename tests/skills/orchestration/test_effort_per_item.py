@@ -33,6 +33,7 @@ from pysci.skills.orchestration.tools.registry import Member
 
 from .conftest import (
     QUOTA_TEXT,
+    drain_batch,
     envelope,
     fake_headless,
     read_backlog,
@@ -344,7 +345,7 @@ def test_drain_forwards_seed_effort(iso_state, monkeypatch):
             code=0, kind="result", body="done commit aaa1111 backlog id=s1"
         ),
     )
-    drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    drain_batch(seed, group, drain.new_run_log(), dry=False)
     assert seen["effort"] == "high"
 
 
@@ -356,7 +357,7 @@ def test_drain_unmarked_seed_passes_none(iso_state, monkeypatch):
         monkeypatch,
         DispatchOutcome(code=0, kind="result", body="done commit aaa1111"),
     )
-    drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    drain_batch(seed, group, drain.new_run_log(), dry=False)
     assert seen["effort"] is None
 
 

@@ -17,7 +17,7 @@ from pysci.skills.orchestration.tools import dispatch, drain, orch, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 from pysci.skills.orchestration.tools.workflow import AWAITING_DECISION_KEY
 
-from .conftest import read_backlog, seed_backlog
+from .conftest import drain_once, read_backlog, seed_backlog
 
 
 def _item(**kw) -> dict:
@@ -84,7 +84,7 @@ def _run_blocked(iso_state, monkeypatch, *, reason: str, body: str = "缺判决�
             code=2, kind="blocked", body=body, reason=reason
         ),
     )
-    drain.drain_backlog(drain.new_run_log())
+    drain_once()  # 计划器入队 → devops FIFO worker 执行并结算
     return read_backlog(iso_state)[0]
 
 

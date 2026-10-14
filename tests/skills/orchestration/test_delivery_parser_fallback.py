@@ -25,7 +25,7 @@ from pysci.skills.orchestration.tools.delivery import (
 )
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import seed_backlog
+from .conftest import drain_once, seed_backlog
 
 #: **旧版**协议的严格面（E1 合并前的字面形态，建议书正文 ``git show 636c4a8`` 引的原文）：
 #: 只认裸标签、没有 ``attrs`` 组——用它替换 ``_STRICT_BLOCKS`` 即复现「解析器早于协议」。
@@ -162,7 +162,7 @@ def test_drain_logs_warning_to_run_log(iso_state, monkeypatch):
     seed_backlog(iso_state, [{"id": "b1", "status": "pending", "summary": "s1"}])
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
     run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once(log=run_log)
     text = run_log.read_text(encoding="utf-8")
     assert summary["items"][0]["status"] == "done"  # 判读不受影响
     assert "解析器早于协议" in text and "[!]" in text

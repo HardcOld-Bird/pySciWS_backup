@@ -14,6 +14,18 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/watch-arm.sh",
+            "name": "watch-arm-release",
+            "timeout": 10000
+          }
+        ]
+      }
     ]
   }
 }

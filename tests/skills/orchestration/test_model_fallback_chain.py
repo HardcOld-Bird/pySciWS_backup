@@ -33,7 +33,9 @@ from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 from .conftest import (
     CHANNEL_TEXT,
     QUOTA_TEXT,
+    batch_seed_of,
     cmd_model,
+    drain_once,
     envelope,
     fake_headless,
     read_backlog,
@@ -206,7 +208,7 @@ def test_drain_stops_and_logs_each_demote(iso_state, monkeypatch):
     dispatched = []
 
     def fake_dispatch(member, **kw):
-        dispatched.append(kw.get("slug"))
+        dispatched.append(batch_seed_of(kw.get("text") or ""))
         return DispatchOutcome(
             code=2,
             kind="channel_error",
@@ -220,14 +222,14 @@ def test_drain_stops_and_logs_each_demote(iso_state, monkeypatch):
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
     run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once(log=run_log)
 
     assert summary["stopped"] == "channel_error"
     assert dispatched == ["k1"], "渠道坏了不是任务书坏了，k2 不得再烧一跳"
     text = run_log.read_text(encoding="utf-8")
     assert "[!] 档位回退：flash 席seat-a不可用 → 已切换 seat-b" in text
     assert "（批次 k1" in text, "留痕要点名批次，否则事后查不到是哪一单换的席"
-    assert "[C] 全局停止" in text
+    assert "[C]" in text and "触发全局停止" in text
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["k1"]["status"] == "pending" and by_id["k2"]["status"] == "pending"
 

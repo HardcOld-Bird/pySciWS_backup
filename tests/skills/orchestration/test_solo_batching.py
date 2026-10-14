@@ -16,7 +16,13 @@ import json
 from pysci.skills.orchestration.tools import dispatch, drain, orch, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import read_backlog, seed_backlog, seed_suggestion
+from .conftest import (
+    batch_seed_of,
+    drain_once,
+    read_backlog,
+    seed_backlog,
+    seed_suggestion,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -71,14 +77,14 @@ def test_drain_solo_items_never_share_a_batch(iso_state, monkeypatch):
     calls: list[str] = []
 
     def fake(member, **kw):
-        slug = kw.get("slug")
+        slug = batch_seed_of(kw.get("text") or "")
         calls.append(slug)
         return DispatchOutcome(
             code=0, kind="result", body=f"done commit aaa1111\nbacklog id={slug}"
         )
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
     assert calls == ["big1", "big2", "small"], "solo 项各占一跳，互不并批"
     assert summary["count"] == 3
     by_id = {i["id"]: i for i in read_backlog(iso_state)}

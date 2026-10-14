@@ -28,7 +28,7 @@ from pysci.skills.orchestration.tools import (
 )
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import read_backlog, seed_backlog
+from .conftest import drain_once, read_backlog, seed_backlog
 
 MIMO_TEXT = "Custom model service error, please retry later or switch to another model."
 
@@ -168,7 +168,7 @@ def test_devops_backlog_chain_defers(iso_state, monkeypatch):
     monkeypatch.setattr(workflow, "next_defer_s", lambda **k: 0.0)
     monkeypatch.setattr(drain, "_sleep", lambda s: None)
 
-    drain.drain_backlog(drain.new_run_log())
+    drain_once()
 
     b = read_backlog(iso_state)[0]
     assert b["status"] == "pending" and b["defer_until"] > 0 and b["defer_count"] == 1

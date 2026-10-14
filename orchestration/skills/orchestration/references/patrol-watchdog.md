@@ -19,11 +19,14 @@
 
 **判据（单一实现 = `watch.queue_pressure`，四处消费面共用）**：
 
-- `PENDING-WORK`（**有活却没人干**，四条任一成立）：devops backlog 有 `pending`；任一成员
-  队列有 `pending` 且该成员**无存活 worker**；统一事件流有**超 30 min 未排空**的事件
-  （刚产生的事件正是本帧要唤醒的那几条，计入会与既有事件重复）；`data/taskbooks/` 有
-  `new` 态未处理。
-- `STALL`（**条目停滞**）：任一队列条目 `in_progress` 且距 `started_at` 超阈值。
+- `PENDING-WORK`（**有活却没人干**，四条任一成立）：devops backlog 有 `pending` **且无
+  devops 队列 worker 在跑**（执行归 FIFO：worker 在场时 pending 属正常在途，降噪——144
+  注记场景）；任一成员队列有 `pending` 且该成员**无存活
+  worker**；统一事件流有**超 30 min 未排空**的事件（刚产生的事件正是本帧要唤醒的那几条，
+  计入会与既有事件重复）；`data/taskbooks/` 有 `new` 态未处理。
+- `STALL`（**条目停滞，叠加心跳判活**）：任一队列条目 `in_progress` 且距 `started_at` 超
+  阈值，**且该成员无心跳新鲜的活会话**（`backpressure.live_entries` ≤120s）——
+  慢而不死（重型环节正当耗时）不报，死而僵才报（2026-14 晚实测误报的根治面）。
 
 **节流（硬要求）**：同类事件 **≤1 次/30 min**——防「唤醒→看一眼→无新事→再唤醒」的循环。
 节流账落在 `watch.json`，跨挂载继承（重启不重置、不堆积）；被节流时**不推进该条件水位**，
@@ -59,13 +62,12 @@ cron「全空闲即撤」的语义，现在由代码自动达成）。组长**�
    卸载同命令 `-Mode uninstall`（删除任务；看门狗进程另用 `orch watchdog stop`）。该 PS1
    **纯 ASCII 有意为之**（PowerShell 5.1 对无 BOM UTF-8 按 ANSI 解码，CJK 会被解成反引号
    转义下一行 → ParserError；仓库里所有 `.ps1` 都遵守）。
-2. **唤醒权（主会话定向，wake-claim）**：主会话跑一次 `pysci-orch wake-claim --name main`
-   （首次就位/换会话时）。此后钩子每回合 `wake-claim --check`：**异会话的钩子直接退出**
-   （不监听、不抢 token、绝不 `exit 2`）——次要会话不再误唤醒；`wake-claim status` 查看
-   当前 owner、`… release` 退回 legacy（未认领时仍是旧的「最新在听者胜」）。
-   **局限**：两端取不到会话区分变量（`WT_SESSION` 等缺席）时认领记 legacy（认领输出会写明）。
-   **同窗格续持**：`WT_SESSION` 是终端窗格 GUID——同一窗格新开的会话**自动沿用**认领
-   （无需重认）；换窗格/换终端才需重跑 `wake-claim`（自动认领补全后零手工，见 backlog）。
+2. **唤醒权（自动归属，wake-owner）**：**零手工**——钩子每回合读 stdin 载荷
+   `session_id` 走 `wake-claim --check`：无 owner 自动认领（首会话即主会话）、owner 续
+   心跳、**异会话永不抢占**（不监听、不抢 token、绝不 `exit 2`）、owner stale（心跳
+   >30 min 且其 watch 已死）自动接管、`SessionEnd` 钩子显式释放（换会话即干净迁移）。
+   `pysci-orch wake-claim status` 查当前 owner 与 stale 判定；`--force [--session-id <id>]`
+   是**应急强制迁移**（非常规步骤）。载荷缺失/解析失败一律 fail-open 走旧 token 语义留痕。
 3. **listener（会话级①）**：无需手工——`Stop` 钩子下一次回合自动接管（`watch-arm.sh` 每回合
    还**幂等自启动看门狗**）；漏挂由 `orch status` 补账（`reconcile`）。
 4. **巡更（②）**：**无需动作**——队列感知自动起止。仅 §2「降级注」那种全灭态才手工挂 cron。
@@ -80,12 +82,19 @@ cron「全空闲即撤」的语义，现在由代码自动达成）。组长**�
   （消费账 `watch.consumed`；2026-10-14 12:44 双唤醒的回归判据）。
 - 队列感知：制造「一成员队列 pending 且无 worker」→ watch 一轮内出 `PENDING-WORK`；
   清空后连续周期**零唤醒**；窗口内重复条件被节流（`watch.throttle` 有账）。
-- STALL：`started_at` 超阈值的 `in_progress` 条目 → 出 `STALL`。
+- STALL：`started_at` 超阈值的 `in_progress` 条目，**且该成员无活会话心跳** → 出 `STALL`；
+  心跳新鲜（慢而不死）→ 不出。
+- backlog FIFO：`approve` → 计划器把批次入队 `queues/devops.json`（面板可见）→ worker
+  消化销账；计划器锁忙**不丢件**（条目在持久 backlog 排队）；完成唤醒=事件流 `QUEUE-EMPTY`
+  （执行侧发）——判据自动化面 `test_backlog_fifo.py`。
 - 看门狗重臂：令心跳 stale > 300 s → 看门狗日志出现 `[→] 重臂监听循环`。
 - 队列超时：入队 > 1800 s 未取走 → 事件层出 `QUEUE-TIMEOUT` 且 TUI 详情点名（不许静默积压）。
-- 唤醒权认领：认领后 `wake-claim --check` 在**同身份**返回 0、**异身份**返回 3（钩子据此退
-  `exit 0`：不监听、不抢 token、绝不 `exit 2`）；`release` 后回 0（legacy）。owner 缺席期间
-  发的事件在 owner 下次挂载被**迟到唤醒**补上（水位单调，重挂不重复消费）。
+- 唤醒权自动归属：不同 `session_id` 的载荷喂 `wake-claim --check`——首会话 **claim** 返回
+  0、owner 返回 0（续心跳）、异 id 返回 3（钩子据此退 `exit 0`：不监听、不抢 token、绝不
+  `exit 2`）、心跳 >30 min + owner watch 已死 → 返回 0 且接管、`SessionEnd` 返回 4（释放
+  后退出）、垃圾/空载荷返回 0 且 fail-open 留痕。owner 缺席期间发的事件在 owner 下次挂载
+  被**迟到唤醒**补上（水位单调，重挂不重复消费）。
 
 判据的自动化面见 `tests/skills/orchestration/test_queue_watch.py`（队列感知 + 双消费回归）、
-`test_wake_claim.py`（唤醒权四类语义）与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。
+`test_wake_owner.py`（唤醒权五类语义）、`test_backlog_fifo.py`（approve→入队→销账 /
+锁忙排队 / STALL 心跳双向 / 降噪）与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。

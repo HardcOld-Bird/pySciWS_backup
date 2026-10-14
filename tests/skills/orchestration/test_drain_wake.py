@@ -43,7 +43,7 @@ def test_wake_skips_when_lock_busy(iso_state, monkeypatch):
     spawned, msg = drain.wake_devops()
     assert spawned is False
     assert calls == []  # 锁忙 → 不重复 spawn
-    assert "正在处理队列" in msg
+    assert "计划器正在跑" in msg
 
 
 def test_wake_passes_dry_flag(iso_state, monkeypatch):

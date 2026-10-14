@@ -19,6 +19,7 @@ from pysci.skills.orchestration.tools import (
     drain,
     failure_classes,
     orch,
+    queueworker,
     sessions,
 )
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
@@ -29,7 +30,9 @@ from .conftest import (
     QUOTA_TEXT,
     REAL_MODEL_TURN,
     append_turn,
+    batch_seed_of,
     cmd_model,
+    drain_once,
     envelope,
     fake_headless,
     read_backlog,
@@ -362,24 +365,28 @@ def test_drain_channel_error_stops_globally(iso_state, monkeypatch):
     calls = []
 
     def fake_dispatch(member, **kw):
-        calls.append(kw.get("slug"))
+        calls.append(batch_seed_of(kw.get("text") or ""))
         return _channel_outcome()
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
     run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once(log=run_log)
     assert summary["stopped"] == "channel_error"
-    assert "渠道级故障" in summary["error"] and "quota" not in summary["error"]
+    wlog = summary["worker"]
+    assert "渠道级故障" in wlog["error"] and "quota" not in wlog["error"]
     assert calls == ["c1"], "c2 不得再被派发（渠道坏了不是任务书坏了）"
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["c1"]["status"] == "pending", "种子无罪复位，不标 needs_leader"
     assert "needs_leader_at" not in by_id["c1"]
     assert by_id["c2"]["status"] == "pending", "组包/剩余条目不连坐"
     assert not drain.LOCK_PATH.exists(), "锁已释放"
-    done = json.loads(run_log.with_suffix(".done").read_text(encoding="utf-8"))
-    assert done["stopped"] == "channel_error"
+    # 执行侧的 .done 摘要（queues-runs/devops）带上 stopped——计划器的 .done 只记计划
+    wdone = sorted(queueworker.member_paths("devops").runs.glob("*.done"))[-1]
+    assert json.loads(wdone.read_text(encoding="utf-8"))["stopped"] == "channel_error"
     text = run_log.read_text(encoding="utf-8")
-    assert "[C] 全局停止" in text, "run 日志的行首标记要能一眼分清 [Q] 额度 / [C] 渠道"
+    assert "[C]" in text and "触发全局停止" in text, (
+        "run 日志的行首标记要能一眼分清 [Q] 额度 / [C] 渠道"
+    )
 
 
 def test_channel_error_not_counted_as_item_failure(iso_state):

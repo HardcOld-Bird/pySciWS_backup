@@ -25,7 +25,7 @@ from pysci.skills.orchestration.tools import (
 )
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import read_backlog, seed_backlog
+from .conftest import batch_seed_of, drain_once, read_backlog, seed_backlog
 
 MIMO_TEXT = "Custom model service error, please retry later or switch to another model."
 OUTAGE_TEXT = "401 Unauthorized: invalid api key"
@@ -54,7 +54,7 @@ def _run(iso_state, monkeypatch, outcome, items=None):
     calls: list[str] = []
 
     def fake_dispatch(member, **kw):
-        calls.append(kw.get("slug"))
+        calls.append(batch_seed_of(kw.get("text") or ""))
         return outcome
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
@@ -69,7 +69,7 @@ def _run(iso_state, monkeypatch, outcome, items=None):
 
     monkeypatch.setattr(workflow, "next_defer_s", _wait)
     run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once(log=run_log)
     return summary, calls, run_log
 
 
@@ -98,11 +98,16 @@ def test_outage_still_stops_globally(iso_state, monkeypatch):
     )
 
     assert summary["stopped"] == "channel_error"
-    assert "渠道级故障" in summary["error"]
+    # backlog-fifo-20261014：账务移到 FIFO worker 后，报告面的 error 是**派发的原文**
+    # （旧的 SYSTEMIC_TEXT 罐头句随执行侧退役）；分类由 stopped 携带，原文要照实可见。
+    assert "401 Unauthorized" in summary["worker"]["error"]
     assert calls == ["b1"], "渠道真不可用 → 剩余条目不许再烧"
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["b1"]["status"] == "pending" and "defer_until" not in by_id["b1"]
-    assert "[C] 全局停止" in run_log.read_text(encoding="utf-8")
+    # 账务行（worker 日志）：[C] 标记 + 「触发全局停止」同现——旧的独立「[C] 全局停止」
+    # 概要行随 drain 主循环退役，执行侧只留这一条账务行。
+    text = run_log.read_text(encoding="utf-8")
+    assert "[C]" in text and "触发全局停止" in text
 
 
 def test_budget_exhausted_promotes_to_channel_saturated(iso_state, monkeypatch):
@@ -117,7 +122,7 @@ def test_budget_exhausted_promotes_to_channel_saturated(iso_state, monkeypatch):
     assert calls == ["b1"], "触顶后立刻停链，不许再吃下一项"
     text = run_log.read_text(encoding="utf-8")
     assert "回升全局停止" in text and "[C]" in text
-    assert "带宽类延期" in summary["error"], (
+    assert "带宽延期触顶" in summary["worker"]["error"], (
         "报告面要能一眼看出是带宽触顶，而不是笼统的渠道不可用"
     )
 

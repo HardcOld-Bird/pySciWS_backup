@@ -11,6 +11,7 @@ import json
 import pathlib
 import re
 import shutil
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -29,6 +30,8 @@ from pysci.skills.orchestration.tools import (
     jury,
     ledger,
     orch,
+    queues,
+    queueworker,
     registry,
     routing,
     settings,
@@ -86,6 +89,11 @@ def no_real_backoff_sleep(monkeypatch):
 
     monkeypatch.setattr(drain, "_sleep", lambda seconds: None)
     monkeypatch.setattr(_wf, "next_defer_s", lambda **_kw: 0.0)
+    # 执行侧（devops FIFO worker）的「睡到最近到期」读的是 ``queues.next_defer_s``（旧
+    # drain 读 ``workflow.next_defer_s``）——不垫成 0，睡被换 no-op 后时钟不动，「全队
+    # 皆延期」那一支会原地空转（同 workflow 那条的挂死形状）。要验睡本身的用例自行覆盖
+    # （test_worker_seams）。
+    monkeypatch.setattr(queues, "next_defer_s", lambda *_a, **_k: 0.0)
 
 
 @pytest.fixture(autouse=True)
@@ -279,6 +287,9 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
     monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")
     monkeypatch.setattr(watch, "WATCH_PATH", state / "watch.json")
+    # 唤醒权真源同归 tmp：不 patch 则任何跑归属判定的用例都真写仓库 wake-owner.json
+    # （且上一用例留下的 owner 会把本用例的「无 owner 自动认领」分支吃掉）。
+    monkeypatch.setattr(watch, "WAKE_OWNER_PATH", state / "wake-owner.json")
     # 预设真源（toml）隔离：默认 mimo；切预设的用例用 write_preset(state, ...) 改一行。
     monkeypatch.setattr(settings, "SETTINGS_PATH", state / "pysci_settings.toml")
     seed_settings(state)
@@ -325,7 +336,115 @@ def iso_state(tmp_path, monkeypatch):
             cancel=state / "inspector.cancel",
         ),
     )
+    # 成员队列面（backlog-fifo-20261014）：devops backlog 批次入队 ``state/queues/devops.json``
+    # ——计划器（drain）与队列 worker（queueworker）用例都读写它；不隔离则真写仓库队列
+    # （且会把测试批次条目喂给生产 devops queue worker）。
+    monkeypatch.setattr(queues, "QUEUES_DIR", state / "queues")
+    monkeypatch.setattr(queueworker, "QUEUE_WORKER_ROOT", state / "queues-runs")
+    monkeypatch.setattr(queueworker, "ORCH_STATE_ROOT", state)
     return state
+
+
+def drain_once(*, dry: bool = False, log: pathlib.Path | None = None) -> dict:
+    """端到端驱动一次 backlog 消化（backlog-fifo-20261014 后的形态）→ **旧摘要形状**。
+
+    计划器（:func:`drain.drain_backlog`：组包→入队）+ devops FIFO worker
+    （:func:`queueworker.run_worker`：执行→账务）；测试经 ``patch dispatch.do_dispatch``
+    假派发。账务在 worker 侧，但既有语义用例按旧 drain 摘要形状断言，故把每批结算行
+    （``backlog_results``）摊平成 ``items``（逐 backlog id，字段同旧形状）：
+
+    - ``items``/``stopped``/``count``：旧口径（count=摊平后条目数）；
+    - ``plan``/``worker``：计划器与 worker 的原始摘要（需要分子面读数的用例）；
+    - ``log`` 给定：把 worker 日志追加进该计划日志——旧用例在同一 ``run_log`` 上同时
+      断言计划行与账务行。
+    """
+    plan_log = log or drain.new_run_log()
+    plan = drain.drain_backlog(plan_log, dry=dry)
+    merged: dict = {
+        "items": [],
+        "stopped": "",
+        "count": 0,
+        "run_log": plan.get("run_log", ""),
+        "kind": plan.get("kind", "plan"),
+        "plan": plan,
+        "worker": None,
+    }
+    if dry:
+        merged["items"] = list(plan.get("items") or [])
+    else:
+        wpaths = queueworker.member_paths("devops")
+        wpaths.runs.mkdir(parents=True, exist_ok=True)
+        wlog = queueworker.new_run_log(wpaths)
+        worker = queueworker.run_worker("devops", wlog)
+        merged["worker"] = worker
+        for entry in worker.get("items") or []:
+            rows = entry.get("backlog_results")
+            if rows:
+                merged["items"].extend(rows)
+        merged["stopped"] = str(worker.get("stopped", "") or "")
+        # 旧 drain 的 summary["error"] 语义（崩溃短消息）迁到执行侧 item_error
+        merged["error"] = str(worker.get("error") or worker.get("item_error") or "")
+        if worker.get("by_reason"):
+            merged["by_reason"] = dict(worker["by_reason"])
+        if log is not None:
+            try:  # 旧用例在同一 run_log 上同时断言计划行与账务行
+                with plan_log.open("a", encoding="utf-8") as fh:
+                    fh.write(wlog.read_text(encoding="utf-8"))
+            except OSError:
+                pass
+    merged["count"] = len(merged["items"])
+    return merged
+
+
+def batch_seed_of(text: str) -> str:
+    """从批次任务书正文抓种子 id（首行「…（backlog FIFO 队首，id=<seed>）：」）。
+
+    backlog-fifo-20261014 后队列条目不再携 slug、worker 也不向 ``do_dispatch`` 透传 slug，
+    故旧用例 ``kw.get("slug")`` 的那一维改从**任务书正文**读回：种子 id 就写在首行，语义
+    等价（每批一次的派发落在哪个种子上）。
+    """
+    m = re.search(r"id=([^，\s)）]+)", text or "")
+    return m.group(1) if m else ""
+
+
+def drain_batch(seed, group, run_log, *, dry: bool = False):
+    """单批账务（替代已退役的 ``drain._drain_batch``），返回旧形态的逐 id 结果列表。
+
+    backlog-fifo-20261014 把「派发 + 账务」二分为计划器（组包入队）与 FIFO worker（执行
+    结算）。原 ``_drain_batch`` 的语义落在 :func:`drain._dry_settle_batch`（dry）与
+    :func:`drain.settle_backlog_batch`（真派发）上，本函数按旧签名把两者拼回：dry 直走
+    前者；非 dry 先真派发（patcher 的 ``do_dispatch``，slug=种子 id——旧口径）再交给账务。
+    """
+    if dry:
+        return drain._dry_settle_batch(seed, group, run_log)
+    from pysci.skills.orchestration.tools import dispatch as _dispatch
+
+    seed_id = str(seed.get("id") or "")
+    group_ids = [str(g.get("id")) for g in group if g.get("id")]
+    outcome = _dispatch.do_dispatch(
+        "devops",
+        text=workflow.backlog_batch_text(seed, group, max_batch=drain.BATCH_MAX),
+        slug=seed_id,
+        session="latest",
+        effort=str(seed.get("effort") or "") or None,
+        quiet=True,
+        auto=True,
+    )
+    item = {
+        "id": f"batch-{seed_id}",
+        "kind": drain.BACKLOG_BATCH_KIND,
+        "member": "devops",
+        "backlog": {
+            "seed": seed,
+            "group": group,
+            "ids": [seed_id, *group_ids],
+            "seed_id": seed_id,
+        },
+    }
+    _status, results, _stop = drain.settle_backlog_batch(
+        item, outcome, run_log, t0=time.time()
+    )
+    return results
 
 
 @pytest.fixture

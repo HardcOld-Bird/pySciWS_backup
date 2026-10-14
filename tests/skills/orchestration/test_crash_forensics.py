@@ -28,6 +28,7 @@ from pysci.skills.orchestration.tools import (
 from .conftest import (
     RUNTIME_FILE,
     cmd_model,
+    drain_once,
     envelope,
     fake_headless,
     read_backlog,
@@ -99,7 +100,7 @@ def test_headless_argv_of_chain_shaped_batch_is_all_str_and_takes_orders(
         lambda n, cmd: envelope(OK_BODY, is_error=False, stop="end_turn", rc=0),
     )
     run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once(log=run_log)
 
     assert len(calls) == 1, "同提请者一批一跳"
     argv = calls[0]
@@ -107,7 +108,7 @@ def test_headless_argv_of_chain_shaped_batch_is_all_str_and_takes_orders(
     assert cmd_model(argv) == A
     assert argv[argv.index("--reasoning-effort") + 1] == "high"
     text = run_log.read_text(encoding="utf-8")
-    assert "消化批次 s1(+1)" in text and "effort=high" in text
+    assert "计划批次 s1(+1)" in text and "effort=high" in text
     assert summary["count"] == 2
     assert all(i["status"] == "done" for i in read_backlog(iso_state))
 
@@ -123,17 +124,20 @@ def test_drain_crash_leaves_full_stack_in_run_log(iso_state, monkeypatch):
 
     monkeypatch.setattr(dispatch, "do_dispatch", boom)
     run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once(log=run_log)
 
     text = run_log.read_text(encoding="utf-8")
     assert "Traceback (most recent call last)" in text
-    assert "_drain_batch" in text, (
-        "栈里有落点函数名（当年只有一句裸消息，只能 git blame）"
+    assert "_execute" in text, (
+        "栈里要有落点函数名（backlog-fifo-20261014 后落点是 queueworker._execute"
+        "——旧 '_drain_batch' 已退役；有帧名才能 git blame 定位，只有一句裸消息不算）"
     )
     assert CRASH in text
-    assert summary["error"] == f"TypeError: {CRASH}", ".done 仍收短消息（不被栈淹掉）"
-    done = json.loads(run_log.with_suffix(".done").read_text(encoding="utf-8"))
-    assert done["error"] == summary["error"]
+    assert summary["error"] == f"TypeError: {CRASH}", "执行账仍收短消息（不被栈淹掉）"
+    wdone = sorted((iso_state / "queues-runs" / "devops").glob("*.done"))[-1]
+    assert (
+        json.loads(wdone.read_text(encoding="utf-8"))["item_error"] == summary["error"]
+    )
 
 
 def test_benchd_item_crash_leaves_stack_in_run_log(iso_bench, monkeypatch, tmp_path):

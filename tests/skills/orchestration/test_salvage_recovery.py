@@ -23,7 +23,7 @@ from argparse import Namespace
 from pysci.skills.orchestration.tools import dispatch, drain, orch, watch, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import GitFaces, read_backlog, seed_backlog
+from .conftest import GitFaces, drain_once, read_backlog, seed_backlog
 
 OID = "20261012-234000-leader"
 
@@ -361,7 +361,7 @@ def _drain_with_dispatch(iso_state, monkeypatch, tmp_path, items, outcome_of, *,
         return outcome_of(len(texts))
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
     return summary, texts, git, read_backlog(iso_state)
 
 
@@ -383,9 +383,10 @@ def test_drain_crash_salvages_then_finishes_same_run(iso_state, monkeypatch, tmp
         lambda n: DispatchOutcome(code=0, kind="result", body="done 全绿"),
         face=(OID, {"dirty": True, "unmerged": 1, "head": "c0ffee12"}),
     )
-    assert summary["reclaimed"] == [OID]
-    assert summary["worktrees_salvaged"] == [OID]
-    assert "worktrees_cleaned" not in summary and "worktrees_regenerated" not in summary
+    plan = summary["plan"]  # 开工扫尾/升代/抢救面是**计划侧**读数
+    assert plan["reclaimed"] == [OID]
+    assert plan["worktrees_salvaged"] == [OID]
+    assert "worktrees_cleaned" not in plan and "worktrees_regenerated" not in plan
     assert git.commits and git.commits[0][1].startswith(drain.SALVAGE_COMMIT_TAG)
     assert ("branch", "-D", f"wt-{OID}") not in git.calls
     assert "续作指令" in texts[0] and "还在原地且登记在册" in texts[0]
