@@ -446,6 +446,23 @@ def _resolve_plan_id(body: str, hint: str | None) -> str | None:
     return max(hits, key=len) if hits else None
 
 
+#: 叙述性（过去/完成态）痕迹：动词后面紧跟**完成**、或 id 前面紧跟「自/已/曾」——
+#: 「自 m4 **建成**后」「m4 已建」是**讲史**，不是「mN 补/充实/建 + 宾语」的未来承诺。
+#: （2026-10-14 实测误报：dispatch-unify 任务书正文「`state/queues/` 自 m4 建成后长期空转」
+#: 被判成环节承诺——m4 根本不在该 adhoc 计划 steps 里。）
+_NARRATIVE_TAIL: tuple[str, ...] = ("成", "了", "完")
+_NARRATIVE_HEAD: tuple[str, ...] = ("自", "已", "曾")
+
+
+def _is_narrative(text: str, m: re.Match[str]) -> bool:
+    """该命中是否**叙述性用法**（不是环节承诺）？``text`` 须与构造 ``m`` 的同一份正文。"""
+    tail = text[m.end() : m.end() + 4].lstrip("*_ ")
+    if tail[:1] in _NARRATIVE_TAIL:
+        return True
+    prefix = re.sub(r"[*_（(【\[\s]", "", text[max(0, m.start() - 8) : m.start()])
+    return bool(prefix) and prefix[-1] in _NARRATIVE_HEAD
+
+
 def _step_promise_warning(
     rule: dict, pat: re.Pattern[str], body: str, plan_id: str | None
 ) -> str | None:
@@ -453,7 +470,12 @@ def _step_promise_warning(
 
     定位不到对应计划 → 返回 ``None``（fail-open：无法核对就不误报）。
     """
-    found = {m.group(1) for m in pat.finditer(_strip_quoted(body)) if m.groups()}
+    shown = _strip_quoted(body)
+    found: set[str] = set()
+    for m in pat.finditer(shown):
+        if not m.groups() or _is_narrative(shown, m):
+            continue
+        found.add(str(m.group(1)))
     if not found:
         return None
     pid = _resolve_plan_id(body, plan_id)

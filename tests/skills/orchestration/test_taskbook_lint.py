@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
+
 from pysci.skills.orchestration.tools import dispatch, plans
 
 # 与仓库随附 taskbook-lint.json 首期规则同形（复制于此，单元测试不依赖仓库文件）
@@ -313,6 +315,48 @@ def test_write_taskbook_uses_slug_to_resolve_plan(tmp_path, monkeypatch, capsys)
     out = capsys.readouterr().out
     assert "任务书 lint" in out and "fix-20261014" in out and "m9" in out
     assert dest.exists()
+
+
+# ---------------------------------------------------------------------------
+# 叙述性用法不告警（2026-10-14 误报精化：「自 m4 建成后」被当成环节承诺）
+# ---------------------------------------------------------------------------
+def test_step_promise_ignores_completed_narrative(tmp_path, monkeypatch):
+    """「自 m4 **建成**后长期空转」是讲史：m4 不在本计划 steps 也**不告警**。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["f1"])
+    body = "事故根因（已取证）：`orchestration/state/queues/` 自 m4 建成后从未有条目。"
+    assert dispatch.lint_taskbook(body, plan_id="fix-20261014") == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "面板 m4 建成后不再改动",
+        "细节 m3 补完（留档）",
+        "正文 m5 充实了 之后没人读",
+        "自 m4 补 上线后无人接管",  # 前缀「自」叙述（动词无完成态也该跳）
+    ],
+)
+def test_step_promise_ignores_narrative_forms(tmp_path, monkeypatch, body):
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["f1"])
+    assert dispatch.lint_taskbook(body, plan_id="fix-20261014") == [], body
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "后续单：细节 m9 补。",  # 未来承诺（动词不带完成态、无叙述前缀）
+        "面板 m4 建立新入口后交接",
+        "正文 m7 充实读数后交付",
+    ],
+)
+def test_step_promise_still_flags_future_promises(tmp_path, monkeypatch, body):
+    """精化**不许把规则废掉**：未来承诺（mN 补/充实/建 + 宾语）照常告警。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["f1"])
+    warns = dispatch.lint_taskbook(body, plan_id="fix-20261014")
+    assert len(warns) == 1 and "placeholder-step-promise" in warns[0], body
 
 
 # ---------------------------------------------------------------------------

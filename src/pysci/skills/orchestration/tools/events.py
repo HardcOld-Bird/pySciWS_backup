@@ -101,6 +101,11 @@ MIRROR_TYPES: tuple[str, ...] = (
     SALVAGE,
 )
 
+#: **条件型伪事件**（非「发生过一次」的事实，而是「持续成立的状态」）：抗重复由
+#: watch 的**节流窗口**负责，故**不进消费账**（``watch.json consumed``）——否则同一条件
+#: 签名被永久吃掉，「≤1 次/30min」退化成「一辈子 1 次」（2026-10-14 返工实测的交互缺陷）。
+CONDITIONAL_TYPES: tuple[str, ...] = (PENDING_WORK, STALL)
+
 
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -320,6 +325,7 @@ def status_lines() -> list[str]:
 
 __all__ = [
     "CHANNEL_STOP",
+    "CONDITIONAL_TYPES",
     "CRASH",
     "EVENTS_LOG",
     "JOB_DONE",
