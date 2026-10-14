@@ -243,10 +243,16 @@ def test_tui_enter_shows_rework_card(cface, capsys):
         app = tui.PysciTUI()
         async with app.run_test() as pilot:
             await pilot.press("t")
+            await pilot.pause()
             lv = app.query_one("#tb-list", ListView)
             idx = next(i for i, d in enumerate(app.tb_items) if d["id"] == tb2)
             lv.index = idx
-            await pilot.press("enter")
+            await pilot.pause()
+            for _ in range(3):  # 键驱动有竞态：按 Enter 直到选中回调落到 tb_msg
+                await pilot.press("enter")
+                await pilot.pause()
+                if "返工卡片" in app.tb_msg:
+                    break
             assert "返工卡片" in app.tb_msg
             assert "第 1 轮返工" in app.tb_msg
 
