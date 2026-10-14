@@ -20,11 +20,23 @@ from pysci.paths import ORCH_STATE_ROOT
 
 from .dispatch import DispatchOutcome
 from .ledger import format_credits, format_est_tokens, read_all, summarize
-from .planflow import DONE_STATES, PlanTree
+from .planflow import (
+    DONE_STATES,
+    KIND_SELF,
+    SELF_AWAITING,
+    PlanTree,
+    freeze_violations,
+)
 
 PLANS_DIR = ORCH_STATE_ROOT / "plans"
 
 _DONE = DONE_STATES
+
+#: 拆解指导真本（PSEP_3 §2.5 三级方案：必读文档 + plan new 打印 + read: 标记 lint）。
+DECOMP_REF = "plan-decomposition.md"
+
+#: ``plan new`` 输出**头部**固定打印的必读指引。
+DECOMP_READ_HINT = f"※ 多环节大任务拆解前必读：orchestration/skills/orchestration/references/{DECOMP_REF}"
 
 
 def _tree(plan: dict) -> PlanTree:
@@ -44,6 +56,130 @@ def _status_of(state: dict):
         for s in state.get("steps", [])
     }
     return lambda path: st.get(str(path), "pending")
+
+
+def _has_read_marker(plan: dict) -> bool:
+    """plan YAML 是否含 ``read: plan-decomposition.md`` 标记行（PSEP_3 §2.5）。"""
+    v = plan.get("read")
+    if isinstance(v, (list, tuple)):
+        return any(DECOMP_REF in str(x) for x in v)
+    return DECOMP_REF in str(v or "")
+
+
+def _print_plan_lints(plan: dict) -> None:
+    """plan 结构 lint（**不阻断**，PSEP_3 §2.4/§2.5）：软提示 + 拆解必读标记行。"""
+    tree = _tree(plan)
+    lines = tree.soft_hints()
+    n = len(tree.leaves)
+    if (tree.has_superstep() or n >= 5) and not _has_read_marker(plan):
+        lines.append(
+            f"plan 含 superstep 或环节数≥{n}——建议在 YAML 加 `read: {DECOMP_REF}` 标记行"
+            f"（拆解前必读 references/{DECOMP_REF}）"
+        )
+    for ln in lines:
+        print(f"[lint] {ln}（软提示，不阻断）")
+
+
+def _check_evidence(path: str, sy: dict) -> tuple[bool, str]:
+    """校验 ``kind: self`` 环节的 evidence（PSEP_3 §2.1）：文件存在 + 模板要求的标题段。
+
+    标题段判据：YAML ``evidence_sections: [...]`` 声明则逐个匹配 Markdown 标题行（``# …``
+    含该标题）；未声明则要求至少一个 ATX 标题（文件是有结构的报告，非空）。
+    """
+    from pysci.paths import PROJECT_ROOT
+
+    p = Path(path)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+    if not p.is_file():
+        return False, f"evidence 文件不存在：{p}"
+    text = p.read_text(encoding="utf-8", errors="replace")
+    if not text.strip():
+        return False, f"evidence 文件为空：{p}"
+    headings = [ln for ln in text.splitlines() if ln.lstrip().startswith("#")]
+    sections = sy.get("evidence_sections") or []
+    if sections:
+        missing = [t for t in sections if not any(str(t) in h for h in headings)]
+        if missing:
+            return (
+                False,
+                f"evidence 缺标题段：{'、'.join(str(m) for m in missing)}（{p}）",
+            )
+        return True, f"evidence 通过（{len(sections)} 个标题段齐全）：{p}"
+    if not headings:
+        return False, f"evidence 无标题段（需至少一个 Markdown 标题行 `# …`）：{p}"
+    return True, f"evidence 通过（含标题段）：{p}"
+
+
+def _self_target(plan: dict, state: dict) -> dict | None:
+    """待收尾的 ``kind:self`` 叶子：优先 ``self_awaiting``（已引导待证据），否则首个可派发 self。"""
+    for s in state["steps"]:
+        if str(s.get("status")) == SELF_AWAITING:
+            return s
+    lm = _leaf_map(plan)
+    disp = _tree(plan).dispatchable(_status_of(state))
+    for p in disp:
+        if str((lm.get(p) or {}).get("kind") or "dispatch") == KIND_SELF:
+            return next((s for s in state["steps"] if str(s["id"]) == p), None)
+    return None
+
+
+def _apply_evidence(plan_id: str, plan: dict, state: dict, evidence: str) -> int | None:
+    """把 ``--evidence`` 落到当前 self 环节。返回 ``None``=已收尾（调用方继续推进）；否则错误码。"""
+    tgt = _self_target(plan, state)
+    if tgt is None:
+        print(f"[!] 计划 {plan_id} 无可收尾的 kind:self 环节——--evidence 无处可施。")
+        return 2
+    sy = _leaf_map(plan).get(str(tgt["id"]), {})
+    ok, msg = _check_evidence(evidence, sy)
+    if not ok:
+        tgt["status"] = SELF_AWAITING
+        _save_state(plan_id, state)
+        print(f"[!] 组长环节 {tgt['id']} evidence 校验未过：{msg}")
+        return 2
+    tgt["status"] = "done"
+    tgt["evidence"] = str(evidence)
+    _save_state(plan_id, state)
+    print(f"[√] 组长环节 {tgt['id']} 收尾：{msg}")
+    return None
+
+
+def _report_after_evidence(plan_id: str, plan: dict, state: dict) -> None:
+    """``--evidence`` 收尾 self 环节后报告：全完成则报完成，否则刷工作清单。"""
+    if _plan_settled(plan, state):
+        if not state.get("completed_at"):
+            state["completed_at"] = _now()
+            _save_state(plan_id, state)
+        _report_plan_complete(plan_id, state)
+    else:
+        _print_worklist(plan_id, plan, state)
+
+
+def _print_self_guidance(plan_id: str, step_state: dict, sy: dict) -> None:
+    """``kind: self`` 环节的引导块（evidence 规格 + 收尾命令）——plan new / advance 共用。"""
+    print()
+    print("[NEXT]")
+    print(f"  环节 {step_state['id']} 为组长自办环节（kind: self）——不入成员队列。")
+    print(f"    粗描述原文：{sy.get('brief', '（无）')}")
+    secs = sy.get("evidence_sections") or []
+    if secs:
+        print(f"  交付 evidence 须含标题段：{'、'.join(str(s) for s in secs)}")
+    else:
+        print("  交付 evidence 须为 Markdown 报告（含至少一个 `# …` 标题段）")
+    print(
+        f"  完成后提交证据收尾：uv run --no-sync pysci-orch plan advance "
+        f"{plan_id} --evidence <路径>"
+    )
+
+
+def _guide_self_step(plan_id: str, plan: dict, state: dict, cur: dict, sy: dict) -> int:
+    """引导一个 ``kind:self`` 组长环节（不入成员队列）：打印 evidence 规格与收尾命令。"""
+    if str(cur.get("status")) != SELF_AWAITING:
+        cur["status"] = SELF_AWAITING
+        _save_state(plan_id, state)
+    _print_self_guidance(plan_id, cur, sy)
+    _print_worklist(plan_id, plan, state)
+    return 0
 
 
 #: ``plan run`` 的同步等待上限（秒）——与成员 registry ``timeout_s`` 默认（3h）同量级：
@@ -138,6 +274,7 @@ def list_plans() -> list[tuple[str, str, int, int]]:
 
 def cmd_plan_new(args) -> int:
     """登记新计划（复制 YAML 入 state/plans/，初始化状态）。"""
+    print(DECOMP_READ_HINT)  # 头部固定打印必读指引（PSEP_3 §2.5 三级方案之二）
     src = Path(args.file)
     if not src.is_absolute():
         from pysci.paths import PROJECT_ROOT
@@ -167,14 +304,19 @@ def cmd_plan_new(args) -> int:
     for leaf in tree.leaves:
         sy = leaf.yaml
         indent = "  " * leaf.path.count(".")
+        who = sy.get("member") or ("self（组长）" if leaf.kind == KIND_SELF else "?")
         print(
-            f"    - {indent}{leaf.path}: {sy.get('member', '?')} | "
+            f"    - {indent}{leaf.path}: {who} | "
             f"{str(sy.get('brief', ''))[:60]}"
             + ("  [review]" if sy.get("review") else "")
         )
+    _print_plan_lints(plan)
     first = state["steps"][0]
     fy = next((n.yaml for n in tree.leaves if n.path == first["id"]), {})
-    _print_run_guidance(plan_id, first, fy)
+    if str(fy.get("kind") or "dispatch") == KIND_SELF:
+        _print_self_guidance(plan_id, first, fy)
+    else:
+        _print_run_guidance(plan_id, first, fy)
     return 0
 
 
@@ -290,6 +432,14 @@ def cmd_plan_run(args) -> int:
     for s_done, o_done in settled:
         _report_handoff(plan_id, plan, state, s_done, o_done)
 
+    # --evidence：先把一个 kind:self 组长环节收尾（PSEP_3 §2.1）
+    if getattr(args, "evidence", None):
+        rc = _apply_evidence(plan_id, plan, state, args.evidence)
+        if rc is not None:
+            return rc
+        _report_after_evidence(plan_id, plan, state)
+        return 0
+
     status_of = _status_of(state)
     # blocked/失败叶子优先（续作语义：--text 即补充信息）；否则**首可派发**（就绪谓词）
     cur = next(
@@ -308,16 +458,19 @@ def cmd_plan_run(args) -> int:
             else None
         )
     if cur is None:
+        if _plan_settled(plan, state):
+            if not state.get("completed_at"):
+                state["completed_at"] = _now()
+                _save_state(plan_id, state)
+            _report_plan_complete(plan_id, state)
+            return 0
         if _inflight(state):
             print(
                 f"[i] 计划 {plan_id} 无就绪环节；在途 {len(_inflight(state))} 项"
                 "——交 `orch plan advance` 结账。"
             )
-            return 0
-        if not state.get("completed_at"):
-            state["completed_at"] = _now()
-            _save_state(plan_id, state)
-        _report_plan_complete(plan_id, state)
+        else:
+            _print_worklist(plan_id, plan, state)
         return 0
 
     # blocked 环节续作：需要组长决策后带 --text/--task 重入
@@ -330,6 +483,9 @@ def cmd_plan_run(args) -> int:
         return 2
 
     sy = steps_yaml.get(cur["id"], {})
+    # kind:self 组长环节：不入成员队列，引导书写 + evidence 收尾
+    if str(sy.get("kind") or "dispatch") == KIND_SELF:
+        return _guide_self_step(plan_id, plan, state, cur, sy)
     if not (args.text or args.task) and not cur.get("task_file"):
         _print_run_guidance(plan_id, cur, sy)
         print("\n[!] 尚未提供本环节任务书（延迟书写：只强制当前环节）。")
@@ -477,12 +633,20 @@ def _inflight(state: dict) -> list[dict]:
 
 
 def _worklist_panes(plan: dict, state: dict) -> dict[str, list[str]]:
-    """三栏工作清单的数据面（可派发/在途/待验收）——[NEXT] 等处共用同一判据。"""
+    """三栏工作清单的数据面（可派发/在途/待验收）——[NEXT] 等处共用同一判据。
+
+    「在途」含成员队列 job（``queued``）与组长自办环节（``self_awaiting``）——两者都是
+    「已在办、未收尾」，只是驱动者不同（worker vs 组长）。
+    """
     tree = _tree(plan)
     status_of = _status_of(state)
     return {
         "dispatchable": tree.dispatchable(status_of),
-        "inflight": [str(s["id"]) for s in _inflight(state)],
+        "inflight": [
+            str(s["id"])
+            for s in state["steps"]
+            if str(s.get("status")) in ("queued", SELF_AWAITING)
+        ],
         "need_leader": [
             str(s["id"])
             for s in state["steps"]
@@ -519,7 +683,13 @@ def _print_worklist(plan_id: str, plan: dict, state: dict) -> None:
             print(f"    其余可派发：{', '.join(disp[1:])}（入队后可继续引导下一个）")
     else:
         print("  可派发：（无）")
-    print(f"  在途：{', '.join(panes['inflight']) if panes['inflight'] else '（无）'}")
+    inflight_disp = [
+        f"{sid}(self·待证据)"
+        if str((lm.get(sid) or {}).get("kind") or "dispatch") == KIND_SELF
+        else sid
+        for sid in panes["inflight"]
+    ]
+    print(f"  在途：{', '.join(inflight_disp) if inflight_disp else '（无）'}")
     need = panes["need_leader"]
     print(
         f"  待验收：{', '.join(need) if need else '（无）'}"
@@ -565,7 +735,15 @@ def cmd_plan_advance(args) -> int:
             "——等 JOB-DONE 事件驱动下一次 advance。"
         )
 
-    # ② 目标环节：blocked/失败叶子（续作优先）；否则**首可派发**（递归就绪谓词）
+    # ② --evidence：先把一个 kind:self 组长环节收尾（PSEP_3 §2.1）
+    if getattr(args, "evidence", None):
+        rc = _apply_evidence(plan_id, plan, state, args.evidence)
+        if rc is not None:
+            return rc
+        _report_after_evidence(plan_id, plan, state)
+        return 0
+
+    # ③ 目标环节：blocked/失败叶子（续作优先）；否则**首可派发**（递归就绪谓词）
     cur = next(
         (
             s
@@ -576,15 +754,20 @@ def cmd_plan_advance(args) -> int:
     )
     if cur is None:
         disp = tree.dispatchable(_status_of(state))
-        if not disp:
-            if inflight:
-                return 0  # 已在上面提示「等在途」
+        cur = (
+            next((s for s in state["steps"] if str(s["id"]) == disp[0]), None)
+            if disp
+            else None
+        )
+    if cur is None:
+        if _plan_settled(plan, state):
             if not state.get("completed_at"):
                 state["completed_at"] = _now()
                 _save_state(plan_id, state)
             _report_plan_complete(plan_id, state)
             return 0
-        cur = next(s for s in state["steps"] if str(s["id"]) == disp[0])
+        _print_worklist(plan_id, plan, state)
+        return 0
     if cur["status"] in ("blocked", "failed", "run_failed") and not (
         args.text or args.task
     ):
@@ -593,6 +776,9 @@ def cmd_plan_advance(args) -> int:
         _print_worklist(plan_id, plan, state)
         return 2
     sy = steps_yaml.get(cur["id"], {})
+    # kind:self 组长环节：不入成员队列，引导书写 + evidence 收尾
+    if str(sy.get("kind") or "dispatch") == KIND_SELF:
+        return _guide_self_step(plan_id, plan, state, cur, sy)
     if not (args.text or args.task) and not cur.get("task_file"):
         _print_run_guidance(plan_id, cur, sy)
         print("\n[!] 尚未提供本环节任务书（延迟书写：只强制当前环节）。")
@@ -741,13 +927,28 @@ def _report_plan_complete(plan_id: str, state: dict) -> None:
 
 
 def cmd_plan_amend(args) -> int:
-    """amend = 直接编辑计划 YAML（组长文件工具可写 plans/*.yaml）；本命令做校验与状态对账。"""
+    """amend = 直接编辑计划 YAML（组长文件工具可写 plans/*.yaml）；本命令做校验与状态对账。
+
+    护栏（PSEP_3 §2.4）：**已 started 的 superstep 结构冻结**——删/挪已派发（或已 started
+    子树内）节点即拒绝（rc=2，不改状态）；未派发部分放行。附带打印结构 lint（软提示，不阻断）。
+    """
     plan_id = args.id
     if not _plan_path(plan_id).exists():
         print(f"[!] 计划不存在：{plan_id}")
         return 2
     plan = _load_yaml(plan_id)
-    state = _reconcile(plan, _load_state(plan_id))
+    old = _load_state(plan_id)
+    violations = freeze_violations(
+        {str(s["id"]): str(s.get("status") or "pending") for s in old.get("steps", [])},
+        _tree(plan).leaf_paths(),
+    )
+    if violations:
+        print("[!] amend 被拒：已 started 的 superstep 结构冻结（PSEP_3 §2.4）——")
+        for v in violations:
+            print(f"  - {v}")
+        print("  （amend 只能改未派发部分；已派发/已 started 子树内节点不得删/挪）")
+        return 2
+    state = _reconcile(plan, old)
     _save_state(plan_id, state)
     rel: Any = _plan_path(plan_id)
     try:
@@ -762,6 +963,7 @@ def cmd_plan_amend(args) -> int:
             f"  - {leaf.path}: {leaf.yaml.get('member', '?')} "
             f"[{ss.get('status', '?')}] {str(leaf.yaml.get('brief', ''))[:50]}"
         )
+    _print_plan_lints(plan)
     return 0
 
 

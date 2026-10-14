@@ -940,6 +940,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     q.add_argument("--max-turns", type=int)
     q.add_argument("--dirs", help="覆盖计划环节的白名单（逗号分隔）")
+    q.add_argument(
+        "--evidence",
+        help="kind:self 组长环节收尾证据文件（存在 + 标题段 lint 通过即置 done，PSEP_3 §2.1）",
+    )
     q.set_defaults(func=_plan_router("run"))
 
     q = psub.add_parser(
@@ -962,6 +966,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     q.add_argument("--dirs", help="覆盖计划环节的白名单（逗号分隔）")
     q.add_argument("--dry", action="store_true", help="只入队不起 worker（测试/演练）")
+    q.add_argument(
+        "--evidence",
+        help="kind:self 组长环节收尾证据文件（存在 + 标题段 lint 通过即置 done，PSEP_3 §2.1）",
+    )
     q.set_defaults(func=_plan_router("advance"))
 
     q = psub.add_parser("amend", help="编辑计划 YAML 后校验对账（按环节 id 保留状态）")

@@ -41,6 +41,8 @@ bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 
 **逐项旗标与四态审批见 `references/command-surface.md`**；bench 要领 drain-watch.md、
 harness-eval.md；巡检引擎 references/inspector-engine.md；判决包 verdict-package.md。
+**多环节大任务拆解前必读 `references/plan-decomposition.md`**（依赖分析 / 切分粒度 /
+并行判定 / `kind:self` 时机 / superstep 嵌套选择 / 验收点）。
 
 ## 派发要领
 

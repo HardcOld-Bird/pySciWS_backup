@@ -6,8 +6,9 @@ SKILL.md「命令面（速查）」只给骨干；本文件是逐行语义与旗
 pysci-orch status                        # 全景：计划/成员/队列/worker/台账
 # —— 日常面 ——
 pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
-pysci-orch plan run <id> --text "<当前环节任务书>"   # 推进（交接处暂停；成员含 devops）
-pysci-orch plan advance <id> [--text/--task]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
+pysci-orch plan run <id> --text "<当前环节任务书>" [--evidence <报告.md>]  # 推进（交接处暂停；成员含 devops）
+pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
+#   └ --evidence：收尾 kind:self 组长环节（文件存在 + 标题段 lint 通过才置 done，PSEP_3 §2.1）
 pysci-orch taskbooks list|show <id>|link <id> --plan <pid>|sync  # 用户大任务书
 pysci-orch queues list | queues enqueue <member> --text "..." [--review]  # 成员 FIFO 队列（含 devops）
 pysci-orch events drain | events list  # 统一事件流：排空积压（幂等）/水位
