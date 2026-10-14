@@ -755,7 +755,10 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   双唤醒实锤后加）：命中事件的**身份**记进 `watch.json` 的 `consumed` 账（读盘为准、跨实例
   跨挂载继承），唤醒前先过它——被取代的 watch 实例即便仍持自己的旧基线，也拿不到第二次
   唤醒权（`watch.filter_consumed`/`mark_consumed`）。同刻多事件按 CRASH > QUOTA-STOP >
-  CHANNEL-STOP > NEEDS-LEADER > PENDING-WORK > STALL > QUEUE-COMPLETE 取主事件、其余以「同时」附注。**弃 Monitor 工具方案**
+  CHANNEL-STOP > NEEDS-LEADER > TASKBOOK-NEW > JOB-DONE > QUEUE-EMPTY > QUEUE-COMPLETE >
+  SALVAGE > **PENDING-WORK > STALL** 取主事件、其余以「同时」附注——**队列感知伪事件排
+  最后**（与真实事件同帧时让位，独处时才是主行），否则 nudge 会把 a1「首个唤醒=真实事件」
+  的契约挤掉。**弃 Monitor 工具方案**
   （会话侧注册更重，且同样要组长发起）。
 
 ---
