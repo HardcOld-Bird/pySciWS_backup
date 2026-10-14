@@ -242,3 +242,50 @@ def test_event_status_marks_consumed_and_drops_action(iso_events):
         "已消费事件不该再挂「建议处置」（历史指引别包装成待办）"
     )
     assert not any("[待排空]" in ln for ln in digested), "排空后不再有待排空行"
+
+
+# ---------------------------------------------------------------------------
+# ④ 实测撞出来的两处（2026-10-14 14:37 首次真实 adhoc 派发）
+# ---------------------------------------------------------------------------
+def test_execute_passes_task_file_not_task(monkeypatch):
+    """`do_dispatch` 的形参是 ``task_file``；写成 ``task=`` → TypeError（队列层从未跑过的
+    路径，plan run 队列化后第一次真跑就撞上）。"""
+    captured: dict = {}
+    monkeypatch.setattr(
+        dispatch,
+        "do_dispatch",
+        lambda member, **kw: captured.update(kw) or _ok_outcome(),
+    )
+    status, result, _ = queueworker._execute(
+        {"member": "sim", "task": "正文", "task_file": "inbox/a.md"}, dry=False
+    )
+    assert status == workq.STATUS_DONE
+    assert captured.get("task_file") == "inbox/a.md"
+    assert "task" not in captured, "不允许传不存在的形参"
+
+
+def test_worker_item_error_finishes_item_and_emits(qface, monkeypatch):
+    """单条目异常必须**就地结账**：条目不得卡 in_progress，且要发出 JOB-DONE。
+
+    真实事故：`task=` 形参写错 → TypeError 逃出循环 → 条目永停 in_progress、
+    ``plan run`` 干等到超时、面板却报「在途」（见 `.done` 的 error 原文）。
+    """
+    queues.enqueue("sim", text="任务书", task_file="inbox/x.md")
+
+    def boom(item, *, dry):
+        raise TypeError("do_dispatch() got an unexpected keyword argument 'task'")
+
+    monkeypatch.setattr(queueworker, "_execute", boom)
+    run_log = queueworker.member_paths("sim").runs / "t.log"
+    run_log.parent.mkdir(parents=True, exist_ok=True)
+    summary = queueworker.run_worker("sim", run_log)
+
+    items = queues.items("sim")
+    assert items[0]["status"] == workq.STATUS_FAILED, (
+        "异常条目必须被结账，不能留在 in_progress"
+    )
+    assert "unexpected keyword argument" in str(items[0]["result"]["error"])
+    assert summary.get("item_error")
+    assert any(e["event"] == events.JOB_DONE for e in events.read_all()), (
+        "失败也要发 JOB-DONE——plan run/advance 靠它推进，否则空等到超时"
+    )
