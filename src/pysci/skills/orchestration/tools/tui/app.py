@@ -352,7 +352,10 @@ class PysciTUI(App):
         if idx >= len(self.tb_items):
             return
         tid = str(self.tb_items[idx].get("id"))
-        card = _tb.rework_card(tid)  # 返工卡片（§4.3 #8）；普通任务书返回空
+        try:
+            card = _tb.rework_card(tid)  # 返工卡片（§4.3 #8）；普通任务书返回空
+        except Exception:  # noqa: BLE001 - 卡片读数坏一项不塌正文（观察面 fail-open）
+            card = []
         head = ("—— 返工卡片 ——\n" + "\n".join(card) + "\n\n") if card else ""
         self._set_tb_msg(f"{head}—— {tid} 正文 ——\n{_tb.read_body(tid)[:400]}")
 
