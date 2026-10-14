@@ -15,7 +15,7 @@
 2026-10-12,MiniMax,M Plan（2026-09-29 上线，承接 Token Plan；后者停售新购）,Go,49.0,,基准量（1x），月额度制,M3.1 Flash Preview、图像、音频（Music 已停服）,不透明（相对用量制）,连续包月首月半价活动至 10-14；年付 490
 2026-10-12,MiniMax,M Plan,Explore,119.0,,Go 的 3 倍,Go + H3 视频,不透明,"年付 1,190"
 2026-10-12,MiniMax,M Plan,Build,469.0,,Go 的 12 倍,Explore + 高峰优先通行,不透明,"年付 4,690；原 Token Plan 参考量：Plus≈6亿 / Max≈18亿 / Ultra≈71亿 M3 tokens/月"
-2026-10-12,小米MiMo,MiMo Token Plan,Lite,39.0,,41亿 Credits/月,MiMo-V2.5 系列 8 款（含 ASR/TTS/VoiceClone/VoiceDesign）；【2026-10-09 下线通知】V2.5/V2.5-Pro 名称 10-21 失效并自动转 V2.6-Flash/Pro 按新版计价 → 池覆盖是否随之更名须核实,透明（官方扣减表：V2.5 缓存2/未命中100/输出200 Credits每token；V2.5-Pro 2.5/300/600；V2.6 系扣减表未公布，沿用 API 定价但池内系数须核实）,无 5 小时限额；年付 411.84（约12%折扣）
+2026-10-12,小米MiMo,MiMo Token Plan,Lite,39.0,,41亿 Credits/月,MiMo-V2.5 系列 8 款（含 ASR/TTS/VoiceClone/VoiceDesign）；【2026-10-09 下线通知】V2.5/V2.5-Pro 名称 10-21 失效并自动转 V2.6-Flash/Pro 按新版计价 → 池覆盖是否随之更名须核实,透明（官方扣减表：V2.5 缓存2/未命中100/输出200 Credits每token；V2.5-Pro 2.5/300/600；V2.6 系扣减表未公布，实测验证（2026-10-12/13 Max 档账单）＝API价×100：Flash 缓存2/未命中100/输出200、Pro 2.5/300/600，与 V2.5 系表数字重合；疑点：V2.5-Pro 10-13 实测近乎不扣（约0.27%），迁移期口径待核）,无 5 小时限额；年付 411.84（约12%折扣）
 2026-10-12,小米MiMo,MiMo Token Plan,Standard,99.0,,110亿 Credits/月,同上,透明,"年付 1,045.44"
 2026-10-12,小米MiMo,MiMo Token Plan,Pro,329.0,,380亿 Credits/月,同上,透明,"年付 3,474.24"
 2026-10-12,小米MiMo,MiMo Token Plan,Max,659.0,,820亿 Credits/月,同上,透明,"年付 6,959.04"
