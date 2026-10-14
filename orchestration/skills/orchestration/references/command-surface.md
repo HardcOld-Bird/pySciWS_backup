@@ -6,10 +6,10 @@ SKILL.md「命令面（速查）」只给骨干；本文件是逐行语义与旗
 pysci-orch status                        # 全景：计划/成员/队列/worker/台账
 # —— 日常面 ——
 pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
-pysci-orch plan run <id> --text "<当前环节任务书>"   # 推进（交接处暂停）
-pysci-orch plan advance <id> [--text/--task]  # 事件驱动：入队即返回（M5，不阻塞）
+pysci-orch plan run <id> --text "<当前环节任务书>"   # 推进（交接处暂停；成员含 devops）
+pysci-orch plan advance <id> [--text/--task]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
 pysci-orch taskbooks list|show <id>|link <id> --plan <pid>|sync  # 用户大任务书
-pysci-orch queues list | queues enqueue <member> --text "..." [--review]  # 成员 FIFO 队列
+pysci-orch queues list | queues enqueue <member> --text "..." [--review]  # 成员 FIFO 队列（含 devops）
 pysci-orch events drain | events list  # 统一事件流：排空积压（幂等）/水位
 pysci-orch plan amend <id>               # 编辑 plan YAML 后校验对账
 pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步
@@ -51,6 +51,12 @@ pysci-orch ledger [--member --days --stats] | sync [--check]
 
 成员 id：sim figure writing theory lit drawing model3d（专职）；deputy reviewer devops
 bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
+
+**队列成员**（`plan run`/`plan advance`/`queues enqueue` 三条路径可直派）＝ 7 专职 + deputy
++ reviewer + **devops**；非队列成员（打错字）三闸皆拒。**devops 双通道并存（非二选一，
+task-20261014-devops-gap-d1/d2）**：plan 环节直派（`kind=produce`，通用 do_dispatch 结账）
+与 backlog FIFO 组包（`kind=backlog-batch`，worker 经 drain 账务结算）同队列同 worker；
+bencher/inspector 各有既有专用队列，**不经** `queues enqueue`。派发选择见 dispatch-playbook.md。
 
 用户控制台 `pysci`：裸跑进 TUI（人类正道）；`pysci status|journal|decisions`＝LLM 静态通道。
 

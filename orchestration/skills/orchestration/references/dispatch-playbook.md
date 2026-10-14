@@ -19,6 +19,21 @@ SKILL.md「派发要领 / 归档与成本 / 降级」是压缩版；本文件补
   不进 M，故 M<N 是正常形态，不是漏记。
 - 耗时/成本异常增长的成员会话 → 提请组长归档轮换（见 devops 「巡检清单」）。
 
+## devops 派发（双通道，task-20261014-devops-gap-d1/d2）
+
+devops 是**队列成员**，两条通道**并存、非二选一**：
+
+- **plan 环节直派（首选）**：基建改进本身是计划的一部分时，步骤写 `member: devops` 走
+  `plan run`（同步推进到交接）或 `plan advance`（事件驱动、入队即返回）——job 为
+  `kind=produce`，与其它成员同队列同 worker，上下文与交接进 plan 状态机。
+- **backlog FIFO 组包（改进建议 / 批次通道）**：`approve` 采纳的建议入 backlog，由计划器
+  组包入队（`kind=backlog-batch`），走 drain 账务（销账 / needs_leader / 延期 / 系统性停止）。
+
+一句话关系：**plan 直派＝环节视角（计划内基建）；backlog＝建议/批次视角（计划外改进）；
+同一个 devops FIFO 与 worker，执行只一份实现**（口径权威＝`queues.QUEUE_MEMBERS` 的 ADR 注记）。
+完成唤醒：plan 环节 job 收 **JOB-DONE**；backlog 批次消化完另收 **QUEUE-EMPTY**
+（`orch events list` 水位可查；watch 事件到达即唤醒组长）。
+
 ## 降级派发（orch 瘫痪时）
 
 - orch 不可用 → 照 README **附录 A 手动模板派发**：**原生 exe 直调**，
