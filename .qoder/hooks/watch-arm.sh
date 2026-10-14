@@ -18,38 +18,70 @@
 #   start` 拉起——冷启动/重启后无人敲它，则「watcher 被杀即重臂」这条链在最需要它的时刻（冷启
 #   动后）空转。本轮在每回合**幂等**自启动看门狗（已在跑则秒返回；仅在实际拉起/失败时留痕）。
 #
-# v5（2026-10-14，唤醒权认领制；wake-claim-20261014）：用户主会话工作时另开次要会话处理琐事，
-#   而 v2 的「最新在听者胜」让次要会话一有回合就抢走唤醒权，drain/事件的 exit-2 被投到次要
-#   会话（污染其上下文，正是用户要避免的；凌晨「被取代却无接任」的谜之日志疑为同源）。本轮
-#   加**认领闸**：`pysci-orch wake-claim` 认领后，**只有 owner 会话的钩子**抢 token/唤醒，
-#   非 owner 钩子直接退出——不监听、不抢、**不 exit 2**。事件不会丢：持久水位 + 迟到唤醒由
-#   owner 下次挂载补（a1 语义），**不存在「转投其他会话」语义**。未认领 = legacy 行为不变。
-#   判据在 `wake-claim --check`（两端同源的会话身份；取证见 README §4.5 与 watch.py）。
+# v6（2026-10-14 晚，唤醒权自动归属；wake-owner-20261014，用户设计定稿「机制优于纪律」）：
+#   v5 的 env 取证 + 手工 `wake-claim` 认领是「硬保证退化成软步骤」，已退役。现行**读取并
+#   解析 stdin 载荷**（取代原先的整包丢弃）取 session_id / hook_event_name →
+#   `wake-claim --check` 判定：
+#     rc 0 = claim（无 owner 自动认领，首会话即主会话）/ owner（续心跳）/ takeover（owner
+#           stale：心跳 >30min 且其 watch 已死 → 自动接管）/ fail-open（空载荷=看门狗重臂、
+#           解析失败、无 session_id → **走旧 token 语义**并留痕）→ 照常监听；
+#     rc 3 = 非 owner 且未 stale → 不监听、不抢 token、**绝不 exit 2**（退出留痕；事件留
+#           持久水位，owner 下次挂载迟到唤醒补上——**不存在「转投其他会话语义**）；
+#     rc 4 = SessionEnd → 释放检查完毕直接退出（会话正在结束，不监听）。
+#   owner==我时把 session_id export 给 `orch watch`（落 watch.json 的 armed_by）——「owner
+#   自己的 watch」才挡接管，看门狗重臂的无主替身不冒充。归属真源 orchestration/state/
+#   wake-owner.json；`pysci-orch wake-claim status` 查看，`--force` 应急强制迁移（非常规）。
 #
 # 安全：任何异常一律 exit 0（观察面塌不了主链路）；token 文件缺失时自抢（不误判为被取代）。
-cat >/dev/null
+PAYLOAD=$(cat)
 ROOT="${QODER_PROJECT_DIR:-/d/XXXIIIGGG/projects/pySci/pySciWS}"
 cd "$ROOT" || exit 0
 LOG="$ROOT/.qoder/hooks/watch-arm.log"
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null; }
+
+# 载荷解析（v6）：sed 取顶层 session_id / hook_event_name；缺席/解析不出 → 留痕并 fail-open。
+# 顺手剥掉继承的 owner 身份：无载荷路径（看门狗重臂的无主替身 / 上游 shell 恰好带着
+# PYSCI_WAKE_OWNER）若漏剥，替身 watch 会盖上别人的 armed_by、冒充「owner 自己的 watch」
+# 把 stale 接管永久挡死（实测 2026-10-14 17:53 重臂现场抓到；watchdog._rearm 另有同源剥离）。
+unset PYSCI_WAKE_OWNER
+SID=$(printf '%s' "$PAYLOAD" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+HEV=$(printf '%s' "$PAYLOAD" | sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+if [ -n "$SID" ]; then
+  log "载荷解析 ok（session_id=$SID event=${HEV:-<缺>}）"
+elif [ -n "$PAYLOAD" ]; then
+  log "载荷解析失败/无 session_id → fail-open 走旧 token 语义"
+else
+  log "空载荷（看门狗重臂/无 stdin）→ fail-open 走旧 token 语义"
+fi
+
 PY="$ROOT/.venv/Scripts/python.exe"; ORCH="$ROOT/.venv/Scripts/pysci-orch.exe"
 { [ -x "$PY" ] && [ -x "$ORCH" ]; } || { log "环境缺失（python/orch 不可执行）→ 退出"; exit 0; }
 
-# 一次性会话身份取证（v5）：把本钩子可见的区分性变量记进日志，供 README §4.5 固化判据。
-SEEN="$ROOT/.qoder/hooks/session-env.seen"
-if [ ! -f "$SEEN" ]; then
-  log "会话身份取证（一次性）：WT_SESSION=${WT_SESSION:-<缺>} QODER_PROJECT_DIR=${QODER_PROJECT_DIR:-<缺>} PYSCI_POD=${PYSCI_POD:-<缺>}"
-  { : > "$SEEN"; } 2>/dev/null
+# 会话结束（SessionEnd 钩子）：显式释放 owner 后退出——正在结束的会话不挂 watch。
+if [ "$HEV" = "SessionEnd" ]; then
+  if [ -n "$SID" ]; then
+    dec=$(printf '%s' "$PAYLOAD" | "$ORCH" wake-claim --check 2>>"$LOG"); log "SessionEnd：${dec:-<无输出>}"
+  else
+    log "SessionEnd（无 session_id，跳过释放）"
+  fi
+  exit 0
 fi
 
-# 唤醒权认领闸（v5）：0=owner/legacy 可监听；3=非 owner（不抢 token、不唤醒）；其余=fail-open。
-# 检查本身失败（旧二进制/环境坏）不得让唤醒链塌掉 → 按 legacy 放行并留痕。
-"$ORCH" wake-claim --check >/dev/null 2>&1; wcr=$?
-case "$wcr" in
-  3) log "非 owner 会话 → 不监听不抢（唤醒权在 owner：pysci-orch wake-claim status 可查）"; exit 0 ;;
-  0) : ;;
-  *) log "wake-claim --check rc=$wcr → fail-open 按 legacy 监听" ;;
-esac
+# 唤醒权自动归属闸（v6）：判定单一实现在 `wake-claim --check`（README §4.5）。
+# rc 0=放行 / 3=非 owner 不抢 / 4=SessionEnd（上方已拦）；未知 rc=检查本身坏了 →
+# fail-open 按旧 token 语义监听并留痕（唤醒链不塌）。
+if [ -n "$SID" ]; then
+  dec=$(printf '%s' "$PAYLOAD" | "$ORCH" wake-claim --check 2>>"$LOG"); wcr=$?
+  case "$wcr" in
+    0) log "归属判定：$dec" ;;
+    3) log "归属判定：$dec → 不监听不抢，退出"; exit 0 ;;
+    4) log "归属判定：$dec → 退出"; exit 0 ;;
+    *) log "wake-claim --check rc=$wcr（${dec:-<无输出>}）→ fail-open 按旧 token 语义监听" ;;
+  esac
+  export PYSCI_WAKE_OWNER="$SID"
+else
+  log "无 session_id 可判定归属 → fail-open 按旧 token 语义监听"
+fi
 
 # 看门狗自启动（v4）：幂等——在场则秒返回，不在场则拉起分离监督进程（冷启动后即在位）。
 wd=$("$ORCH" watchdog start 2>&1); wdrc=$?

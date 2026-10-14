@@ -279,6 +279,9 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(drain, "DEVOPS_RUNS_DIR", state / "devops-runs")
     monkeypatch.setattr(drain, "CANCEL_PATH", state / "devops.cancel")
     monkeypatch.setattr(watch, "WATCH_PATH", state / "watch.json")
+    # 唤醒权真源同归 tmp：不 patch 则任何跑归属判定的用例都真写仓库 wake-owner.json
+    # （且上一用例留下的 owner 会把本用例的「无 owner 自动认领」分支吃掉）。
+    monkeypatch.setattr(watch, "WAKE_OWNER_PATH", state / "wake-owner.json")
     # 预设真源（toml）隔离：默认 mimo；切预设的用例用 write_preset(state, ...) 改一行。
     monkeypatch.setattr(settings, "SETTINGS_PATH", state / "pysci_settings.toml")
     seed_settings(state)

@@ -642,22 +642,30 @@ def cmd_queues(args: argparse.Namespace) -> int:
 
 
 def cmd_wake_claim(args: argparse.Namespace) -> int:
-    """``pysci-orch wake-claim [status|release]``：主会话认领唤醒权（用户设计 2026-10-14）。
+    """``pysci-orch wake-claim [status] [--force]``：唤醒权归属的读数与应急面。
 
-    缺省 ``claim``（记会话身份到 ``state/wake-claim.json``）；``status`` 查看；``release``
-    退回 legacy；``--check`` 是钩子每回合的自检（``0``=可监听，``3``=非 owner、不抢 token）。
-    **没有「转投其他会话」语义**——非 owner 会话的钩子只是不唤醒，事件靠持久水位 + 迟到
-    唤醒在 owner 下次挂载时补上（README §4.5）。
+    归属本体**全自动**（钩子载荷 ``session_id`` 自动认领/续心跳/接管，无手工步骤——
+    README §4.5）。本命令降级为两件事：``status`` 读当前 owner；``--force`` 显式强制
+    迁移（**应急，非常规步骤**：缺省释放、``--session-id`` 直接指定）。``--check`` 是
+    钩子内部判定口（stdin=载荷 → ``0`` 放行 / ``3`` 非 owner / ``4`` SessionEnd）。
+    **不存在「转投其他会话」语义**——非 owner 只是不监听，事件留持久水位由 owner
+    下次挂载迟到唤醒补上。
     """
     if getattr(args, "check", False):
-        return _watch.wake_claim_check()
-    code, lines = _watch.wake_claim(
-        getattr(args, "action", "claim") or "claim",
-        name=str(getattr(args, "name", "") or ""),
-    )
-    for line in lines:
+        try:
+            payload = "" if sys.stdin.isatty() else sys.stdin.read()
+        except Exception:  # noqa: BLE001 - stdin 不可读 = 无身份，fail-open
+            payload = ""
+        code, reason = _watch.hook_decision(payload)
+        print(reason)
+        return code
+    if getattr(args, "force", False):
+        for line in _watch.wake_claim_force(str(getattr(args, "session_id", "") or "")):
+            print(line)
+        return 0
+    for line in _watch.wake_claim_status():
         print(line)
-    return code
+    return 0
 
 
 def cmd_events(args: argparse.Namespace) -> int:
@@ -1204,20 +1212,29 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "wake-claim",
-        help="主会话认领唤醒权（缺省=claim；status 查看；release 退回 legacy；--check 供钩子自检）",
+        help="唤醒权归属：status 读当前 owner（缺省）；--force 应急强制迁移；--check 供钩子",
     )
     p.add_argument(
         "action",
         nargs="?",
-        default="claim",
-        choices=("claim", "status", "release"),
-        help="缺省 claim（认领并写 state/wake-claim.json）",
+        default="status",
+        choices=("status",),
+        help="status=读当前 owner（缺省；归属本体由钩子按 session_id 自动完成）",
     )
-    p.add_argument("--name", default="", help="认领者显示名（默认 session-<pid>）")
+    p.add_argument(
+        "--session-id",
+        default="",
+        help="--force 的指定新 owner；缺省=释放当前 owner（下一钩子自动认领）",
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="应急强制迁移（非常规步骤：释放或直接指定 owner）",
+    )
     p.add_argument(
         "--check",
         action="store_true",
-        help="[钩子内部] 自检：0=本会话/legacy 可监听，3=非 owner（不抢 token 不唤醒）",
+        help="[钩子内部] stdin=载荷 → 0 放行 / 3 非 owner（不监听不抢）/ 4 SessionEnd",
     )
     p.set_defaults(func=cmd_wake_claim)
 

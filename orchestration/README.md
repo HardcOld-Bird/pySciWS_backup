@@ -700,27 +700,44 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   （harness 只认**最近一任**），致 2026-10-13 20:57 的 QUEUE-COMPLETE 唤醒丢失。v2 取消守卫、
   改为每回合接管。
 
-**唤醒权认领（`wake-claim`；用户设计 2026-10-14 晚，钩子 v5）**：v2 的「最新在听者胜」
-在**主会话 + 次要会话并用**时会被抢——次要会话一有回合即抢走唤醒权，drain/事件的 `exit 2`
-被投到次要会话（污染其上下文，用户明确要避免；凌晨「被取代却无接任」的谜之日志疑为同源）。
-改法是**认领制**：主会话跑一次 `pysci-orch wake-claim [--name main]` 把唤醒权锁给自己
-（真源 `state/wake-claim.json`，记认领时刻 + 会话身份）；钩子每回合先 `wake-claim --check`：
+**唤醒权自动归属（`wake-claim`；用户设计定稿 2026-10-14 晚，钩子 v6——「机制优于纪律」）**：
+v2 的「最新在听者胜」在**主会话 + 次要会话并用**时会被抢——次要会话一有回合即抢走唤醒权，
+drain/事件的 `exit 2` 被投到次要会话（污染其上下文，用户明确要避免；凌晨「被取代却无接任」
+的谜之日志疑为同源）。第一版**认领制**（手工 `wake-claim` 认领 + env 取证身份）被判「硬保证
+退化成软步骤」废弃；现行**零人工自动归属**：钩子不再丢弃 stdin 载荷——解析 `session_id` /
+`hook_event_name`，真源 `state/wake-owner.json`（`session_id` + `claimed_at` +
+`last_turn_at`），判定单一实现在 `wake-claim --check`：
 
-| 判定 | 钩子行为 |
+| 情形（载荷判定） | 钩子行为 |
 |---|---|
-| 未认领 / legacy 认领 / **本会话 = owner** | 照旧抢 token、挂 watch、命中 `exit 2` |
-| **异会话（非 owner）** | **不监听、不抢 token、绝不 `exit 2`**（直接 `exit 0`） |
-| 检查本身失败（旧二进制 / 环境坏） | fail-open 按 legacy 监听并留痕（唤醒链不塌） |
+| **无 owner → 自动认领**（首会话即主会话，零人工） | 抢 token、挂 watch，照常 `exit 2` 唤醒 |
+| **owner = 我 → 续心跳** | 照常抢 token、挂 watch |
+| **owner ≠ 我 → 永不抢占**（次要会话自动排除） | **不监听、不抢 token、绝不 `exit 2`**（`exit 0`，留痕） |
+| **owner stale → 自动接管**：心跳断供 >30 min **且** owner 自己的 watch 已死 | 新会话认领为 owner，照常监听 |
+| **SessionEnd**（`SessionEnd` 钩子接线 `.qoder/hooks/watch-arm.sh`） | owner 显式释放真源后退出；非 owner 结束不误释放 |
+| 空载荷（看门狗重臂）/ 解析失败 / 无 `session_id` / 判定命令本身失败 | **fail-open 走旧 token 语义**并留痕（唤醒链不塌） |
 
+- **接管的 watch 判据带身份**：钩子把 owner 的 `session_id` export 给 `orch watch`
+  （`watch.json` 的 `armed_by`）——只有 **owner 自己**的 watch 挡接管；看门狗重臂的
+  无主替身（`armed_by` 空）不冒充，否则接管条款在看门狗常开的环境里永远触发不了。
 - **不存在「转投其他会话」语义**（那正是本单要根治的）：owner 不在场时事件**不丢**——
-  持久水位 + 迟到唤醒由 owner 下次挂载补上；owner 永久迁移 = 新会话再跑一次 claim 接管；
-  `pysci-orch wake-claim status` 查看，`… release` 退回 legacy。
-- **会话身份取证**：候选表 `watch.SESSION_ENV_KEYS = (WT_SESSION, QODER_SESSION_ID,
-  QODER_SESSION)`——本机 env 枚举实测 `WT_SESSION`（Windows Terminal 窗格 GUID）逐会话
-  不同、可用；`QODERCN_*`/`DISPATCHER`/`PYSCI_*`/`PATH` 各会话恒同故不入表。**两端都
-  取不到 → 认领记 legacy**（宁可退化，也不能把 owner 自己的钩子静默禁掉；认领输出会写明
-  这一局限）。钩子首回合把可见的会话变量一次性写进 `watch-arm.log`（`session-env.seen`
-  标记），供后续复核判据。
+  持久水位 + 迟到唤醒由 owner 下次挂载补上。`pysci-orch wake-claim status` 读当前 owner
+  与 stale 判定；`wake-claim --force [--session-id <id>]` 是**应急强制迁移**（缺省=释放，
+  下一钩子自动认领），**非常规步骤**——常规归属全部由钩子按载荷自动完成。
+- **实测留痕**（2026-10-14 17:51–18:11，隔离 ROOT + 双 session_id 载荷喂真实钩子）：
+  ```
+  [17:51:36] 归属判定：claim：无 owner → 本会话自动认领（sid=sess-A）        ← 首会话零人工
+  [17:52:20] 归属判定：deny：非 owner（owner=sess-A，心跳 44s…）→ 不监听不抢，退出
+  [17:53:38] 空载荷（看门狗重臂/无 stdin）→ fail-open 走旧 token 语义        ← 重臂无主替身
+  [17:55:38] 被取代（现持 174918-…）→ 让位退出                              ← v2 自仲裁仍成立
+  [18:08:27] 归属判定：takeover：owner stale（心跳 11307s > 1800s 且其 watch
+             已死）→ 自动接管（sess-A → sess-B）                            ← 替身在场也不挡接管
+  [18:11:07] SessionEnd：release：owner 会话结束 → 显式释放（sid=sess-B）→ 钩子退出不监听
+  [18:11:23] 归属判定：claim：无 owner → 本会话自动认领（sid=sess-C）        ← 干净迁移
+  ```
+  实测当场抓到并修掉一个接线缺陷：看门狗重臂实例会**继承**派生方的 `PYSCI_WAKE_OWNER`
+  （替身 watch 盖上 owner 的 `armed_by` → 把接管永久挡死）——现由钩子 `unset` +
+  `watchdog._rearm` 剥离双保险（各有回归测试钉住）。
 
 **迟到唤醒 + 看门狗（2026-10-14 自动化加固 a1；用户实测发现 02:30–07:30 五小时唤醒真空）**：
 
