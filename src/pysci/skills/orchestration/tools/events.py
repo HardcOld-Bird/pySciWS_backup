@@ -55,6 +55,13 @@ QUEUE_COMPLETE = (
 #: 「drain 判定须组长处理」，这个是「根本没人取走」（2026-10-14 02:21 入队的 patrol 积压整夜）。
 QUEUE_TIMEOUT = "QUEUE-TIMEOUT"
 
+#: **队列感知伪事件**（adhoc-20261014-124521-s1，用户设计）：不是「某次发生的事实」而是
+#: 「持续成立的状态」——由 :mod:`watch` 每轮快照现算（判据单一实现见
+#: :func:`watch.queue_pressure`），故**不进** :data:`STREAM_TYPES`（生产者不直发、不入流），
+#: 只借同一套 detect→echo→exit 2 唤醒链与节流。
+PENDING_WORK = "PENDING-WORK"
+STALL = "STALL"
+
 #: 事件 → 唤醒策略（人读；§3.2 表逐行落这里）。
 WAKE: dict[str, str] = {
     JOB_DONE: "每件唤醒组长（7 专职+deputy，及时接续下一份工作）",
@@ -62,6 +69,8 @@ WAKE: dict[str, str] = {
     QUEUE_EMPTY: "devops / bencher 队列消化完，队列空唤醒一次",
     TASKBOOK_NEW: "用户投递任务书，立即唤醒组长",
     QUEUE_TIMEOUT: "队列入队 30min 未处理，唤醒组长排查（不许静默积压）",
+    PENDING_WORK: "队列感知巡更：有活却没人干（队列/backlog/事件/任务书非空）→ 唤醒组长接管",
+    STALL: "队列感知巡更：in_progress 条目超期无进展 → 唤醒组长排查",
     NEEDS_LEADER: "沿现制：drain 判定须组长处理",
     QUOTA_STOP: "沿现制：额度类全局停止",
     CHANNEL_STOP: "沿现制：渠道级故障全局停止",
@@ -299,12 +308,14 @@ __all__ = [
     "JOB_DONE",
     "MIRROR_TYPES",
     "NEEDS_LEADER",
+    "PENDING_WORK",
     "QUEUE_COMPLETE",
     "QUEUE_EMPTY",
     "QUEUE_TIMEOUT",
     "QUOTA_STOP",
     "SALVAGE",
     "SEEN_PATH",
+    "STALL",
     "STEP_REVIEW_DONE",
     "STREAM_TYPES",
     "TASKBOOK_NEW",
