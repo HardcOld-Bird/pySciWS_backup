@@ -1416,6 +1416,14 @@ def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> boo
         echo(f"  同时：{format_event(ev)}")
     for line in auto_remount_lines():
         echo(line)
+    # 机械推送点（PSEP_3 §3.3）：唤醒即携路由卡片（失败 fail-soft，推送面不拦唤醒）。
+    try:
+        from . import nextroute
+
+        for line in nextroute.card_lines(None):
+            echo(line)
+    except Exception:  # noqa: BLE001
+        pass
     return True
 
 

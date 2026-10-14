@@ -601,6 +601,8 @@ def cmd_plan_run(args) -> int:
             state["completed_at"] = _now()
             _save_state(plan_id, state)
         _report_plan_complete(plan_id, state)
+    for line in _routing_card():
+        print(line)
     return 0 if all(o.code == 0 for _, o in outcomes) else 2
 
 
@@ -745,6 +747,16 @@ def _print_worklist(plan_id: str, plan: dict, state: dict) -> None:
     )
 
 
+def _routing_card() -> list[str]:
+    """机械推送点用的**全局**路由卡片（PSEP_3 §3.3）：fail-soft（推送面绝不阻塞推进）。"""
+    try:
+        from . import nextroute
+
+        return nextroute.card_lines(None)
+    except Exception:  # noqa: BLE001 - 路由读数坏一项不塌推进
+        return []
+
+
 def cmd_plan_advance(args) -> int:
     """**事件驱动推进**（§3.5，M5）：把下一环节入队 m4 成员队列**即返回**。
 
@@ -881,6 +893,8 @@ def cmd_plan_advance(args) -> int:
         f"  事件驱动：orch events drain → "
         f'orch plan advance {plan_id} --text "<下一环节任务书>"'
     )
+    for line in _routing_card():
+        print(line)
     return 0
 
 
@@ -1062,6 +1076,7 @@ def _rework_A(tb_id: str, rnd: int) -> dict:
     return {
         "id": "A",
         "mode": "serial",
+        "brief": "综合项目改进",
         "children": [
             a1,
             {
@@ -1095,6 +1110,7 @@ def _rework_B(node_id: str, tb_id: str) -> dict:
     return {
         "id": node_id,
         "mode": "serial",
+        "brief": "返工执行",
         "children": [
             {"id": "b1", "kind": "self", "brief": "重拆解返工", "role": "rework_plan"},
             {"id": "b2", "member": "devops", "brief": "返工生产环节"},
@@ -1113,6 +1129,7 @@ def _rework_C(tb_id: str) -> dict:
     return {
         "id": "C",
         "mode": "serial",
+        "brief": "监察改进",
         "children": [
             {
                 "id": "c1",
@@ -1154,6 +1171,7 @@ def build_rework_plan(
             {
                 "id": "BC",
                 "mode": "parallel",
+                "brief": "返工与监察（并行）",
                 "children": [_rework_B("B", tb_id), _rework_C(tb_id)],
             },
         ]
