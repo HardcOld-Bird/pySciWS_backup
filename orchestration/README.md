@@ -759,7 +759,12 @@ drain/事件的 `exit 2` 被投到次要会话（污染其上下文，用户明�
      detail = devops 队列消化完：处理 3 项 〔迟到唤醒：发生于挂载前（聋期）〕
   落账后水位 events_seq = 1（单调，不重复消费）
   ```
-- **看门狗（独立于会话/钩子生命周期）**：`pysci-orch watchdog start|stop|status` 拉起一个**分离进程**，每 60 s 读 `watch.json` 的 `heartbeat_at`——心跳新鲜（≤300 s；取值 **≥ watch 自身挂载宽限 240 s**，免把「刚 arm 完就被杀」误判成活着）不动，**stale 即重臂**一条 `.qoder/hooks/watch-arm.sh` 监听循环（它自抢 token 并循环 `orch watch`，**不新造第二套循环**），带 ≥300 s 冷却防堆进程；`stop` 协作式停止（不留孤儿守护者）。OS 侧重启持久化（每 5 min 幂等 `orch watchdog start`）：`orchestration/scripts/watchdog-scheduler.ps1 -Mode install|uninstall|status`。实测留痕：
+- **看门狗（独立于会话/钩子生命周期）**：`pysci-orch watchdog start|stop|status` 拉起一个**分离进程**，每 60 s 读 `watch.json` 的 `heartbeat_at`——心跳新鲜（≤300 s；取值 **≥ watch 自身挂载宽限 240 s**，免把「刚 arm 完就被杀」误判成活着）不动，**stale 即重臂**一条 `.qoder/hooks/watch-arm.sh` 监听循环（它自抢 token 并循环 `orch watch`，**不新造第二套循环**），带 ≥300 s 冷却防堆进程。**`stop` = 广播停止纪元**（backlog 20261014-135935-devops）：写
+  `{"scope":"all","requested_at":…}` 而非单 pid——**一次停止覆盖同刻全部实例**（含不持锁的
+  孤儿；实测病体＝两实例互抢锁记录、旧 stop 只停一个），**锁空闲照样投递**（旧语义在此返回
+  「无需停止」、孤儿永远收不到）；各实例按**自身启动时刻**消费纪元，晚于纪元启动的新实例
+  不受影响（调度器/下一跳照常拉起——「不留孤儿」由此改为「停得干净、重启照常」）。
+  OS 侧重启持久化（每 5 min 幂等 `orch watchdog start`，`pythonw` 无窗口）：`orchestration/scripts/watchdog-scheduler.ps1 -Mode install|uninstall|status`。实测留痕：
   ```
   看门狗 summary：rearms=1 checks=2 stopped=cooperative
     [▶] 看门狗启动（心跳stale）

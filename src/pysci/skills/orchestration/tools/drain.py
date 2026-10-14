@@ -105,6 +105,11 @@ CANCEL_PATH: Path = ORCH_STATE_ROOT / "devops.cancel"
 #: 残骸不再是互斥依据（:func:`_lock_live` 认它为非活锁）。backlog 20261011-225933-devops。
 RELEASED_KEY: str = "released"
 
+#: 广播停止信号的 scope 标记（watchdog 停机用；backlog 20261014-135935-devops）：
+#: ``{"scope": "all", "requested_at": …}`` = **停止纪元**——按启动时刻比较，一次停止
+#: 覆盖同刻全部实例（含不持锁的孤儿）；单 pid 语义只留 drain/队列的常规停止路径。
+STOP_SCOPE_ALL: str = "all"
+
 #: acquire 抢锁重试轮数（竞态窗口 + 残骸清除）。
 ACQUIRE_RETRIES: int = 3
 
@@ -501,14 +506,39 @@ def _stale_run_crashed(data: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 # 协作式停止（orch drain-stop ↔ drain 循环间隙消费）
 # ---------------------------------------------------------------------------
-def request_stop(paths: WorkerPaths | None = None) -> tuple[bool, str]:
+def request_stop(
+    paths: WorkerPaths | None = None, *, broadcast: bool = False
+) -> tuple[bool, str]:
     """写协作停止信号，目标为当前持锁 worker。供 ``orch drain-stop`` 调用。
 
+    ``broadcast=True``（watchdog 用，backlog 20261014-135935-devops）：写**停止纪元**
+    （``scope="all"``）而非单个 pid——同刻**全部** ``_watchdog-loop`` 实例（含不持锁的
+    孤儿）都会在各自下一个自查点（≤60s）退出；**锁空闲时照样投递**（旧实现在此返回
+    「无需停止」且不写信号，孤儿永远收不到——2026-10-14 实测：两实例同跑、一次 stop
+    只停一个）。纪元按 ``requested_at`` 与各实例启动时刻比较，晚于纪元启动的**新实例
+    不受影响**（看门狗调度器/下一跳照常拉起）。
+
     Returns:
-        ``(ok, message)``。无运行中 worker 时**不写信号**（返回 False——空闲队列
-        不需要停，残留信号还会危及下一个 worker）。
+        ``(ok, message)``。非广播：无运行中 worker 时**不写信号**（返回 False——空闲
+        队列不需要停，残留信号还会危及下一个 worker）；广播：**恒写**（孤儿可能无锁在跑）。
     """
     p = paths or _devops_paths()
+    if broadcast:
+        p.cancel.parent.mkdir(parents=True, exist_ok=True)
+        stamp = _now()
+        p.cancel.write_text(
+            json.dumps(
+                {"scope": STOP_SCOPE_ALL, "requested_at": stamp},
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return True, (
+            f"已广播停止请求（停止纪元 {stamp}）：早于该时刻启动的全部 watchdog 实例将在"
+            "下一个自查点（≤60s）干净退出；晚于它启动的新实例不受影响。"
+        )
     st = lock_status(p)
     if st["state"] != "running":
         return False, "无运行中的 drain worker（锁空闲），无需停止。"
@@ -538,18 +568,32 @@ def cancel_status(paths: WorkerPaths | None = None) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def _consume_stop_request(paths: WorkerPaths | None = None) -> bool:
+def _consume_stop_request(
+    paths: WorkerPaths | None = None, *, started_at: str = ""
+) -> bool:
     """drain 循环检查：停止信号是否指向本进程；无论指向与否信号文件均被删除。
 
     陈旧信号（pid≠本进程——被 kill 的 worker 未及消费而留下的）顺手清除并返回
     False，绝不误停接棒的下一个 worker。
+
+    **广播纪元支**（``scope="all"``，watchdog 用）：按 ``requested_at`` 与调用方
+    ``started_at`` 比较——纪元晚于本实例启动才消费（返回 True），**不删文件**（删了会
+    抢掉其他实例的信号：第一个醒来的实例就会把纪元吞掉，其余照旧存活——2026-10-14
+    实测的两实例场景）；纪元早于本实例（新实例）→ False 且保留，陈旧纪元不误停接棒者。
     """
     cancel = (paths or _devops_paths()).cancel
     if not cancel.exists():
         return False
     try:
-        pid = int(json.loads(cancel.read_text(encoding="utf-8")).get("pid", 0))
-    except (json.JSONDecodeError, OSError, ValueError, TypeError):
+        data = json.loads(cancel.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        data = {}
+    if str(data.get("scope") or "") == STOP_SCOPE_ALL:
+        req = str(data.get("requested_at") or "")
+        return bool(req) and bool(started_at) and req > started_at
+    try:
+        pid = int(data.get("pid", 0))
+    except (ValueError, TypeError):
         pid = 0
     try:
         cancel.unlink()

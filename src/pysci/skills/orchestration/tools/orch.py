@@ -241,6 +241,13 @@ def cmd_status(args: argparse.Namespace) -> int:
             f"待={qc.get('pending', 0)} 在做={qc.get('in_progress', 0)} "
             f"完成={qc.get('done', 0)} 失败={qc.get('failed', 0)}"
         )
+    # 降噪标注（backlog 20261014-135935-devops 组长注 13:xx）：backlog pending 且执行面
+    # 在途时只作**标注**（非告警）——判据单一实现在 watch.queue_pressure（notes 通道）。
+    try:
+        for note in _watch.queue_pressure().get("notes") or []:
+            print(f"  [i] {note}")
+    except Exception:  # noqa: BLE001 - 状态屏少一行不塌
+        pass
     cancel = _drain.cancel_status()
     if cancel:
         print(
@@ -1232,7 +1239,9 @@ def main(argv: list[str] | None = None) -> int:
     wsub = p.add_subparsers(dest="w_action", required=True)
     q = wsub.add_parser("start", help="幂等拉起看门狗（分离进程；已在跑不动）")
     q.set_defaults(func=_watchdog.cmd_watchdog)
-    q = wsub.add_parser("stop", help="协作式停止（下一轮自查点干净退出）")
+    q = wsub.add_parser(
+        "stop", help="广播停止纪元（全部实例含孤儿，下一轮自查点干净退出）"
+    )
     q.set_defaults(func=_watchdog.cmd_watchdog)
     q = wsub.add_parser("status", help="看门狗状态 + watch 心跳年龄")
     q.set_defaults(func=_watchdog.cmd_watchdog)

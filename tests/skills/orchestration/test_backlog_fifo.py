@@ -175,6 +175,23 @@ def _old_running_sim_item() -> str:
     return str(it["id"])
 
 
+def test_pending_work_note_when_dispatch_inflight(iso_state):
+    """组长注 13:xx：backlog pending 且有**在途**（直派/批次正在被消化）时，降噪为
+    **标注**（notes 通道，非告警）——2026-10-14 实测场景（backlog 有 pending 的同时
+    本会话正在消化一条 devops 派发）。"""
+    seed_backlog(iso_state, [{"id": "b1", "status": "pending", "summary": "s"}])
+    press = watch.queue_pressure()
+    assert any("backlog" in r for r in press["reasons"]), "无执行面：真告警"
+    assert not press["notes"]
+
+    it = queues.enqueue("devops", text="在途", slug="inflight")
+    workq.take_next(queues.queue_path("devops"))  # 标 in_progress（在途）
+    press = watch.queue_pressure()
+    assert not any("backlog" in r for r in press["reasons"]), "有在途 → 降噪"
+    assert any("等待在途消化完成后续" in n for n in press["notes"]), "降噪必须带标注"
+    assert str(it["id"])
+
+
 def test_stall_reported_when_member_session_dead(iso_state):
     _old_running_sim_item()
     press = watch.queue_pressure()
