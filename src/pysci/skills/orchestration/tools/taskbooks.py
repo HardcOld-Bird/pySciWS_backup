@@ -35,19 +35,44 @@ STATUS_ACTIVE = "active"
 STATUS_DELIVERED = "delivered"
 STATUS_ACCEPTED = "accepted"
 STATUS_REJECTED = "rejected"
+#: 执行失败终态（PSEP_3 §4.3 #3：两次送审不过 → 中止）。
+STATUS_FAILED = "failed"
 
 #: 状态机（唯一真源；越界迁移一律拒绝，不静默改）。
 ALLOWED: dict[str, set[str]] = {
-    STATUS_NEW: {STATUS_PLANNING, STATUS_ACTIVE, STATUS_REJECTED},
-    STATUS_PLANNING: {STATUS_ACTIVE, STATUS_DELIVERED, STATUS_REJECTED, STATUS_NEW},
-    STATUS_ACTIVE: {STATUS_DELIVERED, STATUS_REJECTED, STATUS_NEW},
+    STATUS_NEW: {STATUS_PLANNING, STATUS_ACTIVE, STATUS_REJECTED, STATUS_FAILED},
+    STATUS_PLANNING: {
+        STATUS_ACTIVE,
+        STATUS_DELIVERED,
+        STATUS_REJECTED,
+        STATUS_NEW,
+        STATUS_FAILED,
+    },
+    STATUS_ACTIVE: {STATUS_DELIVERED, STATUS_REJECTED, STATUS_NEW, STATUS_FAILED},
     STATUS_DELIVERED: {STATUS_ACCEPTED, STATUS_REJECTED},
     STATUS_ACCEPTED: set(),
-    STATUS_REJECTED: {STATUS_NEW},  # 返工重拆解
+    STATUS_REJECTED: {
+        STATUS_NEW
+    },  # 返工重拆解（旧语义）；返工流改走 create_rework 时留档终态
+    STATUS_FAILED: set(),  # 失败终态（待用户补充指引后另起新任务书）
 }
 
+#: 优先级（PSEP_3 §3.1 / 用户裁决⑤⑦）：仅影响**引导顺序**，不抢占在途。
+PRIORITY_HIGH = "high"
+PRIORITY_NORMAL = "normal"
+PRIORITY_LOW = "low"
+PRIORITIES: tuple[str, ...] = (PRIORITY_HIGH, PRIORITY_NORMAL, PRIORITY_LOW)
+DEFAULT_PRIORITY = PRIORITY_NORMAL
+
+#: 返工三档模式（PSEP_3 §4.1）：完整 / 无监察改进 / 仅返工。
+MODE_FULL = "full"
+MODE_NO_INSPECTOR = "no_inspector"
+MODE_REWORK_ONLY = "rework_only"
+MODES: tuple[str, ...] = (MODE_FULL, MODE_NO_INSPECTOR, MODE_REWORK_ONLY)
+DEFAULT_MODE = MODE_FULL
+
 #: 列表三段（§3.4 / §2.4 #1）。
-OPEN_STATUSES = (STATUS_NEW, STATUS_PLANNING, STATUS_ACTIVE)
+OPEN_STATUSES = (STATUS_NEW, STATUS_PLANNING, STATUS_ACTIVE, STATUS_FAILED)
 REVIEW_STATUSES = (STATUS_DELIVERED,)
 HISTORY_STATUSES = (STATUS_ACCEPTED,)
 
@@ -100,11 +125,21 @@ def create(
     source: str = "mirror-tui",
     tb_id: str | None = None,
     now: datetime | None = None,
+    priority: str = DEFAULT_PRIORITY,
+    mode: str = "",
+    rework_of: str = "",
+    rework_round: int = 0,
 ) -> dict[str, Any]:
     """落盘一件任务书（``.taskbook.md`` + ``.state.json``），返回其记录。
 
     ``source``：``mirror-tui``（用户 TUI 投递）或 ``llm``（组长程序化投递）。
+    字段面（PSEP_3 §3.1/§4.1）：``priority``（默认 normal）／``mode``（返工三档；非返工留空）／
+    ``rework_of``（原 tb-id）／``rework_round``（轮次）。
     """
+    if priority not in PRIORITIES:
+        raise ValueError(f"未知优先级：{priority}（合法：{'、'.join(PRIORITIES)}）")
+    if mode and mode not in MODES:
+        raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(MODES)}）")
     ts = (now or datetime.now().astimezone()).isoformat(timespec="seconds")
     ident = tb_id or _unique_id(new_id(title, now=now))
     state: dict[str, Any] = {
@@ -113,20 +148,29 @@ def create(
         "title": title,
         "status": STATUS_NEW,
         "source": source,
+        "priority": priority,
+        "mode": mode,
+        "rework_of": rework_of,
+        "rework_round": int(rework_round),
         "plan_id": "",
         "rejections": [],
         "updated": ts,
     }
-    md = (
-        "---\n"
-        f"id: {ident}\n"
-        f"ts: {ts}\n"
-        f"title: {title}\n"
-        f"status: {STATUS_NEW}\n"
-        f"source: {source}\n"
-        "---\n\n"
-        f"{body.rstrip()}\n"
-    )
+    front = [
+        "---",
+        f"id: {ident}",
+        f"ts: {ts}",
+        f"title: {title}",
+        f"status: {STATUS_NEW}",
+        f"source: {source}",
+        f"priority: {priority}",
+    ]
+    if mode:
+        front.append(f"mode: {mode}")
+    if rework_of:
+        front.append(f"rework_of: {rework_of}")
+        front.append(f"rework_round: {int(rework_round)}")
+    md = "\n".join(front) + "\n---\n\n" + f"{body.rstrip()}\n"
     _write(_md_path(ident), md)
     _write(_state_path(ident), json.dumps(state, ensure_ascii=False, indent=2) + "\n")
     # 落盘即发 TASKBOOK-NEW（§3.4：用户投递任务书立即唤醒组长）。写失败 fail-open。
@@ -246,6 +290,49 @@ def reject(tb_id: str, note: str) -> dict[str, Any]:
     """
     transition(tb_id, STATUS_REJECTED, note=note)
     return transition(tb_id, STATUS_NEW)
+
+
+def create_rework(
+    orig_id: str,
+    *,
+    mode: str,
+    priority: str = DEFAULT_PRIORITY,
+    note: str = "",
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """TUI 驳回交付 → 生成**返工大任务书**（PSEP_3 §4.1）。
+
+    ① 原任务书置 ``rejected`` **留档**（批语入 ``rejections``，终态不再回 ``new``）；
+    ② 新建任务书继承原**名称/简介**，字段 ``rework_of/rework_round(=原轮次+1)/mode/priority``
+    齐全，入大任务待办（``new``＋TASKBOOK-NEW 唤醒）。返回**新**任务书状态。
+
+    Raises:
+        ValueError: 原任务书不存在 / 模式或优先级非法。
+    """
+    orig = load_state(orig_id)
+    if orig is None:
+        raise ValueError(f"任务书不存在：{orig_id}")
+    if mode not in MODES:
+        raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(MODES)}）")
+    if priority not in PRIORITIES:
+        raise ValueError(f"未知优先级：{priority}（合法：{'、'.join(PRIORITIES)}）")
+    transition(orig_id, STATUS_REJECTED, note=note)  # 原任务书终态留档
+    rnd = int(orig.get("rework_round") or 0) + 1
+    title = str(orig.get("title") or "返工大任务")
+    body = (read_body(orig_id) or "").strip()
+    new_body = f"（返工第 {rnd} 轮，原任务书 {orig_id}；模式 {mode}）\n\n{body}"
+    if note:
+        new_body += f"\n\n## 本轮驳回批语\n{note}"
+    return create(
+        title,
+        new_body,
+        source="mirror-tui",
+        now=now,
+        priority=priority,
+        mode=mode,
+        rework_of=orig_id,
+        rework_round=rnd,
+    )
 
 
 def sync_delivered() -> list[str]:

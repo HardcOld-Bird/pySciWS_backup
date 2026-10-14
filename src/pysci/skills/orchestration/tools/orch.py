@@ -887,6 +887,7 @@ def _plan_router(action: str):
         "run": _plans.cmd_plan_run,
         "advance": _plans.cmd_plan_advance,
         "amend": _plans.cmd_plan_amend,
+        "rework": _plans.cmd_plan_rework,
         "drop": _plans.cmd_plan_drop,
         "list": _plans.cmd_plan_list,
         "adhoc": _plans.cmd_plan_adhoc,
@@ -975,6 +976,21 @@ def main(argv: list[str] | None = None) -> int:
     q = psub.add_parser("amend", help="编辑计划 YAML 后校验对账（按环节 id 保留状态）")
     q.add_argument("id")
     q.set_defaults(func=_plan_router("amend"))
+
+    q = psub.add_parser(
+        "rework", help="由返工任务书生成三档模板骨架并登记（PSEP_3 §4.2）"
+    )
+    q.add_argument("id", help="返工任务书 id（tb-…）")
+    q.add_argument(
+        "--mode",
+        choices=["full", "no_inspector", "rework_only"],
+        default="full",
+        help="返工三档：完整 / 无监察改进 / 仅返工（默认 full）",
+    )
+    q.add_argument("--goal", help="计划目标（默认「返工：<tb-id>」）")
+    q.add_argument("--plan-id", help="计划 id（默认 rework-<tb-id>）")
+    q.add_argument("--force", action="store_true", help="覆盖同 id 计划")
+    q.set_defaults(func=_plan_router("rework"))
 
     q = psub.add_parser("drop", help="中止计划（标记 abandoned，状态保留审计）")
     q.add_argument("id")
