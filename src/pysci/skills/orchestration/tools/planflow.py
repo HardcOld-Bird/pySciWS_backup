@@ -29,8 +29,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 #: 「已派发」状态族（started 的 step 判据）——凡离开 pending 即已在途/已有结果。
+#: ``self_awaiting``：``kind: self`` 组长环节已被引导、等组长提交 evidence（PSEP_3 §2.1）。
 STARTED_STATES: tuple[str, ...] = (
     "queued",
+    "self_awaiting",
     "done",
     "skipped",
     "blocked",
@@ -40,6 +42,13 @@ STARTED_STATES: tuple[str, ...] = (
 
 #: 「完成」状态族（done 的 step 判据）。
 DONE_STATES: tuple[str, ...] = ("done", "skipped")
+
+#: ``kind`` 面（PSEP_3 §2.1）：``dispatch`` 默认（入成员队列）｜``self`` 组长自办。
+KIND_DISPATCH: str = "dispatch"
+KIND_SELF: str = "self"
+
+#: ``kind: self`` 环节「已引导待提交 evidence」的状态（started 族，非终态、非队列在途）。
+SELF_AWAITING: str = "self_awaiting"
 
 
 @dataclass(frozen=True)
@@ -53,6 +62,11 @@ class Node:
     yaml: dict[str, Any] = field(default_factory=dict)
     index: int = 0
     parent_path: str = ""
+
+    @property
+    def kind(self) -> str:
+        """叶子 kind（``dispatch`` 默认｜``self``）；组节点恒为空串。"""
+        return "" if self.is_group else str(self.yaml.get("kind") or KIND_DISPATCH)
 
 
 class PlanTree:
@@ -213,10 +227,97 @@ class PlanTree:
             ),
         }
 
+    # ------------------------------------------------- 结构面（护栏/软提示，PSEP_3 §2.4）
+    def has_superstep(self) -> bool:
+        """是否含任一 superstep（组节点）——读标记 lint 的触发条件之一。"""
+        return any(n.is_group for n in self.nodes)
+
+    def max_superstep_depth(self) -> int:
+        """superstep 嵌套层数（**叶子点路径的段数 − 1**＝组祖先数；扁平 plan = 0）。
+
+        ``a1``=0、``A.P1.p1-1``=2、``A.B.C.D.l``=4。用于「深度>3 拆解过碎」软提示。
+        """
+        return max((leaf.path.count(".") for leaf in self.leaves), default=0)
+
+    def _branch_members(self, node: Node) -> set[str]:
+        """节点子树内的叶子成员集合（组=并集；叶子={member}）。"""
+        if not node.is_group:
+            m = str(node.yaml.get("member") or "")
+            return {m} if m else set()
+        out: set[str] = set()
+        for leaf in self.leaves:
+            if leaf.path == node.path or leaf.path.startswith(node.path + "."):
+                m = str(leaf.yaml.get("member") or "")
+                if m:
+                    out.add(m)
+        return out
+
+    def soft_hints(self) -> list[str]:
+        """拆解护栏**软提示**（PSEP_3 §2.4，**不阻断**）：同成员并行 / 宽度>3 / 深度>3。"""
+        hints: list[str] = []
+        for node in self.nodes:
+            if not node.is_group or node.mode != "parallel":
+                continue
+            kids = self._children.get(node.path, [])
+            if len(kids) > 3:
+                hints.append(
+                    f"并行组 {node.path or '(顶层)'} 宽度 {len(kids)} > 3——拆解可能过碎，"
+                    "考虑合并为更少分支"
+                )
+            counts: dict[str, int] = {}
+            for k in kids:
+                for m in self._branch_members(k):
+                    counts[m] = counts.get(m, 0) + 1
+            dup = sorted(m for m, c in counts.items() if c >= 2)
+            if dup:
+                hints.append(
+                    f"并行组 {node.path or '(顶层)'} 多分支同用成员 {'、'.join(dup)}"
+                    "——per-member FIFO 下实际串行"
+                )
+        depth = self.max_superstep_depth()
+        if depth > 3:
+            hints.append(f"嵌套深度 {depth} > 3——拆解可能过碎，考虑压缩层级")
+        return hints
+
+
+def freeze_violations(
+    old_statuses: dict[str, str], new_leaf_paths: list[str]
+) -> list[str]:
+    """amend 冻结校验（PSEP_3 §2.4）：**started 的 superstep 结构冻结**。
+
+    规则（``old_statuses`` = 编辑前 state.json 的叶子状态；``new_leaf_paths`` = 编辑后 YAML 的叶子）：
+
+    1. 任一**已 started 叶子**的点路径必须原样保留（不得删除/挪位）；
+    2. 任一**已 started superstep** 下的叶子集合不得**减少**（删/挪出即违规）——但允许
+       **追加**新叶子（返工模板 b2…bn 的 amend 填充，§4.2）。
+
+    未派发部分（未 started 叶子，及未 started 子树）不受约束。返回违规描述列表（空=合法）。
+    """
+    old_paths = set(old_statuses)
+    new_paths = set(new_leaf_paths)
+    started = {p for p, s in old_statuses.items() if s in STARTED_STATES}
+    violations: list[str] = []
+    for p in sorted(started):
+        if p not in new_paths:
+            violations.append(f"已派发叶子被删/挪：{p}")
+    supersteps = {p.rsplit(".", 1)[0] for p in old_paths if "." in p}
+    for s in sorted(supersteps):
+        under = {p for p in old_paths if p.startswith(s + ".")}
+        if not any(old_statuses[p] in STARTED_STATES for p in under):
+            continue  # 该 superstep 未 started：不冻结
+        for p in sorted(under):
+            if p not in new_paths and p not in started:  # started 叶子已在上条报过
+                violations.append(f"已 started 子树 {s} 内未派发节点被删/挪：{p}")
+    return violations
+
 
 __all__ = [
     "DONE_STATES",
+    "KIND_DISPATCH",
+    "KIND_SELF",
+    "SELF_AWAITING",
     "STARTED_STATES",
     "Node",
     "PlanTree",
+    "freeze_violations",
 ]
