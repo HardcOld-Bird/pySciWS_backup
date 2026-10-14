@@ -956,6 +956,201 @@ def tally(ballots: list[Ballot]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# 裁决书（verdict_summary）与 E6 twin 终裁（PSEP_3 §4.4）
+# ---------------------------------------------------------------------------
+def _seat_confidence(juror: dict[str, Any]) -> float | None:
+    confs = [
+        b.get("confidence")
+        for b in juror.get("ballots", [])
+        if b.get("confidence") is not None
+    ]
+    return max(confs) if confs else None
+
+
+def render_verdict_summary(summary: dict[str, Any]) -> str:
+    """裁决书**文本**（一行要点 + 各席 confidence + 多数理由汇总 +（若有）twin 终裁）。"""
+    winner = str(summary.get("winner") or "")
+    by = str(summary.get("decided_by") or "")
+    tally = summary.get("tally") or {}
+    if winner:
+        head = (
+            f"裁决={winner}（{by or 'jury'} 定案；"
+            f"计票 A:{tally.get('A')} B:{tally.get('B')}）"
+        )
+    else:
+        head = f"未定案（计票 A:{tally.get('A')} B:{tally.get('B')}）"
+    parts = [head]
+    confs = []
+    for s in summary.get("seats", []):
+        run = f"{s.get('seat')}={s.get('vote') or '-'}"
+        conf = s.get("confidence")
+        if isinstance(conf, (int, float)):
+            run += f"/{float(conf):.2f}"
+        confs.append(run)
+    if confs:
+        parts.append("各席：" + " ".join(confs))
+    if summary.get("majority_reasons"):
+        parts.append("多数理由：" + "；".join(summary["majority_reasons"]))
+    twin = summary.get("twin")
+    if twin:
+        conf = twin.get("confidence")
+        cs = f"{float(conf):.2f}" if isinstance(conf, (int, float)) else "-"
+        parts.append(
+            f"twin 终裁：{twin.get('choice')}（置信度 {cs}）：{twin.get('reason')}"
+        )
+    return "｜".join(parts)
+
+
+def build_verdict_summary(record: dict[str, Any]) -> dict[str, Any]:
+    """综合**裁决书**（PSEP_3 §4.4）：胜方 + 多数理由汇总 + 各席 confidence +（若有）twin 终裁。
+
+    由判决记录**纯推导**（含 ``final_verdict``/``decided_by``/``twin`` 字段），不读盘——
+    四处落点（jury ``<case>.json`` / preference-journal / ``pysci decisions`` / TUI）共用同一份，
+    杜绝各写各的。
+    """
+    decided_by = str(
+        record.get("decided_by") or ("jury" if record.get("verdict") else "")
+    )
+    winner = str(record.get("final_verdict") or record.get("verdict") or "")
+    seats: list[dict[str, Any]] = []
+    majority: list[str] = []
+    for j in record.get("jurors", []):
+        seat = {
+            "seat": j.get("seat"),
+            "model": j.get("model"),
+            "vote": j.get("vote") or "",
+            "consistent": bool(j.get("consistent")),
+            "confidence": _seat_confidence(j),
+        }
+        seats.append(seat)
+        if winner and seat["vote"] == winner:
+            reason = next(
+                (
+                    str(b.get("reason") or "").strip()
+                    for b in j.get("ballots", [])
+                    if b.get("real") == winner and str(b.get("reason") or "").strip()
+                ),
+                "",
+            )
+            if reason:
+                majority.append(f"{seat['seat']}：{reason}")
+    twin = None
+    if decided_by == "twin":
+        info = record.get("twin") or {}
+        twin = {
+            "choice": winner,
+            "reason": str(info.get("reason") or ""),
+            "confidence": info.get("confidence"),
+        }
+    summary: dict[str, Any] = {
+        "winner": winner,
+        "decided_by": decided_by,
+        "tally": dict(record.get("tally") or {}),
+        "inconclusive": list(record.get("inconclusive") or []),
+        "seats": seats,
+        "majority_reasons": majority,
+        "twin": twin,
+    }
+    summary["text"] = render_verdict_summary(summary)
+    return summary
+
+
+def _resolve_twin(case: Case, *, model_tier: str | None = None) -> dict[str, Any]:
+    """E6：平票/inconclusive 过半 → **自动** twin 终裁（复用 taste 机制，PSEP_3 §4.4）。
+
+    Returns:
+        ``{decided, final_verdict, decided_by, reason, confidence, sid, available}``：
+        ``decided=True`` 时 ``final_verdict`` ∈ {A,B}（**收敛确定选项、不给平局**，REFACTOR §5）；
+        否则为**保守回退**（twin 不可达 / 读不出选择）——调用方据此标挂起并**出声**，不静默放行。
+    """
+    from . import taste  # 延迟导入：taste 顶层引 jury，避免成环
+
+    code, rec = taste.ruling_for_case(case, model_tier=model_tier)
+    choice = str(rec.get("choice") or "")
+    if code == 0 and choice in ("A", "B"):
+        return {
+            "decided": True,
+            "final_verdict": choice,
+            "decided_by": "twin",
+            "reason": str(rec.get("reason") or ""),
+            "confidence": rec.get("confidence"),
+            "sid": str(rec.get("sid") or ""),
+            "available": True,
+        }
+    available = code != 2  # code 2＝通道不可用（taste 未生效 / 宪章缺失）
+    reason = str(rec.get("reason") or "") if not available else "twin 未给出确定选择"
+    return {
+        "decided": False,
+        "final_verdict": "",
+        "decided_by": "",
+        "reason": reason,
+        "confidence": None,
+        "sid": str(rec.get("sid") or ""),
+        "available": available,
+    }
+
+
+def verdict_summary_lines(record: dict[str, Any]) -> list[str]:
+    """裁决书**多行呈现**（CLI/TUI 共用一份）：要点 + 逐席 + 多数理由 +（若有）twin 终裁。"""
+    s = record.get("verdict_summary") or build_verdict_summary(record)
+    out = [f"  裁决书：{s.get('text') or '（空）'}"]
+    for seat in s.get("seats", []):
+        conf = seat.get("confidence")
+        cs = f"{float(conf):.2f}" if isinstance(conf, (int, float)) else "-"
+        tag = "一致" if seat.get("consistent") else "inconclusive"
+        mark = "√" if seat.get("vote") and seat.get("vote") == s.get("winner") else " "
+        out.append(
+            f"    {mark} {seat.get('seat')} 票={seat.get('vote') or '-'} "
+            f"[{tag}] conf={cs}"
+        )
+    if s.get("majority_reasons"):
+        out.append("    多数理由：" + "；".join(s["majority_reasons"]))
+    if s.get("twin"):
+        t = s["twin"]
+        conf = t.get("confidence")
+        cs = f"{float(conf):.2f}" if isinstance(conf, (int, float)) else "-"
+        out.append(
+            f"    twin 终裁：{t.get('choice')}（置信度 {cs}）：{t.get('reason')}"
+        )
+    return out
+
+
+def _journal_verdict_summary(record: dict[str, Any]) -> None:
+    """裁决书入**单一账目源** preference-journal（channel 记账；twin 定案标 decided_by）。
+
+    ``kind="verdict_summary"``：它是同一判决的**文书面**（非又一票/又一次裁决），故
+    :func:`~.verdict.health` 按 kind 跳过它，不重复计入通道用量。写失败 fail-soft——
+    ``evals/jury/<case>.json`` 才是硬留痕。
+    """
+    try:
+        from . import journal
+
+        summary = record.get("verdict_summary") or {}
+        decided_by = str(record.get("decided_by") or "")
+        case_id = str(record.get("case_id") or "")
+        journal.append(
+            {
+                "ts": str(record.get("ts") or ""),
+                "situation": (
+                    f"jury 裁决 {case_id}（{str(record.get('question') or '')[:80]}）"
+                ),
+                "options": "A=采纳 B=维持现状",
+                "choice": str(record.get("verdict") or ""),
+                "reason": str(summary.get("text") or ""),
+                "source": "jury",
+                "kind": "verdict_summary",
+                "channel": "twin" if decided_by == "twin" else "jury",
+                "case_id": case_id,
+                "finding_id": case_id,  # 巡检 J 案卷 case_id==finding id：decisions 面据此可查
+                "decided_by": decided_by,
+                "final_verdict": str(record.get("final_verdict") or ""),
+            }
+        )
+    except Exception:  # noqa: BLE001 - 账目写失败不炸判决（jury JSON 才是硬留痕）
+        pass
+
+
+# ---------------------------------------------------------------------------
 # 留痕与队列
 # ---------------------------------------------------------------------------
 def _atomic_write_json(path: Path, obj: Any) -> None:
@@ -1142,6 +1337,9 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
 
     t = tally(ballots)
     usage = usage_by_model(ballots)
+    # E6（PSEP_3 §4.4）：平票/inconclusive 过半 → **自动** twin 终裁（收敛确定选项，不给平局）。
+    twin: dict[str, Any] = _resolve_twin(case) if t["escalate"] else {}
+    final = str(twin.get("final_verdict") or "")
     record = {
         "case_id": case.case_id,
         "case_file": case.path,
@@ -1181,18 +1379,40 @@ def adjudicate(case: Case, *, dry: bool = False, deadline_s: int | None = None) 
         "votes": t["votes"],
         "tally": t["tally"],
         "inconclusive": t["inconclusive"],
-        "verdict": t["verdict"],
+        "verdict": t["verdict"] or final,
         "escalate": t["escalate"],
+        # E6 终裁字段（twin 定案则 verdict 收敛到确定选项；不可达则空 + 保守回退）
+        "final_verdict": final,
+        "decided_by": "twin" if final else "",
+        "twin": (
+            {
+                "choice": final,
+                "reason": str(twin.get("reason") or ""),
+                "confidence": twin.get("confidence"),
+                "sid": str(twin.get("sid") or ""),
+                "available": bool(twin.get("available")),
+            }
+            if twin
+            else None
+        ),
         "usage": _sum_usage(ballots),
         "usage_by_model": usage,
         "cost": estimate_cost(usage, cfg["pricing"]),
     }
+    record["verdict_summary"] = build_verdict_summary(record)
     p = write_record(record)
+    _journal_verdict_summary(record)
     if t["escalate"]:
-        msg = (
-            f"模棱两可（tally={t['tally']} inconclusive={t['inconclusive']}）"
-            f"→ escalate=twin：挂起呈组长（E6 twin 终裁上线前不自动裁决）"
-        )
+        head = f"模棱两可（tally={t['tally']} inconclusive={t['inconclusive']}）→ escalate=twin"
+        if final:
+            reason = str((record.get("twin") or {}).get("reason") or "")
+            msg = f"{head} → twin 终裁收敛：{final}（理由：{reason[:80]}）"
+        elif twin.get("available"):
+            msg = f"{head}：twin 未给出确定选择 → 保守回退挂起（未通过，待补充指引）"
+        else:
+            msg = (
+                f"{head}：twin 不可达（{twin.get('reason')}）→ 保守回退挂起，不静默放行"
+            )
     else:
         msg = f"裁决={t['verdict']}（tally A:{t['tally']['A']} B:{t['tally']['B']}）"
     return Run("recorded", f"{alert}{warn}{msg}", record=record, path=p)
@@ -1240,13 +1460,20 @@ def cmd_jury(args: argparse.Namespace) -> int:
             f"{rec.get('dossier_hash')}｜usage={rec.get('usage', {}).get('total_tokens')}"
             f"｜cost={'无价目表' if amount is None else amount}"
         )
+        for line in verdict_summary_lines(rec):
+            print(line)
         if rec.get("verdict"):
             action = "approve" if rec["verdict"] == "A" else "reject"
+            by = "twin 终裁" if rec.get("decided_by") == "twin" else "仲裁多数"
             print(
-                f"[NEXT] 裁决自动生效：{action} 对应提案，组长只写任务书派 devops（§5.1 J 路）"
+                f"[NEXT] 裁决自动生效（{by}）：{action} 对应提案，"
+                "组长只写任务书派 devops（§5.1 J 路）"
             )
         else:
-            print("[NEXT] escalate=twin：挂起呈组长人工终裁（E6 twin 上线前的过渡）")
+            print(
+                "[NEXT] escalate=twin 且 twin 不可达/未表态 → **保守回退挂起**："
+                "提案维持待审批、未入队；请人工终裁（orch consult-twin 或 --override）"
+            )
         return 0
     if run.status == "queued":
         print(f"    队列 {orchestration_rel(run.path)}")
@@ -1284,4 +1511,7 @@ __all__ = [
     "scrub",
     "seat_readiness",
     "tally",
+    "build_verdict_summary",
+    "render_verdict_summary",
+    "verdict_summary_lines",
 ]

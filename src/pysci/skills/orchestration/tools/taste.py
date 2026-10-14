@@ -242,6 +242,76 @@ def _journal_ruling(record: dict[str, Any], options_text: str) -> None:
         pass
 
 
+def _run_case_judgement(
+    case: Case,
+    *,
+    reg: Registry,
+    pref: str,
+    member_id: str,
+    model_tier: str | None,
+    quiet: bool,
+    record_extra: dict[str, Any] | None = None,
+    journal_options: str = "A/B（盲审二选一）",
+) -> tuple[int, dict[str, Any]]:
+    """跑一次 twin 判断跳并落留痕（:func:`judge` 与 :func:`ruling_for_case` 共用唯一实现）。"""
+    prompt = build_prompt(case, pref)
+    if not quiet:
+        print(
+            f"→ taste {case.case_id}（宪章 {len(pref)} B，案卷 {len(prompt) - len(pref)} B 注入）"
+        )
+    outcome: DispatchOutcome = do_dispatch(
+        member_id,
+        text=prompt,
+        slug=f"taste-{case.case_id}",
+        session="new",  # 冷启动硬保证；成员 cold_start 使非 new 会话在 dispatch 层被拒
+        model_tier=model_tier,
+        no_checks=True,
+        attach_replies=False,
+        eval_hop=True,  # 判断跳不入生产台账、不塞建议队列（与压测跳同一隔离语义）
+        quiet=quiet,
+    )
+    j = parse_judgement(outcome.body)
+    env = outcome.envelope
+    record = {
+        "ts": _now(),
+        "case_id": case.case_id,
+        "case_file": str(case.path or ""),
+        "case_head": (case.question or "").strip()[:120],  # 案卷摘要（审计面要素）
+        "dossier_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16],
+        "member": member_id,
+        "model_tier": presets.resolve_role(member_id, model_tier),
+        "code": outcome.code,
+        "kind": outcome.kind,
+        "sid": outcome.sid,
+        "turns": env.num_turns if env else 0,
+        "duration_ms": env.duration_ms if env else 0,
+        "ctx_ratio": round(env.context_usage_ratio, 5) if env else 0,
+        "delta_chars": outcome.delta_chars,
+        "est_tokens": outcome.est_tokens,
+        "choice": j["choice"],
+        "confidence": j["confidence"],
+        "reason": j["reason"],
+        "parsed": j["parsed"],
+        "body": (outcome.body or "")[:2000],
+        "record_kind": "taste",
+        **_night_marker(),
+        **(record_extra or {}),
+    }
+    p = write_record(record)
+    _journal_ruling(record, journal_options)
+    if not quiet:
+        if j["parsed"] and j["choice"]:
+            conf = "-" if j["confidence"] is None else f"{j['confidence']:.2f}"
+            print(
+                f"  判断：{j['choice']}（置信度 {conf}，会话 {str(outcome.sid)[:8]}）"
+                f"\n  理由：{j['reason']}"
+            )
+        else:
+            print(f"  [!] 未从交付里读出选择（kind={outcome.kind}），已原样留痕")
+        print(f"  留痕：{_rel(p)}")
+    return (0 if j["parsed"] and j["choice"] else 1), record
+
+
 def judge(
     case_file: Path | str,
     *,
@@ -269,61 +339,53 @@ def judge(
     except (OSError, ValueError) as exc:
         print(f"✗ 案卷不可用：{exc}")
         return 2, {}
-    prompt = build_prompt(case, pref)
-    if not quiet:
-        print(
-            f"→ taste {case.case_id}（宪章 {len(pref)} B，案卷 {len(prompt) - len(pref)} B 注入）"
-        )
-    outcome: DispatchOutcome = do_dispatch(
-        member_id,
-        text=prompt,
-        slug=f"taste-{case.case_id}",
-        session="new",  # 冷启动硬保证；成员 cold_start 使非 new 会话在 dispatch 层被拒
+    return _run_case_judgement(
+        case,
+        reg=reg,
+        pref=pref,
+        member_id=member_id,
         model_tier=model_tier,
-        no_checks=True,
-        attach_replies=False,
-        eval_hop=True,  # 判断跳不入生产台账、不塞建议队列（与压测跳同一隔离语义）
         quiet=quiet,
     )
-    j = parse_judgement(outcome.body)
-    env = outcome.envelope
-    record = {
-        "ts": _now(),
-        "case_id": case.case_id,
-        "case_file": str(case.path or case_file),
-        "case_head": (case.question or "").strip()[:120],  # 案卷摘要（审计面要素）
-        "dossier_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16],
-        "member": member_id,
-        "model_tier": presets.resolve_role(member_id, model_tier),
-        "code": outcome.code,
-        "kind": outcome.kind,
-        "sid": outcome.sid,
-        "turns": env.num_turns if env else 0,
-        "duration_ms": env.duration_ms if env else 0,
-        "ctx_ratio": round(env.context_usage_ratio, 5) if env else 0,
-        "delta_chars": outcome.delta_chars,
-        "est_tokens": outcome.est_tokens,
-        "choice": j["choice"],
-        "confidence": j["confidence"],
-        "reason": j["reason"],
-        "parsed": j["parsed"],
-        "body": (outcome.body or "")[:2000],
-        "record_kind": "taste",
-        **_night_marker(),
-    }
-    p = write_record(record)
-    _journal_ruling(record, "A/B（盲审二选一）")
-    if not quiet:
-        if j["parsed"] and j["choice"]:
-            conf = "-" if j["confidence"] is None else f"{j['confidence']:.2f}"
-            print(
-                f"  判断：{j['choice']}（置信度 {conf}，会话 {str(outcome.sid)[:8]}）"
-                f"\n  理由：{j['reason']}"
-            )
-        else:
-            print(f"  [!] 未从交付里读出选择（kind={outcome.kind}），已原样留痕")
-        print(f"  留痕：{_rel(p)}")
-    return (0 if j["parsed"] and j["choice"] else 1), record
+
+
+def ruling_for_case(
+    case: Case,
+    *,
+    member_id: str = "twin",
+    model_tier: str | None = None,
+    quiet: bool = True,
+    origin: str = "jury-escalate",
+) -> tuple[int, dict[str, Any]]:
+    """把 twin 判断跑在**已解析**案卷上（jury E6 平票终裁复用；同机制、同留痕面）。
+
+    与 :func:`judge` 的唯一差别：入参是 :class:`~.jury.Case`（jury 已解析），且**默认静默**
+    ——输出由 jury 统一呈现；留痕（``evals/taste/<case>.json`` + journal）与 judge 同形态。
+
+    Returns:
+        ``(code, record)``：0=已表态（record 含 choice/confidence/reason）；1=派发失败或读不出
+        选择；2=不可用（taste_enabled=false / 宪章缺失）——此时 record 带 ``available=False``
+        与 ``reason``，供 jury 保守回退（不静默放行）。
+    """
+    reg = Registry.load()
+    if not reg.taste_enabled:
+        return 2, {"available": False, "reason": DISABLED_HINT}
+    pref = preference_text(reg, member_id)
+    if not pref.strip():
+        return 2, {
+            "available": False,
+            "reason": f"宪章缺失：{member_id} pod 内无 {PREFERENCE_NAME}",
+        }
+    return _run_case_judgement(
+        case,
+        reg=reg,
+        pref=pref,
+        member_id=member_id,
+        model_tier=model_tier,
+        quiet=quiet,
+        record_extra={"origin": origin},
+        journal_options="A/B（jury 平票 → twin 终裁）",
+    )
 
 
 def write_record(record: dict[str, Any]) -> Path:

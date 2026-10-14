@@ -459,7 +459,11 @@ def _system_stable() -> list[str]:
 # 决策审计（§2.4 #6）——现 cmd_decisions 全貌迁入（数据层复用，不复制）
 # ---------------------------------------------------------------------------
 def _decisions_summary() -> list[str]:
-    return [mirror._line_inspector_decisions(), mirror._line_trend()]
+    return [
+        mirror._line_inspector_decisions(),
+        mirror._line_verdict_summary(),
+        mirror._line_trend(),
+    ]
 
 
 # ---------------------------------------------------------------------------

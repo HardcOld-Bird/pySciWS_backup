@@ -262,6 +262,42 @@ def _line_jury() -> str:
     return jury.readiness_summary(jury.seat_readiness())
 
 
+def _recent_jury_records() -> list[dict[str, Any]]:
+    """按时间升序读 recent jury 裁决留痕（坏文件跳过）；供裁决书读数面。"""
+    d = jury.JURY_DIR
+    if not d.is_dir():
+        return []
+    rows: list[dict[str, Any]] = []
+    for p in sorted(d.glob("*.json")):
+        try:
+            rec = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(rec, dict) and rec.get("case_id"):
+            rows.append(rec)
+    return rows
+
+
+def verdict_summary_lines(limit: int = 3) -> list[str]:
+    """最近 jury **裁决书**（PSEP_3 §4.4）——TUI/CLI 共用；无记录给一行占位。"""
+    rows = _recent_jury_records()
+    picked = rows[-limit:] if limit > 0 else rows
+    out: list[str] = []
+    for rec in reversed(picked):
+        for ln in jury.verdict_summary_lines(rec):
+            out.append(f"  [{rec.get('case_id')}] {ln.strip()}")
+    return out or ["  （无 jury 裁决书）"]
+
+
+def _line_verdict_summary() -> str:
+    """最近一次 jury 裁决书要点（概览一行；无记录即「（无）」）。"""
+    for rec in reversed(_recent_jury_records()):
+        text = str((rec.get("verdict_summary") or {}).get("text") or "")
+        if text:
+            return f"裁决书 = {text[:200]}"
+    return "裁决书 = （无 jury 裁决记录）"
+
+
 def _line_fallback() -> str:
     """渠道回退事件（用户裁决 2026-10-12 21:1x 规格 4b）：计数 + 最近几条。
 
@@ -353,6 +389,7 @@ STATUS_ITEMS: tuple[tuple[str, Callable[[], str]], ...] = (
     ("队列", _line_queues),
     ("路由", _line_routing),
     ("仲裁", _line_jury),
+    ("裁决书", _line_verdict_summary),
     ("回退", _line_fallback),
     ("决策", _line_inspector_decisions),
     ("延期", _line_defer),
@@ -597,4 +634,5 @@ __all__ = [
     "route",
     "status_lines",
     "taste_cases",
+    "verdict_summary_lines",
 ]

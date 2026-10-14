@@ -392,6 +392,10 @@ def health() -> dict[str, Any]:
     """各判决通道用量、override 率、escalate 积压（§5.1/§5.6 的账要能一眼看见）。"""
     channels = {c: 0 for c in (*CHANNELS, CHANNEL_EXCEPTION)}
     for r in journal.read_records():
+        # 裁决书行（kind=verdict_summary，PSEP_3 §4.4）是同一判决的**文书面**、非又一次
+        # 裁决——按 kind 跳过，避免通道用量被重复计入（判决本身的 channel 行由各路各记一次）。
+        if str(r.get("kind") or "") == "verdict_summary":
+            continue
         ch = row_channel(r)
         if ch in channels:
             channels[ch] += 1
