@@ -39,21 +39,63 @@ from .modules import Module, modules  # re-export：m1 的 `app.modules()` 仍�
 _BADGE_NONE = "·"
 
 #: 各视图下**有可观察效果**的 action（f1：footer 只广告这些，广告的键必须真有效果）。
-#: 未列出的受管 action 在当前视图返回 `None`（不显示、也不生效）——与 `action_*` 的守卫一致。
+#: 未列出的受管 action 在当前视图返回 `False`（Textual 语义：禁用**且不显示**）。
+#: **输入框视图（journal / tb-new）留空**：焦点在 `Input` 上时可打印键属于文本输入
+#: （实测 `screen.active_bindings` 不含 `t`/`n`/`a`/`r`），标成「可用」是撒谎——
+#: 用户打字要的是字符，不是快捷键。
 _ACTIONS_BY_VIEW: dict[str, frozenset[str]] = {
     "menu": frozenset({"taskbooks", "journal"}),
     "detail": frozenset({"taskbooks", "journal"}),
-    "journal": frozenset({"taskbooks"}),
+    "journal": frozenset(),
     "taskbooks": frozenset(
         {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
     ),
-    "tb-new": frozenset({"taskbooks"}),
+    "tb-new": frozenset(),
 }
 
 #: 受本类视图闸管的 action（其余——`back`/`quit` 与 widget 内部动作——一律放行，不干预导航）。
 _GATED_ACTIONS: frozenset[str] = frozenset(
     {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
 )
+
+# ---------------------------------------------------------------------------
+# 主题常量（f2 美学统一）：**一处定义**，全 TUI 面板的 CSS 一律插值引用。
+# 同一视觉参数在本文件里只允许出现一次（tests/test_tui_visual_structure.py 用运行期拼接
+# 的 grep 判据钉住）——各面板各写一套就是「美学不一致」的根。
+# ---------------------------------------------------------------------------
+_T_BORDER = "border: round $accent;"
+_T_BORDER_SOFT = "border: round $warning;"
+_T_INSET = "padding: 0 1;"
+_T_TITLE = "text-style: bold; color: $accent; background: $panel;"
+_T_SUBTLE = "color: $text-muted;"
+_T_BODY = "color: $text;"
+_T_HINT = "color: $warning; text-style: italic;"
+_T_HL = "background: $accent; text-style: bold;"
+_T_BG = "background: $panel;"
+
+#: 详情页里「操作提示行」的辨识标记（渲染分区用：这些行从读数区挪进提示区，**不改数据层**）。
+_DETAIL_HINT_MARKERS = (
+    "按 `t`",
+    "Enter / `t`",
+    "推进：",
+    "多 plan 并行",
+    "审查入口",
+    "批复入口",
+    "口述动作",
+)
+
+
+def _split_detail(lines: list[str]) -> tuple[list[str], list[str]]:
+    """把详情行分成 **读数区** 与 **操作提示区**（只在渲染时分，数据层原样不动）。
+
+    尾部连续命中 :data:`_DETAIL_HINT_MARKERS` 的行归提示区；一行都不命中则提示区只有
+    「Esc/← 返回主菜单」。
+    """
+    body = list(lines)
+    hints: list[str] = []
+    while body and any(m in body[-1] for m in _DETAIL_HINT_MARKERS):
+        hints.insert(0, body.pop())
+    return body, hints
 
 
 class PysciTUI(App):
@@ -69,23 +111,29 @@ class PysciTUI(App):
         ("j", "journal", "口述"),
         ("q", "quit", "退出"),
     ]
-    CSS = """
-    #menu { height: 1fr; border: round $accent; }
-    #menu > ListItem.-highlight { background: $accent; text-style: bold; }
-    .row { width: 100%; height: 1; }
-    .row-title { width: 1fr; }
-    .row-badge { width: auto; color: $warning; text-style: bold; }
-    #summary { height: auto; padding: 0 1; color: $text-muted; }
-    #detail { height: 1fr; padding: 0 1; }
-    #journal { height: 1fr; padding: 0 1; border: round $warning; }
-    #journal-result { color: $success; }
-    #taskbook { height: 1fr; padding: 0 1; border: round $accent; }
-    #tb-list { height: 1fr; }
-    #tb-list > ListItem.-highlight { background: $accent; text-style: bold; }
-    #tb-msg { color: $success; }
-    #tb-new { height: 1fr; padding: 0 1; border: round $warning; }
-    #tb-new-body { height: 1fr; }
-    #tb-new-msg { color: $success; }
+    CSS = f"""
+    #menu {{ {_T_BORDER} height: 1fr; {_T_BG} }}
+    #menu > ListItem.-highlight {{ {_T_HL} }}
+    .row {{ width: 100%; height: 1; }}
+    .row-title {{ width: 1fr; }}
+    .row-badge {{ width: auto; color: $warning; text-style: bold; }}
+    #summary {{ height: auto; {_T_INSET} {_T_SUBTLE} }}
+    #detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #detail-title {{ {_T_TITLE} }}
+    #detail-body {{ {_T_BODY} height: 1fr; }}
+    #detail-hint {{ {_T_HINT} margin-top: 1; }}
+    #journal {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #journal-title {{ {_T_TITLE} }}
+    #journal-result {{ color: $success; }}
+    #taskbook {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #tb-title {{ {_T_TITLE} }}
+    #tb-list {{ height: 1fr; }}
+    #tb-list > ListItem.-highlight {{ {_T_HL} }}
+    #tb-msg {{ color: $success; }}
+    #tb-new {{ height: 1fr; {_T_INSET} {_T_BORDER_SOFT} {_T_BG} }}
+    #tb-new-title {{ {_T_TITLE} }}
+    #tb-new-body {{ height: 1fr; }}
+    #tb-new-msg {{ color: $success; }}
     """
 
     def __init__(self, *, mods: list[Module] | None = None, seen_path=None) -> None:
@@ -97,6 +145,10 @@ class PysciTUI(App):
         self.view = "menu"  # "menu" | "detail" | "journal"
         self.selected = 0
         self.detail_text = ""
+        # 详情三区（f2 分区渲染）——textual 8 的 Static 没有 .renderable，测试读这里
+        self.detail_title = ""
+        self.detail_body = ""
+        self.detail_hint = ""
         self.journal_result = ""
         self.tb_items: list[dict] = []
         self.tb_msg = ""
@@ -112,7 +164,10 @@ class PysciTUI(App):
         with Vertical(id="body"):
             yield ListView(*self._rows(), id="menu")
             yield Static("", id="summary")
-            yield Static("", id="detail")
+            with Vertical(id="detail"):
+                yield Static("", id="detail-title")
+                yield Static("", id="detail-body")
+                yield Static("", id="detail-hint")
             with Vertical(id="journal"):
                 yield Static(
                     "口述：这条内容是——（空格勾选①/②，回车在输入框里提交）",
@@ -174,7 +229,7 @@ class PysciTUI(App):
         return rows
 
     def on_mount(self) -> None:
-        self.query_one("#detail", Static).display = False
+        self.query_one("#detail", Vertical).display = False
         self.query_one("#journal", Vertical).display = False
         self.query_one("#taskbook", Vertical).display = False
         self.query_one("#tb-new", Vertical).display = False
@@ -283,6 +338,9 @@ class PysciTUI(App):
     def _show_menu(self) -> None:
         self.view = "menu"
         self.detail_text = ""
+        self.detail_title = ""
+        self.detail_body = ""
+        self.detail_hint = ""
         self._hide_all_views()
         self.query_one("#menu", ListView).display = True
         self.query_one("#summary", Static).display = True
@@ -294,14 +352,21 @@ class PysciTUI(App):
         self.view = "detail"
         self.selected = idx
         try:
-            body = list(mod.detail())
+            raw = list(mod.detail())
         except Exception as exc:  # noqa: BLE001
-            body = [f"读数失败：{type(exc).__name__}: {exc}"]
+            raw = [f"读数失败：{type(exc).__name__}: {exc}"]
+        body, hints = _split_detail(raw)
+        # `detail_text` 保留整段（测试与静态通道都要它）；渲染按标题/读数/提示三区
         self.detail_text = "\n".join(
-            [f"{mod.title}　详情", "", *body, "", "Esc/← 返回主菜单"]
+            [f"{mod.title}　详情", "", *body, "", *hints, "Esc/← 返回主菜单"]
         )
-        self.query_one("#detail", Static).update(self.detail_text)
-        self.query_one("#detail", Static).display = True
+        self.detail_title = f"{mod.title}　详情"
+        self.detail_body = "\n".join(body)
+        self.detail_hint = "  ".join([*hints, "Esc/← 返回主菜单"])
+        self.query_one("#detail-title", Static).update(self.detail_title)
+        self.query_one("#detail-body", Static).update(self.detail_body or "（无读数）")
+        self.query_one("#detail-hint", Static).update(self.detail_hint)
+        self.query_one("#detail", Vertical).display = True
         self.query_one("#menu", ListView).display = False
         self.query_one("#summary", Static).display = False
         self.query_one("#journal", Vertical).display = False
@@ -311,7 +376,7 @@ class PysciTUI(App):
         self.view = "journal"
         self.query_one("#menu", ListView).display = False
         self.query_one("#summary", Static).display = False
-        self.query_one("#detail", Static).display = False
+        self.query_one("#detail", Vertical).display = False
         self.query_one("#journal", Vertical).display = True
         self.query_one("#journal-result", Static).update("")
         inp = self.query_one("#journal-text", Input)
