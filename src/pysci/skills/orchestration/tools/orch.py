@@ -51,6 +51,7 @@ from . import sync as _sync
 from . import taste as _taste
 from . import verdict as _verdict
 from . import watch as _watch
+from . import watchdog as _watchdog
 from . import workflow as _workflow
 from .dispatch import do_dispatch
 from .ledger import (
@@ -1169,6 +1170,27 @@ def main(argv: list[str] | None = None) -> int:
     q.set_defaults(func=cmd_events)
     q = esub.add_parser("list", help="事件水位与最近事件（观察面）")
     q.set_defaults(func=cmd_events)
+
+    p = sub.add_parser(
+        "watchdog",
+        help="[底层] watch 自愈监督者（心跳 stale 即重臂监听；start/stop/status）",
+    )
+    wsub = p.add_subparsers(dest="w_action", required=True)
+    q = wsub.add_parser("start", help="幂等拉起看门狗（分离进程；已在跑不动）")
+    q.set_defaults(func=_watchdog.cmd_watchdog)
+    q = wsub.add_parser("stop", help="协作式停止（下一轮自查点干净退出）")
+    q.set_defaults(func=_watchdog.cmd_watchdog)
+    q = wsub.add_parser("status", help="看门狗状态 + watch 心跳年龄")
+    q.set_defaults(func=_watchdog.cmd_watchdog)
+
+    p = sub.add_parser(
+        "_watchdog-loop",
+        help="[内部] watch 看门狗监督循环（勿手调；`orch watchdog start` 派生）",
+    )
+    p.add_argument("--run-log", default="", help="run 日志路径（默认自动生成）")
+    p.add_argument("--interval", type=int, default=None, help="自查周期秒（默认 60）")
+    p.add_argument("--stale", type=int, default=None, help="心跳判死阈值秒（默认 300）")
+    p.set_defaults(func=_watchdog.cmd_watchdog_loop)
 
     p = sub.add_parser(
         "_queue-worker",

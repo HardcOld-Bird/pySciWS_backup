@@ -81,6 +81,11 @@ __pycache__/
 # 退场注销，每跳（心跳≤3min）都在变——纯运行态（「此刻谁在跑」的活体读数），入库会让
 # main 每跳必 dirty。永久痕迹在 ledger/events。
 /orchestration/state/active-sessions.json
+# watch 看门狗运行态（README §4.5 / autonomy-fix a1）：per-守护者锁 + run 日志 + 协作停止
+# 信号——每次自查/重臂都可能改写，纯运行态，入库会让 main 每跳必 dirty。
+/orchestration/state/watchdog.lock
+/orchestration/state/watchdog-runs/
+/orchestration/state/watchdog.cancel
 # 基线捕获的物理归档（§13 待决 2 的 E4 定案）：manifest.json 入库（=「当时依赖什么」的
 # 答案），pods/ 下的 gitignored 面副本不入库——它随时可由 git + 清单再生。
 /orchestration/state/evals/baselines/*/pods/
