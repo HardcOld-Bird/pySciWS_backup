@@ -174,7 +174,7 @@ def test_eval_runner_channel_split_is_auditable():
 
 def test_docs_handoff_records_bencher_ownership():
     """套件所有权移交在权威文档留痕：README 角色行 + devops 例外退役 + 引用面。"""
-    readme = (PROJECT_ROOT / "orchestration" / "README.md").read_text(encoding="utf-8")
+    readme = _doc_corpus()
     assert "| **bencher** |" in readme
     bencher_row = next(
         ln for ln in readme.splitlines() if ln.startswith("| **bencher** |")
@@ -229,3 +229,21 @@ def test_bencher_deployed_copy_matches_source_when_present():
         PROJECT_ROOT / "orchestration" / "skills" / "bencher" / "SKILL.md"
     ).read_bytes()
     assert deployed.read_bytes() == source, "部署副本与真本不一致（禁止手改副本）"
+
+
+def _doc_corpus() -> str:
+    """文档语料（README v3.0 拆分后口径）：references/legacy-readme-v2.2.md（v2.2 原文留档）
+    + README.md（v3.0 正文）+ references/*.md（细节块）——doc-face 断言据此判「文档面声明 X」。
+    """
+    root = PROJECT_ROOT / "orchestration"
+    parts: list[str] = []
+    legacy = root / "references" / "legacy-readme-v2.2.md"
+    if legacy.exists():
+        parts.append(legacy.read_text(encoding="utf-8"))
+    parts.append((root / "README.md").read_text(encoding="utf-8"))
+    refs = root / "references"
+    if refs.is_dir():
+        for f in sorted(refs.glob("*.md")):
+            if f.name != "legacy-readme-v2.2.md":
+                parts.append(f.read_text(encoding="utf-8"))
+    return (chr(10) * 2).join(parts)

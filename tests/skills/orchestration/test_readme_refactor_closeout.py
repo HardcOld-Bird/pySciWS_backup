@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from pysci.paths import PROJECT_ROOT
 
@@ -44,7 +43,27 @@ CODE_DOC_FILES = (
 SKIP_PARTS = ("state/", "inbox/", "outbox/", "__pycache__", ".venv", ".ruff_cache")
 
 
+def _doc_corpus() -> str:
+    """文档语料（README v3.0 拆分后口径）：`references/legacy-readme-v2.2.md`（v2.2 原文留档）
+    + `README.md`（v3.0 正文）+ `references/*.md`（细节块）。doc-face 断言据此判「文档面是否声明 X」。
+    """
+    root = PROJECT_ROOT / "orchestration"
+    parts: list[str] = []
+    legacy = root / "references" / "legacy-readme-v2.2.md"
+    if legacy.exists():
+        parts.append(legacy.read_text(encoding="utf-8"))
+    parts.append((root / "README.md").read_text(encoding="utf-8"))
+    refs = root / "references"
+    if refs.is_dir():
+        for f in sorted(refs.glob("*.md")):
+            if f.name != "legacy-readme-v2.2.md":
+                parts.append(f.read_text(encoding="utf-8"))
+    return (chr(10) * 2).join(parts)
+
+
 def _read(rel: str) -> str:
+    if rel == "orchestration/README.md":
+        return _doc_corpus()
     return (PROJECT_ROOT / rel).read_text(encoding="utf-8")
 
 
@@ -57,17 +76,21 @@ def test_refactor_md_is_deleted():
 def test_no_dangling_refactor_md_reference_in_code_or_docs():
     """判据：代码/文档面 REF 字面量清零（本单留档与 state 台账除外）。"""
     offenders: list[str] = []
-    here = Path(__file__).resolve()
     for root in CODE_DOC_ROOTS:
         base = PROJECT_ROOT / root
         if not base.exists():
             continue
         for p in base.rglob("*"):
-            if not p.is_file() or p.resolve() == here:
+            if not p.is_file():
+                continue
+            rel = p.relative_to(PROJECT_ROOT).as_posix()
+            # 自排除用 **rel 字符串**（不能用 ``p.resolve() == here``：Windows 下
+            # 路径形式/junction 终点/__file__ 来源形式会让等值比较失效——2026-10-15 实锤，
+            # test_readme_rewrite 单里同套件在 worktree pytest 下把本文件自身报成 offender）。
+            if rel == "tests/skills/orchestration/test_readme_refactor_closeout.py":
                 continue
             if p.suffix not in {".py", ".md", ".mjs", ".toml", ".yaml", ".json"}:
                 continue
-            rel = p.relative_to(PROJECT_ROOT).as_posix()
             if any(s in rel for s in SKIP_PARTS):
                 continue
             if REF in p.read_text(encoding="utf-8", errors="ignore"):

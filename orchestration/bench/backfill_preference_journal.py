@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13"
 # ///
-"""一次性回灌：README §13 裁决记录表 → ``state/preference-journal.jsonl``（README §6 判据纪律/E0 判据 3）。
+"""一次性回灌：README §13 裁决记录表（现 `references/decisions.md`）→ ``state/preference-journal.jsonl``（README §6 判据纪律/E0 判据 3）。
 
 决策日志的存量原料层。**属一次性搬运工具，放 ``orchestration/bench/`` 不落 src**（设计纪律：
 src 只定义可复用行为，此处是把文档表格里已存在的裁决誊进 JSONL，非体系运行时逻辑）。
@@ -28,12 +28,13 @@ import sys
 from pysci.paths import PROJECT_ROOT
 from pysci.skills.orchestration.tools import journal
 
-README_PATH = PROJECT_ROOT / "orchestration" / "README.md"
+#: §13 裁决记录表已迁 ``orchestration/references/decisions.md``（README v3.0 精简重写，2026-10-15）。
+README_PATH = PROJECT_ROOT / "orchestration" / "references" / "decisions.md"
 SOURCE = "backfill-readme13"
 
 
 def parse_readme13(md_text: str) -> list[dict]:
-    """抽取 README §13 表格数据行（``| 2026…`` 开头），逐行 → journal 记录骨架。"""
+    """抽取 §13 表格数据行（``| 2026…`` 开头），逐行 → journal 记录骨架。"""
     records: list[dict] = []
     in_section = False
     for line in md_text.splitlines():

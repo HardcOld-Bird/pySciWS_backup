@@ -95,10 +95,26 @@ def _runtime_face(runtime_file):
     return face.get(registry.RUNTIME_MODELS_KEY, {})
 
 
+def _doc_corpus() -> str:
+    """文档语料（README v3.0 拆分后口径）：references/legacy-readme-v2.2.md（v2.2 原文留档）
+    + README.md（v3.0 正文）+ references/*.md（细节块）——doc-face 断言据此判「文档面声明 X」。
+    """
+    root = registry.PROJECT_ROOT / "orchestration"
+    parts: list[str] = []
+    legacy = root / "references" / "legacy-readme-v2.2.md"
+    if legacy.exists():
+        parts.append(legacy.read_text(encoding="utf-8"))
+    parts.append((root / "README.md").read_text(encoding="utf-8"))
+    refs = root / "references"
+    if refs.is_dir():
+        for f in sorted(refs.glob("*.md")):
+            if f.name != "legacy-readme-v2.2.md":
+                parts.append(f.read_text(encoding="utf-8"))
+    return (chr(10) * 2).join(parts)
+
+
 def _readme_clause() -> str:
-    text = (registry.PROJECT_ROOT / "orchestration" / "README.md").read_text(
-        encoding="utf-8"
-    )
+    text = _doc_corpus()
     m = re.search(r"^### 3\.5 .*?(?=^### |\Z)", text, re.S | re.M)
     assert m, "README 找不到 §3.5（文案同源断言的锚点丢了）"
     return re.sub(r"\s+", " ", m.group(0))

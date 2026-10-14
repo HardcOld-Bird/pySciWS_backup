@@ -182,7 +182,7 @@ def test_state_faces_gitignored():
 
 def test_readme_declares_inspector_role_and_readonly_limits():
     """README §1 角色行 + 成员 id 清单 + 一成员一技能一 CLI 段。"""
-    readme = (PROJECT_ROOT / "orchestration" / "README.md").read_text(encoding="utf-8")
+    readme = _doc_corpus()
     row = next(ln for ln in readme.splitlines() if ln.startswith("| **inspector** |"))
     for token in ("state/inspector", "pysci-inspect", "无 override", "只读"):
         assert token in row, f"README inspector 行缺 {token}"
@@ -368,3 +368,21 @@ def test_inspector_deployed_copy_matches_source_when_present():
     if not deployed.exists():
         pytest.skip("副本未部署（合并后 pysci-dev sync 生成）")
     assert deployed.read_bytes() == (SKILL_DIR / "SKILL.md").read_bytes()
+
+
+def _doc_corpus() -> str:
+    """文档语料（README v3.0 拆分后口径）：references/legacy-readme-v2.2.md（v2.2 原文留档）
+    + README.md（v3.0 正文）+ references/*.md（细节块）——doc-face 断言据此判「文档面声明 X」。
+    """
+    root = PROJECT_ROOT / "orchestration"
+    parts: list[str] = []
+    legacy = root / "references" / "legacy-readme-v2.2.md"
+    if legacy.exists():
+        parts.append(legacy.read_text(encoding="utf-8"))
+    parts.append((root / "README.md").read_text(encoding="utf-8"))
+    refs = root / "references"
+    if refs.is_dir():
+        for f in sorted(refs.glob("*.md")):
+            if f.name != "legacy-readme-v2.2.md":
+                parts.append(f.read_text(encoding="utf-8"))
+    return (chr(10) * 2).join(parts)
