@@ -86,6 +86,58 @@ def inspector_flag(data: dict[str, Any] | None = None) -> bool | None:
     return str(raw).strip().lower() not in ("false", "0", "off", "no", "")
 
 
+#: 夜航开关的宽容真假值表（字符串/数字手写面的常见写法；与 inspector 同精神）。
+_NIGHT_TRUE: tuple[str, ...] = ("true", "1", "on", "yes")
+_NIGHT_FALSE: tuple[str, ...] = ("false", "0", "off", "no", "")
+
+
+def night_enabled(data: dict[str, Any] | None = None) -> tuple[bool, list[str]]:
+    """``[night] enabled`` 夜航总开关（PSEP_2 §3.1；读取面 fail-open）。
+
+    **文件缺席 / 解析失败 / ``[night]`` 段或键缺席 / 非法值一律回落 ``False``**，并把
+    原因作为**警告**带回调用方（读侧 fail-open——一个人工配置不该把注入钩子阻塞死；
+    非法值尤其**要出声**，否则「写了没生效」只能靠猜）。布尔按原值；字符串/数字按宽容
+    真值表；其余一切（含任意其它串）回落 False + 警告。
+
+    Args:
+        data: 已读到的配置；``None`` 时自己读盘（此时能分辨「文件缺席」与「解析失败」）。
+
+    Returns:
+        ``(是否开启, 警告列表)``——警告要指明「改哪一行、合法写法是什么」。
+    """
+    if data is None:
+        if not SETTINGS_PATH.exists():
+            return False, [f"{SETTINGS_PATH.name} 缺席 → 夜航按关（false）"]
+        data = read_settings()
+        if not data:
+            return False, [f"{SETTINGS_PATH.name} 解析失败 → 夜航按关（false）"]
+    try:
+        raw = data.get("night", {}).get("enabled")
+    except AttributeError:
+        raw = None
+    if raw is None:
+        return False, [
+            f"[night] enabled 未配置（在 {SETTINGS_PATH.name} 写 `[night] enabled = true` 即开）"
+            " → 夜航按关（false）"
+        ]
+    if isinstance(raw, bool):
+        return raw, []
+    if isinstance(raw, int):
+        if raw in (0, 1):
+            return bool(raw), []
+        return False, [
+            f"[night] enabled = {raw!r} 不是合法开关（合法：true/false）→ 回落 false"
+        ]
+    text = str(raw).strip().lower()
+    if text in _NIGHT_TRUE:
+        return True, []
+    if text in _NIGHT_FALSE:
+        return False, []
+    return False, [
+        f"[night] enabled = {raw!r} 不是合法开关（合法：true/false）→ 回落 false"
+    ]
+
+
 #: ``[priority] order`` 的出厂优先级序（用户裁决 2026-10-13，backlog 20261013-193000-leader）：
 #: 外层列表序＝优先级（前＝高），内层同组＝**同档**。列表项是**档名**（活跃会话注册表的
 #: ``tier`` 字段），不是成员 id——「research」一档覆盖 7 专职 + reviewer + deputy。
