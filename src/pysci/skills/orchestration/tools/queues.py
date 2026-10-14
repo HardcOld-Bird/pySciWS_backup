@@ -193,7 +193,12 @@ def water_lines(*, root: Path | None = None) -> list[str]:
             f"  [{m}] 待={pending} 在做={gip} 完成={done} 失败={failed}"
             + ("  ◀ 有积压" if pending else "")
         )
-    return out or ["  （各成员队列皆空）"]
+    members = all_members(root=root)
+    # 口径拆分（用户 2026-10-14 实测反馈「真的为空吗」）：这行只覆盖**成员队列**，
+    # 支撑席（bencher/inspector/devops backlog）另有读数——写清免误读。
+    return out or [
+        f"  （成员队列 {len(members)} 队皆空；支撑席存量 bencher/inspector 不在本行、另报）"
+    ]
 
 
 def all_members(*, root: Path | None = None) -> tuple[str, ...]:

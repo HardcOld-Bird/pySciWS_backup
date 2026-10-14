@@ -318,7 +318,9 @@ resume 自救**（瞬态中断重试大概率即愈、且零工作损失——�
 额度类（`quota_exhausted`，envelope/stderr 含『credit usage limit』类文案）[NEXT] 提示
 检查 registry models 回退链 / 等待额度重置；渠道级（`channel_error`，固定文案 **∧** 会话档
 末轮合成故障形状合取，backlog 20261012-194500-leader）等渠道恢复即可，不必充值。
-**边界避让**：距峰谷切换点不足 `routing.boundary_hold_s`（缺省 300s、硬钳制 ≤300s）时
+**边界避让**：距峰谷切换点不足 `boundary_hold_s`（`data/pysci_settings.toml` `[model]`
+**生效键**，出厂默认 300s、硬钳制 ≤300s；toml 未配置时才兼容读 registry 旧位
+`routing.boundary_hold_s` 并出声提示迁移）时
 **先睡过界再派**——席链随时间走（§3.5），卡在边界前几秒出发＝整跳落在将过期的窗口里，
 而等待期零 LLM 成本；`--no-hold` 跳过（草稿/调试），等待秒数入台账 `hold_s`（backlog
 20261013-144500-leader）。
@@ -428,8 +430,10 @@ parse_error**；正常路径 warning 恒空。含义：协议扩展**当次即�
     ③ 工作日其余时段（含午休与夜间）。节假日库 `chinesecalendar`（pip 离线内嵌
     2004–2026，含调休）；**覆盖外年份 / 库缺席 / 读数失败一律保守不切换并告警**（宁可多付
     峰时价也不猜）。本机时钟不联网校时，读数按 `Asia/Shanghai` 归一；
-  - **切换时机**：入谷即时（12:00、18:00、周末/节假日起点），入峰**提前 1 小时**
-    （工作日 8:00、13:00——单跳不可中途换模型，宁可早切）；覆盖**只作用于新派发**，在途
+  - **切换时机**：入谷即时（12:00、18:00、周末/节假日起点），入峰**提前 `leadtime_s`**
+    （`data/pysci_settings.toml` `[model]` **生效键**，出厂默认 3600s；改值即生效，
+    逐键非法回落出厂并告警——配置键必须写出、不许写成 `#` 注释示例）——单跳不可中途换
+    模型，宁可早切；覆盖**只作用于新派发**，在途
     单跳的台账 `model` 字段不变。跨过一次记一行 run 日志 + 决策日志 `kind=routing`，
     `mirror status` 报「上次切换 X 由 A 切至 B」；
   - **覆盖面**：只有 `main`——**pro 席保持原预设升档席**（用户终裁 2026-10-13：隐性态下
@@ -1352,7 +1356,7 @@ PowerShell 5.1 下的**实机验证待用户**（devops 会话非 tty）；若�
 | 2026-10-13 | **自改进体系实施收官（E0–E7 全链实证）**：各阶段成功判据逐项落地并经实战验证，生效机制全部并入本文（§1/§3.1/§4.1/§4.5/§5.3–5.5/§6/§9），原设计文档删除、仅存 git 历史；收官单=backlog 20261013-072000-leader | 用户终审授权 + 组长立案 |
 | 2026-10-13 | **PREFERENCE v2 生效 + twin 全量上线**：用户审阅确认 v2 转正（33 条语料蒸馏增量+4 修订入宪章），twin 判断通道由初步上线转全量；盲审/回测动线不变，下线权归用户 | 用户 |
 | 2026-10-13 | **修复形状分流 + 后台决策审计面（用户裁决）**：① 回退 ctx 水位闸（fe68a40 改了策略面却绕过判决通道、压缩防溢出使宣称收益无效——重启须经判决包并以真实账单/缓存读数为依据）；② 修复形状分流：inspector mechanical 免判决仅限 restore，change 无判决记录 → 任务书要求 devops 交付 blocked 上报（登记字段/任务书注入/charter 纪律三落点）；③ `mirror status` 注册「决策」项 + `pysci decisions` 决策链全貌（只读拼装、免判决+change 置顶） | 用户 |
-| 2026-10-13 | **路由 v3 谷时隐性 DeepSeek**（backlog 20261013-093000-leader）：DeepSeek 官方价分峰谷（峰 2 倍）→ 谷时自动把 qwen/mimo 预设的 **main** 席链换成 DeepSeek，`preset` 行不动（不新增预设）；判据 chinesecalendar（周末全天=含调休上班的周末、法定节假日全天、工作日其余时段；覆盖外年份/库缺席保守不切换并告警）；入谷即切、入峰提前 1 小时、**只影响新派发**（在途单跳台账 model 不变）。终裁修正：pro 席保持原预设升档席、仲裁团固定 GLM+KIMI+Mimo（矩阵 qwen/mimo/deepseek/隐性态四态定格）、**一律按量付费、TokenPlan 路径整个不做**（个人版条款禁 API 自动化调用）、缺 Key 席双面告警减员运行（平票 twin 终裁兜底）、被评模型同族回退席不上场；观测面 = `orch status` 路由段 + mirror 概览「路由」项 + 决策日志 `kind=routing`。附带：minimum 席链改 BYOK Mimo-V2.6-Flash（火山豆包调查关闭，P-25） | 用户设计 + 终裁 v4 |
+| 2026-10-13 | **路由 v3 谷时隐性 DeepSeek**（backlog 20261013-093000-leader）：DeepSeek 官方价分峰谷（峰 2 倍）→ 谷时自动把 qwen/mimo 预设的 **main** 席链换成 DeepSeek，`preset` 行不动（不新增预设）；判据 chinesecalendar（周末全天=含调休上班的周末、法定节假日全天、工作日其余时段；覆盖外年份/库缺席保守不切换并告警）；入谷即切、入峰提前（原记 1 小时；**2026-10-14 用户改走 `data/pysci_settings.toml` `[model] leadtime_s` 生效键，现配 900s=15 分钟**，见 §3.5）、**只影响新派发**（在途单跳台账 model 不变）。终裁修正：pro 席保持原预设升档席、仲裁团固定 GLM+KIMI+Mimo（矩阵 qwen/mimo/deepseek/隐性态四态定格）、**一律按量付费、TokenPlan 路径整个不做**（个人版条款禁 API 自动化调用）、缺 Key 席双面告警减员运行（平票 twin 终裁兜底）、被评模型同族回退席不上场；观测面 = `orch status` 路由段 + mirror 概览「路由」项 + 决策日志 `kind=routing`。附带：minimum 席链改 BYOK Mimo-V2.6-Flash（火山豆包调查关闭，P-25） | 用户设计 + 终裁 v4 |
 | 2026-10-13 | **批准单单一源纪律机械化**（backlog 20261013-071759-devops）：批准可被追加段写成自相矛盾而无人能发现（`20261012-164601-leader` 的 `taste_enabled` 实案）。新增 `dispatch.criteria_conflicts` 只判**同一配置键的相反布尔值**（精度优先：义务/禁止反差不判，误报=噪声=没人读），approve 告警 + 派发时把矛盾与取舍规则嵌进任务书；单一源登记=`superseded` 且点名该键。全语料 78 份建议实测：1 处真阳、0 误报 | 组长采纳 + devops 实施 |
 | 2026-10-13 | **交集类失败停链**（backlog 20261013-102152-devops）：词表增 `merge_dirty_face`，drain 认此成因→抢救照做、续作单不立，待清清单进 `merge_intersect` 并渲染 `orch status`（§9 恢复面例外闸）；任务书尾部教组员贴清单。实测三连跳树哈希逐字节相同=续作链空转 | 组长采纳 + devops 实施 |
 | 2026-10-13 | **lint 幻影抗体扩面到 13 charter**（backlog 20261013-085045-devops）：「harness 注入的 lint/告警含 `file:line` 先对盘核验」此前只在 8 面在册，其余 5 名组员同样会被平台幻影误导；快照测试钉 13 charter + 2 技能面（清单长度与文件数双锁） | 组长批准（`229a238`）+ devops 实施 |

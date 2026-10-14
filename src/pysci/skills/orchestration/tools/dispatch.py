@@ -240,7 +240,9 @@ def _seat_reason_text(reason: str) -> str:
     return SYSTEMIC_TEXT.get(reason, (reason, reason))[1]
 
 
-def _boundary_hold(reg: Registry, *, no_hold: bool) -> tuple[str, int]:
+def _boundary_hold(
+    reg: Registry, *, no_hold: bool, quiet: bool = False
+) -> tuple[str, int]:
     """距峰谷切换点不足阈值时睡到过点再派（边界避让，用户裁决 2026-10-13）。
 
     为什么值得等（backlog 20261013-144500-leader）：席链随时间走（路由 v3 谷时隐性
@@ -248,18 +250,30 @@ def _boundary_hold(reg: Registry, *, no_hold: bool) -> tuple[str, int]:
     零 LLM 成本。必须在解析角色/席链**之前**调用——等过界后再读，读到的才是新窗口的链。
 
     Args:
-        reg: 注册表（读 ``routing.boundary_hold_s``）。
+        reg: 注册表（``routing.boundary_hold_s`` 旧位，仅作**兼容回退**）。
         no_hold: CLI ``--no-hold``（草稿/调试场景跳过等待）。
+        quiet: 静默派发（drain/批次）——迁移提示是给人看的信息面，**不扰**静默通路。
 
     Returns:
         ``(一行读数, 实际等待秒)``；不需避让/判不出 → ``("", 0)``。
+
+    单一真源：生效值取 ``data/pysci_settings.toml`` ``[model] boundary_hold_s``
+    （2026-10-14 用户实测反馈迁 toml）；仅当 toml 未配置时回退 registry 旧位**并出声**提示迁移。
     """
     if no_hold:
         return "", 0
-    hold_s = int(reg.routing_hold_s)
+    fv = routing.face()
+    hold_s = fv.boundary_hold_s
+    if hold_s is None:
+        # 旧位兼容读一次 + 出声（沿 [model]/[routing] leadtime 同款语义）
+        hold_s = int(reg.routing_hold_s)
+        if hold_s > 0 and not quiet:
+            print(
+                "[!] boundary_hold_s 仍在 registry 旧位（routing.boundary_hold_s）——"
+                "本次已兼容读取；请迁进 data/pysci_settings.toml 的 [model] 节生效键"
+            )
     if hold_s <= 0:
         return "", 0
-    fv = routing.face()
     if not fv.enabled:
         return "", 0
     now = routing.now_cn()
@@ -1004,7 +1018,7 @@ def do_dispatch(
     # 不足阈值就先睡过界再派——席链随时间走，卡在边界前几秒出发=整跳落在将过期的窗口
     # 里（成本错配），而等待期零 LLM 成本。必须在**解析角色之前**：等过界后再读，
     # 读到的才是新窗口的链。避让本身不派发、不烧 token，故放在一切早退闸之后。
-    hold_line, hold_wait_s = _boundary_hold(reg, no_hold=no_hold)
+    hold_line, hold_wait_s = _boundary_hold(reg, no_hold=no_hold, quiet=quiet)
 
     # 路由切换检测（路由 v3 规格 2「切换时机」的记录面）：在**解析角色之前**读一次，
     # 于是这一跳用的席链就是切换后的新链——「只影响新派发、在途单跳不换模型」正是这个

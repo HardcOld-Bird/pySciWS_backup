@@ -275,3 +275,40 @@ def test_watch_cfg_fail_open_on_broken_block(face, monkeypatch):
         classmethod(lambda cls: SimpleNamespace(data={"watch": "坏"})),
     )
     assert watch._watch_cfg()["stall_threshold_s"] == watch.STALL_THRESHOLD_S
+
+
+# ---------------------------------------------------------------------------
+# 支撑席覆盖与 inspector 开关降噪（用户实测反馈 2026-10-14，item 3）
+# ---------------------------------------------------------------------------
+def test_pending_work_covers_bench_seat(face, monkeypatch):
+    """bencher 队列 pending 且无 worker → 属「有活没人干」（支撑席不再是盲区）。"""
+    from pysci.skills.orchestration.tools import benchd
+
+    monkeypatch.setattr(benchd, "queue_counts", lambda: {"pending": 2})
+    pressure = watch.queue_pressure()
+    assert pressure["pending"]
+    assert any("bencher" in r and "无 worker" in r for r in pressure["reasons"])
+
+
+def test_inspector_pending_counts_when_switch_on(face, monkeypatch):
+    from pysci.skills.orchestration.tools import inspectd, workq
+
+    monkeypatch.setattr(inspectd, "enabled", lambda: True)
+    monkeypatch.setattr(workq, "pending_count", lambda path, **kw: 3)
+    pressure = watch.queue_pressure()
+    assert any("inspector" in r and "无 worker" in r for r in pressure["reasons"])
+
+
+def test_inspector_pending_ignored_when_switch_off(face, monkeypatch):
+    """开关关闭 → 不拉起巡检：其存量**只报不告警**，PENDING-WORK 不因它唤醒（降噪）。"""
+    from pysci.skills.orchestration.tools import inspectd, workq
+
+    monkeypatch.setattr(inspectd, "enabled", lambda: False)
+    calls: list[object] = []
+    monkeypatch.setattr(
+        workq, "pending_count", lambda path, **kw: calls.append(path) or 3
+    )
+    pressure = watch.queue_pressure()
+    assert not any("inspector" in r for r in pressure["reasons"]), (
+        "开关关闭时其队列不得进「有活没人干」"
+    )
