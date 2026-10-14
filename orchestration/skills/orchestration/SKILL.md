@@ -70,6 +70,9 @@ harness-eval.md；巡检引擎 references/inspector-engine.md；判决包 verdic
   salvage-reclaim.md；
 - **三级防线/巡更**：队列感知巡更伪事件（`PENDING-WORK`/`STALL`，**自动起止、无手工 cron**）
   + 新机就位 → references/patrol-watchdog.md；
+- **唤醒权认领**：主会话跑一次 `pysci-orch wake-claim [--name main]`（`status` 查、`release`
+  退回）——此后**非 owner 会话的钩子不监听、不 exit 2**（次要会话不再误唤醒）。**不转投**：
+  owner 缺席时事件靠持久水位+迟到唤醒补，owner 迁移 = 新会话重跑 claim（README §4.5）；
 - **交接验收**：任务书条目 × **蓝图条款双向核对**（蓝图有而任务书无 → 补单/留痕；反之记账）；
   UI/交互改动须含**用户路径测试**、占位文案须写真实归属 → references/acceptance-discipline.md；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：改任务书重派，或终裁坚持原派（理由留痕）；

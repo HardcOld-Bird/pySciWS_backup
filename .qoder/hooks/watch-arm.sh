@@ -18,6 +18,14 @@
 #   start` 拉起——冷启动/重启后无人敲它，则「watcher 被杀即重臂」这条链在最需要它的时刻（冷启
 #   动后）空转。本轮在每回合**幂等**自启动看门狗（已在跑则秒返回；仅在实际拉起/失败时留痕）。
 #
+# v5（2026-10-14，唤醒权认领制；wake-claim-20261014）：用户主会话工作时另开次要会话处理琐事，
+#   而 v2 的「最新在听者胜」让次要会话一有回合就抢走唤醒权，drain/事件的 exit-2 被投到次要
+#   会话（污染其上下文，正是用户要避免的；凌晨「被取代却无接任」的谜之日志疑为同源）。本轮
+#   加**认领闸**：`pysci-orch wake-claim` 认领后，**只有 owner 会话的钩子**抢 token/唤醒，
+#   非 owner 钩子直接退出——不监听、不抢、**不 exit 2**。事件不会丢：持久水位 + 迟到唤醒由
+#   owner 下次挂载补（a1 语义），**不存在「转投其他会话」语义**。未认领 = legacy 行为不变。
+#   判据在 `wake-claim --check`（两端同源的会话身份；取证见 README §4.5 与 watch.py）。
+#
 # 安全：任何异常一律 exit 0（观察面塌不了主链路）；token 文件缺失时自抢（不误判为被取代）。
 cat >/dev/null
 ROOT="${QODER_PROJECT_DIR:-/d/XXXIIIGGG/projects/pySci/pySciWS}"
@@ -26,6 +34,22 @@ LOG="$ROOT/.qoder/hooks/watch-arm.log"
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null; }
 PY="$ROOT/.venv/Scripts/python.exe"; ORCH="$ROOT/.venv/Scripts/pysci-orch.exe"
 { [ -x "$PY" ] && [ -x "$ORCH" ]; } || { log "环境缺失（python/orch 不可执行）→ 退出"; exit 0; }
+
+# 一次性会话身份取证（v5）：把本钩子可见的区分性变量记进日志，供 README §4.5 固化判据。
+SEEN="$ROOT/.qoder/hooks/session-env.seen"
+if [ ! -f "$SEEN" ]; then
+  log "会话身份取证（一次性）：WT_SESSION=${WT_SESSION:-<缺>} QODER_PROJECT_DIR=${QODER_PROJECT_DIR:-<缺>} PYSCI_POD=${PYSCI_POD:-<缺>}"
+  { : > "$SEEN"; } 2>/dev/null
+fi
+
+# 唤醒权认领闸（v5）：0=owner/legacy 可监听；3=非 owner（不抢 token、不唤醒）；其余=fail-open。
+# 检查本身失败（旧二进制/环境坏）不得让唤醒链塌掉 → 按 legacy 放行并留痕。
+"$ORCH" wake-claim --check >/dev/null 2>&1; wcr=$?
+case "$wcr" in
+  3) log "非 owner 会话 → 不监听不抢（唤醒权在 owner：pysci-orch wake-claim status 可查）"; exit 0 ;;
+  0) : ;;
+  *) log "wake-claim --check rc=$wcr → fail-open 按 legacy 监听" ;;
+esac
 
 # 看门狗自启动（v4）：幂等——在场则秒返回，不在场则拉起分离监督进程（冷启动后即在位）。
 wd=$("$ORCH" watchdog start 2>&1); wdrc=$?
