@@ -265,6 +265,15 @@ def _queues_detail() -> list[str]:
         f"  inspector 开关={_insp.enabled()}  锁={_dr.lock_status(_insp.INSPECT_PATHS)['state']}"
         f"  积压={_insp.depths()}"
     )
+    stale = _safe_lines(lambda: _insp.stale_queue_items())
+    out.append(
+        f"  inspector 队列超时 = {len(stale)} 项（入队>{_insp.QUEUE_TIMEOUT_S}s 未处理；"
+        "已发 QUEUE-TIMEOUT 事件，不许静默积压）"
+    )
+    for it in stale[:3]:
+        out.append(
+            f"      · {it['id']} [{it.get('kind')}] 入队于 {it.get('enqueued_at')}"
+        )
     out.append(
         f"  活跃会话（state/active-sessions.json）live={_bp.active_count(now=time.time())}"
     )
@@ -274,11 +283,16 @@ def _queues_detail() -> list[str]:
 
 
 def _queues_count() -> int:
-    """队列水位：待消化条目 + 延期在等内容物。"""
+    """队列水位：待消化条目 + 延期在等内容物 + **超时未处理项**（后者要「值得关注」）。"""
+    from .. import inspectd as _insp  # 延迟导入：inspectd 顶层引整条 worker 链
     from .. import workflow as _wf  # 延迟导入：workflow 引 dispatch，顶层引会成环
 
     try:
-        return len(_wf.backlog_pending()) + int(_wf.deferred_count())
+        return (
+            len(_wf.backlog_pending())
+            + int(_wf.deferred_count())
+            + len(_insp.stale_queue_items())
+        )
     except Exception:  # noqa: BLE001 - 观察面绝不阻塞（§0.6）
         return 0
 
@@ -301,11 +315,16 @@ def _review_detail() -> list[str]:
         )
     except Exception as exc:  # noqa: BLE001
         ctext = f"[!] 读数失败：{type(exc).__name__}: {exc}"
+    from .. import inspectd as _insp
+
+    stale = _safe_lines(lambda: _insp.stale_queue_items())
     return [
         "—— 盲审与审查 ——",
         f"  {_safe_line(mirror._line_review)}",
         f"  {_safe_line(mirror._line_charter)}",
         f"  reviewer 附属队列 = {ctext}（reviewer 队条目）",
+        f"  审查面（inspector 队列）超时项 = {len(stale)}（入队>{_insp.QUEUE_TIMEOUT_S}s；"
+        "已发 QUEUE-TIMEOUT 事件）",
         "  审查入口：`orch review <产物> --origin <member>`；宿主环节 `review:true` 时",
         "  由其交付自动投 reviewer 附属子 job（父子联动见 `orch queues list`）",
     ]

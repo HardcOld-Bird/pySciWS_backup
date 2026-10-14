@@ -97,6 +97,10 @@ INSPECT_PATHS = WorkerPaths(
 #: 队列项类型：巡检菜单项 / 组长指派核查 / Tier A 案文撰写。
 QUEUE_KINDS: tuple[str, ...] = ("patrol", "assignment", "tier-a-draft")
 
+#: 队列入队超时阈值（秒，autonomy-fix a2）：入队这么久还没被取走 → 接统一事件层告警，
+#: **不许静默积压**（2026-10-14 02:21 入队的 patrol 积压整夜即此病灶）。
+QUEUE_TIMEOUT_S: int = 1800
+
 #: 发现类别（§5.2 分流）：机械证据=自动晋升；判断=必须经 J。
 FINDING_CLASSES: tuple[str, ...] = ("mechanical", "judgment")
 
@@ -1372,6 +1376,22 @@ def _worker_argv(run_log: Path, *, dry: bool) -> list[str]:
     return argv
 
 
+def last_run_age_s(*, done: dict[str, Any] | None = None) -> float | None:
+    """上一轮 run 结束至今的秒数；无历史 / 读不出 → ``None``（= 无冷却约束）。
+
+    冷却判据的**单一源**（:func:`wake_inspector` 与 :func:`self_patrol_tick` 共用）——两处
+    各算各的迟早漂移。
+    """
+    d = done if done is not None else latest_done(INSPECT_PATHS)
+    if not d:
+        return None
+    try:
+        ended = datetime.fromisoformat(str(d.get("completed") or ""))
+    except (ValueError, TypeError):
+        return None
+    return (datetime.now().astimezone() - ended).total_seconds()
+
+
 def wake_inspector(
     *, force_dry: bool | None = None, ignore_cooldown: bool = False
 ) -> tuple[bool, str]:
@@ -1391,12 +1411,8 @@ def wake_inspector(
         return False, "inspector worker 正在运行（不重复激活）。"
     par = params()
     done = latest_done(INSPECT_PATHS)
-    if done and not ignore_cooldown:
-        try:
-            ended = datetime.fromisoformat(str(done.get("completed") or ""))
-            age = (datetime.now().astimezone() - ended).total_seconds()
-        except (ValueError, TypeError):
-            age = None
+    if not ignore_cooldown:
+        age = last_run_age_s(done=done)
         if age is not None and age < int(par["cooldown_s"]):
             return (
                 False,
@@ -1429,6 +1445,95 @@ def ensure_inspector(*, quiet: bool = True) -> tuple[bool, str]:
     if not quiet:
         print(f"    [i] {msg}")
     return spawned, msg
+
+
+# ---------------------------------------------------------------------------
+# a2 自主化：闲时自调度巡检 + 队列入队超时告警（不许静默积压）
+# ---------------------------------------------------------------------------
+def stale_queue_items(
+    *, timeout_s: int | None = None, now: float | None = None
+) -> list[dict[str, Any]]:
+    """入队超 :data:`QUEUE_TIMEOUT_S` 仍未被取走的 ``pending`` 队列项（判据见 :mod:`workq`）。"""
+    return workq.stale_pending(
+        QUEUE_PATH, timeout_s=int(timeout_s or QUEUE_TIMEOUT_S), now=now
+    )
+
+
+def notify_stale_queue(
+    *, timeout_s: int | None = None, now: float | None = None
+) -> list[dict[str, Any]]:
+    """把「入队超时未处理」接入**统一事件层**（每项只报一次；不许静默积压）。
+
+    落 ``timeout_notified_at`` 于条目上做**去重**——否则看门狗每 60s tick 都会对同一个
+    卡死项再发一条，把事件流淹掉。返回本次**新报**的条目。
+    """
+    from . import events as _events
+
+    out: list[dict[str, Any]] = []
+    moment = datetime.now().timestamp() if now is None else float(now)
+    for it in stale_queue_items(timeout_s=timeout_s, now=moment):
+        if it.get("timeout_notified_at"):
+            continue
+        epoch = workq.item_epoch(it)
+        age = int(moment - epoch) if epoch else -1
+        workq.mutate(QUEUE_PATH, str(it["id"]), timeout_notified_at=_now())
+        _events.emit(
+            _events.QUEUE_TIMEOUT,
+            subject=str(it["id"]),
+            detail=(
+                f"inspector 队列项（{it.get('kind')}）入队 {age}s 未处理"
+                f"（> {int(timeout_s or QUEUE_TIMEOUT_S)}s）"
+            ),
+            action="orch inspector-status 排查让路/节流；orch inspector-up 手动拉起",
+        )
+        out.append(it)
+    return out
+
+
+def self_patrol_tick(*, now: float | None = None) -> dict[str, Any]:
+    """**闲时自调度巡检**（autonomy-fix a2）：由看门狗 tick 调用——**唯一耦合点**，
+    不新造第二套调度/唤醒循环（纪律）。
+
+    幂等，每种「不该动」都给理由（静默 no-op 会让人以为设施坏了）：
+    开关关 / worker 在跑 / 冷却窗内 → 不动；队列已有 ``pending`` 项 → 不重复入队，只唤醒。
+    """
+    if not enabled():
+        return {
+            "ticked": True,
+            "enqueued": None,
+            "spawned": False,
+            "reason": "全局开关关闭",
+        }
+    if lock_status(INSPECT_PATHS)["state"] == "running":
+        return {
+            "ticked": True,
+            "enqueued": None,
+            "spawned": False,
+            "reason": "worker 在跑",
+        }
+    age = last_run_age_s()
+    if age is not None and age < int(params()["cooldown_s"]):
+        return {
+            "ticked": True,
+            "enqueued": None,
+            "spawned": False,
+            "reason": f"冷却窗内（上轮结束于 {int(age)}s 前）",
+        }
+    item_id = None
+    if workq.pending_count(QUEUE_PATH) == 0:
+        try:
+            item_id = str(
+                enqueue("patrol", requested_by="self", target=pick_patrol()["id"])["id"]
+            )
+        except Exception as exc:  # noqa: BLE001 — 自调度失败不能让看门狗挂掉
+            return {
+                "ticked": True,
+                "enqueued": None,
+                "spawned": False,
+                "reason": f"入队异常：{type(exc).__name__}: {exc}",
+            }
+    spawned, msg = wake_inspector()
+    return {"ticked": True, "enqueued": item_id, "spawned": spawned, "reason": msg}
 
 
 def inspector_status() -> dict[str, Any]:
@@ -1482,7 +1587,21 @@ def status_lines() -> list[str]:
         f"已驳回={f.get('rejected', 0)} 仲裁排队={f.get('queued', 0)} "
         f"挂起终裁={f.get('escalated', 0)}｜队列 pending={s['queue'].get('pending', 0)}"
     )
-    lines = [head, line2, line3]
+    stale = stale_queue_items()
+    line4 = (
+        f"    自调度：由看门狗 tick 触发（cooldown={s['params']['cooldown_s']}s；"
+        f"队列入队超时告警阈值={QUEUE_TIMEOUT_S}s）"
+    )
+    lines = [head, line2, line3, line4]
+    if stale:
+        lines.append(
+            f"    [!] 队列超时 {len(stale)} 项未处理（入队>{QUEUE_TIMEOUT_S}s）——"
+            "让路/节流排查，或 orchestrator 未取走："
+        )
+        for it in stale[:3]:
+            lines.append(
+                f"        · {it['id']} [{it.get('kind')}] 入队于 {it.get('enqueued_at')}"
+            )
     if not th["hysteresis_valid"]:
         lines.append(
             "    [!] registry.inspector 阈值非法（resume 须严格低于 pause），已回落出厂值"

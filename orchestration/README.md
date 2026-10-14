@@ -39,7 +39,7 @@ Qoder 的项目级功能（rules/AGENTS.md 加载、技能发现、会话分储/
 | **reviewer** | `orchestration/pods/reviewer/` + headless | 会话池 | 期刊审稿人式**主观质量审查**（规范性/美观度/创新性），可执行昂贵文献对比；输出结构化 VERDICT | **默认不启用**——用户点名或组长主动（默认判断为不需要）时才派发 |
 | **devops** | `orchestration/pods/devops/` + headless | 会话池 | 维护全部基础设施：orch/dev CLI、全体 pod 只读层、技能真本与部署、guards、验收脚本；处理 backlog（FIFO）；git 提交与推送；**src 测试**（`tests/`、CI、工具实现正确性） | **不使用 orch**（组长专属；§12 E2 过渡期例外 `orch eval run`/`eval set-baseline` 已随 E4 bencher 上线**退役**，harness 压测职责移交 bencher）；cwd=自身 pod、worktree 为作业对象（§7）；护栏级修改经组长转呈用户授权 |
 | **bencher** | `orchestration/pods/bencher/` + headless | 队列驱动非常驻（§5.5，`orch bench-*`） | **harness 实测专职工**（Tier B，§5.5）：套件案卷与基线区所有权、套件运行、基线捕获、副本 A/B、组长/inspector 指派的核查跑；输出二元判决（通过/失败、改善/未改善）与污染识别 | 写权仅 `orchestration/state/evals/**`（案卷/基线/判决），**外部代码树零写权**（设施缺陷提 `<infra_suggestion>` 交 devops，不自己修）；harness 只读层与部署副本不可改；不使用 orch/pysci-dev；完成项走 `orch status` 待查看面，**不即时唤醒组长**；专属 CLI `pysci-bench` |
-| **inspector** | `orchestration/pods/inspector/` + headless | 闲时自主激活（§6 改进循环，`orch inspector-*`；全局开关默认开、生产活跃时让路） | **闲时巡检员**：按引擎下发的巡检菜单抽查全域（doctor 全域 / transcript 诚实条款 / 自维护层 / 代码走查 / 改进管道自覆盖 / 设计意图一致性 / 设计审查 rubric / 基线缺口），产出 finding 并按类别分流——**机械证据类免判决**晋升 backlog（`source=inspector`）、**判断类必经 J 仲裁**（§5.3）；双队列迟滞节流（§6） | 全项目**只读**（代码树零写权；产出只落 `state/inspector/` 与 `state/evals/jury-cases/`）；**无 override 面**（§6：CLI 参数表里不存在该项，是代码事实而非纪律条款）；不使用 orch，也不用 pysci-dev 写面（doctor 只读可用）；专属 CLI `pysci-inspect`；**豁口**：`pysci-inspect` 自身不在巡检范围（自覆盖豁口，§6）|
+| **inspector** | `orchestration/pods/inspector/` + headless | 闲时自主激活（§6 改进循环：**看门狗 tick 自调度**，cooldown 3600s，另有 `orch inspector-up` 手动；全局开关默认开、生产活跃时让路） | **闲时巡检员**：按引擎下发的巡检菜单抽查全域（doctor 全域 / transcript 诚实条款 / 自维护层 / 代码走查 / 改进管道自覆盖 / 设计意图一致性 / 设计审查 rubric / 基线缺口），产出 finding 并按类别分流——**机械证据类免判决**晋升 backlog（`source=inspector`）、**判断类必经 J 仲裁**（§5.3）；双队列迟滞节流（§6） | 全项目**只读**（代码树零写权；产出只落 `state/inspector/` 与 `state/evals/jury-cases/`）；**无 override 面**（§6：CLI 参数表里不存在该项，是代码事实而非纪律条款）；不使用 orch，也不用 pysci-dev 写面（doctor 只读可用）；专属 CLI `pysci-inspect`；**豁口**：`pysci-inspect` 自身不在巡检范围（自覆盖豁口，§6）|
 | **twin** | `orchestration/pods/twin/` + headless | 冷启动单跳（每次判断新会话，`orch taste`；§6） | **审美孪生 → 回退终裁者 + 用户代理**：① 可选咨询（仅建议）；② 客观通道模棱两可时回退终裁（强制、**不给平局**，§5.3）；③ 用户代理裁决（原「呈用户」的护栏级审批/升级仲裁/Phase 验收即时代理，**先决策后问责**，全量 mirror 留痕） | PREFERENCE.md 置 pod 内（readonly_extra 只读、护栏级）；**无记忆纪律**——冷启动，「记忆」只有 PREFERENCE.md 与决策日志（§3.1）；无成员 CLI（判断经 `orch taste`，训练审阅经 `pysci`）；永不自改权重、永不投客观质量票；**最终交付验收不代理**（用户本人） |
 
 **副组长平级协作条款（用户裁决）**：副组长与组长接近平级，不是从属关系。
@@ -927,6 +927,18 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
 **双队列迟滞节流（用户裁决）**：inspector 监视 devops backlog pending 与 bencher 队列
 长度——任一 > 积压上限（backlog 12 / bench 6）→ **暂停产出**新提案（只读巡检继续）；
 两队列均回落至**恢复阈值**（8 / 4）→ 恢复。**恢复阈值严格低于暂停阈值 = 迟滞**，防振荡。
+
+**闲时自调度巡检（autonomy-fix a2）**：此前只有 `orch inspector-up` 拉起式，2026-10-14 实测
+02:08–07:42 **零巡检**、02:21 入队的 patrol 积压整夜（唤醒链断 + 无命令 = 永久沉睡）。
+现由 a1 看门狗 tick（60 s）顺带敲 `inspectd.self_patrol_tick`——**唯一调度耦合点，不新造第二套
+循环**：全局开关关 / worker 在跑 / 冷却窗内（`cooldown_s`=3600）任一为真都不动；队列空才自入队
+一项 `patrol` 再 `wake_inspector`。因此 §1 那句「闲时自主激活」是**代码保证**而非纪律，且
+让路/节流/cooldown/预算闸全部照旧。
+
+**队列入队超时告警（不许静默积压）**：同一 tick 还敲 `inspectd.notify_stale_queue`——队列项
+入队 > 1800 s 仍未被取走即进统一事件层发 `QUEUE-TIMEOUT`（词表单一源 `events.WAKE`；每项只报
+一次，靠 `timeout_notified_at` 去重），并在 TUI「盲审与审查」/「队列与运行」详情点名；`orch status`
+inspector 段单列「队列超时 N 项」。
 
 **backlog 判据纪律（三权分立）**：条目必填可证伪 `success_criteria`——提案者写、判决
 案卷审定、devops 只执行；**无判据不入队**，判据同时是 M 实测的靶点（§5.3/§5.5）。

@@ -17,6 +17,10 @@ watcher 的所有**正常**退出路径都留痕（命中 / 被取代 / `rc≠`�
 进程**，``stop`` 协作式停止（不留孤儿守护者进程），``status`` 报读数。看门狗自身**不依赖**
 任何会话/钩子——OS 侧重启持久化可选，安装/卸载见
 ``orchestration/scripts/watchdog-scheduler.ps1``。
+
+**a2 耦合点（唯一调度钩子）**：同一 tick 顺带敲 :func:`inspectd.self_patrol_tick`（闲时自
+调度巡检）与 :func:`inspectd.notify_stale_queue`（队列入队超时告警）——让路/节流/cooldown
+/预算闸全在 inspectd 内部，本模块不重算，纪律是**不造第二套调度循环**。
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import drain as _drain
+from . import inspectd as _inspectd
 from . import watch as _watch
 from .drain import (
     WorkerPaths,
@@ -176,6 +181,13 @@ def run_watchdog(
                         summary["rearms"] += 1
                         _log(f"[→] 重臂监听循环（>{stale_s}s 无心跳）", run_log)
                     last_rearm = float(now())
+            # a2 耦合点：同一 tick 顺带驱动 inspector 的**闲时自调度巡检**与**队列超时告警**
+            # （纪律「不造第二套调度/唤醒循环」——细节与全部闸门全在 inspectd，这里只敲一下）。
+            try:
+                _inspectd.notify_stale_queue(now=now())
+                _inspectd.self_patrol_tick()
+            except Exception as exc:  # noqa: BLE001 - 看门狗要活到下一轮
+                _log(f"[!] inspector tick 异常：{type(exc).__name__}: {exc}", run_log)
             if (
                 int(summary["checks"]) % max(1, int(stale_s) // max(1, int(interval_s)))
                 == 0
