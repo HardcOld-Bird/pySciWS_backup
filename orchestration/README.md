@@ -913,10 +913,15 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
 → 组长裁决 approve（入 backlog FIFO；推理密集项可 `--effort high` 按项标注，§3.5）
   / reject（附理由）
 → 审批回复存 state/replies/，下次派发该成员时自动附送（闭环告知）
-→ approve 默认**自动唤醒** devops：分离后台进程 `_drain-devops` 持 state/devops.lock
-  锁 FIFO 串行消化整个 backlog（组长零阻塞、零轮询，对齐 §4.5 等待模型）
-  · --no-wake 只入队不唤醒；锁忙（已有 worker）不重复 spawn，本项由当前 drain 接手
-  · 锁 stale（持有进程死 / 锁龄 >6h）自动接管，防 worker 崩溃后死锁
+→ approve 默认**自动唤醒** devops **batch 计划器**：分离后台进程 `_drain-devops` 持
+  state/devops.lock 组包并把批次**入队** `state/queues/devops.json`（`kind=backlog-batch`），
+  再由 **devops FIFO worker**（`orch _queue-worker devops`）逐个执行——**执行只留队列
+  worker 一份实现**（backlog-fifo-20261014：drain 自持的 do_dispatch 循环退役；组长
+  零阻塞、零轮询，对齐 §4.5 等待模型）
+  · --no-wake 只入队不唤醒；计划器锁忙不重复 spawn——条目在**持久 backlog**里由在跑那位
+    一并计划/FIFO 排队消化（**锁忙语义消失：排队而非丢弃待拾**）；计划器**一次一批**，
+    下一批由 worker 收尾后的续计划链上（未取项保持 pending）
+  · 锁 stale（持有进程死 / 锁龄 >6h）自动接管，防计划器崩溃后死锁
   · 释放锁时 unlink 删不掉（Windows 他方持句柄 → 共享冲突）**不得静默**：锁记录改写为
     `released` **墓碑** + run 日志留一行 `[!]`。墓碑不作互斥（`_lock_live` 判非活、
     `lock_status` 报 stale 且非 crashed），下一任 drain 就地改写接管——否则「删不掉的残骸
@@ -934,14 +939,18 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
     清理其残留 worktree/branch（`git worktree remove --force wt-<id>` + `branch -D` +
     `prune` 兜底）——worktree 名 = 条目 id（take_first 记录、任务书指定），只清孤儿名、
     不误删活跃/手动 worktree
-  · `orch drain-stop` 协作式停止：写 state/devops.cancel（指向当前锁持有者 pid），worker
-    每项间隙消费→干净退出（释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；
-    陈旧信号（pid≠本进程）清除且不误停接棒 worker；锁空闲时 drain-stop 不写信号（no-op）
-→ drain 每批：取队首为**种子** + 收集同提请者(member)**且同 effort 档位**的 pending 为
+  · `orch drain-stop` 协作式停止：写**计划器** state/devops.cancel **与 devops worker**
+    state/queues/devops.cancel（指向各自锁持有者 pid），两侧在条目间隙消费→干净退出
+    （释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；陈旧信号（pid≠本进程）
+    清除且不误停接棒 worker；锁空闲不写信号（no-op）
+→ 计划器每批：取队首为**种子** + 收集同提请者(member)**且同 effort 档位**的 pending 为
   **组包**（含种子 ≤4 项，同提请者≈同模块/同视角；一跳只有一个跳级档位，混档会静默
   改变被标项的强度）→ 批量任务书（种子必做 + 组包菜单，devops 自主选取合并实施，
-  单 worktree=种子 id）→ dispatch devops（§7）→ 测试验证 → git 提交（+ `timeout 25 git
-  push origin main` best-effort，失败忽略，用户裁决 2026-10-10）→ 交付列 `backlog id=<ids>`
+  单 worktree=种子 id）→ 批次正文**入队**（含元数据）→ **worker 执行**：dispatch devops
+  （§7）→ 测试验证 → git 提交（+ `timeout 25 git push origin main` best-effort，失败忽略，
+  用户裁决 2026-10-10）→ 交付列 `backlog id=<ids>`；**账务**（销账/needs_leader/延期/系统性
+  停止/抢救）在 worker 侧结算（单一实现 `drain._settle_outcome`，计划器 dry 支与 worker
+  真派发支共用）；选组包项保持 pending 的项由 worker 收尾后的**续计划**当新种子再入队
   · 成功 → 按交付 id 清单**逐 id 销账**（done，记 commit hash + batch_size/batch_seed）；
     组包中未选项保持 pending 留待下轮（devops 可只吃种子）
   · 失败（blocked/run_failed）→ 仅**种子** needs_leader、组包项保持 pending（**不连坐**，
@@ -952,15 +961,18 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
   · 系统性故障（`quota_exhausted` 额度耗尽 / `channel_error` 渠道级故障）→ **全局停止**：
     种子复位 pending（非 needs_leader）、组包与剩余条目保持 pending、释放锁、.done 注明
     停止类别；恢复后下次唤醒自动续消化（两类只恢复动作不同：充值/换渠道 vs 等渠道恢复）
-→ run 日志 + .done 摘要落 state/devops-runs/<ts>.{log,done}；orch status 展示 worker
-  态（running/idle/stale，其中 stale 再分**崩溃**〔pid 死且缺该 run 的 .done〕、**残留已标记**
-  〔released 墓碑：已宣告收尾但文件删不掉〕与**残骸已收尾**〔该 run 已有 .done，连墓碑都写
-  不进的极端残骸；pid 不作判活依据〕）、
-  最近 run 摘要（含停止方式：自然跑完/协作停止/额度耗尽/渠道级故障/异常中断）、
+→ **两本账**（backlog-fifo-20261014）：**计划账** devops-runs/<ts>.{log,done}
+  （`kind="plan"`：计划了 N 批；watch 对 plan-done 不报 QUEUE-COMPLETE）；**执行账**
+  queues-runs/devops/<ts>.{log,done}（销账/停止/by_reason 档位分列在此）。orch status
+  展示：计划器 worker 态（running/idle/stale，stale 再分**崩溃**〔pid 死且缺该 run 的
+  .done〕、**残留已标记**〔released 墓碑〕与**残骸已收尾**〔该 run 已有 .done〕）、
+  **devops FIFO worker 态 + 队列水位行**（待/在做/完成/失败）、
+  最近 run 摘要（**执行账优先**；含停止方式：自然跑完/协作停止/额度耗尽/渠道级故障/异常中断）、
   needs_leader 提醒（组长据此 `orch requeue` 回排重派 / 改任务书 / `orch resolve` 销账 / 上报）
 → 组长的等待面（代码化，§4.5）：唤醒/采纳/交办三处输出固定附 `orch watch` 挂载指令；
   watch 后台阻塞轮询 state 文件与锁，命中 QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP /
-  CHANNEL-STOP / CRASH 即单行退出唤醒会话；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
+  CHANNEL-STOP / CRASH 即单行退出唤醒会话（devops backlog 的**完成唤醒自 backlog-fifo 起
+  走事件流 `QUEUE-EMPTY`**，由执行侧 worker 退出时发）；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
   的 watch 段一次性补账
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
 ```

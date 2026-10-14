@@ -1,7 +1,9 @@
-"""drain 循环：dry 干跑、成功销账（含 commit 提取）、失败跳过 needs_leader 且不阻塞
-后续项、锁忙时优雅退出、任务书含合并安全句。
+"""backlog 批量计划器 + FIFO 执行的端到端：dry 干跑、成功销账（含 commit 提取）、失败跳过
+needs_leader 且不阻塞后续项、锁忙时优雅退出、任务书含合并安全句。
 
-覆盖任务书验证要求 2/3 的 drain 侧行为（以 monkeypatch 假 do_dispatch 避免真派发）。
+backlog-fifo-20261014 后的形态：计划器（drain.drain_backlog）只组包入队，执行在 devops
+FIFO worker（queueworker.run_worker）；本文件经 :func:`conftest.drain_once` 端到端驱动，
+以 monkeypatch 假 do_dispatch 避免真派发。
 """
 
 from __future__ import annotations
@@ -9,10 +11,10 @@ from __future__ import annotations
 import json
 from argparse import Namespace
 
-from pysci.skills.orchestration.tools import dispatch, drain, orch, workflow
+from pysci.skills.orchestration.tools import dispatch, drain, orch, queues, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import read_backlog, seed_backlog
+from .conftest import drain_once, read_backlog, seed_backlog
 
 
 def test_dry_drain_consumes_all_and_writes_done(iso_state):
@@ -25,13 +27,16 @@ def test_dry_drain_consumes_all_and_writes_done(iso_state):
     )
     run_log = drain.new_run_log()
     summary = drain.drain_backlog(run_log, dry=True)
+    assert summary["kind"] == "plan", "计划器记账面：kind=plan（执行账归 worker）"
     assert summary["count"] == 2
     assert all(i["status"] == "dry" for i in summary["items"])
     assert all(i["status"] == "done" for i in read_backlog(iso_state))
     done = run_log.with_suffix(".done")
     assert done.exists()
     assert json.loads(done.read_text(encoding="utf-8"))["count"] == 2
-    assert run_log.exists() and "drain 启动" in run_log.read_text(encoding="utf-8")
+    assert run_log.exists() and "backlog 计划器启动" in run_log.read_text(
+        encoding="utf-8"
+    )
     assert not drain.LOCK_PATH.exists()  # 结束已释放锁
 
 
@@ -55,14 +60,24 @@ def test_success_marks_done_and_extracts_commit(iso_state, monkeypatch):
         )
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
+    # backlog 条目 → 队列条目的形态转换（backlog-fifo-20261014 验收项）
+    qitem = queues.items("devops")[0]
+    assert qitem["kind"] == drain.BACKLOG_BATCH_KIND
+    assert qitem["backlog"]["seed_id"] == "b1"
+    assert qitem["backlog"]["ids"] == ["b1"]
+    assert "backlog id=b1" in qitem["task"]  # 批次正文（含销账清单要求）
+    # 合并安全句（任务书 §5）注入批次正文
+    assert "合并前 git status" in qitem["task"]
+    # 执行面：假派发收到 devops + quiet 通路
     assert seen["member"] == "devops"
     assert seen["quiet"] is True
     assert "backlog id=b1" in seen["text"]
-    # 合并安全句（任务书 §5）注入 devops 派发
-    assert "合并前 git status" in seen["text"]
+    # 账务：销账 done + commit 三级定位
+    assert summary["count"] == 1
     assert summary["items"][0]["status"] == "done"
     assert summary["items"][0]["commit"] == "abc1234def"
+    assert qitem["status"] == "done"
     assert read_backlog(iso_state)[0]["status"] == "done"
 
 
@@ -83,11 +98,12 @@ def test_failure_skips_to_needs_leader_and_continues(iso_state, monkeypatch):
         return DispatchOutcome(code=0, kind="result", body="done commit deadbeef")
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
     by_id = {i["id"]: i for i in summary["items"]}
     assert by_id["bad"]["status"] == "needs_leader"
     assert by_id["bad"]["kind"] == "blocked"
-    assert by_id["good"]["status"] == "done"  # 一项卡住不阻塞后续
+    # 一项卡住不阻塞后续：组包项在下一轮（worker 续计划）被当新种子消化
+    assert by_id["good"]["status"] == "done"
     items = {i["id"]: i for i in read_backlog(iso_state)}
     assert items["bad"]["status"] == "needs_leader"
     assert items["good"]["status"] == "done"

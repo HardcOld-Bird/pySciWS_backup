@@ -19,11 +19,14 @@
 
 **判据（单一实现 = `watch.queue_pressure`，四处消费面共用）**：
 
-- `PENDING-WORK`（**有活却没人干**，四条任一成立）：devops backlog 有 `pending`；任一成员
-  队列有 `pending` 且该成员**无存活 worker**；统一事件流有**超 30 min 未排空**的事件
-  （刚产生的事件正是本帧要唤醒的那几条，计入会与既有事件重复）；`data/taskbooks/` 有
-  `new` 态未处理。
-- `STALL`（**条目停滞**）：任一队列条目 `in_progress` 且距 `started_at` 超阈值。
+- `PENDING-WORK`（**有活却没人干**，四条任一成立）：devops backlog 有 `pending` **且无
+  devops 队列 worker 在跑**（执行归 FIFO：worker 在场时 pending 属正常在途，降噪——144
+  注记场景）；任一成员队列有 `pending` 且该成员**无存活
+  worker**；统一事件流有**超 30 min 未排空**的事件（刚产生的事件正是本帧要唤醒的那几条，
+  计入会与既有事件重复）；`data/taskbooks/` 有 `new` 态未处理。
+- `STALL`（**条目停滞，叠加心跳判活**）：任一队列条目 `in_progress` 且距 `started_at` 超
+  阈值，**且该成员无心跳新鲜的活会话**（`backpressure.live_entries` ≤120s）——
+  慢而不死（重型环节正当耗时）不报，死而僵才报（2026-14 晚实测误报的根治面）。
 
 **节流（硬要求）**：同类事件 **≤1 次/30 min**——防「唤醒→看一眼→无新事→再唤醒」的循环。
 节流账落在 `watch.json`，跨挂载继承（重启不重置、不堆积）；被节流时**不推进该条件水位**，
@@ -79,7 +82,11 @@ cron「全空闲即撤」的语义，现在由代码自动达成）。组长**�
   （消费账 `watch.consumed`；2026-10-14 12:44 双唤醒的回归判据）。
 - 队列感知：制造「一成员队列 pending 且无 worker」→ watch 一轮内出 `PENDING-WORK`；
   清空后连续周期**零唤醒**；窗口内重复条件被节流（`watch.throttle` 有账）。
-- STALL：`started_at` 超阈值的 `in_progress` 条目 → 出 `STALL`。
+- STALL：`started_at` 超阈值的 `in_progress` 条目，**且该成员无活会话心跳** → 出 `STALL`；
+  心跳新鲜（慢而不死）→ 不出。
+- backlog FIFO：`approve` → 计划器把批次入队 `queues/devops.json`（面板可见）→ worker
+  消化销账；计划器锁忙**不丢件**（条目在持久 backlog 排队）；完成唤醒=事件流 `QUEUE-EMPTY`
+  （执行侧发）——判据自动化面 `test_backlog_fifo.py`。
 - 看门狗重臂：令心跳 stale > 300 s → 看门狗日志出现 `[→] 重臂监听循环`。
 - 队列超时：入队 > 1800 s 未取走 → 事件层出 `QUEUE-TIMEOUT` 且 TUI 详情点名（不许静默积压）。
 - 唤醒权自动归属：不同 `session_id` 的载荷喂 `wake-claim --check`——首会话 **claim** 返回
@@ -89,4 +96,5 @@ cron「全空闲即撤」的语义，现在由代码自动达成）。组长**�
   被**迟到唤醒**补上（水位单调，重挂不重复消费）。
 
 判据的自动化面见 `tests/skills/orchestration/test_queue_watch.py`（队列感知 + 双消费回归）、
-`test_wake_owner.py`（唤醒权五类语义）与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。
+`test_wake_owner.py`（唤醒权五类语义）、`test_backlog_fifo.py`（approve→入队→销账 /
+锁忙排队 / STALL 心跳双向 / 降噪）与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。

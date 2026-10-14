@@ -15,7 +15,7 @@ import pytest
 from pysci.skills.orchestration.tools import dispatch, drain, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import read_backlog, seed_backlog
+from .conftest import drain_batch, read_backlog, seed_backlog
 
 # 交付正文的两条真实措辞：正则抓得到的 / 抓不到的（E0-B 原形状）
 BODY_PARSEABLE = "已完成，合并 commit 3f2a1b9，backlog id=s1"
@@ -111,7 +111,7 @@ def test_drain_batch_sets_per_id_commit_from_branch_lookup(iso_state, monkeypatc
 
     monkeypatch.setattr(drain, "_run_git", fake_git)
 
-    items = drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    items = drain_batch(seed, group, drain.new_run_log(), dry=False)
 
     assert asked == ["s1"], "只查本批实际完成项（s2 未被选中 → 不查）"
     assert [i["commit"] for i in items] == ["cafe001"]
@@ -132,7 +132,7 @@ def test_drain_batch_unresolved_annotation_not_empty(iso_state, monkeypatch):
     )
     monkeypatch.setattr(drain, "_run_git", lambda *a: (0, ""))
 
-    items = drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    items = drain_batch(seed, group, drain.new_run_log(), dry=False)
 
     assert items[0]["commit"] == drain.COMMIT_UNRESOLVED
     assert drain.COMMIT_UNRESOLVED in read_backlog(iso_state)[0]["note"]

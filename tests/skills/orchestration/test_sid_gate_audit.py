@@ -27,6 +27,7 @@ from pysci.skills.orchestration.tools.ledger import LedgerEntry
 
 from .conftest import (
     FAKE_HOP_PID,
+    drain_batch,
     envelope,
     fake_headless,
     read_backlog,
@@ -261,7 +262,7 @@ def test_drain_needs_leader_note_keeps_full_text(iso_state, monkeypatch):
             code=2, kind="blocked", body=long_body, member="devops"
         ),
     )
-    drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    drain_batch(seed, group, drain.new_run_log(), dry=False)
     note = next(i["note"] for i in read_backlog(iso_state) if i["id"] == "s1")
     assert long_body.strip() in note, "note 必须留全文，截断=证据变残片"
     assert "pods/devops/outbox" in note, (

@@ -5,10 +5,11 @@
 worker 生命周期在 :mod:`queueworker`。
 
 **覆盖范围**：7 专职（sim/figure/writing/theory/lit/drawing/model3d）+ deputy + reviewer。
-devops（backlog 组包）、bencher、inspector 各有既有队列，**不在此列**。
+devops（backlog 组包：backlog-fifo-20261014 起批次经本队列 ``kind=backlog-batch`` 由队列
+worker 执行+结算）、bencher、inspector 各有既有队列，**不在此列**。
 
 **组包边界（§3.1）**：生产组员 job **一律不组包**（worker 每次只取一条 = batch_size 恒 1）；
-devops backlog 的组包/延期/needs_leader 语义在 :mod:`workflow` 侧原样保留。
+devops backlog 的组包/延期/needs_leader 语义在 :mod:`workflow`/计划器侧保留，执行落到本队列。
 
 **reviewer 附属（§3.1 第 3 件）**：带 ``review`` 位的宿主 job 交付后，worker 自动向 ``reviewer``
 队列投一条 ``kind="review"`` 的**子 job**（``parent``=宿主 id、``parent_member``=宿主的成员）；
@@ -73,6 +74,7 @@ def enqueue(
     slug: str = "job",
     item_id: str | None = None,
     max_turns: int | None = None,
+    extra: dict[str, Any] | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
     """入队一条 job（FIFO 尾插），返回条目。
@@ -80,6 +82,7 @@ def enqueue(
     ``review=True`` 表示该宿主 job 交付后需 reviewer 复审（worker 自动投子 job）。
     ``kind="review"`` + ``parent``/``parent_member`` 是 review 子 job 的形态。
     ``max_turns``：单跳轮次上限（``plan run --max-turns`` 经此透传；None=成员默认）。
+    ``extra``：附加字段并入条目（如 devops 批次的 ``backlog`` 元数据）——固定字段不覆盖。
     """
     qp = queue_path(member, root=root)
     item: dict[str, Any] = {
@@ -102,6 +105,9 @@ def enqueue(
         "max_turns": int(max_turns) if max_turns else None,
         "result": None,
     }
+    for key, value in dict(extra or {}).items():
+        if key not in item:
+            item[key] = value
     return workq.append(qp, item)
 
 

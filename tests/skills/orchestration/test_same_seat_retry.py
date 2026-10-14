@@ -30,6 +30,7 @@ from .conftest import (
     QUOTA_TEXT,
     append_turn,
     cmd_model,
+    drain_once,
     envelope,
     fake_headless,
     read_runtime,
@@ -240,7 +241,7 @@ def test_drain_run_log_names_same_seat_retry(iso_state, iso_dispatch, monkeypatc
     )
     fake_headless(monkeypatch, _broken(iso_dispatch))
     run_log = drain.new_run_log()
-    drain.drain_backlog(run_log)
+    drain_once(log=run_log)
 
     text = run_log.read_text(encoding="utf-8")
     assert "同席重试" in text, "run 日志必须点名重试，否则批次账上看不出渠道在抖"

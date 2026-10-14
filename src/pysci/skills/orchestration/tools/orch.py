@@ -226,13 +226,36 @@ def cmd_status(args: argparse.Namespace) -> int:
             )
     else:
         print("  idle（无 drain worker 运行）")
+    # backlog-fifo-20261014：执行已归 devops FIFO worker——状态面必须点名它，否则
+    # 计划器已退场、批次仍在消化时这一屏会读成「idle」。读数失败只跳过本行（观察面不塌）。
+    try:
+        qpaths = _queueworker.member_paths("devops")
+        qst = _drain.lock_status(qpaths)
+        qc = _queues.counts("devops")
+    except Exception:  # noqa: BLE001 - 状态屏宁可少一行、不可崩
+        qst, qc = {}, {}
+    if qst.get("state") == "running" or any(qc.values()):
+        pid_txt = f"（pid {qst.get('pid')}）" if qst.get("state") == "running" else ""
+        print(
+            f"  FIFO worker = {qst.get('state', '?')}{pid_txt}；devops 队列："
+            f"待={qc.get('pending', 0)} 在做={qc.get('in_progress', 0)} "
+            f"完成={qc.get('done', 0)} 失败={qc.get('failed', 0)}"
+        )
     cancel = _drain.cancel_status()
     if cancel:
         print(
             f"  [s] 停止信号待消费（目标 pid {cancel.get('pid', '?')}，"
             f"请求于 {cancel.get('requested_at', '?')}）"
         )
-    done = _drain.latest_done()
+    # 最近一次 devops run：**执行账优先**（backlog-fifo-20261014 后消费事实在
+    # queues-runs/devops/<ts>.done，含 by_reason/stopped），回退计划账（devops-runs）。
+    try:
+        done = (
+            _drain.latest_done(_queueworker.member_paths("devops"))
+            or _drain.latest_done()
+        )
+    except Exception:  # noqa: BLE001 - 状态屏读不到就当没有
+        done = _drain.latest_done()
     if done:
         stopped = done.get("stopped")
         how = (
@@ -783,14 +806,18 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 
 def cmd_drain_stop(args: argparse.Namespace) -> int:
-    """请求后台 drain worker 协作式停止（写 state/devops.cancel）。
+    """请求后台 devops worker 协作式停止（写计划器与队列 worker 两处 cancel）。
 
-    分离进程无规范 kill 手段；本命令写停止信号，worker 在下一条目间隙干净退出。
-    锁空闲时不写信号（避免残留信号危及下一个 worker），仅作提示。
+    分离进程无规范 kill 手段；本命令写停止信号，两侧都在下一条目间隙干净退出
+    （backlog-fifo-20261014：执行已归 devops FIFO worker——只停计划器会留下在跑的
+    批次照旧消化，故两处都要写）。锁空闲时不写信号（避免残留信号危及下一个 worker），
+    仅作提示。
     """
     del args
     ok, msg = _drain.request_stop()
     print(("[√] " if ok else "[i] ") + msg)
+    qok, qmsg = _drain.request_stop(_queueworker.member_paths("devops"))
+    print(("[√] " if qok else "[i] ") + qmsg)
     return 0
 
 
@@ -1259,7 +1286,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_queueworker.cmd_queue_worker)
 
     p = sub.add_parser(
-        "drain-stop", help="请求后台 drain worker 协作式停止（写 devops.cancel）"
+        "drain-stop",
+        help="请求 devops worker 协作式停止（计划器 + devops FIFO worker 两处 cancel）",
     )
     p.set_defaults(func=cmd_drain_stop)
 
@@ -1443,7 +1471,7 @@ def main(argv: list[str] | None = None) -> int:
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(
         "_drain-devops",
-        help="[内部] approve 自动唤醒派生的 backlog drain 循环（下划线前缀=内部命令）",
+        help="[内部] approve 自动唤醒派生的 backlog 计划器（组包→入队 devops FIFO）",
     )
     p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
     p.add_argument(

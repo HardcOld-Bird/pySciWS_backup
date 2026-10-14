@@ -12,7 +12,7 @@ import argparse
 from pysci.skills.orchestration.tools import dispatch, drain, ledger, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import read_backlog, seed_backlog
+from .conftest import batch_seed_of, drain_batch, drain_once, read_backlog, seed_backlog
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ def test_batch_result_completes_listed_only(iso_state, monkeypatch):
             code=0, kind="result", body="完成 commit aaa1111\nbacklog id=s1,s2"
         ),
     )
-    results = drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    results = drain_batch(seed, group, drain.new_run_log(), dry=False)
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["s1"]["status"] == "done" and by_id["s1"]["batch_size"] == 2
     assert by_id["s2"]["status"] == "done" and by_id["s2"]["batch_seed"] == "s1"
@@ -161,7 +161,7 @@ def test_batch_result_no_ids_defensive_seed_done(iso_state, monkeypatch):
             code=0, kind="result", body="done commit bbb2222"
         ),
     )
-    drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    drain_batch(seed, group, drain.new_run_log(), dry=False)
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["s1"]["status"] == "done" and by_id["s1"]["batch_size"] == 1
     assert by_id["s2"]["status"] == "pending"
@@ -184,7 +184,7 @@ def test_batch_ignores_ids_outside_batch(iso_state, monkeypatch):
             code=0, kind="result", body="backlog id=s1,ghost-999"
         ),
     )
-    drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    drain_batch(seed, group, drain.new_run_log(), dry=False)
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["s1"]["status"] == "done"
     assert by_id["s2"]["status"] == "pending"  # ghost-999 不在批内，s2 未被误销
@@ -206,7 +206,7 @@ def test_batch_blocked_only_seed_needs_leader(iso_state, monkeypatch):
             code=2, kind="blocked", body="", error="脏工作区"
         ),
     )
-    results = drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    results = drain_batch(seed, group, drain.new_run_log(), dry=False)
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["s1"]["status"] == "needs_leader"
     assert by_id["s2"]["status"] == "pending", "组包不连坐"
@@ -229,7 +229,7 @@ def test_batch_quota_requeues_seed_group_pending(iso_state, monkeypatch):
             code=2, kind="quota_exhausted", body="", error="credit usage limit"
         ),
     )
-    results = drain._drain_batch(seed, group, drain.new_run_log(), dry=False)
+    results = drain_batch(seed, group, drain.new_run_log(), dry=False)
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["s1"]["status"] == "pending"  # 种子复位
     assert by_id["s2"]["status"] == "pending"
@@ -246,7 +246,7 @@ def test_batch_dry_completes_all(iso_state):
         ],
     )
     seed, group = workflow.backlog_take_batch(4)
-    results = drain._drain_batch(seed, group, drain.new_run_log(), dry=True)
+    results = drain_batch(seed, group, drain.new_run_log(), dry=True)
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert all(by_id[x]["status"] == "done" for x in ("s1", "s2", "s3"))
     assert all(by_id[x]["batch_size"] == 3 for x in ("s1", "s2", "s3"))
@@ -268,13 +268,13 @@ def test_drain_one_batch_for_same_member(iso_state, monkeypatch):
     calls = []
 
     def fake(member, **kw):
-        calls.append(kw.get("slug"))
+        calls.append(batch_seed_of(kw.get("text") or ""))
         return DispatchOutcome(
             code=0, kind="result", body="done commit aaa1111\nbacklog id=s1,s2,s3"
         )
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
     assert calls == ["s1"], "同提请者一批一次派发"
     assert summary["count"] == 3
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
@@ -294,7 +294,7 @@ def test_drain_groups_by_member_and_requeues_unselected(iso_state, monkeypatch):
     calls = []
 
     def fake(member, **kw):
-        slug = kw.get("slug")
+        slug = batch_seed_of(kw.get("text") or "")
         calls.append(slug)
         # devops 只吃种子（不选组包）
         return DispatchOutcome(
@@ -302,7 +302,7 @@ def test_drain_groups_by_member_and_requeues_unselected(iso_state, monkeypatch):
         )
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake)
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
     # 批1 seed=f1 group=[f2]（同 figure）→ 只吃 f1，f2 留 pending
     # 批2 seed=l1（leader，无同组）→ 吃 l1；批3 seed=f2 → 吃 f2
     assert calls == ["f1", "l1", "f2"]

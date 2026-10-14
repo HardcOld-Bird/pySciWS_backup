@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import json
 
-from pysci.skills.orchestration.tools import dispatch, drain, workflow
+from pysci.skills.orchestration.tools import dispatch, drain, queueworker, workflow
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 from pysci.skills.orchestration.tools.runner import Envelope
 
 from .conftest import (
     QUOTA_TEXT,
+    batch_seed_of,
+    drain_once,
     envelope,
     fake_headless,
     read_backlog,
@@ -156,22 +158,26 @@ def test_drain_quota_stops_globally(iso_state, monkeypatch):
     calls = []
 
     def fake_dispatch(member, **kw):
-        calls.append(kw.get("slug"))
+        calls.append(batch_seed_of(kw.get("text") or ""))
         return _quota_outcome()
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
     run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once(log=run_log)
     assert summary["stopped"] == "quota_exhausted"
-    assert "系统性故障" in summary["error"]
+    # backlog-fifo-20261014：账务移到 FIFO worker 后，报告面的 error 是派发**原文**
+    # （旧 drain 的 SYSTEMIC_TEXT 罐头句退役）；分类由 stopped 携带。
+    assert "credit usage limit" in summary["worker"]["error"]
     assert calls == ["q1"], "q2 不得再被派发（不再逐项烧）"
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["q1"]["status"] == "pending", "当前条目复位而非 needs_leader"
     assert "needs_leader_at" not in by_id["q1"]
     assert by_id["q2"]["status"] == "pending"
     assert not drain.LOCK_PATH.exists(), "锁已释放"
-    done = json.loads(run_log.with_suffix(".done").read_text(encoding="utf-8"))
-    assert done["stopped"] == "quota_exhausted" and "系统性故障" in done["error"]
+    wdone = sorted(queueworker.member_paths("devops").runs.glob("*.done"))[-1]
+    wsummary = json.loads(wdone.read_text(encoding="utf-8"))
+    assert wsummary["stopped"] == "quota_exhausted"
+    assert "credit usage limit" in wsummary["error"]
     assert "全局停止" in run_log.read_text(encoding="utf-8")
 
 
@@ -185,12 +191,12 @@ def test_drain_quota_after_success_keeps_done(iso_state, monkeypatch):
     )
 
     def fake_dispatch(member, **kw):
-        if kw.get("slug") == "b1":
+        if batch_seed_of(kw.get("text") or "") == "b1":
             return DispatchOutcome(code=0, kind="result", body="done commit ccc3333")
         return _quota_outcome()
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
     assert summary["stopped"] == "quota_exhausted"
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["b1"]["status"] == "done", "已成功项正常销账"
@@ -208,13 +214,13 @@ def test_drain_needs_leader_path_unchanged(iso_state, monkeypatch):
     )
 
     def fake_dispatch(member, **kw):
-        if kw.get("slug") == "x1":
+        if batch_seed_of(kw.get("text") or "") == "x1":
             return DispatchOutcome(code=2, kind="blocked", body="", error="工作区脏")
         return DispatchOutcome(code=0, kind="result", body="done commit ddd4444")
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
-    summary = drain.drain_backlog(drain.new_run_log())
-    assert "stopped" not in summary
+    summary = drain_once()
+    assert not summary["stopped"]
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["x1"]["status"] == "needs_leader"
     assert by_id["x2"]["status"] == "done"

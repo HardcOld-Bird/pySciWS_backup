@@ -32,6 +32,7 @@ from zoneinfo import ZoneInfo
 from pysci.skills.orchestration.tools import dispatch, drain, registry, routing
 
 from .conftest import (
+    drain_once,
     envelope,
     fake_headless,
     seed_backlog,
@@ -178,7 +179,7 @@ def test_hold_line_reaches_run_log(iso_state, iso_dispatch, monkeypatch):
         lambda n, cmd: envelope(OK_BODY, is_error=False, stop="end_turn", rc=0),
     )
     run_log = drain.new_run_log()
-    drain.drain_backlog(run_log)
+    drain_once(log=run_log)
 
     text = run_log.read_text(encoding="utf-8")
     assert "边界避让" in text, "run 日志必须点名避让，否则耗时读数无人可解释"

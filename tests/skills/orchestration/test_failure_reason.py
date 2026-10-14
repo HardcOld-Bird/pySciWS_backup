@@ -31,7 +31,7 @@ from pysci.skills.orchestration.tools.failure_tags import (
 )
 from pysci.skills.orchestration.tools.ledger import LedgerEntry
 
-from .conftest import seed_backlog
+from .conftest import drain_once, seed_backlog
 
 GUARD = ORCHESTRATION_ROOT / "guards" / "delivery-gate.mjs"
 VOCAB_FILE = ORCH_STATE_ROOT / "failure-tags.json"
@@ -278,14 +278,15 @@ def test_drain_done_splits_blocked_by_reason_and_status_shows_it(
         )
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
-    summary = drain.drain_backlog(drain.new_run_log())
+    summary = drain_once()
     by_id = {i["id"]: i for i in summary["items"]}
     assert by_id["dec"]["reason"] == "needs_decision"
     assert by_id["cap"]["reason"] == "capacity"
     assert summary["by_reason"] == {"needs_decision": 1, "capacity": 1}
 
-    # .done 落盘也要带上分列计数（组长/巡检读 `.done` 文件的那条路）
-    done_files = sorted((iso_state / "devops-runs").glob("*.done"))
+    # .done 落盘也要带上分列计数（组长/巡检读 `.done` 文件的那条路）——backlog-fifo 后
+    # 消费账在执行侧（queues-runs/devops/<ts>.done），计划账（devops-runs）只记 queued。
+    done_files = sorted((iso_state / "queues-runs" / "devops").glob("*.done"))
     persisted = json.loads(done_files[-1].read_text(encoding="utf-8"))
     assert persisted["by_reason"] == {"needs_decision": 1, "capacity": 1}
 

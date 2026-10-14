@@ -250,15 +250,32 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     cfg = _watch_cfg()
     reasons: list[str] = []
     stall: list[str] = []
+    # 活跃会话心跳面（backlog-fifo-20261014）：STALL 判活着读它——「in_progress 超期」若
+    # 该成员仍有心跳新鲜的 worker 会话，是**慢而不死**（重型环节正当耗时），不告警。
+    try:
+        from . import backpressure as _bp
+
+        live_members = {
+            str(e.get("worker") or "") for e in _bp.live_entries(now=moment)
+        }
+    except Exception:  # noqa: BLE001 - 心跳面读失败按「无活会话」保守处理（宁可报）
+        live_members = set()
+    try:
+        from . import queueworker as _qw
+
+        devops_worker_live = _member_worker_live("devops", _qw)
+    except Exception:  # noqa: BLE001
+        devops_worker_live = False
     try:
         backlog = _workflow.backlog_pending()
     except Exception:  # noqa: BLE001
         backlog = []
-    if backlog:
+    # 有 devops 队列 worker 在跑即降噪（backlog-fifo-20261014）：批次执行已归 FIFO，
+    # 计划器/worker 在场时「backlog 有 pending」是**正常在途**，不是「有活却没人干」。
+    if backlog and not devops_worker_live:
         reasons.append(f"devops backlog {len(backlog)} 项 pending")
     try:
         from . import queues as _queues
-        from . import queueworker as _qw
 
         for member in _queues.all_members():
             items = _queues.items(member)
@@ -269,10 +286,13 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
                 if str(it.get("status")) != "in_progress":
                     continue
                 age = _age_epoch(it.get("started_at"), moment)
-                if age is not None and age > cfg["stall_threshold_s"]:
-                    stall.append(
-                        f"{member}:{it.get('id')} in_progress {age / 60:.0f}min"
-                    )
+                if age is None or age <= cfg["stall_threshold_s"]:
+                    continue
+                if member in live_members:
+                    # 慢而不死：该成员有心跳新鲜的活会话（LiveSession ≤120s 心跳）——
+                    # 重型环节正当耗时，不报（2026-14 晚实测误报的根治面）。
+                    continue
+                stall.append(f"{member}:{it.get('id')} in_progress {age / 60:.0f}min")
     except Exception:  # noqa: BLE001 - 队列面读失败不阻塞巡更
         pass
     try:
@@ -449,6 +469,9 @@ def snapshot() -> dict[str, Any]:
         "crash_run": lock_run if crashed else "",
         "done": done_name,
         "done_stopped": str((done or {}).get("stopped", "") or ""),
+        # .done 的种类（backlog-fifo-20261014）：``plan`` = 计划器记账（只计划了几批），
+        # 不是消费完成事实——完成唤醒归执行侧（QUEUE-EMPTY 流事件），detect 据此静默。
+        "done_kind": str((done or {}).get("kind", "") or ""),
         "done_completed": str((done or {}).get("completed", "") or ""),
         "done_count": int((done or {}).get("count", 0) or 0),
         "done_elapsed_s": (done or {}).get("elapsed_s", "?"),
@@ -745,7 +768,13 @@ def detect(
         hold.add("done")
         why = "no-done"
     elif key != base_key:
-        if _in_progress(cur):
+        if str(cur.get("done_kind") or "") == "plan":
+            # 计划器记账帧（backlog-fifo-20261014）：``kind="plan"`` 的 .done 说的是
+            # 「计划了 N 批」，不是「消化完 N 项」——完成唤醒已归执行侧（QUEUE-EMPTY
+            # 流事件）。此处静默推进基线，不报 QUEUE-COMPLETE（否则每次 approve 都会
+            # 误报一次「队列消化完」）。
+            why = "plan-done-bookkeeping"
+        elif _in_progress(cur):
             hold.add("done")
             why = "lock-claims-running"
         else:

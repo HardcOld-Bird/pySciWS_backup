@@ -25,7 +25,7 @@ from pysci.skills.orchestration.tools import (
     watch,
 )
 
-from .conftest import seed_backlog
+from .conftest import drain_once, seed_backlog
 
 
 class _Out:
@@ -114,9 +114,18 @@ def test_failed_job_still_emits_job_done(state, monkeypatch):
 # ---------------------------------------------------------------------------
 # ② 队空发 QUEUE-EMPTY（devops / bencher）
 # ---------------------------------------------------------------------------
-def test_devops_drain_emits_queue_empty(iso_state):
+def test_devops_drain_emits_queue_empty(iso_state, monkeypatch):
     seed_backlog(iso_state, [{"id": "b1", "status": "pending", "summary": "s"}])
-    drain.drain_backlog(drain.new_run_log(), dry=True)
+    # 完成唤醒由**执行侧**（devops FIFO worker）在退出时发出（backlog-fifo-20261014）：
+    # 计划器的 dry 支不发消费事实，故驱动一次真消化（假派发）让 worker 排空队列。
+    monkeypatch.setattr(
+        dispatch,
+        "do_dispatch",
+        lambda *a, **k: dispatch.DispatchOutcome(
+            code=0, kind="result", body="done commit abc1234def"
+        ),
+    )
+    drain_once()
     evs = [e for e in events.read_all() if e["event"] == "QUEUE-EMPTY"]
     assert len(evs) == 1 and "devops" in evs[0]["detail"]
 

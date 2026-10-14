@@ -1,50 +1,39 @@
-"""devops backlog 自动消化：锁 / 后台唤醒 / drain 循环（README §6）。
+"""devops backlog：计划器（组包入队）/ 锁 / 后台唤醒（README §6）。
 
-``orch approve`` 采纳建议入 backlog 后，orch 自动以**分离后台进程**唤醒 devops，
-FIFO 串行消化整个 backlog——组长零阻塞、零轮询（对齐 README §4.5 等待模型）。
+``orch approve`` 采纳建议入 backlog 后，orch 自动以**分离后台进程**唤醒 backlog **计划器**；
+计划器组包成批次**入队 devops FIFO**（``state/queues/devops.json``），由队列 worker 执行
+——组长零阻塞、零轮询（对齐 README §4.5 等待模型）。**执行只留队列 worker 一份实现**
+（backlog-fifo-20261014：drain 自持的 do_dispatch 循环退役；账务单一实现在
+:func:`_settle_outcome`，计划器 dry 支与 worker 真派发支共用）。
 
 三块机制：
 
-- **锁**（``state/devops.lock``，JSON: pid/started/run_log）：同刻至多一个 drain
-  worker。原子 ``O_CREAT|O_EXCL`` 抢占；持有者进程已死或锁龄超 :data:`LOCK_STALE_S`
-  判 stale 并接管（fail-open，防 worker 崩溃后永久死锁）。**收尾事实优先于锁的自称**：
+- **锁**（``state/devops.lock``，JSON: pid/started/run_log）：同刻至多一个**计划器**。
+  原子 ``O_CREAT|O_EXCL`` 抢占；持有者进程已死或锁龄超 :data:`LOCK_STALE_S`
+  判 stale 并接管（fail-open，防崩溃后永久死锁）。**收尾事实优先于锁的自称**：
   释放时 unlink 删不掉（Windows 共享句柄）则改写为 ``released`` **墓碑**并在 run 日志留
   ``[!]``；连墓碑都写不进时，「该 run 已有 ``.done``」仍单独把残骸判为非活
-  （:func:`_run_concluded`）——两条判活否决合起来，队列不会被一把删不掉的锁阻塞 6 h
-  （:func:`release_lock`，backlog 20261011-225933-devops + 20261011-231237-devops）。
-- **唤醒**（:func:`wake_devops`）：approve 成功后调用；锁忙则不重复 spawn（本项由
-  当前 drain 循环接手），空闲则 Popen 分离进程运行内部命令 ``_drain-devops``。返回的
-  message 附一行「等待已自动化」（:mod:`watch` 的 :func:`~watch.autowatch_lines`）：挂载自
-  2026-10-13 起由 Stop 钩子自动完成（README §4.5 v2），不再催组长手动挂。
-- **drain 循环**（:func:`drain_backlog`）：获锁后先回收孤儿 in_progress 条目（已死
-  worker 遗留，重置 pending），并**四面**清干净它留下的写入者
-  （:func:`reclaim_orphan_sessions` 终止仍活着的派生会话进程 →
-  :func:`cleanup_orphan_worktrees` **先抢救再清理**：面上有未提交/未合并内容就先打成
-  WIP-salvage 提交并保留分支与工作树（:func:`salvage_worktree`），force-remove 只对
-  被证明干净的面开放；条目自动注记成「原地续完」，失败收场的单还会自动生
-  ``source=salvage`` 续作单（:func:`_salvage_progress`），组长只收 watch 知会 →
-  任一面确认不了干净就
-  :func:`workflow.bump_worktree_generation` 换 ``<id>-r<gen>`` 新一代隔离面，绝不复用
-  可能还有人写的旧名；worktree 名默认 = 条目 id，``--force`` 摘除 + ``prune``
-  兜底，只清孤儿名不误删活跃/手动 worktree）；``backlog_take_batch`` 取队首为种子 +
-  同提请者组包（≤ :data:`BATCH_MAX` 项）→ 批量任务书（种子必做 + 组包菜单，devops 自主
-  选取合并实施）→ 一次 ``do_dispatch("devops")`` → 解析交付 ``backlog id=<ids>`` 逐 id
-  销账（commit 字段三级定位：正文提取 → 按 ``wt-<id>`` 分支回溯 merge commit → 注记
-  ``unresolved``，不留空串）；未选组包项留 pending 下轮；失败（blocked/run_failed）仅**种子** needs_leader、
-  组包不连坐（一项卡住不阻塞全队列）；系统性故障（额度耗尽 ``quota_exhausted`` /
-  渠道级故障 ``channel_error``）例外——渠道坏了不是任务书坏了，**全局停止**（当前条目
-  复位 pending、剩余保持 pending、.done 记 ``stopped=<kind>`` 与说明）；run 日志
-  逐行落 ``state/devops-runs/<ts>.log``，全部完成写 ``<ts>.done``（JSON 摘要）。run 名是
-  身份而非标签：同秒撞名时 :func:`new_run_log` 顺延为 ``<ts>_002``…并当场占位。
-  ``.done`` 是干净完成信号：stale 锁若缺对应 ``.done`` 即 worker 被中途杀死（崩溃），
-  :func:`lock_status` 据此置 ``crashed``，orch status surfacing 供用户判断 devops 状态。
+  （:func:`_run_concluded`）。
+- **唤醒**（:func:`wake_devops`）：approve 成功后调用；计划器锁忙则不重复 spawn（本项在
+  **持久 backlog** 里，由在跑那位一并计划，FIFO 不丢件），空闲则 Popen 分离进程运行内部
+  命令 ``_drain-devops``。message 附「等待已自动化」（挂载由 Stop 钩子自动完成，README §4.5）。
+- **计划器循环**（:func:`drain_backlog`）：获锁后先做启动扫尾（孤儿 in_progress 回收 +
+  worktree 四面临场处置：**devops 队列 worker 在跑时跳过**——那些 in_progress 是它的在途；
+  :func:`reclaim_orphan_sessions` 终止仍活着的派生会话进程 → :func:`cleanup_orphan_worktrees`
+  先抢救再清理 → 确认不了干净就 :func:`workflow.bump_worktree_generation` 换 ``<id>-r<gen>``
+  新一代隔离面）；然后 ``backlog_take_batch``（种子 + 同提请者组包 ≤ :data:`BATCH_MAX`）逐批
+  ``queues.enqueue(kind=BACKLOG_BATCH_KIND)``（携种子/组包元数据与批次正文），计划毕
+  ``queueworker.wake_member("devops")``。**账务**（销账/needs_leader/延期/系统性停止/抢救）
+  在 worker 侧经 :func:`settle_backlog_batch` → :func:`_settle_outcome` 落定；计划日志与
+  ``<ts>.done``（``kind="plan"``）留 ``state/devops-runs/``，执行日志与 .done 在
+  ``state/queues-runs/devops/``；完成唤醒走统一事件流 ``QUEUE-EMPTY``（worker 退出时发）。
+  分离进程无 kill 之外的规范停止手段，故补**协作式停止**：``orch drain-stop`` 写计划器
+  ``state/devops.cancel`` **与 devops 队列 worker 的 ``state/queues/devops.cancel``**；
+  两侧都在间隙检查——指向本进程则干净退出（释放锁、写含 ``stopped=cooperative`` 的部分
+  .done、cancel 自删）；指向他方的陈旧信号顺手清除，绝不误停新 worker。
 
-分离进程无 kill 之外的规范停止手段，故补**协作式停止**：``orch drain-stop`` 写
-``state/devops.cancel``（JSON: pid/requested_at，指向当前锁持有者）；drain 在每项
-间隙检查——信号指向本进程则干净退出（释放锁、写含 ``stopped=cooperative`` 的部分
-.done、cancel 自删）；指向他方的陈旧信号顺手清除，绝不误停新 worker。
-
-内部命令 ``_drain-devops`` 下划线前缀，argparse help 标注为 ``[内部]``（勿手调）。
+内部命令 ``_drain-devops``（计划器）与 ``_queue-worker devops``（执行）均下划线前缀，
+argparse help 标注 ``[内部]``（勿手调）。
 """
 
 from __future__ import annotations
@@ -65,7 +54,6 @@ from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import backpressure as _bp
 from . import channels as _channels
-from . import events as _events
 from . import presets, procs, workflow
 from .registry import Registry, note_hop_pid, orchestration_rel, refresh_models
 from .workflow import (
@@ -82,6 +70,10 @@ from .workflow import (
 
 #: 单批消化上限（护栏）：种子 + 同提请者组包 ≤ 此数（backlog 20261010-batch-digest）。
 BATCH_MAX: int = 4
+
+#: devops 队列里承载「backlog 批次」的条目 kind：计划器入队、worker 执行 + 结算。
+#: 执行只留队列 worker 一份实现（backlog-fifo-20261014：drain 退役为批量计划器）。
+BACKLOG_BATCH_KIND: str = "backlog-batch"
 
 #: drain 互斥锁（JSON: pid/started/run_log）；仅 orch 与 devops drain 读写。
 LOCK_PATH: Path = ORCH_STATE_ROOT / "devops.lock"
@@ -1406,87 +1398,76 @@ def _salvage_progress(
     return record
 
 
-def _drain_batch(
-    seed: dict[str, Any], group: list[dict[str, Any]], run_log: Path, *, dry: bool
-) -> list[dict[str, Any]]:
-    """消化一批（种子 + 同提请者组包菜单）：一次派发 devops → 逐交付 id 销账。
+def _batch_faces(
+    seed: dict[str, Any], group: list[dict[str, Any]]
+) -> tuple[str, list[str], list[str], str]:
+    """批次四件套：种子 id / 组包 id / 整批 id / 标签（``seed`` 或 ``seed(+N)``）。"""
+    seed_id = str(seed.get("id", ""))
+    group_ids = [str(g.get("id", "")) for g in group if g.get("id")]
+    label = seed_id if not group_ids else f"{seed_id}(+{len(group_ids)})"
+    return seed_id, group_ids, [seed_id, *group_ids], label
 
-    种子条目的 ``effort`` 标注透传给本跳（组包只收同档位条目，故一批一跳一标，
-    见 :func:`workflow.backlog_take_batch`）。
+
+def _dry_settle_batch(
+    seed: dict[str, Any], group: list[dict[str, Any]], run_log: Path
+) -> list[dict[str, Any]]:
+    """dry 支：模拟 devops 吃下整批（种子+组包），逐 id 销账（计划器演练用）。"""
+    seed_id, _group_ids, batch_ids, label = _batch_faces(seed, group)
+    t0 = time.time()
+    for bid in batch_ids:
+        backlog_complete(
+            bid,
+            note="dry 干跑（未实派 devops）",
+            batch_size=len(batch_ids),
+            batch_seed=seed_id,
+        )
+    _log(run_log, f"[dry] 批次 {label} 干跑销账 {len(batch_ids)} 项完成")
+    return [
+        {
+            "id": bid,
+            "status": "dry",
+            "batch_size": len(batch_ids),
+            "batch_seed": seed_id,
+            "elapsed_s": round(time.time() - t0, 1),
+        }
+        for bid in batch_ids
+    ]
+
+
+def _settle_outcome(
+    seed: dict[str, Any],
+    group: list[dict[str, Any]],
+    outcome: Any,
+    run_log: Path,
+    t0: float,
+) -> list[dict[str, Any]]:
+    """批次派发结果 → backlog 账务（销账 / needs_leader / 延期 / 系统性停止）。
+
+    自 backlog-fifo-20261014 起，执行由队列 worker 承担、本函数是**唯一**的账务实现
+    （计划器 dry 支与 worker 真派发支共用；逐支语义与旧 ``_drain_batch`` 完全一致）：
 
     - **result**（code 0）：解析交付 ``backlog id=<ids>``，与本批取交集逐 id 销账 done
       （种子必含——必做项，防御性兜底）；组包中未选的项保持 pending 留待下轮；每个 done
       项记 ``batch_size``/``batch_seed``（供 orch stats 批量分布）。
     - **blocked/run_failed/parse_error/验收FAIL**：仅**种子** → needs_leader，组包项保持
-      pending（**不连坐**——它们未被承诺、未 in_progress）。种子隔离面里还有未收尾内容
-      时，收尾前先走 :func:`_salvage_progress`：进度落成抢救提交、续作单自动入队，
-      不需要组长盘点。
+      pending（**不连坐**）。种子隔离面里还有未收尾内容时先走 :func:`_salvage_progress`。
     - **系统性故障（``quota_exhausted`` / ``channel_error``）**：种子复位 pending、组包项
-      保持 pending，返回该 kind 由调用方触发全局停止（渠道坏了，不逐项 needs_leader）；
-      半路断掉的一跳同样先抢救。
+      保持 pending；返回 ``status=<kind>`` 由调用方触发全局停止（渠道坏了，不逐项
+      needs_leader）；带宽类先延期（``deferred``，不停链），触顶才回升 ``channel_saturated``。
 
     Returns:
         per-id 结果字典列表（写入 .done 的 items）：种子/每个完成组包项各一条
         ``{id, status, commit?, kind?, reason?, batch_size?, batch_seed?, elapsed_s}``。
     """
-    seed_id = str(seed.get("id", ""))
-    group_ids = [str(g.get("id", "")) for g in group if g.get("id")]
-    batch_ids = [seed_id, *group_ids]
-    label = seed_id if not group_ids else f"{seed_id}(+{len(group_ids)})"
-    effort = str(seed.get("effort") or "") or None
-    eff_s = f"（effort={effort}）" if effort else ""
-    _log(
-        run_log,
-        f"[→] 消化批次 {label}: {str(seed.get('summary', ''))[:50]}{eff_s}",
-    )
-    t0 = time.time()
-
-    if dry:
-        # 干跑：模拟 devops 吃下整批（种子+组包），逐 id 销账
-        for bid in batch_ids:
-            backlog_complete(
-                bid,
-                note="drain --dry 干跑（未实派 devops）",
-                batch_size=len(batch_ids),
-                batch_seed=seed_id,
-            )
-        _log(run_log, f"[dry] 批次 {label} 干跑销账 {len(batch_ids)} 项完成")
-        return [
-            {
-                "id": bid,
-                "status": "dry",
-                "batch_size": len(batch_ids),
-                "batch_seed": seed_id,
-                "elapsed_s": round(time.time() - t0, 1),
-            }
-            for bid in batch_ids
-        ]
-
-    from .dispatch import (
-        do_dispatch,  # 延迟导入：避免 drain↔dispatch 环（dispatch 不依赖 drain）
-    )
-
-    outcome = do_dispatch(
-        "devops",
-        text=backlog_batch_text(seed, group, max_batch=BATCH_MAX),
-        slug=seed_id,
-        session="latest",
-        effort=effort,
-        quiet=True,
-        auto=True,  # ④ sid 在途闸批次通路：上一跳进程仍活 → 自动换新 sid，不拒批
-    )
-    # ④ 可见性：批次自动换 sid 必须进 run 日志（人工拒绝走 rc=2 报告面，批次走这里）
+    seed_id, group_ids, batch_ids, label = _batch_faces(seed, group)
+    # quiet 通路读数逐条抄进 run 日志（字段语义与原实现不变）：不抄就没人知道
+    # 「这一跳等了多久/在兜底档上跑」——台账有数但没人逐行看。
     if outcome.sid_new_reason:
         _log(
             run_log, f"[i] sid 在途闸：{outcome.sid_new_reason}，本批已自动换新会话续跑"
         )
-    # 路由 v3 规格 2「切换记录入 run 日志」：do_dispatch 走 quiet 通路，那句切换文案不会
-    # 自己冒到屏幕上。不抄这一行，谷时批次在日志里就与平时长得一模一样——而账单不是。
     if outcome.route:
         _log(run_log, f"{outcome.route}（批次 {label}）")
-    # 边界避让与同席重试同理：do_dispatch 走 quiet 通路，两条读数都不会自己冒到屏幕上。
-    # 避让不进 run 日志就没人知道「这一跳等了 4 分钟」（台账 hold_s 有数但没人逐行看）；
-    # 同席重试不进日志则「渠道在抖」这件事在批次账上是隐形的，只剩台账字段可查。
     if outcome.hold:
         _log(run_log, f"{outcome.hold}（批次 {label}）")
     if outcome.same_seat_retries:
@@ -1495,16 +1476,11 @@ def _drain_batch(
             f"[!] 渠道瞬态故障同席重试 {outcome.same_seat_retries} 次"
             f"（{outcome.same_seat_retry_ms / 1000:.0f}s）（批次 {label}）",
         )
-    elapsed = round(time.time() - t0, 1)
-    # 规格 4a「run 日志」面：do_dispatch 走 quiet 通路，换席告警不会自己打到屏幕上，
-    # 于是降级跑完的批次在日志里看起来就像「首席好好的」——回退必须进日志，否则
-    # 组长据此判断渠道健康，实际整批都在兜底档上跑。
     for event in outcome.fallbacks:
         _log(run_log, f"{_channels.alert_line(event)}（批次 {label}）")
     if outcome.warning:
-        # 交付是被宽松兜底面救回的（解析器版本落后于协议）：不改变判读，但必须进 run
-        # 日志——组长侧看得到「这一跳的交付格式是兜底读出来的」，据此决定要不要重跑
         _log(run_log, f"[!] {outcome.warning}（{seed_id}）")
+    elapsed = round(time.time() - t0, 1)
 
     if outcome.code == 0:
         listed = _extract_backlog_ids(outcome.body)
@@ -1691,6 +1667,48 @@ def _drain_batch(
     return [item_out]
 
 
+def stop_kind_of(results: list[dict[str, Any]]) -> str:
+    """结算结果里的系统性停止 kind（无则空串）——调用方据此停队/全局停止。"""
+    return next(
+        (
+            str(r.get("status"))
+            for r in results
+            if str(r.get("status")) in _systemic_kinds()
+        ),
+        "",
+    )
+
+
+def settle_backlog_batch(
+    item: dict[str, Any], outcome: Any, run_log: Path, *, t0: float
+) -> tuple[str, list[dict[str, Any]], str]:
+    """队列 worker 侧：结算一条 backlog 批次（``kind=BACKLOG_BATCH_KIND``）的账务。
+
+    批次条目由 :func:`drain_backlog`（计划器）入队，``item["backlog"]`` 携种子/组包元数据；
+    本函数把它交给 :func:`_settle_outcome`（唯一账务实现），并把结果映射成队列 worker 的
+    动作面：
+
+    Returns:
+        ``(work_status, results, stop_kind)``——``work_status`` ∈ ``done``（正常收尾）/
+        ``failed``（种子 needs_leader 或系统性停止）/``deferred``（带宽延期，条目由 worker
+        挂 ``defer_until`` 重取）；``results`` 为该批的账务条目列表（**旧 drain 的 items
+        形状**：``{id, status, commit?, kind?, reason?, batch_size?, batch_seed?…}``，首条为
+        种子）；``stop_kind`` 非空 = 系统性全局停止（worker 停队，剩余条目保持 pending）。
+    """
+    meta = dict(item.get("backlog") or {})
+    seed = dict(meta.get("seed") or {})
+    group = [dict(g) for g in (meta.get("group") or [])]
+    results = _settle_outcome(seed, group, outcome, run_log, t0)
+    status = str(results[0].get("status") or "") if results else ""
+    if status == "done":
+        work_status = "done"
+    elif status == "deferred":
+        work_status = "deferred"
+    else:
+        work_status = "failed"
+    return work_status, results, stop_kind_of(results)
+
+
 def _seed_tier(item: dict) -> str:
     """条目所属的**优先级档名**（优先级表用的是档名，不是成员 id）。
 
@@ -1747,18 +1765,124 @@ def _bandwidth_defer_plan(outcome: Any, seed: dict, now: float):
     )
 
 
-def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
-    """FIFO 串行消化整个 backlog（持锁运行；异常/结束均释放锁并写 .done）。
+def _devops_worker_live() -> bool:
+    """devops 队列 worker 是否在跑（计划器扫尾闸：在途 in_progress 不是孤儿）。"""
+    try:
+        from . import queueworker as _qw
 
-    Args:
-        run_log: 本次 run 日志路径；同名 ``.done`` 为完成摘要。
-        dry: True 时不真派发，仅模拟销账（唤醒链演练 / 测试）。
+        return lock_status(_qw.member_paths("devops")).get("state") == "running"
+    except Exception:  # noqa: BLE001 - 读数失败按「不在跑」保守处理（扫尾有恢复语义）
+        return False
+
+
+def _enqueue_batch(
+    seed: dict[str, Any], group: list[dict[str, Any]], run_log: Path
+) -> dict[str, Any]:
+    """把一批（种子 + 组包菜单）入队 devops FIFO，返回计划记账条目。
+
+    批次正文走 :func:`workflow.backlog_batch_text`（种子必做 + 菜单），元数据
+    ``item["backlog"]`` 携种子/组包全文——worker 侧结算（:func:`settle_backlog_batch`）
+    与 dry 演练（:func:`_dry_settle_batch`）都从它还原账务上下文。
+    """
+    from . import queues as _queues
+
+    seed_id, _group_ids, batch_ids, label = _batch_faces(seed, group)
+    effort = str(seed.get("effort") or "") or None
+    eff_s = f"（effort={effort}）" if effort else ""
+    _log(run_log, f"[→] 计划批次 {label}: {str(seed.get('summary', ''))[:50]}{eff_s}")
+    item = _queues.enqueue(
+        "devops",
+        kind=BACKLOG_BATCH_KIND,
+        text=backlog_batch_text(seed, group, max_batch=BATCH_MAX),
+        slug=seed_id,
+        session="latest",
+        effort=str(effort or ""),
+        extra={
+            "backlog": {
+                "seed": seed,
+                "group": group,
+                "ids": batch_ids,
+                "seed_id": seed_id,
+            }
+        },
+    )
+    _log(run_log, f"[i] 批次 {label} 已入队 devops FIFO（item={item.get('id', '')}）")
+    return {
+        "id": seed_id,
+        "status": "queued",
+        "queue_item": str(item.get("id", "")),
+        "batch_size": len(batch_ids),
+        "batch_seed": seed_id,
+        "ids": batch_ids,
+    }
+
+
+def replan_from_backlog(*, dry: bool = False) -> int:
+    """队列 worker 的**续计划**：批次收尾后把仍 pending 的 backlog 条目再组包入队。
+
+    这是「组包项留 pending 下轮再取」语义的落点——不续计划，被卡批次里未选中的组包项
+    要等下一次 approve 才动（旧 drain 循环的「一项卡住不阻塞后续」会退化成「等唤醒」）。
+    取**计划器锁**短暂序列化（防与在跑的计划器并发双取同一 pending 种子——take_batch
+    的「读→标 in_progress→写」不是原子的，双取会把同一批入队两次）；锁忙即返回 0
+    （在跑的计划器会把 pending 一并计划）。计划记账落 ``devops-runs``（计划日志）。
 
     Returns:
-        .done 摘要字典：``{started, completed, count, elapsed_s, items, run_log}``；
-        协作停止时附 ``stopped="cooperative"``；系统性故障全局停止时附
-        ``stopped=<kind>``（``quota_exhausted`` / ``channel_error``）与 ``error`` 说明；
-        有 blocked 标注了成因档位时另附 ``by_reason``（``{reason: 次数}``，供 orch status 分列）。
+        本次续计划入队的批数。
+    """
+    run_log = new_run_log()
+    run_log.parent.mkdir(parents=True, exist_ok=True)
+    if acquire_lock(orchestration_rel(run_log)) is None:
+        return 0  # 计划器在跑：pending 由它一并计划，不抢
+    planned = 0
+    try:
+        _log(run_log, f"[▶] 续计划（worker 侧，pid={os.getpid()}，dry={dry}）")
+        while True:
+            seed, group = backlog_take_batch(BATCH_MAX)
+            if seed is None:
+                break
+            if dry:
+                _dry_settle_batch(seed, group, run_log)
+                planned += 1
+                continue
+            _enqueue_batch(seed, group, run_log)
+            planned += 1
+            break  # 一次一批：链由每个批次收尾后的下一次续计划接上（FIFO 依次处理）
+    except Exception as exc:  # noqa: BLE001 - 续计划失败不炸在跑的批次
+        _log_exception(run_log, exc, "续计划异常（worker 继续）")
+    finally:
+        _log(run_log, f"[√] 续计划结束：入队 {planned} 批")
+        release_lock(run_log)
+    return planned
+
+
+def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
+    """backlog **批量计划器**（backlog-fifo-20261014）：组包成批次 → 入队 devops FIFO。
+
+    执行只留队列 worker 一份实现（``orch _queue-worker devops``）；本函数保留原 drain 的
+    全部**计划侧**语义，**不再自持 do_dispatch 循环**：
+
+    - 预设激活闸 / 计划器互斥锁（``state/devops.lock``，防双计划器）/ 模型映射自愈；
+    - 启动扫尾：孤儿 in_progress 回收 + worktree 抢救/异名重建——**devops 队列 worker
+      在跑时不回收**（此刻的 in_progress 是它的在途，不是孤儿；worker 启动时会做
+      条目级的 ``workq.reset_orphans``）；
+    - 循环 ``backlog_take_batch`` 组包（种子必做 + 同提请者菜单 ≤ ``BATCH_MAX``）→ 每条
+      批次入队 ``state/queues/devops.json``（``kind=backlog-batch``，携种子/组包元数据与
+      批次正文）→ 计划毕 ``queueworker.wake_member("devops")`` 拉起 FIFO 执行；
+    - 带宽延期条目由 ``backlog_take_batch`` 自然跳过，计划器**不睡重试**——延期落在队列
+      条目侧的 defer（worker 睡到到期自动重取），语义等价且不占计划器；
+    - 记账：``devops-runs/<ts>.log``（计划日志）与 ``<ts>.done``（``kind="plan"``）；执行账
+      在 ``queues-runs/devops/`` 的 worker 日志与 .done；完成唤醒走统一事件流的
+      ``QUEUE-EMPTY``（worker 退出时发），watch 对 ``kind="plan"`` 的 .done 不报
+      QUEUE-COMPLETE（记账不是消费事实）。
+
+    Args:
+        run_log: 本次计划日志路径；同名 ``.done`` 为计划摘要。
+        dry: True 时不真入队，模拟逐 id 销账（唤醒链演练 / 测试，语义同旧 drain）。
+
+    Returns:
+        ``.done`` 摘要字典：``{kind:"plan", started, completed, count, elapsed_s, items,
+        run_log}``；协作停止附 ``stopped="cooperative"``；预设未激活时附
+        ``skipped="preset_unavailable"``。
     """
     done_path = run_log.with_suffix(".done")
     # 预设的 main 席表为空（没配席：跟踪覆盖在位以覆盖为准，否则看出厂表）即拒绝开工
@@ -1769,7 +1893,7 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         reason = gate
         _log(
             run_log,
-            f"[!] {reason}——drain 拒绝开工（改 data/pysci_settings.toml [model] preset 后重跑）",
+            f"[!] {reason}——计划器拒绝开工（改 data/pysci_settings.toml [model] preset 后重跑）",
         )
         print(f"[!] {reason}")
         print(
@@ -1782,17 +1906,18 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         }
     lock = acquire_lock(orchestration_rel(run_log))
     if lock is None:
-        _log(run_log, "[i] 另一 drain worker 持锁运行中，本进程退出（不重复消费）。")
+        _log(run_log, "[i] 另一计划器持锁运行中，本进程退出（不重复计划）。")
         return {"skipped": "lock_busy", "run_log": orchestration_rel(run_log)}
 
     t0 = time.time()
     summary: dict[str, Any] = {
+        "kind": "plan",
         "started": _now(),
         "run_log": orchestration_rel(run_log),
         "dry": dry,
         "items": [],
     }
-    _log(run_log, f"[▶] drain 启动（pid={os.getpid()}, dry={dry}）")
+    _log(run_log, f"[▶] backlog 计划器启动（pid={os.getpid()}, dry={dry}）")
     # 模型映射自愈（用户裁决 2026-10-10）：--list-models 刷新档位映射的**运行态面**
     # （重配 BYOK 后下次 drain 即恢复正确 UUID）；跟踪 registry.json 不被写——写它会把
     # main 工作区每 drain 改脏并堵死碰 registry 的单（backlog 20261012-080410-devops）。
@@ -1830,8 +1955,17 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
             )
     except Exception as exc:
         _log_exception(run_log, exc, "模型映射刷新失败（忽略，沿用 registry 现值）")
-    # 刚获锁 → 此刻的 in_progress 必是已死 worker 的孤儿，回收为 pending
-    orphans = backlog_reclaim_orphans()
+    # 启动扫尾（**devops 队列 worker 在跑时跳过**）：此刻的 in_progress 是它的在途，
+    # 不是孤儿——worker 启动时已做条目级 workq.reset_orphans；在这里回收会把正在执行的
+    # 批次复位 pending、被重复入队。无 worker 在场才谈「孤儿」。
+    orphans: list[str] = []
+    if _devops_worker_live():
+        _log(
+            run_log,
+            "[i] devops 队列 worker 在跑 → 跳过启动扫尾（in_progress 是它的在途，非孤儿）",
+        )
+    else:
+        orphans = backlog_reclaim_orphans()
     if orphans:
         summary["reclaimed"] = orphans
         _log(run_log, f"[i] 回收孤儿 in_progress 条目：{', '.join(orphans)}")
@@ -1877,49 +2011,39 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                         f"[!] 旧隔离面无法确认干净 → 异名重建：{oid} → {name}"
                         "（新一代隔离面，禁止复用旧名）",
                     )
-    # §3.3 写侧接线：登记活跃会话 + 守护线程心跳（长 drain 不被判死）；死会话条目先清。
+    # §3.3 写侧接线：登记活跃会话 + 守护线程心跳（长计划不被判死）；死会话条目先清。
     _bp.prune_stale(now=time.time())
     sess = _bp.LiveSession(
-        "devops", sid=run_log.stem, tier="devops", purpose="drain"
+        "devops", sid=run_log.stem, tier="devops", purpose="planner"
     ).start()
     try:
+        planned = 0
         while True:
             if _consume_stop_request():
                 summary["stopped"] = "cooperative"
-                _log(run_log, "[s] 收到协作停止信号，干净退出（条目间隙，无在途消费）")
+                _log(run_log, "[s] 收到协作停止信号，干净退出（批次间隙，无在途消费）")
                 break
             seed, group = backlog_take_batch(BATCH_MAX)
             if seed is None:
-                wait = workflow.next_defer_s()
-                if wait > 0 and not dry:
-                    nap = min(wait, float(DEFER_MAX_SLEEP_S))
-                    _log(
-                        run_log,
-                        f"[i] 仅剩带宽延期条目：睡 {nap:.0f}s 到最近到期再查"
-                        f"（上限 {DEFER_MAX_SLEEP_S}s，期间收到协作停止信号会在下次检查时退）",
-                    )
-                    _sleep(nap)
-                    continue
+                # 空 or 仅剩带宽延期条目：计划器不睡——延期由队列条目侧 defer 承接
+                # （worker 睡到到期自动重取），旧 drain 的睡觉分支在此退役。
                 break
-            results = _drain_batch(seed, group, run_log, dry=dry)
-            summary["items"].extend(results)
-            stopped = next(
-                (r["status"] for r in results if r.get("status") in _systemic_kinds()),
-                "",
-            )
-            if stopped:
-                # 系统性故障 → 全局停止：种子已在 _drain_batch 内复位 pending，
-                # 组包与剩余条目未承诺仍 pending；释放锁与写 .done 由 finally 统一处理
-                summary["stopped"] = stopped
-                summary["error"] = _systemic_error_text(stopped)
-                _log(
-                    run_log,
-                    f"[{_systemic_mark(stopped)}] 全局停止：{stopped}，"
-                    "剩余条目保持 pending，释放锁",
-                )
-                break
+            if dry:
+                summary["items"].extend(_dry_settle_batch(seed, group, run_log))
+                continue
+            summary["items"].append(_enqueue_batch(seed, group, run_log))
+            planned += 1
+            # **一次一批**（对齐旧 drain 的「一步一批次」节奏）：下一批由 worker 收尾后的
+            # 续计划链上（replan_from_backlog）——未取项保持 pending，不被提前拉成在途。
+            break
+        if planned and not dry:
+            from . import queueworker as _qw
+
+            _, msg = _qw.wake_member("devops")
+            summary["worker"] = msg
+            _log(run_log, f"[→] 已入队 {planned} 批并唤醒 devops FIFO worker：{msg}")
     except Exception as exc:  # 记录后仍写 .done（后台进程无人值守，不留黑洞）
-        summary["error"] = _log_exception(run_log, exc, "drain 异常中断")
+        summary["error"] = _log_exception(run_log, exc, "backlog 计划器异常中断")
     finally:
         summary["count"] = len(summary["items"])
         # blocked 成因档位分列计数（backlog 20261013-191213-devops）：让「待裁决」与
@@ -1943,44 +2067,19 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
             )
         except OSError as exc:
             _log(run_log, f"[!] .done 写入失败：{exc}")
-        # 队列消化完 → 统一事件流一条 QUEUE-EMPTY（§3.2；唤醒组长一次）。写失败 fail-open。
-        try:
-            _events.note_queue_empty(
-                "devops",
-                subject=run_log.stem,
-                count=summary["count"],
-                elapsed_s=summary.get("elapsed_s", "?"),
-                stopped=str(summary.get("stopped", "") or ""),
-            )
-        except Exception:  # noqa: BLE001 - 事件面绝不阻塞 drain（§0.6）
-            pass
-        # 带宽延期触顶回升的全局停止（channel_saturated）→ 一条渠道级停止事件（§3.3：
-        # 延期相关的终态事件要进统一事件层，供组长 drain 后处置）。写失败 fail-open。
-        if str(summary.get("stopped", "") or "") == "channel_saturated":
-            try:
-                _events.emit(
-                    _events.CHANNEL_STOP,
-                    subject=run_log.stem,
-                    detail=(
-                        "devops 带宽延期触顶仍未愈 → 全局停止（"
-                        + str(summary.get("error", "") or "")[:80]
-                        + "）"
-                    ),
-                    action="渠道恢复后重新唤醒 drain；orch status 看延期读数",
-                )
-            except Exception:  # noqa: BLE001
-                pass
+        # 计划器**不发** QUEUE-EMPTY / CHANNEL-STOP：那是**消费**事实，归执行侧——
+        # worker 退出（队列排空/全局停止）时发（queueworker.run_worker 的 finally）。
         sess.stop()  # 退场注销活跃会话（读数面不留幽灵）
     _log(
         run_log,
-        f"[√] drain 结束：处理 {summary['count']} 项，耗时 {summary['elapsed_s']}s "
+        f"[√] 计划器结束：计划 {summary['count']} 条，耗时 {summary['elapsed_s']}s "
         f"→ {orchestration_rel(done_path)}",
     )
     return summary
 
 
 def cmd_drain_devops(args) -> int:
-    """内部命令 ``_drain-devops``：持锁消化 backlog，落 run 日志 + .done。"""
+    """内部命令 ``_drain-devops``：跑 backlog 计划器（组包→入队→唤醒 FIFO），落计划日志。"""
     run_log = Path(args.run_log) if getattr(args, "run_log", None) else new_run_log()
     if not run_log.is_absolute():
         run_log = PROJECT_ROOT / run_log
@@ -2054,23 +2153,23 @@ def _spawn_detached(argv: list[str], *, env: dict[str, str], stdout: Any) -> Non
 
 
 def wake_devops(*, force_dry: bool | None = None) -> tuple[bool, str]:
-    """approve 后尝试唤醒后台 drain worker。
+    """approve 后尝试唤醒后台 backlog **计划器**（组包 → 入队 devops FIFO → 唤醒 worker）。
 
     Args:
         force_dry: 覆盖干跑判定（None → 读 :data:`DRY_ENV` 环境变量）。
 
     Returns:
-        ``(spawned, message)``。``spawned=False`` 表示锁忙未唤醒（message 说明本项由
-        当前 drain 循环接手）；``True`` 表示已派生分离进程（message 含日志路径）。
-        两种情况的 message 都附一行「等待已自动化」（:func:`watch.autowatch_lines`）：
-        挂载自 2026-10-13 起由 Stop 钩子每回合自动完成（README §4.5 v2），不再催组长手动挂
-        （backlog 20261013-222533-leader 收尾；旧 [NEXT] 挂载指令段已删）。
+        ``(spawned, message)``。``spawned=False`` 表示计划器锁忙未唤醒（在跑那位会把新
+        条目一并计划；条目在**持久 backlog** 里，不会丢）；``True`` 表示已派生分离进程
+        （message 含日志路径）。两种情况的 message 都附一行「等待已自动化」
+        （:func:`watch.autowatch_lines`）：挂载自 2026-10-13 起由 Stop 钩子每回合自动完成
+        （README §4.5 v2），不再催组长手动挂。
     """
     st = lock_status()
     if st["state"] == "running":
         return (
             False,
-            "devops 正在处理队列，本项将由当前 drain 循环接手（不重复唤醒）。"
+            "devops 计划器正在跑，本项将并入其本轮组包/交由 FIFO 队列消化（不重复唤醒）。"
             + _mount_block(),
         )
     DEVOPS_RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -2081,8 +2180,9 @@ def wake_devops(*, force_dry: bool | None = None) -> tuple[bool, str]:
     with open(run_log, "ab") as logf:
         _spawn_detached(argv, env=env, stdout=logf)
     return True, (
-        f"devops 已后台唤醒（日志 {orchestration_rel(run_log)}）；"
-        "结果见 orch status / 该目录 .done 文件。" + _mount_block()
+        f"devops 计划器已后台唤醒（日志 {orchestration_rel(run_log)}）；"
+        "批次将入队 devops FIFO 由队列 worker 消化，结果见 orch status / queues-runs。"
+        + _mount_block()
     )
 
 

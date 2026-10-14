@@ -10,10 +10,10 @@ from __future__ import annotations
 import json
 import os
 
-from pysci.skills.orchestration.tools import dispatch, drain, orch
+from pysci.skills.orchestration.tools import dispatch, drain, orch, queueworker
 from pysci.skills.orchestration.tools.dispatch import DispatchOutcome
 
-from .conftest import read_backlog, seed_backlog
+from .conftest import drain_once, read_backlog, seed_backlog
 
 
 def _seed_running_lock(iso_state, monkeypatch, pid=4242):
@@ -67,7 +67,11 @@ def test_consume_stop_corrupt_file_false_and_cleans(iso_state):
 
 
 def test_drain_stops_between_items_cleanly(iso_state, monkeypatch):
-    """条目间隙消费信号：已处理项落账，未取项仍 pending，无孤儿 in_progress。"""
+    """条目间隙消费信号（执行侧=FIFO worker 的协作停止）：已处理项落账，未取项仍 pending。
+
+    backlog-fifo-20261014：``orch drain-stop`` 同时写计划器与 devops worker 两处 cancel；
+    执行在 worker，故停止语义由 worker 的条目间隙检查承接（停止优先于续计划）。
+    """
     seed_backlog(
         iso_state,
         [
@@ -75,29 +79,27 @@ def test_drain_stops_between_items_cleanly(iso_state, monkeypatch):
             {"id": "b2", "status": "pending", "summary": "s2"},
         ],
     )
+    wp = queueworker.member_paths("devops")
     calls = {"n": 0}
 
     def fake_dispatch(member, **kw):
         calls["n"] += 1
         if calls["n"] == 1:  # 处理 b1 期间组长敲了 drain-stop（目标=本 worker）
-            drain.CANCEL_PATH.write_text(
-                json.dumps({"pid": os.getpid()}), encoding="utf-8"
-            )
+            wp.cancel.write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
         return DispatchOutcome(code=0, kind="result", body="done commit aaa1111")
 
     monkeypatch.setattr(dispatch, "do_dispatch", fake_dispatch)
-    run_log = drain.new_run_log()
-    summary = drain.drain_backlog(run_log)
+    summary = drain_once()
     assert summary["stopped"] == "cooperative"
     assert summary["count"] == 1
     by_id = {i["id"]: i for i in read_backlog(iso_state)}
     assert by_id["b1"]["status"] == "done"
-    assert by_id["b2"]["status"] == "pending"
-    assert not drain.CANCEL_PATH.exists()  # 信号已消费自删
-    assert not drain.LOCK_PATH.exists()  # 锁已释放
-    done = json.loads(run_log.with_suffix(".done").read_text(encoding="utf-8"))
-    assert done["stopped"] == "cooperative"
-    assert "协作停止信号" in run_log.read_text(encoding="utf-8")
+    assert by_id["b2"]["status"] == "pending", "停止优先于续计划：未取项不得被拉成在途"
+    assert not wp.cancel.exists()  # 信号已消费自删
+    assert not drain.LOCK_PATH.exists()  # 计划器锁已释放
+    assert queueworker.lock_status(wp).get("state") != "running"  # worker 锁已释放
+    wdone = sorted(wp.runs.glob("*.done"))[-1]
+    assert json.loads(wdone.read_text(encoding="utf-8"))["stopped"] == "cooperative"
 
 
 def test_stale_signal_does_not_stop_new_worker(iso_state, monkeypatch):
@@ -119,8 +121,8 @@ def test_stale_signal_does_not_stop_new_worker(iso_state, monkeypatch):
             code=0, kind="result", body="done commit bbb2222"
         ),
     )
-    summary = drain.drain_backlog(drain.new_run_log())
-    assert "stopped" not in summary
+    summary = drain_once()
+    assert not summary["stopped"]
     assert summary["count"] == 2
     assert not drain.CANCEL_PATH.exists()
 
