@@ -286,8 +286,22 @@ def drain() -> list[dict[str, Any]]:
     return ev
 
 
+def _format_digested(ev: dict[str, Any]) -> str:
+    """**已消费**事件的行：只留事实，不复读 ``action``（「建议处置」是 emit 时写进 detail
+    的历史指引——已排空的事件再挂它，会把办完的事包装成待办（用户 2026-10-14 误导反馈）。
+    只改显示层，不碰事件流。"""
+    return (
+        f"{ev.get('event', '?')} {ev.get('subject', '') or ''} —— "
+        f"{ev.get('detail', '')}"
+    )
+
+
 def status_lines() -> list[str]:
-    """``orch status`` 事件段：水位 + 最近事件（观察面）。"""
+    """``orch status``/队列面板 事件段：水位 + 最近事件（**标注消费态**的观察面）。
+
+    每条标 ``[已消费]``/``[待排空]``（判据 = 序号是否 ≤ ``ack_seq``，与水位线同源）；
+    已消费的行**不带**「建议处置」后缀——那句是 emit 当刻的动作指引，消费后只剩历史。
+    """
     total = latest_seq()
     ack = ack_seq()
     pending = len(unacked())
@@ -297,7 +311,10 @@ def status_lines() -> list[str]:
         out.append("  （尚无事件；生产者直发 + watch 差分镜像入 state/events.jsonl）")
         return out
     for e in recent:
-        out.append(f"    · {str(e.get('ts', ''))[5:19]} {format_event(e)}")
+        consumed = _seq_of(e) <= ack
+        mark = "已消费" if consumed else "待排空"
+        text = _format_digested(e) if consumed else format_event(e)
+        out.append(f"    · {str(e.get('ts', ''))[5:19]} [{mark}] {text}")
     return out
 
 

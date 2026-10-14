@@ -116,15 +116,26 @@ def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any], A
         dirs=list(item.get("dirs") or []),
         plan=str(item.get("plan") or ""),
         step=str(item.get("step") or ""),
+        max_turns=item.get("max_turns") or None,
         quiet=True,
         auto=True,
     )
     code = int(getattr(out, "code", 2))
+    env = getattr(out, "envelope", None)
+    # 结果字典要能**独立撑起 plan run 的交接报告**（直派退役后 plan run 不再拿
+    # DispatchOutcome，而是从本条目还原）——分类/正文/验收/建议/时长/会话一并落盘。
     result: dict[str, Any] = {
         "kind": str(getattr(out, "kind", "")),
         "body": str(getattr(out, "body", ""))[:2000],
         "error": str(getattr(out, "error", ""))[:500],
         "task_file": str(item.get("task_file") or ""),
+        "code": code,
+        "member": str(getattr(out, "member", "") or item.get("member") or ""),
+        "sid": str(getattr(out, "sid", "") or ""),
+        "session_name": str(getattr(out, "session_name", "") or ""),
+        "checks": [dict(c) for c in (getattr(out, "checks", None) or [])],
+        "suggestion_id": str(getattr(out, "suggestion_id", "") or ""),
+        "duration_ms": int(getattr(env, "duration_ms", 0) or 0) if env else 0,
     }
     return (workq.STATUS_DONE if code == 0 else workq.STATUS_FAILED), result, out
 

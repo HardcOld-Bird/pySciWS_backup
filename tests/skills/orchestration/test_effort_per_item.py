@@ -365,19 +365,36 @@ def test_drain_unmarked_seed_passes_none(iso_state, monkeypatch):
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def iso_plans(tmp_path, monkeypatch):
-    """把计划目录隔离到 tmp，并捕获传给 do_dispatch 的参数。"""
+    """把计划目录隔离到 tmp，并捕获**入队**参数（直派退役：effort 等经队列条目传递）。
+
+    端点（用户裁定 2026-10-14「plan run/adhoc 一律经成员队列」）——原先捕获
+    ``do_dispatch`` 的直派参数面已消失，判据改挂在**同一语义的新接缝**上：
+    ① 入队参数（effort/档位/白名单…是否照传）；② 等收尾后能否从条目还原交接报告。
+    """
+    from pysci.skills.orchestration.tools import queues, queueworker
 
     d = tmp_path / "plans"
     d.mkdir()
     monkeypatch.setattr(plans, "PLANS_DIR", d)
     seen: dict = {}
     monkeypatch.setattr(
-        plans,
-        "do_dispatch",
+        queues,
+        "enqueue",
         lambda member, **k: (
-            seen.update(k)
-            or DispatchOutcome(code=0, kind="result", member=member, body=OK)
+            seen.update(k) or {"id": "job-1", "member": member, "status": "pending"}
         ),
+    )
+    monkeypatch.setattr(
+        queueworker, "wake_member", lambda member, **k: (True, "stub worker")
+    )
+    monkeypatch.setattr(
+        plans,
+        "_wait_job",
+        lambda member, job_id, **k: {
+            "id": job_id,
+            "status": "done",
+            "result": {"code": 0, "kind": "result", "body": OK, "checks": []},
+        },
     )
     return d, seen
 
@@ -425,10 +442,11 @@ def test_plan_run_flag_overrides_step(iso_plans):
 
 
 def test_plan_run_without_effort_passes_none(iso_plans):
+    """未标注 effort → 不覆盖成员/用户级默认（队列条目里 effort 空=跟随默认）。"""
     d, seen = iso_plans
     _write_plan(d, "p1", {})
     plans.cmd_plan_run(_run_args("p1"))
-    assert seen["effort"] is None
+    assert not seen["effort"]
 
 
 def test_plan_adhoc_carries_effort_to_run(iso_plans, monkeypatch):

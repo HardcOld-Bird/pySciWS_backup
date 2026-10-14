@@ -9,19 +9,29 @@ run 时按环节 id 对账）；执行状态 = ``state/plans/<id>.state.json``�
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from pysci.paths import ORCH_STATE_ROOT
 
-from .dispatch import DispatchOutcome, do_dispatch
+from .dispatch import DispatchOutcome
 from .ledger import format_credits, format_est_tokens, read_all, summarize
 
 PLANS_DIR = ORCH_STATE_ROOT / "plans"
 
 _DONE = ("done", "skipped")
+
+#: ``plan run`` 的同步等待上限（秒）——与成员 registry ``timeout_s`` 默认（3h）同量级：
+#: 直派时代本命令就一路阻塞在 ``do_dispatch`` 里，改为「入队+等收尾」后阻塞面不变。
+PLAN_RUN_TIMEOUT_S: int = 3 * 3600
+
+#: 等收尾的轮询间隔（秒）。等的是**队列条目状态**（worker 落盘），不是进程——进程死了
+#: 条目会由孤儿回收/reset_orphans 收敛，本函数到点即退，把环节留 ``queued`` 交 advance 结账。
+PLAN_RUN_POLL_S: float = 2.0
 
 
 def _now() -> str:
@@ -158,6 +168,71 @@ def _print_run_guidance(plan_id: str, step_state: dict, step_yaml: dict) -> None
     print("  （长任务建议以**后台 Bash**运行本命令——完成时自动通知，见 README §4.5）")
 
 
+def _wait_job(
+    member: str,
+    job_id: str,
+    *,
+    timeout_s: int = PLAN_RUN_TIMEOUT_S,
+    sleep: Any = None,
+    now: Any = None,
+) -> dict | None:
+    """等成员队列里该 job 收尾（``plan run`` 的同步语义＝**入队 + 等完成事件**）。
+
+    条目状态一离开 ``pending/in_progress`` 即返回它；条目消失（裁剪/孤儿回收）或到点
+    仍未收尾 → ``None``（调用方不改环节状态，留 ``queued`` 交 ``plan advance`` 结账）。
+    ``sleep``/``now`` 是**测试注入口**（真等 3h 没法进套件）。
+    """
+    from . import queues, workq
+
+    do_sleep = time.sleep if sleep is None else sleep
+    do_now = time.time if now is None else now
+    deadline = do_now() + float(timeout_s)
+    while True:
+        hit = [i for i in queues.items(member) if str(i.get("id")) == job_id]
+        item = hit[-1] if hit else None
+        if item is None:
+            return None
+        if str(item.get("status")) not in (
+            workq.STATUS_PENDING,
+            workq.STATUS_IN_PROGRESS,
+        ):
+            return item
+        if do_now() >= deadline:
+            return None
+        do_sleep(PLAN_RUN_POLL_S)
+
+
+def _outcome_from_job(member: str, item: dict) -> DispatchOutcome:
+    """从成员队列条目**还原**一次派发的结构化结果（交接报告的输入面）。
+
+    直派退役后 ``plan run`` 不再经手 ``DispatchOutcome``——worker 把分类/正文/验收/
+    建议/时长落在 ``item.result``（见 ``queueworker._execute``），这里还原成交接报告
+    原本就认识的形状，避免两套交接渲染。
+    """
+    from . import workq
+    from .runner import Envelope
+
+    res = item.get("result") or {}
+    status = str(item.get("status") or "")
+    code = res.get("code")
+    code = int(code) if code is not None else (0 if status == workq.STATUS_DONE else 2)
+    kind = str(res.get("kind") or "")
+    if not kind:
+        kind = "result" if status == workq.STATUS_DONE else "run_failed"
+    return DispatchOutcome(
+        code=code,
+        kind=kind,
+        member=str(res.get("member") or member),
+        sid=str(res.get("sid") or ""),
+        session_name=str(res.get("session_name") or ""),
+        task_file=str(res.get("task_file") or item.get("task_file") or ""),
+        body=str(res.get("body") or ""),
+        checks=[dict(c) for c in (res.get("checks") or [])],
+        suggestion_id=str(res.get("suggestion_id") or ""),
+        envelope=Envelope(duration_ms=int(res.get("duration_ms") or 0)),
+    )
+
+
 def cmd_plan_run(args) -> int:
     """推进计划：执行当前环节（任务书延迟书写），交接处暂停呈报决策。"""
     plan_id = args.id
@@ -193,22 +268,50 @@ def cmd_plan_run(args) -> int:
     slug = args.name or f"{plan_id}-{cur['id']}"
     # 环节曾有会话（blocked/failed 续作）→ 复用之；否则按组长指定或默认 latest
     sel = cur["session_id"][:8] if cur.get("session_id") else (args.session or "latest")
-    outcome: DispatchOutcome = do_dispatch(
-        str(sy.get("member", cur.get("member", ""))),
-        text=args.text,
-        task_file=args.task,
-        slug=slug,
-        session=sel,
-        model_tier=args.model_tier or (str(sy["model"]) if sy.get("model") else None),
-        effort=args.effort or (str(sy["effort"]) if sy.get("effort") else None),
-        max_turns=args.max_turns,
+    member = str(sy.get("member") or cur.get("member") or "")
+
+    # ── 直派退役（用户裁定 2026-10-14）：环节执行一律经成员队列 ────────────────
+    # 对外语义**不变**（仍是「推进到交接暂停」的同步命令），内部改为：入队 → 唤醒 worker
+    # → 等它收尾 → 从条目还原 outcome 再报交接。于是队列面板在途计数 / active-sessions
+    # 注册 / STALL 判据对**一切** plan 环节生效（此前 state/queues/ 长期空转、面板全盲）。
+    # ``runner.run_headless``/``do_dispatch`` 的直调只剩**队列 worker 一个入口**。
+    from . import queues, queueworker
+
+    item = queues.enqueue(
+        member,
+        text=str(args.text or ""),
+        task_file=str(args.task or ""),
         dirs=_split_dirs(args.dirs.split(","))
         if args.dirs
         else _split_dirs(sy.get("dirs")),
+        model_tier=args.model_tier or (str(sy["model"]) if sy.get("model") else ""),
+        effort=args.effort or (str(sy["effort"]) if sy.get("effort") else ""),
         plan=plan_id,
-        step=cur["id"],
-        quiet=True,
+        step=str(cur["id"]),
+        session=sel,
+        review=bool(sy.get("review")),
+        slug=slug,
+        max_turns=args.max_turns,
     )
+    job_id = str(item["id"])
+    cur["status"] = "queued"
+    cur["job_id"] = job_id
+    if args.task:
+        cur["task_file"] = args.task
+    _save_state(plan_id, state)
+
+    _, wake_msg = queueworker.wake_member(member)
+    got = _wait_job(member, job_id)
+    if got is None:
+        # 不猜结果：留 queued 交 plan advance 结账（事件驱动语义优先于「同步要有个结论」）。
+        print(
+            f"[!] job {job_id} 未在 {member} 队列收尾（超时/条目失踪）——"
+            f"环节 {cur['id']} 保持 queued，交 `orch plan advance {plan_id}` 结账（不重跑）。"
+        )
+        print(f"    {wake_msg}")
+        return 2
+
+    outcome = _outcome_from_job(member, got)
     cur["task_file"] = outcome.task_file or cur.get("task_file")
     cur["session_id"] = outcome.sid or cur.get("session_id")
     cur["kind"] = outcome.kind
