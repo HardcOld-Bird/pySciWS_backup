@@ -22,6 +22,11 @@ from pathlib import Path, PurePosixPath
 
 LIMIT = 8192
 
+#: 余量预警比例与起点：>WARN_AT 且未超限即提示（**不拦截**，rc 仍 0）。与
+#: ``pysci.skills.devops.tools.budget`` 同源（该模块是 doctor 侧真源）。
+WARN_RATIO = 0.95
+WARN_AT = int(LIMIT * WARN_RATIO)
+
 # (档位标签, 路径判定, 整改动作)——顺序即优先级，先命中者定性。
 TIERS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
@@ -53,6 +58,7 @@ def tier_for(path_str: str) -> tuple[str, str] | None:
 
 def main(argv: list[str]) -> int:
     offenders: list[str] = []
+    near: list[str] = []
     checked = 0
     for arg in argv:
         hit = tier_for(arg)
@@ -63,15 +69,28 @@ def main(argv: list[str]) -> int:
         if not p.is_file():  # 暂存删除/重命名的旧路径：无内容可注入，不算违规
             continue
         size = p.stat().st_size
+        rel = PurePosixPath(arg.replace("\\", "/"))
         if size > LIMIT:
             label, action = hit
-            rel = PurePosixPath(arg.replace("\\", "/"))
             offenders.append(
                 f"  ✗ {rel}  实测 {size}B > 上限 {LIMIT}B（{label}）\n"
                 f"     超出 {size - LIMIT}B。动作：{action}。"
             )
+        elif size > WARN_AT:
+            # 余量预警：不拦截，只提示「加一句即超限」——到顶即拒之外补上余量读数。
+            near.append(
+                f"  ⚠ {rel}  已用 {size}B / {LIMIT}B（{size * 100 // LIMIT}%），"
+                f"余 {LIMIT - size}B（{hit[0]}）"
+            )
     if not offenders:
         print(f"harness 预算：{checked} 个在范围内的文件全部 ≤{LIMIT}B ✓")
+        for ln in near:
+            print(ln)
+        if near:
+            print(
+                f"  （{len(near)} 个文件余量 >{int(WARN_RATIO * 100)}% 已耗尽，"
+                "提示不拦截：加一句前先精简或移分册）"
+            )
         return 0
     print(
         f"harness 预算硬拦：{len(offenders)} 个文件超出 basic.md §1 的每文件上限 "

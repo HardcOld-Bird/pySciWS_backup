@@ -912,6 +912,9 @@ def backlog_task_text(item: dict) -> str:
         "commit（commit 后按 charter 的 push 规程执行：限时 best-effort、失败忽略）；"
         "交付中报告改动清单与验证证据，"
         f"并注明 backlog id={item['id']} 以便销账。\n\n"
+        "grep 判据约定：任务书要求的 grep 核对，**禁词一律运行期拼接**"
+        '（如 `"m3" + " 补"`，防 Python 常量折叠把字面量折进 `.pyc` 令含二进制的 '
+        "grep 仍命中、判据把自己判红），且判据限 `*.py` 或排除 `__pycache__`。\n\n"
         "合并前 git status 检查——若 main 工作区存在会被本次合并触碰的未提交改动，"
         "交付 <blocked> 说明，等待组长清理；无关的未提交改动可照常合并。\n"
         '**交集类 blocked 请按 <blocked tags="merge_dirty_face"> 交付，并把 '

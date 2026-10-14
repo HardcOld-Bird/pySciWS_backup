@@ -76,6 +76,27 @@ def test_within_limit_reports_clean(tree):
     assert not [ln for ln in lines if ln.startswith("[!]")]
 
 
+def test_near_limit_warned_but_not_violation(tree):
+    """余量 >95% 提示 [~]，但仍算在预算内（不改退出码、不算违规）。"""
+    _mk(tree.skills / "lit" / "references" / "tight.md", budget_mod.WARN_AT + 1)
+    lines = budget_mod.report(budget_mod.audit(), [])
+    assert lines[0] == "  [√] 三档全部在预算内"
+    (warn,) = [ln for ln in lines if ln.startswith("[~]")]
+    assert "tight.md" in warn and "余量吃紧" in warn
+    assert not [ln for ln in lines if ln.startswith("[!]")]
+
+
+def test_headroom_readout_names_tightest_file(tree):
+    """余量读数一行须点名最紧文件与剩余字节（据此判断还能否再加一句）。"""
+    _mk(tree.skills / "lit" / "references" / "loose.md", 120)
+    _mk(tree.skills / "lit" / "references" / "tight.md", budget_mod.WARN_AT + 1)
+    readout = next(
+        ln for ln in budget_mod.report(budget_mod.audit(), []) if "余量读数" in ln
+    )
+    assert "tight.md" in readout
+    assert f"余 {budget_mod.LIMIT - (budget_mod.WARN_AT + 1)}B" in readout
+
+
 def test_description_total_over_budget_flagged(tree):
     for name in ("a", "b"):
         _mk(
