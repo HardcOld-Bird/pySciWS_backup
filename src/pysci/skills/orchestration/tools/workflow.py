@@ -1164,9 +1164,10 @@ def cmd_approve(args) -> int:
                 }
             )
             print(
-                f"[!] 仲裁模棱两可 → escalate=twin：提案保持待审批，未入队。\n"
+                f"[!] 仲裁模棱两可 → escalate=twin 且 twin 不可达/未表态 → 保守回退挂起："
+                f"提案保持待审批，未入队。\n"
                 f"    {run.message}\n"
-                "    人工终裁待 E6 twin 上线（orch consult-twin）；眼下要定案："
+                "    人工终裁走 orch consult-twin；眼下要定案："
                 '--override "<理由>"（计入 override 率）。'
             )
             return 1
