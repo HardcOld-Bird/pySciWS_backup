@@ -784,6 +784,31 @@ drain/事件的 `exit 2` 被投到次要会话（污染其上下文，用户明�
   三层**互相独立**：任何一层坏掉，另两层仍在。
 - **日志完整化（hook v3）**：环境缺失 / token 写失败 / token 自抢分支均留痕，另加 `TERM/INT` 陷阱留痕（SIGKILL 无法拦，故由看门狗按心跳判死重臂）。
 - **已知残余风险**：① SIGKILL 类外部终止由看门狗兜底，但**阈值 300 s 内**仍有真空（心跳新鲜期不会重臂）；② 看门狗本身若被同一类外部杀手干掉，只有 `watchdog-scheduler.ps1`（OS 任务计划）能在下一个 5 min 点重臂——未注册该任务时，重启后看门狗不在场；③ `schtasks` 默认当前用户交互令牌，**用户未登录时任务不跑**（此时也无组长会话可唤醒，影响面为零）。
+
+#### 夜航模式（PSEP_2，2026-10-14 晚定型；规格 `data/others/original_designs/PSEP_2.md`）
+
+用户离机时段需无人值守推进：**手动单开关** `data/pysci_settings.toml [night] enabled`——
+**热切换**（钩子每次触发现读文件，无需重启会话）；读取失败/键缺席/非法值一律回落 `false`
+并出声（`settings.night_enabled` 读侧 fail-open）。**关闭即回到现状、零残留**。三层：
+
+- **① 政策注入层**（`.qoder/hooks/night-policy.sh`，挂 **SessionStart + PostCompact**）：
+  ON 时经既有钩子体系 `hookSpecificOutput.additionalContext` 注入**政策全文＝用户授权书**
+  （持续推进不等用户 / 一般决策自行执行且事后追溯责任在用户 / 高风险**咨询 twin 且其决策权
+  等同用户**（leader-only.md §3 限时预授权；twin 不可达降级副组长+自行决断+留痕）/ 两终态
+  「全部完成或严重阻碍」/ 禁把 LLM 当定时器 / 权限弹窗属硬阻塞）；OFF 零注入零噪声。选这两
+  个触发点而非每回合 Stop：逐回合注入烧 token，而上下文压缩正是政策最易丢的时刻。判定与
+  文本单点 `tools/night.py`（NIGHT_POLICY）。
+- **② 判据层**：`.qoder/hooks/night-gate.sh`（`PreToolUse` matcher=AskUserQuestion）——夜航内
+  **提问工具成不可能**（`exit 2` + 转 `orch consult-twin` 指令）；`watch.queue_pressure`
+  第六条夜航判据——`state/mirror-pending.json` 非空 → 夜航 `PENDING-WORK`（沿既有 30 min
+  节流；非夜航不加）。两层皆 **fail-open**（任何异常放行/零输出，不塌唤醒主链路）。
+- **③ 保险丝层（缓行，规格先立）**：仅当「有未竟事项且组长无活动」的停滞才打回，两终态
+  一律静默；PENDING-WORK 已覆盖大部分停滞面，故**只预留** `periodic_wake_s` 键、实施前勿设。
+- **配套审计（唯一软依赖）**：twin 代裁全链可追溯——记录 `evals/taste/<case>.json`（案卷摘要/
+  选择/理由/置信度/时间/**夜航预授权**标记）+ **单一账目源** preference-journal（`channel=twin`
+  + `case_id`）+ `orch twin-review --list/--confirm/--reject`（否决入 override 账，供后续改进
+  追溯）。判据自动化面：`test_night_policy.py` / `test_night_gate.py` / `test_twin_trace.py`；
+  操作步骤与可证伪判据另见技能 `references/patrol-watchdog.md` §5。
 - **手动用法（降级/兜底仍适用）**：组长以 Bash `run_in_background` 启动，进程退出即原生完成
   通知唤醒本会话；一次 watch 报一批事件即退。**交办/唤醒/watch 输出不再催挂**（旧 `watch.mount_lines`
   [NEXT] 段已删，backlog 20261013-222533-leader）——只回报「已自动挂载」。
