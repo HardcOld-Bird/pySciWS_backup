@@ -69,6 +69,8 @@ harness-eval.md；巡检引擎 references/inspector-engine.md；判决包 verdic
   `run_in_background` 且**唯一顶层命令**（嵌入即连坐被杀）；事件面见 drain-watch.md、
   salvage-reclaim.md；
 - **三级防线/巡更**：活跃期 30min 巡更 cron（全空闲即撤）、新机就位 → references/patrol-watchdog.md；
+- **交接验收**：任务书条目 × **蓝图条款双向核对**（蓝图有而任务书无 → 补单/留痕；反之记账）；
+  UI/交互改动须含**用户路径测试**、占位文案须写真实归属 → references/acceptance-discipline.md；
 - 副组长拒绝任务（blocked 首行「拒绝任务」）：改任务书重派，或终裁坚持原派（理由留痕）；
 - 交接处决策：一键继续 / plan amend 改后续 / drop 中止。
 

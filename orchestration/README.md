@@ -767,6 +767,10 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
 - `check="none" reason="..."` → 放行，台账记「未验收（成员判断）」及理由；
 - 无 `<artifact>` 的交付（纯咨询类）→ 天然不触发；
 - 制衡：台账透明 + 组长 `orch check` 随时抽检 + reviewer 可见验收状态；
+- **UI/交互类改动的验收必须含「用户路径测试」**（菜单→Enter→视图→footer 广告**键位矩阵**
+  逐键断言可观察效果 + 未广告键无副作用），**函数直调测试不作数**——2026-10-14 `n` 键用户
+  路径断裂穿过验收，根因正是「测试只走面板路径（`t`→`n`），菜单→Enter 路径零覆盖」；范例
+  `tests/skills/orchestration/test_tui_user_paths.py`（f1 立）与 `test_tui_visual_structure.py`（f2）；
 - 脚本所有权在 devops，组员禁改（只读层）——独立性由所有权保证；
 - unrouted（未知 check 类型）→ 放行 + 记台账（门禁故障不阻塞生产）。
 
