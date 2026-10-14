@@ -348,14 +348,29 @@ def filter_consumed(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     这是「同一底层事件只唤醒一次」的硬判据——旧实现里两个 watch 实例各持**自己的**内存
     基线，被取代的那任仍会在 ``orch watch`` 返回时唤醒一次（2026-10-14 12:44 生产实锤）。
+
+    **条件型伪事件不受此账约束**（``events.CONDITIONAL_TYPES``）：它们不是「发生过一次」
+    的事实而是「持续成立的状态」，抗重复由**节流窗口**（≤1 次/30min、跨挂载持久）负责。
+    若也记进消费账，同一签名就被永久吃掉——「≤1 次/30min」会退化成「一辈子 1 次」
+    （2026-10-14 返工发现的交互缺陷）。
     """
     seen = _consumed_map()
-    return [e for e in events if _identity(e) not in seen]
+    return [
+        e
+        for e in events
+        if str(e.get("event")) in _events.CONDITIONAL_TYPES or _identity(e) not in seen
+    ]
 
 
 def mark_consumed(events: list[dict[str, Any]], state: dict[str, Any]) -> None:
-    """把 ``events`` 的身份记进消费账（合并读盘结果，只留最近 :data:`CONSUMED_KEEP` 条）。"""
-    merged = {**_consumed_map(), **{_identity(e): _now() for e in events}}
+    """把 ``events`` 的身份记进消费账（合并读盘结果，只留最近 :data:`CONSUMED_KEEP` 条）。
+
+    条件型伪事件**不入账**（见 :func:`filter_consumed`）——节流账才是它们的记忆。
+    """
+    durable = [
+        e for e in events if str(e.get("event")) not in _events.CONDITIONAL_TYPES
+    ]
+    merged = {**_consumed_map(), **{_identity(e): _now() for e in durable}}
     items = sorted(merged.items(), key=lambda kv: kv[1])[-CONSUMED_KEEP:]
     state["consumed"] = dict(items)
 
@@ -549,12 +564,20 @@ def detect(
     cur: dict[str, Any],
     *,
     throttle: dict[str, Any] | None = None,
+    queue_watch: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """基线 → 当前 的差分判定。返回 ``(events, verdict)``。
 
     ``verdict = {"hold": set[str], "why": str, "throttle": dict[str, float]}``——``hold`` 是
     本帧**不得**并入基线的身份组（由 :func:`advance_base` 执行）；``throttle`` 是本帧新
     记的节流账（调用方并进 ``state["throttle"]``）；``why`` 是抑制/无事的原因，进黑匣子留痕。
+
+    ``queue_watch``：**队列感知巡更通道**（``PENDING-WORK``/``STALL``）的开关，缺省关。
+    伪事件是「持续成立的条件」而非「基线差分事实」——开着它，任何**真实** backlog/队列
+    存量都会挤进每一帧的事件列表，把 a1 的「聋期事件必须被读出 / 首轮无事件 / 水位单调」
+    断言变成**依赖运行期状态**的脆弱判据（2026-10-14 实测：main 上 backlog 恰有 1 条
+    pending → 4 个 a1 用例集体变红）。故只有**观察循环**（:func:`run_watch` / 补账
+    :func:`reconcile`）打开它，基线差分调用方一律走默认关。
 
     判定规则（每条都是「新出现」而非「当前存在」——既存状态是基线的一部分，不重复
     打扰组长）：
@@ -660,14 +683,19 @@ def detect(
     # 事实」而是「持续成立的状态」。故判据 = 条件成立 + **同类事件距上次超节流窗口**；不按
     # 基线差分（挂载时队列已非空也要报一次：那正是「没人干」的现场），**节流就是防抖机制**
     # （节流账持久化在 watch.json，跨挂载继承 → 重启不重置、不刷屏）。
-    window = float(_watch_cfg()["pending_throttle_s"])
+    # `queue_watch` 关（缺省）时本通道整体静默——见本函数 docstring：伪事件不该把真实
+    # backlog/队列存量塞进每一帧的差分结果里。
     moment = float(cur.get("epoch", 0) or 0) or time.time()
 
     def _throttled(name: str) -> bool:
+        """节流判定；``queue_watch=False`` 恒 True = **关掉本通道**（差分调用方无伪事件）。"""
+        if not queue_watch:
+            return True
         try:
             last = float((throttle or {}).get(name, 0) or 0)
         except (TypeError, ValueError):
             last = 0.0
+        window = float(_watch_cfg()["pending_throttle_s"])
         return last > 0 and (moment - last) < window
 
     if cur.get("queue_pending"):
@@ -1154,7 +1182,9 @@ def run_watch(
             break
         sleep(min(interval, left))
         cur = snapshot()
-        events, verdict = detect(prev, cur, throttle=state.get("throttle"))
+        events, verdict = detect(
+            prev, cur, throttle=state.get("throttle"), queue_watch=True
+        )
         prev = advance_base(prev, cur, verdict["hold"])
         _touch(state, cur, prev, verdict)
         if events and _emit(state, events, echo):
@@ -1162,7 +1192,9 @@ def run_watch(
         save_state(state)
 
     cur = snapshot()
-    events, verdict = detect(prev, cur, throttle=state.get("throttle"))
+    events, verdict = detect(
+        prev, cur, throttle=state.get("throttle"), queue_watch=True
+    )
     prev = advance_base(prev, cur, verdict["hold"])
     _touch(state, cur, prev, verdict)
     if events and _emit(state, events, echo):  # 最后一拍才落地的收尾也照报
@@ -1219,7 +1251,9 @@ def reconcile() -> tuple[list[dict[str, Any]], bool]:
         # 有心跳却无退出记录 = 被外部杀死：追认遗言，供 status 读黑匣子
         state["exit_reason"] = KILLED
     cur = snapshot()
-    events, verdict = detect(base, cur, throttle=state.get("throttle"))
+    events, verdict = detect(
+        base, cur, throttle=state.get("throttle"), queue_watch=True
+    )
     state["base"] = advance_base(base, cur, verdict["hold"])
     push_recent(state, _frame(cur, str(verdict.get("why", "") or "")))
     state["heartbeat_at"] = ""

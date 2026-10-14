@@ -116,7 +116,7 @@ def test_consumed_and_throttle_survive_remount(face):
 def test_pending_work_fires_when_queue_waits_without_worker(face):
     watch.arm()
     _pend("figure")
-    evs, verdict = watch.detect(_armed_base(), watch.snapshot())
+    evs, verdict = watch.detect(_armed_base(), watch.snapshot(), queue_watch=True)
     assert [e["event"] for e in evs] == [events.PENDING_WORK]
     assert "figure 队列 1 项 pending 且无 worker" in evs[0]["detail"]
     assert verdict["throttle"][events.PENDING_WORK] > 0
@@ -127,14 +127,14 @@ def test_pending_work_silent_when_worker_live(face):
     drain.acquire_lock("w", queueworker.member_paths("figure"))
     watch.arm()
     _pend("figure")
-    evs, _ = watch.detect(_armed_base(), watch.snapshot())
+    evs, _ = watch.detect(_armed_base(), watch.snapshot(), queue_watch=True)
     assert evs == []
 
 
 def test_pending_work_silent_when_everything_empty(face):
     """队列全空 → 条件不成立（这是「cron 自动取消」的判据面）。"""
     watch.arm()
-    evs, _ = watch.detect(_armed_base(), watch.snapshot())
+    evs, _ = watch.detect(_armed_base(), watch.snapshot(), queue_watch=True)
     assert evs == []
     assert watch.queue_pressure()["pending"] is False
 
@@ -151,7 +151,7 @@ def test_pending_work_fires_on_taskbook_new(face):
         ),
         encoding="utf-8",
     )
-    evs, _ = watch.detect(_armed_base(), watch.snapshot())
+    evs, _ = watch.detect(_armed_base(), watch.snapshot(), queue_watch=True)
     assert [e["event"] for e in evs] == [events.PENDING_WORK]
     assert "taskbooks" in evs[0]["detail"]
 
@@ -163,19 +163,23 @@ def test_throttle_suppresses_within_window_then_reports_after_expiry(face):
     """节流防抖：窗口内抑制（不重复唤醒）；窗口过后条件仍在 → 再报一次（信号不丢）。"""
     watch.arm()
     _pend("figure")
-    evs, verdict = watch.detect(_armed_base(), watch.snapshot())
+    evs, verdict = watch.detect(_armed_base(), watch.snapshot(), queue_watch=True)
     assert [e["event"] for e in evs] == [events.PENDING_WORK]
     throttle = dict(verdict["throttle"])
     assert throttle[events.PENDING_WORK] > 0
 
     # 窗口内：条件仍在（甚至又多一项）→ 抑制，不记新账
     _pend("figure")
-    evs2, v2 = watch.detect(_armed_base(), watch.snapshot(), throttle=throttle)
+    evs2, v2 = watch.detect(
+        _armed_base(), watch.snapshot(), throttle=throttle, queue_watch=True
+    )
     assert evs2 == [] and v2["throttle"] == {}
 
     # 窗口过期：同一条件再报一次
     throttle[events.PENDING_WORK] -= watch.PENDING_THROTTLE_S + 1
-    evs3, _ = watch.detect(_armed_base(), watch.snapshot(), throttle=throttle)
+    evs3, _ = watch.detect(
+        _armed_base(), watch.snapshot(), throttle=throttle, queue_watch=True
+    )
     assert [e["event"] for e in evs3] == [events.PENDING_WORK]
 
 
@@ -311,4 +315,59 @@ def test_inspector_pending_ignored_when_switch_off(face, monkeypatch):
     pressure = watch.queue_pressure()
     assert not any("inspector" in r for r in pressure["reasons"]), (
         "开关关闭时其队列不得进「有活没人干」"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 伪事件 × 真实事件的**消费账语义**（2026-10-14 返工钉的回归）
+# ---------------------------------------------------------------------------
+def test_pseudo_and_real_events_coexist_with_correct_consumption(face):
+    """共存时三条语义一次钉住（漏任一条都会在生产上退化）：
+
+    ① 同帧共存 → **一次**唤醒（主事件 + 「同时」附注），不拆成两次；
+    ② 真实事件**入**消费账 → 换帧/换实例不再报（同一底层事件只唤醒一次）；
+    ③ 伪事件**不入**消费账 → 节流窗口过后仍能再报；否则「≤1 次/30min」被永久账吃成
+       「一辈子 1 次」，队列再次非空就再也不叫醒组长了。
+    """
+    watch.arm()
+    _pend("figure")
+    events.emit(events.JOB_DONE, "figure-1", "收尾", "advance")
+
+    st = watch.load_state()
+    evs, verdict = watch.detect(st["base"], watch.snapshot(), queue_watch=True)
+    assert [e["event"] for e in evs] == [events.PENDING_WORK, events.JOB_DONE]
+
+    out: list[str] = []
+    assert watch._emit(st, evs, out.append) is True, (
+        "共存要一次唤醒（True=已 echo 送达）"
+    )
+    assert len(out) >= 2, "主事件一行 + 「同时」附注一行"
+
+    after = watch.load_state()
+    keys = list(after.get("consumed") or {})
+    assert any(k.startswith(events.JOB_DONE + "|") for k in keys), (
+        "真实事件必须入消费账"
+    )
+    assert not any(k.startswith(events.PENDING_WORK + "|") for k in keys), (
+        "伪事件不入消费账——入了会把「≤1 次/30min」吃成「一辈子 1 次」"
+    )
+
+    real = [e for e in evs if e["event"] == events.JOB_DONE]
+    pseudo = [e for e in evs if e["event"] == events.PENDING_WORK]
+    assert watch.filter_consumed(real) == [], "真实事件此后被消费水位吃掉（不再唤醒）"
+    assert watch.filter_consumed(pseudo) == pseudo, "伪事件不受消费水位约束"
+
+    # 节流窗口过期 + 条件仍成立 → 伪事件照报，且真实事件仍被消费账挡下
+    throttle = dict(
+        verdict["throttle"]
+    )  # 调用方会并进 state["throttle"]（_touch 的职责）
+    throttle[events.PENDING_WORK] -= watch.PENDING_THROTTLE_S + 1
+    evs2, _v2 = watch.detect(
+        after["base"], watch.snapshot(), throttle=throttle, queue_watch=True
+    )
+    assert events.PENDING_WORK in [e["event"] for e in evs2]
+    out2: list[str] = []
+    assert watch._emit(after, evs2, out2.append) is True
+    assert out2[0].startswith(events.PENDING_WORK), (
+        f"窗口过后只剩伪事件被唤醒，真实事件不该复活：{out2[0]}"
     )
