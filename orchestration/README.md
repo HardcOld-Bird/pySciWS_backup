@@ -726,7 +726,7 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   ```
 - **三级防线（谁在哪一级兜底，a1–a3 定型）**：
   1. **会话级·watch 钩子**——`Stop` 钩子每回合接管 `watch-arm.sh`（token 竞争、循环 `orch watch`）：有监听时命中即 `exit 2` 唤醒。主路，**零轮询**。
-  2. **会话级·巡更 cron**（harness `CronCreate`，30 min）——兜「**没有事件但状态该看**」：漏挂、wake 送达失败、队列悄悄积压。组长**活跃期**挂；**连续 2 次全空闲即 `CronDelete` 撤**（cron 触发一轮 LLM，空转即浪费）。prompt 模板与就位步骤见 orchestration 技能 `references/patrol-watchdog.md`。它与铁律「禁止 sleep-轮询」**不冲突**——禁的是拿轮询**等工作完成**，巡更只是低频读一次状态面、驱动仍靠 ①。
+  2. **会话级·队列感知巡更**（`watch` 的 `PENDING-WORK` / `STALL` 伪事件，与 ① **同一循环同帧**判定，走同一条 `detect → echo → exit 2` 唤醒链）——兜「**没有事件但状态该看**」：队列 / devops backlog / 事件流 / `data/taskbooks/` **有活却没人干**，或条目 `in_progress` 停滞超期。判据单一实现 `watch.queue_pressure`（四条任一即「非空」：backlog pending；成员队列 pending 且**该成员无存活 worker**；事件流有超 30 min 未排空；taskbooks 有 `new` 态）。**自动起止**：队列全空 → 纯 TIMEOUT 循环**零唤醒**，组长**不手工挂/撤 cron**（2026-10-14 用户设计，手工巡更 cron 退役）。同类事件 **≤1 次/30 min**（`registry.watch.pending_throttle_s` / `stall_threshold_s` 可配），节流账随 `watch.json` 持久化（重启不重置）。它与铁律「禁止 sleep-轮询」**不冲突**——禁的是拿轮询**等工作完成**，巡更不是驱动工作的机制。就位步骤与可证伪判据见 orchestration 技能 `references/patrol-watchdog.md`。
   3. **机器级·`pysci-watchdog`**（`orch watchdog start|stop|status`）——listener/watchdog 被无声杀死、会话消亡连坐时于阈值内重臂。**注册/卸载**（重启/重登后自动点火）：
      ```
      powershell -ExecutionPolicy Bypass -File orchestration\scripts\watchdog-scheduler.ps1 -Mode install
@@ -747,8 +747,11 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   锁态、锁 run、done 身份、抑制原因）进 `recent` 环形缓冲，命中/超时写 `exit_reason`；
   被外部杀死的那任没有退出记录，下次挂载或 `orch status` 会读出这条「遗言」。漏挂/会话
   中断期间的账由下次 `orch status` 的 watch 段**一次性补账**（报完即推进基线，重复运行不
-  刷屏；watch 仍在挂载时 status 不抢账，免双份唤醒）。同刻多事件按 CRASH > QUOTA-STOP >
-  CHANNEL-STOP > NEEDS-LEADER > QUEUE-COMPLETE 取主事件、其余以「同时」附注。**弃 Monitor 工具方案**
+  刷屏；watch 仍在挂载时 status 不抢账，免双份唤醒）。**单一消费水位**（2026-10-14 12:44
+  双唤醒实锤后加）：命中事件的**身份**记进 `watch.json` 的 `consumed` 账（读盘为准、跨实例
+  跨挂载继承），唤醒前先过它——被取代的 watch 实例即便仍持自己的旧基线，也拿不到第二次
+  唤醒权（`watch.filter_consumed`/`mark_consumed`）。同刻多事件按 CRASH > QUOTA-STOP >
+  CHANNEL-STOP > NEEDS-LEADER > PENDING-WORK > STALL > QUEUE-COMPLETE 取主事件、其余以「同时」附注。**弃 Monitor 工具方案**
   （会话侧注册更重，且同样要组长发起）。
 
 ---
