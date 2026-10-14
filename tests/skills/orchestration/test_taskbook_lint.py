@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 
-from pysci.skills.orchestration.tools import dispatch
+from pysci.skills.orchestration.tools import dispatch, plans
 
 # 与仓库随附 taskbook-lint.json 首期规则同形（复制于此，单元测试不依赖仓库文件）
 FIGURES_RULE = {
@@ -139,9 +139,11 @@ def test_repo_shipped_rules_file_valid():
     assert rules, "随附 taskbook-lint.json 应至少含一条规则"
     for r in rules:
         assert r.get("re") and r.get("hint"), f"规则缺 re/hint：{r}"
-        re.compile(r["re"])  # 非法正则会抛，测试即失败
+        pat = re.compile(r["re"])  # 非法正则会抛，测试即失败
         if r.get("absent"):
             re.compile(r["absent"])
+        if r.get("steps"):
+            assert pat.groups >= 1, f"steps 规则必须捕获环节 id：{r}"
 
 
 # ---------------------------------------------------------------------------
@@ -212,3 +214,102 @@ def test_repo_rule_silent_when_gitignore_present():
         "白名单：orchestration/state/queues/（运行态新建）、.gitignore"
     )
     assert not any("new-runtime-dir-needs-gitignore" in w for w in warns)
+
+
+# ---------------------------------------------------------------------------
+# steps 判据（tui-fixup f3；背景：m2 占位文案承诺「m3 补」×4 无人兑现）：
+# 环节 id 承诺必须能在**对应计划 YAML 的 steps** 里找到；引述段不计；定位不到计划 fail-open
+# ---------------------------------------------------------------------------
+PLAN_RULE = {
+    "id": "placeholder-step-promise",
+    "re": r"(?<![A-Za-z0-9])([A-Za-z]{1,4}\d{1,2}[a-z]?)\s*(?:补|充实|建)",
+    "steps": True,
+    "hint": "环节承诺不可溯",
+}
+
+
+def _seed_plan(tmp_path, monkeypatch, plan_id, steps):
+    """铺一个最小计划 YAML，并把 plans.PLANS_DIR 指到 tmp（判据经它定位计划）。"""
+    d = tmp_path / "plans"
+    d.mkdir(parents=True, exist_ok=True)
+    body = "goal: g\nsteps:\n" + "".join(
+        f"  - id: {s}\n    member: devops\n" for s in steps
+    )
+    (d / f"{plan_id}.plan.yaml").write_text(body, encoding="utf-8")
+    monkeypatch.setattr(plans, "PLANS_DIR", d)
+    return d
+
+
+def test_step_promise_flags_unregistered_step(tmp_path, monkeypatch):
+    """含「mN 补」却引用了计划里不存在的环节 → 告警，并附计划 id 供核对。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["f1", "f2"])
+    warns = dispatch.lint_taskbook(
+        "后续单：待决模块细节 m9 补。", plan_id="fix-20261014"
+    )
+    assert len(warns) == 1
+    assert warns[0].startswith("[placeholder-step-promise]")
+    assert "fix-20261014" in warns[0] and "m9" in warns[0]
+
+
+def test_step_promise_silent_when_step_exists(tmp_path, monkeypatch):
+    """引用真实存在的环节 → 零告警（零误报的正向面）。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["m1", "m3"])
+    assert dispatch.lint_taskbook("细节 m3 补。", plan_id="fix-20261014") == []
+
+
+def test_step_promise_ignores_quoted_samples(tmp_path, monkeypatch):
+    """引述段（「」/''）是被引用的样例或 grep 判据字面量，不算承诺 → 不告警。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["f1"])
+    body = "缺陷：「（细节 m3 补）」×4；判据 `grep 'm3 补' src/` 零命中。"
+    assert dispatch.lint_taskbook(body, plan_id="fix-20261014") == []
+
+
+def test_step_promise_fail_open_without_resolvable_plan(tmp_path, monkeypatch):
+    """定位不到对应计划（无注册计划）→ fail-open 不告警（无法核对就不误报）。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    monkeypatch.setattr(plans, "PLANS_DIR", tmp_path / "nope")
+    assert dispatch.lint_taskbook("细节 m9 补。") == []
+
+
+def test_step_promise_resolves_plan_from_body(tmp_path, monkeypatch):
+    """未显式给 plan_id 时，从正文里出现的真实计划 id 定位（多命中取最长）。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["f1"])
+    warns = dispatch.lint_taskbook("（计划 fix-20261014 环节 f1）后续 m9 补。")
+    assert len(warns) == 1 and "fix-20261014" in warns[0]
+
+
+def test_step_promise_zero_false_positive_on_historical_shapes(tmp_path, monkeypatch):
+    """历史任务书形态回放：引述样例 / 引用真实环节 / 无承诺 → 全部零告警。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["m3", "m4", "m5"])
+    bodies = [
+        "占位未兑现：留着「（细节 m3 补）」×4、「（占位）…m5 充实」——均未含兑现条款。",
+        "- 「计划与派发」详情放占位（m3/m5 充实，如实标注「占位」）；",
+        "3. **m4 建** 已收官（环节状态 read 自 plan YAML）；",
+        "验收：`grep 'm3 补\\|m5 充实\\|m5 建' src/` 零命中。",
+        "细节见 references，无任何环节承诺。",
+    ]
+    for b in bodies:
+        assert dispatch.lint_taskbook(b, plan_id="fix-20261014") == [], b
+
+
+def test_plan_from_slug_strips_trailing_step(tmp_path, monkeypatch):
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["f1"])
+    assert dispatch._plan_from_slug("fix-20261014-f1") == "fix-20261014"
+    assert dispatch._plan_from_slug("unknown-slug") is None
+
+
+def test_write_taskbook_uses_slug_to_resolve_plan(tmp_path, monkeypatch, capsys):
+    """落盘路径：write_taskbook 由 slug 定位计划，承诺了不存在的环节即告警（不阻断落盘）。"""
+    _seed(tmp_path, monkeypatch, [PLAN_RULE])
+    _seed_plan(tmp_path, monkeypatch, "fix-20261014", ["f1"])
+    dest = dispatch.write_taskbook(
+        tmp_path / "pod", text="后续 m9 补。", task_file=None, slug="fix-20261014-f1"
+    )
+    out = capsys.readouterr().out
+    assert "任务书 lint" in out and "fix-20261014" in out and "m9" in out
+    assert dest.exists()

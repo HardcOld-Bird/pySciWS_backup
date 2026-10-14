@@ -371,18 +371,115 @@ def load_lint_rules() -> list[dict]:
     return [r for r in rules if isinstance(r, dict) and r.get("re")]
 
 
-def lint_taskbook(body: str) -> list[str]:
-    """扫任务书正文，返回命中的错误 CLI 范式告警（空=干净）。
+#: 引述段（「」『』“” 与成对 ASCII 引号）：其中的范式是**被引述**——缺陷样例、grep 判据的
+#: 禁词字面量、shell 单引号串——不是正文承诺本身。判据自己的禁词字面量不该被自己判红
+#: （20261014-075230-devops 约定「禁词运行期拼接」，本规则是该约定的第一次实战）。
+_QUOTE_SPAN_RE = re.compile(
+    r"「[^」\n]*」|『[^』\n]*』|“[^”\n]*”|\"[^\"\n]*\"|'[^'\n]*'"
+)
 
-    **告警不阻断**：单条规则 regex 非法只跳过该条，不影响其余规则与派发。规则可选
-    ``absent``（第二正则）：只有 ``re`` 命中**且** ``absent`` **不**命中时才告警——用于
-    「正文提到 A 却没提 B」的条件判据（如白名单列了运行态目录却漏了 `.gitignore`）。
+
+def _strip_quoted(body: str) -> str:
+    """去掉引述段，只留正文陈述（供环节 id 承诺判据扫描）。"""
+    return _QUOTE_SPAN_RE.sub(" ", body)
+
+
+def _known_plan_ids() -> list[str]:
+    """已注册计划 id（``state/plans/<id>.plan.yaml``）；取不到 → 空表（fail-open）。"""
+    try:
+        from . import plans as _plans  # 局部导入：避开 plans 侧对 dispatch 的再入
+
+        d = _plans.PLANS_DIR
+    except Exception:  # noqa: BLE001 - 定位计划失败不阻塞派发
+        return []
+    if not d.exists():
+        return []
+    return [p.name[: -len(".plan.yaml")] for p in d.glob("*.plan.yaml")]
+
+
+def _plan_steps(plan_id: str) -> list[str]:
+    """计划 YAML 的环节 id 清单；读不到 → 空表。"""
+    try:
+        from .plans import _load_yaml
+
+        plan = _load_yaml(plan_id)
+    except Exception:  # noqa: BLE001
+        return []
+    return [
+        str(s["id"])
+        for s in (plan.get("steps") or [])
+        if isinstance(s, dict) and s.get("id")
+    ]
+
+
+def _plan_from_slug(slug: str) -> str | None:
+    """由任务书 slug 剥尾段定位注册计划 id（``tui-fixup-20261014-f3`` → ``tui-fixup-20261014``）。"""
+    ids = set(_known_plan_ids())
+    parts = slug.split("-")
+    for cut in range(len(parts), 0, -1):
+        cand = "-".join(parts[:cut])
+        if cand in ids:
+            return cand
+    return None
+
+
+def _resolve_plan_id(body: str, hint: str | None) -> str | None:
+    """「对应计划」：显式 hint 优先；否则正文中出现且真实存在的计划 id（多命中取最长/最具体）。"""
+    ids = _known_plan_ids()
+    if hint and hint in ids:
+        return hint
+    hits = [pid for pid in ids if pid in body]
+    return max(hits, key=len) if hits else None
+
+
+def _step_promise_warning(
+    rule: dict, pat: re.Pattern[str], body: str, plan_id: str | None
+) -> str | None:
+    """环节 id 承诺判据：正文（去引述后）命中的 id 必须能在对应计划 steps 里找到。
+
+    定位不到对应计划 → 返回 ``None``（fail-open：无法核对就不误报）。
+    """
+    found = {m.group(1) for m in pat.finditer(_strip_quoted(body)) if m.groups()}
+    if not found:
+        return None
+    pid = _resolve_plan_id(body, plan_id)
+    if pid is None:
+        return None
+    steps = _plan_steps(pid)
+    missing = sorted(found - set(steps))
+    if not missing:
+        return None
+    tag = f"[{rule['id']}] " if rule.get("id") else ""
+    hint = rule.get("hint", "环节 id 承诺不可溯")
+    return (
+        f"{tag}{hint}（对应计划 {pid} 的 steps=[{', '.join(steps) or '空'}]，"
+        f"承诺了不存在的：{'、'.join(missing)}）"
+    )
+
+
+def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
+    """扫任务书正文，返回命中的告警（空=干净）。**告警不阻断**。
+
+    单条规则 regex 非法只跳过该条，不影响其余规则与派发。规则可选：
+
+    - ``absent``（第二正则）：只有 ``re`` 命中**且** ``absent`` **不**命中时才告警——用于
+      「正文提到 A 却没提 B」的条件判据（如白名单列了运行态目录却漏了 `.gitignore`）；
+    - ``steps: true``（环节 id 承诺，backlog 20261014-075230-devops 的落地）：``re`` 第 1
+      捕获组是**环节 id**（如 m3/f4）；该 id 必须存在于**对应计划** YAML 的 steps，否则
+      告警（附计划 id 与现有 steps 供核对）。对应计划由 ``plan_id``（任务书 slug 派生）或
+      正文中最具体的真实计划 id 定位；定位不到则 fail-open 不告警。**引号内的引述**（缺陷
+      样例 / grep 判据的禁词字面量）不算承诺。
     """
     warnings: list[str] = []
     for rule in load_lint_rules():
         try:
             pat = re.compile(rule["re"])
         except re.error:
+            continue
+        if rule.get("steps"):
+            warn = _step_promise_warning(rule, pat, body, plan_id)
+            if warn:
+                warnings.append(warn)
             continue
         if not pat.search(body):
             continue
@@ -600,7 +697,7 @@ def write_taskbook(
     else:
         body = text or ""
     # 落盘前轻量 lint：命中错误 CLI 范式仅告警（组长确认后可照常派发），不阻断
-    for warn in lint_taskbook(body):
+    for warn in lint_taskbook(body, plan_id=_plan_from_slug(slug)):
         print(f"[!] 任务书 lint：{warn}")
     conflicts = evidence_conflicts(body)
     for c in conflicts:
