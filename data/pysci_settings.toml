@@ -47,14 +47,12 @@ preset = "mimo"
 # 一律保守不切换并在 orch status 与 mirror 出声告警。
 enabled = true
 valley_preset = "deepseek"           # 谷时席链取哪个预设（qwen/mimo/deepseek）
-leadtime_s = 900                     # 入峰提前量（秒；0 = 踩点才切）——生效键，改值即生效
+leadtime_s = 600                     # 入峰提前量（秒；0 = 踩点才切）——生效键，改值即生效
                                      #   （代码 DEFAULT_LEADTIME_S=3600 只是键缺失/非法时的回落值）
 peak = [[9, 12], [14, 18]]           # 峰段，半开区间 [起, 止)，24 小时制
 boundary_hold_s = 300                # 边界避让窗口（秒；0=关闭，上限 300）——生效键
                                      #   （原 [routing].boundary_hold_s，2026-10-14 迁本节）
 jury_panel = ["glm", "kimi", "mimo"] # 谷时仲裁团固定面板（三席一律按量付费直调）
-# **配置键必须写出（不许写成注释里的示例）**：`# leadtime_s = 600` 读不到、改了不生效，
-# 正是 2026-10-14「改了入峰提前量、面板不动」的事故根因。
 # 非法值逐键回落出厂并告警——`orch status` 路由段会把警告逐条列出来。
 
 [priority]
