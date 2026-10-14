@@ -1348,6 +1348,24 @@ def main(argv: list[str] | None = None) -> int:
     # ---- taste：twin 审美判断通道（README §1/§3.1，E6-prep）----
     _taste._add_parser(sub)
 
+    # ---- twin-review：用户复核 twin 判断/裁决（PSEP_2 配套追溯面，task-20261014-psep2-n3）----
+    p = sub.add_parser(
+        "twin-review",
+        help="用户复核 twin 判断/裁决：--list 查看；--confirm/--reject 留痕（否决入 override 账）",
+    )
+    p.add_argument("case_id", nargs="?", default="", help="裁决 case id（--list 可省）")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument(
+        "--confirm", action="store_true", help="确认该裁决（入 journal verdict）"
+    )
+    g.add_argument(
+        "--reject", action="store_true", help="否决该裁决（批语入 override 账）"
+    )
+    p.add_argument("--note", default="", help="批语（否决留痕用）")
+    p.add_argument("--list", action="store_true", help="列出最近裁决与待复核计数")
+    p.add_argument("--limit", type=int, default=8, help="--list 显示条数（默认 8）")
+    p.set_defaults(func=_taste.cmd_twin_review)
+
     # ---- eval：Tier B harness 压测套件（README §5.5 / E2）----
     p = sub.add_parser(
         "eval",

@@ -92,6 +92,17 @@ def record_path(case_id: str) -> Path:
     return TASTE_DIR / f"{case_id}.json"
 
 
+def case_id_from_path(path: Path | str) -> str:
+    """案卷路径 → 留痕 case id（文件名 stem；非法字符折 ``-``；空则 ``case``）。
+
+    consult 案卷是自由形式文件（无 A/B 解析），故 case id 取 stem——与 taste 的
+    ``case_id``（jury 案卷解析所得）同作**关联键**：记录 ↔ journal 行 ↔ 复核入口。
+    """
+    stem = Path(path).stem.strip()
+    cleaned = re.sub(r"[^0-9A-Za-z_\u4e00-\u9fff.-]+", "-", stem)
+    return cleaned or "case"
+
+
 def build_prompt(case: Case, preference: str) -> str:
     """组装注入正文：宪章全文 + 案卷 + 输出格式硬要求。
 
@@ -155,6 +166,82 @@ def parse_judgement(body: str) -> dict[str, Any]:
     return out
 
 
+#: 夜航预授权标记（PSEP_2 §3.2 授权书；写进判断/裁决留痕供用户事后复核）。
+NIGHT_AUTHORITY: str = "夜航预授权"
+
+
+def parse_ruling(body: str) -> dict[str, Any]:
+    """从**裁决**交付正文抽 ``{choice, reason, confidence}``——choice 为**自由文本**
+    （consult 案卷是自由形式，没有 A/B 选项；盲审二选一仍走 :func:`parse_judgement`）。
+
+    与 :func:`parse_judgement` 同钳制精神：confidence 越界钳 0–1、非数置 None；抽不到即
+    ``parsed=False``（不猜——宁可让人看出这条没读出来）。
+    """
+    out: dict[str, Any] = {
+        "choice": "",
+        "reason": "",
+        "confidence": None,
+        "parsed": False,
+    }
+    m = _JSON_BLOCK_RE.search(body or "")
+    if not m:
+        return out
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return out
+    if not isinstance(data, dict):
+        return out
+    out["choice"] = str(data.get("choice", "") or "").strip()
+    out["reason"] = str(data.get("reason", "") or "").strip()
+    try:
+        out["confidence"] = min(1.0, max(0.0, float(data.get("confidence"))))
+    except (TypeError, ValueError):
+        out["confidence"] = None
+    out["parsed"] = True
+    return out
+
+
+def _night_marker() -> dict[str, Any]:
+    """夜航标记：开关 ON 时记授权依据（用户复核看的就是它）；读开关失败按常规时段。"""
+    try:
+        from .settings import night_enabled
+
+        on, _warnings = night_enabled()
+    except Exception:  # noqa: BLE001 - 读开关失败按非夜航（标记缺席=常规时段，保守）
+        on = False
+    return {"night": on, "authority": NIGHT_AUTHORITY if on else ""}
+
+
+def _journal_ruling(record: dict[str, Any], options_text: str) -> None:
+    """裁决入**单一账目源** preference-journal（channel=twin + case_id + 夜航标记）。
+
+    「单一账目源」纪律（§纪律「同一能力不留两份实现」）：判决流水只此一处；taste/jury/
+    post-verify 各面都在此落行，读数无需第二本账（verdict.py 同口径）。写失败 fail-soft
+    ——记录文件（``evals/taste/<case_id>.json``）才是硬留痕，账目面不炸判断。
+    """
+    try:
+        from . import journal
+
+        journal.append(
+            {
+                "ts": str(record.get("ts") or ""),
+                "situation": f"twin 裁决 {record.get('case_id')}（{record.get('case_file') or '?'}）",
+                "options": options_text,
+                "choice": str(record.get("choice") or ""),
+                "reason": str(record.get("reason") or ""),
+                "source": "twin",
+                "kind": "ruling",
+                "channel": "twin",
+                "case_id": str(record.get("case_id") or ""),
+                "confidence": record.get("confidence"),
+                "night": bool(record.get("night")),
+            }
+        )
+    except Exception:  # noqa: BLE001 - 账目写失败不炸判断（记录文件仍是硬留痕）
+        pass
+
+
 def judge(
     case_file: Path | str,
     *,
@@ -162,7 +249,7 @@ def judge(
     model_tier: str | None = None,
     quiet: bool = False,
 ) -> tuple[int, dict[str, Any]]:
-    """执行一次判断跳并落留痕。
+    """执行一次判断跳并落留痕（记录 + **单一账目源** journal；夜航时带预授权标记）。
 
     Returns:
         ``(code, record)``：0=已表态且落盘；1=派发失败或没读出选择（留痕仍写，
@@ -204,6 +291,7 @@ def judge(
         "ts": _now(),
         "case_id": case.case_id,
         "case_file": str(case.path or case_file),
+        "case_head": (case.question or "").strip()[:120],  # 案卷摘要（审计面要素）
         "dossier_hash": hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16],
         "member": member_id,
         "model_tier": presets.resolve_role(member_id, model_tier),
@@ -220,8 +308,11 @@ def judge(
         "reason": j["reason"],
         "parsed": j["parsed"],
         "body": (outcome.body or "")[:2000],
+        "record_kind": "taste",
+        **_night_marker(),
     }
     p = write_record(record)
+    _journal_ruling(record, "A/B（盲审二选一）")
     if not quiet:
         if j["parsed"] and j["choice"]:
             conf = "-" if j["confidence"] is None else f"{j['confidence']:.2f}"
@@ -240,6 +331,134 @@ def write_record(record: dict[str, Any]) -> Path:
     p = record_path(str(record["case_id"]))
     _atomic_write_json(p, record)
     return p
+
+
+# ---------------------------------------------------------------------------
+# 追溯与复核（PSEP_2 §1 配套要求/§5；task-20261014-psep2-n3）
+# ---------------------------------------------------------------------------
+def _load_records() -> list[dict[str, Any]]:
+    """读全部留痕记录（taste 盲审 + consult 夜航代裁**同读一目录**；坏文件跳过）。"""
+    rows: list[dict[str, Any]] = []
+    try:
+        paths = sorted(TASTE_DIR.glob("*.json"))
+    except OSError:
+        return rows
+    for p in paths:
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(d, dict) and d.get("case_id"):
+            rows.append(d)
+    return rows
+
+
+def twin_rulings(limit: int = 10) -> list[dict[str, Any]]:
+    """twin 判断/裁决留痕（按时间倒序；``limit<=0`` 全量）。"""
+    rows = _load_records()
+    rows.sort(key=lambda r: str(r.get("ts") or ""), reverse=True)
+    return rows if limit <= 0 else rows[:limit]
+
+
+def pending_review_count() -> int:
+    """未复核（记录无 ``review``）的裁决数——用户复核链路的待办读数。"""
+    return sum(1 for r in _load_records() if not r.get("review"))
+
+
+def ruling_lines(limit: int = 8) -> list[str]:
+    """审计面逐条呈现（要素：时间/类型/案卷 id/选择/置信度/理由/夜航预授权标记/复核态）。"""
+    rows = twin_rulings(limit)
+    if not rows:
+        return ["（无 twin 判断/裁决留痕）"]
+    out: list[str] = []
+    for r in rows:
+        conf = "-"
+        try:
+            if r.get("confidence") not in (None, ""):
+                conf = f"{float(r['confidence']):.2f}"
+        except (TypeError, ValueError):
+            conf = "-"
+        tags: list[str] = []
+        if r.get("night"):
+            tags.append(str(r.get("authority") or NIGHT_AUTHORITY))
+        rev = r.get("review") or {}
+        tags.append(f"已复核:{rev.get('verdict')}" if rev else "待复核")
+        out.append(
+            f"  {str(r.get('ts'))[:19]} [{r.get('record_kind') or 'taste'}] "
+            f"{r.get('case_id')}：{r.get('choice') or '（未读出）'}（置信度 {conf}）"
+            f"〔{'；'.join(tags)}〕"
+        )
+        head = str(r.get("case_head") or "").strip()
+        if head:
+            out.append(f"      案卷：{head[:100]}")
+        reason = str(r.get("reason") or "").strip()
+        if reason:
+            out.append(f"      理由：{reason[:120]}")
+    return out
+
+
+def apply_review(case_id: str, *, verdict: str, note: str = "") -> tuple[int, str]:
+    """用户复核一次 twin 判断/裁决（``confirmed``/``rejected``）→ 记录留痕 + 单一账目记账。
+
+    否决另入 journal（``kind="override"``、reason=批语）——后续改进（twin 语料/宪章修订）
+    循此追溯；确认入 ``kind="verdict"``。账目写失败 fail-soft（review 已落进记录文件）。
+    """
+    path = record_path(case_id)
+    if not path.exists():
+        return 2, f"[!] 无此裁决留痕：{_rel(path)}（orch twin-review --list 看现有）"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return 2, f"[!] 留痕不可读：{exc}"
+    if not isinstance(record, dict):
+        return 2, "[!] 留痕格式异常（非对象）"
+    record["review"] = {"ts": _now(), "verdict": verdict, "note": note}
+    _atomic_write_json(path, record)
+    try:
+        from . import journal
+
+        journal.append(
+            {
+                "ts": _now(),
+                "situation": f"用户复核 twin 裁决 {case_id}",
+                "options": "",
+                "choice": verdict,
+                "reason": note,
+                "source": "user",
+                "kind": "override" if verdict == "rejected" else "verdict",
+                "channel": "twin",
+                "case_id": case_id,
+                "night": bool(record.get("night")),
+            }
+        )
+    except Exception:  # noqa: BLE001 - 账目写失败不炸复核（记录里 review 已落）
+        pass
+    label = "确认" if verdict == "confirmed" else "否决"
+    tail = f"；批语：{note[:80]}" if note else ""
+    return 0, f"[√] 已{label}：{case_id}（{_rel(path)}{tail}）"
+
+
+def cmd_twin_review(args: argparse.Namespace) -> int:
+    """``orch twin-review``：复核入口——``--list`` 看最近裁决；``--confirm|--reject`` 留痕。"""
+    case_id = str(getattr(args, "case_id", "") or "")
+    if getattr(args, "list", False) or not case_id:
+        for line in ruling_lines(limit=int(getattr(args, "limit", 8) or 8)):
+            print(line)
+        print(
+            f"  待用户复核 = {pending_review_count()}"
+            '（复核：orch twin-review <case_id> --confirm|--reject [--note "…"]）'
+        )
+        return 0
+    if not (getattr(args, "confirm", False) or getattr(args, "reject", False)):
+        print("[!] 需 --confirm 或 --reject（或 --list 查看）")
+        return 2
+    rc, msg = apply_review(
+        case_id,
+        verdict="confirmed" if getattr(args, "confirm", False) else "rejected",
+        note=str(getattr(args, "note", "") or ""),
+    )
+    print(msg)
+    return rc
 
 
 def cmd_taste(args: argparse.Namespace) -> int:
