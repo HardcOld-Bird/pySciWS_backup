@@ -246,7 +246,7 @@ def _devops_dispatch_inflight() -> bool:
 def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     """队列压力读数（PENDING-WORK / STALL 判据的**单一实现**，§纪律「同一能力不留两份」）。
 
-    「非空」= 有活却没人干，五条任一成立即真：
+    「非空」= 有活却没人干，六条任一成立即真：
 
     1. devops backlog 有 ``pending``**且无 devops FIFO worker 在跑、也无在途条目**
        （backlog-fifo-20261014：执行归 FIFO，worker 在场/有在途时 pending 是正常在途——
@@ -257,7 +257,10 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
        （开关关闭 → 不拉起巡检，其存量只报不告警——否则每次巡更都叫醒组长去处理一个本来
        就不跑的队列，正是「唤醒→无事」的反面示例，用户 2026-10-14 点名降噪）；
     4. 统一事件流有超一个巡更周期未排空的事件（:func:`events.unacked`）；
-    5. ``data/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）。
+    5. ``data/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）；
+    6. **夜航时段**（``[night] enabled=true``，PSEP_2 §3.3b）``state/mirror-pending.json``
+       非空——此刻「谁在等用户」的事项应转 twin 或自行裁决，不得等用户；非夜航时段
+       **不加**此判据（白天等用户是正常的）。
 
     ``stall`` 单列：任一队列条目 ``in_progress`` 且距 ``started_at`` 超阈值**且该成员无
     心跳新鲜的活会话**（慢而不死不报，backlog-fifo-20261014）。
@@ -300,6 +303,28 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
             )
         else:
             reasons.append(f"devops backlog {len(backlog)} 项 pending")
+    # 夜航判据（PSEP_2 §3.3b，task-20261014-psep2-n2）：夜间「在等用户」＝停滞——真源
+    # state/mirror-pending.json（此刻谁在等用户）非空即并入 PENDING-WORK（detail 带夜航
+    # 提示）；**仅夜航时段生效**（白天等用户是正常的，不加此判据）；节流复用既有
+    # PENDING-WORK 窗口（同一事件名同一 30min 账），不另造节流实现。
+    try:
+        from . import settings as _settings
+
+        night_on, _night_warns = _settings.night_enabled()
+    except Exception:  # noqa: BLE001 - 读开关失败按非夜航（宁少报不多报）
+        night_on = False
+    if night_on:
+        try:
+            from . import mirror as _mirror
+
+            waiting = _mirror.pending_items()
+        except Exception:  # noqa: BLE001 - 待决面读失败不阻塞巡更
+            waiting = []
+        if waiting:
+            reasons.append(
+                f"夜航：待决事项 {len(waiting)} 项（mirror-pending）——应转 twin 或自行"
+                "裁决，不得等用户"
+            )
     try:
         from . import queues as _queues
 

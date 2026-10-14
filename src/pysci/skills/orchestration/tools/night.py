@@ -41,6 +41,27 @@ NIGHT_POLICY: str = (
 )
 
 
+#: 拦截（deny）时注入给模型的转 twin 指令（PSEP_2 §3.3a 文案，task-20261014-psep2-n2）。
+NIGHT_GATE_DENY: str = (
+    "夜航模式：用户已离机（[night] enabled=true），提问工具不可用——该决策转 twin 终裁："
+    "`pysci-orch consult-twin <案卷.md>`，依其裁决执行；twin 不可达时降级「副组长咨询 + 自行"
+    "决断 + 留痕」，仍不等用户。"
+)
+
+
+def gate_deny_message(data: dict[str, Any] | None = None) -> str | None:
+    """PreToolUse（AskUserQuestion）拦截判定：夜航 ON → 返回 deny 指令；OFF → ``None``。
+
+    **fail-open 方向**：读开关异常一律返回 ``None``（放行）——不能因配置损坏就废掉提问
+    工具；调用方（:func:`main` 的 ``--gate`` 支与 night-gate.sh）据此 exit 2 / exit 0。
+    """
+    try:
+        on, _warnings = night_enabled(data)
+    except Exception:  # noqa: BLE001 - 读开关出错不拦
+        return None
+    return NIGHT_GATE_DENY if on else None
+
+
 def policy_hook_output(
     event_name: str = "SessionStart", *, data: dict[str, Any] | None = None
 ) -> dict[str, Any] | None:
@@ -72,7 +93,13 @@ def _read_settings_file(path: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """钩子入口：stdin 载荷取 ``hook_event_name`` → 开关 ON 时打印 JSON；OFF/异常一律 exit 0。
+    """钩子入口，两模式：
+
+    - ``--gate``（PreToolUse 拦截口，PSEP_2 §3.3a）：夜航 ON → **stderr 注出转 twin
+      指令 + exit 2**（harness 拦截语义：exit 2 = deny、stderr 注入给模型）；OFF /
+      读开关异常 → exit 0 放行（fail-open）。
+    - 缺省（政策注入口，PSEP_2 §3.2）：stdin 载荷取 ``hook_event_name`` → 开关 ON 时
+      打印 ``hookSpecificOutput.additionalContext`` JSON；OFF/异常一律 exit 0。
 
     ``--settings PATH``：显式配置文件路径（钩子按 ``$QODER_PROJECT_DIR`` 传入；
     测试隔离面用同一参数）。载荷解析失败按 SessionStart 名义注入（两触发点政策同一份，
@@ -82,7 +109,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--settings", default="", help="配置文件路径（缺省走 paths 默认）"
     )
+    parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="PreToolUse 拦截口：夜航 ON → stderr 指令 + exit 2；OFF/异常 → exit 0",
+    )
     args = parser.parse_args(argv)
+    if args.gate:
+        try:
+            data = _read_settings_file(Path(args.settings)) if args.settings else None
+            deny = gate_deny_message(data)
+        except Exception:  # noqa: BLE001 - fail-open：gate 自身异常放行
+            return 0
+        if deny:
+            print(deny, file=sys.stderr)
+            return 2
+        return 0
     try:
         raw_payload = sys.stdin.read()
     except Exception:  # noqa: BLE001 - stdin 不可读 = 无触发名，按缺省
