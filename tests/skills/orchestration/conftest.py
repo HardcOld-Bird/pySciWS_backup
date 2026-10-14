@@ -35,6 +35,7 @@ from pysci.skills.orchestration.tools import (
     registry,
     routing,
     settings,
+    taste,
     verdict,
     watch,
     workflow,
@@ -279,6 +280,9 @@ def iso_state(tmp_path, monkeypatch):
     # E5b：每条判决（approve/reject/核验落地）都写决策日志，不 patch 就真写仓库里那份
     # 长期资产（git 跟踪——测试污染会直接变成脏跟踪面）。
     monkeypatch.setattr(journal, "JOURNAL_PATH", state / "preference-journal.jsonl")
+    # twin 判断/裁决留痕面（n3 起 `consult-twin`/`taste.judge` 都会落痕）：不 patch 则
+    # 真写仓库 `state/evals/taste/`（实测 2026-10-14：测试产物 case.json 落进主树 untracked）。
+    monkeypatch.setattr(taste, "TASTE_DIR", state / "evals" / "taste")
     monkeypatch.setattr(verdict, "JURY_CASE_DIR", state / "evals" / "jury-cases")
     monkeypatch.setattr(dispatch, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(dispatch, "SUGGESTIONS_DIR", state / "suggestions")
