@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from pysci import paths as _paths
 from pysci.skills.orchestration.tools import (
     backpressure,
     benchd,
@@ -24,6 +25,7 @@ from pysci.skills.orchestration.tools import (
     dispatch,
     drain,
     events,
+    failure_classes,
     failure_tags,
     inspectd,
     journal,
@@ -346,6 +348,19 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(queues, "QUEUES_DIR", state / "queues")
     monkeypatch.setattr(queueworker, "QUEUE_WORKER_ROOT", state / "queues-runs")
     monkeypatch.setattr(queueworker, "ORCH_STATE_ROOT", state)
+    # 哨兵暴露的漏面（PSEP_3 收尾单）：bencher 生命周期落点与失败词表——不 patch 就真写
+    # ``orchestration/state/bencher*.lock``/``failure-classes.json``（此前"手工清单"漏了两面）。
+    monkeypatch.setattr(benchd, "QUEUE_PATH", state / "bencher" / "queue.json")
+    monkeypatch.setattr(
+        benchd,
+        "BENCH_PATHS",
+        drain.WorkerPaths(
+            lock=state / "bencher.lock",
+            runs=state / "bencher-runs",
+            cancel=state / "bencher.cancel",
+        ),
+    )
+    monkeypatch.setattr(failure_classes, "CLASSES_PATH", state / "failure-classes.json")
     return state
 
 
@@ -1026,3 +1041,102 @@ def biased_first_juror(**kw):
         return ai_reply("A", **kw)
 
     return transport
+
+
+# ---------------------------------------------------------------------------
+# 防写穿哨兵（autouse，PSEP_3 收尾单）：测试写**真实状态面** → 即刻失败并报用例名
+# ---------------------------------------------------------------------------
+# 背景：测试写穿真实 state 三次实锤（queues/sim.json ×2、rface 漏 patch）。根因＝iso_state
+# 是**手工 patch 清单**，每个新测试文件/新状态面都可能漏，漏了就是静默污染（孤儿队列条目、
+# 孤儿 TASKBOOK-NEW 事件、误触发巡更）。本哨兵把「漏」从静默变**即刻红**：
+#   · 绊线（**写即 raise**）：``Path.write_text/write_bytes/open(w+)/mkdir/replace`` 命中真实
+#     state/data 根 → AssertionError 并报**用例名**。这是**零例外面**机制——不看 patch 清单，
+#     凡落到真实根的写一律拦（新增状态面自动覆盖）；宁可误杀后放行，不可漏面。
+#   · 豁免：``@pytest.mark.allow_real_state``（确需写真实面的用例）→ 跳过 + 收尾留痕。
+# 只拦**写**不拦读：读真实面（shipped registry/vocab/lint 规则）是合法用法，重定向会误杀一片。
+REAL_STATE_ROOT = _paths.ORCH_STATE_ROOT
+REAL_DATA_ROOT = _paths.DATA_ROOT
+_REAL_ROOT_STRS = (
+    str(REAL_STATE_ROOT).replace("\\", "/"),
+    str(REAL_DATA_ROOT).replace("\\", "/"),
+)
+#: 豁免留痕（本会话内被 allow_real_state 跳过的用例 nodeid）。
+_REAL_STATE_EXEMPT: list[str] = []
+
+
+def _within_real_root(p: pathlib.Path) -> bool:
+    """路径是否落在真实 state/data 根内（**无系统调用**：abs 前缀比对，够快够用）。"""
+    s = str(p if p.is_absolute() else (pathlib.Path.cwd() / p)).replace("\\", "/")
+    return any(s == root or s.startswith(root + "/") for root in _REAL_ROOT_STRS)
+
+
+@pytest.fixture(autouse=True)
+def _state_write_guard(request, monkeypatch):
+    """防写穿哨兵（autouse）：对真实 state/data 根的**写操作即刻 raise** 并报用例名。
+
+    豁免：``@pytest.mark.allow_real_state``（确需写真实面的用例）——跳过并留痕（收尾汇总）。
+    """
+    if request.node.get_closest_marker("allow_real_state"):
+        _REAL_STATE_EXEMPT.append(request.node.nodeid)
+        yield
+        return
+
+    nodeid = request.node.nodeid
+    real_open = pathlib.Path.open
+    real_write_text = pathlib.Path.write_text
+    real_write_bytes = pathlib.Path.write_bytes
+    real_mkdir = pathlib.Path.mkdir
+    real_replace = pathlib.Path.replace
+
+    def _trip(p, what: str) -> None:
+        if _within_real_root(pathlib.Path(p)):
+            raise AssertionError(
+                "[防写穿哨兵] 测试写真实状态面（" + what + "）：" + str(p) + "\n"
+                "  用例 = " + nodeid + "\n"
+                "  → 把该状态面重定向到 tmp（挂 iso_state 或 monkeypatch 该常量）；"
+                "确需写真实面请标 @pytest.mark.allow_real_state。"
+            )
+
+    def _open(self, mode="r", *a, **k):
+        if any(c in str(mode) for c in "wxa+"):
+            _trip(self, "open(" + str(mode) + ")")
+        return real_open(self, mode, *a, **k)
+
+    def _write_text(self, *a, **k):
+        _trip(self, "write_text")
+        return real_write_text(self, *a, **k)
+
+    def _write_bytes(self, *a, **k):
+        _trip(self, "write_bytes")
+        return real_write_bytes(self, *a, **k)
+
+    def _mkdir(self, *a, **k):
+        _trip(self, "mkdir")
+        return real_mkdir(self, *a, **k)
+
+    def _replace(self, target, *a, **k):
+        _trip(self, "replace(src)")
+        _trip(target, "replace(dst)")
+        return real_replace(self, target, *a, **k)
+
+    monkeypatch.setattr(pathlib.Path, "open", _open)
+    monkeypatch.setattr(pathlib.Path, "write_text", _write_text)
+    monkeypatch.setattr(pathlib.Path, "write_bytes", _write_bytes)
+    monkeypatch.setattr(pathlib.Path, "mkdir", _mkdir)
+    monkeypatch.setattr(pathlib.Path, "replace", _replace)
+    yield
+
+
+def pytest_configure(config) -> None:
+    """注册 ``allow_real_state`` 标记（豁免留痕用）。"""
+    config.addinivalue_line(
+        "markers", "allow_real_state: 豁免防写穿哨兵（确需写真实状态面的用例）"
+    )
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
+    """豁免面**留痕**（要求：哨兵自身可关，豁免面留痕）。"""
+    if _REAL_STATE_EXEMPT:
+        terminalreporter.write_sep("=", "防写穿哨兵豁免留痕（allow_real_state）")
+        for nodeid in _REAL_STATE_EXEMPT:
+            terminalreporter.write_line("  - " + nodeid)
