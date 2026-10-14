@@ -1,0 +1,25 @@
+{
+  "plan_id": "devops-gap-20261014.plan",
+  "created": "2026-10-14T21:25:26+08:00",
+  "goal": "补齐 plan→devops 派发缺口（PSEP_2 备忘优先项）——plan 可直接派发 devops 环节，backlog-batch 通道不回归",
+  "steps": [
+    {
+      "id": "d1",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-devops-gap-d1.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "d2",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-devops-gap-d2.md",
+      "session_id": null,
+      "kind": null,
+      "review": "pending",
+      "job_id": "devops-20261014-214747-devops-gap-20261014.plan-d2"
+    }
+  ],
+  "completed_at": "2026-10-14T21:54:05+08:00"
+}

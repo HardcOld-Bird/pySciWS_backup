@@ -1,0 +1,64 @@
+{
+  "plan_id": "refactor-20261014",
+  "created": "2026-10-14T00:46:12+08:00",
+  "goal": "按 REFACTOR.md 实施 pysci 交互式控制台 + 全员 FIFO 队列化（M1–M7）",
+  "steps": [
+    {
+      "id": "m1",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-004618-refactor-20261014-m1.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "m2",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-005827-refactor-20261014-m2.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "m3",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-010817-refactor-20261014-m3.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "m4",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-012130-refactor-20261014-m4.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "m5",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-013232-refactor-20261014-m5.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "m6",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-014428-refactor-20261014-m6.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "m7",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-015635-refactor-20261014-m7.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    }
+  ],
+  "completed_at": "2026-10-14T02:18:11+08:00"
+}

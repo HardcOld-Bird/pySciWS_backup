@@ -1,5 +1,13 @@
 # PSEP 2 — 夜航模式（无人值守推进）：单开关 + 机械政策注入 + 判据拦截
 
+> **备忘（2026-10-14 补，优先实施项）**：plan 系统不支持派发 devops 环节
+> （`queues.QUEUE_MEMBERS` 不含 devops，`plan run/advance` 成员闸拒绝——系早期
+> 决策「基建条目走 devops backlog」未考虑大任务显式含基建改进的情景，实现不
+> 彻底）。**先补齐此缺口**（收编 devops 入队列成员、成员闸反转、ADR 注记、
+> backlog-batch 不回归、全链实测），随后 PSEP 2 原内容的基建环节即可直接经
+> plan 派发 devops，受益于此。此备忘属 PSEP 2 实施序的一部分，实施完成后
+> 并入正文或随本文退役。
+
 > Status: **已批准（方向）**，待实施｜类型: Enhancement（PySci Enhancement Proposal，戏拟 PEP）
 > 作者: 组长（综合用户需求 2026-10-14 与次要会话调查评估）｜关联: PSEP 1（原 REFACTOR
 > 收官版，已更名存档）｜依赖基建: wake-claim / cronless 队列感知巡更 / 配置实时化

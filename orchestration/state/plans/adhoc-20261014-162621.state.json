@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261014-162621",
+  "created": "2026-10-14T16:26:21+08:00",
+  "goal": "adhoc：orchestration/state/plans/wake-owner-20261014.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "task_file": "orchestration/state/plans/wake-owner-20261014.task.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending",
+      "job_id": "devops-20261014-183037-adhoc-20261014-162621-s1"
+    }
+  ],
+  "completed_at": "2026-10-14T19:12:55+08:00"
+}

@@ -1,0 +1,8 @@
+id: adhoc-20261014-124521
+goal: adhoc：orchestration/state/plans/cronless-wake-20261014.task.md
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs: []
+  review: false

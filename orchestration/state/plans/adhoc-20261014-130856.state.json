@@ -1,0 +1,16 @@
+{
+  "plan_id": "adhoc-20261014-130856",
+  "created": "2026-10-14T13:08:56+08:00",
+  "goal": "adhoc：orchestration/state/plans/config-live-panel-20261014.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-130856-adhoc-20261014-130856-s1.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    }
+  ],
+  "completed_at": "2026-10-14T13:59:35+08:00"
+}

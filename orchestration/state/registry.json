@@ -87,6 +87,12 @@
         "rubrics"
       ],
       "tier_note": "REFACTOR §7/E5a：闲时巡检专职工，flash 起步（成本敏感：巡检是每日常态而非疑难攻坚；需要更高分辨率的 rubric 判断由引擎侧指派项 --model-tier max 升档）。全项目**只读**：extra_dirs 只给两处产出面（发现台账/证据/队列所在的 state/inspector，与判决案卷所在的 state/evals/jury-cases），其余零写权——巡检发现靠晋升 backlog 交 devops 消化，不自己动手。readonly_extra=rubrics 把 pod 内设计审查 rubric 锁成只读（修订权归用户）。timeout_s 1200 刻意小于引擎 wallclock_s 1800：单跳要显著短于单次激活的墙钟预算，否则「预算到顶自停」会退化成「跳完才发现超预算」。"
+    },
+    "sim": {
+      "pod": "orchestration\\pods\\sim",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
     }
   },
   "inspector": {

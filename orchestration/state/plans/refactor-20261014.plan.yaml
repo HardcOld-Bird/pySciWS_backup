@@ -1,0 +1,35 @@
+goal: 按 REFACTOR.md 实施 pysci 交互式控制台 + 全员 FIFO 队列化（M1–M7）
+steps:
+- id: m1
+  member: devops
+  brief: TUI 技术选型 spike（Textual 兼容性实测）+ 裸 pysci 入口 + 非 tty 静态回退；spike 结论写回 REFACTOR.md
+    §2.3
+  effort: high
+- id: m2
+  member: devops
+  brief: TUI 主菜单（每模块一行+更新徽标+选中展开概览板+Enter 全屏详情）+ mirror-seen.json 水位 + 旧 12 概览项归并
+    7 模块（journal/decisions 迁入）
+  effort: high
+- id: m3
+  member: devops
+  brief: 任务书模块（列表/多行新增/批复返工）+ data/taskbooks/ 落盘与状态机 + TASKBOOK-NEW 唤醒 + orch taskbooks
+    list|show 程序化面
+- id: m4
+  member: devops
+  brief: 队列层统一：7 专职+deputy+reviewer FIFO（workq 原语，state/queues/<member>.json）+ worker
+    生命周期（非空拉起/空后销毁）+ reviewer 附属语义；devops 组包保留、生产组员不组包
+  effort: high
+- id: m5
+  member: devops
+  brief: 统一事件/唤醒层（JOB-DONE/STEP-REVIEW-DONE/QUEUE-EMPTY/TASKBOOK-NEW + events drain
+    合并唤醒）+ plan advance 事件驱动 + 多 plan 并行；须向后兼容 plan run 现语义
+  effort: high
+- id: m6
+  member: devops
+  brief: backpressure 写侧接线（note_session/heartbeat/注销）+ 全队列 defer 延期语义 + REFACTOR.md
+    §3.3 硬验收
+- id: m7
+  member: devops
+  brief: pysci-mirror 改名清扫（全仓 grep 零命中）+ 命令式面转 LLM 通道 + charter/README 同步 + REFACTOR.md
+    裁决并入 README §12/§13 并退役
+id: refactor-20261014

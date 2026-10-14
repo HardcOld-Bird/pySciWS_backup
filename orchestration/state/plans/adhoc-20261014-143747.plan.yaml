@@ -1,0 +1,8 @@
+id: adhoc-20261014-143747
+goal: adhoc：（实测留痕 2026-10-14）请只回一行 done，不要修改任何文件
+steps:
+- id: s1
+  member: sim
+  brief: （实测留痕 2026-10-14）请只回一行 done，不要修改任何文件
+  dirs: []
+  review: false

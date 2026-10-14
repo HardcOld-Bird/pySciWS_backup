@@ -1,0 +1,14 @@
+# REFACTOR 收尾补完计划（2026-10-14 用户实测反馈：占位未兑现 + n 键失效 + 美学统一）
+goal: TUI 补完（键位修复+模块详情充实+美学统一）+ 过程防再犯（覆盖度对账+用户路径测试纪律）
+steps:
+  - id: f1
+    member: devops
+    brief: 交互路径修复（任务书模块 Enter 直达专用面板、footer 键位广告与守卫一致化）+ 五模块详情充实（计划与派发/队列与运行/盲审与审查/待决与验收/系统与路由），消灭「m3 补」式占位
+    effort: high
+  - id: f2
+    member: devops
+    brief: 美学统一（概览板/详情页/journal/taskbook 面板与主菜单同风格：边框/色彩/背景/标题）+ 用户路径 Pilot 测试（菜单 Enter→详情→footer 广告键位逐一验证）+ 文案一致性测试
+    effort: high
+  - id: f3
+    member: devops
+    brief: 过程防再犯：占位/承诺文案中环节 id 必须存在于计划的 taskbook lint 规则 + 用户路径测试纪律写进机械验收/编排操作面 + 组长蓝图条款对账纪律入技能

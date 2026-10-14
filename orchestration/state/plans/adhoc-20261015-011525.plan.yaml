@@ -1,0 +1,9 @@
+id: adhoc-20261015-011525
+goal: adhoc：orchestration/pods/devops/inbox/task-20261015-readme-rewrite
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs:
+  - orchestration
+  review: false

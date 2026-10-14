@@ -1,0 +1,57 @@
+{
+  "plan_id": "psep3-20261014.plan",
+  "created": "2026-10-14T22:42:26+08:00",
+  "goal": "PSEP_3 实施——superstep 嵌套编排 + jury 裁决书/E6 twin 终裁 + 返工驱动改进流 + 跨任务优先级路由",
+  "steps": [
+    {
+      "id": "pa1",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep3-pa1.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "pa2",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep3-pa2.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "pc",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep3-pc.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "pd1",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep3-pd1.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "pd2",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep3-pd2.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "pb",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep3-pb.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending",
+      "job_id": "devops-20261015-004028-psep3-20261014.plan-pb"
+    }
+  ],
+  "completed_at": "2026-10-15T01:00:02+08:00"
+}

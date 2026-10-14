@@ -1,0 +1,41 @@
+{
+  "plan_id": "psep2-night-20261014.plan",
+  "created": "2026-10-14T21:55:16+08:00",
+  "goal": "PSEP_2 夜航模式实施——单开关 + 机械政策注入 + 判据拦截 + 盲测追溯配套（保险丝缓行不实施）",
+  "steps": [
+    {
+      "id": "n1",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep2-n1.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "n2",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep2-n2.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "n3",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep2-n3.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "n4",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261014-psep2-n4.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending",
+      "job_id": "devops-20261014-222747-psep2-night-20261014.plan-n4"
+    }
+  ],
+  "completed_at": "2026-10-14T22:38:34+08:00"
+}

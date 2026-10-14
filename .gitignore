@@ -11,6 +11,9 @@ __pycache__/
 /data/research/**/experiment/
 /data/research/**/storage/
 
+# 用户大任务材料（data/大任务/）：docx/pdf 等原始材料体积巨大，不入库（用户裁决 2026-10-15）
+/data/大任务/
+
 # 图管线可再生中间产物与超大矢量交付物（eps/svg 可由 figures 管线重建；pdf/png 仍跟踪）
 /data/research/**/figures/*/raw/
 /data/research/**/figures/*/panels/

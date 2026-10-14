@@ -1,0 +1,16 @@
+goal: 唤醒链自愈与迟到唤醒（聋期事件不丢）+ inspector 自主巡逻名实相符 + 自动化 e2e 防回归
+steps:
+- id: a1
+  member: devops
+  brief: watch 唤醒链加固：持久水位迟到唤醒（聋期事件下次挂载立即命中，不被基线吞掉）+ 监听进程静默死亡取证与看门狗自愈重臂 + token/退出路径日志完整化；复现
+    02:30 丢唤醒场景
+  effort: high
+- id: a2
+  member: devops
+  brief: inspector 自主性：闲时自调度巡检（无 orch 命令也按 cooldown 走）+ 队列 pending 超时告警（入队 30min 未处理即事件）；模拟「组长
+    5h 无操作」验收
+  effort: high
+- id: a3
+  member: devops
+  brief: 自动化 e2e 防回归测试（聋期事件→迟到唤醒必须发生、watcher 被杀→看门狗重臂）+ README §4.5 机制说明更新为实况
+id: autonomy-fix-20261014

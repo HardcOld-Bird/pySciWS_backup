@@ -1,0 +1,18 @@
+{
+  "plan_id": "adhoc-20261014-161944",
+  "created": "2026-10-14T16:19:44+08:00",
+  "goal": "adhoc：orchestration/state/plans/wake-claim-20261014.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "task_file": "orchestration/state/plans/wake-claim-20261014.task.md",
+      "session_id": null,
+      "kind": null,
+      "review": "pending",
+      "job_id": "devops-20261014-161944-adhoc-20261014-161944-s1"
+    }
+  ],
+  "completed_at": null,
+  "abandoned_at": "2026-10-14T16:25:52+08:00"
+}

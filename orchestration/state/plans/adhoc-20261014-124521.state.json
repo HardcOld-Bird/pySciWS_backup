@@ -1,0 +1,16 @@
+{
+  "plan_id": "adhoc-20261014-124521",
+  "created": "2026-10-14T12:45:21+08:00",
+  "goal": "adhoc：orchestration/state/plans/cronless-wake-20261014.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-124521-adhoc-20261014-124521-s1.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    }
+  ],
+  "completed_at": "2026-10-14T12:57:27+08:00"
+}

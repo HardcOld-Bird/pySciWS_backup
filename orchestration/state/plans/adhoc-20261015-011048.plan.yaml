@@ -1,0 +1,10 @@
+id: adhoc-20261015-011048
+goal: adhoc：orchestration/pods/devops/inbox/task-20261015-test-sentinel.
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs:
+  - tests
+  - src/pysci/skills/orchestration/tools
+  review: false

@@ -1,0 +1,32 @@
+{
+  "plan_id": "autonomy-fix-20261014",
+  "created": "2026-10-14T07:50:51+08:00",
+  "goal": "唤醒链自愈与迟到唤醒（聋期事件不丢）+ inspector 自主巡逻名实相符 + 自动化 e2e 防回归",
+  "steps": [
+    {
+      "id": "a1",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-080000-autonomy-fix-20261014-a1.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "a2",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-090001-autonomy-fix-20261014-a2.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "a3",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-105049-autonomy-fix-20261014-a3.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    }
+  ],
+  "completed_at": "2026-10-14T11:29:44+08:00"
+}

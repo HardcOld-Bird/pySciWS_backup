@@ -1,0 +1,46 @@
+id: psep3-20261014
+goal: PSEP_3 实施——superstep 嵌套编排 + jury 裁决书/E6 twin 终裁 + 返工驱动改进流 + 跨任务优先级路由
+steps:
+- id: pa1
+  member: devops
+  brief: 'M-A 核心——plan YAML superstep 嵌套 schema（step|superstep{mode,children} 递归、叶子点路径扁平化、_reconcile 按 id 对账兼容）+ 递归就绪谓词（started/done；serial=前兄弟 done 完成级、parallel=前兄弟 started 派发级）+ advance 多 job 乱序收尾 + [NEXT] 三栏工作清单（可派发/在途/待验收）+ plan run 等全部在途；存量扁平 plan 行为不变'
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  effort: high
+- id: pa2
+  member: devops
+  brief: 'M-A 护栏与指导——kind self 组长环节（--evidence 收尾+lint 标题段）+ amend 冻结（started 的 superstep 结构不可改）+ 同成员并行软提示 + 宽深>3 拆解过碎提示 + 拆解指导 references/plan-decomposition.md（≤8KB）+ SKILL.md 索引行 + plan new 头部必读打印 + read 标记行 lint'
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  - orchestration/skills/orchestration/references
+  effort: high
+- id: pc
+  member: devops
+  brief: 'M-C jury 增强——裁决书 verdict_summary（胜方+多数理由聚合+confidence+twin 终裁理由，落 jury/<case>.json/preference-journal/pysci decisions/TUI）+ E6 twin 终裁接线（tally 平票/inconclusive 过半→escalate=twin→taste 通道自动终裁 final_verdict/decided_by+twin 不可达保守回退出声）；适用全部 jury 使用点'
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  effort: high
+- id: pd1
+  member: devops
+  brief: 'M-D 返工流骨架——taskbooks 增 priority/mode/rework_of/rework_round 字段 + failed 终态（active→failed 迁移）+ TUI reject 三段式（模式三档→优先级→批语）+ TUI 投递交互式选优先级（修订⑦，输入任务信息前）+ plan rework 模板三档骨架（完整/无监察改进/仅返工）+ 必留节点 lint + 送审 gate（verdict=A 才解锁派单）+ 两次不过中止置 failed'
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  effort: high
+- id: pd2
+  member: devops
+  brief: 'M-D 返工流闭环——rework_round>=2 时 a1 引导自动展开全部前轮报告全文 + 「前次改进复盘」段 lint + taskbooks report 全流程报告组装器 + TUI 返工卡片（轮次/模式/优先级/裁决书摘要/改进清单/superstep 进度树）+ 循环语义端到端测试'
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  effort: high
+- id: pb
+  member: devops
+  brief: 'M-B 跨任务路由——taskbook priority 全局排序 + pysci-orch next 路由命令（聚合活动 plan 就绪动作，排序：任务优先级→动作类别 blocked>待验收>可派发→序；输出任务卡片：大任务名/简介/plan 内位置树/进度/动作）+ 机械推送点（plan advance 尾部/events drain 尾部/watch detail/plan run 交接一律附卡片）'
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  effort: high

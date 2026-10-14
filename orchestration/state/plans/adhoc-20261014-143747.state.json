@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261014-143747",
+  "created": "2026-10-14T14:37:47+08:00",
+  "goal": "adhoc：（实测留痕 2026-10-14）请只回一行 done，不要修改任何文件",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "task_file": null,
+      "session_id": "fe0a1caf-6283-4e30-a2bc-39c63a4bd137",
+      "kind": "result",
+      "review": "pending",
+      "job_id": "sim-20261014-143747-adhoc-20261014-143747-s1"
+    }
+  ],
+  "completed_at": "2026-10-14T14:48:15+08:00"
+}

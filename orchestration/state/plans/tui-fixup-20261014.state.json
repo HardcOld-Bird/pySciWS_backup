@@ -1,0 +1,32 @@
+{
+  "plan_id": "tui-fixup-20261014",
+  "created": "2026-10-14T07:39:30+08:00",
+  "goal": "TUI 补完（键位修复+模块详情充实+美学统一）+ 过程防再犯（覆盖度对账+用户路径测试纪律）",
+  "steps": [
+    {
+      "id": "f1",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-073942-tui-fixup-20261014-f1.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "f2",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-113450-tui-fixup-20261014-f2.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "f3",
+      "status": "done",
+      "task_file": "orchestration\\pods\\devops\\inbox\\task-20261014-122027-tui-fixup-20261014-f3.md",
+      "session_id": "b27b8883-788a-47c9-a152-fa791c26c644",
+      "kind": "result",
+      "review": "pending"
+    }
+  ],
+  "completed_at": "2026-10-14T12:29:18+08:00"
+}

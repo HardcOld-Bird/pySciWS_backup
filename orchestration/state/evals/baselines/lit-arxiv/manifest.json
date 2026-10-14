@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "case": "lit-arxiv",
+  "ref": "HEAD",
+  "commit": "72e164ca359174e590c112bbd490a45a82dbe765",
+  "captured_at": "2026-10-14T13:08:57+08:00",
+  "pods": [
+    "lit"
+  ],
+  "files": [
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/SKILL.md",
+      "bytes": 8189,
+      "sha256": "603b57223082d47b"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/citecheck.md",
+      "bytes": 2800,
+      "sha256": "04798593adeb634c"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/ingest.md",
+      "bytes": 1874,
+      "sha256": "08ce7bddd76bc77b"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-01-overview.md",
+      "bytes": 7353,
+      "sha256": "80e1370f598c102d"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-02-pdf-markdown-pdf-extract-py.md",
+      "bytes": 6484,
+      "sha256": "5ce685500ca5581d"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-03-paywalled-full-text-browser-fe.md",
+      "bytes": 3717,
+      "sha256": "953d3b19791a35ee"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-04-cache-governance-cache-manager.md",
+      "bytes": 7559,
+      "sha256": "f78fee729ce67db7"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-05-bulk-local-pdf-ingestion-local.md",
+      "bytes": 7171,
+      "sha256": "01fe3a047b01568c"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-06-semantic-rag-layer-rag-py-rese.md",
+      "bytes": 7605,
+      "sha256": "baa85f9c5197679c"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-07-note-frontmatter-merging-notes.md",
+      "bytes": 7261,
+      "sha256": "b13f2059b81d0572"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-08-journal-quality-metrics-journa.md",
+      "bytes": 5204,
+      "sha256": "200d5a29819f5c5e"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-09-journal-quality-metrics-journa.md",
+      "bytes": 5328,
+      "sha256": "21a2373334bcfa8b"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-10-common-failures-fixes.md",
+      "bytes": 7241,
+      "sha256": "9b9f83264543ba25"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance-11-extending-the-system.md",
+      "bytes": 1953,
+      "sha256": "ff73de6e53294ad0"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/maintenance.md",
+      "bytes": 1592,
+      "sha256": "75cf52f316b2c974"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/rag.md",
+      "bytes": 2865,
+      "sha256": "efceebeb4bafb341"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/read-01-overview.md",
+      "bytes": 6193,
+      "sha256": "07cb75b573d38db0"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/read-02-read-fetch-full-text-build-a-n.md",
+      "bytes": 4494,
+      "sha256": "3a1dec93c3d5450a"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/read-03-how-notes-are-written-the-merg.md",
+      "bytes": 5504,
+      "sha256": "64b702c8bffca26f"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/read-04-citecheck-the-citation-integri.md",
+      "bytes": 6800,
+      "sha256": "0a58c22164e53bbb"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/read-05-review-survey-scaffolding-link.md",
+      "bytes": 3839,
+      "sha256": "51a3fa2a4df7abbf"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/read-06-the-paper-note-schema-evaluati.md",
+      "bytes": 5355,
+      "sha256": "0bda6f52427d315d"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/read.md",
+      "bytes": 1133,
+      "sha256": "898d15c1e3e7f32b"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/search-01-overview.md",
+      "bytes": 6218,
+      "sha256": "1a1379381a3404a5"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/search-02-search-multi-source-retrieval.md",
+      "bytes": 6745,
+      "sha256": "a1b8c10ac8c27371"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/search-03-citegraph-snowball-the-citatio.md",
+      "bytes": 3853,
+      "sha256": "7002ce68445d6518"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/search-04-journal-venue-quality-from-the.md",
+      "bytes": 7806,
+      "sha256": "8024f215968e729b"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/search-05-rag-semantic-retrieval-over-yo.md",
+      "bytes": 5366,
+      "sha256": "30072406c9b77a7d"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/search.md",
+      "bytes": 1354,
+      "sha256": "530656e42dd07667"
+    },
+    {
+      "path": "orchestration/pods/lit/.qoder/skills/literature-research/references/sources.md",
+      "bytes": 4713,
+      "sha256": "8b49ed6235e04241"
+    }
+  ],
+  "archive_tracked": false
+}
