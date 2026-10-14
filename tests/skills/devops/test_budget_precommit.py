@@ -145,6 +145,26 @@ def test_file_at_the_limit_passes(tmp_path: Path):
     assert proc.returncode == 0, proc.stdout
 
 
+def test_near_limit_warns_but_still_passes(tmp_path: Path):
+    """余量 >95%（未超限）：打印 ⚠ 余量读数但**不拦截**（rc 仍 0）。"""
+    rel = "orchestration/skills/lit/references/tight.md"
+    f = tmp_path / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("x" * (_GUARD.WARN_AT + 1), encoding="utf-8", newline="\n")
+
+    proc = run_script(tmp_path, rel)
+
+    assert proc.returncode == 0, proc.stdout
+    assert "tight.md" in proc.stdout and "余量" in proc.stdout
+    assert "⚠" in proc.stdout
+
+
+def test_warn_threshold_has_one_source():
+    """钩子与 doctor 的预警起点必须相等（同 LIMIT 一样单一真源）。"""
+    assert _GUARD.WARN_AT == budget.WARN_AT
+    assert _GUARD.WARN_RATIO == budget.WARN_RATIO
+
+
 def test_mixed_batch_reports_only_offenders(tmp_path: Path):
     ok = "orchestration/skills/lit/SKILL.md"
     bad = "orchestration/skills/lit/references/big.md"

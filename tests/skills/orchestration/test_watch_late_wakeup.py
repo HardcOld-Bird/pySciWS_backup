@@ -5,7 +5,8 @@
 2. `arm()` 又把对比基线重置为**挂载瞬间快照**——聋期（无监听期间）产生的 QUEUE-EMPTY
    被新基线吸收，永不触发。
 本文件把三条机制钉死：① 聋期事件→新挂载 ≤1 轮询周期迟到唤醒；② listener 死→看门狗阈值内
-重臂（留痕）；③ 水位单调、重复挂载不重复唤醒。
+重臂（留痕）；③ 水位单调、重复挂载不重复唤醒。④ 看门狗自启动（hook 每回合幂等拉起，冷启动
+后即在位）——backlog 20261014-104738。
 """
 
 from __future__ import annotations
@@ -181,6 +182,42 @@ def test_orch_exposes_watchdog_command():
     from pysci.skills.orchestration.tools import orch
 
     assert orch.main(["watchdog", "status"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# ③c 看门狗自启动（backlog 20261014-104738）：hook 每回合幂等拉起，冷启动后即在位
+# ---------------------------------------------------------------------------
+def test_hook_script_self_starts_watchdog():
+    """hook 脚本每回合调用 `orch watchdog start`（幂等）——冷启动/重启无需手工敲。"""
+    text = (PROJECT_ROOT / ".qoder" / "hooks" / "watch-arm.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "watchdog start" in text, "hook 未自启动看门狗 → 冷启动后「被杀即重臂」空转"
+    assert "已后台启动" in text, "仅在实际拉起时留痕（在场则秒返回不留噪）"
+    assert "自启动失败" in text, "失败要留痕（否则冷启动静默失败）"
+
+
+def test_watchdog_self_start_idempotent_then_relaunch(state, monkeypatch):
+    """(a) 缺锁→拉起；(b) 第二次→「已在跑」不重复派生；(c) 被杀（锁清）→ 下一跳重新拉起。"""
+    wp = watchdog.WATCHDOG_PATHS
+    wp.runs.mkdir(parents=True, exist_ok=True)
+    spawned: list[list[str]] = []
+
+    def fake_spawn(argv, *, env, stdout):
+        spawned.append(argv)
+        drain.acquire_lock("wd-sim", wp)  # 模拟被拉起的看门狗子进程持有守护者锁
+
+    monkeypatch.setattr(watchdog, "_spawn_detached", fake_spawn)
+
+    ok1, _ = watchdog.start_watchdog()
+    assert ok1 is True and len(spawned) == 1, "(a) 缺锁即拉起"
+
+    ok2, msg2 = watchdog.start_watchdog()
+    assert ok2 is False and "已在跑" in msg2 and len(spawned) == 1, "(b) 幂等不重复派生"
+
+    drain.release_lock(wp.runs / "wd-sim.log", wp)  # (c) 看门狗被杀 → 锁释放
+    ok3, _ = watchdog.start_watchdog()
+    assert ok3 is True and len(spawned) == 2, "(c) 被杀后下一跳重新拉起"
 
 
 # ---------------------------------------------------------------------------

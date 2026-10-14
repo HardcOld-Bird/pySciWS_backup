@@ -12,8 +12,7 @@ description: devops 组员的作业规程：worktree 隔离实施、PYTHONPATH �
 ## worktree 作业规程（一切代码改动）
 
 ```bash
-# 1. 开 worktree（从最新 main）
-#    ← drain/backlog 派发时 <任务名> 用**任务书 id**（如 20261010-xxx），便于孤儿回收
+# 1. 开 worktree（从最新 main）；<任务名> 用法见下「worktree 命名约定」
 pysci-dev worktree add <任务名>        # = git worktree add -b wt-<任务名> .qoder/worktrees/<任务名>
 ROOT="$(git rev-parse --show-toplevel)"   # 在 main/pod 侧执行 → 主树根
 WT="$ROOT/.qoder/worktrees/<任务名>"
@@ -25,7 +24,7 @@ WT="$ROOT/.qoder/worktrees/<任务名>"
 #    那时改用主解释器 "$ROOT/.venv/Scripts/python.exe" -m pytest。细节见 references/worktree-merge.md
 PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
 
-# 3b. 仅当 pyproject 依赖变更才 uv sync --project "$WT"（重、分钟级），之后用 "$WT/.venv"
+# 3b. pyproject 依赖变更才 uv sync --project "$WT"（分钟级），之后用 "$WT/.venv"
 
 # 4. 合并回 main（先在 worktree 内 commit；cz 规范、pre-commit 全过、禁 --no-verify）：
 pysci-dev worktree merge <任务名>   # 交集检查 → cp 运行态 → merge --no-ff → 会话数自检
@@ -52,31 +51,20 @@ worktree 不含 gitignored 未跟踪重数据；需真数据时以绝对路径�
 
 ## 技能部署（真本 → 副本）
 
-- 真本：`orchestration/skills/<name>/`（git 跟踪）；manifest：同目录 `manifest.toml`；
-- 改完真本执行 `pysci-dev sync`（与 pysci-orch sync 同引擎）；`sync --check` 查漂移；
-- `tree_hash` **行尾无关**（哈希前 CRLF→LF）：worktree 内 sync 提交的
-  `skills-deployed.json` 对 main 即正确，无需合并后重跑；
-- 红线：只碰 manifest 声明的部署名；**不删除成员自建技能**；不手改部署副本。
-- **真本 references 超 8KB 的处置**：按 `##` 主题拆 `<stem>-0N-<slug>.md` 分册，所属
-  SKILL.md 索引行标 ``*``；搬运纪律与次序（含 pre-commit 先改写文件的坑）见
-  `references/budget-layers.md` §4。
-- **机械生成/改写 markdown 的 EOF 窗口**：`pysci-dev mdgen-check <paths…>` 提前把
-  pre-commit（trailing-ws + end-of-file-fixer）改写**做完**并打印 pre/post sha256；
-  等价性断言基准=**post_sha256**（钩子终态），非生成前字节。首提必过。
+真本在 `orchestration/skills/<name>/`（git 跟踪；manifest 同目录 `manifest.toml`）；
+改完 `pysci-dev sync` 部署、`sync --check` 查漂移。**红线**：只碰 manifest 声明的部署名、
+不删除成员自建技能、不手改任何 pod 内的部署副本。分册搬运/EOF 窗口的细则与逐项语义见
+`references/dev-cli.md`。
 
 ## pysci-dev 命令面
 
 ```
-pysci-dev doctor [--pod <id>]   # pod 巡检：hooks/leader 排除/charter/AGENTS 体量/积压
-                                 # + 部署台账（sync --check）+ 预算三档（≤8192B/文件）
-                                 # + API Key 泄漏哨兵（tests/ 豁免）+ 跟踪 state 脏面
-                                 #   （advisory：脏=组员合并前检查会拦的东西）
-pysci-dev sync [--check]        # 技能部署
-pysci-dev worktree add|merge|remove|list|clean [<name>]  # merge 成功自动摘面(--keep 留；clean 清遗留)
-pysci-dev push [--timeout S]    # 推 origin/main（跨平台超时 + 成败留痕；best-effort）
-pysci-dev mdgen-check <paths…>  # 提前做完 pre-commit 对 md 的改写
-pysci-dev doc-faces <paths…|--changed>  # 动的源文件→文档面（改语义别忘对盘；不阻断）
+pysci-dev doctor | sync [--check] | worktree add|merge|remove|list|clean
+pysci-dev push [--timeout S] | mdgen-check <paths…> | doc-faces <paths…|--changed>
+pysci-dev venv-sync | probe | skilltax
 ```
+
+逐项语义与旗标见 `references/dev-cli.md`。
 
 ## 新 pod 脚手架（只读层入库面）
 
@@ -96,6 +84,9 @@ pysci-dev doc-faces <paths…|--changed>  # 动的源文件→文档面（改语
 | 组员侧硬闸 | `guards/delivery-gate.mjs`（Stop） | 自维护层四条：`AGENTS.md` 尺寸、自建 rules 禁 `always_on`、rules·skills 的 `description` 合计、自建 `SKILL.md` 尺寸 |
 | 真本侧硬闸 | pre-commit `harness-budget`（`guards/budget_check.py`） | 真本 `SKILL.md`/`references/*.md` 与根 `basic.md`·`leader-only.md` 每文件 |
 | 观测 | `pysci-dev doctor` 三档审计 | 全量扫描 + 台账，唯一能看见「会话中途死掉留下的膨胀」的一层 |
+
+两层硬闸与 doctor 均已给**余量读数 + >95% 预警**（未超限即提示、不拦截）：把「到顶即拒」
+补成「逼近即知」，避免「加一句、删一段」靠临时腾字节。
 
 改任一层、加新 guard、或处置超限 references 前，先读
 `references/budget-layers.md`（豁免/TDZ 教训/Stop 探针/分册次序）与

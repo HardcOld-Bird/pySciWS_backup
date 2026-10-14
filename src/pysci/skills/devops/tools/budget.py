@@ -18,6 +18,13 @@ from pysci.paths import ORCHESTRATION_ROOT, PODS_ROOT, PROJECT_ROOT
 #: 预算上限（字节，落盘面）。basic.md §1 三档同为 8KB。
 LIMIT = 8192
 
+#: 余量预警比例：占用超过上限的此比例即提示（「加一句/删一段」的余量已耗尽）。
+WARN_RATIO = 0.95
+
+#: 预警起点（落盘字节）：**大于**它且未超限即提示余量吃紧。全员真源，pre-commit 钩子
+#: ``guards/budget_check.py`` 复制同一常量（钩子 stdlib-only），一致性由测试钉住。
+WARN_AT = int(LIMIT * WARN_RATIO)
+
 #: 审计根（模块级常量，便于测试 monkeypatch 到 tmp_path）。
 SKILLS_ROOT = ORCHESTRATION_ROOT / "skills"
 RULES_ROOT = PROJECT_ROOT / ".qoder" / "rules"
@@ -37,6 +44,21 @@ class Finding:
     @property
     def over(self) -> bool:
         return self.size > LIMIT
+
+    @property
+    def headroom(self) -> int:
+        """距上限的剩余字节（可为负=超限）。"""
+        return LIMIT - self.size
+
+    @property
+    def pct(self) -> int:
+        """已用百分比（向下取整）。"""
+        return self.size * 100 // LIMIT
+
+    @property
+    def near(self) -> bool:
+        """余量吃紧：占用 >95% 上限且未超限（预警不拦截）。"""
+        return not self.over and self.size > WARN_AT
 
 
 def disk_size(path: Path) -> int:
@@ -89,19 +111,22 @@ def description_findings() -> list[Finding]:
 
 
 def report(findings: list[Finding], desc: list[Finding]) -> list[str]:
-    """人类可读审计行：违规逐条列出 + 各档计数 + 合计；无违规时给出通过行。"""
+    """人类可读审计行：超限 [!] 逐条、余量吃紧 [~] 逐条、各档计数 + 余量读数。"""
     lines: list[str] = []
     over = [f for f in findings if f.over]
     for f in over:
-        try:
-            rel = f.path.relative_to(PROJECT_ROOT)
-        except ValueError:
-            rel = f.path
-        lines.append(f"[!] 超预算 {f.tier} 档：{rel}（{f.size}B > {LIMIT}B）")
+        lines.append(f"[!] 超预算 {f.tier} 档：{_rel(f)}（{f.size}B > {LIMIT}B）")
     total_desc = sum(d.size for d in desc)
     if total_desc > LIMIT:
         lines.append(
             f"[!] 超预算 常驻暴露 档：技能 description 合计 {total_desc}B > {LIMIT}B"
+        )
+    near = sorted((f for f in findings if f.near), key=lambda f: f.headroom)
+    for f in near:
+        lines.append(
+            f"[~] 余量吃紧 {f.tier} 档：{_rel(f)}"
+            f"（{f.size}B / {LIMIT}B，已用 {f.pct}%，余 {f.headroom}B）"
+            "——加一句即可能超限，宜先精简或移分册"
         )
     for tier in ("全量注入", "按需"):
         n = sum(1 for f in findings if f.tier == tier)
@@ -110,6 +135,28 @@ def report(findings: list[Finding], desc: list[Finding]) -> list[str]:
     lines.append(
         f"  常驻暴露 档：{len(desc)} 条 description，合计 {total_desc}B / 上限 {LIMIT}B"
     )
+    lines.append(_headroom_readout(findings, near))
     if not over and total_desc <= LIMIT:
         lines.insert(0, "  [√] 三档全部在预算内")
     return lines
+
+
+def _rel(f: Finding):
+    """相对仓库根的短路径（不在仓内时原样返回）。"""
+    try:
+        return f.path.relative_to(PROJECT_ROOT)
+    except ValueError:
+        return f.path
+
+
+def _headroom_readout(findings: list[Finding], near: list[Finding]) -> str:
+    """余量读数一行：最紧文件距上限多少字节 + 预警计数（决定能否再加一句）。"""
+    within = [f for f in findings if not f.over]
+    if not within:
+        return "  余量读数：无可计量文件"
+    tight = min(within, key=lambda f: f.headroom)
+    warn = f"，{len(near)} 个 >{int(WARN_RATIO * 100)}% 预警" if near else ""
+    return (
+        f"  余量读数：最紧 {_rel(tight)} 余 {tight.headroom}B"
+        f"（已用 {tight.pct}%）{warn}"
+    )
