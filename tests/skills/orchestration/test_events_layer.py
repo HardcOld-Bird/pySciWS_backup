@@ -247,7 +247,8 @@ def test_two_plans_parallel_same_member_serializes(state, monkeypatch):
 
 
 def test_plan_advance_rejects_non_queue_member(state):
-    _write_plan(state, "p1", [("s1", "devops", False)])
+    """真·非队列成员仍被拒（devops 收编后原样例已转正——task-20261014-devops-gap-d1）。"""
+    _write_plan(state, "p1", [("s1", "bogus", False)])
     assert plans.cmd_plan_advance(_Args(id="p1")) == 2
 
 

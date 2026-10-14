@@ -251,7 +251,7 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     1. devops backlog 有 ``pending``**且无 devops FIFO worker 在跑、也无在途条目**
        （backlog-fifo-20261014：执行归 FIFO，worker 在场/有在途时 pending 是正常在途——
        降噪为 ``notes`` 里的**标注**而非告警，此即 144 注记与组长注 13:xx 的场景）；
-    2. 任一**成员**队列（:data:`queues.QUEUE_MEMBERS`，9 队）有 ``pending``，且该成员
+    2. 任一**成员**队列（:data:`queues.QUEUE_MEMBERS`，10 队）有 ``pending``，且该成员
        **无存活 worker**（worker 在场时队列有活是常态，不该叫醒组长）；
     3. **支撑席**队列有 ``pending`` 且无 worker：bencher 常驻；inspector 仅**开关开启时**计入
        （开关关闭 → 不拉起巡检，其存量只报不告警——否则每次巡更都叫醒组长去处理一个本来

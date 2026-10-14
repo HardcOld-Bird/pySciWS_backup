@@ -277,6 +277,15 @@ def cmd_plan_run(args) -> int:
     # ``runner.run_headless``/``do_dispatch`` 的直调只剩**队列 worker 一个入口**。
     from . import queues, queueworker
 
+    # 成员闸（全链一致性，task-20261014-devops-gap-d1）：与 plan advance 同款——非队列
+    # 成员（打错字）在入口就拒，别入队到无人消费的野生队列（devops 双通道后 QUEUE_MEMBERS 即真集）。
+    if member not in queues.QUEUE_MEMBERS:
+        print(
+            f"[!] 成员 {member} 非队列成员——plan 只覆盖 "
+            f"{'、'.join(queues.QUEUE_MEMBERS)}（devops 双通道：plan 环节直派 + backlog 组包）"
+        )
+        return 2
+
     item = queues.enqueue(
         member,
         text=str(args.text or ""),
@@ -446,7 +455,7 @@ def cmd_plan_advance(args) -> int:
     if member not in queues.QUEUE_MEMBERS:
         print(
             f"[!] 成员 {member} 非队列成员——plan advance 只覆盖 "
-            f"{'、'.join(queues.QUEUE_MEMBERS)}（基建/测量类条目走 devops backlog）"
+            f"{'、'.join(queues.QUEUE_MEMBERS)}（devops 双通道：plan 环节直派 + backlog 组包）"
         )
         return 2
     item = queues.enqueue(
