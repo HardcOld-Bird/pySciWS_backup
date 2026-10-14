@@ -119,17 +119,18 @@ def test_config_file_matches_registry_defaults():
     assert all(table[cls] for cls in fc.DEFAULT_CLASSES), "不许有空类"
 
 
-def test_missing_or_broken_config_falls_back():
-    """词表缺失/坏 JSON → 回落兜底（分类器不能在配置坏掉时失效）。"""
+def test_missing_or_broken_config_falls_back(tmp_path):
+    """词表缺失/坏 JSON → 回落兜底（分类器不能在配置坏掉时失效）。
+
+    坏文件写 ``tmp_path``（防写穿哨兵：原先落在真实 ``orchestration/state/``，即便 finally
+    清理也仍触碰真树——PSEP_3 收尾单暴露）。
+    """
     missing = fc.load_classes(path=__import__("pathlib").Path("/nonexistent/x.json"))
     assert missing == fc.DEFAULT_CLASSES
-    broken = fc.CLASSES_PATH.parent / "__broken_classes.json"
+    broken = tmp_path / "__broken_classes.json"
     broken.write_text("{not json", encoding="utf-8")
-    try:
-        assert fc.load_classes(path=broken) == fc.DEFAULT_CLASSES
-        assert fc.precedence(path=broken) == fc.PRECEDENCE
-    finally:
-        broken.unlink()
+    assert fc.load_classes(path=broken) == fc.DEFAULT_CLASSES
+    assert fc.precedence(path=broken) == fc.PRECEDENCE
 
 
 def test_config_extension_takes_effect(tmp_path):
