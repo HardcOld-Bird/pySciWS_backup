@@ -177,8 +177,8 @@ def test_queues_detail_splits_member_and_support_seat(monkeypatch):
     monkeypatch.setattr(inspectd, "enabled", lambda: False)
     lines = modules._queues_detail()
     joined = "\n".join(lines)
-    assert "9 成员：7 专职 + deputy + reviewer" in joined
     assert "支撑席存量" in joined and "成员队列皆空 ≠ 支撑席也空" in joined
+    assert "7 专职 + deputy + reviewer" in joined
     assert "口径：9 成员队列 pending=" in joined
     assert "不拉起巡检" in joined and "只报不告警" in joined
 
@@ -188,8 +188,9 @@ def test_water_lines_empty_states_scope(monkeypatch):
 
     monkeypatch.setattr(queues, "QUEUES_DIR", Path("no-such-dir"))
     out = queues.water_lines()
-    assert len(out) == 1
-    assert "成员队列" in out[0] and "支撑席" in out[0]
+    joined = "\n".join(out)
+    assert "pending=0 in_progress=0" in joined, "在途合计读数必须在第一行"
+    assert "双零" in joined and "支撑席" in joined
 
 
 def test_event_watermark_reflects_ack_seq_same_frame(iso_events):

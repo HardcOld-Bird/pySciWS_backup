@@ -250,7 +250,11 @@ def _queues_detail() -> list[str]:
     from .. import workflow as _wf
     from .. import workq as _wq
 
-    out = ["—— 成员队列（9 成员：7 专职 + deputy + reviewer；state/queues/*.json）——"]
+    members = _q.all_members()
+    out = [
+        f"—— 成员队列（{len(members)} 队：7 专职 + deputy + reviewer + 计划步骤入队成员；"
+        "state/queues/*.json）——"
+    ]
     out += _safe_lines(_q.water_lines)
     out.append(f"  {_safe_line(mirror._line_defer)}")
     out.append("—— 支撑席存量（与上面分列，**成员队列皆空 ≠ 支撑席也空**）——")
@@ -303,13 +307,24 @@ def _queues_detail() -> list[str]:
 
 
 def _queues_count() -> int:
-    """队列水位：待消化条目 + 延期在等内容物 + **超时未处理项**（后者要「值得关注」）。"""
+    """队列水位：**成员队列 pending + in_progress** + 延期在 + backlog pending +
+    超时未处理项（plan 环节直派退役后，成员队列里的在途条目必须进徽标读数）。"""
     from .. import inspectd as _insp  # 延迟导入：inspectd 顶层引整条 worker 链
+    from .. import queues as _q
     from .. import workflow as _wf  # 延迟导入：workflow 引 dispatch，顶层引会成环
+    from .. import workq as _wq
 
     try:
+        member_pending = 0
+        member_active = 0
+        for m in _q.all_members():
+            c = _q.counts(m)
+            member_pending += c.get(_wq.STATUS_PENDING, 0)
+            member_active += c.get(_wq.STATUS_IN_PROGRESS, 0)
         return (
-            len(_wf.backlog_pending())
+            member_pending
+            + member_active
+            + len(_wf.backlog_pending())
             + int(_wf.deferred_count())
             + len(_insp.stale_queue_items())
         )

@@ -72,12 +72,14 @@ def enqueue(
     parent_member: str = "",
     slug: str = "job",
     item_id: str | None = None,
+    max_turns: int | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
     """入队一条 job（FIFO 尾插），返回条目。
 
     ``review=True`` 表示该宿主 job 交付后需 reviewer 复审（worker 自动投子 job）。
     ``kind="review"`` + ``parent``/``parent_member`` 是 review 子 job 的形态。
+    ``max_turns``：单跳轮次上限（``plan run --max-turns`` 经此透传；None=成员默认）。
     """
     qp = queue_path(member, root=root)
     item: dict[str, Any] = {
@@ -97,6 +99,7 @@ def enqueue(
         "parent_member": parent_member,
         "status": workq.STATUS_PENDING,
         "created": workq._now(),
+        "max_turns": int(max_turns) if max_turns else None,
         "result": None,
     }
     return workq.append(qp, item)
@@ -179,26 +182,53 @@ def next_defer_s(
 
 
 def water_lines(*, root: Path | None = None) -> list[str]:
-    """观察面：各成员队列水位（``orch status`` 队列段用）。只列非空队避免噪声。"""
+    """观察面：成员队列水位（``orch status`` 队列段用）。
+
+    **「皆空」的唯一合法场景 = pending 与 in_progress 双零**（用户 2026-10-14：在途条目
+    曾被一句「各成员队列皆空」盖住——`plan run` 还在直派、队列照却是空的）。非双零时逐队
+    列计数，并把**在途条目显名 + 起跑时刻**点出来。
+    """
+    members = all_members(root=root)
     out: list[str] = []
-    for m in all_members(root=root):
+    inflight: list[str] = []
+    pending_total = 0
+    active_total = 0
+    for m in members:
         c = counts(m, root=root)
-        if not c:
-            continue
         pending = c.get(workq.STATUS_PENDING, 0)
         gip = c.get(workq.STATUS_IN_PROGRESS, 0)
+        pending_total += pending
+        active_total += gip
+        if not c:
+            continue
         done = c.get(workq.STATUS_DONE, 0)
         failed = c.get(workq.STATUS_FAILED, 0)
         out.append(
             f"  [{m}] 待={pending} 在做={gip} 完成={done} 失败={failed}"
             + ("  ◀ 有积压" if pending else "")
         )
-    members = all_members(root=root)
-    # 口径拆分（用户 2026-10-14 实测反馈「真的为空吗」）：这行只覆盖**成员队列**，
-    # 支撑席（bencher/inspector/devops backlog）另有读数——写清免误读。
-    return out or [
-        f"  （成员队列 {len(members)} 队皆空；支撑席存量 bencher/inspector 不在本行、另报）"
-    ]
+        if gip:
+            for it in items(m, root=root):
+                if str(it.get("status")) != workq.STATUS_IN_PROGRESS:
+                    continue
+                plan = str(it.get("plan") or "")
+                step = str(it.get("step") or "")
+                where = f"（{plan}·{step}）" if plan or step else ""
+                inflight.append(
+                    f"    · 在途 {it.get('id')}{where} 起于 {it.get('started_at') or '?'}"
+                )
+    header = (
+        f"  在途合计：pending={pending_total} in_progress={active_total}"
+        f"（{len(members)} 队）"
+    )
+    if pending_total == 0 and active_total == 0:
+        # 「皆空」只在这里出现：双零才敢这么写（其余情况必须点名在途，见上）。
+        return [
+            header,
+            f"  （{len(members)} 队皆空：pending 与 in_progress 双零"
+            "——done/failed 历史不在本行；支撑席存量另报）",
+        ]
+    return [header, *out, *inflight]
 
 
 def all_members(*, root: Path | None = None) -> tuple[str, ...]:
