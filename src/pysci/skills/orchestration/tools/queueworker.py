@@ -109,7 +109,7 @@ def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any], A
     out = do_dispatch(
         str(item.get("member")),
         text=str(item.get("task") or "") or None,
-        task=str(item.get("task_file") or "") or None,
+        task_file=str(item.get("task_file") or "") or None,
         session=str(item.get("session") or "latest"),
         effort=str(item.get("effort") or "") or None,
         model_tier=str(item.get("model") or "") or None,
@@ -245,7 +245,21 @@ def run_worker(
                     _drain._sleep(min(wait, float(DEFER_MAX_SLEEP_S)))
                     continue
                 break
-            status, result, outcome = _execute(item, dry=dry)
+            # 单条目异常**就地结账**（2026-10-14 实测：`task=` 参数名写错 → TypeError 逃出
+            # 循环 → 条目永远卡 in_progress、plan run 干等到超时）。失败也要 finish：发
+            # JOB-DONE 让 plan run/advance 拿到事件而不是空等；本队列其余条目继续。
+            try:
+                status, result, outcome = _execute(item, dry=dry)
+            except Exception as exc:  # noqa: BLE001 - 一条目炸不得炸整队
+                status = workq.STATUS_FAILED
+                result = {
+                    "kind": "run_failed",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "code": 2,
+                    "member": member,
+                }
+                outcome = None
+                summary["item_error"] = result["error"]
             plan = _defer_plan(outcome, item, time.time())
             if plan is not None and not plan.exhausted:
                 nth = plan.attempt + 1
