@@ -286,5 +286,23 @@ def test_skill_indexes_patrol_reference():
         assert marker in ref, f"巡更规程缺要素：{marker}"
 
 
+def _doc_corpus() -> str:
+    """文档语料（README v3.0 拆分后口径）：`references/legacy-readme-v2.2.md`（v2.2 原文留档）
+    + `README.md`（v3.0 正文）+ `references/*.md`（细节块）。doc-face 断言据此判「文档面是否声明 X」。
+    """
+    root = PROJECT_ROOT / "orchestration"
+    parts: list[str] = []
+    legacy = root / "references" / "legacy-readme-v2.2.md"
+    if legacy.exists():
+        parts.append(legacy.read_text(encoding="utf-8"))
+    parts.append((root / "README.md").read_text(encoding="utf-8"))
+    refs = root / "references"
+    if refs.is_dir():
+        for f in sorted(refs.glob("*.md")):
+            if f.name != "legacy-readme-v2.2.md":
+                parts.append(f.read_text(encoding="utf-8"))
+    return (chr(10) * 2).join(parts)
+
+
 def _readme() -> str:
-    return (PROJECT_ROOT / "orchestration" / "README.md").read_text(encoding="utf-8")
+    return _doc_corpus()
