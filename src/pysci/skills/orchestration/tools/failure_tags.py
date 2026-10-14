@@ -35,6 +35,7 @@ DEFAULT_TAGS: dict[str, str] = {
     "quota": "",
     "env_broken": "",
     "merge_dirty_face": "",
+    "concurrent_writer": "",
     "design_smell": "",
     "unknown": "",
 }

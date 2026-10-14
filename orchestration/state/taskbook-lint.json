@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_comment": "任务书轻量 lint 规则表。devops 增补：向 rules 追加 {id, re, hint}——re 为 Python 正则（JSON 内反斜杠需双写），命中任务书正文即打印 hint 告警；可选 absent（第二正则）：只有 re 命中且 absent 不命中时才告警（「提到 A 却漏了 B」类条件）；可选 steps:true（环节 id 承诺）：re 第 1 捕获组为环节 id，须存在于对应计划 YAML 的 steps，引述段（引号内）不计、定位不到计划即 fail-open。告警不阻断派发（组长确认后照常执行）。与 20261009-taskbook-cli-signature（charter/文档侧统一）互补：那里改文档正本，这里在派发口机械拦截错误范式传染。写/读 grep 判据一律遵 backlog 20261014-075230-devops 约定：禁词**运行期拼接/转义**（防 Python 常量折叠把字面量折进 .pyc，令含二进制的 grep 仍命中、判据把自己判红），判据限定 *.py 或排除 __pycache__——本文件自身的判据同此。",
+  "_comment": "任务书轻量 lint 规则表。devops 增补：向 rules 追加 {id, re, hint}——re 为 Python 正则（JSON 内反斜杠需双写），命中任务书正文即打印 hint 告警；可选 absent（第二正则）：只有 re 命中且 absent 不命中时才告警（「提到 A 却漏了 B」类条件）；可选 steps:true（环节 id 承诺）：re 第 1 捕获组为环节 id，须存在于对应计划 YAML 的 steps，引述段（引号内）不计、定位不到计划即 fail-open；可选 whitelist:true（白名单覆盖）：正文声明白名单时，其点名的改动目标路径须落在白名单内，否则派发时会被 pod-guard 拦成 whitelist_conflict。告警不阻断派发（组长确认后照常执行）。与 20261009-taskbook-cli-signature（charter/文档侧统一）互补：那里改文档正本，这里在派发口机械拦截错误范式传染。写/读 grep 判据一律遵 backlog 20261014-075230-devops 约定：禁词**运行期拼接/转义**（防 Python 常量折叠把字面量折进 .pyc，令含二进制的 grep 仍命中、判据把自己判红），判据限定 *.py 或排除 __pycache__——本文件自身的判据同此。",
   "rules": [
     {
       "id": "figures-two-positional-args",
@@ -18,6 +18,12 @@
       "re": "(?<![A-Za-z0-9])([A-Za-z]{1,4}\\d{1,2}[a-z]?)\\s*(?:补|充实|建)",
       "steps": true,
       "hint": "检测到「<环节id> 补/充实/建」式**环节承诺**（如 m3 补、f4 建）。承诺的环节 id 必须能在对应计划 YAML 的 steps 里找到——找不到即告警：占位文案须写明**真实归属**（后续单/E几）或先在计划里登记该环节，禁止兑现不了的承诺（背景：m2 占位文案承诺「m3 补」×4 无人兑现，tui-fixup-f3 立此规则）。引号内引述的样例与 grep 判据字面量不计；跨计划引用请在正文写明该计划 id。"
+    },
+    {
+      "id": "whitelist-covers-edits",
+      "re": "白名单",
+      "whitelist": true,
+      "hint": "任务书声明了「白名单（涉改文件）」段，但正文点名的**改动目标**路径未落在其内（同一行有改动动词才算目标，纯证据/背景引用不计）。该路径派发时会被 pod-guard 拦成 whitelist_conflict、白烧一跳——请把白名单补齐，或把这部分移出本单。未声明白名单的单不触发（backlog 20261014-113347-tier-a）。"
     }
   ]
 }

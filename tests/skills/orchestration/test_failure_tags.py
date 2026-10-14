@@ -50,9 +50,19 @@ def _e(
 
 
 def test_load_tags_reads_shipped_file():
-    """真文件优先：随附词表的 10 个受控标签都要在（与 guard 侧读同一文件）。"""
+    """真文件优先：随附词表的受控标签都要在（与 guard 侧读同一文件）。"""
     vocab = failure_tags.load_tags()
     assert "cli_missing" in vocab and "whitelist_conflict" in vocab
+
+
+def test_shipped_vocab_disambiguates_whitelist_conflict():
+    """mis-tag 防回退（backlog 20261014-113347-tier-a）：whitelist_conflict 的定义须点明
+    它**不是** merge_dirty_face / concurrent_writer 的兜底，且新标签有非空定义。"""
+    vocab = failure_tags.load_tags()
+    assert "concurrent_writer" in vocab
+    wl = vocab["whitelist_conflict"]
+    assert "merge_dirty_face" in wl and "concurrent_writer" in wl
+    assert all(d.strip() for d in vocab.values())
 
 
 def test_load_tags_missing_file_falls_back_to_defaults(iso_state):
