@@ -41,6 +41,7 @@ running 只可能是 unlink 失败残留 + 判活说谎（pid 回收 / tasklist 
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from datetime import datetime
@@ -828,6 +829,130 @@ def save_state(data: dict[str, Any]) -> None:
         )
     except OSError:
         pass
+
+
+# ---------------------------------------------------------------------------
+# 唤醒权认领（wake-claim，用户设计方向 2026-10-14 晚）：主会话定向唤醒
+# ---------------------------------------------------------------------------
+#: 唤醒权真源（gitignored 运行态）：谁有资格「抢 token + exit 2 唤醒组长」。
+WAKE_CLAIM_PATH: Path = ORCH_STATE_ROOT / "wake-claim.json"
+
+#: 能区分**会话身份**的环境变量（认领进程取一份、钩子核对时各取一份；两端都有且相同
+#: 才算同会话）。取证实测（2026-10-14 本机 env 枚举）：`WT_SESSION` 是 Windows Terminal
+#: 窗格 GUID、逐会话不同；而 `QODERCN_*`/`DISPATCHER`/`PYSCI_*`/`PATH` 在各会话恒同
+#: （不具区分力，故不入表）。**两端都取不到表内变量 → 无可靠会话 id**：认领记 legacy
+#: （见 :func:`wake_claim`）——宁可退化成旧行为，也不能把 owner 自己的钩子静默禁掉。
+SESSION_ENV_KEYS: tuple[str, ...] = ("WT_SESSION", "QODER_SESSION_ID", "QODER_SESSION")
+
+
+def _claim_identity() -> dict[str, str]:
+    """本进程可给出的会话身份（只收 :data:`SESSION_ENV_KEYS` 里实际存在的项）。"""
+    out: dict[str, str] = {}
+    for key in SESSION_ENV_KEYS:
+        val = str(os.environ.get(key, "") or "")
+        if val:
+            out[key] = val
+    return out
+
+
+def load_claim() -> dict[str, Any]:
+    """读唤醒权真源；缺失/损坏 → ``{}``（= 未认领，走 legacy「最新在听者胜」）。"""
+    if not WAKE_CLAIM_PATH.exists():
+        return {}
+    try:
+        data = json.loads(WAKE_CLAIM_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_claim(data: dict[str, Any]) -> None:
+    """写唤醒权真源（可读 JSON）。写失败不抛——观察面塌不了主链路。"""
+    try:
+        WAKE_CLAIM_PATH.parent.mkdir(parents=True, exist_ok=True)
+        WAKE_CLAIM_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def wake_claim(action: str = "claim", *, name: str = "") -> tuple[int, list[str]]:
+    """认领 / 查询 / 释放唤醒权（``pysci-orch wake-claim [status|release]``）。
+
+    **没有「转投其他会话」语义**（那正是本单要根治的污染）：认领只是把唤醒权锁给
+    **一个**会话；owner 不在场时事件**不丢**（持久水位 + 迟到唤醒由 owner 下次挂载补）；
+    owner 永久迁移 = 新会话再跑一次 claim 接管。
+
+    Returns:
+        ``(退出码, 输出行)``。
+    """
+    if action == "status":
+        claim = load_claim()
+        if not claim:
+            return 0, ["  唤醒权 = 未认领（legacy：最新在听者胜，次要会话可抢）"]
+        mode = (
+            "strict（仅 owner 会话的钩子可监听/唤醒）"
+            if claim.get("strict")
+            else "legacy（当前环境无会话区分变量，任何钩子可唤醒——局限见 README §4.5）"
+        )
+        return 0, [
+            f"  唤醒权 = {claim.get('owner', '?')}（认领于 {claim.get('claimed_at', '?')}）",
+            f"  模式 = {mode}",
+            f"  会话身份 = {claim.get('identity', {})}（pid {claim.get('pid')}）",
+            f"  真源 = {WAKE_CLAIM_PATH}",
+            "  迁移：新会话跑 `pysci-orch wake-claim` 接管；`wake-claim release` 退回 legacy。",
+        ]
+    if action == "release":
+        try:
+            if WAKE_CLAIM_PATH.exists():
+                WAKE_CLAIM_PATH.unlink()
+        except OSError:
+            pass
+        return 0, ["[√] 唤醒权已释放 → 退回 legacy（最新在听者胜）"]
+    identity = _claim_identity()
+    claim = {
+        "owner": name or f"session-{os.getpid()}",
+        "claimed_at": _now(),
+        "identity": identity,
+        "strict": bool(identity),
+        "pid": os.getpid(),
+    }
+    save_claim(claim)
+    if identity:
+        return 0, [
+            f"[√] 唤醒权已认领：{claim['owner']}（strict——非 owner 会话的钩子不监听、"
+            "永不 exit 2 唤醒）",
+            f"    会话身份 = {identity}",
+            "    迁移：新会话跑同一条命令接管；`wake-claim release` 退回 legacy。",
+        ]
+    return 0, [
+        f"[√] 唤醒权已认领：{claim['owner']}（**legacy 模式**：本机环境无会话区分变量"
+        "（WT_SESSION 等缺席），任何钩子仍可唤醒——局限：次要会话可能抢占；"
+        "在 Windows Terminal 内重跑认领即可获得 strict 模式）",
+    ]
+
+
+def wake_claim_check() -> int:
+    """钩子每回合问一次「我属于 owner 会话吗」——``0``=可监听，``3``=非 owner。
+
+    判定链（两端同源 :func:`_claim_identity`，可单测证伪）：
+
+    1. 未认领 → ``0``（legacy：与本单之前的行为完全一致）；
+    2. 认领记为 legacy（``strict=False``，见 :func:`wake_claim`）→ ``0``；
+    3. 两端都有会话变量：**相同 → 0（owner）；不同 → 3（非 owner，永不抢 token）**；
+    4. 任一端取不到 → ``0``（身份不可判定时**宁可退化，也不静默禁掉 owner 的唤醒**——
+       退化路径的局限已写进认领输出与 README §4.5）。
+    """
+    claim = load_claim()
+    if not claim or not claim.get("strict"):
+        return 0
+    want = {k: str(v) for k, v in dict(claim.get("identity") or {}).items()}
+    have = _claim_identity()
+    common = [k for k in SESSION_ENV_KEYS if k in want and k in have]
+    if not common:
+        return 0
+    return 0 if all(want[k] == have[k] for k in common) else 3
 
 
 # ---------------------------------------------------------------------------

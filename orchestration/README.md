@@ -700,6 +700,28 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   （harness 只认**最近一任**），致 2026-10-13 20:57 的 QUEUE-COMPLETE 唤醒丢失。v2 取消守卫、
   改为每回合接管。
 
+**唤醒权认领（`wake-claim`；用户设计 2026-10-14 晚，钩子 v5）**：v2 的「最新在听者胜」
+在**主会话 + 次要会话并用**时会被抢——次要会话一有回合即抢走唤醒权，drain/事件的 `exit 2`
+被投到次要会话（污染其上下文，用户明确要避免；凌晨「被取代却无接任」的谜之日志疑为同源）。
+改法是**认领制**：主会话跑一次 `pysci-orch wake-claim [--name main]` 把唤醒权锁给自己
+（真源 `state/wake-claim.json`，记认领时刻 + 会话身份）；钩子每回合先 `wake-claim --check`：
+
+| 判定 | 钩子行为 |
+|---|---|
+| 未认领 / legacy 认领 / **本会话 = owner** | 照旧抢 token、挂 watch、命中 `exit 2` |
+| **异会话（非 owner）** | **不监听、不抢 token、绝不 `exit 2`**（直接 `exit 0`） |
+| 检查本身失败（旧二进制 / 环境坏） | fail-open 按 legacy 监听并留痕（唤醒链不塌） |
+
+- **不存在「转投其他会话」语义**（那正是本单要根治的）：owner 不在场时事件**不丢**——
+  持久水位 + 迟到唤醒由 owner 下次挂载补上；owner 永久迁移 = 新会话再跑一次 claim 接管；
+  `pysci-orch wake-claim status` 查看，`… release` 退回 legacy。
+- **会话身份取证**：候选表 `watch.SESSION_ENV_KEYS = (WT_SESSION, QODER_SESSION_ID,
+  QODER_SESSION)`——本机 env 枚举实测 `WT_SESSION`（Windows Terminal 窗格 GUID）逐会话
+  不同、可用；`QODERCN_*`/`DISPATCHER`/`PYSCI_*`/`PATH` 各会话恒同故不入表。**两端都
+  取不到 → 认领记 legacy**（宁可退化，也不能把 owner 自己的钩子静默禁掉；认领输出会写明
+  这一局限）。钩子首回合把可见的会话变量一次性写进 `watch-arm.log`（`session-env.seen`
+  标记），供后续复核判据。
+
 **迟到唤醒 + 看门狗（2026-10-14 自动化加固 a1；用户实测发现 02:30–07:30 五小时唤醒真空）**：
 
 - **取证：watcher 被「无声杀死」，而非自身出错**（全部可复核）。隔离 ROOT 复现
