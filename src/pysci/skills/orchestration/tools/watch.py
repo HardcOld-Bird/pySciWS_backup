@@ -656,9 +656,19 @@ def arm(
 
     ``watch.json`` 是全局单例：新挂载会整体覆写，故先把上一任折进 ``prev``（遗言）。
     测试/诊断性挂载前须确认无 live 挂载，否则会覆写正在等待那任的状态文件。
+
+    **基线是持久水位，不是「挂载瞬间快照」**（autonomy-fix a1）：有历史基线时**继承**它，
+    而非重置为当前快照——聋期（无监听期间）产生的事件必须在下次挂载**立即命中唤醒**，
+    不能被新快照吸收掉（2026-10-14 02:30 那起 QUEUE-EMPTY 正是被 07:40 的新基线吞掉的）。
+    只有首次（无历史基线）才用当前快照种子（无可迟发项）。继承即置 ``catchup``，
+    供 :func:`_mark_late` 把迟到事件在 detail 上标注；首轮后清除（避免后续正常事件被误标）。
     """
     cur = snapshot()
     now = _now()
+    prior = load_state()
+    prev_base = prior.get("base") if isinstance(prior, dict) else None
+    inherit = isinstance(prev_base, dict) and bool(prev_base)
+    base = dict(prev_base) if inherit else cur
     state = {
         "version": 1,
         "armed_at": now,
@@ -666,12 +676,12 @@ def arm(
         "timeout_s": timeout_s,
         "interval_s": interval_s,
         "polls": 0,
-        "base": cur,
+        "base": base,
+        "catchup": inherit,
         "fired": [],
         "fired_ack": "",
         "recent": [],
     }
-    prior = load_state()
     if prior.get("armed_at"):
         state["prev"] = _legacy(prior)
         # 未确认的命中跨任继承：watch.json 是全局单例、新挂载整体覆写，若前任的
@@ -735,6 +745,9 @@ def _touch(
     state["base"] = base
     state["heartbeat_at"] = _now()
     state["polls"] = int(state.get("polls", 0)) + 1
+    if int(state.get("polls", 0)) > 1:
+        # 迟到标注只作用于**首轮**：水位推进之后本任看到的都是新事件（autonomy-fix a1）。
+        state["catchup"] = False
     push_recent(state, _frame(cur, str(verdict.get("why", "") or "")))
 
 
@@ -760,6 +773,29 @@ def _mirror(events_list: list[dict[str, Any]]) -> None:
             pass
 
 
+def _mark_late(events: list[dict[str, Any]], state: dict[str, Any]) -> None:
+    """把**迟到唤醒**的事件在 detail 上标注（autonomy-fix a1：聋期事件下次挂载立即命中，
+    并说清来源——让组长一眼分辨「刚发生的」与「刚才没人听时积压的」）。
+
+    两条判据，任一命中即迟：
+    ① 事件自带 ``ts`` 且早于本任挂载时刻（统一事件流的生产者直发事件有 ``ts``）；
+    ② 本任**继承了上一任持久水位**（``catchup``）——差分型事件（CRASH/QUEUE-COMPLETE 等）
+       不自带时间，但「继承水位后才被报出来」本身就说明它们发生在挂载前。
+    ``catchup`` 首轮后即清除（:func:`_touch`），故后续正常事件不会被误标。
+    """
+    armed = str(state.get("armed_at") or "")
+    catchup = bool(state.get("catchup"))
+    for ev in events:
+        ts = str(ev.get("ts") or "")
+        late = catchup or (bool(ts) and bool(armed) and ts < armed)
+        if not late:
+            continue
+        detail = str(ev.get("detail") or "")
+        if "迟到" not in detail:
+            ev["detail"] = detail + " 〔迟到唤醒：发生于挂载前（聋期）〕"
+        ev["late"] = True
+
+
 def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> None:
     """命中收场：``fired`` 审计留痕（最近 :data:`FIRED_KEEP` 条）+ ``exit_reason`` + 单行呈现。
 
@@ -767,6 +803,7 @@ def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> Non
     （挂载通道被 `&` 嵌死时的夜航形态），确认权交给 ``orch status`` 的展示动作。
     """
     fired = list(state.get("fired", []))
+    _mark_late(events, state)
     for ev in events:
         fired.append({"ts": _now(), **ev})
     state["fired"] = fired[-FIRED_KEEP:]
@@ -885,6 +922,8 @@ def reconcile() -> tuple[list[dict[str, Any]], bool]:
     push_recent(state, _frame(cur, str(verdict.get("why", "") or "")))
     state["heartbeat_at"] = ""
     state["reconciled_at"] = _now()
+    _mark_late(events, state)  # 补账补到的多半是聋期积压（autonomy-fix a1）
+    state["catchup"] = False
     state["settled"] = events
     _mirror(events)  # 补账命中的 legacy 事件同样补流账（§3.2）
     save_state(state)

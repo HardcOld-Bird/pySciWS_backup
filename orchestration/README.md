@@ -695,6 +695,37 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   watch，新会话各任被守卫挡成 no-op（exit 0），旧 hook 命中时 `exit 2` 又唤不动已重启的会话
   （harness 只认**最近一任**），致 2026-10-13 20:57 的 QUEUE-COMPLETE 唤醒丢失。v2 取消守卫、
   改为每回合接管。
+
+**迟到唤醒 + 看门狗（2026-10-14 自动化加固 a1；用户实测发现 02:30–07:30 五小时唤醒真空）**：
+
+- **取证：watcher 被「无声杀死」，而非自身出错**（全部可复核）。隔离 ROOT 复现
+  （`QODER_PROJECT_DIR` 指向临时目录，`bash watch-arm.sh`）：
+  ```
+  # 起一任
+  [2026-10-14 08:30:57] 接任 watch（token=2728-1791937856)
+  # taskkill /F 杀掉后 —— 日志**零新增**
+  [2026-10-14 08:30:57] 接任 watch（token=2728-1791937856)
+  ```
+  而 watcher 的**所有正常退出路径都留痕**：token 被他人改写 → `被取代（现持 someone-else）→ 让位退出`；`orch watch` 返回非 0 → `watch rc=1 → 退出`；自然超时不退出（TIMEOUT 后继续循环）。⇒「零留痕」只能来自**外部终止**（进程被杀、没机会落盘）。与 02:22–07:40 现场同形（token 迁移 + 会话 UUID 迁移 f80af65f→6140625f，疑似会话重载连带清理其孤儿钩子进程——此点无法从进程内证实，故不做断言，只以看门狗兜底）。
+- **迟到唤醒（持久水位）**：`arm()` 不再把对比基线重置为「挂载瞬间快照」，而是**继承上一任持久水位**（`watch.json` 的 `base`；首次无历史才用当下快照种子）。聋期（无监听期间）产生的事件在下一次**任何**挂载的**首轮轮询**即命中唤醒，detail 标注 `〔迟到唤醒：发生于挂载前（聋期）〕`；水位单调（`advance_base` 落账），重复挂载不重复消费。实测留痕：
+  ```
+  挂载前基线 events_seq = 0
+  聋期（无人监听）产生的事件 seq = 1
+  新挂载继承持久水位（catchup=True），基线 events_seq = 0
+  → 唤醒命中：QUEUE-EMPTY run-022113
+     detail = devops 队列消化完：处理 3 项 〔迟到唤醒：发生于挂载前（聋期）〕
+  落账后水位 events_seq = 1（单调，不重复消费）
+  ```
+- **看门狗（独立于会话/钩子生命周期）**：`pysci-orch watchdog start|stop|status` 拉起一个**分离进程**，每 60 s 读 `watch.json` 的 `heartbeat_at`——心跳新鲜（≤300 s；取值 **≥ watch 自身挂载宽限 240 s**，免把「刚 arm 完就被杀」误判成活着）不动，**stale 即重臂**一条 `.qoder/hooks/watch-arm.sh` 监听循环（它自抢 token 并循环 `orch watch`，**不新造第二套循环**），带 ≥300 s 冷却防堆进程；`stop` 协作式停止（不留孤儿守护者）。OS 侧重启持久化（每 5 min 幂等 `orch watchdog start`）：`orchestration/scripts/watchdog-scheduler.ps1 -Mode install|uninstall|status`。实测留痕：
+  ```
+  看门狗 summary：rearms=1 checks=2 stopped=cooperative
+    [▶] 看门狗启动（心跳stale）
+    [→] 重臂监听循环（>300s 无心跳）
+    [√] 看门狗退出（已释放锁）
+  监听替身是否被真实拉起：是
+  ```
+- **日志完整化（hook v3）**：环境缺失 / token 写失败 / token 自抢分支均留痕，另加 `TERM/INT` 陷阱留痕（SIGKILL 无法拦，故由看门狗按心跳判死重臂）。
+- **已知残余风险**：① SIGKILL 类外部终止由看门狗兜底，但**阈值 300 s 内**仍有真空（心跳新鲜期不会重臂）；② 看门狗本身若被同一类外部杀手干掉，只有 `watchdog-scheduler.ps1`（OS 任务计划）能在下一个 5 min 点重臂——未注册该任务时，重启后看门狗不在场；③ `schtasks` 默认当前用户交互令牌，**用户未登录时任务不跑**（此时也无组长会话可唤醒，影响面为零）。
 - **手动用法（降级/兜底仍适用）**：组长以 Bash `run_in_background` 启动，进程退出即原生完成
   通知唤醒本会话；一次 watch 报一批事件即退。**交办/唤醒/watch 输出不再催挂**（旧 `watch.mount_lines`
   [NEXT] 段已删，backlog 20261013-222533-leader）——只回报「已自动挂载」。
