@@ -214,6 +214,10 @@ def test_run_watch_wakes_on_residue_frame(iso_state, monkeypatch):
         sleep=clock.sleep,
         monotonic=clock.monotonic,
         echo=out.append,
+        # 本例验的是**残留帧的 QUEUE-COMPLETE 身份**（纯差分语义）：关掉队列感知巡更通道，
+        # 免得运行期恰好存在的 in_progress 停滞条目把 `exit_reason` 变成
+        # `event:QUEUE-COMPLETE,STALL`（2026-10-14 main 实测：本会话自身超 60min → STALL 真阳）。
+        queue_watch=False,
     )
     assert rc == 0
     assert out[0].startswith("QUEUE-COMPLETE 20261011-210557")
