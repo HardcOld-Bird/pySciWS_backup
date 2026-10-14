@@ -400,6 +400,7 @@ def _outcome_from_job(member: str, item: dict) -> DispatchOutcome:
         session_name=str(res.get("session_name") or ""),
         task_file=str(res.get("task_file") or item.get("task_file") or ""),
         body=str(res.get("body") or ""),
+        body_file=str(res.get("body_file") or ""),
         checks=[dict(c) for c in (res.get("checks") or [])],
         suggestion_id=str(res.get("suggestion_id") or ""),
         envelope=Envelope(duration_ms=int(res.get("duration_ms") or 0)),
@@ -928,6 +929,8 @@ def _report_handoff(
     print(
         f"---- 交付正文（前 600 字）----\n{outcome.body[:600]}\n----------------------------"
     )
+    if getattr(outcome, "body_file", ""):
+        print(f"  交付全文留档：{outcome.body_file}")
     for c in outcome.checks:
         print(f"  验收[{c['verdict']}] {c['check']}: {Path(c['path']).name}")
     if outcome.suggestion_id:
