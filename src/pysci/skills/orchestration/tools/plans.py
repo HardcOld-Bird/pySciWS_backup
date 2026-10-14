@@ -20,10 +20,31 @@ from pysci.paths import ORCH_STATE_ROOT
 
 from .dispatch import DispatchOutcome
 from .ledger import format_credits, format_est_tokens, read_all, summarize
+from .planflow import DONE_STATES, PlanTree
 
 PLANS_DIR = ORCH_STATE_ROOT / "plans"
 
-_DONE = ("done", "skipped")
+_DONE = DONE_STATES
+
+
+def _tree(plan: dict) -> PlanTree:
+    """plan YAML → 编排树（PSEP_3 §2.1；纯解析无 I/O，每次现建——plan 小）。"""
+    return PlanTree(plan.get("steps") or [])
+
+
+def _leaf_map(plan: dict) -> dict[str, dict]:
+    """叶子**点路径** → 叶子 YAML（superstep 嵌套下为全部叶子；扁平 plan 恒等原 id）。"""
+    return _tree(plan).leaf_map()
+
+
+def _status_of(state: dict):
+    """状态读数闭包：叶子点路径 → status（缺省 pending）。"""
+    st = {
+        str(s.get("id")): str(s.get("status") or "pending")
+        for s in state.get("steps", [])
+    }
+    return lambda path: st.get(str(path), "pending")
+
 
 #: ``plan run`` 的同步等待上限（秒）——与成员 registry ``timeout_s`` 默认（3h）同量级：
 #: 直派时代本命令就一路阻塞在 ``do_dispatch`` 里，改为「入队+等收尾」后阻塞面不变。
@@ -67,19 +88,21 @@ def _save_state(plan_id: str, state: dict) -> None:
 
 
 def _reconcile(plan: dict, state: dict) -> dict:
-    """按环节 id 对账 YAML（可能被组长 amend 过）与既有状态。
+    """按**叶子点路径 id** 对账 YAML（可能被组长 amend 过）与既有状态。
 
-    保留已有环节状态；新环节置 pending；YAML 中已删除的环节从状态中移除。
+    superstep 只在 YAML 里存在（递归结构），**state.json 只落叶子行**（PSEP_3 §2.1：
+    聚合状态由叶子推导不落盘）；存量扁平 plan 的顶层叶子路径 == 原环节 id，行为完全不变
+    （无 superstep 等价单元素串行）。保留已有叶子状态；新叶子置 pending；YAML 中已删除的
+    叶子从状态中移除（增删节点天然兼容）。
     """
-    steps_yaml = plan.get("steps") or []
+    tree = _tree(plan)
     old = {s["id"]: s for s in state.get("steps", [])}
     steps: list[dict] = []
-    for i, sy in enumerate(steps_yaml):
-        sid = str(sy.get("id") or f"s{i + 1}")
-        prev = old.get(sid)
+    for path in tree.leaf_paths():
+        prev = old.get(path)
         steps.append(
             {
-                "id": sid,
+                "id": path,
                 "status": prev["status"] if prev else "pending",
                 "task_file": prev.get("task_file") if prev else None,
                 "session_id": prev.get("session_id") if prev else None,
@@ -138,16 +161,19 @@ def cmd_plan_new(args) -> int:
     )
     state = _reconcile(plan, {"plan_id": plan_id, "created": _now()})
     _save_state(plan_id, state)
+    tree = _tree(plan)
     print(f"[√] 计划已登记：{plan_id}（{len(state['steps'])} 环节）")
     print(f"    目标：{state['goal']}")
-    for s_yaml, s_state in zip(plan["steps"], state["steps"]):
+    for leaf in tree.leaves:
+        sy = leaf.yaml
+        indent = "  " * leaf.path.count(".")
         print(
-            f"    - {s_state['id']}: {s_yaml.get('member', '?')} | "
-            f"{str(s_yaml.get('brief', ''))[:60]}"
-            + ("  [review]" if s_yaml.get("review") else "")
+            f"    - {indent}{leaf.path}: {sy.get('member', '?')} | "
+            f"{str(sy.get('brief', ''))[:60]}"
+            + ("  [review]" if sy.get("review") else "")
         )
     first = state["steps"][0]
-    fy = plan["steps"][0]
+    fy = next((n.yaml for n in tree.leaves if n.path == first["id"]), {})
     _print_run_guidance(plan_id, first, fy)
     return 0
 
@@ -166,40 +192,6 @@ def _print_run_guidance(plan_id: str, step_state: dict, step_yaml: dict) -> None
     print(f'    uv run --no-sync pysci-orch plan run {plan_id} --text "<任务书全文>"')
     print(f"    或 uv run --no-sync pysci-orch plan run {plan_id} --task <任务书文件>")
     print("  （长任务建议以**后台 Bash**运行本命令——完成时自动通知，见 README §4.5）")
-
-
-def _wait_job(
-    member: str,
-    job_id: str,
-    *,
-    timeout_s: int = PLAN_RUN_TIMEOUT_S,
-    sleep: Any = None,
-    now: Any = None,
-) -> dict | None:
-    """等成员队列里该 job 收尾（``plan run`` 的同步语义＝**入队 + 等完成事件**）。
-
-    条目状态一离开 ``pending/in_progress`` 即返回它；条目消失（裁剪/孤儿回收）或到点
-    仍未收尾 → ``None``（调用方不改环节状态，留 ``queued`` 交 ``plan advance`` 结账）。
-    ``sleep``/``now`` 是**测试注入口**（真等 3h 没法进套件）。
-    """
-    from . import queues, workq
-
-    do_sleep = time.sleep if sleep is None else sleep
-    do_now = time.time if now is None else now
-    deadline = do_now() + float(timeout_s)
-    while True:
-        hit = [i for i in queues.items(member) if str(i.get("id")) == job_id]
-        item = hit[-1] if hit else None
-        if item is None:
-            return None
-        if str(item.get("status")) not in (
-            workq.STATUS_PENDING,
-            workq.STATUS_IN_PROGRESS,
-        ):
-            return item
-        if do_now() >= deadline:
-            return None
-        do_sleep(PLAN_RUN_POLL_S)
 
 
 def _outcome_from_job(member: str, item: dict) -> DispatchOutcome:
@@ -233,21 +225,98 @@ def _outcome_from_job(member: str, item: dict) -> DispatchOutcome:
     )
 
 
+def _wait_all_inflight(
+    plan_id: str,
+    plan: dict,
+    state: dict,
+    *,
+    timeout_s: int = PLAN_RUN_TIMEOUT_S,
+    sleep: Any = None,
+    now: Any = None,
+) -> list[tuple[dict, DispatchOutcome]]:
+    """等本计划**全部在途 job** 收尾（``plan run`` 的阻塞语义，PSEP_3 §2.3）。
+
+    逐轮把已到齐的结果落终态（**乱序即到达序**）；到点仍未收尾 → 留 ``queued`` 交
+    advance（与「超时不猜结果」旧语义一致）。无在途时也先收尾一轮（把已终态条目结掉）。
+    ``sleep``/``now`` 是**测试注入口**。
+    """
+    do_sleep = time.sleep if sleep is None else sleep
+    do_now = time.time if now is None else now
+    deadline = do_now() + float(timeout_s)
+    settled: list[tuple[dict, DispatchOutcome]] = []
+    while True:
+        settled.extend(_settle_terminal_jobs(plan_id, plan, state))
+        pend = _inflight(state)
+        if not pend:
+            break
+        # 条目失踪（被裁剪 / 入队未落盘 / 测试桩）：无法观察 → 不猜结果，停止等待留 queued
+        # （与旧 `_wait_job`「条目消失 → 不改状态」语义一致；防下游按 3h 上限空转）。
+        lm = _leaf_map(plan)
+        if any(
+            _queue_item_for_step(
+                plan_id,
+                str(s["id"]),
+                str((lm.get(str(s["id"])) or {}).get("member") or ""),
+            )
+            is None
+            for s in pend
+        ):
+            break
+        if do_now() >= deadline:
+            break
+        do_sleep(PLAN_RUN_POLL_S)
+    _save_state(plan_id, state)
+    return settled
+
+
 def cmd_plan_run(args) -> int:
-    """推进计划：执行当前环节（任务书延迟书写），交接处暂停呈报决策。"""
+    """推进计划：执行**就绪环节**（任务书延迟书写），**等全部在途 job 收尾**后交接。
+
+    语义（PSEP_3 §2.3）：① 先把已终态队列条目全部结掉（多 job 并行时乱序到达，逐项交接）；
+    ② 若仍有在途 job → 阻塞等它们全部收尾；③ 目标＝blocked/失败叶子（续作优先，--text
+    即补充信息）或**首个可派发叶子**（递归就绪谓词）；④ 交接处打印三栏工作清单后暂停。
+    """
     plan_id = args.id
     if not _plan_path(plan_id).exists():
         print(f"[!] 计划不存在：{plan_id}（orch plan list 查看）")
         return 2
     plan = _load_yaml(plan_id)
     state = _reconcile(plan, _load_state(plan_id))
-    steps_yaml = {
-        str(sy.get("id") or f"s{i + 1}"): sy
-        for i, sy in enumerate(plan.get("steps") or [])
-    }
+    tree = _tree(plan)
+    steps_yaml = _leaf_map(plan)
 
-    cur = next((s for s in state["steps"] if s["status"] not in _DONE), None)
+    # ①② 收尾全部已终态条目 + 等在途全部收尾（run 的阻塞语义）
+    settled = _wait_all_inflight(plan_id, plan, state)
+    for s_done, o_done in settled:
+        _report_handoff(plan_id, plan, state, s_done, o_done)
+
+    status_of = _status_of(state)
+    # blocked/失败叶子优先（续作语义：--text 即补充信息）；否则**首可派发**（就绪谓词）
+    cur = next(
+        (
+            s
+            for s in state["steps"]
+            if str(s.get("status")) in ("blocked", "failed", "run_failed")
+        ),
+        None,
+    )
     if cur is None:
+        disp = tree.dispatchable(status_of)
+        cur = (
+            next((s for s in state["steps"] if str(s["id"]) == disp[0]), None)
+            if disp
+            else None
+        )
+    if cur is None:
+        if _inflight(state):
+            print(
+                f"[i] 计划 {plan_id} 无就绪环节；在途 {len(_inflight(state))} 项"
+                "——交 `orch plan advance` 结账。"
+            )
+            return 0
+        if not state.get("completed_at"):
+            state["completed_at"] = _now()
+            _save_state(plan_id, state)
         _report_plan_complete(plan_id, state)
         return 0
 
@@ -257,6 +326,7 @@ def cmd_plan_run(args) -> int:
     ):
         print(f"[!] 环节 {cur['id']} 上次状态为 {cur['status']}，需要决策：")
         _print_blocked_options(plan_id, cur, steps_yaml.get(cur["id"], {}))
+        _print_worklist(plan_id, plan, state)
         return 2
 
     sy = steps_yaml.get(cur["id"], {})
@@ -310,8 +380,8 @@ def cmd_plan_run(args) -> int:
     _save_state(plan_id, state)
 
     _, wake_msg = queueworker.wake_member(member)
-    got = _wait_job(member, job_id)
-    if got is None:
+    outcomes = _wait_all_inflight(plan_id, plan, state)
+    if not outcomes:
         # 不猜结果：留 queued 交 plan advance 结账（事件驱动语义优先于「同步要有个结论」）。
         print(
             f"[!] job {job_id} 未在 {member} 队列收尾（超时/条目失踪）——"
@@ -320,25 +390,14 @@ def cmd_plan_run(args) -> int:
         print(f"    {wake_msg}")
         return 2
 
-    outcome = _outcome_from_job(member, got)
-    cur["task_file"] = outcome.task_file or cur.get("task_file")
-    cur["session_id"] = outcome.sid or cur.get("session_id")
-    cur["kind"] = outcome.kind
-
-    if outcome.code == 0:
-        cur["status"] = "done"
-        if sy.get("review"):
-            cur["review"] = "not_wired"  # reviewer Phase 3 接入
-    elif outcome.kind == "blocked":
-        cur["status"] = "blocked"
-    else:
-        cur["status"] = "failed"
-    if all(s["status"] in _DONE for s in state["steps"]):
-        state["completed_at"] = _now()
-    _save_state(plan_id, state)
-
-    _report_handoff(plan_id, plan, state, cur, outcome)
-    return outcome.code
+    for s_done, o_done in outcomes:
+        _report_handoff(plan_id, plan, state, s_done, o_done)
+    if _plan_settled(plan, state):
+        if not state.get("completed_at"):
+            state["completed_at"] = _now()
+            _save_state(plan_id, state)
+        _report_plan_complete(plan_id, state)
+    return 0 if all(o.code == 0 for _, o in outcomes) else 2
 
 
 def _split_dirs(dirs) -> list[str]:
@@ -367,6 +426,107 @@ def _queue_item_for_step(plan_id: str, step_id: str, member: str) -> dict | None
     return hit[-1] if hit else None
 
 
+def _settle_terminal_jobs(
+    plan_id: str, plan: dict, state: dict
+) -> list[tuple[dict, DispatchOutcome]]:
+    """把**全部**已在成员队列收尾的 ``queued`` 叶子落终态（state 序＝叶子点路径序）。
+
+    多 job 并行时结果**乱序到达**：一次把已到齐的都结掉（仍在途 / 条目失踪的保持
+    ``queued`` 不动）；返回 ``[(叶子状态行, outcome)]`` 供调用方**逐项** ``_report_handoff``。
+    本函数只改内存，调用方负责 ``_save_state``。
+    """
+    from . import workq
+
+    lm = _leaf_map(plan)
+    out: list[tuple[dict, DispatchOutcome]] = []
+    for s in state["steps"]:
+        if s.get("status") != "queued":
+            continue
+        sid = str(s["id"])
+        member = str((lm.get(sid) or {}).get("member") or "")
+        item = _queue_item_for_step(plan_id, sid, member)
+        if item is None:
+            continue  # 条目失踪：保守保持 queued（不猜结果）
+        st = str(item.get("status") or "")
+        if st in (workq.STATUS_PENDING, workq.STATUS_IN_PROGRESS):
+            continue
+        kind = str((item.get("result") or {}).get("kind") or "")
+        if st == workq.STATUS_DONE:
+            s["status"] = "done"
+            if (lm.get(sid) or {}).get("review"):
+                s["review"] = "review_done"  # 合并单元：宿主已交付（review 走附属）
+        elif kind == "blocked":
+            s["status"] = "blocked"
+        else:
+            s["status"] = "failed"
+        s["job_id"] = str(item.get("id"))
+        outcome = _outcome_from_job(member, item)
+        # 会话/任务书/交付类别回填（续作复用与台账读数；run/advance 同口径）
+        s["task_file"] = outcome.task_file or s.get("task_file")
+        s["session_id"] = outcome.sid or s.get("session_id")
+        s["kind"] = outcome.kind
+        out.append((s, outcome))
+    if state.get("steps") and all(x["status"] in _DONE for x in state["steps"]):
+        state["completed_at"] = state.get("completed_at") or _now()
+    return out
+
+
+def _inflight(state: dict) -> list[dict]:
+    """在途叶子（status=queued）。"""
+    return [s for s in state["steps"] if s.get("status") == "queued"]
+
+
+def _worklist_panes(plan: dict, state: dict) -> dict[str, list[str]]:
+    """三栏工作清单的数据面（可派发/在途/待验收）——[NEXT] 等处共用同一判据。"""
+    tree = _tree(plan)
+    status_of = _status_of(state)
+    return {
+        "dispatchable": tree.dispatchable(status_of),
+        "inflight": [str(s["id"]) for s in _inflight(state)],
+        "need_leader": [
+            str(s["id"])
+            for s in state["steps"]
+            if str(s.get("status")) in ("blocked", "failed", "run_failed")
+        ],
+    }
+
+
+def _plan_settled(plan: dict, state: dict) -> bool:
+    """三栏全空（无可派发/无在途/无待验收）→ 计划可判完成。"""
+    panes = _worklist_panes(plan, state)
+    return not (panes["dispatchable"] or panes["inflight"] or panes["need_leader"])
+
+
+def _print_worklist(plan_id: str, plan: dict, state: dict) -> None:
+    """[NEXT] **三栏工作清单**（PSEP_3 §2.3）：可派发（按 id 序，一次引导一个）/在途/待验收。
+
+    待验收栏含 blocked/失败决策点（可能多个）；可派发栏给出首个的成员与粗描述原文，
+    其余逐一列名（本环节入队后可连续引导下一个）。
+    """
+    del plan_id
+    panes = _worklist_panes(plan, state)
+    lm = _leaf_map(plan)
+    disp = panes["dispatchable"]
+    print("[NEXT] 工作清单（可派发 / 在途 / 待验收）：")
+    if disp:
+        head = disp[0]
+        sy = lm.get(head, {})
+        print(
+            f"  可派发（按 id 序，一次引导一个）：{head}（{sy.get('member', '?')}）"
+            f" | {str(sy.get('brief', '（无）'))[:50]}"
+        )
+        if len(disp) > 1:
+            print(f"    其余可派发：{', '.join(disp[1:])}（入队后可继续引导下一个）")
+    else:
+        print("  可派发：（无）")
+    print(f"  在途：{', '.join(panes['inflight']) if panes['inflight'] else '（无）'}")
+    need = panes["need_leader"]
+    print(
+        f"  待验收：{', '.join(need) if need else '（无）'}"
+        + ("（blocked/失败决策点见上方交接段；可能多个）" if need else "")
+    )
+
+
 def cmd_plan_advance(args) -> int:
     """**事件驱动推进**（§3.5，M5）：把下一环节入队 m4 成员队列**即返回**。
 
@@ -377,10 +537,11 @@ def cmd_plan_advance(args) -> int:
     由组长在 drain 后决策。
 
     闭环：advance → 入队（环节置 ``queued``）→ worker 消化（发 JOB-DONE/STEP-REVIEW-DONE）
-    → 组长 ``orch events drain`` 醒来 → 再 advance：本命令先据队列条目结果把在途环节落终态，
-    再入队下一环节。
+    → 组长 ``orch events drain`` 醒来 → 再 advance：本命令先收尾**全部**已终态条目（多 job
+    并行时乱序到达，逐项交接），再按**递归就绪谓词**（PSEP_3 §2.2）入队**首个可派发**叶子，
+    并以**三栏工作清单**（可派发/在途/待验收）收尾。
     """
-    from . import queues, queueworker, workq
+    from . import queues, queueworker
 
     plan_id = args.id
     if not _plan_path(plan_id).exists():
@@ -388,67 +549,54 @@ def cmd_plan_advance(args) -> int:
         return 2
     plan = _load_yaml(plan_id)
     state = _reconcile(plan, _load_state(plan_id))
-    steps_yaml = {
-        str(sy.get("id") or f"s{i + 1}"): sy
-        for i, sy in enumerate(plan.get("steps") or [])
-    }
+    tree = _tree(plan)
+    steps_yaml = _leaf_map(plan)
 
-    # ① 收尾在途环节：status=="queued" 的环节，回读它在成员队列里的 job 结果。
-    queued = next((s for s in state["steps"] if s.get("status") == "queued"), None)
-    if queued is not None:
-        member = str(steps_yaml.get(queued["id"], {}).get("member") or "")
-        item = _queue_item_for_step(plan_id, str(queued["id"]), member)
-        if item is None:
-            print(
-                f"[i] 环节 {queued['id']} 在 {member or '?'} 队列中无对应条目"
-                "（或被裁剪）——保守不推进；orch queues list 核实后重来。"
-            )
-            return 0
-        st = str(item.get("status", ""))
-        if st in (workq.STATUS_PENDING, workq.STATUS_IN_PROGRESS):
-            print(
-                f"[i] 环节 {queued['id']} 仍在 {member} 队列（{st}）——"
-                "等它完成的 JOB-DONE 事件驱动下一次 advance。"
-            )
-            return 0
-        kind = str((item.get("result") or {}).get("kind", ""))
-        if st == workq.STATUS_DONE:
-            queued["status"] = "done"
-            if steps_yaml.get(queued["id"], {}).get("review"):
-                queued["review"] = (
-                    "review_done"  # 合并单元：宿主已交付（review 走附属）
-                )
-        elif kind == "blocked":
-            queued["status"] = "blocked"
-        else:
-            queued["status"] = "failed"
-        queued["job_id"] = str(item.get("id"))
+    # ① 收尾**全部**已终态队列条目（多 job 乱序到达：一次结清，逐项交接决策点）
+    settled = _settle_terminal_jobs(plan_id, plan, state)
+    if settled:
         _save_state(plan_id, state)
-        if queued["status"] in ("blocked", "failed"):
-            print(
-                f"[!] 环节 {queued['id']} 的 job 以 {queued['status']} 收尾，需要决策："
-            )
-            _print_blocked_options(plan_id, queued, steps_yaml.get(queued["id"], {}))
-            return 2
+    for s_done, o_done in settled:
+        _report_handoff(plan_id, plan, state, s_done, o_done)
+    inflight = _inflight(state)
+    if inflight:
+        print(
+            f"[i] 在途 {len(inflight)} 项仍在跑：{', '.join(str(s['id']) for s in inflight)}"
+            "——等 JOB-DONE 事件驱动下一次 advance。"
+        )
 
-    # ② 下一未完成环节
-    cur = next((s for s in state["steps"] if s["status"] not in _DONE), None)
+    # ② 目标环节：blocked/失败叶子（续作优先）；否则**首可派发**（递归就绪谓词）
+    cur = next(
+        (
+            s
+            for s in state["steps"]
+            if str(s.get("status")) in ("blocked", "failed", "run_failed")
+        ),
+        None,
+    )
     if cur is None:
-        if not state.get("completed_at"):
-            state["completed_at"] = _now()
-            _save_state(plan_id, state)
-        _report_plan_complete(plan_id, state)
-        return 0
+        disp = tree.dispatchable(_status_of(state))
+        if not disp:
+            if inflight:
+                return 0  # 已在上面提示「等在途」
+            if not state.get("completed_at"):
+                state["completed_at"] = _now()
+                _save_state(plan_id, state)
+            _report_plan_complete(plan_id, state)
+            return 0
+        cur = next(s for s in state["steps"] if str(s["id"]) == disp[0])
     if cur["status"] in ("blocked", "failed", "run_failed") and not (
         args.text or args.task
     ):
         print(f"[!] 环节 {cur['id']} 上次状态为 {cur['status']}，需要决策：")
         _print_blocked_options(plan_id, cur, steps_yaml.get(cur["id"], {}))
+        _print_worklist(plan_id, plan, state)
         return 2
     sy = steps_yaml.get(cur["id"], {})
     if not (args.text or args.task) and not cur.get("task_file"):
         _print_run_guidance(plan_id, cur, sy)
         print("\n[!] 尚未提供本环节任务书（延迟书写：只强制当前环节）。")
+        _print_worklist(plan_id, plan, state)
         return 2
 
     member = str(sy.get("member") or "")
@@ -485,8 +633,9 @@ def cmd_plan_advance(args) -> int:
         "——入队即返回，完成事件驱动下一次 advance"
     )
     print(f"    {msg}")
+    _print_worklist(plan_id, plan, state)
     print(
-        f"[NEXT] 等 JOB-DONE/STEP-REVIEW-DONE 事件：orch events drain → "
+        f"  事件驱动：orch events drain → "
         f'orch plan advance {plan_id} --text "<下一环节任务书>"'
     )
     return 0
@@ -539,14 +688,17 @@ def _report_handoff(
             "  [i] 本环节标记 review:true，但 reviewer 尚未接入（Phase 3）——已记 not_wired 跳过。"
         )
 
-    nxt = next((s for s in state["steps"] if s["status"] not in _DONE), None)
-    if nxt is None:
-        _report_plan_complete(plan_id, state)
+    panes = _worklist_panes(plan, state)
+    nxt_id = next(iter(panes["dispatchable"]), "")
+    if not nxt_id:
+        # 完成判定交给调用方**收尾一次**（多 job 乱序同批到达时逐项交接，避免重复播报）。
+        _print_worklist(plan_id, plan, state)
         return
-    steps_yaml = {
-        str(sy.get("id") or f"s{i + 1}"): sy
-        for i, sy in enumerate(plan.get("steps") or [])
-    }
+    nxt = next((s for s in state["steps"] if str(s["id"]) == nxt_id), None)
+    if nxt is None:  # 防御：理论上不可达（可派发项必有状态行）
+        _print_worklist(plan_id, plan, state)
+        return
+    steps_yaml = _leaf_map(plan)
     ny = steps_yaml.get(nxt["id"], {})
     print()
     print(f"== 交接决策点：下一环节 {nxt['id']}（{ny.get('member', '?')}）==")
@@ -557,7 +709,7 @@ def _report_handoff(
     )
     if outcome.kind == "result":
         print("  交接物：上一环节交付正文中的产物路径（书写任务书时引用）。")
-    print()
+    _print_worklist(plan_id, plan, state)
     print("[NEXT] 可选：")
     print(
         f'  1) 一键继续（书写下一环节任务书）：uv run --no-sync pysci-orch plan run {plan_id} --text "..."'
@@ -597,12 +749,18 @@ def cmd_plan_amend(args) -> int:
     plan = _load_yaml(plan_id)
     state = _reconcile(plan, _load_state(plan_id))
     _save_state(plan_id, state)
-    print(
-        f"[√] 计划 {plan_id} 已对账（编辑 {_plan_path(plan_id).relative_to(ORCH_STATE_ROOT.parent)} 后运行本命令校验）："
-    )
-    for sy, ss in zip(plan.get("steps") or [], state["steps"]):
+    rel: Any = _plan_path(plan_id)
+    try:
+        rel = rel.relative_to(ORCH_STATE_ROOT.parent)
+    except ValueError:  # PLANS_DIR 被隔离到 tmp（测试面）：原样显示
+        pass
+    print(f"[√] 计划 {plan_id} 已对账（编辑 {rel} 后运行本命令校验）：")
+    st = {str(s["id"]): s for s in state["steps"]}
+    for leaf in _tree(plan).leaves:
+        ss = st.get(leaf.path, {})
         print(
-            f"  - {ss['id']}: {sy.get('member', '?')} [{ss['status']}] {str(sy.get('brief', ''))[:50]}"
+            f"  - {leaf.path}: {leaf.yaml.get('member', '?')} "
+            f"[{ss.get('status', '?')}] {str(leaf.yaml.get('brief', ''))[:50]}"
         )
     return 0
 
