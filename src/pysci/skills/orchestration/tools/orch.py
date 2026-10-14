@@ -41,6 +41,7 @@ from . import events as _events
 from . import inspectd as _inspectd
 from . import jury as _jury
 from . import mirror as _mirror
+from . import nextroute as _nextroute
 from . import plans as _plans
 from . import presets as _presets
 from . import queues as _queues
@@ -721,6 +722,11 @@ def cmd_events(args: argparse.Namespace) -> int:
         _events.drain()  # 排空并推进水位线（幂等）
         print(f"  水位线已推至 seq={_events.ack_seq()}；同命令再跑一次返回空。")
         print('[NEXT] 逐 plan 推进：orch plan advance <id> --text "<下一环节任务书>"')
+        try:  # 机械推送点（§3.3）：排空后以路由卡片收尾
+            for line in _nextroute.next_lines(limit=3):
+                print(line)
+        except Exception:  # noqa: BLE001 - 推送面绝不阻塞事件清算
+            pass
         return 0
     if action == "list":
         print("== 统一事件流（events.jsonl，§3.2）==")
@@ -1027,6 +1033,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     q.add_argument("--max-turns", type=int)
     q.set_defaults(func=_plan_router("adhoc"))
+
+    p = sub.add_parser(
+        "next",
+        help="跨任务路由：聚合就绪动作，按（优先级→动作类别→序）置顶一张任务卡片（PSEP_3 §3.2）",
+    )
+    p.add_argument(
+        "--limit", type=int, default=5, help="其余就绪项最多显示条数（默认 5）"
+    )
+    p.set_defaults(func=_nextroute.cmd_next)
 
     # ---- 改进循环 ----
     p = sub.add_parser("suggestions", help="列出待审批改进建议")
