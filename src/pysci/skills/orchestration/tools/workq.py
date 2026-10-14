@@ -222,6 +222,46 @@ def pending_count(queue_path: Path) -> int:
     return sum(1 for it in load(queue_path) if it.get("status") == STATUS_PENDING)
 
 
+#: 条目「入队时刻」的候选字段（各成员队列写法不同；取首个能解析的）。缺该字段的条目
+#: **不参与**超时判据——拿不到时间戳就别发告警（坏数据不该变成告警噪声）。
+_TS_KEYS: tuple[str, ...] = ("enqueued_at", "created")
+
+
+def item_epoch(it: dict[str, Any]) -> float | None:
+    """条目的入队时刻（epoch 秒）；解析不出 → ``None``。"""
+    for key in _TS_KEYS:
+        raw = it.get(key)
+        if not raw:
+            continue
+        try:
+            return datetime.fromisoformat(str(raw)).timestamp()
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def stale_pending(
+    queue_path: Path, *, timeout_s: int, now: float | None = None
+) -> list[dict[str, Any]]:
+    """``pending`` 且**入队超时**（距今 > ``timeout_s`` 秒）的条目。
+
+    观察面：**不许静默积压**（autonomy-fix a2）——2026-10-14 那起 02:21 入队、整夜 pending
+    的巡检项就是「没人取走也没人报警」的形态。给**各队列共用**（成员队列/inspector 队列）
+    一份判据，别每队各写一套。
+    """
+    moment = datetime.now().timestamp() if now is None else float(now)
+    out: list[dict[str, Any]] = []
+    for it in load(queue_path):
+        if it.get("status") != STATUS_PENDING:
+            continue
+        epoch = item_epoch(it)
+        if epoch is None:
+            continue
+        if moment - epoch > int(timeout_s):
+            out.append(it)
+    return out
+
+
 def prune(queue_path: Path, keep: int = DEFAULT_KEEP) -> int:
     """裁掉最早的条目，只留最近 ``keep`` 条，返回裁掉数。"""
     items = load(queue_path)

@@ -50,12 +50,18 @@ QUEUE_COMPLETE = (
     "QUEUE-COMPLETE"  # watch 差分的 devops 收尾名（legacy；流里用 QUEUE-EMPTY）
 )
 
+#: 队列项**入队超时未处理**（autonomy-fix a2）——不许静默积压：30 min 没被 worker 取走即
+#: 唤醒组长，并在 TUI「盲审与审查」/「队列与运行」点名。与 NEEDS-LEADER 的分工：那个是
+#: 「drain 判定须组长处理」，这个是「根本没人取走」（2026-10-14 02:21 入队的 patrol 积压整夜）。
+QUEUE_TIMEOUT = "QUEUE-TIMEOUT"
+
 #: 事件 → 唤醒策略（人读；§3.2 表逐行落这里）。
 WAKE: dict[str, str] = {
     JOB_DONE: "每件唤醒组长（7 专职+deputy，及时接续下一份工作）",
     STEP_REVIEW_DONE: "环节+附属 review 合并完成，唤醒一次（一个通知单元）",
     QUEUE_EMPTY: "devops / bencher 队列消化完，队列空唤醒一次",
     TASKBOOK_NEW: "用户投递任务书，立即唤醒组长",
+    QUEUE_TIMEOUT: "队列入队 30min 未处理，唤醒组长排查（不许静默积压）",
     NEEDS_LEADER: "沿现制：drain 判定须组长处理",
     QUOTA_STOP: "沿现制：额度类全局停止",
     CHANNEL_STOP: "沿现制：渠道级故障全局停止",
@@ -73,6 +79,7 @@ STREAM_TYPES: tuple[str, ...] = (
     STEP_REVIEW_DONE,
     QUEUE_EMPTY,
     TASKBOOK_NEW,
+    QUEUE_TIMEOUT,
 )
 
 #: watch 差分命中后**镜像**入流（记录面）的类型——唤醒已由差分送出，这里只补流账。
@@ -294,6 +301,7 @@ __all__ = [
     "NEEDS_LEADER",
     "QUEUE_COMPLETE",
     "QUEUE_EMPTY",
+    "QUEUE_TIMEOUT",
     "QUOTA_STOP",
     "SALVAGE",
     "SEEN_PATH",
