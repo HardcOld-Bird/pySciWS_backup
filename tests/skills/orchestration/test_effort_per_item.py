@@ -388,11 +388,13 @@ def iso_plans(tmp_path, monkeypatch):
     monkeypatch.setattr(
         queueworker, "wake_member", lambda member, **k: (True, "stub worker")
     )
+    # 收尾回读的新接缝（PSEP_3 pa1 起 run/advance 共用 `_settle_terminal_jobs`→按条目结账）：
+    # 桩一份「该环节的 job 已 done」的条目读数，等价旧 `_wait_job` 桩（本条即测试端点②）。
     monkeypatch.setattr(
         plans,
-        "_wait_job",
-        lambda member, job_id, **k: {
-            "id": job_id,
+        "_queue_item_for_step",
+        lambda plan_id, step_id, member: {
+            "id": "job-1",
             "status": "done",
             "result": {"code": 0, "kind": "result", "body": OK, "checks": []},
         },

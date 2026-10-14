@@ -412,18 +412,15 @@ def _known_plan_ids() -> list[str]:
 
 
 def _plan_steps(plan_id: str) -> list[str]:
-    """计划 YAML 的环节 id 清单；读不到 → 空表。"""
+    """计划 YAML 的**叶子**环节点路径清单（superstep 递归展开；读不到 → 空表）。"""
     try:
+        from .planflow import PlanTree
         from .plans import _load_yaml
 
         plan = _load_yaml(plan_id)
     except Exception:  # noqa: BLE001
         return []
-    return [
-        str(s["id"])
-        for s in (plan.get("steps") or [])
-        if isinstance(s, dict) and s.get("id")
-    ]
+    return PlanTree(plan.get("steps") or []).leaf_paths()
 
 
 def _plan_from_slug(slug: str) -> str | None:
