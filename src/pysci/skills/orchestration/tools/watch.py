@@ -83,13 +83,15 @@ PRIORITY: tuple[str, ...] = (
     "STEP-REVIEW-DONE",
     "QUEUE-EMPTY",
     "QUEUE-COMPLETE",
-    "SALVAGE",
-    # 队列感知伪事件（adhoc-20261014-124521-s1）**排最后**：它们是巡更 nudge——与真实事件
-    # 同帧时让位（真实事件拿主行、伪事件进「同时」附注），独处时才是主行。排在前面会把
-    # a1「首个唤醒=真实事件」的契约挤掉（2026-10-14 main 实测：backlog 恰 1 条 pending
-    # → 聋期 e2e 断言 echoed[0] 拿到 PENDING-WORK 而非 QUEUE-EMPTY）。
+    # 队列感知伪事件（adhoc-20261014-124521-s1）**排在 SALVAGE 之前、真实事件之后**：
+    # 巡更 nudge 不该抢在真实事件前当主行（否则 a1「首个唤醒=真实事件」的契约被挤掉——
+    # 2026-10-14 main 实测：backlog 恰 1 条 pending → 聋期 e2e 的 echoed[0] 拿到
+    # PENDING-WORK），但它毕竟是要组长动手的信号，比 SALVAGE（知会、无需动手）更该先说。
     "PENDING-WORK",
     "STALL",
+    # SALVAGE 必须保持**最低优先级**（test_salvage_sits_at_lowest_priority 钉住）：
+    # 「进度已保住、队列自己在续」是知会，不该盖住真要处理的信号。
+    "SALVAGE",
 )
 
 #: run 日志里的额度类全局停止痕迹（drain 在触发全局停止前打 ``[Q]`` 行）。日志判定
