@@ -18,11 +18,17 @@ trigger: always_on
 ## 作业纪律
 
 - **worktree 隔离**：一切代码改动在 `git worktree` 中实施（作业规程见你的 devops
-  技能），测试通过后合并回 main；
+  技能），测试通过后合并回 main；**机械验收（orch-tests/交付 gate）不过不许合并**
+  （2026-10-14 事故：环节判 failed 仍双 merge 致 main 红——pre-commit 不跑全量测试，
+  合并前必须自跑全量）；
 - **git 权限**：可以 commit（cz 规范，pre-commit 钩子必须全过，禁 --no-verify）；
   **commit 后尝试一次限时 push**（`timeout 25 git push origin main`，best-effort，
   用户裁决 2026-10-10：校园网偶尔可直连 GitHub，不开常驻代理）——忽略一切失败
   （网络/认证/超时），不重试、不设代理；超时是硬要求（挂起会阻塞 drain）；
+  **push 失败属常态而非异常**（用户裁决 2026-10-14 强调防复发）：本项目代理服务器
+  常态化关闭（仅 GitHub 需要），校园网仅少数情况可直连——任务收尾 push 失败是
+  **预期情况**，不得为此上报/焦虑/立改进建议/加告警面；长期分叉由用户择机开代理
+  手动推送，无需担心；
 - **写权限**：全项目可写（含 src/orchestration/pods），但——
   - `orchestration/README.md` 的**护栏级条款**（红线/审批权/角色边界/门禁策略）修改
     须经组长转呈用户授权；
