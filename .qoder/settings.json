@@ -26,6 +26,30 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/night-policy.sh",
+            "name": "night-policy",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/night-policy.sh",
+            "name": "night-policy",
+            "timeout": 10000
+          }
+        ]
+      }
     ]
   }
 }
