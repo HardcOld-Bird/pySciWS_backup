@@ -169,7 +169,8 @@ def test_orch_queues_enqueue_and_list(state, capsys):
     assert "已入队" in out and "figure" in out
     assert orch.main(["queues", "list"]) == 0
     assert "figure" in capsys.readouterr().out
-    assert orch.main(["queues", "enqueue", "devops", "--text", "x", "--dry"]) == 2
+    # devops 收编（task-20261014-devops-gap-d1）：入队不再 rc=2
+    assert orch.main(["queues", "enqueue", "devops", "--text", "x", "--dry"]) == 0
 
 
 def test_water_lines_marks_backlog(state):
@@ -191,7 +192,9 @@ def test_status_reads_new_queue_water(iso_state, monkeypatch, capsys):
     assert "[figure]" in out and "有积压" in out
 
 
-def test_queue_members_exclude_devops_and_bencher():
+def test_queue_members_include_devops_exclude_bencher():
+    """devops 收编（task-20261014-devops-gap-d1）：plan 可直派 devops（双通道并存）；
+    bencher/inspector 仍各有既有队列，不在 QUEUE_MEMBERS。"""
     assert "figure" in queues.QUEUE_MEMBERS
-    assert "devops" not in queues.QUEUE_MEMBERS
+    assert "devops" in queues.QUEUE_MEMBERS
     assert "bencher" not in queues.QUEUE_MEMBERS

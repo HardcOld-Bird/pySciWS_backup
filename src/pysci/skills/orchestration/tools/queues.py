@@ -4,9 +4,10 @@
 （纪律：同一能力不留两份实现）。本模块只定义「条目长什么样、入队/查队/父子关联怎么算」；
 worker 生命周期在 :mod:`queueworker`。
 
-**覆盖范围**：7 专职（sim/figure/writing/theory/lit/drawing/model3d）+ deputy + reviewer。
-devops（backlog 组包：backlog-fifo-20261014 起批次经本队列 ``kind=backlog-batch`` 由队列
-worker 执行+结算）、bencher、inspector 各有既有队列，**不在此列**。
+**覆盖范围**：7 专职（sim/figure/writing/theory/lit/drawing/model3d）+ deputy + reviewer
++ devops。devops **双通道并存**（非二选一，见 :data:`QUEUE_MEMBERS` 的 ADR）：plan 环节
+直派（``kind=produce``）与 backlog 组包（``kind=backlog-batch``，worker 经 drain 账务结算）
+同队列共用 FIFO/worker；bencher、inspector 各有既有队列，**不在此列**。
 
 **组包边界（§3.1）**：生产组员 job **一律不组包**（worker 每次只取一条 = batch_size 恒 1）；
 devops backlog 的组包/延期/needs_leader 语义在 :mod:`workflow`/计划器侧保留，执行落到本队列。
@@ -31,7 +32,18 @@ from . import backpressure, workq
 #: 成员队列根（运行态；gitignore 语义与其余 state 同族）。
 QUEUES_DIR: Path = ORCH_STATE_ROOT / "queues"
 
-#: 建队的成员（§3.1）：7 专职 + deputy + reviewer（reviewer 只收 review 子 job）。
+#: 建队的成员（§3.1）：7 专职 + deputy + reviewer（reviewer 只收 review 子 job）+ devops。
+#:
+#: **ADR（task-20261014-devops-gap-d1，用户裁决 2026-10-14）**——推翻旧决策「基建/测量类
+#: 条目走 devops backlog、不进 plan」：
+#: - **选了什么**：devops 收编为 plan 系统可直接派发的队列成员（plan run / plan advance /
+#:   queues enqueue 三路全通），与既有 backlog FIFO 组包通道**并存**（双通道，**非二选一**：
+#:   ``kind=produce`` = plan 环节直派，worker 走通用 ``do_dispatch`` 结账；``kind=
+#:   backlog-batch`` = backlog 组包入队，worker 经 ``drain.settle_backlog_batch`` 落账务）。
+#: - **弃了什么**：弃「基建条目不进 plan」的旧边界（其成因是队列化前没有统一 FIFO 面，
+#:   基建/测量只能另走 backlog；M4 队列化落地后该边界成了残留）。
+#: - **为什么**：大任务的计划里**显式含基建改进环节**（plan-first 要求环节全走计划），旧边界
+#:   让这类环节无处派发（PSEP_2 备忘点名的缺口）；队列化后双通道同队列并存是合理形态。
 QUEUE_MEMBERS: tuple[str, ...] = (
     "sim",
     "figure",
@@ -42,6 +54,7 @@ QUEUE_MEMBERS: tuple[str, ...] = (
     "model3d",
     "deputy",
     "reviewer",
+    "devops",
 )
 
 #: 宿主 job 的完成态读数。

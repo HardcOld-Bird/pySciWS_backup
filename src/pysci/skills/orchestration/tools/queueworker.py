@@ -310,6 +310,9 @@ def run_worker(
         "run_log": str(run_log),
     }
     t_worker = time.time()
+    # devops 的 QUEUE-EMPTY = **backlog 消化完**的知会（旧 drain 语义）；plan 环节直派的
+    # devops job 走通用 JOB-DONE 收账，不再叠发（task-20261014-devops-gap-d1 双通道对齐）。
+    saw_batch = False
     # 死会话条目（注册表过期）与死队列条目（in_progress 孤儿）各清各的，不重复回收。
     backpressure.prune_stale(now=time.time())
     sess = backpressure.LiveSession(
@@ -355,6 +358,7 @@ def run_worker(
             # devops backlog 批次（计划器入队）：账务=backlog 销账/needs_leader/延期/系统性
             # 停止，全部走 drain 的单一实现；本条目终态由结算结果映射（见 _settle_batch_item）。
             if str(item.get("kind")) == BACKLOG_BATCH_KIND:
+                saw_batch = True
                 _settle_batch_item(
                     q,
                     member,
@@ -462,8 +466,10 @@ def run_worker(
         )
         # devops 完成唤醒（backlog-fifo-20261014 迁移）：执行只留队列 worker 一份实现后，
         # 「消化完」的消费事实由**执行侧**发——统一事件流一条 QUEUE-EMPTY（旧 drain.finally
-        # 的职责平移至此）；带宽延期触顶回升的全局停止另发一条渠道级停止事件。写失败 fail-open。
-        if member == "devops":
+        # 的职责平移至此）；仅在消化过 backlog 批次的 run 发（plan 环节直派走 JOB-DONE 收账，
+        # 双通道对齐见 task-20261014-devops-gap-d1）；带宽延期触顶回升的全局停止另发一条
+        # 渠道级停止事件。写失败 fail-open。
+        if member == "devops" and saw_batch:
             try:
                 events.note_queue_empty(
                     "devops",
