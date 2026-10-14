@@ -52,7 +52,8 @@ CN_TZ_NAME: str = "Asia/Shanghai"
 #: 峰时段出厂口径（半开区间 ``[起, 止)``，小时）。谷=其余全部时刻。
 DEFAULT_PEAK_WINDOWS: tuple[tuple[int, int], ...] = ((9, 12), (14, 18))
 
-#: 进峰前提前切换的秒数（见模块 docstring「早切」）。
+#: 进峰前提前切换的秒数（见模块 docstring「早切」）。**toml 生效键** ``[model] leadtime_s``
+#: 优先——用户改它即生效（2026-10-14 事故根治：注释里的示例键读不到，改了不生效）。
 DEFAULT_LEADTIME_S: int = 3600
 
 #: 谷时主席来自哪个预设的席位表。qwen/mimo 是「被覆盖方」，deepseek 是「覆盖来源」——
@@ -80,14 +81,25 @@ _WEEKDAYS: tuple[str, ...] = ("周一", "周二", "周三", "周四", "周五", 
 
 @dataclass(frozen=True)
 class Face:
-    """路由键的**已校验**读数（出厂值 + 警告，绝不为非法配置停摆）。"""
+    """路由键的**已校验**读数（出厂值 + 警告，绝不为非法配置停摆）。
+
+    ``sources`` 记每个键的真源（``"toml 显式"`` / ``"出厂默认"``）——面板据此标注，
+    面板/派发/文档读的都是**同一次** :func:`face` 的结果（单一真源）。
+    """
 
     enabled: bool = True
     valley_preset: str = DEFAULT_VALLEY_PRESET
     leadtime_s: int = DEFAULT_LEADTIME_S
     peak: tuple[tuple[int, int], ...] = DEFAULT_PEAK_WINDOWS
     jury_panel: tuple[str, ...] = DEFAULT_JURY_PANEL
+    #: 边界避让窗口（秒）；``None`` = toml 未配置（调用方回退 registry 旧位并出声迁移）。
+    boundary_hold_s: int | None = None
+    sources: tuple[tuple[str, str], ...] = ()
     warnings: tuple[str, ...] = ()
+
+    def source(self, key: str) -> str:
+        """该键的真源读数（``toml 显式`` / ``出厂默认``；未知键按出厂默认）。"""
+        return dict(self.sources).get(key, "出厂默认")
 
     def windows_text(self) -> str:
         """峰段的人类可读串（告警与「已关闭」读数里都要它，别两处各拼一遍）。"""
@@ -147,6 +159,7 @@ ROUTING_KEYS: tuple[str, ...] = (
     "leadtime_s",
     "peak",
     "jury_panel",
+    "boundary_hold_s",
 )
 
 
@@ -178,6 +191,9 @@ def face(data: dict[str, Any] | None = None) -> Face:
         for key in fell_back:
             raw[key] = legacy[key]
     warn: list[str] = []
+    # 真源标注：默认「出厂默认」，值**被成功采纳**时才标「toml 显式」——回落后的生效值
+    # 其实是出厂值，标成显式会骗用户（2026-10-14 事故：改了不生效还以为生效）。
+    sources: dict[str, str] = {key: "出厂默认" for key in ROUTING_KEYS}
     if fell_back:
         warn.append(
             "[!] [routing] 已并入 [model]（用户 2026-10-13）："
@@ -189,6 +205,8 @@ def face(data: dict[str, Any] | None = None) -> Face:
     if not isinstance(enabled, bool):
         warn.append(f"[routing] enabled = {raw.get('enabled')!r} 非布尔 → 按 true")
         enabled = True
+    else:
+        sources["enabled"] = "toml 显式" if "enabled" in raw else "出厂默认"
 
     valley = str(raw.get("valley_preset", DEFAULT_VALLEY_PRESET) or "").strip()
     if valley not in presets.PRESETS:
@@ -197,6 +215,8 @@ def face(data: dict[str, Any] | None = None) -> Face:
             f"{'/'.join(presets.PRESETS)}）→ 回落 {DEFAULT_VALLEY_PRESET!r}"
         )
         valley = DEFAULT_VALLEY_PRESET
+    else:
+        sources["valley_preset"] = "toml 显式" if "valley_preset" in raw else "出厂默认"
 
     leadtime = DEFAULT_LEADTIME_S
     if raw.get("leadtime_s") is not None:
@@ -205,10 +225,38 @@ def face(data: dict[str, Any] | None = None) -> Face:
             if not 0 <= number <= 86400:
                 raise ValueError
             leadtime = number
+            sources["leadtime_s"] = "toml 显式"
         except (TypeError, ValueError):
             warn.append(
                 f"[routing] leadtime_s = {raw.get('leadtime_s')!r} 非法（0–86400）"
                 f"→ 回落 {DEFAULT_LEADTIME_S}"
+            )
+
+    # 边界避让窗口（原 [routing].boundary_hold_s，2026-10-14 用户实测反馈迁本节生效键）：
+    # 硬钳 ≤300s（「稍等过界」不是「排队等窗口」）；未配置 → None（调用方回退旧位并出声
+    # 迁移提示，沿 leadtime 的「旧位兼容读一次」语义）。
+    boundary: int | None = None
+    if raw.get("boundary_hold_s") is not None:
+        try:
+            number = int(raw["boundary_hold_s"])
+            if number < 0:
+                raise ValueError
+            if number > 0:
+                from .registry import BOUNDARY_HOLD_CAP_S
+
+                if number > BOUNDARY_HOLD_CAP_S:
+                    warn.append(
+                        f"[routing] boundary_hold_s = {number} 超上限 "
+                        f"{BOUNDARY_HOLD_CAP_S} → 压到 {BOUNDARY_HOLD_CAP_S}"
+                        "（稍等过界不是排队等窗口）"
+                    )
+                    number = BOUNDARY_HOLD_CAP_S
+            boundary = number
+            sources["boundary_hold_s"] = "toml 显式"
+        except (TypeError, ValueError):
+            warn.append(
+                f"[routing] boundary_hold_s = {raw.get('boundary_hold_s')!r} 非法"
+                "（≥0 秒，上限 300）→ 回落出厂默认"
             )
 
     peak = DEFAULT_PEAK_WINDOWS
@@ -225,6 +273,7 @@ def face(data: dict[str, Any] | None = None) -> Face:
             parsed.append(pair)
         if parsed:
             peak = tuple(sorted(parsed))
+            sources["peak"] = "toml 显式"
         else:
             warn.append(
                 f"[routing] peak = {raw.get('peak')!r} 无合法区间 → 回落出厂峰段"
@@ -240,6 +289,7 @@ def face(data: dict[str, Any] | None = None) -> Face:
             and all(str(x).strip() for x in items)
         ):
             panel = tuple(str(x).strip() for x in items)
+            sources["jury_panel"] = "toml 显式"
         else:
             warn.append(
                 f"[routing] jury_panel = {items!r} 非法（须家族名列表）→ 回落 "
@@ -252,6 +302,8 @@ def face(data: dict[str, Any] | None = None) -> Face:
         leadtime_s=int(leadtime),
         peak=peak,
         jury_panel=panel,
+        boundary_hold_s=boundary,
+        sources=tuple(sources.items()),
         warnings=tuple(warn),
     )
 
@@ -331,6 +383,25 @@ def next_peak_start(moment: datetime, face_value: Face) -> datetime | None:
                 return start
         day = day + timedelta(days=1)
     return None
+
+
+def countdown_s(next_at: str) -> int | None:
+    """``next_at`` 距**现在**的秒数（负数=已过点；``None`` = 判不出）。
+
+    读数面的 ``next_at`` 落盘格式是 ``%m-%d %H:%M``（无年份，跨年语义由
+    :func:`next_switch` 的向后找保证）；这里兼容该格式与 ``%Y-%m-%d %H:%M``，
+    年份缺省按**今年**补齐。TUI 倒计时与 status 同走本函数（判据单一实现）。
+    """
+    text = str(next_at or "").strip()
+    if not text:
+        return None
+    if len(text) <= 11:  # 读数面是 ``%m-%d %H:%M``（无年份）→ 补今年后统一按同格式解析
+        text = f"{now_cn().year}-{text}"
+    try:
+        target = datetime.strptime(text, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+    return int((target - as_cn(None).replace(tzinfo=None)).total_seconds())
 
 
 def switch_moments(day: date, face_value: Face) -> list[tuple[datetime, str]]:

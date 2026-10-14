@@ -204,10 +204,18 @@ def _watch_cfg() -> dict[str, int]:
     return out
 
 
-def _member_worker_live(member: str, qw: Any) -> bool:
-    """该成员队列是否有存活 worker（持 per-成员 worker 锁）。读不到 → 视为无（宁可报）。"""
+def _paths_live(paths: Any) -> bool:
+    """某组 worker 生命周期落点（锁）是否 ``running``；读不到 → 视为无（宁可报）。"""
     try:
-        return _drain.lock_status(qw.member_paths(member)).get("state") == "running"
+        return _drain.lock_status(paths).get("state") == "running"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _member_worker_live(member: str, qw: Any) -> bool:
+    """该成员队列是否有存活 worker（per-成员 worker 锁）。读不到 → 视为无（宁可报）。"""
+    try:
+        return _paths_live(qw.member_paths(member))
     except Exception:  # noqa: BLE001
         return False
 
@@ -215,13 +223,16 @@ def _member_worker_live(member: str, qw: Any) -> bool:
 def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     """队列压力读数（PENDING-WORK / STALL 判据的**单一实现**，§纪律「同一能力不留两份」）。
 
-    「非空」= 有活却没人干，四条任一成立即真：
+    「非空」= 有活却没人干，五条任一成立即真：
 
     1. devops backlog 有 ``pending``；
-    2. 任一成员队列（:data:`queues.QUEUE_MEMBERS`）有 ``pending``，且该成员**无存活 worker**
-       （worker 在场时队列有活是常态，不该叫醒组长）；
-    3. 统一事件流有未排空事件（:func:`events.unacked`）；
-    4. ``data/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）。
+    2. 任一**成员**队列（:data:`queues.QUEUE_MEMBERS`，9 队）有 ``pending``，且该成员
+       **无存活 worker**（worker 在场时队列有活是常态，不该叫醒组长）；
+    3. **支撑席**队列有 ``pending`` 且无 worker：bencher 常驻；inspector 仅**开关开启时**计入
+       （开关关闭 → 不拉起巡检，其存量只报不告警——否则每次巡更都叫醒组长去处理一个本来
+       就不跑的队列，正是「唤醒→无事」的反面示例，用户 2026-10-14 点名降噪）；
+    4. 统一事件流有超一个巡更周期未排空的事件（:func:`events.unacked`）；
+    5. ``data/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）。
 
     ``stall`` 单列：任一队列条目 ``in_progress`` 且距 ``started_at`` 超过阈值。
 
@@ -256,6 +267,20 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
                         f"{member}:{it.get('id')} in_progress {age / 60:.0f}min"
                     )
     except Exception:  # noqa: BLE001 - 队列面读失败不阻塞巡更
+        pass
+    try:
+        from . import benchd as _bd
+        from . import inspectd as _insp
+        from . import workq as _workq
+
+        bench_pending = int(_bd.queue_counts().get("pending", 0) or 0)
+        if bench_pending and not _paths_live(_bd.BENCH_PATHS):
+            reasons.append(f"bencher 队列 {bench_pending} 项 pending 且无 worker")
+        if _insp.enabled():  # 开关关闭 → 不计入（其存量只报不告警）
+            insp_pending = int(_workq.pending_count(_insp.QUEUE_PATH))
+            if insp_pending and not _paths_live(_insp.INSPECT_PATHS):
+                reasons.append(f"inspector 队列 {insp_pending} 项 pending 且无 worker")
+    except Exception:  # noqa: BLE001
         pass
     try:
         unacked = _events.unacked()

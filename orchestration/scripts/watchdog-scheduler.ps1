@@ -39,7 +39,15 @@ $ErrorActionPreference = "Stop"
 # $PSScriptRoot = <repo>/orchestration/scripts  ->  two levels up = repo root
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $Python   = Join-Path $RepoRoot ".venv\Scripts\python.exe"
-$Action   = "`"$Python`" -m pysci.skills.orchestration.tools.orch watchdog start"
+# HIDDEN HOST (empty-terminal fix, 2026-10-14 user report): python.exe is a console
+# subsystem binary, so a Task Scheduler tick with an interactive token pops a visible
+# (empty) console every 5 minutes. pythonw.exe is GUI subsystem -> no console window at
+# all, and the action only runs `orch watchdog start` (spawn-and-exit). Fall back to the
+# console binary when pythonw.exe is absent (venv layout variance) so the task never
+# silently stops working.
+$Pythonw  = Join-Path $RepoRoot ".venv\Scripts\pythonw.exe"
+$HostExe  = if (Test-Path $Pythonw) { $Pythonw } else { $Python }
+$Action   = "`"$HostExe`" -m pysci.skills.orchestration.tools.orch watchdog start"
 
 switch ($Mode) {
     "install" {

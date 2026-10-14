@@ -235,6 +235,10 @@ class PysciTUI(App):
         self.query_one("#tb-new", Vertical).display = False
         self._render_summary(0)
         self.query_one("#menu", ListView).focus()
+        # 详情倒计时**每秒跳动**（「距下次切换还有 X 分 X 秒」，用户 2026-10-14 实测反馈）：
+        # 只重算详情文本、不走菜单/徽标面——徽标指纹用**去掉倒计时行**的稳定读数，
+        # 否则每秒一次的读数变化会让徽标常亮（§2.2「数字与详情对得上」）。
+        self.set_interval(1.0, self._tick_detail)
 
     # ---- 徽标与水位 -------------------------------------------------------
     def _badge_text(self, mod: Module) -> str:
@@ -371,6 +375,27 @@ class PysciTUI(App):
         self.query_one("#summary", Static).display = False
         self.query_one("#journal", Vertical).display = False
         self._mark_seen(mod)
+
+    def _tick_detail(self) -> None:
+        """逐秒刷新详情读数（倒计时用）：只在**系统与路由**详情在场时重算，别处不动。"""
+        if self.view != "detail":
+            return
+        mod = self._mods[self.selected]
+        if mod.key != "system":
+            return
+        try:
+            raw = list(mod.detail())
+        except Exception:  # noqa: BLE001 - 刷新失败保持上一帧，不塌详情
+            return
+        body, hints = _split_detail(raw)
+        self.detail_body = "\n".join(body)
+        self.detail_text = "\n".join(
+            [f"{mod.title}　详情", "", *body, "", *hints, "Esc/← 返回主菜单"]
+        )
+        self.detail_hint = "  ".join([*hints, "Esc/← 返回主菜单"])
+        self.query_one("#detail-body", Static).update(self.detail_body or "（无读数）")
+        self.query_one("#detail-hint", Static).update(self.detail_hint)
+        self._mark_seen(mod)  # 用户正看着：把最新读数记为已见，徽标不自亮
 
     def _open_journal(self) -> None:
         self.view = "journal"
