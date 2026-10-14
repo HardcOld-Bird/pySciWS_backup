@@ -1,45 +1,43 @@
 # 唤醒链三级防线与巡更规程（autonomy-fix a1–a3；队列感知巡更 adhoc-20261014-124521-s1）
 
-本册是**组长侧**的就位与巡更手册：三层防线各管什么、巡更怎么自动起止、新会话/新机器
-开机就位做什么。设计背景见 `orchestration/README.md` §4.5；本册只写**操作步骤与可证伪判据**。
+本册＝**组长侧**就位与巡更手册（三层防线各管什么 / 巡更自动起止 / 开新机就位做什么）；
+设计背景见 `orchestration/README.md` §4.5，本册只写**操作步骤与可证伪判据**。
 
 ## 1. 三级防线（谁在哪一级兜底）
 
 | 级别 | 机制 | 生命周期 | 覆盖的失效 |
 |---|---|---|---|
-| 会话级（①） | `.qoder/hooks/watch-arm.sh`（`Stop` 钩子每回合接管，token 竞争，循环 `orch watch`） | 组长会话回合内 | 事件产生时**有监听**：命中即 `exit 2` 唤醒 |
+| 会话级（①） | `.qoder/hooks/watch-arm.sh`（`Stop` 钩子每回合接管、token 竞争、循环 `orch watch`） | 组长会话回合内 | 事件产生时**有监听**：命中即 `exit 2` 唤醒 |
 | 会话级（②） | **队列感知巡更伪事件**（`PENDING-WORK`/`STALL`，随 ① 同帧判定） | 随 ① 同生命周期（**自动起止**：队列全空即零唤醒） | 没有事件但**状态该看而没人看**（队列/backlog/事件流/任务书非空、条目停滞） |
 | 机器级（③） | `pysci-watchdog`（`orch watchdog start`；OS 计划任务每 5 min 幂等点火） | 独立于会话/机器重启（③ 的 OS 注册在） | listener/watchdog **被无声杀死**、会话消亡连坐 |
 
-关系：① 是主路（零轮询、事件驱动）；② 是**队列感知的自动巡更**——补「没事件但该知道」，
-判据全在代码（`watch.queue_pressure`），**无需组长挂/撤任何 cron**；③ 是**监督**——它不制造
-事件，只保证 ① 那一环还在跑（心跳 stale → 重臂）。三者互相独立：任何一层坏掉，另两层仍在。
+关系：① 主路（零轮询、事件驱动）；② 队列感知巡更（补「没事件但该知道」，判据单点
+`watch.queue_pressure`，**无需挂/撤 cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳
+stale → 重臂）。三层互相独立：任一层坏掉，另两层仍在。
 
 ## 2. 巡更（②：队列感知，自动起止）
 
 **判据（单一实现 = `watch.queue_pressure`，四处消费面共用）**：
 
-- `PENDING-WORK`（**有活却没人干**，四条任一成立）：devops backlog 有 `pending` **且无
-  devops 队列 worker 在跑**（执行归 FIFO：worker 在场时 pending 属正常在途，降噪——144
-  注记场景）；任一成员队列有 `pending` 且该成员**无存活
-  worker**；统一事件流有**超 30 min 未排空**的事件（刚产生的事件正是本帧要唤醒的那几条，
-  计入会与既有事件重复）；`data/taskbooks/` 有 `new` 态未处理。
+- `PENDING-WORK`（**有活却没人干**，四条任一成立；含**夜航判据**见 §5）：devops backlog 有
+  `pending` **且无 devops 队列 worker 在跑**（执行归 FIFO，worker 在场即降噪）；任一成员队列
+  有 `pending` 且该成员**无存活 worker**；统一事件流有**超 30 min 未排空**的事件；`data/
+  taskbooks/` 有 `new` 态未处理。
 - `STALL`（**条目停滞，叠加心跳判活**）：任一队列条目 `in_progress` 且距 `started_at` 超
   阈值，**且该成员无心跳新鲜的活会话**（`backpressure.live_entries` ≤120s）——
   慢而不死（重型环节正当耗时）不报，死而僵才报（2026-14 晚实测误报的根治面）。
 
-**节流（硬要求）**：同类事件 **≤1 次/30 min**——防「唤醒→看一眼→无新事→再唤醒」的循环。
-节流账落在 `watch.json`，跨挂载继承（重启不重置、不堆积）；被节流时**不推进该条件水位**，
-故窗口一过信号照报，不丢。
+**节流（硬要求）**：同类事件 **≤1 次/30 min**（防唤醒→看一眼→再唤醒的循环）。账落
+`watch.json` 跨挂载继承；被节流时**不推进条件水位**，窗口一过照报，不丢。
 
-**全空即静默**：队列全空 → 条件不成立 → 纯 TIMEOUT 循环**零唤醒**（这正是原先手工巡更
-cron「全空闲即撤」的语义，现在由代码自动达成）。组长**不手工挂/撤巡更 cron**。
+**全空即静默**：队列全空 → 零唤醒（原手工 cron「全空闲即撤」语义，现由代码达成）；组长
+**不手工挂/撤巡更 cron**。
 
-**与铁律「禁止 sleep-轮询」的关系**：禁的是拿轮询**等工作完成**（把 LLM 当定时器烧 token）；
-巡更是**低频读一次状态面**的兜底，驱动工作仍靠 ① 的事件唤醒——两者不冲突。
+**与「禁 sleep-轮询」铁律不冲突**：禁的是拿轮询**等工作完成**；巡更是低频读一次状态面的
+兜底，驱动工作仍靠 ① 的事件唤醒。
 
-**阈值可配**：`registry.json` 顶层 `watch` 块——`stall_threshold_s`（默认 3600）、
-`pending_throttle_s`（默认 1800）；逐键 fail-open（读坏就按出厂默认跑）。
+**阈值可配**：`registry.json` 顶层 `watch` 块（`stall_threshold_s` 3600 /
+`pending_throttle_s` 1800）；逐键 fail-open（读坏按出厂默认）。
 
 **降级注（仅兜底）**：**钩子与看门狗全灭**时才手工挂一条 harness cron 顶一阵：
 
@@ -59,20 +57,19 @@ cron「全空闲即撤」的语义，现在由代码自动达成）。组长**�
    ```
    powershell -ExecutionPolicy Bypass -File orchestration\scripts\watchdog-scheduler.ps1 -Mode install
    ```
-   卸载同命令 `-Mode uninstall`（删除任务；看门狗进程另用 `orch watchdog stop`）。该 PS1
-   **纯 ASCII 有意为之**（PowerShell 5.1 对无 BOM UTF-8 按 ANSI 解码，CJK 会被解成反引号
-   转义下一行 → ParserError；仓库里所有 `.ps1` 都遵守）。
+   卸载同命令 `-Mode uninstall`；进程另用 `orch watchdog stop`。该 PS1 **纯 ASCII 有意
+   为之**（PS 5.1 按 ANSI 解无 BOM UTF-8 → CJK 变反引号吞行；仓库 `.ps1` 都遵守）。
 2. **唤醒权（自动归属，wake-owner）**：**零手工**——钩子每回合读 stdin 载荷
    `session_id` 走 `wake-claim --check`：无 owner 自动认领（首会话即主会话）、owner 续
    心跳、**异会话永不抢占**（不监听、不抢 token、绝不 `exit 2`）、owner stale（心跳
    >30 min 且其 watch 已死）自动接管、`SessionEnd` 钩子显式释放（换会话即干净迁移）。
    `pysci-orch wake-claim status` 查当前 owner 与 stale 判定；`--force [--session-id <id>]`
    是**应急强制迁移**（非常规步骤）。载荷缺失/解析失败一律 fail-open 走旧 token 语义留痕。
-3. **listener（会话级①）**：无需手工——`Stop` 钩子下一次回合自动接管（`watch-arm.sh` 每回合
-   还**幂等自启动看门狗**）；漏挂由 `orch status` 补账（`reconcile`）。
+3. **listener（会话级①）**：无需手工——`Stop` 钩子下回合自动接管（`watch-arm.sh` 每回合
+   幂等自启动看门狗）；漏挂由 `orch status` 补账（`reconcile`）。
 4. **巡更（②）**：**无需动作**——队列感知自动起止。仅 §2「降级注」那种全灭态才手工挂 cron。
-5. **自检**：`pysci-orch watchdog status` 三行（看门狗态 / 心跳年龄 / listener 活与不活）
-   应为 `running` / `<300s` / `活着`；`orch status` 的 watch 段应显示已挂载或可补账。
+5. **自检**：`pysci-orch watchdog status` 三行（看门狗态/心跳年龄/listener 活与不活）应为
+   `running`/`<300s`/`活着`；`orch status` 的 watch 段应显示已挂载或可补账。
 
 ## 4. 判据（可证伪）
 
@@ -80,21 +77,29 @@ cron「全空闲即撤」的语义，现在由代码自动达成）。组长**�
   再挂载**不重复**（水位单调）。
 - **同一事件只唤醒一次**：命中后**立即重挂载**，重复检测同一事件 → 不再唤醒
   （消费账 `watch.consumed`；2026-10-14 12:44 双唤醒的回归判据）。
-- 队列感知：制造「一成员队列 pending 且无 worker」→ watch 一轮内出 `PENDING-WORK`；
-  清空后连续周期**零唤醒**；窗口内重复条件被节流（`watch.throttle` 有账）。
+- 队列感知：造「成员队列 pending 无 worker」→ 一轮内出 `PENDING-WORK`；清空后连续周期
+  **零唤醒**；窗口内被节流（`watch.throttle` 有账）。
 - STALL：`started_at` 超阈值的 `in_progress` 条目，**且该成员无活会话心跳** → 出 `STALL`；
   心跳新鲜（慢而不死）→ 不出。
-- backlog FIFO：`approve` → 计划器把批次入队 `queues/devops.json`（面板可见）→ worker
-  消化销账；计划器锁忙**不丢件**（条目在持久 backlog 排队）；完成唤醒=事件流 `QUEUE-EMPTY`
-  （执行侧发）——判据自动化面 `test_backlog_fifo.py`。
+- backlog FIFO：`approve` → 计划器入队 `queues/devops.json`（面板可见）→ worker 消化销账；
+  计划器锁忙**不丢件**（持久 backlog 排队）；完成唤醒=事件流 `QUEUE-EMPTY`。判据面
+  `test_backlog_fifo.py`。
 - 看门狗重臂：令心跳 stale > 300 s → 看门狗日志出现 `[→] 重臂监听循环`。
 - 队列超时：入队 > 1800 s 未取走 → 事件层出 `QUEUE-TIMEOUT` 且 TUI 详情点名（不许静默积压）。
 - 唤醒权自动归属：不同 `session_id` 的载荷喂 `wake-claim --check`——首会话 **claim** 返回
-  0、owner 返回 0（续心跳）、异 id 返回 3（钩子据此退 `exit 0`：不监听、不抢 token、绝不
-  `exit 2`）、心跳 >30 min + owner watch 已死 → 返回 0 且接管、`SessionEnd` 返回 4（释放
-  后退出）、垃圾/空载荷返回 0 且 fail-open 留痕。owner 缺席期间发的事件在 owner 下次挂载
-  被**迟到唤醒**补上（水位单调，重挂不重复消费）。
+  0、owner 返回 0（续心跳）、异 id 返回 3（钩子退 `exit 0`：不监听、不抢 token、绝不
+  `exit 2`）、心跳 >30 min + owner watch 已死 → 返回 0 且接管、`SessionEnd` 返回 4（释放后
+  退出）、垃圾/空载荷返回 0 且 fail-open 留痕；owner 缺席期事件靠迟到唤醒补（水位单调）。
 
 判据的自动化面见 `tests/skills/orchestration/test_queue_watch.py`（队列感知 + 双消费回归）、
-`test_wake_owner.py`（唤醒权五类语义）、`test_backlog_fifo.py`（approve→入队→销账 /
-锁忙排队 / STALL 心跳双向 / 降噪）与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。
+`test_wake_owner.py`（唤醒权五类语义）、`test_backlog_fifo.py`（approve→入队→销账 / 锁忙
+排队 / STALL 心跳双向 / 降噪）与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。
+
+## 5. 夜航模式（PSEP_2；总开关 `data/pysci_settings.toml [night] enabled`）
+
+用户离机无人值守推进：**手动单开关、热切换**（钩子每回合现读）。**政策注入**
+（`night-policy.sh`，SessionStart/PostCompact 经 `additionalContext` 注入授权书全文）+
+**判据**（`night-gate.sh` 夜航内拒 `AskUserQuestion` 并转 `consult-twin`；
+`mirror-pending.json` 非空 → 夜航 `PENDING-WORK`）；两层皆 **fail-open**。保险丝层**缓行**
+（预留键勿设，PSEP_2 §3.4）；twin 代裁追溯/复核走 `orch twin-review`（授权依据标「夜航
+预授权」）。**全文、授权书与实测面见 README §4.5「夜航模式」**。

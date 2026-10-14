@@ -560,6 +560,8 @@ def cmd_consult_twin(args) -> int:
         (ln.strip().lstrip("#").strip() for ln in case_text.splitlines() if ln.strip()),
         case.name,
     )
+    # 首行自带的「案卷：」前缀去掉（审计面行自带该标签，避免重影）。
+    case_head = case_head.removeprefix("案卷：").removeprefix("案卷:").strip()
     record = {
         "ts": _now(),
         "case_id": case_id,
