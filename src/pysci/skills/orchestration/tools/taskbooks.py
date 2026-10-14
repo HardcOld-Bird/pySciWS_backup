@@ -335,6 +335,169 @@ def create_rework(
     )
 
 
+def report_path(tb_id: str) -> Path:
+    """全流程报告落点（``data/taskbooks/<id>.report.md``；**delivered 交付物即本报告**，§4.3 #5）。"""
+    return TASKBOOKS_DIR / f"{tb_id}.report.md"
+
+
+def _evidence_text(path_str: str) -> str:
+    """读 evidence 文件正文（绝对路径原样；相对路径按项目根解析；缺失/坏读返回空串）。"""
+    if not path_str:
+        return ""
+    p = Path(path_str)
+    if not p.is_absolute():
+        from pysci.paths import PROJECT_ROOT
+
+        p = PROJECT_ROOT / p
+    try:
+        return p.read_text(encoding="utf-8").strip() if p.is_file() else ""
+    except OSError:
+        return ""
+
+
+def _role_texts(pid: str) -> tuple[dict[str, str], list[tuple[str, str]]]:
+    """从所链 plan 聚合「叶子 role → evidence 正文」与「叶子 (路径, 状态)」清单。"""
+    if not pid:
+        return {}, []
+    from . import plans as _plans  # 延迟导入：plans 与 taskbooks 无依赖，保持叶子化
+
+    plan = _plans._load_yaml(pid)
+    pstate = _plans._load_state(pid)
+    rows = {str(s.get("id")): s for s in pstate.get("steps", [])}
+    roles: dict[str, str] = {}
+    leaves: list[tuple[str, str]] = []
+    for leaf in _plans._tree(plan).leaves:
+        row = rows.get(leaf.path) or {}
+        role = str(leaf.yaml.get("role") or "")
+        if role:
+            roles[role] = _evidence_text(str(row.get("evidence") or ""))
+        leaves.append((leaf.path, str(row.get("status") or "pending")))
+    return roles, leaves
+
+
+def build_report(tb_id: str) -> str:
+    """程序化拼装**全流程报告**（PSEP_3 §4.3 #5）→ ``<id>.report.md``；返回正文。
+
+    段落：任务概述 / 历轮摘要 / 本轮成因分析 / 解决方案 / 裁决书 / 监察判断 / 改进清单 / 返工
+    产物报告。各段从任务书 + 所链 plan（叶子 ``role`` + evidence）与 jury 案卷聚合；缺一段
+    显式标「（缺：无留痕）」——不静默、不空过。
+
+    Raises:
+        ValueError: 任务书不存在。
+    """
+    from . import jury as _jury
+
+    st = load_state(tb_id)
+    if st is None:
+        raise ValueError(f"任务书不存在：{tb_id}")
+    roles, leaves = _role_texts(str(st.get("plan_id") or ""))
+
+    def sec(title: str, body: object) -> str:
+        return f"## {title}\n\n{str(body or '').strip() or '（缺：无留痕）'}\n"
+
+    parts: list[str] = [f"# 全流程报告：{st.get('title')}（{tb_id}）", ""]
+    overview = (
+        f"- 状态：{st.get('status')}；轮次：第 {int(st.get('rework_round') or 1)} 轮；"
+        f"模式：{st.get('mode') or '（非返工）'}；优先级：{st.get('priority')}"
+    )
+    body_txt = read_body(tb_id)
+    parts.append(sec("任务概述", overview + ("\n\n" + body_txt if body_txt else "")))
+
+    hist: list[str] = []
+    prev = str(st.get("rework_of") or "")
+    n = int(st.get("rework_round") or 1) - 1
+    while prev:
+        pst = load_state(prev) or {}
+        notes = "；".join(
+            str(r.get("note") or "") for r in (pst.get("rejections") or [])
+        )
+        line = f"- 第 {n} 轮 {prev}「{pst.get('title')}」状态={pst.get('status')}" + (
+            f"；批语：{notes}" if notes else ""
+        )
+        hist.append(line)
+        prev = str(pst.get("rework_of") or "")
+        n -= 1
+    parts.append(sec("历轮摘要", "\n".join(hist) if hist else "（首轮，无历史）"))
+
+    parts.append(sec("本轮成因分析", roles.get("cause", "")))
+    parts.append(sec("解决方案", roles.get("solution", "")))
+
+    rulings: list[str] = []
+    for cid in (f"{tb_id}-jury", f"{tb_id}-discoverability"):
+        rp = _jury.record_path(cid)
+        try:
+            rec = json.loads(rp.read_text(encoding="utf-8")) if rp.exists() else {}
+        except (OSError, ValueError):
+            rec = {}
+        text = str((rec.get("verdict_summary") or {}).get("text") or "")
+        if text:
+            rulings.append(f"- {cid}：{text}")
+    parts.append(sec("裁决书", "\n".join(rulings) if rulings else "（无送审裁决留痕）"))
+
+    parts.append(sec("监察判断", roles.get("discoverability", "")))
+    if roles.get("improvement_plan"):
+        parts.append(sec("改进清单", roles["improvement_plan"]))
+    elif leaves:
+        parts.append(
+            sec(
+                "改进清单",
+                "计划环节（未填派单正文）：\n"
+                + "\n".join(f"- {p} [{s}]" for p, s in leaves),
+            )
+        )
+    else:
+        parts.append(sec("改进清单", ""))
+    parts.append(sec("返工产物报告", roles.get("final_report", "")))
+
+    text = "\n".join(parts).rstrip() + "\n"
+    _write(report_path(tb_id), text)
+    st["report"] = str(report_path(tb_id))
+    _save_state(tb_id, st)
+    return text
+
+
+def rework_card(tb_id: str) -> list[str]:
+    """TUI **返工卡片**（§4.3 #8）：轮次/模式/优先级 + 各轮裁决书摘要 + 改进清单 + superstep 进度树。
+
+    仅对带返工字段（``rework_of`` 或 ``mode``）的任务书返回内容；普通任务书返回空表（面板照旧）。
+    """
+    st = load_state(tb_id)
+    if st is None or not (st.get("rework_of") or st.get("mode")):
+        return []
+    from . import jury as _jury
+    from . import plans as _plans
+
+    rnd = int(st.get("rework_round") or 1)
+    out = [
+        f"轮次：第 {rnd} 轮返工｜模式：{st.get('mode') or '（非返工）'}"
+        f"｜优先级：{st.get('priority') or 'normal'}"
+    ]
+    if st.get("rework_of"):
+        out.append(f"原任务书：{st['rework_of']}")
+    out.append("—— 各轮裁决书摘要 ——")
+    any_ruling = False
+    for cid in (f"{tb_id}-jury", f"{tb_id}-discoverability"):
+        rp = _jury.record_path(cid)
+        try:
+            rec = json.loads(rp.read_text(encoding="utf-8")) if rp.exists() else {}
+        except (OSError, ValueError):
+            rec = {}
+        text = str((rec.get("verdict_summary") or {}).get("text") or "")
+        if text:
+            out.append(f"  · {cid}：{text}")
+            any_ruling = True
+    if not any_ruling:
+        out.append("  （无送审裁决留痕）")
+    pid = str(st.get("plan_id") or "")
+    if pid:
+        roles, _leaves = _role_texts(pid)
+        out.append("—— 改进清单 ——")
+        out.append(roles.get("improvement_plan") or "  （无派单正文；见进度树）")
+        out.append("—— superstep 进度树 ——")
+        out.extend("  " + ln for ln in _plans.plan_tree_lines(pid))
+    return out
+
+
 def sync_delivered() -> list[str]:
     """幂等对账：``planning/active`` 且所链 plan **已完成** → 置 ``delivered``。
 

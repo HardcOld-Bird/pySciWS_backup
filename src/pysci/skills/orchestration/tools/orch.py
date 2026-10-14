@@ -735,7 +735,8 @@ def cmd_events(args: argparse.Namespace) -> int:
 def cmd_taskbooks(args: argparse.Namespace) -> int:
     """``orch taskbooks``：用户大任务的**程序化查看面**（LLM 通道，README §12）。
 
-    子命令：``list`` / ``show <id>`` / ``link <id> --plan <pid>`` / ``sync``。
+    子命令：``list`` / ``show <id>`` / ``link <id> --plan <pid>`` / ``sync`` /
+    ``report <id>``（全流程报告组装，§4.3 #5）。
     **用户 accept/reject 只经 TUI**——本面不提供批复动作（用户裁决 ①）。
     """
     from . import taskbooks as _tb
@@ -791,7 +792,16 @@ def cmd_taskbooks(args: argparse.Namespace) -> int:
         done = _tb.sync_delivered()
         print(f"[√] 联动 delivered：{'、'.join(done) if done else '（无变化）'}")
         return 0
-    print(f"[!] 未知子命令：{action}（list|show|link|sync）")
+    if action == "report":
+        try:
+            text = _tb.build_report(args.id)
+        except ValueError as exc:
+            print(f"[!] {exc}")
+            return 2
+        print(f"[√] 全流程报告已组装：{_tb.report_path(args.id)}")
+        print(text)
+        return 0
+    print(f"[!] 未知子命令：{action}（list|show|link|sync|report）")
     return 2
 
 
@@ -1206,7 +1216,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "taskbooks",
-        help="[底层] 用户任务书程序化面（list/show/link/sync；用户 accept/reject 只经 TUI）",
+        help="[底层] 用户任务书程序化面（list/show/link/sync/report；用户 accept/reject 只经 TUI）",
     )
     tbsub = p.add_subparsers(dest="tb_action", required=True)
     q = tbsub.add_parser("list", help="三段列出：现有大任务 / 待批复 / 历史")
@@ -1219,6 +1229,11 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--plan", required=True, help="orch plan id")
     q.set_defaults(func=cmd_taskbooks)
     q = tbsub.add_parser("sync", help="幂等对账：所链 plan 完成 → 置 delivered")
+    q.set_defaults(func=cmd_taskbooks)
+    q = tbsub.add_parser(
+        "report", help="组装全流程报告 → data/taskbooks/<id>.report.md（§4.3 #5）"
+    )
+    q.add_argument("id")
     q.set_defaults(func=cmd_taskbooks)
 
     p = sub.add_parser(
