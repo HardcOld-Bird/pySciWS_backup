@@ -1,4 +1,4 @@
-# REFACTOR.md — `pysci` 交互式控制台 + 全员 FIFO 队列化（施工蓝图）
+# PSEP_1.md — `pysci` 交互式控制台 + 全员 FIFO 队列化（施工蓝图）
 
 > 状态：**已批准，施工中**（2026-10-14 用户批准全部五项裁决，④⑤ 明确同意）。
 > 施工计划：`orchestration/state/plans/refactor-20261014.plan.yaml`（M1–M7 逐环节推进）。
