@@ -16,23 +16,28 @@ import pytest
 import yaml
 
 from pysci import paths as _paths
-from pysci.skills.orchestration.tools import jury, plans, taskbooks
+from pysci.skills.orchestration.tools import jury, plans, queueworker, taskbooks
 from pysci.skills.orchestration.tools.planflow import PlanTree
 
 
 @pytest.fixture
-def rface(tmp_path, monkeypatch):
-    """隔离三面：plans / jury 留痕 / taskbooks（+ data 防 stray 判据源）。"""
+def rface(iso_state, tmp_path, monkeypatch):
+    """在 ``iso_state``（全状态面隔离）之上补 plans/taskbooks/data 三面。
+
+    前置缺陷修复（pd2 §0）：原夹具漏 ``queues.QUEUES_DIR``，``plan advance`` 入队真写仓库
+    ``orchestration/state/queues/sim.json``（组长 2026-10-15 复现实锤）。改锚 ``iso_state``
+    ——它已 patch ``QUEUES_DIR``/``QUEUE_WORKER_ROOT``/``ORCH_STATE_ROOT``/jury/journal…；
+    另 stub ``wake_member`` 防起真 worker。
+    """
     plans_dir = tmp_path / "plans"
     plans_dir.mkdir()
     monkeypatch.setattr(plans, "PLANS_DIR", plans_dir)
-    monkeypatch.setattr(jury, "JURY_DIR", tmp_path / "state" / "evals" / "jury")
-    monkeypatch.setattr(
-        jury, "JURY_QUEUE_DIR", tmp_path / "state" / "evals" / "jury-queue"
-    )
     data = tmp_path / "data"
     monkeypatch.setattr(taskbooks, "TASKBOOKS_DIR", data / "taskbooks")
     monkeypatch.setattr(_paths, "DATA_ROOT", data)
+    monkeypatch.setattr(
+        queueworker, "wake_member", lambda member, **k: (True, "stub（测试不消化）")
+    )
     return tmp_path
 
 

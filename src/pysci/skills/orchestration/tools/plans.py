@@ -155,8 +155,13 @@ def _report_after_evidence(plan_id: str, plan: dict, state: dict) -> None:
         _print_worklist(plan_id, plan, state)
 
 
-def _print_self_guidance(plan_id: str, step_state: dict, sy: dict) -> None:
-    """``kind: self`` 环节的引导块（evidence 规格 + 收尾命令）——plan new / advance 共用。"""
+def _print_self_guidance(
+    plan_id: str, step_state: dict, sy: dict, *, plan: dict | None = None
+) -> None:
+    """``kind: self`` 环节的引导块（evidence 规格 + 收尾命令）——plan new / advance 共用。
+
+    ``expand_history`` 叶子（返工 a1，round≥2）在 [NEXT] 后**全文展开**历次改进报告（§4.3 #4）。
+    """
     print()
     print("[NEXT]")
     print(f"  环节 {step_state['id']} 为组长自办环节（kind: self）——不入成员队列。")
@@ -170,6 +175,40 @@ def _print_self_guidance(plan_id: str, step_state: dict, sy: dict) -> None:
         f"  完成后提交证据收尾：uv run --no-sync pysci-orch plan advance "
         f"{plan_id} --evidence <路径>"
     )
+    if sy.get("expand_history") and plan is not None:
+        for ln in _rework_history_lines(plan):
+            print(ln)
+
+
+def _rework_history_lines(plan: dict) -> list[str]:
+    """rework_round≥2 的**历次改进强制展示**（§4.3 #4）：前轮报告**全文**（不只给路径）。
+
+    数据面：任务书 ``rework_of`` 链回溯；每轮取 ``data/taskbooks/<id>.report.md``（组装器产物）
+    全文，缺则回落该轮任务书正文（简介）。
+    """
+    from . import taskbooks as _tb
+
+    tb_id = str(plan.get("taskbook") or "")
+    st = (_tb.load_state(tb_id) or {}) if tb_id else {}
+    rnd = int(st.get("rework_round") or plan.get("rework_round") or 1)
+    if rnd < 2:
+        return []
+    out = [f"  == 历次改进强制展示（第 {rnd} 轮；前轮报告全文，PSEP_3 §4.3 #4）=="]
+    prev = str(st.get("rework_of") or "")
+    n = rnd - 1
+    while prev:
+        pst = _tb.load_state(prev) or {}
+        out.append(f"  —— 第 {n} 轮「{pst.get('title') or prev}」（{prev}）——")
+        rp = _tb.report_path(prev)
+        try:
+            text = rp.read_text(encoding="utf-8").strip() if rp.exists() else ""
+        except OSError:
+            text = ""
+        out.append(text or _tb.read_body(prev).strip() or "（无报告留痕）")
+        out.append("")
+        prev = str(pst.get("rework_of") or "")
+        n -= 1
+    return out
 
 
 def _guide_self_step(plan_id: str, plan: dict, state: dict, cur: dict, sy: dict) -> int:
@@ -177,7 +216,7 @@ def _guide_self_step(plan_id: str, plan: dict, state: dict, cur: dict, sy: dict)
     if str(cur.get("status")) != SELF_AWAITING:
         cur["status"] = SELF_AWAITING
         _save_state(plan_id, state)
-    _print_self_guidance(plan_id, cur, sy)
+    _print_self_guidance(plan_id, cur, sy, plan=plan)
     _print_worklist(plan_id, plan, state)
     return 0
 
@@ -314,7 +353,7 @@ def cmd_plan_new(args) -> int:
     first = state["steps"][0]
     fy = next((n.yaml for n in tree.leaves if n.path == first["id"]), {})
     if str(fy.get("kind") or "dispatch") == KIND_SELF:
-        _print_self_guidance(plan_id, first, fy)
+        _print_self_guidance(plan_id, first, fy, plan=plan)
     else:
         _print_run_guidance(plan_id, first, fy)
     return 0
@@ -1008,34 +1047,42 @@ def template_violations(plan: dict) -> list[str]:
     return out
 
 
-def _rework_A(tb_id: str) -> dict:
-    """A 综合项目改进（serial superstep）：a1 成因分析 → … → a5 改进实施。"""
+def _rework_A(tb_id: str, rnd: int) -> dict:
+    """A 综合项目改进（serial superstep）：a1 成因分析 → … → a5 改进实施。
+
+    ``rnd>=2`` 时 a1 触发**历次改进强制展示**（``expand_history``）且 evidence 须含
+    「前次改进复盘」标题段（§4.3 #4）。
+    """
+    a1_sections = ["成因分析", "结论"]
+    a1: dict = {"id": "a1", "kind": "self", "brief": "成因分析报告", "role": "cause"}
+    if rnd >= 2:
+        a1_sections = ["前次改进复盘", "成因分析", "结论"]
+        a1["expand_history"] = True
+    a1["evidence_sections"] = a1_sections
     return {
         "id": "A",
         "mode": "serial",
         "children": [
-            {
-                "id": "a1",
-                "kind": "self",
-                "brief": "成因分析报告",
-                "evidence_sections": ["成因分析", "结论"],
-            },
+            a1,
             {
                 "id": "a2",
                 "kind": "self",
                 "brief": "解决方案报告",
+                "role": "solution",
                 "evidence_sections": ["解决方案", "结论"],
             },
             {
                 "id": "a3",
                 "kind": "self",
                 "brief": f"送审 jury（改进后状态 vs 现状；案卷 {tb_id}-jury）",
+                "role": "review",
                 "evidence_sections": ["送审结论"],
             },
             {
                 "id": "a4",
                 "kind": "self",
                 "brief": "拆解改进派单",
+                "role": "improvement_plan",
                 "gate_jury": f"{tb_id}-jury",
             },
             {"id": "a5", "member": "devops", "brief": "改进实施"},
@@ -1049,9 +1096,14 @@ def _rework_B(node_id: str, tb_id: str) -> dict:
         "id": node_id,
         "mode": "serial",
         "children": [
-            {"id": "b1", "kind": "self", "brief": "重拆解返工"},
+            {"id": "b1", "kind": "self", "brief": "重拆解返工", "role": "rework_plan"},
             {"id": "b2", "member": "devops", "brief": "返工生产环节"},
-            {"id": "b_last", "kind": "self", "brief": "全流程报告组装"},
+            {
+                "id": "b_last",
+                "kind": "self",
+                "brief": "全流程报告组装",
+                "role": "final_report",
+            },
         ],
     }
 
@@ -1066,6 +1118,7 @@ def _rework_C(tb_id: str) -> dict:
                 "id": "c1",
                 "kind": "self",
                 "brief": f"可发现性案卷送审（案卷 {tb_id}-discoverability）",
+                "role": "discoverability",
                 "evidence_sections": ["可发现性判断"],
             },
             {"id": "c2", "kind": "self", "brief": "改进方案（若判需改进）"},
@@ -1080,20 +1133,24 @@ def _rework_C(tb_id: str) -> dict:
     }
 
 
-def build_rework_plan(tb_id: str, *, mode: str = MODE_FULL, goal: str = "") -> dict:
+def build_rework_plan(
+    tb_id: str, *, mode: str = MODE_FULL, goal: str = "", rework_round: int = 1
+) -> dict:
     """生成返工 plan **骨架**（PSEP_3 §4.2 三档）。
 
     结构：A、BC 顶层 serial（A 全 done → B 起）；BC 并行组内 B id 靠前、C 靠后（B 派发后
-    C 即可推进＝派发级）；B 是串行链（重拆解→返工生产→全流程报告）。
+    C 即可推进＝派发级）；B 是串行链（重拆解→返工生产→全流程报告）。``rework_round>=2``
+    时 a1 触发历次改进强制展示 + 复盘段 lint（§4.3 #4）。
 
     Raises:
         ValueError: 未知模式。
     """
     if mode not in REWORK_MODES:
         raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(REWORK_MODES)}）")
+    rnd = int(rework_round or 1)
     if mode == MODE_FULL:
         steps = [
-            _rework_A(tb_id),
+            _rework_A(tb_id, rnd),
             {
                 "id": "BC",
                 "mode": "parallel",
@@ -1101,16 +1158,56 @@ def build_rework_plan(tb_id: str, *, mode: str = MODE_FULL, goal: str = "") -> d
             },
         ]
     elif mode == MODE_NO_INSPECTOR:
-        steps = [_rework_A(tb_id), _rework_B("B", tb_id)]
+        steps = [_rework_A(tb_id, rnd), _rework_B("B", tb_id)]
     else:  # rework_only
         steps = [_rework_B("B", tb_id)]
     return {
         "goal": goal or f"返工：{tb_id}",
         "template": "rework",
         "rework_mode": mode,
+        "rework_round": rnd,
         "taskbook": tb_id,
         "steps": steps,
     }
+
+
+def plan_tree_lines(plan_id: str) -> list[str]:
+    """plan 的 **superstep 进度树**（文本；组带聚合态、叶子带 ``kind=status``）——TUI 返工卡片用。"""
+    if not _plan_path(plan_id).exists():
+        return []
+    plan = _load_yaml(plan_id)
+    status_of = _status_of(_load_state(plan_id))
+    tree = _tree(plan)
+    icons = {
+        "done": "✔",
+        "queued": "▶",
+        "self_awaiting": "✎",
+        "blocked": "✗",
+        "failed": "✗",
+        "run_failed": "✗",
+    }
+    out: list[str] = []
+
+    def walk(items: list, prefix: str, depth: int) -> None:
+        for i, raw in enumerate(items):
+            if not isinstance(raw, dict):
+                continue
+            name = str(raw.get("id") or f"s{i + 1}")
+            path = f"{prefix}.{name}" if prefix else name
+            indent = "  " * depth
+            kids = raw.get("children")
+            if kids:
+                agg = tree.aggregate(path, status_of)
+                mark = "✔" if agg["done"] else ("▶" if agg["started"] else "·")
+                out.append(f"{indent}{mark} {name} [{raw.get('mode') or 'serial'}]")
+                walk(kids, path, depth + 1)
+            else:
+                st = status_of(path)
+                kind = str(raw.get("kind") or "dispatch")
+                out.append(f"{indent}{icons.get(st, '·')} {name} ({kind}={st})")
+
+    walk(plan.get("steps") or [], "", 0)
+    return out
 
 
 def _jury_case_ruling(case_id: str) -> tuple[str, str]:
@@ -1196,8 +1293,15 @@ def cmd_plan_rework(args) -> int:
         print(f"[!] 未知返工模式：{mode}（合法：{'、'.join(REWORK_MODES)}）")
         return 2
     goal = str(getattr(args, "goal", "") or "")
+    rnd = 1
     try:
-        plan = build_rework_plan(tb_id, mode=mode, goal=goal)
+        from . import taskbooks as _tb
+
+        rnd = int((_tb.load_state(tb_id) or {}).get("rework_round") or 1)
+    except Exception:  # noqa: BLE001 - 任务书缺席不拦骨架（round 回落 1）
+        rnd = 1
+    try:
+        plan = build_rework_plan(tb_id, mode=mode, goal=goal, rework_round=rnd)
     except ValueError as exc:
         print(f"[!] {exc}")
         return 2

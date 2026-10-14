@@ -352,7 +352,9 @@ class PysciTUI(App):
         if idx >= len(self.tb_items):
             return
         tid = str(self.tb_items[idx].get("id"))
-        self._set_tb_msg(f"—— {tid} 正文 ——\n{_tb.read_body(tid)[:400]}")
+        card = _tb.rework_card(tid)  # 返工卡片（§4.3 #8）；普通任务书返回空
+        head = ("—— 返工卡片 ——\n" + "\n".join(card) + "\n\n") if card else ""
+        self._set_tb_msg(f"{head}—— {tid} 正文 ——\n{_tb.read_body(tid)[:400]}")
 
     def action_back(self) -> None:
         """Esc/←：任何子视图（详情/口述/任务书）→ 主菜单；主菜单 → 退出。"""
