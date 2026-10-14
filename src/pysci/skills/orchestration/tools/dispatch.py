@@ -306,7 +306,10 @@ class DispatchOutcome:
     effort: str = ""  # 本跳实际所用的推理强度档位（""=跟随用户级默认）
     delta_chars: int = 0  # 本跳会话 jsonl 字符增量（相对用量尺子，见 LedgerEntry）
     est_tokens: int = 0  # = delta_chars × est_tokens_per_char（启发式估算）
-    body: str = ""  # 交付正文（result/blocked 块内容）
+    body: str = ""  # 交付正文（result/blocked 块内容；长交付可能带截断标记）
+    #: 交付正文**全文**留档路径（``state/queues-runs``→``state/deliveries/<job_id>.md``）；
+    #: 空串=无留档（短交付亦落盘；写失败时为空）。
+    body_file: str = ""
     checks: list[dict] = field(default_factory=list)
     infra_suggestion: str = ""
     infra_kind: str = ""  # E0-B：交付 XML 上的 kind 属性（defect/usability/""）

@@ -24,6 +24,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,53 @@ from .registry import orchestration_rel
 
 #: 成员 worker 的运行态根（锁/停止信号在 ``state/queues/`` 旁，run 日志独立成树）。
 QUEUE_WORKER_ROOT: Path = ORCH_STATE_ROOT / "queues-runs"
+
+#: **交付正文全文落盘目录（入 git）**：长交付全文的唯一入库落点——队列条目 ``result.body``
+#: 截断至 2000 字、``queues-runs/*.log`` 被 gitignore，长交付原文否则不入远端（用户裁决
+#: 2026-10-15：黄金任务回归集需要全文参照）。一 job 一文件 ``<job_id>.md``。每次现读模块常量
+#: 便于测试 monkeypatch 隔离（同 :data:`QUEUE_WORKER_ROOT`）。
+DELIVERIES_DIR: Path = ORCH_STATE_ROOT / "deliveries"
+
+
+def archive_delivery(
+    item: dict[str, Any], result: dict[str, Any], *, body: str, error: str = ""
+) -> str:
+    """把**完整交付正文**落 ``state/deliveries/<job_id>.md``（头部元数据 + 正文原文）→ 相对路径。
+
+    - **失败交付同样留档**（blocked/failed 正文对返工分析有价值）：``error`` 一并写入「错误正文」段。
+    - 写失败 **fail-soft**（留档面不阻塞 worker；返回空串，调用方不挂 ``body_file``）。
+    """
+    job_id = str(item.get("id") or "").strip()
+    if not job_id:
+        return ""
+    body = str(body or "")
+    err = str(error or "")
+    try:
+        DELIVERIES_DIR.mkdir(parents=True, exist_ok=True)
+        p = DELIVERIES_DIR / f"{job_id}.md"
+        head = [
+            f"# 交付全文留档：{job_id}",
+            "",
+            f"- member: {result.get('member') or item.get('member') or ''}",
+            f"- kind: {result.get('kind') or ''}",
+            f"- code: {result.get('code')}",
+            f"- plan: {item.get('plan') or ''}",
+            f"- step: {item.get('step') or ''}",
+            f"- task_file: {result.get('task_file') or ''}",
+            f"- sid: {result.get('sid') or ''}",
+            f"- duration_ms: {result.get('duration_ms')}",
+            f"- ts: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+            "",
+            "## 交付正文",
+            "",
+            body.rstrip() or "（空）",
+        ]
+        if err:
+            head += ["", "## 错误正文", "", err.rstrip()]
+        p.write_text("\n".join(head) + "\n", encoding="utf-8")
+        return orchestration_rel(p)
+    except Exception:  # noqa: BLE001 - 留档面绝不阻塞 worker（正文仍在队列条目内务面）
+        return ""
 
 
 def member_paths(member: str, *, root: Path | None = None) -> WorkerPaths:
@@ -143,6 +191,18 @@ def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any], A
         "suggestion_id": str(getattr(out, "suggestion_id", "") or ""),
         "duration_ms": int(getattr(env, "duration_ms", 0) or 0) if env else 0,
     }
+    # 交付正文**全文留档**（入 git）：result.body 仍截 2000 字（内务读取面不破），
+    # 新增 ``body_file`` 指向全文；截断时在 body 末尾注明（读取面据此顺带透出路径）。
+    body_file = archive_delivery(
+        item,
+        result,
+        body=str(getattr(out, "body", "")),
+        error=str(getattr(out, "error", "")),
+    )
+    if body_file:
+        result["body_file"] = body_file
+        if len(str(getattr(out, "body", ""))) > 2000:
+            result["body"] = f"{result['body']}\n…（截断，全文见 {body_file}）"
     return (workq.STATUS_DONE if code == 0 else workq.STATUS_FAILED), result, out
 
 

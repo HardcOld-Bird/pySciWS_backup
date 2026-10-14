@@ -348,6 +348,9 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(queues, "QUEUES_DIR", state / "queues")
     monkeypatch.setattr(queueworker, "QUEUE_WORKER_ROOT", state / "queues-runs")
     monkeypatch.setattr(queueworker, "ORCH_STATE_ROOT", state)
+    # 交付正文全文留档（入 git 面；2026-10-15）：不隔离则用例真写仓库 state/deliveries/
+    # （防写穿哨兵会拦——此处即隔离，不是豁免）。
+    monkeypatch.setattr(queueworker, "DELIVERIES_DIR", state / "deliveries")
     # 哨兵暴露的漏面（PSEP_3 收尾单）：bencher 生命周期落点与失败词表——不 patch 就真写
     # ``orchestration/state/bencher*.lock``/``failure-classes.json``（此前"手工清单"漏了两面）。
     monkeypatch.setattr(benchd, "QUEUE_PATH", state / "bencher" / "queue.json")
