@@ -25,7 +25,9 @@ import re
 
 import pytest
 
-from pysci.skills.orchestration.tools import presets, registry
+from pysci.skills.orchestration.tools import presets, registry, settings
+
+from .conftest import seed_settings
 
 # --list-models 实测格式（2026-10-12 22:xx 真实账户目录，含用户新增的 Mimo 自定义模型）
 MIMO_PRO_UUID = "99127e47-626d-421f-b0cb-02ffdbf1ada7"
@@ -60,6 +62,11 @@ REAL_REGISTRY_PATH = registry.REGISTRY_PATH
 def iso_reg(tmp_path, monkeypatch):
     reg_file = tmp_path / "registry.json"
     monkeypatch.setattr(registry, "REGISTRY_PATH", reg_file)
+    # 预设真源（toml）一并隔离：presets.active() 读 settings.SETTINGS_PATH——不隔离则用例
+    # 跟随**真实** data/pysci_settings.toml 的 preset 行，合法换预设即红（2026-10-15：mimo→
+    # deepseek 实锤）。锚隔离预设（出厂 mimo），不锁运行面当前值。
+    monkeypatch.setattr(settings, "SETTINGS_PATH", tmp_path / "pysci_settings.toml")
+    seed_settings(tmp_path)
     return reg_file, tmp_path / registry.RUNTIME_NAME
 
 

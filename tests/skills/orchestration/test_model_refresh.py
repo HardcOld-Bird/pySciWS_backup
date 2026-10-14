@@ -24,9 +24,9 @@ from pathlib import Path
 
 import pytest
 
-from pysci.skills.orchestration.tools import drain, orch, registry
+from pysci.skills.orchestration.tools import drain, orch, registry, settings
 
-from .conftest import seed_backlog
+from .conftest import seed_backlog, seed_settings
 
 MIMO_PRO_UUID = "99127e47-626d-421f-b0cb-02ffdbf1ada7"
 MIMO_FLASH_UUID = "017036af-b630-498a-bfea-883a20c67e33"
@@ -73,9 +73,16 @@ def test_parse_catalog_empty():
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def iso_reg(tmp_path, monkeypatch):
-    """隔离配置面与运行态（同目录，随 ``REGISTRY_PATH`` 一起搬）；返回 (reg, runtime)。"""
+    """隔离配置面与运行态 **+ 预设真源（toml）**；返回 (reg, runtime)。
+
+    预设面须一并隔离（2026-10-15 实锤）：``presets.active()`` 读 ``settings.SETTINGS_PATH``
+    指向的 toml——不隔离则用例跟随**真实** ``data/pysci_settings.toml`` 的 ``preset`` 行，
+    用户/组长合法换预设即红（本案 mimo → deepseek）。锚隔离预设=出厂面，不锁运行面当前值。
+    """
     reg_file = tmp_path / "registry.json"
     monkeypatch.setattr(registry, "REGISTRY_PATH", reg_file)
+    monkeypatch.setattr(settings, "SETTINGS_PATH", tmp_path / "pysci_settings.toml")
+    seed_settings(tmp_path)
     return reg_file, tmp_path / registry.RUNTIME_NAME
 
 
