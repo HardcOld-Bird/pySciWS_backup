@@ -505,7 +505,13 @@ def cmd_consult_twin(args) -> int:
 
     ``taste_enabled=false`` 时明确拒绝并提示待上线，不静默降级成 deputy 咨询：把「问
     了个不存在的声音」当成答案是更坏的失败。
+
+    **追溯留痕**（task-20261014-psep2-n3）：本通道是夜航政策的「转 twin 终裁」落点，
+    故裁示经**硬格式**（{choice, reason, confidence}）读出后落两处——记录
+    ``evals/taste/<case_id>.json``（record_kind=consult，含夜航预授权标记）+ 单一账目源
+    ``preference-journal``（channel=twin）；用户复核走 ``orch twin-review``。
     """
+    from . import taste as _taste
     from .dispatch import do_dispatch  # 延迟导入：与 consult 同面
 
     if not taste_enabled():
@@ -527,6 +533,12 @@ def cmd_consult_twin(args) -> int:
         "组长咨询（twin 偏好面，顾问模式）：请就该案卷给出与组长判断独立的意见，"
         "并指出你认为组长前提有误之处。\n\n"
         f"案卷 {case.name}：\n\n{case.read_text(encoding='utf-8')}\n"
+        "\n## 输出要求（硬格式，追溯留痕用）\n\n"
+        "在 `<result>` 正文里给出**且只给出**一个 JSON 对象：\n\n"
+        '{"choice": "<裁示：一句话给结论>", "reason": "援引依据与案卷证据的简短理由", '
+        '"confidence": 0.62}\n\n'
+        "- 必须表态，不许「视情况而定」；把握不足用低 `confidence` 表达；\n"
+        "- 夜航模式下本裁示即用户授权范围内的**终裁**（依其裁决执行），故须给出明确裁示。"
     )
     outcome = do_dispatch(
         "twin",
@@ -536,4 +548,53 @@ def cmd_consult_twin(args) -> int:
     )
     if outcome.error == "pod 不存在":
         print("    （twin pod 未就位：E6 上线前该通道不可用。）")
-    return outcome.code
+    ruling = _taste.parse_ruling(str(getattr(outcome, "body", "") or ""))
+    env = getattr(outcome, "envelope", None)
+    case_id = _taste.case_id_from_path(case)
+    marker = _taste._night_marker()
+    try:
+        case_text = case.read_text(encoding="utf-8")
+    except OSError:
+        case_text = ""
+    case_head = next(
+        (ln.strip().lstrip("#").strip() for ln in case_text.splitlines() if ln.strip()),
+        case.name,
+    )
+    record = {
+        "ts": _now(),
+        "case_id": case_id,
+        "case_file": orchestration_rel(case),
+        "case_head": case_head[:120],  # 案卷摘要（审计面要素）
+        "member": "twin",
+        "model_tier": "",
+        "code": outcome.code,
+        "kind": str(getattr(outcome, "kind", "") or ""),
+        "sid": str(getattr(outcome, "sid", "") or ""),
+        "turns": env.num_turns if env else 0,
+        "duration_ms": env.duration_ms if env else 0,
+        "ctx_ratio": round(env.context_usage_ratio, 5) if env else 0,
+        "delta_chars": getattr(outcome, "delta_chars", 0),
+        "est_tokens": getattr(outcome, "est_tokens", 0),
+        "choice": ruling["choice"],
+        "confidence": ruling["confidence"],
+        "reason": ruling["reason"],
+        "parsed": ruling["parsed"],
+        "body": str(getattr(outcome, "body", "") or "")[:2000],
+        "record_kind": "consult",
+        **marker,
+    }
+    path = _taste.write_record(record)
+    _taste._journal_ruling(record, "自由形式案卷（consult 代裁）")
+    if ruling["parsed"] and ruling["choice"]:
+        conf = "-" if ruling["confidence"] is None else f"{ruling['confidence']:.2f}"
+        tag = f"〔{_taste.NIGHT_AUTHORITY}〕" if marker["night"] else ""
+        print(
+            f"  裁示：{ruling['choice']}（置信度 {conf}）{tag}\n"
+            f"  理由：{ruling['reason']}\n  留痕：{_taste._rel(path)}；复核：orch twin-review {case_id}"
+        )
+        return 0
+    print(
+        f"  [!] 未从交付里读出裁示（kind={getattr(outcome, 'kind', '')}），"
+        f"已原样留痕：{_taste._rel(path)}"
+    )
+    return int(outcome.code or 1)

@@ -410,11 +410,15 @@ def test_consult_twin_dispatches_when_enabled(iso_state, monkeypatch, tmp_path):
     case.write_text("案卷正文", encoding="utf-8")
     seen: list[tuple] = []
     monkeypatch.setattr(verdict, "taste_enabled", lambda: True)
+    # 追溯留痕（n3）后本命令要求可读出的裁示体——假体按硬格式给一份（rc=0 判据）。
+    ruling = (
+        '<result>{"choice": "批准", "reason": "援引 P-01", "confidence": 0.6}</result>'
+    )
     monkeypatch.setattr(
         dispatch,
         "do_dispatch",
         lambda member, **kw: (
-            seen.append((member, kw)) or SimpleNamespace(code=0, error="")
+            seen.append((member, kw)) or SimpleNamespace(code=0, error="", body=ruling)
         ),
     )
 

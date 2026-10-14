@@ -38,7 +38,7 @@ from . import channels as _channels
 from . import journal as _journal
 from . import jury, routing
 from .registry import Registry
-from .taste import PREFERENCE_NAME, TASTE_DIR
+from .taste import PREFERENCE_NAME
 
 #: 行动指令队列（§5.4「强制派发」同等待遇）。与 backlog.json 同族**入库跟踪**：
 #: 用户指令是授权凭证，「先决策后问责」（§0.4）要求它比一次会话活得更久。
@@ -164,19 +164,41 @@ def append_preference(text: str, *, path: Path | None = None) -> dict[str, Any]:
 
 
 def taste_cases() -> int:
-    """已表态、待盲审的 twin 判断数（``state/evals/taste/*.json``）。"""
-    return len(sorted(TASTE_DIR.glob("*.json"))) if TASTE_DIR.is_dir() else 0
+    """twin 判断/裁决留痕数（``state/evals/taste/*.json``：盲审 taste + consult 代裁同目录）。
+
+    目录取 **taste 模块的活属性**（非本模块 import 时的快照）——测试/隔离面 monkeypatch
+    ``taste.TASTE_DIR`` 即刻生效（同「路径取模块级、函数内读全局」纪律）。
+    """
+    from . import taste as _taste
+
+    base = _taste.TASTE_DIR
+    return len(sorted(base.glob("*.json"))) if base.is_dir() else 0
+
+
+def twin_ruling_lines(limit: int = 8) -> list[str]:
+    """twin 判断/裁决**逐条明细**（审计面：夜航代裁须事后可复核；数据层纯函数）。
+
+    ``pysci`` TUI「盲审与审查」详情与 `orch twin-review --list` 共用（同一能力不留两份
+    实现：拼装在 :func:`taste.ruling_lines`，本函数只做数据层转发）。
+    """
+    from . import taste
+
+    return taste.ruling_lines(limit=limit)
 
 
 # ---------------------------------------------------------------- status 概览项
 
 
 def _line_review() -> str:
+    """twin 判断/裁决追溯读数（PSEP_2 配套：夜航代裁须事后可复核，含待复核计数）。"""
+    from . import taste
+
     n = taste_cases()
-    return f"待盲审案件数 = {n}" + (
-        "〔盲审即训练，盲审面后续单（twin/reviewer 域）〕"
-        if n
-        else "（twin 判断留痕尚未产生）"
+    if not n:
+        return "twin 判断/裁决 = 0（留痕尚未产生）"
+    pending = taste.pending_review_count()
+    return (
+        f"twin 判断/裁决 = {n}（待用户复核 {pending}；明细 `orch twin-review --list`）"
     )
 
 

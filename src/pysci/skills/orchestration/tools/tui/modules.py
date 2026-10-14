@@ -362,6 +362,8 @@ def _review_detail() -> list[str]:
         "已发 QUEUE-TIMEOUT 事件）",
         "  审查入口：`orch review <产物> --origin <member>`；宿主环节 `review:true` 时",
         "  由其交付自动投 reviewer 附属子 job（父子联动见 `orch queues list`）",
+        "—— twin 判断/裁决追溯（PSEP_2 配套；复核入口 `orch twin-review`）——",
+        *_safe_lines(lambda: mirror.twin_ruling_lines()),
     ]
 
 

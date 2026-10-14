@@ -369,7 +369,13 @@ def test_cmd_status_panorama_covers_spec_items(twin_face, capsys):
     rc = mirror.cmd_status(argparse.Namespace())
     out = capsys.readouterr().out
     assert rc == 0
-    for key in ("待盲审", "宪章", "taste_enabled", "行动指令队列待处理"):
+    for key in (
+        "盲审",
+        "twin 判断/裁决",
+        "宪章",
+        "taste_enabled",
+        "行动指令队列待处理",
+    ):
         assert key in out, f"概览项缺席：{key}"
     assert "草案 v1" in out
     assert len(mirror.STATUS_ITEMS) >= 4
