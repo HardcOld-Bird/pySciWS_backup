@@ -457,6 +457,113 @@ def _step_promise_warning(
     )
 
 
+#: 「白名单」段标题与任意标题（用于切出白名单段的边界）。
+_WHITELIST_HEAD_RE = re.compile(r"^#{1,6}\s*白名单")
+_ANY_HEAD_RE = re.compile(r"^#{1,6}\s")
+
+#: 正文点名的**仓库路径**（顶层目录起；前后不许接路径字符，避免咬进长串）。
+_REPO_PATH_RE = re.compile(
+    r"(?<![\w/.\-])((?:src|tests|orchestration|data|scripts|\.qoder)/[A-Za-z0-9_./\-*]+)"
+)
+
+#: 「改动目标」的动作词：路径须与它在同一行才算「要改的」（排除纯证据/背景引用）。
+_EDIT_VERBS: tuple[str, ...] = (
+    "改",
+    "修改",
+    "新增",
+    "新建",
+    "创建",
+    "删除",
+    "移除",
+    "写入",
+    "落地",
+    "重写",
+    "补",
+)
+
+#: 否定前缀字（「**不**手改」「**勿**动」「**禁**改」）——否定语境里的路径是「别改」，
+#: 正好相反（m7 任务书：`.qoder/skills/orchestration/` 是部署副本……**不手改**）。
+_NEG_WORDS = "不勿禁别毋莫休"
+
+
+def _is_edit_line(ln: str) -> bool:
+    """该行是否在讲「要改」：命中改动动词，且该动词前 3 字内无否定词。"""
+    for v in _EDIT_VERBS:
+        i = ln.find(v)
+        while i != -1:
+            if not any(c in _NEG_WORDS for c in ln[max(0, i - 3) : i]):
+                return True
+            i = ln.find(v, i + 1)
+    return False
+
+
+def _whitelist_entries(lines: list[str]) -> tuple[list[str], set[int]]:
+    """解析「白名单」段 → (条目前缀, 段内行号集)。无段 → ``([], set())``。"""
+    entries: list[str] = []
+    used: set[int] = set()
+    on = False
+    for i, ln in enumerate(lines):
+        if _WHITELIST_HEAD_RE.match(ln):
+            on = True
+            used.add(i)
+            continue
+        if on and _ANY_HEAD_RE.match(ln):
+            on = False
+        if on:
+            used.add(i)
+            for seg in re.split(r"[、,，;；]", ln):
+                raw = re.sub(r"[`（）()【】\[\]]", "", seg).strip().replace("\\", "/")
+                # 只取行首的路径样片段：条目常带中文注记（`data/taskbooks/**`（新建））
+                m = re.match(r"[A-Za-z0-9_./\-*]+", raw)
+                if not m:
+                    continue
+                tok = m.group(0)
+                # 路径样才收（在规整**之前**判：`src/**` 规整成 `src` 后已不含 `/`）
+                if "/" not in tok and not tok.endswith(
+                    (".md", ".py", ".toml", ".json")
+                ):
+                    continue
+                norm = tok.rstrip("*").rstrip("/")
+                if norm:
+                    entries.append(norm)
+    return entries, used
+
+
+def _covered_by(path: str, entries: list[str]) -> bool:
+    """路径是否落在白名单某条目之下（前缀语义，宽松取静：宁可少报不误报）。"""
+    return any(
+        path == e or path.startswith(e.rstrip("/") + "/") or path.startswith(e)
+        for e in entries
+    )
+
+
+def _whitelist_warning(rule: dict, body: str) -> str | None:
+    """白名单覆盖判据：正文点名的**改动目标**路径必须落在其声明的白名单内。
+
+    未声明白名单 → 返回 ``None``（无从判断，fail-open）。命中说明该路径会在派发时被
+    pod-guard 拦成 ``whitelist_conflict``（backlog 20261014-113347-tier-a 的机械预防面）。
+    """
+    lines = body.splitlines()
+    entries, used = _whitelist_entries(lines)
+    if not entries:
+        return None
+    missing: list[str] = []
+    for i, ln in enumerate(lines):
+        if i in used or not _is_edit_line(ln):
+            continue
+        for m in _REPO_PATH_RE.finditer(ln):
+            if not _covered_by(m.group(1), entries):
+                missing.append(m.group(1))
+    if not missing:
+        return None
+    tag = f"[{rule['id']}] " if rule.get("id") else ""
+    hint = rule.get("hint", "白名单未覆盖正文点名的改动目标")
+    return (
+        f"{tag}{hint}（白名单：{'、'.join(entries[:8])}；"
+        f"未覆盖：{'、'.join(sorted(set(missing))[:8])}）"
+    )
+
+
 def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
     """扫任务书正文，返回命中的告警（空=干净）。**告警不阻断**。
 
@@ -468,7 +575,11 @@ def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
       捕获组是**环节 id**（如 m3/f4）；该 id 必须存在于**对应计划** YAML 的 steps，否则
       告警（附计划 id 与现有 steps 供核对）。对应计划由 ``plan_id``（任务书 slug 派生）或
       正文中最具体的真实计划 id 定位；定位不到则 fail-open 不告警。**引号内的引述**（缺陷
-      样例 / grep 判据的禁词字面量）不算承诺。
+      样例 / grep 判据的禁词字面量）不算承诺；
+    - ``whitelist: true``（白名单覆盖，backlog 20261014-113347-tier-a）：正文声明了
+      「白名单」段时，正文点名的**改动目标**路径必须落在其内（同行动作词判「改动目标」），
+      否则告警——这类路径会在派发时被 pod-guard 拦成 ``whitelist_conflict``。未声明
+      白名单 → fail-open 不告警。
     """
     warnings: list[str] = []
     for rule in load_lint_rules():
@@ -478,6 +589,11 @@ def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
             continue
         if rule.get("steps"):
             warn = _step_promise_warning(rule, pat, body, plan_id)
+            if warn:
+                warnings.append(warn)
+            continue
+        if rule.get("whitelist"):
+            warn = _whitelist_warning(rule, body)
             if warn:
                 warnings.append(warn)
             continue

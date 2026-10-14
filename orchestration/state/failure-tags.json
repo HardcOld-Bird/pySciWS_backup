@@ -2,7 +2,7 @@
   "version": 1,
   "discipline": "受控词表（REFACTOR v1.0 §2）。组员 <blocked tags=\"a,b\"> 只能取本表 tags 的键；缺省不标注合法（=空列表，不阻断交付）。增补须**附定义**（definition 非空）并走 devops 交付 + pre-commit 校验——词表改动会改变全体组员的失败分类面与 Tier A 统计口径，不是本地偏好。删减同规矩。库侧读取口：pysci.skills.orchestration.tools.failure_tags.load_tags()，Node 侧：orchestration/guards/delivery-gate.mjs。**提案分类同用本文件**（infra_kinds 键）：<infra_suggestion kind=\"…\"> 的合法取值以此表为准，gate 拦、dispatch 落盘复核、approve 入队三面共读同一份——词表若有两份就会漂移，非法分类便可能只被其中一面看见（backlog 20261012-120001-leader）。**blocked 成因档位同用本文件**（reasons 键）：<blocked reason=\"…\"> 的合法取值以此表为准（缺省不标注合法），供 orch status 与 drain 的 .done 按档分列计数、让链路策略可按档分化（backlog 20261013-191213-devops）。",
   "tags": {
-    "whitelist_conflict": "写权限面冲突：目标路径不在本 pod 允许写面内（pod-guard 拦截、或须经他人/组长代写）。",
+    "whitelist_conflict": "写权限面冲突：目标路径不在本 pod 允许写面内（pod-guard 路径拦截、或须经他人/组长代写）。**只归这一类**——main 脏面与本次合并相交（`pysci-dev worktree merge` 报「[✗] 交集 N 项」）用 merge_dirty_face；同一隔离面/会话被并发写者占用用 concurrent_writer。**别把它当「写不下去」的兜底标签**：20261014-113347-tier-a 立案的 4 次命中里，3 次实为 merge_dirty_face、1 次为并发写者，误标把 Tier A 计数抬过了阈值。",
     "cli_missing": "所需 CLI/子命令不存在、未部署或签名与文档不符（含 PATH 与 editable 安装漂移）。",
     "doc_stale": "文档/技能真本与代码实际行为不一致——读了会做错（比 tool_bug 更值得立案，因为它污染每一次决策）。",
     "tool_bug": "既有工具行为缺陷（有复现、非新需求）：结果与声明的语义不符。",
@@ -11,6 +11,7 @@
     "quota": "额度/配额耗尽或被限流（含平台 credit limit、上游 API 配额）。",
     "env_broken": "环境损坏：venv/PATH/node/编码/代理/钩子接线等本机设施不可用（通常一次修复消掉一批失败）。",
     "merge_dirty_face": "main 工作区脏面与本次合并相交：`pysci-dev worktree merge` 报「[✗] 交集 N 项」拒合并（rc=2）。**重跑无用**——续作改变不了别人工作区的脏面，须在 main 提交/还原相交文件后由组长合并。blocked 正文请原样贴上交集文件清单。",
+    "concurrent_writer": "同一隔离面/会话被并发写者占用：同一 worktree 已有活写者（「一个 worktree 一个写者」），或同一 sid 被两个进程并发执行。**停手勿抢写**，换面/换 sid 后重派（派发侧 sid 在途闸对批次自动换 sid，人工派发默认拒绝并点名占用证据）。",
     "design_smell": "设计异味：能跑但方向可疑，需要人裁决而非修 bug（Goodhart 防护：别让它混进 bug 计数）。",
     "unknown": "归不进以上任何一类。**慎用**：它的出现即说明词表该补一项——若反复出现，Tier A 会把它立案出来。"
   },

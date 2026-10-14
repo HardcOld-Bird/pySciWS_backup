@@ -313,3 +313,86 @@ def test_write_taskbook_uses_slug_to_resolve_plan(tmp_path, monkeypatch, capsys)
     out = capsys.readouterr().out
     assert "任务书 lint" in out and "fix-20261014" in out and "m9" in out
     assert dest.exists()
+
+
+# ---------------------------------------------------------------------------
+# whitelist 判据（backlog 20261014-113347-tier-a）：白名单须覆盖正文点名的「改动目标」
+# ——不覆盖的路径派发时会被 pod-guard 拦成 whitelist_conflict（白烧一跳）
+# ---------------------------------------------------------------------------
+WL_RULE = {
+    "id": "whitelist-covers-edits",
+    "re": "白名单",
+    "whitelist": True,
+    "hint": "白名单未覆盖正文点名的改动目标",
+}
+
+
+def test_whitelist_flags_edit_target_outside_list(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [WL_RULE])
+    body = (
+        "## 白名单（涉改文件）\n\n`src/a.py`、`tests/**`\n\n"
+        "## 目标\n\n- 修改 `orchestration/guards/x.mjs` 的告警文案。\n"
+    )
+    warns = dispatch.lint_taskbook(body)
+    assert len(warns) == 1
+    assert warns[0].startswith("[whitelist-covers-edits]")
+    assert "orchestration/guards/x.mjs" in warns[0]
+
+
+def test_whitelist_silent_when_target_covered(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [WL_RULE])
+    body = "## 白名单（涉改文件）\n\n`src/**`、`tests/**`\n\n## 目标\n\n- 修改 `src/x.py`。\n"
+    assert dispatch.lint_taskbook(body) == []
+
+
+def test_whitelist_ignores_plain_evidence_mentions(tmp_path, monkeypatch):
+    """无改动动词的行（证据/背景引用）不是「改动目标」→ 不告警（防噪声）。"""
+    _seed(tmp_path, monkeypatch, [WL_RULE])
+    body = (
+        "## 白名单（涉改文件）\n\n`src/a.py`\n\n"
+        "证据：`orchestration/state/suggestions/approved/x.md`\n"
+    )
+    assert dispatch.lint_taskbook(body) == []
+
+
+def test_whitelist_fail_open_without_section(tmp_path, monkeypatch):
+    """未声明白名单 → 无从判断（fail-open 不告警）。"""
+    _seed(tmp_path, monkeypatch, [WL_RULE])
+    assert dispatch.lint_taskbook("修改 `orchestration/guards/x.mjs`。") == []
+
+
+def test_whitelist_section_lines_are_not_body_targets(tmp_path, monkeypatch):
+    """白名单段自身的路径不算「正文点名」——否则任何白名单都自证违规。"""
+    _seed(tmp_path, monkeypatch, [WL_RULE])
+    body = "## 白名单（涉改文件）\n\n新增 `src/a.py`、`tests/b.py`\n"
+    assert dispatch.lint_taskbook(body) == []
+
+
+def test_whitelist_ignores_negated_lines(tmp_path, monkeypatch):
+    """否定语境（「是部署副本……**不**手改」）不是改动目标——m7 任务书实况（防误报）。"""
+    _seed(tmp_path, monkeypatch, [WL_RULE])
+    body = (
+        "## 白名单（涉改文件）\n\n`orchestration/skills/**`\n\n"
+        "## 说明\n\n- `.qoder/skills/orchestration/` 是部署副本（orch sync 再生），不手改。\n"
+    )
+    assert dispatch.lint_taskbook(body) == []
+
+
+def test_whitelist_entry_with_cjk_note_still_covers(tmp_path, monkeypatch):
+    """条目带中文注记（`data/taskbooks/**`（新建））仍按路径解析——m3 任务书实况。"""
+    _seed(tmp_path, monkeypatch, [WL_RULE])
+    body = (
+        "## 白名单（涉改文件）\n\n`src/**`、`data/taskbooks/**`（新建）\n\n"
+        "## 目标\n\n- 新增 `data/taskbooks/x.taskbook.md` 落盘。\n"
+    )
+    assert dispatch.lint_taskbook(body) == []
+
+
+def test_repo_rule_whitelist_covers_edits_engages_on_shipped_table():
+    """随附规则：真实 LINT_RULES_PATH 里该规则真的会触发（不是空转）。"""
+    body = (
+        "## 白名单（涉改文件）\n\n`src/**`\n\n"
+        "## 目标\n\n- 删除 `orchestration/guards/pod-guard.mjs` 的旧分支。\n"
+    )
+    warns = dispatch.lint_taskbook(body)
+    assert any("whitelist-covers-edits" in w for w in warns)
