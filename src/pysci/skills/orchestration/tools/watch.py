@@ -75,10 +75,6 @@ PRIORITY: tuple[str, ...] = (
     "QUOTA-STOP",
     "CHANNEL-STOP",
     "NEEDS-LEADER",
-    # 队列感知伪事件（adhoc-20261014-124521-s1）：有活却没人干 / 条目停滞——都要求组长
-    # 动手，故排在「完成类知会」之前。
-    "PENDING-WORK",
-    "STALL",
     # 用户投递大任务（README §12）：**立即唤醒组长**。M5 收编——旧的最小差分
     # （`taskbook_ids` 基线）已删，改由 :mod:`taskbooks` 生产者直发、本模块从统一事件流
     # （:data:`events.STREAM_TYPES`）读出后唤醒。保留本优先级项供多事件同刻排序。
@@ -87,6 +83,14 @@ PRIORITY: tuple[str, ...] = (
     "STEP-REVIEW-DONE",
     "QUEUE-EMPTY",
     "QUEUE-COMPLETE",
+    # 队列感知伪事件（adhoc-20261014-124521-s1）**排在 SALVAGE 之前、真实事件之后**：
+    # 巡更 nudge 不该抢在真实事件前当主行（否则 a1「首个唤醒=真实事件」的契约被挤掉——
+    # 2026-10-14 main 实测：backlog 恰 1 条 pending → 聋期 e2e 的 echoed[0] 拿到
+    # PENDING-WORK），但它毕竟是要组长动手的信号，比 SALVAGE（知会、无需动手）更该先说。
+    "PENDING-WORK",
+    "STALL",
+    # SALVAGE 必须保持**最低优先级**（test_salvage_sits_at_lowest_priority 钉住）：
+    # 「进度已保住、队列自己在续」是知会，不该盖住真要处理的信号。
     "SALVAGE",
 )
 
@@ -1157,6 +1161,7 @@ def run_watch(
     sleep: Any = time.sleep,
     monotonic: Any = time.monotonic,
     echo: Any = print,
+    queue_watch: bool = True,
 ) -> int:
     """阻塞轮询直到命中事件或超时；无论命中或超时均返回 0（非零会被误读为故障）。
 
@@ -1165,6 +1170,9 @@ def run_watch(
         interval_s: 轮询间隔，钳制到 :data:`MIN_INTERVAL_S`–:data:`MAX_INTERVAL_S`。
         sleep/monotonic: 注入口，测试用假时钟免真等。
         echo: 输出注入口。
+        queue_watch: 是否开**队列感知巡更通道**（``PENDING-WORK``/``STALL``）。生产缺省开
+            （观察循环的职责）；测试要验**纯差分链路**（迟到唤醒/水位单调等）时关掉，
+            免得运行期恰好存在的 backlog/队列存量挤进断言（判据必须自己隔离自己的输入）。
 
     每轮按 :func:`advance_base` 把当前快照并入 ``base``（受 :func:`detect` 的 ``hold``
     约束：抑制帧与瞬态空值**不推进**，被压住的完成事实下一帧仍在比较），同时刷新心跳
@@ -1183,7 +1191,7 @@ def run_watch(
         sleep(min(interval, left))
         cur = snapshot()
         events, verdict = detect(
-            prev, cur, throttle=state.get("throttle"), queue_watch=True
+            prev, cur, throttle=state.get("throttle"), queue_watch=queue_watch
         )
         prev = advance_base(prev, cur, verdict["hold"])
         _touch(state, cur, prev, verdict)
@@ -1193,7 +1201,7 @@ def run_watch(
 
     cur = snapshot()
     events, verdict = detect(
-        prev, cur, throttle=state.get("throttle"), queue_watch=True
+        prev, cur, throttle=state.get("throttle"), queue_watch=queue_watch
     )
     prev = advance_base(prev, cur, verdict["hold"])
     _touch(state, cur, prev, verdict)

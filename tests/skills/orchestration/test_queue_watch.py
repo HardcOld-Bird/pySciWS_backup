@@ -335,7 +335,9 @@ def test_pseudo_and_real_events_coexist_with_correct_consumption(face):
 
     st = watch.load_state()
     evs, verdict = watch.detect(st["base"], watch.snapshot(), queue_watch=True)
-    assert [e["event"] for e in evs] == [events.PENDING_WORK, events.JOB_DONE]
+    # 排序：**真实事件拿主行**，伪事件排最后（见 watch.PRIORITY——同帧让位，
+    # 否则 a1 的「首个唤醒=真实事件」契约会被一条巡更 nudge 挤掉）。
+    assert [e["event"] for e in evs] == [events.JOB_DONE, events.PENDING_WORK]
 
     out: list[str] = []
     assert watch._emit(st, evs, out.append) is True, (

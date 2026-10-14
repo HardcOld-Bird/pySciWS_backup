@@ -106,6 +106,10 @@ def test_deaf_period_event_fires_on_next_mount(tmp_path, monkeypatch):
         sleep=clock.sleep,
         monotonic=clock.now,
         echo=echoed.append,
+        # 本例只验**纯差分链路**（聋期迟到唤醒 + 水位单调）：关掉队列感知巡更通道，
+        # 免得运行期恰好存在的 backlog/队列存量挤进断言（判据得自己隔离自己的输入）。
+        # 巡更通道的行为由 tests/skills/orchestration/test_queue_watch.py 覆盖。
+        queue_watch=False,
     )
 
     assert echoed, "新挂载的首轮轮询必须命中聋期事件"
