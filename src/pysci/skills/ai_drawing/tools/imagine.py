@@ -153,6 +153,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     print("\n--- tier 0（Qoder 内置 ImageGen，零安装兜底）---")
     print("  由 Agent 直接调用 ImageGen 出图，再 `imagine ingest` 入库记账。")
+    print(
+        "  ⚠ 该路径当前不可用（平台侧 invalid_model_error，2026-10-15 实测）——"
+        "请走 Tier 1（ARK_API_KEY；细则 references/backends.md）"
+    )
     return 0
 
 

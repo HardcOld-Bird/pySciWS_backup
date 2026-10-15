@@ -10,7 +10,7 @@ Workflow A (the killer feature) plus a one-line pointer to each of these.
 For purely aesthetic deliverables (no data to be accurate):
 
 ```
-- [ ] 1. imagine doctor                                       # Tier 1 key present? else use Tier 0
+- [ ] 1. imagine doctor                                       # Tier 1 key present? else Tier 0 (⚠ 平台侧当前不可用 → 走 Tier 1)
 - [ ] 2. imagine gen --prompt '<…>' --size 2K --research gain_ep --slug cover --dry-run   # free check
 - [ ] 3. same command without --dry-run
        (Tier 0: call ImageGen, then imagine ingest --src <path> --slug cover --research gain_ep)
