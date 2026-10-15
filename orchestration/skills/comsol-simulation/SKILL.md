@@ -78,9 +78,10 @@ From the **project root**: `pysci-simulation <command> [options]`, abbreviated b
 
 Worth memorising: `run solve` **auto-rebinds** every plot group to the fresh dataset (so solve-then-export
 across invocations is safe), and `inspect node` is the only ground truth for a node's type /
-properties / allowed enums. Prefix any live command with `--connect-port PORT` to reuse a persistent
-server instead of booting a JVM. Exact flags and output fields:
-[references/cli.md](references/cli.md), or `simulation <command> -h`.
+properties / allowed enums. `export image --clean` hides the colorbar/legend/title **and strips the
+COMSOL brand logo** (native `logo*d=off` + a post-export pixel check). Prefix any live command with
+`--connect-port PORT` to reuse a persistent server instead of booting a JVM. Exact flags and output
+fields: [references/cli.md](references/cli.md), or `simulation <command> -h`.
 
 ## Standard closed-loop workflow
 

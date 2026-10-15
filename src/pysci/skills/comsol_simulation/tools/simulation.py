@@ -408,6 +408,7 @@ def cmd_export_image(args: argparse.Namespace) -> int:
             extent=tuple(args.extent) if args.extent else None,
             clean=args.clean,
             sidecar=not args.no_sidecar,
+            strip_brand=args.strip_brand,
             color_range=tuple(args.color_range) if args.color_range else None,
             polar_rmax=(0.0, args.polar_rmax) if args.polar_rmax is not None else None,
             geom_bbox=tuple(args.geom_bbox) if args.geom_bbox else None,
@@ -784,7 +785,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="X0 X1 Y0 Y1",
         help="几何包围盒；反演 auto-zoom 窗口写入 sidecar 的 extent_recovered",
     )
-    s.add_argument("--clean", action="store_true", help="隐藏 colorbar/图例/标题")
+    s.add_argument(
+        "--clean",
+        action="store_true",
+        help="隐藏 colorbar/图例/标题**并清除 COMSOL 品牌 logo**（下游排版用；logo 清除见 --strip-brand）",
+    )
+    s.add_argument(
+        "--strip-brand",
+        action="store_true",
+        default=None,
+        dest="strip_brand",
+        help="单独清除导出图角区的 COMSOL 品牌 logo（不改其余 clean 项）；不传=跟随 --clean",
+    )
     s.add_argument(
         "--no-sidecar",
         action="store_true",

@@ -19,6 +19,7 @@ from typing import Any
 
 import numpy as np
 
+from . import postprocess as _post
 from .config import settings
 from .inspect import _call_if, _jmodel, _safe, _tags
 from .postprocess import (
@@ -130,6 +131,21 @@ def _apply_polar_rmax(pg: Any, polar_rmax: tuple[float, float]) -> list[str]:
     return applied
 
 
+def _apply_clean_brand(node: Any, applied: list[str]) -> None:
+    """在 Image 导出节点上按 COMSOL 手册关掉品牌 logo（= 「optional components」之一）。
+
+    手册「Image (Export)」属性表：``logo*d`` 仅在 ``options*d`` 为 on 时才受控（默认
+    logo*d=on、options*d=off），故须**先开 options 再关 logo**。1d/2d/3d 三档都设，
+    免绘图组维数不同而漏。属性名不存在时静默跳过（版本差异），由导出后的像素核验兜底。
+    """
+    for prop in ("options1d", "options2d", "options3d"):
+        if _set_first_ok(node, (prop,), "on") is not None:
+            applied.append(f"{prop}=on")
+    for prop in ("logo1d", "logo2d", "logo3d"):
+        if _set_first_ok(node, (prop,), "off") is not None:
+            applied.append(f"{prop}=off")
+
+
 def _json_default(o: Any) -> Any:
     """``json.dumps(default=...)`` 兜底：把无法原生序列化的对象降级为纯 Python。
 
@@ -165,6 +181,7 @@ def export_image(
     color_range: tuple[float, float] | None = None,
     polar_rmax: tuple[float, float] | None = None,
     geom_bbox: tuple[float, float, float, float] | None = None,
+    strip_brand: bool | None = None,
 ) -> ExportResult:
     """把一个绘图组导出为 PNG（COMSOL 原生渲染）。
 
@@ -177,9 +194,14 @@ def export_image(
             配合 sidecar 的 crop_box_px 可得精确 pixel↔data 映射（下游叠图用）。
             注意：2D 绘图组（PlotGroup2D）不暴露轴限属性，此参数对其无效——
             改用 ``geom_bbox`` 走 auto-zoom 反演（见下）。
-        clean: 隐藏 colorbar/图例/标题（仅留轴框与内容，减少下游裁剪干扰）。
+        clean: 隐藏 colorbar/图例/标题，并**清除 COMSOL 品牌 logo**（下游排版用）。后者走两手：
+            ①导出节点原生开关 ``options*d=on`` + ``logo*d=off``（手册「Image (Export)」）；
+            ②导出后像素核验——角区仍有品牌像素就地抹除并附 warning（原生开关在部分
+            版本/绘图组类型上不生效，见 backlog 20261015-204911）。
         sidecar: 写 ``<out>.sidecar.json``（extent/clean 生效情况、像素尺寸、
-            轴框像素框、内部空白度量）。
+            轴框像素框、内部空白度量、``brand`` 品牌清理读数）。
+        strip_brand: 单独的品牌清除开关；``None``（默认）**跟随 clean**——即 ``clean=True``
+            必然出无品牌图。显式 ``False`` 可保留品牌（仅当 clean=False 时有意义）。
         color_range: (min, max) 统一 Surface 色标（rangecoloractive=on +
             rangecolormin/max），使多 case 共享同一 colorbar 标度。
         polar_rmax: (rmin, rmax) 统一极坐标绘图组极径（axislimits=on）。
@@ -238,6 +260,8 @@ def export_image(
                 hit = _set_first_ok(pg, props, val)
                 if hit:
                     applied_clean.append(f"{hit}={val}")
+        if clean:
+            _apply_clean_brand(node, applied_clean)
         if color_range is not None:
             if pg is None:
                 warnings.append(f"绘图组 {plotgroup} 不存在，--color-range 未生效")
@@ -269,6 +293,18 @@ def export_image(
             f"run() 后未生成文件：{out}（headless 图形栈可能不可用，改用 pyvista 渲染）",
             warnings=warnings,
         )
+
+    # --- 品牌清除：像素级核验兜底（原生 logo*d=off 不保证在各版本/绘图组类型上生效）---
+    brand: dict[str, Any] = {}
+    do_strip = clean if strip_brand is None else bool(strip_brand)
+    if do_strip:
+        brand = _post.strip_brand(out)
+        if brand.get("found"):
+            warnings.append(
+                "导出 PNG 仍带品牌标记（原生 logo*d=off 未生效）——已就地抹除："
+                f"bbox={brand.get('bbox')} 填充={brand.get('fill')}"
+            )
+            applied_clean.append("brand_pixels_stripped")
 
     # --- 导出后自检：轴框 + 内部空白度量 + sidecar ---
     gray = read_gray_png(out)
@@ -309,6 +345,7 @@ def export_image(
             "scale_applied": applied_scale,
             "crop_box_px": list(box) if box else None,
             "interior": metrics,
+            "brand": brand,
         }
         try:
             sc.write_text(
