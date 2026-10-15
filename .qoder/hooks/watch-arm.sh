@@ -32,6 +32,11 @@
 #   自己的 watch」才挡接管，看门狗重臂的无主替身不冒充。归属真源 orchestration/state/
 #   wake-owner.json；`pysci-orch wake-claim status` 查看，`--force` 应急强制迁移（非常规）。
 #
+# v7（2026-10-15 晚，夜航热生效；adhoc-night-text）：回合边界顺带比对 `[night] enabled` 与
+#   本会话上次读数（night.py `--diff`，读数存 watch.json 的 night_seen）——有跳变即用本钩子
+#   既有的 rewake 通道（stderr + exit 2）在**下一轮**注入差分（关→开=授权书全文、开→关=刹车
+#   差分），无变化零输出。开关**只归用户手动**（不实现自拨回/时限到期）。
+#
 # 安全：任何异常一律 exit 0（观察面塌不了主链路）；token 文件缺失时自抢（不误判为被取代）。
 PAYLOAD=$(cat)
 ROOT="${QODER_PROJECT_DIR:-/d/XXXIIIGGG/projects/pySci/pySciWS}"
@@ -65,6 +70,25 @@ if [ "$HEV" = "SessionEnd" ]; then
     log "SessionEnd（无 session_id，跳过释放）"
   fi
   exit 0
+fi
+
+# 夜航差分注入（v7，2026-10-15 热生效单 adhoc-night-text）：回合边界比对 `[night] enabled`
+#   与本会话上次读数（night.py `--diff`，读数寄存在 watch.json 的 night_seen）。
+#   有跳变 → **走本钩子既有 rewake 通道**（stderr + exit 2）在**下一轮**注入差分：
+#     关→开 = 授权书全文（同 SessionStart 注入文本）；开→关 = 刹车差分。
+#   无变化 → 零输出零打扰；判定与文案单点在 night.py，本脚本只做通道。
+#   fail-open：读不出/异常一律零输出继续走原有链路（watch 语义零回退——本块在 token
+#   竞争与 watch 挂载之前，未命中时对既有行为**无任何影响**）。
+if [ -n "$SID" ]; then
+  ndiff=$(printf '%s' "$PAYLOAD" | PYTHONPATH="$ROOT/src" "$PY" -m pysci.skills.orchestration.tools.night \
+    --diff --session "$SID" --settings "$ROOT/data/pysci_settings.toml" 2>>"$LOG")
+  ndrc=$?
+  if [ -n "$ndiff" ]; then
+    log "夜航差分注入（session=$SID）→ exit 2（rewake）"
+    printf '%s\n' "$ndiff" >&2
+    exit 2
+  fi
+  [ "$ndrc" -eq 0 ] || log "夜航差分 rc=$ndrc → fail-open 继续监听"
 fi
 
 # 唤醒权自动归属闸（v6）：判定单一实现在 `wake-claim --check`（README §4.5）。

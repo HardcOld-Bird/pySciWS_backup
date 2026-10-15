@@ -7,8 +7,16 @@
 触发点注出；OFF 零注入零噪声。**判据层**（AskUserQuestion 拦截 / queue_pressure 夜航
 判据）是 n2，不在本模块。
 
+**回合边界差分（热生效单 2026-10-15，用户裁决）**：仅 SessionStart/PostCompact 注入时，
+开关的**中途跳变**要等到下一次压缩才被看见——用户关掉夜航后，会话可能仍按授权书行事。
+故新增 ``--diff`` 口：watch-arm.sh（Stop 钩子）每回合边界调用本模块，与**本会话上次读数**
+（``watch.json`` 的 :data:`NIGHT_SEEN_KEY`）比对，**有跳变才**产出差分文本（关→开＝授权书
+全文、开→关＝刹车差分），由该钩子走既有的 rewake 通道（stderr + exit 2）在**下一轮**注入；
+无变化零输出、零打扰。开关**只归用户手动**：本模块不实现自拨回、不实现时限到期。
+
 为什么挂 SessionStart + PostCompact 而非每回合 Stop（PSEP_2 §3.2）：逐回合注入烧
 token；而上下文压缩正是政策**最易丢**的时刻——PostCompact 补一针即覆盖真风险。
+（差分口不是「每回合注入」：只在跳变的那一轮出声。）
 
 **fail-open**：任何异常都零输出、exit 0——本钩子挂在会话初始化/压缩链上，绝不能塌
 任何主链路（watch-arm.sh 的 token 竞争 / wake-claim 均不经过本模块）。
@@ -29,15 +37,22 @@ from .settings import night_enabled
 #: ① 持续推进不等用户；② 一般决策自行执行且事后追溯责任在用户；③ 高风险咨询 twin 且
 #: twin 决策权等同用户（leader-only.md §3 限时预授权；不可达降级副组长+自行决断+留痕）；
 #: ④ 终态仅「全部完成 / 严重阻碍」+ 禁把 LLM 当定时器 + 权限弹窗属硬阻塞。
+#:
+#: ④ 于 2026-10-15（用户裁决）改写：**开关只归用户手动**——LLM 永不改写 `enabled`
+#: （不实现自拨回、不实现时限到期），达成终态写收尾总结即结束推进。
 NIGHT_POLICY: str = (
     "**【夜航模式生效】** 用户已离机并签发以下授权（本授权随 [night] enabled=true "
     "有效，关闭即失效）：① 尽可能持续推进所有事项/大任务，不得因等待用户回复而停滞或"
     "结束回合观望；② 一般决策你自行执行，事后追溯责任在用户；③ 需用户口头授权的高风险"
-    "事项（含护栏级/规则级裁决）**咨询 twin 并依其裁决执行**——twin 的决策权等同用户"
-    "（本条为 leader-only.md §3 的限时预授权）；twin 不可达时降级为「副组长咨询 + 自行"
+    "事项（含护栏级/规则级裁决）**咨询 twin 并依其裁决执行**——`pysci-orch consult-twin "
+    '<案卷.md>`（twin 终裁）、`pysci-orch consult "<问题>"`（副组长）；twin 的决策权等同'
+    "用户（本条为 leader-only.md §3 的限时预授权）；twin 不可达时降级为「副组长咨询 + 自行"
     "决断 + 留痕」，仍不等用户；④ 终态仅两种：**全部完成**或**不得不的严重阻碍**——"
-    "达成即写一段收尾总结、将 enabled 改回 false、结束推进；⑤ 禁止把 LLM 当定时器"
-    "（空转打回）；⑥ 工具权限弹窗属硬阻塞，用户离机前应自调权限档（见 §3.6）。"
+    "达成即写一段收尾总结（进展/遗留/关键决策点）**即结束推进**；开关只归用户手动拨动，"
+    "**你永不改写 `enabled`**（不做自拨回、不设时限）；⑤ 禁止把 LLM 当定时器：不用空回合/"
+    "轮询充当定时器，等待一律走事件机制（watch 自动挂载，命中即唤醒）；⑥ 工具权限弹窗属"
+    "硬阻塞——它不写钩子接管，用户离机前应把会话权限调到宽松档（把常用工具设为允许，"
+    "PSEP_2 §3.6）。"
 )
 
 
@@ -47,6 +62,80 @@ NIGHT_GATE_DENY: str = (
     "`pysci-orch consult-twin <案卷.md>`，依其裁决执行；twin 不可达时降级「副组长咨询 + 自行"
     "决断 + 留痕」，仍不等用户。"
 )
+
+
+#: 关→开差分 = 与 SessionStart **同一份**授权书全文（同一政策只有一份真源，不另写）。
+#: 开→关差分 = **刹车差分**。措辞禁令（用户裁决 2026-10-15）：关闭**不得**出现「立即停止
+#: 自主推进」类字样——本项目**始终鼓励自主推进**（twin 即为此设计），夜航只是为该模式加
+#: 一道强调与硬保险（附带开关）。关闭 = 收回夜航授权、恢复常规交互（可提问/可等待），
+#: **自主推进照常**。
+NIGHT_DIFF_OFF: str = (
+    "**【夜航已由用户关闭】** 夜航授权书失效（决策权回到用户），AskUserQuestion 拦截随之"
+    "放行，恢复与用户的一问一答；**自主推进照常**（项目常态，twin 机制即为此设计），"
+    "无需停摆等用户——该问用户的照常问，能自己推进的照常推进。"
+)
+
+#: watch.json 里的**会话级上次读数**表（``{session_id: "on"|"off"}``）。
+#: 为什么寄存在 watch 面：① 差分由 watch-arm（Stop 钩子）触发，同一份文件当回合已被读写
+#: ——零新增 I/O 与零新增文件；② watch.json 是 gitignored 运行态，不污染跟踪面（本项目
+#: 对运行态文件的既有纪律）；③ 它跨 watch.json 的**整体覆写**由 ``watch.CARRY_KEYS`` 兜住。
+NIGHT_SEEN_KEY: str = "night_seen"
+
+#: 上表条目上限（按插入序淘汰最旧）：防会话池长期演进后无界增长。
+NIGHT_SEEN_MAX: int = 64
+
+
+def _seen_write(session_id: str, value: str) -> None:
+    """记录该会话的上次读数（fail-open：写不动就算了，下次当「首次见」处理）。"""
+    try:
+        from . import watch as _watch  # 延迟导入：watch 链重，且避免模块级环
+
+        st = _watch.load_state()
+        seen = st.get(NIGHT_SEEN_KEY)
+        seen = dict(seen) if isinstance(seen, dict) else {}
+        seen[session_id] = value
+        if len(seen) > NIGHT_SEEN_MAX:
+            for k in list(seen)[: len(seen) - NIGHT_SEEN_MAX]:
+                seen.pop(k, None)
+        st[NIGHT_SEEN_KEY] = seen
+        _watch.save_state(st)
+    except Exception:  # noqa: BLE001 - 记账面绝不反噬（差分本身照常产出）
+        pass
+
+
+def diff_message(session_id: str, *, data: dict[str, Any] | None = None) -> str | None:
+    """回合边界差分：开关与**本会话上次读数**不同 → 返回该注入的差分文本，否则 ``None``。
+
+    - 关→开 → :data:`NIGHT_POLICY`（授权书全文，同 SessionStart 注入文本）；
+    - 开→关 → :data:`NIGHT_DIFF_OFF`（刹车差分，措辞受用户裁决禁令约束）；
+    - 无变化 → ``None``（**零输出零写入**，调用方据此零打扰）；
+    - **首次见该会话** → 记基线但**不注入**：SessionStart 已按当时开关注入过一次，再注
+      一遍纯属烧 token；基线记下即可捕获此后每一次真实跳变；
+    - 无 ``session_id`` / 读开关异常 → ``None``（fail-open；且**永不跨会话误报**——
+      上次读数按 session_id 各存一份）。
+    """
+    sid = str(session_id or "").strip()
+    if not sid:
+        return None
+    try:
+        on, _warnings = night_enabled(data)
+    except Exception:  # noqa: BLE001 - 读开关异常 → 零输出
+        return None
+    now = "on" if on else "off"
+    prior: Any = None
+    try:
+        from . import watch as _watch  # 延迟导入（同上）
+
+        seen = _watch.load_state().get(NIGHT_SEEN_KEY)
+        prior = dict(seen).get(sid) if isinstance(seen, dict) else None
+    except Exception:  # noqa: BLE001 - 读不出当首次见（不注入、不炸）
+        prior = None
+    if prior == now:
+        return None
+    _seen_write(sid, now)
+    if prior is None:
+        return None
+    return NIGHT_POLICY if on else NIGHT_DIFF_OFF
 
 
 def gate_deny_message(data: dict[str, Any] | None = None) -> str | None:
@@ -93,11 +182,14 @@ def _read_settings_file(path: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """钩子入口，两模式：
+    """钩子入口，三模式：
 
     - ``--gate``（PreToolUse 拦截口，PSEP_2 §3.3a）：夜航 ON → **stderr 注出转 twin
       指令 + exit 2**（harness 拦截语义：exit 2 = deny、stderr 注入给模型）；OFF /
       读开关异常 → exit 0 放行（fail-open）。
+    - ``--diff``（回合边界差分口，热生效单 2026-10-15）：与 ``--session`` 的上次读数比对，
+      有跳变才把差分文本打到 **stdout**（调用方 watch-arm.sh 转 stderr + exit 2 = rewake
+      注入下一轮）；无变化零输出。恒 exit 0（是否注入由调用方按输出是否为空决定）。
     - 缺省（政策注入口，PSEP_2 §3.2）：stdin 载荷取 ``hook_event_name`` → 开关 ON 时
       打印 ``hookSpecificOutput.additionalContext`` JSON；OFF/异常一律 exit 0。
 
@@ -114,6 +206,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="PreToolUse 拦截口：夜航 ON → stderr 指令 + exit 2；OFF/异常 → exit 0",
     )
+    parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="回合边界差分口：开关跳变 → stdout 差分文本；无变化零输出（恒 exit 0）",
+    )
+    parser.add_argument(
+        "--session", default="", help="--diff 用：会话 id（上次读数按会话各存一份）"
+    )
     args = parser.parse_args(argv)
     if args.gate:
         try:
@@ -124,6 +224,15 @@ def main(argv: list[str] | None = None) -> int:
         if deny:
             print(deny, file=sys.stderr)
             return 2
+        return 0
+    if args.diff:
+        try:
+            data = _read_settings_file(Path(args.settings)) if args.settings else None
+            msg = diff_message(args.session, data=data)
+        except Exception:  # noqa: BLE001 - fail-open：差分口异常零输出
+            return 0
+        if msg:
+            print(msg)
         return 0
     try:
         raw_payload = sys.stdin.read()
