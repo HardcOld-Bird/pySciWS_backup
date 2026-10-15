@@ -83,6 +83,22 @@ def run_checks(
                 f"[check exit={proc.returncode}] "
                 + (proc.stdout or proc.stderr or "")[-600:]
             )
+            dirty_face: list[str] = []
+            if verdict == "fail":
+                # 污染降级（backlog 20261015-130555-devops / -132143-devops，判据②）：
+                # 现场有**与本交付无关**的在飞脏面时，判据 FAIL 不能算数——`orch-tests` 跑
+                # 整个编排队列、其红多半来自别人正在编辑的跟踪面（实案 A.a5：已完成的交付被
+                # 判 FAIL → code=2 → drain 抢救 + 另起续作单，白烧一跳）。降级为 **advisory**：
+                # 仍然出声（tail 首位标注 + `dirty_face` 字段留证），但**不计入 failed_checks**
+                # → 交付的 `code` 不受影响、不触发抢救与续作。
+                dirty_face = _unrelated_dirty_paths(p)
+                if dirty_face:
+                    verdict = "advisory"
+                    tail = (
+                        f"[check advisory: 现场有无关脏面 {len(dirty_face)} 项"
+                        f"（{', '.join(dirty_face[:4])}{'…' if len(dirty_face) > 4 else ''}）"
+                        f"——FAIL 不判交付] " + tail
+                    )
         except subprocess.TimeoutExpired:
             verdict, tail, proc = "fail", f"验收命令超时（>{CHECK_TIMEOUT_S}s）", None
         except OSError as exc:
@@ -95,6 +111,41 @@ def run_checks(
                 "output_tail": tail,
                 # 判据真源＝退出码（None=未能执行）：台账/报告据此复核，不必从 tail 里猜。
                 "returncode": proc.returncode if proc is not None else None,
+                **({"dirty_face": dirty_face} if dirty_face else {}),
             }
         )
     return results
+
+
+def _unrelated_dirty_paths(artifact: Path) -> list[str]:
+    """工作区里**与本次产物无关**的脏路径（跟踪面）；读不到即空表（fail-open）。
+
+    「无关」＝不在本产物路径之下（产物自身可以合法地还没提交）。判据只取 git 侧的
+    ``status --porcelain``（跟踪面改动 + 未跟踪），不猜语义。
+    """
+    from . import drain as _drain
+
+    try:
+        rc, out = _drain._run_git("status", "--porcelain", "--untracked-files=all")
+    except Exception:  # noqa: BLE001 - 探活面 fail-open（探不到就不降级）
+        return []
+    if rc != 0:
+        return []
+    try:
+        rel = artifact.resolve().relative_to(PROJECT_ROOT.resolve()).as_posix()
+    except (OSError, ValueError):
+        rel = ""
+    skip = ("__pycache__/", ".pytest_cache/")
+    dirty: list[str] = []
+    for ln in out.splitlines():
+        p = ln[3:].strip().strip('"').replace("\\", "/")
+        if not p or any(s in p for s in skip):
+            continue
+        if rel and (
+            p == rel
+            or p.startswith(rel.rstrip("/") + "/")
+            or rel.startswith(p.rstrip("/") + "/")
+        ):
+            continue  # 产物自身/其父目录：属于本交付，不算「无关」
+        dirty.append(p)
+    return dirty
