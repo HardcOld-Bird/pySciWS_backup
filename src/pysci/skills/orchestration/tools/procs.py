@@ -29,10 +29,48 @@ from pathlib import Path
 QUERY_TIMEOUT_S: int = 20
 
 
+def _hidden_creationflags(base: int = 0) -> int:
+    """win32 上叠加 ``CREATE_NO_WINDOW``；POSIX 恒 0（无此概念）。"""
+    if sys.platform != "win32":
+        return base
+    return int(base) | int(subprocess.CREATE_NO_WINDOW)
+
+
+def run_hidden(
+    args: list[str] | str, *, creationflags: int = 0, **kwargs: object
+) -> subprocess.CompletedProcess[str]:
+    """**唯一**的子进程 spawn 口径：跑一条命令并**隐藏窗口**（win32 恒带 ``CREATE_NO_WINDOW``）。
+
+    为什么必须有单一落点（用户 2026-10-15 加急实案）：``pythonw.exe``/GUI 子系统进程或
+    分离进程（``_spawn_detached``）**没有控制台**，它们派生 console 子系统程序（``git``/``sh``/
+    ``pre-commit``…）时若不带该旗标，Windows 会**新开一个可见控制台**；命令秒退 → 窗口闪现
+    夺焦点。看门狗一次 tick 连发约 28 个 git ⇒ 用户每分钟被 ~28 个空终端打断（30 分钟+）。
+
+    调用方一律走本函数（「同一能力不留两份口径」）：``runner``/``drain`` 原先各自手写旗标，
+    现并入此处；POSIX 侧**不加**任何旗标、行为完全不变。
+    """
+    if sys.platform == "win32" and not kwargs.get("shell"):
+        kwargs["creationflags"] = _hidden_creationflags(creationflags)
+    return subprocess.run(args, **kwargs)  # type: ignore[arg-type]
+
+
+def popen_hidden(
+    argv: list[str] | str, *, creationflags: int = 0, **kwargs: object
+) -> subprocess.Popen:
+    """``Popen`` 版的同一口径（分离/长驻子进程用；win32 恒带 ``CREATE_NO_WINDOW``）。"""
+    if sys.platform == "win32" and not kwargs.get("shell"):
+        kwargs["creationflags"] = _hidden_creationflags(creationflags)
+    return subprocess.Popen(argv, **kwargs)  # type: ignore[arg-type]
+
+
 def _cmd(args: list[str], timeout_s: int = QUERY_TIMEOUT_S) -> str:
-    """跑一条查询命令，返回合并输出；任何异常（缺命令/超时）→ 空串（= 不知道）。"""
+    """跑一条查询命令，返回合并输出；任何异常（缺命令/超时）→ 空串（= 不知道）。
+
+    走 :func:`run_hidden`：本模块的探活（``tasklist``）与终止（``taskkill``）常在**无控制台**
+    的巡更/回收路径上被调，裸 spawn 会闪窗（2026-10-15 加急「空终端风暴」）。
+    """
     try:
-        proc = subprocess.run(
+        proc = run_hidden(
             args,
             capture_output=True,
             text=True,

@@ -44,8 +44,15 @@ from pysci.paths import PROJECT_ROOT
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
-    """在项目根跑一条 git（记账用；``PROJECT_ROOT`` 是模块级，便于测试注入）。"""
-    return subprocess.run(
+    """在项目根跑一条 git（记账用；``PROJECT_ROOT`` 是模块级，便于测试注入）。
+
+    走 :func:`procs.run_hidden`（2026-10-15 加急「空终端风暴」）：本模块的提交链**常由
+    无控制台的 worker（pythonw/分离进程）触发**，裸 ``subprocess.run`` 会让每次 git 与
+    随后的 pre-commit fixer 串各开一个可见窗口（同轮采样实录）。
+    """
+    from . import procs as _procs
+
+    return _procs.run_hidden(
         ["git", *args],
         cwd=PROJECT_ROOT,
         capture_output=True,
