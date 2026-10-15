@@ -58,14 +58,11 @@ def test_repo_shipped_registry_has_orch_tests_check():
     data = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     spec = data.get("checks", {}).get("orch-tests")
     assert spec is not None, "随附 registry.json 应注册 orch-tests"
-    assert spec["cmd"] == [
-        "uv",
-        "run",
-        "--no-sync",
-        "pytest",
-        "tests/skills/orchestration",
-        "-q",
-    ]
+    # 判据①（backlog 20261015-132143-devops）：收 `{path}` 形参（同 figure-audit 的形状），
+    # 交付可把验收面收窄到**自指套件**；`path_default` 是「产物不是 pytest 目标」时的回落面
+    # （否则把源码路径喂给 pytest 会零收集、退出码 5 → 制造假 FAIL）。
+    assert spec["cmd"] == ["uv", "run", "--no-sync", "pytest", "{path}", "-q"]
+    assert spec["path_default"] == "tests/skills/orchestration"
 
 
 def test_repo_shipped_registry_keeps_figure_audit_check():
@@ -253,6 +250,73 @@ def test_unrelated_dirty_paths_excludes_the_artifact_itself(monkeypatch, tmp_pat
     assert dirty == ["orchestration/state/registry.json"], dirty
 
 
+# ---------------------------------------------------------------------------
+# `{path}` 形参：自指套件收窄 / 非测试产物回落默认面（backlog 20261015-132143-devops 判据①）
+# ---------------------------------------------------------------------------
+def test_scoped_check_runs_the_self_referencing_suite():
+    """产物是 **pytest 目标**（自指套件）→ argv 收窄到它（不再整目录）。"""
+    from pysci.paths import PROJECT_ROOT
+    from pysci.skills.orchestration.tools.checks import _path_arg
+
+    spec = {
+        "cmd": ["pytest", "{path}", "-q"],
+        "path_default": "tests/skills/orchestration",
+    }
+    art = PROJECT_ROOT / "tests" / "skills" / "orchestration" / "test_foo.py"
+
+    assert _path_arg(art, spec) == str(art)
+
+
+def test_non_test_artifact_falls_back_to_the_default_face():
+    """产物**不是** pytest 目标（如源码）→ 回落默认整目录——否则 pytest 零收集、退出码 5
+    会把交付假判 FAIL（正是本单要消灭的那类误判）。"""
+    from pysci.paths import PROJECT_ROOT
+    from pysci.skills.orchestration.tools.checks import _path_arg
+
+    spec = {
+        "cmd": ["pytest", "{path}", "-q"],
+        "path_default": "tests/skills/orchestration",
+    }
+    src = (
+        PROJECT_ROOT
+        / "src"
+        / "pysci"
+        / "skills"
+        / "orchestration"
+        / "tools"
+        / "plans.py"
+    )
+    untracked_art = PROJECT_ROOT / "arbitrary-not-a-real-file.md"
+
+    assert _path_arg(src, spec) == "tests/skills/orchestration"
+    assert _path_arg(untracked_art, spec) == "tests/skills/orchestration"
+
+
+def test_checks_without_a_default_use_the_artifact_path_verbatim():
+    """没给 ``path_default`` 的 check（如 ``figure-audit``）保持原语义：{path} 原样代入。"""
+    from pysci.paths import PROJECT_ROOT
+    from pysci.skills.orchestration.tools.checks import _path_arg
+
+    art = (
+        PROJECT_ROOT / "data" / "research" / "gain_ep" / "article" / "figures" / "fig1"
+    )
+    assert _path_arg(art, {"cmd": ["x", "{path}"]}) == str(art)
+
+
+def test_run_checks_uses_the_scoped_target_end_to_end(monkeypatch):
+    """端到端：产物=自指套件 → 真 argv 里出现该文件的路径（而非整目录）。"""
+    calls = _fake_run(monkeypatch, rc=0)
+    art = Artifact(
+        path="tests/skills/orchestration/test_checks_orch_tests.py", check="orch-tests"
+    )
+
+    run_checks([art], Registry.load(), member_pod=Path("."))
+
+    argv = calls[0]["argv"]
+    assert argv[4].endswith("test_checks_orch_tests.py"), argv
+    assert argv[:4] == ["uv", "run", "--no-sync", "pytest"]
+
+
 def test_registry_load_save_roundtrip_preserves_orch_tests(tmp_path, monkeypatch):
     """Registry.load→save→load 往返保留 checks 块两条（save 走原子写 tmp→replace）。"""
     src = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -271,6 +335,7 @@ def test_registry_load_save_roundtrip_preserves_orch_tests(tmp_path, monkeypatch
         "run",
         "--no-sync",
         "pytest",
-        "tests/skills/orchestration",
+        "{path}",
         "-q",
     ]
+    assert after["checks"]["orch-tests"]["path_default"] == "tests/skills/orchestration"

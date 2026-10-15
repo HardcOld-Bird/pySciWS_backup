@@ -179,9 +179,10 @@
         "run",
         "--no-sync",
         "pytest",
-        "tests/skills/orchestration",
+        "{path}",
         "-q"
-      ]
+      ],
+      "path_default": "tests/skills/orchestration"
     },
     "guards-in-force": {
       "cmd": [
