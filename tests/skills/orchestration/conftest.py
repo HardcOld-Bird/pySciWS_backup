@@ -532,7 +532,14 @@ def set_inspect_busy(monkeypatch, busy):
 
 
 def seed_backlog(state, items):
-    """写入 backlog.json（items 为条目字典列表）。"""
+    """写入 backlog.json（items 为条目字典列表）。
+
+    每条补 ``no_artifact: True``（若未显式给）：夹具条目是**合成**的，没有真实交付物——
+    销账锚点校验（backlog 20261015-145953-f4b）下它们走「显式无产物标记」这一支放行。
+    要测锚点校验本身的用例**不要**用本夹具（自建条目），否则会把闸测成空转。
+    """
+    for it in items:
+        it.setdefault("no_artifact", True)
     (state / "backlog.json").write_text(
         json.dumps({"version": 1, "items": items}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -696,6 +703,12 @@ def seed_suggestion(state, member="devops", sid=None):
     d = state / "suggestions"
     d.mkdir(parents=True, exist_ok=True)
     sid = sid or f"20261010-120000-{member}"
+    # 销账锚点校验（backlog 20261015-145953-f4b）：本夹具走 approve → 派发 → 销账整链，
+    # 而假派发不会真落留档——故**预置一份** `deliveries/<sid>.md` 模拟「本单确有交付物」。
+    # （`iso_state` 已把 ``queueworker.DELIVERIES_DIR`` 指向 ``<state>/deliveries``。）
+    dlv = state / "deliveries"
+    dlv.mkdir(parents=True, exist_ok=True)
+    (dlv / f"{sid}.md").write_text("# 交付留档（夹具）\n", encoding="utf-8")
     (d / f"{sid}.md").write_text(
         f"# 改进建议（{member}，待审批）\n\nkind: usability\n建议正文首行。\n\n"
         "success_criteria：\n- 默认判据（可证伪）\n",

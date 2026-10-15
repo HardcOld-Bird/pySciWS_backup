@@ -414,14 +414,92 @@ def _backlog_set_status(
     )
 
 
+#: 「无产物任务」标记（销账锚点三选一的第三项）：条目字段或 note/summary/text 里出现即认。
+NO_ARTIFACT_MARKER = "no_artifact"
+
+
+def delivery_anchor(item: dict) -> tuple[bool, str]:
+    """销账锚点校验：**三选一**（backlog 20261015-145953-f4b）。
+
+    实案：组长裁量销账 TUI-UX 单，「账上 done 实际未交付」静默 3 小时（成果卡 worktree）。
+
+    ① **合并提交在 main**：条目 ``commit`` 非空且 ``git merge-base --is-ancestor <sha> main``
+       成立（可 git 查——这是「真交付」最强的锚）；
+    ② **产物/留档在盘**：``orchestration/state/deliveries/`` 下有该条目的留档（``<item_id>.md``
+       或派发留档 ``*-<item_id>.md``——批次派发落的是 ``<member>-<ts>-<item_id>.md``），
+       或条目声明的 ``evidence_file`` 文件在盘；
+    ③ **显式无产物标记**：条目 ``no_artifact`` 为真，或 ``note``/``summary``/``text`` 里出现
+       :data:`NO_ARTIFACT_MARKER`（纯咨询/探针一类本就不产物的任务）。
+
+    **生效边界（爆炸半径处置）**：只作用于**销账这一刻**（:func:`backlog_complete` /
+    :func:`backlog_resolve`），**不回溯改判**已 done 的历史条目——历史维持原状，新销账才受校验。
+
+    Returns:
+        ``(True, 命中说明)`` 或 ``(False, 缺什么)``——后者用于点名提示与 needs_leader note。
+    """
+    iid = str(item.get("id") or "")
+    # ③ 显式无产物标记（先查它：纯咨询/探针不必去碰 git 与磁盘）
+    if item.get("no_artifact"):
+        return True, "显式无产物标记（no_artifact）"
+    blob = " ".join(str(item.get(k) or "") for k in ("note", "summary", "text"))
+    if NO_ARTIFACT_MARKER in blob:
+        return True, f"显式无产物标记（{NO_ARTIFACT_MARKER}）"
+    # ① 合并提交在 main
+    sha = str(item.get("commit") or "").strip()
+    if sha:
+        try:
+            from . import drain as _drain
+
+            rc, _out = _drain._run_git("merge-base", "--is-ancestor", sha, "main")
+            if rc == 0:
+                return True, f"合并提交在 main（{sha[:12]}）"
+        except Exception:  # noqa: BLE001 - git 不可用不该让销账卡死（退到②③判）
+            pass
+    # ② 产物/留档在盘（**现读** queueworker.DELIVERIES_DIR：测试可 monkeypatch 隔离该面，
+    #    与 taskbooks._deliveries_dir 同口径；模块级 ORCH_STATE_ROOT 会被隔离面绕过）
+    try:
+        from . import queueworker as _qw
+
+        root = Path(_qw.DELIVERIES_DIR)
+    except Exception:  # noqa: BLE001 - 读不到落点就不做这半支（退到①③判）
+        root = ORCH_STATE_ROOT / "deliveries"
+    if iid:
+        cands = [root / f"{iid}.md"]
+        try:
+            cands += sorted(root.glob(f"*-{iid}.md"))
+        except OSError:
+            pass
+        for p in cands:
+            if p.is_file():
+                return True, f"交付留档在盘（{p.name}）"
+    ev = str(item.get("evidence_file") or "").strip()
+    if ev:
+        p = Path(ev)
+        p = p if p.is_absolute() else PROJECT_ROOT / p
+        if p.is_file():
+            return True, f"声明的证据在盘（{ev}）"
+    if sha:
+        return False, (
+            f"commit {sha[:12]} 不在 main（已提交未合并 ≠ 已交付），且无留档/证据在盘"
+        )
+    return False, (
+        "无锚点：既无「合并提交在 main」的 commit，也无 deliveries/ 留档或声明的证据在盘；"
+        f"若本条目本就无产物，请在 note/summary 里写 {NO_ARTIFACT_MARKER} 标记"
+    )
+
+
 def backlog_complete(
     item_id: str,
     note: str = "",
     *,
     batch_size: int | None = None,
     batch_seed: str | None = None,
-) -> None:
+) -> bool:
     """标记 backlog 条目完成（devops 交付后由组长/orch 调用）。
+
+    **先过销账锚点校验**（backlog 20261015-145953-f4b，:func:`delivery_anchor`）：无锚 →
+    **拒绝 done** 并转 ``needs_leader`` 出声（点名缺什么），**不静默**——「账上 done 实际未
+    交付」曾静默 3 小时。返回 ``True``＝已销账，``False``＝被锚点校验拦下（转 needs_leader）。
 
     batch_size/batch_seed：批量消化时记录本条目所属批次（同批一起 done 的条目数与
     种子 id），供 orch stats 批量大小分布与审计；单条消化时留空。
@@ -430,6 +508,13 @@ def backlog_complete(
     核验方式在审批时一次定死，交付后不再有人裁决，所以这一步必须机械发生。核验入队
     失败不能让销账本身失败（条目已交付是事实），故 fail-soft 打印并继续。
     """
+    ok, why = delivery_anchor(backlog_find(item_id) or {})
+    if not ok:
+        backlog_needs_leader(
+            item_id, note=f"[销账锚点校验] {why}——未销账", extra={"anchor_missing": why}
+        )
+        print(f"[!] 拒绝销账 {item_id}：{why}（已转 needs_leader，补齐锚点后再销）")
+        return False
     extra: dict = {}
     if batch_size is not None:
         extra["batch_size"] = batch_size
@@ -438,17 +523,18 @@ def backlog_complete(
     _backlog_set_status(item_id, "done", note, stamp="done_at", extra=extra or None)
     entry = backlog_find(item_id)
     if not entry:
-        return
+        return True
     try:
         item = verdict.post_verify_enqueue(entry)
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"[!] 交付后核验入队失败（{item_id}）：{type(exc).__name__}: {exc}")
-        return
+        return True
     if item:
         print(
             f"    已排交付后核验：{item['id']}（label={item['label']}，"
             f"a={item['ref_a'][:8]} → b=HEAD）——判决由 bencher 消化后自动落地"
         )
+    return True
 
 
 def backlog_needs_leader(
@@ -550,9 +636,20 @@ def backlog_resolve(item_id: str, *, note: str = "") -> dict | None:
     ``needs_leader_at``/``blocked_report`` 等字段原样留着。这是「组长手动把已消解条目
     收尾」的正门，取代直改 ``state/backlog.json`` 的野路子（drain 在跑时有并发覆盖风险）。
 
+    **销账锚点校验**（backlog 20261015-145953-f4b）：组长裁量销账同样过
+    :func:`delivery_anchor`——无锚即**拒绝**（返回 ``None``，条目留在 needs_leader）并点名
+    缺什么，**不静默**（实案：组长裁量销账 TUI-UX 单，「账上 done 实际未交付」静默 3 小时）。
+
     Returns:
-        迁移后的条目；未找到 / 状态不是 needs_leader → None。
+        迁移后的条目；未找到 / 状态不是 needs_leader / 无锚点 → ``None``。
     """
+    item = backlog_find(item_id) or {}
+    ok, why = delivery_anchor(item)
+    if not ok:
+        print(
+            f"[!] 拒绝销账 {item_id}：{why}（条目留在 needs_leader，补齐锚点后再 resolve）"
+        )
+        return None
     return _backlog_transition(
         item_id,
         allowed_from={"needs_leader"},
