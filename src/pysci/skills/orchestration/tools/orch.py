@@ -923,6 +923,7 @@ def _plan_router(action: str):
         "run": _plans.cmd_plan_run,
         "advance": _plans.cmd_plan_advance,
         "amend": _plans.cmd_plan_amend,
+        "edit": _plans.cmd_plan_edit,
         "rework": _plans.cmd_plan_rework,
         "drop": _plans.cmd_plan_drop,
         "list": _plans.cmd_plan_list,
@@ -1019,6 +1020,22 @@ def main(argv: list[str] | None = None) -> int:
     q = psub.add_parser("amend", help="编辑计划 YAML 后校验对账（按环节 id 保留状态）")
     q.add_argument("id")
     q.set_defaults(func=_plan_router("amend"))
+
+    q = psub.add_parser(
+        "edit",
+        help="结构化改既有环节的 brief/dirs（免手编折行；自动对账）",
+    )
+    q.add_argument("id")
+    q.add_argument("--step", required=True, help="环节 id（叶子点路径，如 a1 或 A.a1）")
+    q.add_argument("--brief", default=None, help="整段替换该环节的 brief")
+    q.add_argument(
+        "--append-brief",
+        default="",
+        dest="append_brief",
+        help="在既有 brief 后追加一句（自动以「；」分隔）",
+    )
+    q.add_argument("--dirs", default=None, help="替换该环节白名单（逗号分隔）")
+    q.set_defaults(func=_plan_router("edit"))
 
     q = psub.add_parser(
         "rework", help="由返工任务书生成三档模板骨架并登记（PSEP_3 §4.2）"

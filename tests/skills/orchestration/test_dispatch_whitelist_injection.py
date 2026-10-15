@@ -184,3 +184,54 @@ def test_warns_when_whitelist_section_yields_nothing(tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert "解析不出任何目录" in out and "whitelist_conflict" in out, out
+
+
+# ---------------------------------------------------------------------------
+# 声明面「写了」却解析不出目录 → **可见失败**（backlog 20261015-222249）
+# ---------------------------------------------------------------------------
+#: 白名单段存在，但条目**不是路径样**（无 `/`、无已知后缀）→ 解析得空。
+TB_MISPARSE = """# 任务书 demo
+
+## 白名单（写权限）
+- 只动该模块内的实现文件
+- 其它一律不改
+"""
+
+
+def test_misparsed_section_warns_even_with_explicit_dirs(tmp_path, capsys):
+    """有显式 dirs 时，声明面被静默丢弃**也要出声**（旧实现只在「两者皆空」时告警）。"""
+    p = tmp_path / "tb-misparse.md"
+    p.write_text(TB_MISPARSE, encoding="utf-8")
+
+    out = dispatch.dirs_with_taskbook_whitelist(["src"], p)
+    msg = capsys.readouterr().out
+
+    assert out == ["src"]  # 仍按显式 dirs 注入
+    assert "解析不出任何目录" in msg
+    assert "声明面被静默丢弃" in msg
+
+
+def test_misparsed_section_warns_when_nothing_else(tmp_path, capsys):
+    """两者皆空的老分支语义保留（组员会被拦成 whitelist_conflict）。"""
+    p = tmp_path / "tb-misparse2.md"
+    p.write_text(TB_MISPARSE, encoding="utf-8")
+
+    out = dispatch.dirs_with_taskbook_whitelist([], p)
+    msg = capsys.readouterr().out
+
+    assert out == []
+    assert "whitelist_conflict" in msg
+
+
+def test_normal_taskbook_emits_no_new_warning(tmp_path, capsys):
+    """正常任务书（能解析出目录）**无新告警**（criteria：不误报）。"""
+    assert dispatch.dirs_with_taskbook_whitelist([], _taskbook(tmp_path))
+    assert "解析不出任何目录" not in capsys.readouterr().out
+
+
+def test_no_whitelist_section_emits_no_warning(tmp_path, capsys):
+    """压根没写白名单段 → 不是格式失配，不告警。"""
+    p = tmp_path / "tb-nosec.md"
+    p.write_text("# 任务书\n\n## 目标\n做事。\n", encoding="utf-8")
+    assert dispatch.dirs_with_taskbook_whitelist(["src"], p) == ["src"]
+    assert "解析不出任何目录" not in capsys.readouterr().out

@@ -1593,6 +1593,69 @@ def cmd_plan_rework(args) -> int:
     return 0
 
 
+def cmd_plan_edit(args) -> int:
+    """**结构化**改既有环节的 ``brief``/``dirs``，并自动对账（backlog 20261015-222248）。
+
+    为什么需要它：`plan new` 登记时把 YAML 交给 ``yaml.safe_dump`` **重新折行**，人工 Edit 的
+    ``old_string``（照自己写入时的折行写）**逐字对不上** → 实测连续两次 `0 occurrences found`，
+    每次都得先 `sed` 读回实际折行再改。本命令让人**不必猜折行**：直接给"改什么"。
+
+    与 `amend` 的分工：`amend` 是「你改了 YAML 文件，我来校验对账」；`edit` 是「你说改什么，
+    我来改并对账」。护栏同 `amend`（模板必留节点 + 已 started 结构冻结——字段编辑不动结构，
+    本应恒过，跑一遍是**保险**：真被拦说明计划已进入不该改的状态）。
+    """
+    plan_id = args.id
+    if not _plan_path(plan_id).exists():
+        print(f"[!] 计划不存在：{plan_id}")
+        return 2
+    plan = _load_yaml(plan_id)
+    sid = str(getattr(args, "step", "") or "")
+    leaves = _leaf_map(plan)
+    if sid not in leaves:
+        hint = "、".join(list(leaves)[:8]) or "（无叶子）"
+        print(f"[!] 计划 {plan_id} 无环节 {sid}；可用环节：{hint}")
+        return 2
+    leaf = leaves[sid]
+    if args.brief is None and not args.append_brief and args.dirs is None:
+        print("[!] 未给任何编辑项（至少一个：--brief / --append-brief / --dirs）")
+        return 2
+
+    if args.brief is not None:
+        leaf["brief"] = str(args.brief)
+    if args.append_brief:
+        cur = str(leaf.get("brief") or "").strip()
+        leaf["brief"] = f"{cur}；{args.append_brief}" if cur else str(args.append_brief)
+    if args.dirs is not None:
+        leaf["dirs"] = _split_dirs(args.dirs)
+
+    tpl = template_violations(plan)
+    if tpl:
+        print("[!] edit 被拒：rework 模板必留节点不完整（PSEP_3 §4.3 #1）——")
+        for v in tpl:
+            print(f"  - {v}")
+        return 2
+    old = _load_state(plan_id)
+    violations = freeze_violations(
+        {str(s["id"]): str(s.get("status") or "pending") for s in old.get("steps", [])},
+        _tree(plan).leaf_paths(),
+    )
+    if violations:
+        print("[!] edit 被拒：已 started 的 superstep 结构冻结（PSEP_3 §2.4）——")
+        for v in violations:
+            print(f"  - {v}")
+        return 2
+
+    _plan_path(plan_id).write_text(
+        yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    _save_state(plan_id, _reconcile(plan, old))
+    print(f"[√] 环节 {sid} 已更新（计划 {plan_id}）：")
+    print(f"    brief = {str(leaf.get('brief') or '')[:80]}")
+    print(f"    dirs  = {leaf.get('dirs') or '（未声明）'}")
+    print(f"[NEXT] 核对：pysci-orch plan list / plan run {plan_id}")
+    return 0
+
+
 def cmd_plan_amend(args) -> int:
     """amend = 直接编辑计划 YAML（组长文件工具可写 plans/*.yaml）；本命令做校验与状态对账。
 
