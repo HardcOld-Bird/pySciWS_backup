@@ -440,3 +440,76 @@ def test_repo_rule_whitelist_covers_edits_engages_on_shipped_table():
     )
     warns = dispatch.lint_taskbook(body)
     assert any("whitelist-covers-edits" in w for w in warns)
+
+
+# ---------------------------------------------------------------------------
+# reference-image-needs-semantic-alignment（返工1 M2）：任务书引用参考图路径却无
+# 「参考材料语义对齐」段 → 告警；有该段 → 静默；非参考图语境的 figures/artwork → 不误报
+# ---------------------------------------------------------------------------
+REFIMG_RULE = {
+    "id": "reference-image-needs-semantic-alignment",
+    "re": (
+        "绘图参考|参考图|artwork[/\\\\]|(?:figures|references)[/\\\\]"
+        "[^\\s，。；、）)]*\\.(?:png|jpe?g|jpeg|svg|pdf|eps)"
+    ),
+    "absent": "语义对齐|逐要素解构|语义解构",
+    "hint": "引用参考图却无「参考材料语义对齐」段",
+}
+
+
+def test_refimg_flags_reference_without_semantic_section(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [REFIMG_RULE])
+    warns = dispatch.lint_taskbook("输入：`绘图参考/4ref2.png`（配色真源）")
+    assert len(warns) == 1
+    assert warns[0].startswith("[reference-image-needs-semantic-alignment]")
+
+
+def test_refimg_silent_when_semantic_section_present(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [REFIMG_RULE])
+    body = "## 参考材料语义对齐\n- 全集：`绘图参考/4ref2.png`；逐要素解构表见下"
+    assert dispatch.lint_taskbook(body) == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "跑 `pysci-figures build fig1_ep_band` 出图",  # figures 作 CLI 名，非路径
+        "输出目录 `article/figures/beam_scatter/`",  # 目录引用，无图像扩展名
+        "grep -rn 'figures' src/pysci",  # figures 作检索词
+    ],
+)
+def test_refimg_silent_on_non_reference_usage(tmp_path, monkeypatch, body):
+    """**防噪声**：figures 作 CLI 名/目录/检索词（无图像文件）不触发。"""
+    _seed(tmp_path, monkeypatch, [REFIMG_RULE])
+    assert dispatch.lint_taskbook(body) == [], body
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "参考材料：`2ref.png` 见 `artwork/final.png`",  # artwork 图像路径
+        "对照 data/research/1_gain_ep/article/figures/x/figure.png",  # figures 下图像
+        "见参考图中的方框语义",  # 「参考图」字面
+    ],
+)
+def test_refimg_flags_various_reference_forms(tmp_path, monkeypatch, body):
+    _seed(tmp_path, monkeypatch, [REFIMG_RULE])
+    warns = dispatch.lint_taskbook(body)
+    assert len(warns) == 1 and "reference-image-needs-semantic-alignment" in warns[0], (
+        body
+    )
+
+
+def test_repo_rule_refimg_engages_without_semantic_section():
+    """随附规则：真实 LINT_RULES_PATH 里引用参考图而无语义段 → 真的告警。"""
+    warns = dispatch.lint_taskbook("输入：`绘图参考/4ref2.png`（仅作配色参考）")
+    assert any("reference-image-needs-semantic-alignment" in w for w in warns)
+
+
+def test_repo_rule_refimg_silent_with_semantic_section():
+    body = (
+        "## 参考材料语义对齐\n\n- 全集：`绘图参考/4ref2.png`\n"
+        "- 逐要素解构表：内框→场区位置标记→图内几何\n"
+    )
+    warns = dispatch.lint_taskbook(body)
+    assert not any("reference-image-needs-semantic-alignment" in w for w in warns)

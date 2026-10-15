@@ -1,7 +1,9 @@
-"""rubric v0.3 的六处校准修订 + `figures inspect` 的在场性（backlog 20261015-204912）。
+"""rubric v0.3 六处校准 + v0.4 三处强化 的在场性（backlog 20261015-204912 / 返工1 M3）。
 
-来源：I.i3 校准审查报告 §4.1–4.7（首份实审对 v0.2 的可执行性观察，组长转立单）。本文件把
-「六条各有一处对应措辞（可逐条 grep 命中）」钉成机械判据，并顺带交叉核对工具面在场。
+v0.3 来源：I.i3 校准审查报告 §4.1–4.7（首份实审对 v0.2 的可执行性观察，组长转立单）。
+v0.4 来源：返工1 成因分析（a1）§环3/§4——「数字对但语义错」全链无环可拦、常识排版纪律
+未入判定词表。本文件把「各条各有一处对应措辞（可逐条 grep 命中）」钉成机械判据，并交叉
+核对工具面在场与 8KB 预算。
 """
 
 from __future__ import annotations
@@ -21,15 +23,59 @@ def _rubric() -> str:
     return RUBRIC.read_text(encoding="utf-8")
 
 
+def _lines_with(md: str, token: str) -> list[str]:
+    return [ln for ln in md.splitlines() if token in ln]
+
+
 # ---------------------------------------------------------------------------
-# 六处校准（§4.1 / §4.2 / §4.3 / §4.4工具 / §4.6 / §4.7）
+# 版本与修订史
 # ---------------------------------------------------------------------------
 def test_version_bumped_and_changelog():
     md = _rubric()
-    assert "scientific-plotting）v0.3" in md
-    assert "v0.3（2026-10-15）" in md, "缺 v0.3 修订说明"
+    assert "scientific-plotting）v0.4" in md
+    assert "v0.4（2026-10-15）" in md, "缺 v0.4 修订说明"
+    assert "v0.3（2026-10-15）" in md, "v0.3 修订史应保留"
 
 
+# ---------------------------------------------------------------------------
+# v0.4 三处强化（返工1 M3）：G2 意图对齐核对 / H4 零遮挡铁律四条 / D5 检查点词表
+# ---------------------------------------------------------------------------
+def test_item_v04_g2_intent_alignment_method():
+    """①G2 增「意图对齐核对」判定方法：产物元素↔参考语义↔物理意图三方核对。"""
+    md = _rubric()
+    assert "意图对齐核对" in md
+    for token in ("产物元素", "参考语义", "物理意图", "三方一致"):
+        assert token in md, f"G2 意图对齐核对缺三方要素：{token}"
+    assert "数字对但语义错" in md, "须能抓出「数字对但语义错」"
+
+
+def test_item_v04_h4_zero_occlusion_four_rules():
+    """②H4 零遮挡铁律四条（硬伤级）逐条可 grep。"""
+    md = _rubric()
+    h4 = " ".join(_lines_with(md, "| H4 |"))
+    assert "零遮挡铁律" in h4 and "硬伤级" in h4
+    for token in (
+        "文字/刻度值不压主图图线",  # ①
+        "图体与标题留间距",  # ②
+        "colorbar 标题↔色标、色标↔子图留边距",  # ③
+        "任何元素重叠",  # ④
+    ):
+        assert token in h4, f"H4 零遮挡铁律缺一条：{token}"
+    assert "FAIL 无例外" in h4
+
+
+def test_item_v04_d5_checkpoint_wordlist():
+    """③零遮挡铁律词表入 D5 检查点。"""
+    md = _rubric()
+    d5 = " ".join(_lines_with(md, "| D5 "))
+    assert "零遮挡铁律词表" in d5
+    for token in ("文字压图线", "刻度压图线", "标题贴身", "色标压子图", "任何元素重叠"):
+        assert token in d5, f"D5 词表缺：{token}"
+
+
+# ---------------------------------------------------------------------------
+# v0.3 六处校准（§4.1 / §4.2 / §4.3 / §4.4工具 / §4.6 / §4.7）
+# ---------------------------------------------------------------------------
 def test_item_41_physical_expectation_input():
     """§4.1：任务书可随附最小物理预期陈述；H1/D1 以之为判据。"""
     md = _rubric()
@@ -97,7 +143,7 @@ def test_rubric_within_budget():
 
 
 def test_rubric_still_generic_no_task_specific_recipe():
-    """通用性护栏：v0.3 的修订不得把本任务的具体返工指引搬进标准。"""
+    """通用性护栏：v0.3/v0.4 的修订不得把本任务的具体返工指引搬进标准。"""
     md = _rubric()
     for token in ("正方形", "菱形", "管槽", "行式", "列式"):
         assert token not in md, f"量表混入了任务特定措辞：{token}"

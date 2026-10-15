@@ -387,6 +387,7 @@ def build_figure_dir(
         eff_width = width or cfg.get("width") or "double"
         eff_aspect = aspect if aspect is not None else float(cfg.get("aspect", 0.618))
         eff_palette = palette or cfg.get("palette") or "okabe-ito"
+        eff_scienceplots = cfg.get("scienceplots")  # True/序列/None（缺省=关）
         eff_formats = tuple(formats) if formats else tuple(settings.default_formats)
         eff_stem = stem or cfg.get("stem") or figdir.name
         result.stem = eff_stem
@@ -397,7 +398,11 @@ def build_figure_dir(
         build_kwargs.setdefault("research_dir", figures_root_from_figdir(figdir))
 
         with style_context(
-            eff_style, width=eff_width, aspect=eff_aspect, palette=eff_palette
+            eff_style,
+            width=eff_width,
+            aspect=eff_aspect,
+            palette=eff_palette,
+            scienceplots=eff_scienceplots,
         ) as info:
             result.style_info = info
             build_kwargs["style"] = info
@@ -472,13 +477,18 @@ def built_figure(
     eff_width = width or cfg.get("width") or "double"
     eff_aspect = aspect if aspect is not None else float(cfg.get("aspect", 0.618))
     eff_palette = palette or cfg.get("palette") or "okabe-ito"
+    eff_scienceplots = cfg.get("scienceplots")
 
     module = _import_pipeline(pipeline)
     build_kwargs = dict(extra_kwargs or {})
     build_kwargs.setdefault("research_dir", figures_root_from_figdir(figdir))
 
     with style_context(
-        eff_style, width=eff_width, aspect=eff_aspect, palette=eff_palette
+        eff_style,
+        width=eff_width,
+        aspect=eff_aspect,
+        palette=eff_palette,
+        scienceplots=eff_scienceplots,
     ) as info:
         build_kwargs["style"] = info
         fig = _call_build_figure(module, build_kwargs)

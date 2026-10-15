@@ -27,7 +27,7 @@ r"""出版规范层：期刊风格预设、尺寸、字体链与 mathtext 约定
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
@@ -188,6 +188,61 @@ def list_presets() -> list[Preset]:
 
 
 # ---------------------------------------------------------------------------
+# scienceplots 审美层（可选依赖；契约层优先）
+# ---------------------------------------------------------------------------
+#: scienceplots（可选）默认叠加的风格序列，顺序即应用次序（后者覆盖前者）；``no-latex``
+#: 收尾确保 ``text.usetex=False``——本机未装 LaTeX 也能渲染。**优先级铁律**：本技能契约层
+#: （设计宽度 / 字体链 / 色盲调色板 / 可编辑矢量导出 / mathtext）**后应用、覆盖 scienceplots**，
+#: 故 scienceplots 只在非冲突键上生效（如 ``grid.linewidth``、``figure.facecolor``）。
+SCIENCEPLOTS_DEFAULT: tuple[str, ...] = ("science", "no-latex")
+
+
+def scienceplots_available() -> list[str]:
+    """返回本机 scienceplots 注册的全部风格名（未安装则空列表）。"""
+    try:
+        import matplotlib.style as mstyle
+        import scienceplots  # noqa: F401  # 导入即注册风格
+    except Exception:  # noqa: BLE001
+        return []
+    return sorted(mstyle.library)
+
+
+def scienceplots_rc(styles: Sequence[str] = SCIENCEPLOTS_DEFAULT) -> dict[str, object]:
+    """取 scienceplots 预设的 rcParams（作为**审美基底**，契约层随后覆盖）。
+
+    Args:
+        styles: scienceplots 风格名序列（如 ``("science", "no-latex")``）。
+
+    Returns:
+        合并后的 rcParams 片段。scienceplots 未安装时返回空 dict（fail-soft，不阻断绘图）；
+        请求了未注册的风格名则抛 ``KeyError``（列出可用名）——静默失效升级为可见失败。
+    """
+    try:
+        import matplotlib.style as mstyle
+        import scienceplots  # noqa: F401
+    except Exception:  # noqa: BLE001
+        return {}
+    merged: dict[str, object] = {}
+    for name in styles:
+        if name not in mstyle.library:
+            avail = ", ".join(scienceplots_available())
+            raise KeyError(f"scienceplots 无此风格 {name!r}；可用：{avail}")
+        merged.update(mstyle.library[name])
+    return merged
+
+
+def resolve_scienceplots(
+    scienceplots: bool | Sequence[str] | None,
+) -> tuple[str, ...]:
+    """把 ``scienceplots`` 开关解析为风格序列：``True`` -> 默认序列；序列原样；否则空。"""
+    if scienceplots is True:
+        return SCIENCEPLOTS_DEFAULT
+    if scienceplots:
+        return tuple(scienceplots)
+    return ()
+
+
+# ---------------------------------------------------------------------------
 # rcParams 组装 / 应用
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -201,6 +256,8 @@ class StyleInfo:
     resolved_font: str | None
     missing_fonts: list[str]
     palette: str
+    #: 本次生效的 scienceplots 风格序列（空=未启用审美层）。
+    scienceplots: tuple[str, ...] = ()
 
     def report(self) -> str:
         lines = [
@@ -210,6 +267,7 @@ class StyleInfo:
             f"resolved font   : {self.resolved_font or '(matplotlib default)'}",
             f"missing fonts   : {', '.join(self.missing_fonts) or '(none)'}",
             f"palette         : {self.palette}",
+            f"scienceplots    : {', '.join(self.scienceplots) or '(off)'}",
         ]
         return "\n".join(lines)
 
@@ -221,6 +279,7 @@ def build_rcparams(
     aspect: float = 0.618,
     fontsize: float | None = None,
     palette: str = "okabe-ito",
+    scienceplots: bool | Sequence[str] | None = None,
 ) -> tuple[dict[str, object], StyleInfo]:
     """组装一套完整 rcParams，并返回其 StyleInfo 摘要。
 
@@ -230,6 +289,8 @@ def build_rcparams(
         aspect: 高/宽比（默认黄金比 0.618）；决定 figsize 高度。
         fontsize: 覆盖预设正文字号。
         palette: 色盲友好调色板名（见 palette.py）。
+        scienceplots: 可选审美基底——``True`` 用默认序列（science + no-latex），序列则指定
+            scienceplots 风格名；None/False 不启用。**契约层覆盖它**（非冲突键才生效）。
     """
     from . import palette as _palette  # 延迟导入：避免与 palette 形成环
 
@@ -241,7 +302,11 @@ def build_rcparams(
 
     resolved, missing = resolve_font(p.font_chain)
 
-    rc: dict[str, object] = dict(_BASE_RC)
+    sp_styles = resolve_scienceplots(scienceplots)
+    rc: dict[str, object] = {}
+    if sp_styles:
+        rc.update(scienceplots_rc(sp_styles))  # 先：审美基底
+    rc.update(_BASE_RC)  # 后：契约层（覆盖 scienceplots 的冲突键）
     rc.update(p.extra_rc)
     rc["font.sans-serif"] = list(p.font_chain)
     rc["font.size"] = base_fs
@@ -263,6 +328,7 @@ def build_rcparams(
         resolved_font=resolved,
         missing_fonts=missing,
         palette=palette,
+        scienceplots=sp_styles,
     )
     return rc, info
 
@@ -274,6 +340,7 @@ def apply_style(
     aspect: float = 0.618,
     fontsize: float | None = None,
     palette: str = "okabe-ito",
+    scienceplots: bool | Sequence[str] | None = None,
 ) -> StyleInfo:
     """就地更新全局 ``plt.rcParams`` 并返回 StyleInfo。
 
@@ -285,6 +352,7 @@ def apply_style(
         aspect=aspect,
         fontsize=fontsize,
         palette=palette,
+        scienceplots=scienceplots,
     )
     plt.rcParams.update(rc)
     return info
@@ -298,6 +366,7 @@ def style_context(
     aspect: float = 0.618,
     fontsize: float | None = None,
     palette: str = "okabe-ito",
+    scienceplots: bool | Sequence[str] | None = None,
 ) -> Iterator[StyleInfo]:
     """上下文管理器：临时套用某期刊风格，退出后还原 rcParams。
 
@@ -306,6 +375,8 @@ def style_context(
         with style_context("aps", width="double") as info:
             fig, ax = plt.subplots()   # figsize 已按设计宽度设好
             ...
+
+    ``scienceplots=True`` 时先铺 scienceplots 审美基底、再由契约层覆盖（见 build_rcparams）。
     """
     rc, info = build_rcparams(
         preset_name,
@@ -313,6 +384,7 @@ def style_context(
         aspect=aspect,
         fontsize=fontsize,
         palette=palette,
+        scienceplots=scienceplots,
     )
     with plt.rc_context(rc):
         yield info
