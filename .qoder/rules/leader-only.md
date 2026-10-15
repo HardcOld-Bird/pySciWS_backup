@@ -62,11 +62,11 @@ alwaysApply: true
 | id | 职责 | 典型派发 |
 |---|---|---|
 | sim | 数值仿真（COMSOL 等） | 仿真、参数扫描 |
-| figure | 论文插图 | 论文图表 |
+| figure | 论文插图（mpl技术栈） | 论文图表、需程序化绘制的图像 |
 | writing | 论文写作＋**办公文档**（doc/docx/ppt/pptx/xlsx 等） | 报告、文档、幻灯片 |
 | theory | 理论推导与计算 | 推导、解析计算 |
-| lit | **文献研究（科研文章，多为 pdf）** | 检索、文献阅读、综述 |
-| drawing | AI 作画、效果图 | 视觉素材 |
+| lit | **文献研究（科研文章，多为 pdf）** | 文献获取/检索/阅读/综述 |
+| drawing | AI 作画、效果图 | 视觉素材、美学设计 |
 | model3d | 3D 建模 | 模型、场景 |
 | deputy | 跨域简单任务单体执行＋技术顾问（平级，有拒绝权+异议义务） | 归属不明、咨询 |
 | reviewer | 期刊审稿式主观质量审查（可选重炮，非硬门） | 用户点名或 review:true |
@@ -77,3 +77,4 @@ alwaysApply: true
 
 - **lit ↔ writing 分工**：科研文章（pdf）归 lit，办公文档（doc/docx/ppt/pptx）归
   writing——2026-10-15 实派偏过（doc/docx 误派 lit），拿不准先问 deputy。
+- **figure ↔ drawing 分工**：数据驱动/精确绘制归 figure，美术素材/审美指导归 drawing。常见协作——drawing 产出科研绘图审美参考图，figure 用mpl精确实现并加入真实数据落地。
