@@ -31,6 +31,16 @@ worktree 里建了这三样也不会随 `git merge` 转移到 main——这是�
 规格造未被要求的技能真本。该裁定由测试钉住（twin 见 `test_twin_intentionally_has_no_manifest_target`），
 manifest 里任何 target 指向的 pod 必须真实存在（同测试的反向护栏）。
 
+**`.qoder/skills` 是部署产物，不是「本级目录」**（backlog id=20261015-185941-devops）：真本
+不跟踪它，它只由 `pysci-dev sync` 按 manifest targets 写出，故——
+- 全新 worktree / 新克隆里**任何 pod 都没有**它（要跑 `pysci-dev sync` 才出现）；
+- **空目录**可能是外部/平台初始化留下的残留（2026-10-15 实测：无技能 pod 曾带空
+  `.qoder/skills`，而全树 grep、全新 worktree 全套 3467 例 + 目录绊线两种手法**都没有**
+  本仓写入者）——「谁建的」不在本仓可复现面，别为它改代码；
+- 因此**禁止「目录不存在」型断言**（那是把部署面的此刻读数当出厂默认，换棵树就误红）：
+  一律改断「**若目录在，则其中不得有部署内容**」；纪律由
+  `tests/skills/devops/test_pod_skills_face.py` 的机械闸执行（含 manifest 内外双向往返护栏）。
+
 ## 4. 注册面：无需预写 registry.json
 
 `orch dispatch` 前调 `ensure_member_defaults`，pod 目录存在即生成默认成员条目
