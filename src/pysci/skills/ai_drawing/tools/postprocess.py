@@ -10,6 +10,10 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +52,51 @@ def open_image(src: str | Path, *, mode: str | None = None) -> Image.Image:
     return img
 
 
+#: 破坏性写前的**原件回收区**默认名（CLI 侧传 ``settings.trash_dir``）。
+DEFAULT_TRASH_REL: str = "trash"
+
+
+def to_trash(
+    path: str | Path, trash_dir: str | Path, *, now: str | None = None
+) -> Path:
+    """把 *path* **复制**进回收区（带时间戳），返回回收副本路径。
+
+    为什么要它（backlog 20261015-210400 实案）：`adjust` 的覆盖/就地改写一旦用法出错就
+    **永久销毁**原件（本次误删两张已计费生成图、且快照 b64 已剥离无从恢复）。破坏性写之前
+    一律先在此留一份可完整找回的副本——回收区是运行态垃圾（gitignore 已排除），不占跟踪面。
+
+    回收失败**抛错**（绝不静默继续做破坏性写——那正是要防的事）。
+    """
+    src = Path(path)
+    if not src.exists():
+        raise FileNotFoundError(f"回收失败：原件不存在 {src}")
+    d = Path(trash_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    ts = now or datetime.now().strftime("%Y%m%d-%H%M%S")
+    n = 0
+    while True:
+        tail = "" if n == 0 else f"-{n}"
+        cand = d / f"{src.stem}.{ts}{tail}{src.suffix}"
+        if not cand.exists():
+            break
+        n += 1
+    shutil.copy2(src, cand)
+    return cand
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    """两个路径是否指向**同一个文件**（含不存在时的规范化路径比较）。"""
+    try:
+        if a.exists() and b.exists():
+            return a.samefile(b)
+    except OSError:
+        pass
+    try:
+        return a.resolve() == b.resolve()
+    except OSError:
+        return str(a.absolute()) == str(b.absolute())
+
+
 def adjust_image(
     src: str | Path,
     dst: str | Path,
@@ -60,8 +109,21 @@ def adjust_image(
     pad_color: tuple[int, ...] = (255, 255, 255),
     quality: int = 95,
     fmt: str | None = None,
+    allow_in_place: bool = False,
+    trash_dir: str | Path | None = None,
+    on_backup: Callable[[Path, Path], None] | None = None,
 ) -> Path:
-    """对单张图做一串简单调整并写出。
+    """对单张图做一串简单调整并写出（**破坏性写有护栏**）。
+
+    护栏（backlog 20261015-210400 实案：一次用法错误 + 管道掩盖退出码 → 两张已计费生成图
+    被永久销毁、快照 b64 已剥离无从恢复）：
+
+    1. **源先完整解码**（``load()``）——源坏/不完整在此失败，**动 dst 之前**就退出；
+    2. **就地覆盖（``dst`` 就是 ``src``）默认拒绝**——须显式 ``allow_in_place=True``；
+    3. **任何会销毁既有文件的写**（就地覆盖，或 ``dst`` 已存在）都先把该文件**复制进回收区**
+       （``to_trash``，带时间戳）——「误用不销毁、可从回收区完整找回」；未给 ``trash_dir`` 时
+       **拒绝**破坏性写（宁可不做，不可无备份地销毁）；
+    4. **原子落盘**：先写同目录 ``.tmp`` 再 ``os.replace``——中途失败绝不留截断的目标文件。
 
     调整顺序（固定，符合直觉）：crop → rotate → resize → pad → 色彩模式/格式转换。
 
@@ -83,6 +145,7 @@ def adjust_image(
     src = Path(src)
     dst = Path(dst)
     img = Image.open(src)
+    img.load()  # 立即解码：源坏/不完整在**动 dst 之前**失败（护栏 1）
 
     if crop is not None:
         x0, y0, x1, y1 = crop
@@ -111,6 +174,23 @@ def adjust_image(
     if mode:
         img = img.convert(mode)
 
+    same = _same_file(src, dst)
+    if same and not allow_in_place:
+        raise ValueError(
+            f"目标是源图自身（就地覆盖）：{src} —— 就地改写会销毁原图。"
+            "确认要就地覆盖请加 --confirm（仍会先把原件移入回收区）；更稳妥是另给 --out。"
+        )
+    destructive = same or dst.exists()
+    if destructive:
+        if trash_dir is None:
+            raise ValueError(
+                f"拒绝破坏性写：{dst} 已存在或被就地覆盖，但未提供回收区（trash_dir）——"
+                "宁可不做，也不做无备份的销毁。"
+            )
+        backup = to_trash(dst, trash_dir)
+        if on_backup is not None:
+            on_backup(dst, backup)
+
     dst.parent.mkdir(parents=True, exist_ok=True)
     out_fmt = _resolve_format(dst, fmt)
     save_kwargs: dict[str, Any] = {}
@@ -118,7 +198,16 @@ def adjust_image(
         save_kwargs["quality"] = int(quality)
         if out_fmt == "JPEG" and img.mode in ("RGBA", "P", "LA"):
             img = img.convert("RGB")  # JPEG 不支持 alpha
-    img.save(dst, format=out_fmt, **save_kwargs)
+    tmp = dst.with_name(dst.name + ".tmp")
+    try:
+        img.save(tmp, format=out_fmt, **save_kwargs)
+        os.replace(tmp, dst)  # 原子替换：失败不留截断目标（护栏 4）
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
     return dst
 
 
