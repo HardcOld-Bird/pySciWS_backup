@@ -40,7 +40,6 @@ import copy
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -49,7 +48,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, ORCHESTRATION_ROOT, PODS_ROOT, PROJECT_ROOT
 
-from . import presets, routing
+from . import presets, procs, routing
 
 REGISTRY_PATH: Path = ORCH_STATE_ROOT / "registry.json"
 
@@ -1178,7 +1177,7 @@ def list_models_output(*, timeout_s: int = 60) -> str:
         OSError / subprocess.TimeoutExpired: 调用失败/超时——是否 fail-open 由调用方决定。
     """
     exe = resolve_exe()
-    proc = subprocess.run(
+    proc = procs.run_hidden(
         [str(exe), "--list-models"],
         capture_output=True,
         text=True,
@@ -1369,7 +1368,7 @@ def dirty_tracked_state(
         影响主流程（fail-open，README §4.3）。
     """
     try:
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             [
                 "git",
                 "status",

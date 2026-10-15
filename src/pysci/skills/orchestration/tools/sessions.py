@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import procs
 from .registry import Member, pod_sessions_dir, resolve_exe
 
 _LINE_RE = re.compile(
@@ -219,7 +220,7 @@ def prune(member: Member, sid: str) -> str:
     """
     exe = resolve_exe()
     try:
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             [str(exe), "--cwd", str(member.pod), "--list-sessions"],
             capture_output=True,
             text=True,
@@ -238,7 +239,7 @@ def prune(member: Member, sid: str) -> str:
             return (
                 f"[!] 聚合列表未匹配到 {sid[:8]}，仅在 registry 标记 pruned（不删文件）"
             )
-        subprocess.run(
+        procs.run_hidden(
             [str(exe), "--cwd", str(member.pod), "--delete-session", idx],
             capture_output=True,
             text=True,

@@ -64,7 +64,7 @@ from dotenv import dotenv_values
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
-from . import presets, routing
+from . import presets, procs, routing
 from .ledger import read_all
 from .registry import DEFAULT_JURY, Registry, orchestration_rel
 
@@ -214,7 +214,7 @@ def run_git(*args: str) -> str:
     """在项目根跑一条 git 命令取材料（法院模式：材料缺失只记录原因，不崩整案）。"""
     cmd = " ".join(["git", *args])
     try:
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             ["git", *args],
             cwd=str(PROJECT_ROOT),
             capture_output=True,

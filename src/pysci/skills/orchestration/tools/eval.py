@@ -20,7 +20,6 @@ import argparse
 import json
 import re
 import statistics
-import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +27,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
+from . import procs
 from .checks import run_checks
 from .delivery import Artifact
 from .dispatch import do_dispatch
@@ -342,7 +342,7 @@ def revert_new_dirt(member_id: str, before: set[str]) -> list[str]:
     if not fresh:
         return []
     try:
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             ["git", "checkout", "--", *fresh],
             cwd=str(PROJECT_ROOT),
             capture_output=True,

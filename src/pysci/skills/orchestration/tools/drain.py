@@ -190,7 +190,7 @@ def _pid_alive(pid: int) -> bool:
         return False
     if sys.platform == "win32":
         try:
-            proc = subprocess.run(
+            proc = procs.run_hidden(
                 ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
                 capture_output=True,
                 text=True,

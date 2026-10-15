@@ -23,12 +23,12 @@ REG = "orchestration/state/registry.json"
 
 
 def _fake_run(monkeypatch, *, rc=0, stdout=""):
-    """把 registry 命名空间里的 subprocess.run 换成定值回放（不真起 git）。"""
+    """把 registry 的 spawn 口径（``procs.run_hidden``）换成定值回放（不真起 git）。"""
 
     def run(cmd, *a, **kw):
         return SimpleNamespace(returncode=rc, stdout=stdout, stderr="")
 
-    monkeypatch.setattr(reg_mod.subprocess, "run", run)
+    monkeypatch.setattr(reg_mod, "procs", SimpleNamespace(run_hidden=run))
 
 
 def test_dirty_lines_parsed_is_order_kept(monkeypatch):
@@ -66,7 +66,7 @@ def test_git_unavailable_fails_open(monkeypatch):
     def boom(*a, **kw):
         raise FileNotFoundError("git")
 
-    monkeypatch.setattr(reg_mod.subprocess, "run", boom)
+    monkeypatch.setattr(reg_mod, "procs", SimpleNamespace(run_hidden=boom))
     assert reg_mod.dirty_tracked_state() == []
 
 
@@ -78,7 +78,7 @@ def test_scoped_to_state_path_only(monkeypatch):
         seen["cmd"] = cmd
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(reg_mod.subprocess, "run", run)
+    monkeypatch.setattr(reg_mod, "procs", SimpleNamespace(run_hidden=run))
     reg_mod.dirty_tracked_state()
     assert seen["cmd"][-2:] == ["--", reg_mod.STATE_REL_PATH]
     assert "--untracked-files=no" in seen["cmd"]

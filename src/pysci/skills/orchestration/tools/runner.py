@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -310,14 +309,9 @@ def run_headless(
     """
     # Popen 而非 subprocess.run：后者不暴露子进程 pid，而 on_spawn 要的恰是它（超时语义
     # 在此手工复刻——kill + 二次 communicate，与 subprocess.run 的超时路径一致）。
-    spawn_kwargs: dict[str, Any] = {}
-    if sys.platform == "win32":
-        # 空终端根治（用户实测 2026-10-14）：本函数常由**分离进程**（drain worker，自己没有
-        # 控制台）派起组员 headless 会话。console 子系统程序没有 console 属性时 Windows 会
-        # 给它开一个**新可见窗口**，而 stdout/stderr 是管道 → 窗口里空无一物＝「空终端」。
-        # 统一隐藏窗口策略（与 drain._spawn_detached 同款）：有无父控制台都不开窗。
-        spawn_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-    proc = subprocess.Popen(
+    # 窗口隐藏走唯一口径 ``procs.popen_hidden``（win32 恒 CREATE_NO_WINDOW；本函数常由
+    # **分离进程** drain worker 派起组员 headless 会话，无控制台时裸 spawn 会闪空终端）。
+    proc = procs.popen_hidden(
         cmd,
         cwd=str(cwd),
         env=env,
@@ -326,7 +320,6 @@ def run_headless(
         text=True,
         encoding="utf-8",
         errors="replace",
-        **spawn_kwargs,
     )
     if on_spawn is not None:
         on_spawn(proc.pid)
