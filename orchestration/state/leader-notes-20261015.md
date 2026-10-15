@@ -23,3 +23,14 @@
   对真实 ORCH_STATE_ROOT/data 面的写操作直接 fail（或全部 autouse 重定向到 tmp），
   让「漏隔离」从静默污染变成测试即刻失败。零星补 patch 治标不治本。
 - 泄漏条目已清理（sim 队列 1 条 failed 留痕）；孤儿事件 append-only 不删。
+
+## 机制缺口立案清单（2026-10-15 下午累积，待 devops 立单）
+
+1. **shutil.move 归档 reply 源缺失崩溃**（dispatch.py:1596）：源文件已不存在时 FileNotFoundError 逃出
+   → 批次异常、已派发未结账坠落重派→双写者（实案 job 20261015-122406）。修法：move 前 exists() 守卫或
+   except FileNotFoundError fail-soft（归档面不反噬派发）。
+2. **任务书白名单声明不注入 pod-guard**：任务书「白名单」段仅 lint 提示，PYSCI_TASK_DIRS 只来自 --dirs/
+   plan step dirs——声明面与注入面脱节（b2 实案被拦）。修法：派发时把任务书白名单段自动并入 PYSCI_TASK_DIRS
+   或 lint 强制 plan step dirs 同步。
+3. **机械验收 orch-tests 判据被哨兵留痕行污染误杀**（A.a5 实案）：output_tail 被哨兵豁免留痕 print 占据→
+   判据解析 fail。修法：判据取测试退出码/末行摘要，或哨兵留痕写 stderr/独立文件。

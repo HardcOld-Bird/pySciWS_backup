@@ -2290,11 +2290,44 @@
       "kind": "defect",
       "success_criteria": "- `git ls-files orchestration/state/deliveries/ data/taskbooks/` 的输出与「落点是否入 git」的声明一致（要么非空、要么注释改口），且 `git status` 不再出现这两个目录的 `?? `；判据可用上面同一组命令复核。\n- 若选 ①：新生成的一件交付留档在 `git log --stat` 可见；若选 ②：源码内不再存在「（入 git）」与「未跟踪」并存的矛盾表述（grep 复核）。",
       "evidence_file": "orchestration/state/suggestions/approved/20261015-085823-devops.md",
-      "status": "in_progress",
+      "status": "needs_leader",
       "proposed": "2026-10-15T08:59:48+08:00",
-      "note": "",
+      "note": "drain 跳过（交付=run_failed）：FileNotFoundError: [WinError 2] 系统找不到指定的文件。\n【全文已留审计副本：pods/devops/outbox/delivery-*.xml】｜已自动立续作单 20261015-125314-salvage",
       "started_at": "2026-10-15T08:59:50+08:00",
-      "worktree": "20261015-085823-devops"
+      "worktree": "20261015-085823-devops",
+      "needs_leader_at": "2026-10-15T12:53:12+08:00"
+    },
+    {
+      "id": "20261015-125314-salvage",
+      "member": "devops",
+      "summary": "（续作 20261015-085823-devops）**声明「入 git」的两个内容面实际全部未跟踪：`orchestration/state/deliveries/` 与 `data/taskbooks/`**",
+      "kind": "defect",
+      "success_criteria": "- `git ls-files orchestration/state/deliveries/ data/taskbooks/` 的输出与「落点是否入 git」的声明一致（要么非空、要么注释改口），且 `git status` 不再出现这两个目录的 `?? `；判据可用上面同一组命令复核。\n- 若选 ①：新生成的一件交付留档在 `git log --stat` 可见；若选 ②：源码内不再存在「（入 git）」与「未跟踪」并存的矛盾表述（grep 复核）。",
+      "evidence": "orchestration/state/suggestions/approved/20261015-085823-devops.md",
+      "source": "salvage",
+      "salvage": {
+        "worktree": "20261015-085823-devops",
+        "branch": "wt-20261015-085823-devops",
+        "commit": "9157f13",
+        "path": ".qoder/worktrees/20261015-085823-devops",
+        "reason": "run_failed",
+        "entry": "20261015-085823-devops",
+        "registered": true,
+        "present": true,
+        "uncommitted": false,
+        "unmerged_before": 0,
+        "salvaged_at": "2026-10-15T12:53:14+08:00",
+        "from": "20261015-085823-devops",
+        "gen": 1
+      },
+      "status": "done",
+      "proposed": "2026-10-15T12:53:14+08:00",
+      "note": "drain 批量销账（commit 9157f13）",
+      "started_at": "2026-10-15T12:53:14+08:00",
+      "worktree": "20261015-125314-salvage",
+      "done_at": "2026-10-15T13:05:55+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261015-125314-salvage"
     }
   ]
 }

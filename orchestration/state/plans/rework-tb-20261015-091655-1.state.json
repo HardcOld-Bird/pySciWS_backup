@@ -37,16 +37,15 @@
     },
     {
       "id": "A.a5",
-      "status": "queued",
+      "status": "done",
       "task_file": "orchestration/pods/devops/inbox/task-20261015-info-arch.md",
-      "session_id": null,
-      "kind": null,
-      "review": "pending",
-      "job_id": "devops-20261015-092923-rework-tb-20261015-091655-1-A.a5"
+      "session_id": "478b69ac-8d7a-4e39-af6c-32e42ff449e8",
+      "kind": "result",
+      "review": "pending"
     },
     {
       "id": "BC.B.b1",
-      "status": "pending",
+      "status": "done",
       "task_file": null,
       "session_id": null,
       "kind": null,
@@ -54,15 +53,15 @@
     },
     {
       "id": "BC.B.b2",
-      "status": "pending",
-      "task_file": null,
-      "session_id": null,
-      "kind": null,
+      "status": "done",
+      "task_file": "orchestration/pods/writing/inbox/task-20261015-rework-b2.md",
+      "session_id": "315595a7-6b54-45b7-9f4d-ea7c9b3703a0",
+      "kind": "result",
       "review": "pending"
     },
     {
       "id": "BC.B.b_last",
-      "status": "pending",
+      "status": "done",
       "task_file": null,
       "session_id": null,
       "kind": null,
@@ -70,7 +69,7 @@
     },
     {
       "id": "BC.C.c1",
-      "status": "pending",
+      "status": "done",
       "task_file": null,
       "session_id": null,
       "kind": null,
@@ -78,7 +77,7 @@
     },
     {
       "id": "BC.C.c2",
-      "status": "pending",
+      "status": "done",
       "task_file": null,
       "session_id": null,
       "kind": null,
@@ -86,20 +85,22 @@
     },
     {
       "id": "BC.C.c3",
-      "status": "pending",
+      "status": "done",
       "task_file": null,
       "session_id": null,
       "kind": null,
-      "review": "pending"
+      "review": "pending",
+      "evidence": "orchestration/pods/devops/inbox/task-20261015-inspector-info-arch.md"
     },
     {
       "id": "BC.C.c4",
-      "status": "pending",
+      "status": "done",
       "task_file": null,
       "session_id": null,
       "kind": null,
-      "review": "pending"
+      "review": "pending",
+      "note": "账实修正（组长 2026-10-15）：实际已交付合并（inspectd 菜单 info-architecture 项，7425412/048a427，全量 3326 绿）——状态被 amend 对账误重置"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-15T13:25:00+08:00"
 }

@@ -12,4 +12,10 @@
 
 ## 经验
 
-（暂无）
+- **白名单未注入时 pod-guard 会拦白名单目录（2026-10-15 实测）**：任务书 `## 白名单（写权限）`
+  段是**声明面**，**不会自动注入** pod-guard 的 `PYSCI_TASK_DIRS`——后者只来自派发 `--dirs` /
+  plan step `dirs`。`dirs` 为空时，对任务书白名单目录的 `Write/Edit` 会被拦（`EXIT=2`）。
+  排查：`echo "$PYSCI_TASK_DIRS"`、看 `orchestration/state/queues/<member>.json` 的 `"dirs"`。
+  **处置**：勿 Bash 绕行（README §9 定性为刻意违规）；把成品留 `bench/`，回 `<blocked
+  tags="whitelist_conflict" reason="blocked_by_env">` 并提 `<infra_suggestion kind="defect">`，
+  由组长补 `--dirs` 重派或 `cp` 代写。重派带 `--dirs` 后即可原地 `Write` 覆盖。

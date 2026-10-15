@@ -1,0 +1,34 @@
+{
+  "plan_id": "rework-smooth-20261015.plan",
+  "created": "2026-10-15T13:29:32+08:00",
+  "goal": "返工流首跑摩擦根治——三机制缺口 + evidence role 化 lint + 账实保护 + advance 动作分离 + 双写者防护",
+  "steps": [
+    {
+      "id": "f1",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261015-fix3.md",
+      "session_id": "478b69ac-8d7a-4e39-af6c-32e42ff449e8",
+      "kind": "result",
+      "review": "pending"
+    },
+    {
+      "id": "f2",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261015-f2-ledger.md",
+      "session_id": "478b69ac-8d7a-4e39-af6c-32e42ff449e8",
+      "kind": "result",
+      "review": "pending",
+      "job_id": "devops-20261015-134510-rework-smooth-20261015.plan-f2"
+    },
+    {
+      "id": "f3",
+      "status": "done",
+      "task_file": "orchestration/pods/devops/inbox/task-20261015-f3-writer-guard.md",
+      "session_id": "478b69ac-8d7a-4e39-af6c-32e42ff449e8",
+      "kind": "result",
+      "review": "pending",
+      "job_id": "devops-20261015-140208-rework-smooth-20261015.plan-f3"
+    }
+  ],
+  "completed_at": "2026-10-15T14:12:31+08:00"
+}

@@ -1,0 +1,334 @@
+{
+  "case_id": "tb-20261015-091655-1-discoverability",
+  "case_file": "data\\taskbooks\\tb-20261015-091655-1-discoverability.md",
+  "ts": "2026-10-15T13:08:13+08:00",
+  "question": "案卷：监察改进可发现性裁定（inspector 能否自行发现「信息散而不聚」）",
+  "options": {
+    "A": "**现有机制足以高效发现**：inspector 巡检菜单（8 项随机抽取，含 rubric/self_cover\n标注）与发现→分类→分流链路已覆盖「交付质量」面——巡检读交付物时按既有 rubric\n能够注意到维度散落并立案。无需新增机制。",
+    "B": "**需要改进**：现有巡检菜单聚焦流程/台账/基建面（预算、留痕、队列、测试等），对\n「交付物信息组织质量」无专门判据——「时间节点散落」在巡检眼里不是可立案的缺陷\n（内容完整、出处齐全、无错误），只有用户实际查阅时才暴露。需要给 inspector 补\n「信息架构」类巡检判据（对照验收纪律 §4 抽查高频维度集中呈现）。"
+  },
+  "targets": [
+    "orchestration/state/inspector",
+    "data/大任务/1_文档阅读与需关注事项总结/0_待关注事项总结.md"
+  ],
+  "dossier_hash": "34dd730f4e7c6809",
+  "dossier_chars": 6446,
+  "dossier": "# 案卷 tb-20261015-091655-1-discoverability\n\n## 问题\n案卷：监察改进可发现性裁定（inspector 能否自行发现「信息散而不聚」）\n\n## 选项 A\n**现有机制足以高效发现**：inspector 巡检菜单（8 项随机抽取，含 rubric/self_cover\n标注）与发现→分类→分流链路已覆盖「交付质量」面——巡检读交付物时按既有 rubric\n能够注意到维度散落并立案。无需新增机制。\n\n## 选项 B\n**需要改进**：现有巡检菜单聚焦流程/台账/基建面（预算、留痕、队列、测试等），对\n「交付物信息组织质量」无专门判据——「时间节点散落」在巡检眼里不是可立案的缺陷\n（内容完整、出处齐全、无错误），只有用户实际查阅时才暴露。需要给 inspector 补\n「信息架构」类巡检判据（对照验收纪律 §4 抽查高频维度集中呈现）。\n\n## 证据\n- 缺陷实例：首版总结（0_待关注事项总结.md v1，git 历史可查）内容完整但时间线散落\n  1.1/1.3/2.1 各节——用户驳回实证「只有用起来才发现」。\n- inspector 现状：`orchestration/state/inspector/` findings 历史（findings.jsonl）\n  中无「信息组织」类发现——该类缺陷从未被巡检捕获。\n- 验收纪律 §4（2026-10-15 新增）：判据已存在，可机械抽查——巡检面引用它即可。\n\n## 自动附着材料（CLI 确定性抓取，非撰写者所写）\n\n### git diff --stat\norchestration/state/backlog.json                   | 39 ++++++++++++++++++++--\n .../plans/rework-tb-20261015-091655-1.plan.yaml    |  4 +--\n .../plans/rework-tb-20261015-091655-1.state.json   | 20 +++++------\n orchestration/state/registry.json                  | 14 +++-----\n .../state/replies/devops/20261015-085823-devops.md |  5 ---\n 5 files changed, 53 insertions(+), 29 deletions(-)\n\n### git diff\ndiff --git a/orchestration/state/backlog.json b/orchestration/state/backlog.json\nindex f72b20e..9025880 100644\n--- a/orchestration/state/backlog.json\n+++ b/orchestration/state/backlog.json\n@@ -2290,11 +2290,44 @@\n       \"kind\": \"defect\",\n       \"success_criteria\": \"- `git ls-files orchestration/state/deliveries/ data/taskbooks/` 的输出与「落点是否入 git」的声明一致（要么非空、要么注释改口），且 `git status` 不再出现这两个目录的 `?? `；判据可用上面同一组命令复核。\\n- 若选 ①：新生成的一件交付留档在 `git log --stat` 可见；若选 ②：源码内不再存在「（入 git）」与「未跟踪」并存的矛盾表述（grep 复核）。\",\n       \"evidence_file\": \"orchestration/state/suggestions/approved/20261015-085823-devops.md\",\n-      \"status\": \"in_progress\",\n+      \"status\": \"needs_leader\",\n       \"proposed\": \"2026-10-15T08:59:48+08:00\",\n-      \"note\": \"\",\n+      \"note\": \"drain 跳过（交付=run_failed）：FileNotFoundError: [WinError 2] 系统找不到指定的文件。\\n【全文已留审计副本：pods/devops/outbox/delivery-*.xml】｜已自动立续作单 20261015-125314-salvage\",\n       \"started_at\": \"2026-10-15T08:59:50+08:00\",\n-      \"worktree\": \"20261015-085823-devops\"\n+      \"worktree\": \"20261015-085823-devops\",\n+      \"needs_leader_at\": \"2026-10-15T12:53:12+08:00\"\n+    },\n+    {\n+      \"id\": \"20261015-125314-salvage\",\n+      \"member\": \"devops\",\n+      \"summary\": \"（续作 20261015-085823-devops）**声明「入 git」的两个内容面实际全部未跟踪：`orchestration/state/deliveries/` 与 `data/taskbooks/`**\",\n+      \"kind\": \"defect\",\n+      \"success_criteria\": \"- `git ls-files orchestration/state/deliveries/ data/taskbooks/` 的输出与「落点是否入 git」的声明一致（要么非空、要么注释改口），且 `git status` 不再出现这两个目录的 `?? `；判据可用上面同一组命令复核。\\n- 若选 ①：新生成的一件交付留档在 `git log --stat` 可见；若选 ②：源码内不再存在「（入 git）」与「未跟踪」并存的矛盾表述（grep 复核）。\",\n+      \"evidence\": \"orchestration/state/suggestions/approved/20261015-085823-devops.md\",\n+      \"source\": \"salvage\",\n+      \"salvage\": {\n+        \"worktree\": \"20261015-085823-devops\",\n+        \"branch\": \"wt-20261015-085823-devops\",\n+        \"commit\": \"9157f13\",\n+        \"path\": \".qoder/worktrees/20261015-085823-devops\",\n+        \"reason\": \"run_failed\",\n+        \"entry\": \"20261015-085823-devops\",\n+        \"registered\": true,\n+        \"present\": true,\n+        \"uncommitted\": false,\n+        \"unmerged_before\": 0,\n+        \"salvaged_at\": \"2026-10-15T12:53:14+08:00\",\n+        \"from\": \"20261015-085823-devops\",\n+        \"gen\": 1\n+      },\n+      \"status\": \"done\",\n+      \"proposed\": \"2026-10-15T12:53:14+08:00\",\n+      \"note\": \"drain 批量销账（commit 9157f13）\",\n+      \"started_at\": \"2026-10-15T12:53:14+08:00\",\n+      \"worktree\": \"20261015-125314-salvage\",\n+      \"done_at\": \"2026-10-15T13:05:55+08:00\",\n+      \"batch_size\": 1,\n+      \"batch_seed\": \"20261015-125314-salvage\"\n     }\n   ]\n }\ndiff --git a/orchestration/state/plans/rework-tb-20261015-091655-1.plan.yaml b/orchestration/state/plans/rework-tb-20261015-091655-1.plan.yaml\nindex ed931bc..249b3e4 100644\n--- a/orchestration/state/plans/rework-tb-20261015-091655-1.plan.yaml\n+++ b/orchestration/state/plans/rework-tb-20261015-091655-1.plan.yaml\n@@ -49,8 +49,8 @@ steps:\n       brief: 重拆解返工\n       role: rework_plan\n     - id: b2\n-      member: devops\n-      brief: 返工生产环节\n+      member: writing\n+      brief: 返工生产环节（按 §5 分工归 writing：总结/文档类）——升级开题总结：补硬性时间节点集中章节+信息架构原则兑现\n     - id: b_last\n       kind: self\n       brief: 全流程报告组装\ndiff --git a/orchestration/state/plans/rework-tb-20261015-091655-1.state.json b/orchestration/state/plans/rework-tb-20261015-091655-1.state.json\nindex 9557938..644937d 100644\n--- a/orchestration/state/plans/rework-tb-20261015-091655-1.state.json\n+++ b/orchestration/state/plans/rework-tb-20261015-091655-1.state.json\n@@ -37,16 +37,15 @@\n     },\n     {\n       \"id\": \"A.a5\",\n-      \"status\": \"queued\",\n+      \"status\": \"done\",\n       \"task_file\": \"orchestration/pods/devops/inbox/ta[REDACTED].md\",\n-      \"session_id\": null,\n-      \"kind\": null,\n-      \"review\": \"pending\",\n-      \"job_id\": \"devops-20261015-092923-rework-tb-20261015-091655-1-A.a5\"\n+      \"session_id\": \"478b69ac-8d7a-4e39-af6c-32e42ff449e8\",\n+      \"kind\": \"result\",\n+      \"review\": \"pending\"\n     },\n     {\n       \"id\": \"BC.B.b1\",\n-      \"status\": \"pending\",\n\n…（截断：git diff 全文 6211 B）\n\n### git log --oneline -5\n185e1ed chore(state): 任务书入库（新建即提交）\nbb8f448 chore(state): 交付全文留档入库（新留档即提交）\n0860fc1 chore(devops): 技能部署台账同步（sync 落盘即提交）\n665b3a8 Merge branch 'wt-ta[REDACTED]'\nf740754 docs(orchestration): 验收纪律补「高频查阅维度集中呈现」硬判据（A.a5）\n\n### 涉事文件字节读数\n- orchestration/state/inspector: 目录，44 文件 / 88684 B\n- data/大任务/1_文档阅读与需关注事项总结/0_待关注事项总结.md: 14652 B / 98 行 / sha256=bcee99e2b75d32f2\n\n### 相关台账行\n- 2026-10-12T18:29:55+08:00 inspector kind=result plan=- turns=24 tags=-\n- 2026-10-12T21:17:27+08:00 inspector kind=result plan=- turns=20 tags=-\n- 2026-10-13T03:42:33+08:00 inspector kind=result plan={'tier': 'pro', 'usable': ['99127e47-626d-421f-b0cb-02ffdbf1ada7', 'Qwen3.8-Flash'], 'skipped': [], 'forced_probe': ''} turns=15 tags=-\n- 2026-10-13T05:01:49+08:00 inspector kind=result plan={'tier': 'pro', 'usable': ['99127e47-626d-421f-b0cb-02ffdbf1ada7', 'Qwen3.8-Flash'], 'skipped': [], 'forced_probe': ''} turns=24 tags=-\n- 2026-10-13T16:56:39+08:00 inspector kind=result plan={'tier': 'pro', 'usable': ['99127e47-626d-421f-b0cb-02ffdbf1ada7', '1a54cc57-e614-4521-80cc-447de31dc896', 'Qwen3.8-Flash'], 'skipped': [], 'forced_probe': ''} turns=23 tags=-\n- 2026-10-15T07:48:59+08:00 lit kind=result plan={'tier': 'main', 'usable': ['1a54cc57-e614-4521-80cc-447de31dc896', 'DeepSeek-Flash'], 'skipped': [], 'forced_probe': ''} turns=12 tags=-\n",
+  "brief": {
+    "path": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\orchestration\\state\\evals\\jury-brief.md",
+    "approved": false,
+    "hash": "4e026d2b65bb85e1"
+  },
+  "seats": [
+    {
+      "name": "glm",
+      "model": "glm-5.3",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "key_env": "GLM_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "kimi",
+      "model": "kimi-k2.6",
+      "base_url": "https://api.moonshot.cn/v1",
+      "key_env": "KIMI_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "mimo",
+      "model": "mimo-v2.6-pro",
+      "base_url": "https://api.xiaomimimo.com/v1",
+      "key_env": "MIMO_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "siliconflow",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "key_env": "SILICONFLOW_API_KEY",
+      "role": "fallback",
+      "defect": "",
+      "reason": "被评模型 deepseek 同族，依 §4 不得入庭",
+      "usable": true
+    }
+  ],
+  "routing": {
+    "preset": "deepseek",
+    "hidden": false,
+    "producer": "deepseek",
+    "panel": [
+      "glm",
+      "kimi",
+      "mimo"
+    ]
+  },
+  "fallback": {
+    "enabled": true,
+    "used": false,
+    "notice": "",
+    "missing_primary": []
+  },
+  "panel": [
+    "glm-5.3",
+    "kimi-k2.6",
+    "mimo-v2.6-pro"
+  ],
+  "attempts": 1,
+  "jurors": [
+    {
+      "seat": "glm",
+      "model": "glm-5.3",
+      "consistent": true,
+      "vote": "B",
+      "ballots": [
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "AB",
+          "choice": "B",
+          "real": "B",
+          "reason": "findings 历史无信息组织类发现，缺陷仅靠用户驳回暴露；§4 判据已存在可机械抽查，巡检确有盲区",
+          "confidence": 0.82,
+          "usage": {
+            "completion_tokens": 2060,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1997
+            },
+            "prompt_tokens": 3966,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 6026
+          },
+          "error": ""
+        },
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "BA",
+          "choice": "A",
+          "real": "B",
+          "reason": "findings 史无信息组织类发现，缺陷经用户驳回才暴露；§4 已有可机械抽查判据，补入巡检面低成本闭环。",
+          "confidence": 0.75,
+          "usage": {
+            "completion_tokens": 3700,
+            "completion_tokens_details": {
+              "reasoning_tokens": 3638
+            },
+            "prompt_tokens": 3966,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 7666
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 7932,
+        "completion_tokens": 5760,
+        "total_tokens": 13692
+      }
+    },
+    {
+      "seat": "kimi",
+      "model": "kimi-k2.6",
+      "consistent": true,
+      "vote": "B",
+      "ballots": [
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "AB",
+          "choice": "B",
+          "real": "B",
+          "reason": "证据显示inspector历史findings从无「信息组织」类发现，用户驳回实证曾漏检；引用已有§4补判据，低成本且提升可靠性。",
+          "confidence": 0.85,
+          "usage": {
+            "prompt_tokens": 3672,
+            "completion_tokens": 1258,
+            "total_tokens": 4930,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1204
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "BA",
+          "choice": "A",
+          "real": "B",
+          "reason": "findings.jsonl 从无信息组织类发现，用户驳回实证「用起来才发现」；引用既有 §4 补巡检判据可机械验证",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 3672,
+            "completion_tokens": 3016,
+            "total_tokens": 6688,
+            "completion_tokens_details": {
+              "reasoning_tokens": 2964
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 7344,
+        "completion_tokens": 4274,
+        "total_tokens": 11618
+      }
+    },
+    {
+      "seat": "mimo",
+      "model": "mimo-v2.6-pro",
+      "consistent": true,
+      "vote": "B",
+      "ballots": [
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "AB",
+          "choice": "B",
+          "real": "B",
+          "reason": "findings.jsonl 无信息组织类发现且缺陷确由用户实证暴露；§4 判据已机械可查（f740754），引用既有判据成本低、可追责",
+          "confidence": 0.72,
+          "usage": {
+            "completion_tokens": 304,
+            "prompt_tokens": 4393,
+            "total_tokens": 4697,
+            "completion_tokens_details": {
+              "reasoning_tokens": 233
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "BA",
+          "choice": "A",
+          "real": "B",
+          "reason": "附着材料显示 findings.jsonl 无信息组织类发现，缺陷仅用户实查暴露；验收纪律 §4 判据已机械可查，引用成本低。",
+          "confidence": 0.78,
+          "usage": {
+            "completion_tokens": 300,
+            "prompt_tokens": 4393,
+            "total_tokens": 4693,
+            "completion_tokens_details": {
+              "reasoning_tokens": 240
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 8786,
+        "completion_tokens": 604,
+        "total_tokens": 9390
+      }
+    }
+  ],
+  "votes": {
+    "glm": "B",
+    "kimi": "B",
+    "mimo": "B"
+  },
+  "tally": {
+    "A": 0,
+    "B": 3
+  },
+  "inconclusive": [],
+  "verdict": "B",
+  "escalate": "",
+  "final_verdict": "",
+  "decided_by": "",
+  "twin": null,
+  "usage": {
+    "prompt_tokens": 24062,
+    "completion_tokens": 10638,
+    "total_tokens": 34700
+  },
+  "usage_by_model": {
+    "glm-5.3": {
+      "prompt_tokens": 7932,
+      "completion_tokens": 5760,
+      "total_tokens": 13692
+    },
+    "kimi-k2.6": {
+      "prompt_tokens": 7344,
+      "completion_tokens": 4274,
+      "total_tokens": 11618
+    },
+    "mimo-v2.6-pro": {
+      "prompt_tokens": 8786,
+      "completion_tokens": 604,
+      "total_tokens": 9390
+    }
+  },
+  "cost": {
+    "amount": null,
+    "unit": "",
+    "note": "无价目表：registry.jury.pricing 未覆盖任何 panel 型号（成本不猜）",
+    "priced": [],
+    "unpriced": [
+      "glm-5.3",
+      "kimi-k2.6",
+      "mimo-v2.6-pro"
+    ]
+  },
+  "verdict_summary": {
+    "winner": "B",
+    "decided_by": "jury",
+    "tally": {
+      "A": 0,
+      "B": 3
+    },
+    "inconclusive": [],
+    "seats": [
+      {
+        "seat": "glm",
+        "model": "glm-5.3",
+        "vote": "B",
+        "consistent": true,
+        "confidence": 0.82
+      },
+      {
+        "seat": "kimi",
+        "model": "kimi-k2.6",
+        "vote": "B",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "mimo",
+        "model": "mimo-v2.6-pro",
+        "vote": "B",
+        "consistent": true,
+        "confidence": 0.78
+      }
+    ],
+    "majority_reasons": [
+      "glm：findings 历史无信息组织类发现，缺陷仅靠用户驳回暴露；§4 判据已存在可机械抽查，巡检确有盲区",
+      "kimi：证据显示inspector历史findings从无「信息组织」类发现，用户驳回实证曾漏检；引用已有§4补判据，低成本且提升可靠性。",
+      "mimo：findings.jsonl 无信息组织类发现且缺陷确由用户实证暴露；§4 判据已机械可查（f740754），引用既有判据成本低、可追责"
+    ],
+    "twin": null,
+    "text": "裁决=B（jury 定案；计票 A:0 B:3）｜各席：glm=B/0.82 kimi=B/0.90 mimo=B/0.78｜多数理由：glm：findings 历史无信息组织类发现，缺陷仅靠用户驳回暴露；§4 判据已存在可机械抽查，巡检确有盲区；kimi：证据显示inspector历史findings从无「信息组织」类发现，用户驳回实证曾漏检；引用已有§4补判据，低成本且提升可靠性。；mimo：findings.jsonl 无信息组织类发现且缺陷确由用户实证暴露；§4 判据已机械可查（f740754），引用既有判据成本低、可追责"
+  }
+}

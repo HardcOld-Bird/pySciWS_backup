@@ -49,8 +49,10 @@ steps:
       brief: 重拆解返工
       role: rework_plan
     - id: b2
-      member: devops
-      brief: 返工生产环节
+      member: writing
+      brief: 返工生产环节（按 §5 分工归 writing：总结/文档类）——升级开题总结：补硬性时间节点集中章节+信息架构原则兑现
+      dirs:
+      - data/大任务/1_文档阅读与需关注事项总结
     - id: b_last
       kind: self
       brief: 全流程报告组装
