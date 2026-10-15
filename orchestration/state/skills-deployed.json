@@ -9,9 +9,9 @@
       }
     },
     "orchestration": {
-      "source_hash": "9d546f35264e3069389bcf54d996084c6b3bc0f7af6ba054875451203bf69414",
+      "source_hash": "adeac9bbcf1b16ab9fec9183253cda60c9d743a1eafe4ac4ef0c391f15ebc0a1",
       "targets": {
-        ".qoder/skills/orchestration": "9d546f35264e3069389bcf54d996084c6b3bc0f7af6ba054875451203bf69414"
+        ".qoder/skills/orchestration": "adeac9bbcf1b16ab9fec9183253cda60c9d743a1eafe4ac4ef0c391f15ebc0a1"
       }
     },
     "devops": {
@@ -28,10 +28,10 @@
       }
     },
     "document-writing": {
-      "source_hash": "7d89e7a4a0ed0bcef8a469e162df9b75ca224b754851cb720ebef46e44d5cb11",
+      "source_hash": "ade65ec4de32a6dc79ef4295a1de715a9c2f46c38dbc7671da40040b8a8fd9fd",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/document-writing": "7d89e7a4a0ed0bcef8a469e162df9b75ca224b754851cb720ebef46e44d5cb11",
-        "orchestration/pods/writing/.qoder/skills/document-writing": "7d89e7a4a0ed0bcef8a469e162df9b75ca224b754851cb720ebef46e44d5cb11"
+        "orchestration/pods/deputy/.qoder/skills/document-writing": "ade65ec4de32a6dc79ef4295a1de715a9c2f46c38dbc7671da40040b8a8fd9fd",
+        "orchestration/pods/writing/.qoder/skills/document-writing": "ade65ec4de32a6dc79ef4295a1de715a9c2f46c38dbc7671da40040b8a8fd9fd"
       }
     },
     "literature-research": {
