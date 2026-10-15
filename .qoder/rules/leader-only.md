@@ -78,3 +78,8 @@ alwaysApply: true
 - **lit ↔ writing 分工**：科研文章（pdf）归 lit，办公文档（doc/docx/ppt/pptx）归
   writing——2026-10-15 实派偏过（doc/docx 误派 lit），拿不准先问 deputy。
 - **figure ↔ drawing 分工**：数据驱动/精确绘制归 figure，美术素材/审美指导归 drawing。常见协作——drawing 产出科研绘图审美参考图，figure 用mpl精确实现并加入真实数据落地。
+- **渠道归属判据**（2026-10-15 实案，查证成本高）：台账 `model` 字段 **UUID=BYOK 席、
+  名字形态（DeepSeek-Flash/Qwen3.8-Flash）=Qoder 内置席**——判「走没走内置」只看
+  model 字段，**别用 credits/控制台推断**（BYOK 也经 Qoder 网关 sendRemoteChatAsk，
+  credits 是计量非实扣、控制台只显 TUI 会话）。禁内置渠道已机械硬过滤（registry
+  `BUILTIN_SEATS`，用户明令 2026-10-15）。

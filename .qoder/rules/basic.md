@@ -50,6 +50,10 @@ alwaysApply: true
   `[Console]::OutputEncoding=UTF8`、双引号会被剥离一律单引号、链式用 `;` 不用 `&&`、
   `Get/Set-Content` 必须 `-Encoding UTF8`）——完整实测结论见 git 历史本文件
   2026-10 前版本的 §3，无必要不再使用 PowerShell。
+- **pre-commit 死循环（2026-10-15 实测踩 4 次）**：工作区有 unstaged 改动时提交，hook
+  自动修复（ruff format/尾换行）会与 stash 冲突**回滚且提交失败**。对策：提交前先
+  `uv run --no-sync ruff format <面>` + 补尾换行，再 `git add` **全部待交文件**（不留
+  unstaged）后 commit；仍被拦就按 hook 提示的文件逐个修。
 
 ## 4. 网络代理约定（跨技能生效）
 
@@ -84,3 +88,6 @@ alwaysApply: true
 - **多 Agent 编排已启用**（唯一权威 `orchestration/README.md`）：末端生产工作由组长
   （TUI 主会话）经 `pysci-orch` 派发给 `orchestration/pods/<id>/` 的 headless 组员；
   组员交付协议与写权限由各自 charter 与 pod-guard 约束。
+- **worktree 里跑测试**（2026-10-15 实测）：共享 venv 的 editable 指向主树——直接
+  `pytest` 会 import 主树包（新文件 ImportError/测到旧码）。对策：`PYTHONPATH=src
+  uv run --no-sync pytest tests -q` 前置 worktree 的 src。
