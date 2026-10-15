@@ -179,7 +179,7 @@ def test_replica_call_entry_is_main_tree_bench_file(monkeypatch, tmp_path):
         seen["argv"] = argv
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(replica, "subprocess", types.SimpleNamespace(run=fake_run))
+    monkeypatch.setattr(replica, "procs", types.SimpleNamespace(run_hidden=fake_run))
     rc, out, err = replica._replica_call(
         tmp_path, ["_hop", "--cases", "x"], timeout_s=5
     )
@@ -195,9 +195,9 @@ def test_replica_call_logs_nonzero_rc(monkeypatch, tmp_path):
     """rc≠0 必须留痕到调用方日志——静默失败正是空壳 done 的温床。"""
     monkeypatch.setattr(
         replica,
-        "subprocess",
+        "procs",
         types.SimpleNamespace(
-            run=lambda *a, **k: types.SimpleNamespace(
+            run_hidden=lambda *a, **k: types.SimpleNamespace(
                 returncode=7, stdout="", stderr="boom: 模块缺失"
             )
         ),

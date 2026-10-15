@@ -530,7 +530,13 @@ def test_twin_intentionally_has_no_manifest_target():
     data = tomllib.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     targets = [t for s in data["skills"] for t in s.get("targets", [])]
     assert not any("pods/twin" in t.replace("\\", "/") for t in targets)
-    assert (PODS_ROOT / "twin" / ".qoder" / "skills").exists() is False
+    # 判据是「**没有技能被部署**」，不是「目录不存在」：脚手架会给每个 pod 备好
+    # ``.qoder/skills``（twin/reviewer 这类无技能 pod 也留一个**空**目录，2026-10-15
+    # 全套跑实测），按目录存在性断言就是把运行面的此刻读数当出厂默认——脚手架一跑就红。
+    skills_dir = PODS_ROOT / "twin" / ".qoder" / "skills"
+    assert not skills_dir.exists() or not any(skills_dir.iterdir()), (
+        f"twin 不该被部署技能，但 {skills_dir} 里有内容：{sorted(skills_dir.iterdir())}"
+    )
     # 反向护栏：manifest 里每条 target 的父目录都必须是已存在 pod 的 .qoder/skills 或项目根
     for t in targets:
         rel = t.replace("\\", "/")

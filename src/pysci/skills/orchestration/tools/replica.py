@@ -44,6 +44,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import eval as _eval
+from . import procs
 from .registry import orchestration_rel
 
 #: 基线区（§3：bencher 完全写权）。``manifest.json`` 入库，物理归档不入库。
@@ -85,7 +86,7 @@ def _now() -> str:
 
 def _git_proc(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     """直连 git（argv 列表，不经 shell——MSYS 路径转换坑免疫，见 devops AGENTS.md）。"""
-    return subprocess.run(
+    return procs.run_hidden(
         ["git", *args],
         cwd=str(cwd or PROJECT_ROOT),
         capture_output=True,
@@ -371,7 +372,7 @@ def _replica_call(
     }
     argv = [sys.executable, str(BENCH_ENTRY), *bench_args]
     try:
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             argv,
             cwd=str(PROJECT_ROOT),
             env=env,

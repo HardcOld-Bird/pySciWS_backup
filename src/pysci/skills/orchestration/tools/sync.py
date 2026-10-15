@@ -19,6 +19,8 @@ from pathlib import Path
 
 from pysci.paths import ORCH_STATE_ROOT, ORCHESTRATION_ROOT, PROJECT_ROOT
 
+from . import procs
+
 MANIFEST_PATH: Path = ORCHESTRATION_ROOT / "skills" / "manifest.toml"
 DEPLOYED_PATH: Path = ORCH_STATE_ROOT / "skills-deployed.json"
 
@@ -104,7 +106,7 @@ def _save_deployed(data: dict) -> None:
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
     """在项目根跑一条 git（只读/记账用；``PROJECT_ROOT`` 是模块级，便于测试注入）。"""
-    return subprocess.run(
+    return procs.run_hidden(
         ["git", *args],
         cwd=PROJECT_ROOT,
         capture_output=True,

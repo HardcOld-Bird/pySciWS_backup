@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from pysci.skills.orchestration.tools import drain, events, workflow
@@ -156,27 +157,25 @@ def test_run_hidden_sets_create_no_window_on_win32(monkeypatch):
 def test_no_bare_spawn_outside_the_single_landing_point():
     """判据③（防再漏）：``orchestration/tools`` 下除 ``procs.py`` 外**不得有裸 spawn**。
 
-    已知未迁站点记在 DEBT 里（每条带 backlog id）：新出现的裸 spawn 即红——把「再漏一处」从
-    靠人盯变成机械拦截。
+    DEBT 清单已于本单（adhoc-debt-spawns）**清零**——最后 9 处低频站点（sync/registry×2/
+    replica×2/sessions×2/verdict/jury/eval/runner/drain 余 1）全部并入
+    ``procs.run_hidden``/``popen_hidden`` 口径，故此用例不再有豁免名单：新出现的裸 spawn
+    即红，把「再漏一处」从靠人盯变成机械拦截。
     """
 
     from pysci.paths import ORCHESTRATION_ROOT
 
-    DEBT = {
-        # 2026-10-15 加急只迁了「风暴路径」（tick/提交链/验收链）与判据所需的三处；
-        # 其余低频站点待并（同 backlog：adhoc-storm-fix）：
-        "sync.py",
-        "registry.py",
-        "replica.py",
-        "sessions.py",
-        "verdict.py",
-        "jury.py",
-        "eval.py",
-        "runner.py",  # runner 已有旗标（功能无碍），只是尚未并入 procs 口径
-        # drain 原有 3 处 spawn：`_run_git`（tick 主犯）与 `_spawn_detached`（分离派生）
-        # 已并入 procs 口径；余 1 处低频站点待并（同 backlog，下一跳收尾）。
-        "drain.py",
-    }
+    # 入口形态不止 ``subprocess.run/Popen``：``check_output``/``call``/``os.system``/
+    # 未限定 ``Popen(`` 同样是裸 spawn（只是本树当前一处都没有——扫描面先收严）。
+    patterns = (
+        "subprocess.run(",
+        "subprocess.Popen(",
+        "subprocess.call(",
+        "subprocess.check_output(",
+        "subprocess.check_call(",
+        "os.system(",
+        "os.popen(",
+    )
     tools = ORCHESTRATION_ROOT / "src" / "pysci" / "skills" / "orchestration" / "tools"
     if not tools.is_dir():  # 真本树里没有 src（部署副本）：退到 PROJECT_ROOT
         from pysci.paths import PROJECT_ROOT
@@ -184,11 +183,13 @@ def test_no_bare_spawn_outside_the_single_landing_point():
         tools = PROJECT_ROOT / "src" / "pysci" / "skills" / "orchestration" / "tools"
 
     offenders: list[str] = []
-    for p in tools.glob("*.py"):
-        if p.name in ("procs.py",) or p.name in DEBT:
+    for p in sorted(tools.glob("*.py")):
+        if p.name == "procs.py":  # 唯一落点本体
             continue
         text = p.read_text(encoding="utf-8")
-        if "subprocess.run(" in text or "subprocess.Popen(" in text:
+        if any(pat in text for pat in patterns) or re.search(
+            r"(?<![\w.])Popen\(", text
+        ):
             offenders.append(p.name)
 
     assert offenders == [], (

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -474,7 +475,7 @@ def test_run_case_reverts_pod_dirt_created_by_hop(iso_eval, monkeypatch):
         checkout["cwd"] = kw.get("cwd")
         return FakeProc()
 
-    monkeypatch.setattr(ev.subprocess, "run", fake_run)
+    monkeypatch.setattr(ev, "procs", SimpleNamespace(run_hidden=fake_run))
     case = ev.parse_case(seed_case(iso_eval, "member: figure\n" + BODY))
     row = ev.run_case(case)
     assert row.reverted == ["orchestration/pods/figure/AGENTS.md"]
@@ -501,7 +502,9 @@ def test_revert_keeps_dirt_that_predated_hop(iso_eval, monkeypatch):
     )
     ran = []
     monkeypatch.setattr(
-        ev.subprocess, "run", lambda argv, **kw: ran.append(argv) or FakeOk()
+        ev,
+        "procs",
+        SimpleNamespace(run_hidden=lambda argv, **kw: ran.append(argv) or FakeOk()),
     )
     before = {"orchestration/pods/figure/AGENTS.md"}
     assert ev.revert_new_dirt("figure", before) == []
@@ -517,7 +520,9 @@ def test_revert_refuses_paths_outside_pod(iso_eval, monkeypatch):
     )
     ran = []
     monkeypatch.setattr(
-        ev.subprocess, "run", lambda argv, **kw: ran.append(argv) or FakeOk()
+        ev,
+        "procs",
+        SimpleNamespace(run_hidden=lambda argv, **kw: ran.append(argv) or FakeOk()),
     )
     assert ev.revert_new_dirt("figure", set()) == []
     assert ran == []
@@ -534,7 +539,9 @@ def test_revert_fail_open_on_git_error(iso_eval, monkeypatch):
     class Bad:
         returncode = 128
 
-    monkeypatch.setattr(ev.subprocess, "run", lambda argv, **kw: Bad())
+    monkeypatch.setattr(
+        ev, "procs", SimpleNamespace(run_hidden=lambda argv, **kw: Bad())
+    )
     assert ev.revert_new_dirt("figure", set()) == []
 
 

@@ -27,7 +27,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
-from . import channels, journal, jury
+from . import channels, journal, jury, procs
 from .registry import Registry, orchestration_rel
 
 #: 审批时自动组的案卷落盘处（``evals/`` 整面 gitignored——案卷是运行态，
@@ -192,7 +192,7 @@ def head_commit(*, short: bool = False) -> str:
     """当前 HEAD 的 commit hash（基线锚点；取不到返回空串，调用方据此拒绝标 M）。"""
     args = ["rev-parse", "--short" if short else "--verify", "HEAD"]
     try:
-        out = subprocess.run(
+        out = procs.run_hidden(
             ["git", "-C", str(PROJECT_ROOT), *args],
             capture_output=True,
             text=True,
