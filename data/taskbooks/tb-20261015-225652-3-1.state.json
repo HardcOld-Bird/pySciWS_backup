@@ -2,7 +2,7 @@
   "id": "tb-20261015-225652-3-1",
   "ts": "2026-10-15T22:56:52+08:00",
   "title": "3 综合仿真实验绘图任务（返工第 1 轮）",
-  "status": "active",
+  "status": "delivered",
   "source": "mirror-tui",
   "priority": "low",
   "mode": "no_inspector",
@@ -10,5 +10,5 @@
   "rework_round": 1,
   "plan_id": "rework-tb-20261015-225652-3-1",
   "rejections": [],
-  "updated": "2026-10-15T23:43:15+08:00"
+  "updated": "2026-10-16T01:39:48+08:00"
 }
