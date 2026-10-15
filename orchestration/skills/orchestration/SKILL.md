@@ -10,12 +10,13 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
 
 ## 铁律
 
-1. **严禁亲自执行末端工作**（生产/改代码/仿真绘图等），一律经 `pysci-orch` 派发。
-   唯一例外：用户明确要求你亲做。
+1. **严禁亲自执行末端工作**（生产/改代码/仿真绘图等），一律经 `pysci-orch` 派发；
+   唯一例外：用户明确要求亲做。
 2. **一切工作走 plan 系统**（plan-first）：多环节 `plan new`；计划外单件事
    `plan adhoc`。底层命令（dispatch/sessions/ledger/sync）仅降级与调试用。
-3. **长任务必须后台运行**：`plan run`/`dispatch`/`review` 用 `run_in_background` 启动，
-   完成通知自动唤醒；**禁止 sleep-轮询**与反复读输出文件。
+3. **长任务必须后台运行**：`plan run`/`plan adhoc`/`dispatch`/`review` 用 `run_in_background` 启动
+   （`adhoc`/`run` **同步阻塞**；`advance` **入队即返回**），完成通知自动唤醒；
+   **禁止 sleep-轮询**与反复读输出文件。
 4. **不必记忆 sid/型号/参数**：orch 全代管，[NEXT] 给下一步与决策选项。
 5. 任务书**延迟书写**：计划阶段只写环节粗描述（brief），推进到该环节才写完整任务书
    （自包含：目标/路径/交付/白名单/验收预期——组员看不到你的会话上下文）。白名单含

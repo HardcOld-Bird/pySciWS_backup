@@ -99,3 +99,37 @@ def test_suggestion_member_column_semantics_documented():
     doc = _doc()
     assert "`[member]` 列" in doc
     assert "代补单" in doc and "目标" in doc
+
+
+# ---------------------------------------------------------------------------
+# `plan adhoc` 的阻塞语义（backlog 20261015-211200）
+# ---------------------------------------------------------------------------
+SKILL = ORCHESTRATION_ROOT / "skills" / "orchestration" / "SKILL.md"
+
+
+def test_plan_adhoc_blocking_semantics_in_command_surface():
+    """命令面明示：`plan adhoc` **同步阻塞到完成**（与 `plan advance` 入队即返回**相反**）。"""
+    doc = _doc()
+    assert "同步阻塞到完成" in doc
+    assert "入队即返回" in doc
+    assert "run_in_background" in doc  # 后台纪律
+    # 对照须点名 advance（否则读者仍可能按 advance 的直觉放前台）
+    adhoc_at = doc.index("同步阻塞到完成")
+    tail = doc[adhoc_at : adhoc_at + 400]
+    assert "plan advance" in tail, "adhoc 的阻塞语义旁未对照 plan advance"
+
+
+def test_skill_iron_rule_3_lists_plan_adhoc():
+    """SKILL 铁律 3「长任务必须后台运行」的命令枚举含 `plan adhoc`，并写明与 advance 的差异。"""
+    md = SKILL.read_text(encoding="utf-8")
+    start = md.index("**长任务必须后台运行**")
+    block = md[start : md.index("4. **", start)]
+    assert "plan adhoc" in block
+    assert "run_in_background" in block
+    assert "同步阻塞" in block and "入队即返回" in block
+
+
+def test_watched_docs_within_budget():
+    """本册与 SKILL 都在 8KB 真本预算内（落盘字节口径）。"""
+    for p in (CMDSURF, SKILL):
+        assert p.stat().st_size <= 8192, f"{p.name} 超预算：{p.stat().st_size}B"
