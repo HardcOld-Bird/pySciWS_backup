@@ -32,6 +32,7 @@ from pysci.skills.orchestration.tools import (
     jury,
     ledger,
     orch,
+    plans,
     queues,
     queueworker,
     registry,
@@ -255,6 +256,20 @@ def iso_registry(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "SETTINGS_PATH", tmp_path / "pysci_settings.toml")
     seed_settings(tmp_path)
     return reg_file, runtime_file, backup_file
+
+
+@pytest.fixture
+def qface(iso_state, tmp_path, monkeypatch):
+    """计划目录隔离（``plans.PLANS_DIR`` → ``tmp_path/plans``）。
+
+    计划面用例（拆解/对账/advance/evidence）的公共夹具：不隔离则用例会真读写
+    ``orchestration/state/plans/``（踢到真计划）。原在 ``test_plan_guards.py`` 本地定义，
+    多文件复用后上提到此处（backlog 20261015-135000-f2-ledger）。
+    """
+    d = tmp_path / "plans"
+    d.mkdir()
+    monkeypatch.setattr(plans, "PLANS_DIR", d)
+    return d
 
 
 @pytest.fixture

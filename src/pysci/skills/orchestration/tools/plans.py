@@ -24,6 +24,7 @@ from .planflow import (
     DONE_STATES,
     KIND_SELF,
     SELF_AWAITING,
+    STARTED_STATES,
     PlanTree,
     freeze_violations,
 )
@@ -80,11 +81,32 @@ def _print_plan_lints(plan: dict) -> None:
         print(f"[lint] {ln}（软提示，不阻断）")
 
 
-def _check_evidence(path: str, sy: dict) -> tuple[bool, str]:
-    """校验 ``kind: self`` 环节的 evidence（PSEP_3 §2.1）：文件存在 + 模板要求的标题段。
+#: role → 该环节 evidence 的**内容特征段**（backlog 20261015-135000-f2-ledger）。
+#: 为什么按 role 判内容：原先 `evidence_sections` 只有 a1/a2/a3 显式写了，`b1`（重拆解）与
+#: `b_last`（全流程报告）**没有** → 退回「至少一个标题行」的弱判据，于是 `b_last` 拿一份
+#: 别的环节的方案文件也能过（实案：误收 c2 文件）。YAML 里的 `evidence_sections` 仍**优先**
+#: （它才是每份计划的可定制面），本表只是**缺省**。
+ROLE_EVIDENCE_SECTIONS: dict[str, tuple[str, ...]] = {
+    "cause": ("成因分析", "结论"),
+    "solution": ("解决方案", "结论"),
+    "review": ("送审结论",),
+    "improvement_plan": ("拆解",),
+    "rework_plan": ("拆解", "结论"),
+    # 「全流程报告」= `taskbooks.report_sections` 组装的通用两段（任何任务书都有）
+    "final_report": ("任务概述", "环节完成清单"),
+}
 
-    标题段判据：YAML ``evidence_sections: [...]`` 声明则逐个匹配 Markdown 标题行（``# …``
-    含该标题）；未声明则要求至少一个 ATX 标题（文件是有结构的报告，非空）。
+
+def _check_evidence(path: str, sy: dict) -> tuple[bool, str]:
+    """校验 ``kind: self`` 环节的 evidence（PSEP_3 §2.1）：文件存在 + 段落要求。
+
+    段落要求的**判据来源**（按优先级）：
+    1. YAML ``evidence_sections: [...]``（显式声明，逐段匹配 Markdown 标题行）；
+    2. 节点的 ``role`` 对应 :data:`ROLE_EVIDENCE_SECTIONS` 的**内容特征段**——照抄一份
+       别的环节的方案文件不再算数（实案 b_last 误收 c2）；
+    3. 两者皆无才退回「至少一个 ATX 标题行」（有结构的报告，非空）。
+
+    不合规一律**拒收并点名缺哪一段**。
     """
     from pysci.paths import PROJECT_ROOT
 
@@ -97,13 +119,15 @@ def _check_evidence(path: str, sy: dict) -> tuple[bool, str]:
     if not text.strip():
         return False, f"evidence 文件为空：{p}"
     headings = [ln for ln in text.splitlines() if ln.lstrip().startswith("#")]
-    sections = sy.get("evidence_sections") or []
+    role = str(sy.get("role") or "")
+    sections = sy.get("evidence_sections") or ROLE_EVIDENCE_SECTIONS.get(role, ())
     if sections:
         missing = [t for t in sections if not any(str(t) in h for h in headings)]
         if missing:
+            what = "标题段" if sy.get("evidence_sections") else f"role={role} 特征段"
             return (
                 False,
-                f"evidence 缺标题段：{'、'.join(str(m) for m in missing)}（{p}）",
+                f"evidence 缺{what}：{'、'.join(str(m) for m in missing)}（{p}）",
             )
         return True, f"evidence 通过（{len(sections)} 个标题段齐全）：{p}"
     if not headings:
@@ -262,29 +286,55 @@ def _save_state(plan_id: str, state: dict) -> None:
     )
 
 
+def _started_rows_by_leaf_name(old: dict[str, dict]) -> dict[str, dict]:
+    """已 started 行的**叶名**索引（``BC.C.c4`` → ``c4``）；同名多于一行即丢弃（歧义不猜）。
+
+    为什么要它（backlog 20261015-135000-f2-ledger）：superstep 重排会让叶子的**点路径**变
+    （``C.c4`` → ``BC.C.c4``），此时按 id 严格对账会把**已派发的行**当成「新叶子」置回
+    ``pending``——「已完成的工作显示待派发」（实案 c4：已 queued 却显示待派发，组长只能手工
+    账实修正）。唯一同名命中时按「同一环节」带过状态；歧义（同名多行）时保守置 pending。
+    """
+    buckets: dict[str, list[dict]] = {}
+    for sid, row in old.items():
+        if str(row.get("status") or "") in STARTED_STATES:
+            buckets.setdefault(str(sid).rsplit(".", 1)[-1], []).append(row)
+    return {k: v[0] for k, v in buckets.items() if len(v) == 1}
+
+
 def _reconcile(plan: dict, state: dict) -> dict:
     """按**叶子点路径 id** 对账 YAML（可能被组长 amend 过）与既有状态。
 
     superstep 只在 YAML 里存在（递归结构），**state.json 只落叶子行**（PSEP_3 §2.1：
     聚合状态由叶子推导不落盘）；存量扁平 plan 的顶层叶子路径 == 原环节 id，行为完全不变
-    （无 superstep 等价单元素串行）。保留已有叶子状态；新叶子置 pending；YAML 中已删除的
-    叶子从状态中移除（增删节点天然兼容）。
+    （无 superstep 等价单元素串行）。
+
+    对账**只做两件事**（账实保护，backlog 20261015-135000-f2-ledger）：
+    - 增补 YAML 里有、state 里没有的叶子（新叶子置 ``pending``）；
+    - 删掉 YAML 里已不存在的幽灵行。
+    凡能认出是「同一环节」的既有行，一律**原样带过**（status + 既有字段），**绝不把
+    已 started 的状态打回 pending**。识别按 id；id 对不上时按**唯一叶名**兜底（见
+    :func:`_started_rows_by_leaf_name`），歧义则保守置 pending。
     """
     tree = _tree(plan)
-    old = {s["id"]: s for s in state.get("steps", [])}
+    old = {str(s["id"]): s for s in state.get("steps", []) if s.get("id")}
+    by_name = _started_rows_by_leaf_name(old)
     steps: list[dict] = []
     for path in tree.leaf_paths():
         prev = old.get(path)
-        steps.append(
-            {
-                "id": path,
-                "status": prev["status"] if prev else "pending",
-                "task_file": prev.get("task_file") if prev else None,
-                "session_id": prev.get("session_id") if prev else None,
-                "kind": prev.get("kind") if prev else None,
-                "review": prev.get("review", "pending") if prev else "pending",
-            }
-        )
+        if prev is None:
+            prev = by_name.get(
+                path.rsplit(".", 1)[-1]
+            )  # id 迁移容错：唯一同名 + 已 started
+        if prev is None:
+            row: dict = {"id": path, "status": "pending", "review": "pending"}
+        else:
+            # 从既有行**整体拷贝**再覆写 id：evidence/job_id/note 等字段也是账实的一部分，
+            # 原实现只挑五个键重建 → 每次对账都静默丢掉 evidence（自办环节的交付证据）。
+            row = dict(prev)
+            row["id"] = path
+            row.setdefault("status", "pending")
+            row.setdefault("review", "pending")
+        steps.append(row)
     state.update(
         {
             "plan_id": state.get("plan_id") or plan.get("id") or "",
@@ -633,6 +683,33 @@ def _queue_item_for_step(plan_id: str, step_id: str, member: str) -> dict | None
     return hit[-1] if hit else None
 
 
+def _terminal_ready_ids(plan_id: str, plan: dict, state: dict) -> list[str]:
+    """已在成员队列里**收尾但尚未结账**的叶子 id（**只读**；结账见 :func:`_settle_terminal_jobs`）。
+
+    为什么要有只读版（backlog 20261015-135000-f2-ledger）：`advance --evidence` 想收尾一个
+    self 环节，却先被在途结算挤占——结算动作与收尾动作搅在一条命令里（实案：c2 收尾被挤）。
+    有它就能在「本次只做证据收尾」时**如实提示**还有几项待结账，而不动手。
+    """
+    from . import workq
+
+    lm = _leaf_map(plan)
+    out: list[str] = []
+    for s in state["steps"]:
+        if s.get("status") != "queued":
+            continue
+        sid = str(s["id"])
+        member = str((lm.get(sid) or {}).get("member") or "")
+        item = _queue_item_for_step(plan_id, sid, member)
+        if item is None:
+            continue
+        if str(item.get("status") or "") not in (
+            workq.STATUS_PENDING,
+            workq.STATUS_IN_PROGRESS,
+        ):
+            out.append(sid)
+    return out
+
+
 def _settle_terminal_jobs(
     plan_id: str, plan: dict, state: dict
 ) -> list[tuple[dict, DispatchOutcome]]:
@@ -771,6 +848,10 @@ def cmd_plan_advance(args) -> int:
     → 组长 ``orch events drain`` 醒来 → 再 advance：本命令先收尾**全部**已终态条目（多 job
     并行时乱序到达，逐项交接），再按**递归就绪谓词**（PSEP_3 §2.2）入队**首个可派发**叶子，
     并以**三栏工作清单**（可派发/在途/待验收）收尾。
+
+    **一次命令一个动作**（backlog 20261015-135000-f2-ledger）：带 ``--evidence`` 时只做组长
+    环节的证据收尾，**不**顺带结算在途条目（只如实提示还有几项待结账）；结算请另跑一次不带
+    ``--evidence`` 的 advance。
     """
     from . import queues, queueworker
 
@@ -790,11 +871,24 @@ def cmd_plan_advance(args) -> int:
         return 2
 
     # ① 收尾**全部**已终态队列条目（多 job 乱序到达：一次结清，逐项交接决策点）
-    settled = _settle_terminal_jobs(plan_id, plan, state)
-    if settled:
-        _save_state(plan_id, state)
-    for s_done, o_done in settled:
-        _report_handoff(plan_id, plan, state, s_done, o_done)
+    #    **但带了 --evidence 时不做**（backlog 20261015-135000-f2-ledger）：一次命令一个
+    #    动作，收尾证据不该被在途结算挤占（实案：`advance --evidence` 想收尾 self 环节，
+    #    先撞在途结算、输出与动作搅在一起 → c2 收尾被挤）。此时只**如实提示**待结账项。
+    evidence = getattr(args, "evidence", None)
+    if evidence:
+        ready = _terminal_ready_ids(plan_id, plan, state)
+        print("[本次动作] 只做 evidence 收尾（在途结算留给下一次普通 advance）。")
+        if ready:
+            print(
+                f"[i] 另有 {len(ready)} 项已在队里收尾、尚待结账："
+                f"{'、'.join(ready)}——结算请另跑一次 `orch plan advance {plan_id}`。"
+            )
+    else:
+        settled = _settle_terminal_jobs(plan_id, plan, state)
+        if settled:
+            _save_state(plan_id, state)
+        for s_done, o_done in settled:
+            _report_handoff(plan_id, plan, state, s_done, o_done)
     inflight = _inflight(state)
     if inflight:
         print(
@@ -802,8 +896,8 @@ def cmd_plan_advance(args) -> int:
             "——等 JOB-DONE 事件驱动下一次 advance。"
         )
 
-    # ② --evidence：先把一个 kind:self 组长环节收尾（PSEP_3 §2.1）
-    if getattr(args, "evidence", None):
+    # ② --evidence：把一个 kind:self 组长环节收尾（PSEP_3 §2.1）
+    if evidence:
         rc = _apply_evidence(plan_id, plan, state, args.evidence)
         if rc is not None:
             return rc
