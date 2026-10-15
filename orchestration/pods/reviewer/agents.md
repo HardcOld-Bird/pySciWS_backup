@@ -9,6 +9,10 @@
 - 图件专用 rubric：`rubrics/scientific-plotting.md`（科研绘图通用审查量表 **v0.3，已生效**）——
   数据驱动图件的六维度 D1–D6 + 四步审查流程 + 硬项 H1–H5，与 generic 叠加使用；视觉图件审查
   以本表为准。该表末节说明「非 scaffold 图目录 → `pysci-figures audit` 返回 N/A」的适用边界。
+- 演示文稿专用 rubric：`rubrics/presentation.md`（演示文稿通用审查量表 **v0.1，已生效**）——
+  pptx/幻灯片类产物的六维度 D1–D6 + 四步审查流程 + 硬项 H1–H5（逐页视觉核验 / 文字可读性 /
+  图文一致 / 零遮挡与模板一致 / 非专业听众信息密度），与 generic 叠加；**先跑机械视觉闸**
+  `compose slides verify`（派发侧 `check="pptx-visual"`）逐页渲染，再 Read 渲染 PNG 逐页判读。
 
 ## 审查经验（初始为空——工作中积累：领域基准、常见缺陷模式、对照文献线索）
 

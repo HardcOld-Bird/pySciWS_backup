@@ -13,6 +13,8 @@ LLM 直接调用，无需了解底层模块实现。
     read <file>      统一提取（markitdown）→ Markdown（pptx/docx/pdf/xlsx/...）
     slides extract   结构化提取 .pptx（逐页文本/表格/图片/演讲者备注）
     slides digest    大型 pptx → 图文互证 Markdown 工作区（去重导图/邻近文字/分节分块）
+    slides render    把 .pptx 渲染成逐页 PNG（pptx→pdf→page-NNN.png，供视觉判读/交付附件）
+    slides verify    机械验收逐页渲染（渲染存在 / 页数=幻灯片数 / 非空白页）
     verify <pdf>     把 PDF 渲染成 PNG，供 LLM「看图」校对版式
 
 用法（在项目根目录）::
@@ -520,6 +522,45 @@ def cmd_slides_digest(args: argparse.Namespace) -> int:
 
 
 # ===========================================================================
+# 子命令：slides render / verify（pptx → 逐页 PNG + 视觉验收）
+# ===========================================================================
+def cmd_slides_render(args: argparse.Namespace) -> int:
+    from . import office_convert, slides_visual
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides render] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        res = slides_visual.render_pptx_pages(src, out_dir=args.out, dpi=args.dpi)
+    except office_convert.LibreOfficeNotInstalled as e:
+        print(e, file=sys.stderr)
+        return 3
+    except Exception as e:
+        print(f"[slides render] 渲染失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(res.summary())
+    print("[slides render] 用 Read 逐一查看下列 PNG 做视觉判读：")
+    for p in res.pngs:
+        print(f"    {p}")
+    return 0
+
+
+def cmd_slides_verify(args: argparse.Namespace) -> int:
+    from . import slides_visual
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides verify] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    rep = slides_visual.verify_pptx_render(
+        src, render_dir=args.render_dir, min_ink_ratio=args.min_ink
+    )
+    print(rep.summary())
+    return 0 if rep.ok else 1
+
+
+# ===========================================================================
 # 子命令：docx read / from-markdown / add（DOCX 读写）
 # ===========================================================================
 def cmd_docx_read(args: argparse.Namespace) -> int:
@@ -848,6 +889,35 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--force", action="store_true", help="全量重建（会覆盖已填解读）")
     sp.add_argument("--lint", action="store_true", help="只对既有输出做图片链接体检")
     sp.set_defaults(func=cmd_slides_digest)
+
+    sp = slidessub.add_parser(
+        "render", help="把 .pptx 渲染成逐页 PNG（pptx→pdf→page-NNN.png）"
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument(
+        "--out",
+        default=None,
+        help="输出目录（默认 <stem>_render/，与 verify 约定一致）",
+    )
+    sp.add_argument("--dpi", type=int, default=140)
+    sp.set_defaults(func=cmd_slides_render)
+
+    sp = slidessub.add_parser("verify", help="机械验收逐页渲染（存在/页数一致/非空白）")
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument(
+        "--render-dir",
+        default=None,
+        dest="render_dir",
+        help="渲染图目录（默认 <stem>_render/）",
+    )
+    sp.add_argument(
+        "--min-ink",
+        type=float,
+        default=0.002,
+        dest="min_ink",
+        help="空白页阈值：墨迹像素占比低于它即判空白（默认 0.002）",
+    )
+    sp.set_defaults(func=cmd_slides_verify)
 
     # --- docx 子命令组 ---
     docx = sub.add_parser("docx", help="DOCX 读写（read/from-markdown/add）")
