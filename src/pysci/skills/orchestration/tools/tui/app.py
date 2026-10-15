@@ -189,6 +189,8 @@ class PysciTUI(App):
     #tb-new-msg {{ color: $success; }}
     #tb-reject {{ height: 1fr; {_T_INSET} {_T_BORDER_SOFT} {_T_BG} }}
     #tb-reject-title {{ {_T_TITLE} }}
+    #tb-reject-note-label {{ {_T_SUBTLE} height: 1; }}
+    #tb-note {{ height: 5; overflow-y: auto; scrollbar-gutter: stable; }}
     #tb-reject-msg {{ color: $success; }}
     #tb-detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
     #tb-detail-title {{ {_T_TITLE} }}
@@ -325,7 +327,11 @@ class PysciTUI(App):
                     ),
                     id="tb-reject-priority",
                 )
-                yield Input(placeholder="批语（完整批复要求）", id="tb-note")
+                yield Static(
+                    "③ 批语（多行：Enter 换行，填完点按钮提交）",
+                    id="tb-reject-note-label",
+                )
+                yield TextArea("", id="tb-note")
                 yield Button("确认驳回并生成返工任务书", id="tb-reject-submit")
                 yield Static("", id="tb-reject-msg")
         yield Footer()
@@ -767,7 +773,7 @@ class PysciTUI(App):
         # 复位：模式回①、优先级回中（默认）、批语清空
         self._set_radio("#tb-reject-mode", 0)
         self._set_radio("#tb-reject-priority", 1)
-        self.query_one("#tb-note", Input).value = ""
+        self.query_one("#tb-note", TextArea).text = ""
         self._set_tb_reject_msg(f"驳回 {tb_id}：请依次选 ① 模式 → ② 优先级 → ③ 批语")
         self.query_one("#tb-reject-mode", RadioSet).focus()
 
@@ -807,9 +813,18 @@ class PysciTUI(App):
         return default if idx is None else int(idx)
 
     def _set_radio(self, selector: str, index: int) -> None:
-        """程序化选中 RadioSet 第 ``index`` 项（``pressed_index`` 只读，改各按钮 value）。"""
-        for i, btn in enumerate(self.query_one(selector, RadioSet).query(RadioButton)):
-            btn.value = i == index
+        """程序化选中 RadioSet 第 ``index`` 项。
+
+        ``pressed_index`` 只读，故改各按钮的 ``value``；**必须两段式**（backlog 20261015-230248
+        ④）：先把所有按钮清成 False 再把目标置 True——直接写 ``value = (i == index)`` 时，
+        置 True 会让 RadioSet 内部重排，**上一轮选中的按钮会把 True 留在自己身上**（实测重开
+        面板后 ``values=[True,False,True]``：残留值与默认值同时被选中=双绿）。
+        """
+        btns = list(self.query_one(selector, RadioSet).query(RadioButton))
+        for btn in btns:
+            btn.value = False
+        if 0 <= index < len(btns):
+            btns[index].value = True
 
     def _submit_new_taskbook(self) -> None:
         """「投递」：程序化组装元数据（含优先级）并落盘（TASKBOOK-NEW 由 watch 增量报出）。"""
@@ -827,8 +842,11 @@ class PysciTUI(App):
             self._set_tb_new_msg(f"✗ {exc}")
             return
         self.last_created = str(st["id"])
-        self._set_tb_new_msg(
-            f"已投递：{st['id']}（优先级 {priority}；TASKBOOK-NEW 唤醒组长）"
+        # ③ 成功即**关表单回列表**（backlog 20261015-230248）：留在表单上可被重复点「投递」
+        # → 同一份任务书被投两遍；回列表后确认结果一眼可见。
+        self._open_taskbooks()
+        self._set_tb_msg(
+            f"[√] 已投递：{st['id']}（优先级 {priority}；TASKBOOK-NEW 唤醒组长）"
         )
 
     def _submit_reject(self) -> None:
@@ -838,7 +856,7 @@ class PysciTUI(App):
         tb_id = self.reject_target
         mode = _REWORK_MODE_BY_INDEX[self._radio_index("#tb-reject-mode", 0)]
         priority = _PRIORITY_BY_INDEX[self._radio_index("#tb-reject-priority", 1)]
-        note = self.query_one("#tb-note", Input).value.strip()
+        note = self.query_one("#tb-note", TextArea).text.strip()
         try:
             new = _tb.create_rework(tb_id, mode=mode, priority=priority, note=note)
         except ValueError as exc:
