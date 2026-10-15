@@ -49,10 +49,10 @@
       }
     },
     "ai-drawing": {
-      "source_hash": "d86a624f4e9733ec022299843385105f6d62ce398b525ece413d897102fb7051",
+      "source_hash": "0231ed51bdc89709ec272d129cfafc65e46dca5d0e73a13f0073391f52e71fc0",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/ai-drawing": "d86a624f4e9733ec022299843385105f6d62ce398b525ece413d897102fb7051",
-        "orchestration/pods/drawing/.qoder/skills/ai-drawing": "d86a624f4e9733ec022299843385105f6d62ce398b525ece413d897102fb7051"
+        "orchestration/pods/deputy/.qoder/skills/ai-drawing": "0231ed51bdc89709ec272d129cfafc65e46dca5d0e73a13f0073391f52e71fc0",
+        "orchestration/pods/drawing/.qoder/skills/ai-drawing": "0231ed51bdc89709ec272d129cfafc65e46dca5d0e73a13f0073391f52e71fc0"
       }
     },
     "modeling3d": {
