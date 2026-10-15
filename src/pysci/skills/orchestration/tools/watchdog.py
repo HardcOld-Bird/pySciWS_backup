@@ -179,6 +179,8 @@ def run_watchdog(
     }
     last_live = listener_live(now=now(), stale_s=stale_s)
     last_rearm = 0.0
+    #: 「已提交未合并」出声去重集（本进程持有；见 tick 里的检出段）。
+    unmerged_seen: set = set()
     _log(f"[▶] 看门狗启动（心跳{'新鲜' if last_live else 'stale'}）", run_log)
     try:
         while True:
@@ -219,6 +221,16 @@ def run_watchdog(
                     _log(f"[→] 队列自愈：{healed}", run_log)
             except Exception as exc:  # noqa: BLE001 - 看门狗要活到下一轮
                 _log(f"[!] 队列自愈异常：{type(exc).__name__}: {exc}", run_log)
+            # 「已提交未合并」检出（backlog 20261015-145045，f4a）：devops 尾段被杀/截断时
+            # 成果会卡在 worktree 里静默躺平（实案 6304 卡 3 小时）。挂同一 tick（不造第二套
+            # 定时器）；**只出声不自动合并**（护栏级写操作，留给组长有意授权）。去重集由本
+            # 进程持有：同一面同一 head 只喊一次，head 变了再喊。
+            try:
+                fresh = _drain.announce_unmerged_worktrees(unmerged_seen)
+                if fresh:
+                    _log(f"[→] 检出已提交未合并 {len(fresh)} 个面：{fresh}", run_log)
+            except Exception as exc:  # noqa: BLE001 - 看门狗要活到下一轮
+                _log(f"[!] 未合并检出异常：{type(exc).__name__}: {exc}", run_log)
             if (
                 int(summary["checks"]) % max(1, int(stale_s) // max(1, int(interval_s)))
                 == 0

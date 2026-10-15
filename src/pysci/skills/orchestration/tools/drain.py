@@ -1079,6 +1079,102 @@ def worktree_salvage_state(name: str, *, main_ref: str = "main") -> dict[str, An
     return state
 
 
+def worktree_faces() -> list[str]:
+    """在册 worktree 的**面名**（``git worktree list`` ∩ 本编排的面根）——检出与回收共用一份枚举。
+
+    只认落在 ``workflow.WORKTREES_ROOT`` 下的面（别人的 worktree/主树不算），
+    ``git`` 不可用或无面 → ``[]``（读不出就静默，不猜）。
+    """
+    rc, out = _run_git("worktree", "list", "--porcelain")
+    if rc != 0:
+        return []
+    root = workflow.WORKTREES_ROOT
+    names: list[str] = []
+    for line in out.splitlines():
+        if not line.startswith("worktree "):
+            continue
+        p = Path(line[len("worktree ") :].strip())
+        try:
+            rel = p.relative_to(root)
+        except ValueError:
+            continue  # 主树/仓外树：不是本编排的面
+        if rel.parts and str(rel.parts[0]) not in names:
+            names.append(str(rel.parts[0]))
+    return names
+
+
+def unmerged_worktree_alerts(*, main_ref: str = "main") -> list[dict[str, Any]]:
+    """「**已提交、未合并**」的面 → 只读告警读数（**零新造判据**，backlog 20261015-145045）。
+
+    实案（2026-10-15 两起，用户征询后裁定必修）：devops 尾段「提交→合并→推送」被进程杀死
+    /跳截断/重启时会停在**已提交未合并**——成果卡在 worktree 里静默躺平（实案 6304 卡 3
+    小时），零告警。判据**复用** :func:`worktree_salvage_state` 的 ``unmerged``
+    （``git rev-list --count main..branch``，``drain.py`` 既有），不新造第二份。
+
+    **只检出，不合并**（组长 2026-10-15 裁决）：patrol 自动 merge 进 main 是护栏级写操作
+    （与「一个 worktree 一个写者」「合并前交集闸」同级）——故读数里附**现成合并命令**，
+    由组长有意授权后一键执行。
+
+    Returns:
+        每面一条 ``{worktree, branch, head, unmerged, behind_point, merge_cmd, title}``。
+    """
+    out: list[dict[str, Any]] = []
+    for name in worktree_faces():
+        st = worktree_salvage_state(name, main_ref=main_ref)
+        n = int(st.get("unmerged") or 0)
+        if n <= 0:
+            continue  # 已合并（或无独有提交）→ 不误报
+        rc, base = _run_git("merge-base", main_ref, str(st["branch"]))
+        out.append(
+            {
+                "worktree": name,
+                "branch": st["branch"],
+                "head": st["head"],
+                "unmerged": n,
+                "behind_point": base.strip()[:SALVAGE_HEAD_LEN] if rc == 0 else "?",
+                "merge_cmd": f"pysci-dev worktree merge {name}",
+                "title": (
+                    f"面 {name} 有 {n} 个提交未合并（{st['branch']} @ {st['head']}）"
+                ),
+            }
+        )
+    return out
+
+
+def announce_unmerged_worktrees(
+    seen: set, *, main_ref: str = "main"
+) -> list[dict[str, Any]]:
+    """检出「已提交未合并」并**出声**（NEEDS_LEADER）；``seen`` 由调用方持有做进程内去重。
+
+    ``seen`` 语义：``{(branch, head)}``——同一面同一 head 只喊一次（watchdog 是长驻进程，
+    tick 一分钟一次，不去重就是每分钟一条噪声）；head 变了（又有新提交）会再喊一次。
+    **不落盘**：本单白名单不含 ``.gitignore``，为去重新增 state 文件会在 main 留 ``??``。
+    """
+    from . import events as _events
+
+    fresh: list[dict[str, Any]] = []
+    for a in unmerged_worktree_alerts(main_ref=main_ref):
+        key = (a["branch"], a["head"])
+        if key in seen:
+            continue
+        seen.add(key)
+        fresh.append(a)
+        try:
+            _events.emit(
+                _events.NEEDS_LEADER,
+                subject=str(a["branch"]),
+                detail=(
+                    f"「已提交未合并」：{a['title']}；与 {main_ref} 的分叉点 "
+                    f"{a['behind_point']}。patrol **不自动合并**（护栏级写操作），"
+                    "请有意授权后执行："
+                ),
+                action=str(a["merge_cmd"]),
+            )
+        except Exception:  # noqa: BLE001 - 出声失败不挡巡检
+            pass
+    return fresh
+
+
 def salvage_worktree(
     name: str,
     run_log: Path | None = None,
