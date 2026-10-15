@@ -92,8 +92,21 @@ RUN_LOG_MAX_TRIES: int = 100
 RUN_LOG_SEP: str = "_"
 RUN_LOG_PAD: int = len(str(RUN_LOG_MAX_TRIES))
 
-#: 锁龄上限（秒）——超过即判 stale 接管（worker 崩溃兜底）。6h 覆盖最长 devops 任务。
-LOCK_STALE_S: int = 6 * 3600
+#: 锁龄上限（秒）——超过即判 stale 接管（worker 崩溃兜底）。
+#:
+#: **2026-10-15 由 6h 下调为 45min**（task-20261015-worker-stall，用户点名「卡死无任何事件」）。
+#: 依据是台账实测：208 跳的时长分布 p50=10.7min、p90=40.8min、p95=58.3min、max=129.7min
+#: ——所以**不能**只按 30-60min 一刀切：单看年龄会把 10% 的正常跳判死并抢锁。故本阈值
+#: 与 :func:`_holder_heartbeating` **配对**才成立：
+#:
+#: * 持有者仍**心跳新鲜**（``LiveSession`` ≤120s 刷新，成员队列/计划器/bencher 三方都登记）
+#:   ⇒ 超龄也只说明「慢」，一律**不抢锁**——抢了就是双 worker 并发消费（本仓库最贵的事故）；
+#: * 持有者**无心跳**（死进程 / 假活僵尸）⇒ 45min 即解套，不再白等 6h。
+#:
+#: 于是「心跳活着但工作卡死」这一类（2026-10-15 08:02 实案：31+ min 零进展、心跳照跳）
+#: 不再由本判据兜——它由 :mod:`~.stallwatch` 的**跳级 watchdog**按「无进展」判据主动杀。
+#: 两层分工：心跳管「慢而不死」，watchdog 管「不死但不动」，本阈值管「死了还占着锁」。
+LOCK_STALE_S: int = 45 * 60
 
 #: 干跑开关环境变量：置真值时 wake 派生的 drain 走 --dry（不真派发，演练/验证唤醒链用）。
 DRY_ENV: str = "PYSCI_ORCH_DRAIN_DRY"
@@ -311,17 +324,53 @@ def _overwrite_lock(payload: str, paths: WorkerPaths | None = None) -> bool:
         return False
 
 
+def _holder_heartbeating(
+    paths: WorkerPaths | None = None, data: dict[str, Any] | None = None
+) -> bool:
+    """锁的持有者**仍在心跳**吗（超龄锁的免抢判据，2026-10-15 worker-stall 单）。
+
+    为什么需要它：锁龄上限（:data:`LOCK_STALE_S`）单看年龄无法区分「快」与「死」——实测
+    单跳可跑 130min，一刀切 45min 会把 ~10% 的正常跳判死并让第二个 worker 抢锁，直接违反
+    ``_pid_alive`` docstring 里那条纪律（「误抢会导致双 worker 并发消费」）。而活跃会话
+    注册表（``backpressure.LiveSession``，≤120s 刷心跳）给出的正是「持有者还活着」的独立
+    证据：**超龄 + 心跳 ⇒ 慢而不死，不抢**。
+
+    身份对齐：锁记录里的 ``run_log`` 与心跳条目的 ``sid`` 同源（两侧都用 ``run_log.stem``，
+    见 :func:`new_run_log`／各 worker 的 ``LiveSession(... sid=run_log.stem ...)``），故按
+    sid 命中即认定为同一持有者；``worker == 锁文件名`` 作为兜底（旧记录 run_log 不可解析时）。
+
+    读心跳失败**保守判为「有心跳」**：与 :func:`_pid_alive`「判不出来时宁可不抢」同口径——
+    竞争条件的代价是双 worker，而多等一拍的代价只是慢。
+    """
+    d = data if data is not None else read_lock(paths)
+    if not d:
+        return False
+    p = paths or _devops_paths()
+    wanted = {Path(str(d.get("run_log") or "")).stem, p.lock.stem}
+    try:
+        entries = _bp.live_entries(now=time.time())
+    except Exception:  # noqa: BLE001 - 心跳面读不动不改变「宁可不抢」的方向
+        return True
+    return any(
+        str(e.get("sid") or "") in wanted or str(e.get("worker") or "") in wanted
+        for e in entries
+    )
+
+
 def _lock_live(data: dict[str, Any] | None, paths: WorkerPaths | None = None) -> bool:
     """锁是否有效：未宣告收尾、持有者进程存活且锁龄未超上限。
 
     两条**收尾宣告**都优先于 pid 判活（判活本身可能说谎：pid 回收、tasklist 超时保守
     判活）：``released`` 墓碑，以及该 run 已有 ``.done`` 摘要（:func:`_run_concluded`）。
+
+    超龄（``age > stale_s``）**不直接判死**：持有者仍心跳时它只是慢（见
+    :func:`_holder_heartbeating`，2026-10-15 worker-stall 单）——抢走仍在干活的锁 = 双 worker。
     """
     if not data or _lock_released(data) or _run_concluded(data):
         return False
     p = paths or _devops_paths()
     age = _lock_age_s(data)
-    if age > p.stale_s:
+    if age > p.stale_s and not _holder_heartbeating(p, data):
         return False
     return _pid_alive(int(data.get("pid", 0) or 0))
 
@@ -484,7 +533,9 @@ def lock_status(paths: WorkerPaths | None = None) -> dict[str, Any]:
     # 观察面去清锁/杀进程，杀的正是在跑的 worker（backlog insp-20261013-045910-mechanical：
     # 判读语义对齐，先例 #43/#44 家族）。未知龄与存活进程并存时按 running 报——判不出
     # 龄不等于判得出死。
-    age_ok = age < 0 or age <= p.stale_s
+    # 超龄但持有者仍心跳 ⇒ 报 running（慢而不死；与 :func:`_lock_live` 同判据同方向，
+    # 两面都说「running」才不会有第二个人去抢锁，2026-10-15 worker-stall 单）。
+    age_ok = age < 0 or age <= p.stale_s or _holder_heartbeating(p, data)
     state = "running" if (alive and age_ok) else "stale"
     out: dict[str, Any] = {"state": state, **base}
     if state == "stale":
@@ -617,6 +668,34 @@ def _log(run_log: Path | None, line: str) -> None:
         with run_log.open("a", encoding="utf-8") as fh:
             fh.write(f"[{datetime.now().strftime('%H:%M:%S')}] {line}\n")
     except OSError:
+        pass
+
+
+def log_stage(run_log: Path | None, stage: str, **fields: Any) -> None:
+    """**阶段埋点**：把 worker/派发链的推进点追加进 run 日志（带毫秒时间戳）。
+
+    为什么必须有它（2026-10-15 08:02 实案，用户定性「非常危险」）：devops 队列 worker
+    ``_queue-worker``(pid 12960) 获锁后**静默卡死 31+ 分钟**——run 日志 **0 字节**、零会话
+    登记、零 token、条目假挂 ``in_progress``，只能等用户从 API 控制台偶然发现；事后无栈可查、
+    钉不死根因。根因是「日志里什么阶段都可能，就是没有『我走到哪一步了』的记录」——
+    而 ``quiet=True``（queue worker 一律静默派发）会把一切 stdout 提示也吃掉。
+
+    本函数独立于 ``quiet``：**只写文件、不写 stdout**，故静默派发照样留痕。逐阶段一行，
+    每行即时落盘（open→write→flush→close，不共享句柄），进程被硬杀也留得下最后一条。
+
+    格式：``[2026-10-15T08:02:31.412+08:00] [stage] lock_acquired member=devops``。
+    写失败 fail-open（观察面不阻塞生产，§0.6）。
+    """
+    if run_log is None:
+        return
+    stamp = datetime.now().astimezone().isoformat(timespec="milliseconds")
+    tail = " ".join(f"{k}={v}" for k, v in fields.items() if v not in (None, ""))
+    try:
+        run_log.parent.mkdir(parents=True, exist_ok=True)
+        with run_log.open("a", encoding="utf-8") as fh:
+            fh.write(f"[{stamp}] [stage] {stage}{' ' + tail if tail else ''}\n")
+            fh.flush()
+    except (OSError, ValueError):  # 坏路径（含内嵌 NUL）也吞：取证面绝不改派发结局
         pass
 
 

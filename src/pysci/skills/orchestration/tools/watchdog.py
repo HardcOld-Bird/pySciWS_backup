@@ -53,10 +53,19 @@ from .drain import (
 from .registry import orchestration_rel
 
 #: 看门狗自身的生命周期落点（锁/日志/协作停止信号）——复用 drain 原语，不另造一套。
+#:
+#: ``stale_s`` **显式取 6h**（不随 ``drain.LOCK_STALE_S`` 的 45min 下调走）：看门狗是
+#: **常驻**监督者，其锁的「黏性」正是 ``start_watchdog`` 幂等判据（锁在跑就不重复派生）；
+#: 而它此刻并无 LiveSession 心跳可作免抢证据（心跳面 :func:`listener_live` 判的是被监督的
+#: watch listener，不是看门狗自己）。若按 45min 判死，一个跑了 2 小时的健康看门狗会被自己的
+#: 下一任抢锁 → 双看门狗（与 drain 侧「误抢=双 worker」同族事故）。
+WATCHDOG_LOCK_STALE_S: int = 6 * 3600
+
 WATCHDOG_PATHS = WorkerPaths(
     lock=ORCH_STATE_ROOT / "watchdog.lock",
     runs=ORCH_STATE_ROOT / "watchdog-runs",
     cancel=ORCH_STATE_ROOT / "watchdog.cancel",
+    stale_s=WATCHDOG_LOCK_STALE_S,
 )
 
 #: 自查周期（秒）。分钟级即可——判死阈值是分钟级的，查得再勤也不改变结论。
@@ -199,6 +208,17 @@ def run_watchdog(
                 _inspectd.self_patrol_tick()
             except Exception as exc:  # noqa: BLE001 - 看门狗要活到下一轮
                 _log(f"[!] inspector tick 异常：{type(exc).__name__}: {exc}", run_log)
+            # 队列**自愈**（task-20261015-worker-stall B2）：孤儿 in_progress 复位 + 有活无人干
+            # 时唤醒 worker。为什么挂在看门狗而不是 worker 自己：worker 死了就没人再拉它
+            # （队列无 pending → 无唤醒 → 鸡生蛋），而看门狗是**唯一**与队列状态无关的常驻面。
+            try:
+                from . import queueworker as _qw
+
+                healed = _qw.reclaim_orphans(now=now())
+                if healed.get("reclaimed") or healed.get("woken"):
+                    _log(f"[→] 队列自愈：{healed}", run_log)
+            except Exception as exc:  # noqa: BLE001 - 看门狗要活到下一轮
+                _log(f"[!] 队列自愈异常：{type(exc).__name__}: {exc}", run_log)
             if (
                 int(summary["checks"]) % max(1, int(stale_s) // max(1, int(interval_s)))
                 == 0

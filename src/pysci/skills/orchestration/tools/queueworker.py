@@ -30,7 +30,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT
 
-from . import backpressure, events, queues, workq
+from . import backpressure, events, queues, stallwatch, workq
 from . import drain as _drain
 from .drain import (
     BACKLOG_BATCH_KIND,
@@ -42,14 +42,27 @@ from .drain import (
     _spawn_detached,
     acquire_lock,
     lock_status,
+    log_stage,
     new_run_log,
     release_lock,
     settle_backlog_batch,
 )
 from .registry import orchestration_rel
+from .stallwatch import StallWatch
 
 #: 成员 worker 的运行态根（锁/停止信号在 ``state/queues/`` 旁，run 日志独立成树）。
 QUEUE_WORKER_ROOT: Path = ORCH_STATE_ROOT / "queues-runs"
+
+#: 跳级 watchdog 判死后本进程的退出码（非 0：`.done` 不会写出，锁面据此可认出「被中途杀死」）。
+STALL_EXIT_CODE: int = 3
+
+#: 巡更自愈：孤儿复位后，若成员队列仍有 pending 且**最老者**超过这个岁数，顺手把 worker
+#: 叫起来（鸡生蛋的另一半——复位只是把活放回队列，没人拉 worker 就等于没复位）。
+RECLAIM_WAKE_MIN_AGE_S: int = 120
+
+#: 巡更自愈的**唤醒冷却**（秒）：该成员的 run 目录里若有这个窗口内的日志，说明刚叫过，
+#: 本轮不再叫——防「worker 起不来 → 每 60s 派生一次」的暴走（无状态判据，无需额外台账）。
+RECLAIM_WAKE_COOLDOWN_S: int = 180
 
 #: **交付正文全文落盘目录（入 git）**：长交付全文的唯一入库落点——队列条目 ``result.body``
 #: 截断至 2000 字、``queues-runs/*.log`` 被 gitignore，长交付原文否则不入远端（用户裁决
@@ -150,11 +163,19 @@ def wake_member(
     return True, f"{member} worker 已后台唤醒（日志 {orchestration_rel(run_log)}）"
 
 
-def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any], Any]:
+def _execute(
+    item: dict[str, Any],
+    *,
+    dry: bool,
+    trace: Any = None,
+) -> tuple[str, dict[str, Any], Any]:
     """执行一条 job（复用 :func:`dispatch.do_dispatch`，会话策略沿派发惯例）。
 
     返回 ``(status, result, outcome)``；``outcome`` 原样带出（带宽类延期判据要用它的
     ``kind``/``error_text``，别在结果字典里丢掉分类原料）。
+
+    ``trace``：阶段埋点/进展回调（:func:`run_worker` 给的那个）——透传给 ``do_dispatch``，
+    让它把「走到哪一步了」写进 run 日志（2026-10-15 worker-stall 单：静默卡死的取证面）。
     """
     if dry:
         return workq.STATUS_DONE, {"dry": True}, None
@@ -173,6 +194,7 @@ def _execute(item: dict[str, Any], *, dry: bool) -> tuple[str, dict[str, Any], A
         max_turns=item.get("max_turns") or None,
         quiet=True,
         auto=True,
+        trace=trace,
     )
     code = int(getattr(out, "code", 2))
     env = getattr(out, "envelope", None)
@@ -350,14 +372,184 @@ def _settle_batch_item(
         summary["error"] = str(first.get("error", "") or "")
 
 
+def _reset_inflight(q: Path, item_id: str, *, note: str) -> bool:
+    """把**单条**在途条目复位 ``pending``（字段语义与 :func:`workq.reset_orphans` 一致）。"""
+    if not item_id:
+        return False
+    return (
+        workq.mutate(
+            q,
+            item_id,
+            status=workq.STATUS_PENDING,
+            started_at="",
+            reclaimed_at=workq._now(),
+            note=note,
+        )
+        is not None
+    )
+
+
+def _make_stall_handler(member: str, q: Path, run_log: Path) -> Any:
+    """造 watchdog 的 ``on_stall`` 回调：复位条目 → 出声 → 杀进程树 → 硬退出。
+
+    为什么必须杀到**本进程**（而不只是那个 headless 子进程）：主线程此刻正卡在
+    ``run_headless`` 的 ``communicate()`` 里，没有协作退出点可返回；不硬退就会「复活」成
+    第二个消费者（条目已复位成 pending，worker 拿到锁却没死 → 双 worker 并发消费）。
+    先杀已派生的会话子进程（它还在写 worktree），再杀自己（含后代），最后 ``os._exit``
+    兜底 Windows 上 taskkill 与 os._exit 之间的竞态。
+
+    出声两路：① ``NEEDS-LEADER`` 事件（记录面 + 巡检命名）；② 复位本身让
+    ``watch.queue_pressure`` 的「队列有 pending 且无 worker」判据成立 → 一个巡更周期内
+    ``PENDING-WORK`` 差分唤醒组长；本进程被杀且无 ``.done`` → 锁面 ``crashed`` →
+    既有 ``CRASH`` 差分也报一次。三路并行，不留静默。
+    """
+    from .stallwatch import JobProgress  # noqa: F401  （类型注解用途）
+
+    def handler(verdict: str, reason: str, prog: Any) -> None:
+        log_stage(
+            run_log, "stall_detected", verdict=verdict, item=prog.item_id, detail=reason
+        )
+        _reset_inflight(
+            q, str(prog.item_id), note=f"watchdog 判卡死（{verdict}）：{reason}"
+        )
+        try:
+            events.emit(
+                events.NEEDS_LEADER,
+                subject=str(prog.item_id or member),
+                detail=f"{member} worker 卡死已被 watchdog 处置：{reason}",
+                action=(
+                    "条目已回 pending；orch status 看队列读数；本 worker 已自退，"
+                    "下次唤醒会重新消费该条目（卡死成因见该 run 的 run 日志）"
+                ),
+            )
+        except Exception:  # noqa: BLE001 - 出声失败也要继续处置（不能因它卡住）
+            pass
+        if int(prog.pid or 0) > 0:
+            stallwatch.kill_tree(int(prog.pid))
+        stallwatch.kill_tree(os.getpid())
+        stallwatch.hard_exit(STALL_EXIT_CODE)
+
+    return handler
+
+
+def _member_recent_log(member: str, *, now: float, window_s: int) -> bool:
+    """该成员的 run 目录里有没有 ``window_s`` 内写过的日志（= 刚叫过 worker，别重复叫）。"""
+    runs = member_paths(member).runs
+    try:
+        logs = list(runs.glob("*.log"))
+    except OSError:
+        return False
+    return any(
+        (now - p.stat().st_mtime) <= window_s
+        for p in logs
+        if _safe_mtime(p) is not None
+    )
+
+
+def _safe_mtime(p: Path) -> float | None:
+    try:
+        return p.stat().st_mtime
+    except OSError:
+        return None
+
+
+def reclaim_orphans(*, now: float | None = None, wake: bool = True) -> dict[str, Any]:
+    """**巡更自愈**：把「``in_progress`` 但无活 worker」的孤儿条目复位 ``pending`` 并唤醒。
+
+    补的缺口（task-20261015-worker-stall B2「鸡生蛋」）：``workq.reset_orphans`` 只在
+    **下次获锁**时执行，而队列若已无 ``pending`` 就再没人拉 worker——孤儿条目永久假挂
+    ``in_progress``、锁永久占位，正是 2026-10-15 08:02 实案（31+ min 无人处置）。本函数
+    把同一回收动作搬到**定期巡更面**（:func:`watchdog.run_watchdog` 每 tick 调用），不再
+    依赖「下次获锁」这个不存在的下次。
+
+    判据：该成员队列有在途条目 **且** 该成员的 worker 锁非 ``running``（锁在跑=那些在途是
+    它的，不碰）。复位之后若仍有**非延期**的 ``pending`` 且最老者已超
+    :data:`RECLAIM_WAKE_MIN_AGE_S`，且该成员 :data:`RECLAIM_WAKE_COOLDOWN_S` 内没派生过
+    worker，则顺手 ``wake_member``——把「活放回队列」补成「真的有人来干」。
+
+    Returns:
+        ``{"reclaimed": {member: [item_id, …]}, "woken": [member, …], "notes": [...]}``。
+    """
+    moment = time.time() if now is None else float(now)
+    out: dict[str, Any] = {"reclaimed": {}, "woken": [], "notes": []}
+    for member in queues.all_members():
+        q = queues.queue_path(member)
+        try:
+            items = workq.load(q)
+        except Exception:  # noqa: BLE001 - 单个队列坏不挡其余成员
+            continue
+        if not items:
+            continue
+        if lock_status(member_paths(member)).get("state") == "running":
+            continue  # 有活 worker：在途条目是它的
+        inflight = [
+            str(i.get("id"))
+            for i in items
+            if str(i.get("status")) == workq.STATUS_IN_PROGRESS
+        ]
+        if inflight:
+            done = workq.reset_orphans(q)
+            out["reclaimed"][member] = done
+            out["notes"].append(
+                f"{member}：孤儿在途 {len(done)} 项已复位 pending（无活 worker）"
+            )
+            try:
+                events.emit(
+                    events.NEEDS_LEADER,
+                    subject=f"{member}:{done[0] if done else '?'}",
+                    detail=(
+                        f"{member} worker 不在场却留下 {len(done)} 项 in_progress —— "
+                        "已按孤儿回收复位为 pending 并重新唤醒（自愈，非静默）"
+                    ),
+                    action="orch status 看队列读数；本条仅需知悉（已自愈，卡死成因见该 run 日志）",
+                )
+            except Exception:  # noqa: BLE001 - 出声失败不挡自愈
+                pass
+        if not wake:
+            continue
+        pend = [
+            i
+            for i in workq.load(q)
+            if str(i.get("status")) == workq.STATUS_PENDING
+            and not backpressure.item_deferred(i, moment)
+        ]
+        if not pend:
+            continue
+        epochs = [workq.item_epoch(i) for i in pend]
+        known = [e for e in epochs if e is not None]
+        if not known or moment - min(known) < RECLAIM_WAKE_MIN_AGE_S:
+            continue
+        if _member_recent_log(member, now=moment, window_s=RECLAIM_WAKE_COOLDOWN_S):
+            out["notes"].append(
+                f"{member}：pending {len(pend)} 项但 {RECLAIM_WAKE_COOLDOWN_S}s 内刚派生过"
+                " worker，本轮不重复叫"
+            )
+            continue
+        spawned, msg = wake_member(member)
+        if spawned:
+            out["woken"].append(member)
+            out["notes"].append(f"{member}：有活无人干 → 已唤醒 worker（{msg}）")
+    return out
+
+
 def run_worker(
-    member: str, run_log: Path, *, dry: bool = False, root: Path | None = None
+    member: str,
+    run_log: Path,
+    *,
+    dry: bool = False,
+    root: Path | None = None,
+    watch: Any = None,
 ) -> dict[str, Any]:
     """FIFO 消化该成员队列（持锁运行；异常/结束均释放锁并写 ``.done`` 摘要）。
 
     §3.3：写侧接线——登记活跃会话 + 守护线程心跳（长 job 阻塞在 ``do_dispatch`` 里也有
     心跳、不被判死）；出队单点先过延期判据；带宽类失败回队挂 ``defer_until``，到期自动重取，
     双闸触顶则停止本队列并上报（发 CHANNEL-STOP 事件）。
+
+    **阶段埋点 + 跳级 watchdog**（2026-10-15 worker-stall 单）：本函数把「走到哪一步」逐段
+    写进 run 日志（``drain.log_stage``，**不受 ``quiet`` 影响**——只写文件不写 stdout），
+    并同时喂给 :class:`~.stallwatch.StallWatch` 作「无进展」判据；判死即复位条目、出声、
+    杀进程树（见 :func:`_make_stall_handler`）。``watch`` 允许注入（测试用假监护）。
     """
     paths = member_paths(member, root=root)
     q = queues.queue_path(member, root=root)
@@ -370,11 +562,29 @@ def run_worker(
         "run_log": str(run_log),
     }
     t_worker = time.time()
+    log_stage(run_log, "lock_acquired", member=member, pid=os.getpid(), dry=dry)
+    # 进展面：一个回调同时供**埋点**（写 run 日志）与**判据**（StallWatch 的无进展判据）。
+    guard = (
+        watch
+        if watch is not None
+        else StallWatch(on_stall=_make_stall_handler(member, q, run_log))
+    )
+    guard.start()
+    # 先按「worker 启动」占位起跑：获锁到取到第一条 job 之间的卡死（实案就发生在这段：
+    # 零会话登记 ⇒ 根本没走到派生）同样要有判据可用。
+    guard.arm("(worker-startup)", member)
+
+    def trace(stage: str, **fields: Any) -> None:
+        log_stage(run_log, stage, **fields)
+        guard.note(stage, **fields)
+
     # devops 的 QUEUE-EMPTY = **backlog 消化完**的知会（旧 drain 语义）；plan 环节直派的
     # devops job 走通用 JOB-DONE 收账，不再叠发（task-20261014-devops-gap-d1 双通道对齐）。
     saw_batch = False
     # 死会话条目（注册表过期）与死队列条目（in_progress 孤儿）各清各的，不重复回收。
+    trace("prune_stale")
     backpressure.prune_stale(now=time.time())
+    trace("live_session_register")
     sess = backpressure.LiveSession(
         member,
         sid=run_log.stem,
@@ -382,26 +592,42 @@ def run_worker(
         purpose="queue-worker",
     ).start()
     try:
+        trace("reset_orphans_begin")
         orphans = workq.reset_orphans(q)
         if orphans:
             summary["reclaimed"] = orphans
+            trace("reset_orphans_done", count=len(orphans))
         while True:
+            # 每条新迭代先解除上一轮的监护：条目已结账（或已延期），它的「无进展」判词
+            # 不再有意义——带着旧判据继续计时就会把已收尾的 job 判成卡死（误杀）。
+            guard.disarm()
             if _consume_stop_request(paths):
                 summary["stopped"] = "cooperative"
+                trace("stop_requested")
                 break
+            trace("take_ready")
             item = queues.take_ready(member, root=root)  # 出队单点：过延期判据
             if item is None:
+                guard.disarm()
                 wait = 0.0 if dry else queues.next_defer_s(member, root=root)
                 if wait > 0:
                     _drain._sleep(min(wait, float(DEFER_MAX_SLEEP_S)))
                     continue
                 break
+            guard.arm(str(item["id"]), member)  # 本跳起跑线（无进展判据在此归零）
+            trace("item_taken", item=str(item["id"]), kind=str(item.get("kind") or ""))
             # 单条目异常**就地结账**（2026-10-14 实测：`task=` 参数名写错 → TypeError 逃出
             # 循环 → 条目永远卡 in_progress、plan run 干等到超时）。失败也要 finish：发
             # JOB-DONE 让 plan run/advance 拿到事件而不是空等；本队列其余条目继续。
             t0 = time.time()
             try:
-                status, result, outcome = _execute(item, dry=dry)
+                status, result, outcome = _execute(item, dry=dry, trace=trace)
+                trace(
+                    "hop_settled",
+                    item=str(item["id"]),
+                    status=status,
+                    code=result.get("code"),
+                )
             except Exception as exc:  # noqa: BLE001 - 一条目炸不得炸整队
                 if str(item.get("kind")) == BACKLOG_BATCH_KIND:
                     # 派发异常：栈进 run 日志（旧 drain 的异常留痕语义——不留黑洞）
@@ -415,6 +641,7 @@ def run_worker(
                 }
                 outcome = None
                 summary["item_error"] = result["error"]
+                _drain._log_exception(run_log, exc, "job 执行异常")
             # devops backlog 批次（计划器入队）：账务=backlog 销账/needs_leader/延期/系统性
             # 停止，全部走 drain 的单一实现；本条目终态由结算结果映射（见 _settle_batch_item）。
             if str(item.get("kind")) == BACKLOG_BATCH_KIND:
@@ -503,6 +730,8 @@ def run_worker(
     except Exception as exc:  # noqa: BLE001 - 异常也要写 .done（不留黑洞）
         summary["error"] = f"{type(exc).__name__}: {exc}"
     finally:
+        guard.disarm()
+        guard.stop()  # 监护线程随 worker 退场：不留一条还在判死已收尾 job 的线
         sess.stop()  # 退场注销活跃会话（先于释放锁，读数面不留幽灵）
         release_lock(run_log, paths)
         summary["completed"] = workq._now()

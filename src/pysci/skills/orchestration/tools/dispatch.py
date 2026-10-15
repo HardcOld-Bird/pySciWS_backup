@@ -12,6 +12,7 @@ import re
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -968,6 +969,7 @@ def do_dispatch(
     eval_hop: bool = False,
     auto: bool = False,
     force_new_session: bool = False,
+    trace: Callable[..., None] | None = None,
 ) -> DispatchOutcome:
     """执行一跳派发（完整链路）。参数语义与 ``orch dispatch`` 一致。
 
@@ -1007,6 +1009,22 @@ def do_dispatch(
     Returns:
         DispatchOutcome（code=0 仅当 result 交付且声明的机械验收全过）。
     """
+
+    def _trace(stage: str, **fields: Any) -> None:
+        """阶段埋点（2026-10-15 worker-stall 单）：opt-in 回调，**fail-soft**。
+
+        为什么透传式而非在 dispatch 里自己写日志：run 日志的归属在调用方（queue worker 的
+        run_log），dispatch 不持有它；而卡死取证要的是「这一跳走到哪一步了」。quiet 与本面
+        无关——埋点只写文件、不写 stdout，故 ``quiet=True`` 的队列派发照样留痕。
+        """
+        if trace is None:
+            return
+        try:
+            trace(stage, **fields)
+        except Exception:  # noqa: BLE001 - 取证面绝不改变派发结局（§0.6）
+            pass
+
+    _trace("dispatch_begin", member=member_id, resume=session, plan=plan, step=step)
     reg = Registry.load()
     reg.ensure_member_defaults(member_id)
     m = reg.member(member_id)
@@ -1041,6 +1059,7 @@ def do_dispatch(
     # 里（成本错配），而等待期零 LLM 成本。必须在**解析角色之前**：等过界后再读，
     # 读到的才是新窗口的链。避让本身不派发、不烧 token，故放在一切早退闸之后。
     hold_line, hold_wait_s = _boundary_hold(reg, no_hold=no_hold, quiet=quiet)
+    _trace("boundary_hold_done", wait_s=hold_wait_s)
 
     # 路由切换检测（路由 v3 规格 2「切换时机」的记录面）：在**解析角色之前**读一次，
     # 于是这一跳用的席链就是切换后的新链——「只影响新派发、在途单跳不换模型」正是这个
@@ -1093,6 +1112,7 @@ def do_dispatch(
         for warn in active.warnings:  # 非法/缺配置回落出厂预设时必须出声
             print(f"[!] {warn}")
     model = chain[0] if chain else str(reg.models.get(tier, ""))
+    _trace("seat_resolved", tier=tier, model=model, chain=len(chain))
     if not quiet:
         for item in seat_plan.skipped:
             print(_channels.skip_line(item))
@@ -1128,6 +1148,7 @@ def do_dispatch(
     # （没记 pid / pid 已死 / argv 对不上 sid）fail-open 照续，不冤枉正常跑。
     sid_new_reason = ""
     if resume:
+        _trace("probe_sid_inflight", sid=sid[:8])
         occ = _sid_inflight(m, sid)
         if occ and auto:
             old_sid, sid, resume = sid, new_session_id(), False
@@ -1157,6 +1178,7 @@ def do_dispatch(
     if not resume:
         _sessions.register_session(m, sid, slug)
     name = slug if not resume else (m.find_session(sid) or {}).get("name", slug)
+    _trace("session_selected", sid=sid[:8], resume=resume, reason=sid_new_reason)
 
     # 相对用量尺子（backlog 20261010-ledger-est-tokens，用户裁决 2026-10-10）：双渠道
     # usage/credits 上报缺口 → 精确 token 不可得，改测「本跳期间会话 jsonl 长多少」。
@@ -1175,10 +1197,14 @@ def do_dispatch(
         return delta, int(round(delta * per_char)), after
 
     taskbook = write_taskbook(m.pod, text=text, task_file=task_file, slug=slug)
+    _trace("taskbook_written", name=taskbook.name)
 
     def _note_pid(pid: int) -> None:
         """派生瞬间把会话进程 pid 记进运行态（第四面回收的判据，见 note_hop_pid）。"""
         note_hop_pid(member_id, sid, pid=pid, task=taskbook.name)
+        # 派生瞬间也是**进展判据的起跑线**（stallwatch：pid/sid/字符水位都在这一刻定下；
+        # 之后 M 分钟字符不涨即判卡死——2026-10-15 worker-stall 单的跳级 watchdog）。
+        _trace("spawn", pid=pid, sid=sid)
 
     replies_body, reply_files = (
         collect_replies(member_id) if attach_replies else ("", [])
@@ -1211,6 +1237,7 @@ def do_dispatch(
             f"→ 派发 {member_id}（会话 {'续:' + sid[:8] if resume else '新:' + sid[:8]}"
             f"，模型 {model or '(默认)'}{eff}，任务书 {taskbook.name}）"
         )
+    _trace("popen_begin", timeout_s=timeout or m.timeout_s)
     rc, out, err = run_headless(
         cmd,
         cwd=PROJECT_ROOT,
@@ -1218,6 +1245,7 @@ def do_dispatch(
         timeout_s=timeout or m.timeout_s,
         on_spawn=_note_pid,
     )
+    _trace("popen_returned", rc=rc, out_chars=len(out or ""))
     env_json = acc_env = Envelope.parse(out)
     failed = rc != 0 or env_json.is_error
     # 席位不可用（额度耗尽 / 渠道级故障 / 启动即失败）**不做普通重试**（上面那段只吃

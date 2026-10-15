@@ -19,6 +19,7 @@ from typing import Any
 
 from pysci.paths import PROJECT_ROOT
 
+from . import procs
 from .registry import Member, resolve_exe
 
 #: 注入到每次派发的交付协议提醒（charter 有全文，这里只防健忘）。
@@ -332,9 +333,19 @@ def run_headless(
     try:
         out, err = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        # 超时**杀进程树**而非只杀直接子进程（2026-10-15 worker-stall 单）：headless CLI
+        # 自己还会派生子进程（工具调用、构建子壳），``proc.kill()`` 只终结它一个，孙进程
+        # 继续占着 worktree 写盘 → 下一次回收重派同名的隔离面就并发双写（procs 模块
+        # docstring 记的同一族事故）。Windows 走 ``taskkill /T /F``，POSIX 走 SIGTERM
+        # 并对好给对手收尾；无论哪条路径随后都补一次 ``proc.kill()`` 兜底（直系子进程
+        # 若忽略 SIGTERM，communicate 会一直等到它退出——超时路径不能挂住 worker）。
+        procs.terminate_tree(proc.pid)
+        try:
+            proc.kill()
+        except OSError:
+            pass
         out, _ = proc.communicate()
-        return -1, out or "", f"TIMEOUT after {timeout_s}s"
+        return -1, out or "", f"TIMEOUT after {timeout_s}s（已杀进程树 pid={proc.pid}）"
     return proc.returncode, out or "", err or ""
 
 

@@ -54,6 +54,7 @@ from pysci.paths import ORCH_STATE_ROOT
 
 from . import drain as _drain
 from . import events as _events
+from . import stallwatch as _stallwatch
 from . import workflow as _workflow
 
 #: watch 自身状态文件（基线快照 / 心跳 / 已发事件）；仅 watch 写、status 读。
@@ -344,6 +345,18 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
                     # 重型环节正当耗时，不报（2026-14 晚实测误报的根治面）。
                     continue
                 stall.append(f"{member}:{it.get('id')} in_progress {age / 60:.0f}min")
+            if member in live_members:
+                # **心跳活着却不动**（task-20261015-worker-stall 实案：心跳照跳、零会话
+                # 登记、零 token、条目假挂 31+min）——心跳闸结构上看不见这一维，故在
+                # 「有心跳」这一支上再补一层无进展判据（判据单一实现在 stallwatch）。
+                reasons.extend(
+                    _stallwatch.patrol_reasons(
+                        member,
+                        items,
+                        now=moment,
+                        age_threshold_s=cfg["stall_threshold_s"],
+                    )
+                )
     except Exception:  # noqa: BLE001 - 队列面读失败不阻塞巡更
         pass
     try:
