@@ -26,6 +26,21 @@ compose slides verify '<deck.pptx>' [--render-dir DIR] [--min-ink 0.002]
 `check="pptx-visual"`：交付里声明 `<artifact check="pptx-visual">…deck.pptx</artifact>` 即由
 orch 自动验收，**缺渲染 / 页数不符即打回**。
 
+渲染后命令会**打印可直接粘贴的 verify 调用**——受审目录只读时用 `render --out <可写目录>`，
+不必记住 `--render-dir` 旗标名。
+
+## 几何体检（版面硬伤，只读、不写盘）
+
+```
+compose slides geometry '<deck.pptx>' [--frame NAME] [--json] [--strict]
+```
+
+渲染闸只管「渲染出来了没 / 是不是空白」，命不中「渲染出来了但版面是坏的」。几何体检补后者：
+纯 bbox + z 序硬判三项——**外框边被更高 z 序图片覆盖率**（压模板外框）、**图元越界**（画布 /
+外框）、**图片互叠面积**（粘贴截图互相叠住）。**不渲染、不写盘**，故受审目录只读时照跑；默认
+只报告（版面硬伤需人判读），`--strict` 才据违规置非零退出码。外框默认自动识别（画布面积
+10%–95% 的最大矩形），识别不准时 `--frame <形状名>`。这即是 H4①/H2 的机械原料，**不必自建脚本**。
+
 ## 网页截图（deck 里的官网 / 页面图）
 
 需要把网页截进幻灯片时用本机 `playwright`（已装，复用 literature_research 的浏览器）：

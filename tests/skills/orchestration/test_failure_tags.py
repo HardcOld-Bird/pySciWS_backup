@@ -65,6 +65,15 @@ def test_shipped_vocab_disambiguates_whitelist_conflict():
     assert all(d.strip() for d in vocab.values())
 
 
+def test_shipped_vocab_has_presentation_defect_tags():
+    """演示/图件版面硬伤类档位（backlog 20261016-024413-reviewer）：遮挡 / 溢出 / 素材质量
+    三类各有**非空定义**（词表纪律：增补须附定义；否则 gate 拒、统计口径空转）。"""
+    vocab = failure_tags.load_tags()
+    for key in ("visual_occlusion", "text_overflow", "asset_quality"):
+        assert key in vocab, f"随附词表缺 {key}"
+        assert vocab[key].strip(), f"{key} 的定义为空"
+
+
 def test_load_tags_missing_file_falls_back_to_defaults(iso_state):
     """词表文件没部署（新克隆/隔离态）→ 兜底集合顶上，统计不崩。"""
     assert set(failure_tags.load_tags()) == set(failure_tags.DEFAULT_TAGS)

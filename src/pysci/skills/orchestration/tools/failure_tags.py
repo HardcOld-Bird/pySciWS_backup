@@ -36,6 +36,9 @@ DEFAULT_TAGS: dict[str, str] = {
     "env_broken": "",
     "merge_dirty_face": "",
     "concurrent_writer": "",
+    "visual_occlusion": "",
+    "text_overflow": "",
+    "asset_quality": "",
     "design_smell": "",
     "unknown": "",
 }
