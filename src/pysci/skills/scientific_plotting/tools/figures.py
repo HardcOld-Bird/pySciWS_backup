@@ -107,6 +107,16 @@ def cmd_styles(args: argparse.Namespace) -> int:
     for name in _palette.list_palettes():
         cols = _palette.get_palette(name)
         print(f"  {name:<12}: {' '.join(cols)}")
+    print("\n=== scienceplots（可选审美层；契约层优先） ===")
+    sp = _style.scienceplots_available()
+    if sp:
+        print(f"  已安装；可用风格: {', '.join(sp)}")
+        print(
+            f"  默认叠加: {' + '.join(_style.SCIENCEPLOTS_DEFAULT)}"
+            "（STYLE.yaml `scienceplots: true` 启用；契约键覆盖之）"
+        )
+    else:
+        print("  (未安装——可选；`uv add scienceplots`)")
     print(f"\ndefault style (config): {settings.default_style}")
     return 0
 
