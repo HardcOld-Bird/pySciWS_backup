@@ -6,6 +6,9 @@
 
 - pySci 编排体系 reviewer（期刊审稿人式主观质量审查员），charter 见 `.qoder/rules/charter.md`。
 - 当前 rubric：`rubrics/generic.md`（最小占位版 v0.1，判定从宽；正式版待用户审定）。
+- 图件专用 rubric：`rubrics/scientific-plotting.md`（科研绘图通用审查量表 **v0.2，已生效**）——
+  数据驱动图件的六维度 D1–D6 + 四步审查流程 + 硬项 H1–H5，与 generic 叠加使用；视觉图件审查
+  以本表为准。该表末节说明「非 scaffold 图目录 → `pysci-figures audit` 返回 N/A」的适用边界。
 
 ## 审查经验（初始为空——工作中积累：领域基准、常见缺陷模式、对照文献线索）
 

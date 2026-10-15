@@ -21,8 +21,8 @@ loop **docs → build → run → export → render/post → validate**. Its bac
 
 They coexist on this **single-license** box only because an *idle* MCP server holds no license — which
 requires HTTP transport (path C). Once it has started COMSOL it holds the one license, so `mcp stop`
-before a CLI solve or opening the GUI. Transport choice, license probing (`jvm.dll`, **not** `_jpype.pyd`),
-duplicate instances: [references/mcp.md](references/mcp.md).
+before a CLI solve or opening the GUI. Transport, license probing (`jvm.dll`, **not** `_jpype.pyd`),
+duplicates: [references/mcp.md](references/mcp.md).
 
 ## Step 0 — bring the MCP server up (every session, before any MCP tool call)
 
@@ -60,7 +60,7 @@ From the **project root**: `pysci-simulation <command> [options]`, abbreviated b
 > **PowerShell:** this CLI prints Chinese — apply `.qoder/rules/basic.md` §3 or you read mojibake.
 >
 > **Cost rule:** every command touching a live model (`inspect`, `run solve`, `export`, `build apply`)
-> boots a JVM (~30 s) and takes a license slot. Batch questions: prefer ONE session doing several things
+> boots a JVM (~30 s) and takes a license slot. Batch: prefer ONE session doing several things
 > over many single-purpose calls.
 
 ## Commands
@@ -72,7 +72,7 @@ From the **project root**: `pysci-simulation <command> [options]`, abbreviated b
 | read | `inspect tree` · `params` · `inventory` · `node --path P` · `java F.java` |
 | write | `node set --path P --set k=v [--save O.mph]` · `build recipes` · `build apply --recipe R` |
 | run | `run solve [--study S] [--set-param k=v] [--clear]` · `run batch IN.mph --output OUT.mph` |
-| see | `export image --plotgroup PG --out O.png` · `export data --source D [--expr E]` · `export table` · `render F.vtk` · `post stats`/`quality`/`framebox` |
+| see | `export image --plotgroup PG --out O.png` · `export data --source D [--expr E]` · `export polar` · `export table` · `render F.vtk` · `post stats`/`quality`/`framebox` |
 | docs | `docs search '<q>'` · `docs read DOC [--heading H]` · `docs convert-all` · `docs index` |
 | server | `server start` · `stop` · `status` |
 

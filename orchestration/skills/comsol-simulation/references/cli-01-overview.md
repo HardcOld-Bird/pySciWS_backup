@@ -29,6 +29,7 @@ when a solve or export misbehaves, or when you are about to change how sessions 
 | `run batch IN.mph --output OUT.mph` | Heavy/long solves off-session | comsolbatch result + stdout/stderr |
 | `export image --mph M --plotgroup PG --out O.png [--color-range MIN MAX] [--polar-rmax R] [--geom-bbox X0 X1 Y0 Y1] [--extent … --clean]` | "Seeing" a result plot | PNG + `<O>.sidecar.json` (axis-frame px box, `extent_recovered`/`scale_applied`, blank self-check warn) |
 | `export data --mph M --source D --out O.csv [--expr E]` | Numeric field data | CSV/VTK (add `--expr` for field values) |
+| `export polar --mph M --expr E --radius R --out O.csv [--center X0 Y0] [--angle-range MIN MAX] [--angle-step S] [--source D]` | Field **vs angle** (far/exterior-field sweep) | CSV: angle column (deg) + field value(s); builds a parametric-arc dataset with `global=on` (evaluates outside the mesh) |
 | `export table --mph M --table T --out O.csv` | Probe/global tables | CSV |
 | `render F.vtk --out O.png [--scalars S]` | Offscreen look at mesh/field | pyvista PNG (no COMSOL needed) |
 | `post stats --file F.vtk --scalars S` / `--csv C` | Field statistics | min/max/mean/rms or CSV columns |
