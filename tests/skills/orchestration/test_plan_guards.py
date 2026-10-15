@@ -14,7 +14,6 @@ from __future__ import annotations
 from argparse import Namespace
 from pathlib import Path
 
-import pytest
 import yaml
 
 from pysci.skills.orchestration.tools import plans, queues, queueworker, workq
@@ -24,14 +23,6 @@ from pysci.skills.orchestration.tools.planflow import (
 )
 
 OK = "改动完成 commit abc1234 已合并回 main"
-
-
-@pytest.fixture
-def qface(iso_state, tmp_path, monkeypatch):
-    d = tmp_path / "plans"
-    d.mkdir()
-    monkeypatch.setattr(plans, "PLANS_DIR", d)
-    return d
 
 
 def _write_plan(d: Path, plan_id: str, steps: list[dict], **top) -> None:
