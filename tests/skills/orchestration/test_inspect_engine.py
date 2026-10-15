@@ -878,3 +878,37 @@ def test_promote_surfaces_shape_warn_in_returns(iso_state, monkeypatch):
     }
     out = inspectd.promote_finding(rec, channel="mechanical", wake=False)
     assert "warn" in out and out["warn"], out
+
+
+# ---------------------------------------------------------------------------
+# ⑥ 「交付信息架构抽查」菜单项（返工监察改进 c4）的**抽查→立案**链路
+# ---------------------------------------------------------------------------
+def test_info_arch_patrol_finding_takes_the_existing_funnel(iso_engine):
+    """监察盲区补齐（c4）：按该菜单项 brief 登记的 usability 发现，走**既有**分流进 backlog。
+
+    历史盲区：``findings`` 零信息组织类捕获——缺陷只靠用户驳回暴露。c2 方案不新造规则：
+    菜单补一项 + 判据引验收纪律 §4（真本路径见菜单项 brief）。本用例钉住「抽查立案真的
+    接得上既有通道」，而不是只看菜单文本在场。
+    """
+    rec = inspectd.append_finding(
+        cls="mechanical",
+        title="交付物信息组织不合验收纪律 §4 判据：被抽交付物的高频维度散落",
+        symptom="交付留档里同类维度分散在各节，读者需逐节扫读",
+        repro="读 orchestration/state/deliveries/<job>.md 逐条核对 §4 判据",
+        evidence="抽中交付物逐节扫读：同类维度散在各节，无该判据要求的集中呈现",
+        expect="被抽交付物按 §4 判据把高频维度集中呈现",
+        kind="usability",
+        criteria="- 被抽交付物按 §4 判据含集中呈现的高频维度条目",
+        # 交付物未满足**已声明的** success_criteria ⇒ 复原既有声明行为，非改策略
+        remedy_shape="restore",
+        stamp="20261015-140000",
+    )
+    assert rec["kind"] == "usability" and rec["remedy_shape"] == "restore"
+
+    out = inspectd.promote_finding(rec, channel="mechanical", wake=False)
+
+    assert out["action"] == "promoted", out
+    row = next(it for it in read_backlog(iso_engine) if it["id"] == rec["id"])
+    assert row["kind"] == "usability" and row["source"] == "inspector"
+    assert row["class"] == "mechanical" and row["remedy_shape"] == "restore"
+    assert inspectd.finding_by_id(rec["id"])["status"] == "promoted"
