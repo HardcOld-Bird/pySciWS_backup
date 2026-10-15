@@ -59,3 +59,38 @@ def test_any_oserror_is_swallowed_with_trace(tmp_path, monkeypatch):
     dispatch._archive_replies(files, trace=lambda stage, **kw: traced.append(stage))
 
     assert traced == ["reply_archive_skipped"]
+
+
+# ---------------------------------------------------------------------------
+# 派发级阳性用例（backlog 20261015-131302-devops 判据②：驱动一次 dispatch 收尾）
+# ---------------------------------------------------------------------------
+MEMBER = "quotamember"
+OK = "<result>完工，commit abc1234 已合并。</result>"
+BUILTIN = "Qwen3.8-Flash"
+
+
+def test_dispatch_settle_survives_a_missing_reply_source(
+    iso_dispatch, monkeypatch, tmp_path
+):
+    """**实案同款**：待归档的源已被移走（``sent/`` 侧已在）→ `do_dispatch` 照常收尾、**不抛**。
+
+    旧代码在此从归档循环里抛出 ``FileNotFoundError`` → 逃出 ``do_dispatch`` → 批次异常退出
+    （job 20261015-122406 无 ``.done``）→ 条目坠落重派 → 双写者。本用例把判据钉在**派发级**
+    （不只是归档 helper）：驱动一次完整的 dispatch 收尾，断言返回正常。
+    """
+    from .conftest import envelope, fake_headless, set_models
+
+    set_models(iso_dispatch, flash=BUILTIN)
+    fake_headless(monkeypatch, lambda n, cmd: envelope(OK, is_error=False, rc=0))
+    replies = iso_dispatch / "replies" / MEMBER
+    (replies / "sent").mkdir(parents=True, exist_ok=True)
+    stale = replies / "already-archived.md"
+    (replies / "sent" / stale.name).write_text("回复正文\n", encoding="utf-8")
+    assert not stale.exists(), "前提：源已被移走、sent/ 侧已在（实案形态）"
+    monkeypatch.setattr(dispatch, "collect_replies", lambda _mid: ("回复正文", [stale]))
+
+    o = dispatch.do_dispatch(MEMBER, text="干活", quiet=True, no_checks=True)
+
+    assert o.code == 0 and o.kind == "result", (
+        f"归档面不得反噬派发（实案：FileNotFoundError 逃出 → 批次崩 + 无 .done）——实得 {o}"
+    )
