@@ -20,7 +20,7 @@ from argparse import Namespace
 
 import pytest
 import yaml
-from textual.widgets import Input
+from textual.widgets import TextArea
 
 from pysci import paths as _paths
 from pysci.skills.orchestration.tools import (
@@ -232,7 +232,7 @@ def test_tui_reject_message_shows_next_command(face):
             await pilot.pause()
             await pilot.press("r")
             assert app.view == "tb-reject"
-            app.query_one("#tb-note", Input).value = "重新来"
+            app.query_one("#tb-note", TextArea).text = "重新来"
             await pilot.click("#tb-reject-submit")
             return app.last_rework, app.tb_reject_msg
 

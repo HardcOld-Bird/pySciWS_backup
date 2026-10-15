@@ -62,6 +62,11 @@ ALLOWED: dict[str, set[str]] = {
     STATUS_FAILED: set(),  # 失败终态（待用户补充指引后另起新任务书）
 }
 
+#: 终态（报告快照须随之刷新，见 :func:`transition`）。
+_TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {STATUS_DELIVERED, STATUS_ACCEPTED, STATUS_REJECTED, STATUS_FAILED}
+)
+
 #: 优先级（PSEP_3 §3.1 / 用户裁决⑤⑦）：仅影响**引导顺序**，不抢占在途。
 PRIORITY_HIGH = "high"
 PRIORITY_NORMAL = "normal"
@@ -324,7 +329,17 @@ def transition(
     if plan_id is not None:
         st["plan_id"] = plan_id
     st["status"] = status
-    return _save_state(tb_id, st)
+    saved = _save_state(tb_id, st)
+    # 终态变更 ⇒ **刷新报告快照**（backlog 20261015-230248 ②）：`<id>.report.md` 是
+    # delivered 的**交付物**（§4.3 #5），若它还留着旧状态（实测：sync 前生成的快照永远写着
+    # `状态：active`），组长批复时读到的就是过期口径。只在快照**已存在**时重建（不因此凭空
+    # 造文件）；写失败 fail-soft——留档面绝不阻塞状态迁移。
+    if status in _TERMINAL_STATUSES and report_path(tb_id).exists():
+        try:
+            build_report(tb_id)
+        except Exception:  # noqa: BLE001 - 报告面 fail-soft（状态迁移已完成）
+            pass
+    return saved
 
 
 def link_plan(tb_id: str, plan_id: str) -> dict[str, Any]:

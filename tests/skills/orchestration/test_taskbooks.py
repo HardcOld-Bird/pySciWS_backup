@@ -201,7 +201,9 @@ def test_pilot_new_taskbook_lands_on_disk(tbdir):
             app.query_one("#tb-new-body", TextArea).text = "正文甲\n正文乙"
             await pilot.click("#tb-new-submit")
             assert app.last_created.startswith("tb-")
-            assert "已投递" in app.tb_new_msg
+            # ③ 确认即关页回列表（backlog 20261015-230248）：消息落列表面
+            assert app.view == "taskbooks"
+            assert "已投递" in app.tb_msg
 
     _run(_go())
     st = taskbooks.list_all()
@@ -235,7 +237,7 @@ def test_pilot_accept_and_reject_selected(tbdir):
             assert app.view == "tb-reject"
             app._set_radio("#tb-reject-mode", 1)  # 无监察改进
             app._set_radio("#tb-reject-priority", 2)  # 低
-            app.query_one("#tb-note", Input).value = "拆得不对"
+            app.query_one("#tb-note", TextArea).text = "拆得不对"
             await pilot.click("#tb-reject-submit")
             assert app.last_rework.startswith("tb-")
             assert "rework" in app.tb_reject_msg.lower() or "返工" in app.tb_reject_msg
