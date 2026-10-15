@@ -76,6 +76,28 @@ OPEN_STATUSES = (STATUS_NEW, STATUS_PLANNING, STATUS_ACTIVE, STATUS_FAILED)
 REVIEW_STATUSES = (STATUS_DELIVERED,)
 HISTORY_STATUSES = (STATUS_ACCEPTED,)
 
+#: **状态徽标**（TUI 列表与 CLI 共用真源，用户 2026-10-15「看不出完成与否」）：
+#: 每态一个可辨字形 + 状态名——字形让"完成/在做/被拒"一眼可扫，状态名保留精确定义。
+STATUS_BADGES: dict[str, str] = {
+    STATUS_NEW: "○ new",
+    STATUS_PLANNING: "◔ planning",
+    STATUS_ACTIVE: "◑ active",
+    STATUS_DELIVERED: "◆ delivered",
+    STATUS_ACCEPTED: "✔ accepted",
+    STATUS_REJECTED: "✗ rejected",
+    STATUS_FAILED: "⚠ failed",
+}
+
+
+def status_badge(status: str) -> str:
+    """状态徽标串（TUI 列表/详情行首用）。
+
+    未知状态**原样回显**而非吞成占位：状态机新增一态而徽标表未跟随时，界面必须看得见
+    真值（否则用户把「未识别的态」读成「没有态」）。
+    """
+    s = str(status or "")
+    return STATUS_BADGES.get(s, s or "?")
+
 
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -375,12 +397,185 @@ def _role_texts(pid: str) -> tuple[dict[str, str], list[tuple[str, str]]]:
     return roles, leaves
 
 
-def build_report(tb_id: str) -> str:
-    """程序化拼装**全流程报告**（PSEP_3 §4.3 #5）→ ``<id>.report.md``；返回正文。
+# ---------------------------------------------------------------------------
+# 流程报告素材：环节完成清单（TUI 详情页与全流程报告**同一组装器**，§2.5 不留两份）
+# ---------------------------------------------------------------------------
+#: 交付留档正文在页内摘要的字符上限：全文始终可由留档路径取，摘要够长以致「不必翻文件」
+#: （用户 2026-10-15：TUI 里就要能看到交付报告）。
+DELIVERY_EXCERPT_CHARS: int = 2000
 
-    段落：任务概述 / 历轮摘要 / 本轮成因分析 / 解决方案 / 裁决书 / 监察判断 / 改进清单 / 返工
-    产物报告。各段从任务书 + 所链 plan（叶子 ``role`` + evidence）与 jury 案卷聚合；缺一段
-    显式标「（缺：无留痕）」——不静默、不空过。
+#: 环节状态字形（与 ``plans.plan_tree_lines`` 同族语义）。
+_STEP_ICONS: dict[str, str] = {
+    "done": "✔",
+    "queued": "▶",
+    "self_awaiting": "✎",
+    "blocked": "✗",
+    "failed": "✗",
+    "run_failed": "✗",
+}
+
+
+def _deliveries_dir() -> Path:
+    """交付全文留档目录：**现读** ``queueworker.DELIVERIES_DIR``（测试 monkeypatch 可隔离）。"""
+    from . import queueworker
+
+    return Path(queueworker.DELIVERIES_DIR)
+
+
+def _rel_show(p: Path) -> str:
+    """相对项目根的显示串（越界原样返回）。"""
+    from .registry import orchestration_rel
+
+    return orchestration_rel(p)
+
+
+def _delivery_body(text: str) -> str:
+    """从留档文件里剥出「交付正文」段（失败交付的「错误正文」另段，不混入）。"""
+    _head, sep, rest = text.partition("## 交付正文")
+    body = (rest if sep else text).strip()
+    return body.split("\n## ", 1)[0].strip()
+
+
+def _delivery_text(p: Path) -> str:
+    """读留档全文（缺读返回空串——读数面 fail-soft）。"""
+    try:
+        return p.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _delivery_excerpt(text: str, name: str, limit: int = DELIVERY_EXCERPT_CHARS) -> str:
+    """留档「交付正文」的页内摘要（空正文 → 空串）。"""
+    body = _delivery_body(text)
+    if not body:
+        return ""
+    if len(body) > limit:
+        return body[:limit].rstrip() + f"…（已截断，全文见 {name}）"
+    return body
+
+
+def _delivery_duration(text: str) -> int:
+    """留档头部的 ``- duration_ms: N``（无则 0）。
+
+    为何需要它：台账 ``plan`` 字段在 2026-10-13～2026-10-15 的遮蔽缺陷窗口内落的是席表
+    对象（见 :func:`_durations`），那段历史的耗时只能从留档头读——留档头由
+    ``queueworker.archive_delivery`` 逐 job 写，与岗位归属无关。
+    """
+    for ln in text.splitlines():
+        if ln.startswith("- duration_ms:"):
+            try:
+                return int(ln.split(":", 1)[1].strip())
+            except ValueError:
+                return 0
+    return 0
+
+
+def _delivery_file(plan_id: str, step: str, job_id: str) -> Path | None:
+    """环节的交付全文留档：优先 ``<job_id>.md``，否则按 ``*-<plan>-<step>.md`` 后缀反查。"""
+    d = _deliveries_dir()
+    if job_id:
+        p = d / f"{job_id}.md"
+        if p.is_file():
+            return p
+    try:
+        hits = sorted(d.glob(f"*-{plan_id}-{step}.md"))
+    except OSError:
+        return None
+    return hits[-1] if hits else None
+
+
+def _durations(plan_id: str) -> dict[str, int]:
+    """环节**累计耗时**（ms）：台账按 ``plan``+``step`` 聚合（重派多跳即累加）。
+
+    读不到即留空——台账 ``plan`` 在 2026-10-13～2026-10-15 的遮蔽缺陷窗口内落的是席表
+    对象（非 id），那段历史由 :func:`_delivery_duration` 从留档头补位。
+    """
+    from .ledger import read_all
+
+    out: dict[str, int] = {}
+    for e in read_all():
+        if str(getattr(e, "plan", "") or "") != plan_id or not getattr(e, "step", ""):
+            continue
+        key = str(e.step)
+        out[key] = out.get(key, 0) + int(e.duration_ms or 0)
+    return out
+
+
+def flow_steps(plan_id: str) -> list[dict[str, Any]]:
+    """所链 plan 的**环节完成清单**（每环节：状态/成员/粗描述/耗时/交付留档路径与正文摘要）。
+
+    交付正文的定位与读取全走 :mod:`..queueworker` 的留档落点（``<job_id>.md``，2026-10-15
+    落地的「交付正文全文入 git」）；plan 缺席/坏读 → 空表（观察面 fail-soft，不塌界面）。
+    耗时优先取台账（可累积重派），台账无归属时回落**留档头**的 ``duration_ms``。
+    """
+    if not plan_id:
+        return []
+    from . import plans as _plans  # 延迟导入：plans 与 taskbooks 无依赖，保持叶子化
+
+    try:
+        plan = _plans._load_yaml(plan_id)
+        pstate = _plans._load_state(plan_id)
+    except Exception:  # noqa: BLE001 - 读数失败不塌详情（§0.6）
+        return []
+    rows = {str(s.get("id")): s for s in (pstate.get("steps") or [])}
+    dur = _durations(plan_id)
+    out: list[dict[str, Any]] = []
+    for leaf in _plans._tree(plan).leaves:
+        row = rows.get(leaf.path) or {}
+        sy = leaf.yaml
+        f = _delivery_file(plan_id, leaf.path, str(row.get("job_id") or ""))
+        text = _delivery_text(f) if f else ""
+        out.append(
+            {
+                "id": leaf.path,
+                "status": str(row.get("status") or "pending"),
+                "member": str(
+                    sy.get("member")
+                    or ("self（组长）" if leaf.kind == _plans.KIND_SELF else "?")
+                ),
+                "brief": str(sy.get("brief") or ""),
+                "duration_ms": dur.get(leaf.path) or _delivery_duration(text),
+                "evidence": str(row.get("evidence") or ""),
+                "delivery_file": str(f) if f else "",
+                "delivery_path": _rel_show(f) if f else "",
+                "delivery_excerpt": _delivery_excerpt(text, f.name) if f else "",
+            }
+        )
+    return out
+
+
+def _flow_body(steps: list[dict[str, Any]]) -> str:
+    """环节完成清单的 Markdown 正文（报告段与 TUI 页内块共用）。"""
+    if not steps:
+        return ""
+    out: list[str] = []
+    for s in steps:
+        icon = _STEP_ICONS.get(s["status"], "·")
+        dur = f"{s['duration_ms'] / 1000:.0f}s" if s["duration_ms"] else "—"
+        out.append(f"- {icon} {s['id']} [{s['status']}] {s['member']}｜耗时 {dur}")
+        if s["brief"]:
+            out.append(f"  - 粗描述：{s['brief']}")
+        if s["delivery_path"]:
+            out.append(
+                f"  - 交付正文留档：{s['delivery_path']}"
+                f"（页内摘要 {len(s['delivery_excerpt'])} 字）"
+            )
+            if s["delivery_excerpt"]:
+                out.append(
+                    "\n".join(f"    {ln}" for ln in s["delivery_excerpt"].splitlines())
+                )
+        if s["evidence"]:
+            out.append(f"  - evidence：{s['evidence']}")
+    return "\n".join(out)
+
+
+def report_sections(tb_id: str) -> list[str]:
+    """组装**全流程报告正文**（**纯组装、不落盘**）→ 行文本；``build_report`` 与 TUI 详情页共用。
+
+    通用段（任何任务书都有）：任务概述 / **环节完成清单**（所链 plan 的逐环节状态·成员·耗时·
+    交付正文留档路径与页内摘要）。
+    返工专属段（仅带 ``rework_of``/``mode`` 的任务书）：历轮摘要 / 本轮成因分析 / 解决方案 /
+    裁决书 / 监察判断 / 改进清单 / 返工产物报告——普通任务书省略（省得满屏「（缺：无留痕）」）。
 
     Raises:
         ValueError: 任务书不存在。
@@ -390,7 +585,13 @@ def build_report(tb_id: str) -> str:
     st = load_state(tb_id)
     if st is None:
         raise ValueError(f"任务书不存在：{tb_id}")
-    roles, leaves = _role_texts(str(st.get("plan_id") or ""))
+    pid = str(st.get("plan_id") or "")
+    try:
+        roles, leaves = _role_texts(pid)
+    except Exception:  # noqa: BLE001 - 计划侧读数坏不塌报告（观察面）
+        roles, leaves = {}, []
+    steps = flow_steps(pid)
+    rework = bool(st.get("rework_of") or st.get("mode"))
 
     def sec(title: str, body: object) -> str:
         return f"## {title}\n\n{str(body or '').strip() or '（缺：无留痕）'}\n"
@@ -400,8 +601,15 @@ def build_report(tb_id: str) -> str:
         f"- 状态：{st.get('status')}；轮次：第 {int(st.get('rework_round') or 1)} 轮；"
         f"模式：{st.get('mode') or '（非返工）'}；优先级：{st.get('priority')}"
     )
+    if pid:
+        done = sum(1 for s in steps if s["status"] in ("done", "skipped"))
+        overview += f"\n- 计划：{pid}（{done}/{len(steps)} 环节完成）"
     body_txt = read_body(tb_id)
     parts.append(sec("任务概述", overview + ("\n\n" + body_txt if body_txt else "")))
+    parts.append(sec("环节完成清单", _flow_body(steps)))
+
+    if not rework:
+        return parts
 
     hist: list[str] = []
     prev = str(st.get("rework_of") or "")
@@ -448,12 +656,65 @@ def build_report(tb_id: str) -> str:
     else:
         parts.append(sec("改进清单", ""))
     parts.append(sec("返工产物报告", roles.get("final_report", "")))
+    return parts
 
-    text = "\n".join(parts).rstrip() + "\n"
+
+def build_report(tb_id: str) -> str:
+    """程序化拼装**全流程报告**（PSEP_3 §4.3 #5）→ ``<id>.report.md``；返回正文。
+
+    段落由 :func:`report_sections` 组装（单一实现）；本函数只负责**落盘与回写状态**。
+
+    Raises:
+        ValueError: 任务书不存在。
+    """
+    text = "\n".join(report_sections(tb_id)).rstrip() + "\n"
     _write(report_path(tb_id), text)
+    st = load_state(tb_id) or {}
     st["report"] = str(report_path(tb_id))
     _save_state(tb_id, st)
     return text
+
+
+def detail_lines(tb_id: str) -> list[str]:
+    """任务书**详情页**内容（TUI Enter；纯读数、无副作用）。
+
+    段：标题/状态徽标 → （delivered 态）**批复参考＝流程报告置顶** → 任务书正文 →
+    批语历史 → 流程报告 → 返工卡片。流程报告走 :func:`report_sections`（**不落盘**——
+    详情页只读，不因看一眼就写出 ``.report.md``）。
+    """
+    st = load_state(tb_id) or {}
+    status = str(st.get("status") or "")
+    pid = str(st.get("plan_id") or "")
+    delivered = status == STATUS_DELIVERED
+    out: list[str] = [
+        f"任务书 {tb_id}　[{status_badge(status)}]",
+        f"标题：{st.get('title') or ''}",
+    ]
+    if pid:
+        steps = flow_steps(pid)
+        done = sum(1 for s in steps if s["status"] in ("done", "skipped"))
+        out.append(f"计划：{pid}（{done}/{len(steps)} 环节完成）")
+    try:
+        report = report_sections(tb_id)
+    except Exception as exc:  # noqa: BLE001 - 报告坏一段不塌详情（观察面 fail-soft）
+        report = [f"（流程报告读数失败：{type(exc).__name__}: {exc}）"]
+    if delivered:
+        out += [
+            "",
+            "★ 批复参考 —— 流程报告（本大任务的流程交付；看毕再批复）",
+            *report,
+        ]
+    out += ["", "—— 任务书正文 ——", read_body(tb_id) or "（空）"]
+    rej = st.get("rejections") or []
+    out += ["", f"—— 批语历史（{len(rej)} 条）——"]
+    out += [f"  · {r.get('ts')}：{r.get('note')}" for r in rej] or ["  （无）"]
+    if not delivered:
+        out += ["", "—— 流程报告（所链计划的环节完成清单）——", *report]
+    card = rework_card(tb_id)
+    if card:
+        out += ["", "—— 返工卡片 ——", *card]
+    out.append("批复入口：`a` 接受选中 / `r` 驳回选中（三段式）")
+    return out
 
 
 def rework_card(tb_id: str) -> list[str]:

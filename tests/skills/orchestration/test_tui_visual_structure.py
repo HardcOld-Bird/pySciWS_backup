@@ -14,6 +14,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+
+from pysci import paths as _paths
+from pysci.skills.orchestration.tools import taskbooks
 from pysci.skills.orchestration.tools.tui import app as tui
 from pysci.skills.orchestration.tools.tui.modules import modules
 
@@ -22,11 +26,28 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+@pytest.fixture
+def tbdir(tmp_path, monkeypatch):
+    """任务书面板/详情页的读数是**真实 state**——不隔离则该模块用例随开发者机器上的
+    任务书而变（也让「任务书详情页」这条视图走不进：空列表按 Enter 无处可去）。"""
+    data = tmp_path / "data"
+    monkeypatch.setattr(taskbooks, "TASKBOOKS_DIR", data / "taskbooks")
+    monkeypatch.setattr(_paths, "DATA_ROOT", data)
+    return data
+
+
 #: action 名 → 键（从 BINDINGS 反推，避免手工表漂移）。
 KEY_OF_ACTION: dict[str, str] = {a: k for k, a, _ in tui.PysciTUI.BINDINGS}
 
 #: 详情页三区组件。
 _DETAIL_IDS = ("#detail", "#detail-title", "#detail-body", "#detail-hint")
+#: 任务书详情页三区组件（Enter 进；与模块详情页同构）。
+_TB_DETAIL_IDS = (
+    "#tb-detail",
+    "#tb-detail-title",
+    "#tb-detail-body",
+    "#tb-detail-hint",
+)
 _PANEL_IDS = (
     "#menu",
     "#summary",
@@ -118,6 +139,12 @@ async def _each_view(pilot, app):
     await pilot.press("escape")
     await pilot.press("t")
     yield "taskbooks"
+    if app.tb_items:  # 空列表按 Enter 无处可去（无任务书时跳过详情页）
+        await pilot.press("enter")
+        await pilot.pause()
+        yield "tb-detail"
+        await pilot.press("escape")
+        yield "taskbooks"
     await pilot.press("n")
     yield "tb-new"
     await pilot.press("escape")
@@ -126,8 +153,9 @@ async def _each_view(pilot, app):
     await pilot.press("escape")
 
 
-def test_key_matrix_matches_guard_for_all_actions():
+def test_key_matrix_matches_guard_for_all_actions(tbdir):
     """全 action 表 × 全视图：Footer 广告集合 == `check_action` 守卫集合（不许漂移）。"""
+    taskbooks.create("键位矩阵用任务书", "正文")
     app = tui.PysciTUI()
 
     async def _go():
@@ -210,13 +238,13 @@ def test_unadvertised_key_has_no_side_effect():
 # ③ 视觉结构回归 + 全走一遍不崩溃
 # ---------------------------------------------------------------------------
 def test_component_ids_complete():
-    """组件 id 齐全：菜单/概览/详情三区/口述/任务书/新增面板一次性查全。"""
+    """组件 id 齐全：菜单/概览/详情三区/口述/任务书/新增面板/任务书详情三区一次性查全。"""
 
     async def _go():
         app = tui.PysciTUI()
         async with app.run_test() as pilot:
             await pilot.pause()
-            for sel in (*_PANEL_IDS, *_DETAIL_IDS):
+            for sel in (*_PANEL_IDS, *_DETAIL_IDS, *_TB_DETAIL_IDS):
                 assert app.query(sel), f"缺组件：{sel}"
 
     _run(_go())

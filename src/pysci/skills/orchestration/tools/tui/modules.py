@@ -117,7 +117,13 @@ def _taskbook_summary() -> list[str]:
 
 
 def _taskbook_detail() -> list[str]:
-    """列表三段（§2.4 #1 / §3.4）；写入口在 TUI 面板（`t`/Enter），此处只读。"""
+    """列表三段（§2.4 #1 / §3.4）；写入口在 TUI 面板（`t`/Enter），此处只读。
+
+    每行带**状态徽标**（`taskbooks.status_badge`，七态字形可辨）——用户 2026-10-15：
+    「已存在的大报告不显示是否完成」。
+    """
+    from .. import taskbooks as _tb  # 延迟导入：taskbooks 是叶子数据层
+
     secs = _taskbook_secs()
     out: list[str] = []
     for name, key in (
@@ -137,7 +143,9 @@ def _taskbook_detail() -> list[str]:
                 tail = f"｜批语：{str(rej[-1].get('note', ''))[:40]}"
             elif d.get("plan_id"):
                 tail = f"｜plan={d['plan_id']}"
-            out.append(f"  [{d.get('status')}] {d.get('title')}{tail}")
+            out.append(
+                f"  {_tb.status_badge(str(d.get('status')))} {d.get('title')}{tail}"
+            )
     out += [
         "",
         "Enter / `t` 进面板块：`n` 新增 / `a` 接受选中 / `r` 驳回选中（批语输入框）",
