@@ -1063,7 +1063,9 @@ SHELL_MIN_CHARS = 40
 #: 结构化标记行前缀：这些行是协议字段，不算「实质正文」。``success_criteria`` 行只剥前缀，
 #: 其后的判据内容仍计入（那是人写的真话）。
 _MARKER_LINE_RE = re.compile(r"^\s*(kind|source|fingerprint)\s*[:：]", re.IGNORECASE)
-_SC_PREFIX_RE = re.compile(r"^\s*success_criteria\s*[:：]?\s*", re.IGNORECASE)
+_SC_PREFIX_RE = re.compile(
+    r"^\s*(?:[-*+•]\s*)?(?:\*\*|__)?success_criteria\s*[:：]?\s*", re.IGNORECASE
+)
 
 
 def _substantive_chars(body: str) -> int:
@@ -1192,7 +1194,13 @@ def cmd_approve(args) -> int:
     if not criteria:
         print(
             f"[!] 建议 '{sugg.stem}'（kind={kind}）缺可证伪成功判据，拒绝入队。\n"
-            "    补写其一：① 在建议正文加 `success_criteria` 标记行 + 其后要点；"
+            "    **先对盘**：判据可能只是写成了解析器读不到的形态。接受的书写形态（任一）：\n"
+            "      · `success_criteria: …`（行首）\n"
+            "      · `- success_criteria: …`（列表项）\n"
+            "      · `**success_criteria**: …`（粗体）\n"
+            "      且判据正文＝标记行**之后的连续非空行**（最小示例：\n"
+            "      `- success_criteria:` 换行后 `  - <可机械复核的判据>`）。\n"
+            "    补写其一：① 在建议正文按上述任一形态补判据段；"
             '② 或本次 approve 追加 --criteria "<做完后如何机械验证算成功>"。'
             "（README §6 判据纪律：无判据的提案不可证伪，不进队。）"
         )
@@ -1294,11 +1302,13 @@ def cmd_approve(args) -> int:
     }
     # 提案来源标记（Tier A 自动立案写 `source: tier-a`）随条目入队，让 drain 与人工
     # 复盘都能看出这条是「统计机制立的案」还是「组员自己提的建议」。
+    # 同族前缀盲区（backlog adhoc-criteria-parse）：`- source: tier-a` 这类列表项写法
+    # 旧口径 `startswith("source:")` 读不到 → 元字段静默丢失；去掉行首列表标记再判。
     source = next(
         (
             ln.split(":", 1)[1].strip()
             for ln in body.splitlines()
-            if ln.strip().lower().startswith("source:")
+            if re.sub(r"^[-*+•]\s*", "", ln.strip()).lower().startswith("source:")
         ),
         "",
     )

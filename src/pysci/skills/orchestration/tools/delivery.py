@@ -67,8 +67,23 @@ PROTOCOL_LAG_HINT = "解析器早于协议：交付块按宽松兜底形态解�
 # `success_criteria：` 后紧跟要点行。kind 值面**含连字符与数字**：组员自造的分类词
 # （实测 `defusability-placeholder`）必须能被读出来再交给词表判定，否则「标错分类」会被
 # 误报成「没标分类」，提示文案指错方向（backlog 20261012-120001-leader）。
-_KIND_LINE_RE = re.compile(r"^\s*kind[:：]\s*([A-Za-z][\w-]*)\s*$", re.MULTILINE)
-_SC_HEADER_RE = re.compile(r"^\s*success_criteria", re.IGNORECASE)
+#: 结构化标记行的**前缀盲区**（backlog adhoc-criteria-parse）：建议正文里这些标记常写成
+#: **列表项**（``- success_criteria: …``）或**粗体**（``**success_criteria**:``），而旧口径
+#: 只认行首裸标记 → 整条漏读、真实判据被当「缺判据」误拒（实案 20261015-130838-writing）。
+#: 两处统一放宽：可选列表标记 + 可选粗体包裹。
+_MARKER_PREFIX = r"^\s*(?:[-*+•]\s*)?(?:\*\*|__)?"
+_MARKER_SUFFIX = r"(?:\*\*|__)?"
+_KIND_LINE_RE = re.compile(
+    _MARKER_PREFIX + r"kind[:：]\s*([A-Za-z][\w-]*)\s*$", re.MULTILINE
+)
+_SC_HEADER_RE = re.compile(
+    _MARKER_PREFIX + r"success_criteria" + _MARKER_SUFFIX, re.IGNORECASE
+)
+#: 标记行**本身**（含冒号）——用于剥出「行内判据值」。
+_SC_INLINE_RE = re.compile(
+    _MARKER_PREFIX + r"success_criteria" + _MARKER_SUFFIX + r"\s*[:：]?\s*",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -265,6 +280,11 @@ def parse_suggestion_fields(body: str) -> tuple[str, str]:
     lines = body.splitlines()
     for i, ln in enumerate(lines):
         if _SC_HEADER_RE.match(ln):
+            # **行内值也算**：原件常把判据直接写在标记行上（`- success_criteria: <全文>`）——
+            # 旧口径只看其后的行，于是「有判据」被判成「缺判据」（实案 20261015-130838-writing）。
+            inline = _SC_INLINE_RE.sub("", ln).strip()
+            if inline:
+                criteria.append(inline)
             for follow in lines[i + 1 :]:
                 if not follow.strip():
                     break
