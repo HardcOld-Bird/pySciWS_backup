@@ -9,7 +9,7 @@
 |---|---|---|---|
 | 会话级（①） | `.qoder/hooks/watch-arm.sh`（`Stop` 钩子每回合接管、token 竞争、循环 `orch watch`） | 组长会话回合内 | 事件产生时**有监听**：命中即 `exit 2` 唤醒 |
 | 会话级（②） | **队列感知巡更伪事件**（`PENDING-WORK`/`STALL`，随 ① 同帧判定） | 随 ① 同生命周期（**自动起止**：队列全空即零唤醒） | 没有事件但**状态该看而没人看**（队列/backlog/事件流/任务书非空、条目停滞） |
-| 机器级（③） | `pysci-watchdog`（`orch watchdog start`；OS 计划任务每 5 min 幂等点火） | 独立于会话/机器重启（③ 的 OS 注册在） | listener/watchdog **被无声杀死**、会话消亡连坐 |
+| 机器级（③） | `pysci-watchdog`（`orch watchdog start`；OS 计划任务每 5 min 幂等点火） | 独立于会话/机器重启 | listener/watchdog **被无声杀死**、会话消亡连坐 |
 
 关系：① 主路（零轮询、事件驱动）；② 队列感知巡更（补「没事件但该知道」，**无需挂/撤
 cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳 stale → 重臂）。三层互相独立：任一层
@@ -33,8 +33,8 @@ cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳 stale �
 **全空即静默**：队列全空 → 零唤醒（原手工 cron「全空闲即撤」语义，现由代码达成）；组长
 **不手工挂/撤巡更 cron**。
 
-**与「禁 sleep-轮询」铁律不冲突**：禁的是拿轮询**等工作完成**；巡更是低频读一次状态面的
-兜底，驱动工作仍靠 ① 的事件唤醒。
+**与「禁 sleep-轮询」不冲突**：禁的是拿轮询**等工作完成**；巡更只低频读一次状态面，
+驱动仍靠 ① 的事件唤醒。
 
 **阈值可配**：`registry.json` 顶层 `watch` 块（`stall_threshold_s` 3600 /
 `pending_throttle_s` 1800）；逐键 fail-open（读坏按出厂默认）。
@@ -58,7 +58,7 @@ cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳 stale �
    powershell -ExecutionPolicy Bypass -File orchestration\scripts\watchdog-scheduler.ps1 -Mode install
    ```
    卸载同命令 `-Mode uninstall`；进程另用 `orch watchdog stop`。该 PS1 **纯 ASCII 有意
-   为之**（PS 5.1 按 ANSI 解无 BOM UTF-8 → CJK 变反引号吞行；仓库 `.ps1` 都遵守）。
+   为之**（PS 5.1 无 BOM UTF-8 按 ANSI 解 → CJK 吞行；仓内 `.ps1` 同规）。
 2. **唤醒权（自动归属，wake-owner）**：**零手工**——钩子每回合读 stdin 载荷
    `session_id` 走 `wake-claim --check`：无 owner 自动认领（首会话即主会话）、owner 续
    心跳、**异会话永不抢占**（不监听、不抢 token、绝不 `exit 2`）、owner stale（心跳
@@ -68,8 +68,9 @@ cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳 stale �
 3. **listener（会话级①）**：无需手工——`Stop` 钩子下回合自动接管（`watch-arm.sh` 每回合
    幂等自启动看门狗）；漏挂由 `orch status` 补账（`reconcile`）。
 4. **巡更（②）**：**无需动作**——队列感知自动起止。仅 §2「降级注」那种全灭态才手工挂 cron。
-5. **自检**：`pysci-orch watchdog status` 三行（看门狗态/心跳年龄/listener 活与不活）应为
-   `running`/`<300s`/`活着`；`orch status` 的 watch 段应显示已挂载或可补账。
+5. **自检**：`pysci-orch watchdog status` 四行（看门狗态/心跳年龄/listener/逻辑实例数——口径
+   = distinct `--run-log`，非进程数）应为 `running`/`<300s`/`活着`/`1`；`orch status` 的
+   watch 段应显示已挂载或可补账。
 
 ## 4. 判据（可证伪）
 
