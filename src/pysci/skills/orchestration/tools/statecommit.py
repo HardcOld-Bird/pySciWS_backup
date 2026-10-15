@@ -13,8 +13,10 @@ backlog 20261013-203724-devops 已合入）——跟踪面由工具改写，工�
 的面不留 ``??``」，不是「每次改动即一笔提交」。
 
 **fail-soft**：非 git 工作树 / 面未被跟踪（有意不入库或尚未首提）/ add 或 commit 失败（钩子
-改写、索引锁竞争、无身份）→ 各返回一行说明、**绝不抛**。失败不额外告警也不隐藏：面仍是未跟踪
-或改动的，本就是 ``git status`` 与 ``pysci-dev doctor`` 上的可见观测量，下一次状态收尾照常兜住。
+改写、索引锁竞争、无身份）→ 各返回一行说明、**绝不抛**。首投被 pre-commit 钩子改写中止时
+**重新 add 再试一次**（同一纪律：被钩子改写不算失败；交付全文常带 markdown 行尾双空格，
+实测首投必栽在这一步），重试仍不过才算真失手。失败不额外告警也不隐藏：面仍是未跟踪或改动的，
+本就是 ``git status`` 与 ``pysci-dev doctor`` 上的可见观测量，下一次状态收尾照常兜住。
 """
 
 from __future__ import annotations
@@ -68,8 +70,13 @@ def commit_face(path: str | Path, message: str) -> str:
             return f"[i] {rel} 自动提交 add 失败——请手动提交"
         done = _git("commit", "-m", message, "--", rel)
         if done.returncode != 0:
-            # 钩子改写（trailing-ws 等）会中止提交并把面留成「已暂存又改动」；退回暂存，
-            # 让它停在可辨认的未跟踪/改动态，别卡住下一个人的提交。
+            # pre-commit 钩子会**改写**文件（trailing-ws / end-of-file-fixer）并中止本次提交。
+            # 这正是本仓纪律里的「被钩子改写不算失败」：重新 add 再试一次（2026-10-15 实测
+            # 首投失败即此因——交付全文常带 markdown 行尾双空格），重试仍不过才算真失手。
+            _git("add", "--", rel)
+            done = _git("commit", "-m", message, "--", rel)
+        if done.returncode != 0:
+            # 退回暂存，让面停在可辨认的未跟踪/改动态，别卡住下一个人的提交。
             _git("reset", "-q", "--", rel)
             tail = (done.stderr or done.stdout or "").strip().splitlines()
             why = tail[-1][:120] if tail else ""
