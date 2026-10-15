@@ -120,9 +120,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         except Exception as e:  # noqa: BLE001
             tag = "MISSING" if required else "(optional)"
             print(f"  {mod:<14}: {tag}" + (f" ({e!r})" if required else ""))
-    for name, ver in _img.available().items():
+    optional = _img.available()
+    for name, ver in optional.items():
         print(
             f"  {name:<14}: {ver or '(not installed, optional — uv pip install -e ".[imaging]")'}"
+        )
+    if any(not v for v in optional.values()):
+        # backlog 20261015-203158：extra 是「按需临时安装」——uv sync 只同步到默认依赖集，
+        # lock 之外的包会被移除。不明说这一点，使用者会反复经历「装了又没了」。
+        print(
+            "  ⚠ 上列是**可选 extra**（不在默认依赖集）：临时装上后，下一次 "
+            "`pysci-dev venv-sync`（uv sync）会把它清除；要长期可用须纳入默认依赖。"
         )
 
     print("\n--- provider（火山方舟 / 即梦 Seedream）---")

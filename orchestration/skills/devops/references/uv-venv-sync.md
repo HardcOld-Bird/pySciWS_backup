@@ -117,3 +117,12 @@ packages`，不重装 pysci）⇒ 被让路的 `pysci-dev.exe` **没人重建**�
   worktree 那套环境（分钟级、且不是你要的那套）。跨树用 `PYTHONPATH="<wt>/src"` 配方，
   见 `references/worktree-merge.md` §1。
 - pyproject 依赖变更只在**主树**同步一次；组员会话中途 `uv sync` 前先想「谁的 exe 正在跑」。
+
+## 8. 可选依赖 extra 的存活策略（backlog 20261015-203158）
+
+**extra 是按需临时安装，不是持久状态**：`uv sync` 只同步到 lock 的默认依赖集，
+**lock 之外的包一律被移除**（含 `uv pip install -e ".[imaging]"` 装的 scikit-image /
+opencv）——装上可用，下一次 `pysci-dev venv-sync` 就没了，且**静默**。**要长期可用必须写进
+`pyproject.toml` 默认依赖**；当前 `[imaging]` 未纳入是**有意为之**，不是缺陷。
+工具面已点明：`pysci-imagine doctor` 在可选依赖缺失时多打一行 `⚠ …会被清除`；
+运行期缺失报错（`imaging.INSTALL_HINT`）同样附该告警与出路。

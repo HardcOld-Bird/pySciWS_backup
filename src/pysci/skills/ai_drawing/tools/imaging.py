@@ -38,6 +38,8 @@ from PIL import Image
 INSTALL_HINT: str = (
     '本功能需要可选依赖：uv pip install -e ".[imaging]"'
     "（scikit-image + opencv-python-headless）"
+    "——该 extra **不在默认依赖集**，装了会被下一次 `pysci-dev venv-sync`（uv sync）清除；"
+    "要长期可用须把它纳入 pyproject 默认依赖（backlog 20261015-203158）"
 )
 
 
