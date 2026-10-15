@@ -1,0 +1,105 @@
+{
+  "plan_id": "rework-tb-20261015-091655-1",
+  "created": "2026-10-15T09:19:06+08:00",
+  "goal": "返工：tb-20261015-091655-1",
+  "steps": [
+    {
+      "id": "A.a1",
+      "status": "done",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "A.a2",
+      "status": "done",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "A.a3",
+      "status": "done",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "A.a4",
+      "status": "done",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "A.a5",
+      "status": "queued",
+      "task_file": "orchestration/pods/devops/inbox/task-20261015-info-arch.md",
+      "session_id": null,
+      "kind": null,
+      "review": "pending",
+      "job_id": "devops-20261015-092923-rework-tb-20261015-091655-1-A.a5"
+    },
+    {
+      "id": "BC.B.b1",
+      "status": "pending",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "BC.B.b2",
+      "status": "pending",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "BC.B.b_last",
+      "status": "pending",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "BC.C.c1",
+      "status": "pending",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "BC.C.c2",
+      "status": "pending",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "BC.C.c3",
+      "status": "pending",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    },
+    {
+      "id": "BC.C.c4",
+      "status": "pending",
+      "task_file": null,
+      "session_id": null,
+      "kind": null,
+      "review": "pending"
+    }
+  ],
+  "completed_at": null
+}

@@ -22,7 +22,7 @@ from .conftest import (
     set_models,
 )
 
-BUILTIN = "Qwen3.8-Flash"  # 内置免费档
+BUILTIN = "byok-flash-main"  # 主席样本（BYOK 形态——内置席已被执行面硬过滤，样本不得再用内置名）
 FB = "byok-flash-id"  # 备用渠道（BYOK modelID 占位）
 OK_BODY = "<result>出图完成，commit eee5555 已合并。</result>"
 

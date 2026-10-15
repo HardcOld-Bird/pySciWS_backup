@@ -41,7 +41,7 @@ from .conftest import (
     sid_from_argv,
 )
 
-BUILTIN = "Qwen3.8-Flash"  # 主档渠道
+BUILTIN = "byok-main"  # 主档渠道样本（BYOK 形态：内置席已硬过滤，2026-10-15）
 FB = "byok-flash-id"  # 备用渠道（<tier>_fallback 的占位 modelID）
 OK_BODY = "<result>完工，commit fff9999 已合并。</result>"
 

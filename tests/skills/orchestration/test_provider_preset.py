@@ -94,15 +94,19 @@ def test_three_preset_seat_tables():
     qwen = presets.PRESETS["qwen"]
     mimo = presets.PRESETS["mimo"]
     deepseek = presets.PRESETS["deepseek"]
-    assert qwen.main == ("Qwen-3.8-Flash", BUILTIN)
-    assert qwen.pro == ("Qwen-3.8-Max", BUILTIN) and qwen.pro_members == ("twin",)
-    assert mimo.main == ("Mimo-V2.6-Flash", BUILTIN)
-    assert mimo.pro == ("Mimo-V2.6-Pro", BUILTIN)
+    assert qwen.main == ("Qwen-3.8-Flash",)
+    assert qwen.pro == ("Qwen-3.8-Max",) and qwen.pro_members == ("twin",)
+    assert mimo.main == ("Mimo-V2.6-Flash",)
+    assert mimo.pro == ("Mimo-V2.6-Pro",)
     assert mimo.pro_members == ("reviewer", "deputy", "inspector", "twin")
-    assert deepseek.main == (DS_UUID, DS_BUILTIN), (
-        "回填席表：BYOK UUID 首席（同名消歧）→ 内置同名回退席"
+    assert deepseek.main == (DS_UUID,), (
+        "用户明令 2026-10-15：仅 BYOK 席，禁一切 Qoder 内置渠道"
     )
     assert deepseek.pro == (), "deepseek 全员同档无 pro 席（用户设计）"
+    assert all(
+        BUILTIN not in chain and DS_BUILTIN not in chain
+        for chain in (qwen.main, qwen.pro, mimo.main, mimo.pro, deepseek.main)
+    ), "三预设链内不得出现任何内置席（用户明令 2026-10-15：BYOK 失败即告警不落内置）"
     assert qwen.jury == ("glm", "kimi", "mimo") and mimo.jury == ("glm", "kimi", "qwen")
     assert deepseek.jury == ("glm", "kimi", "mimo"), "三预设都排除预设同族"
 
@@ -138,19 +142,23 @@ def test_status_lines_show_preset_and_chains(iso_registry):
     reg = registry.Registry.load()
     out = "\n".join(presets.status_lines(reg))
     assert "预设 mimo" in out and "data/pysci_settings.toml" in out
-    assert "Mimo-V2.6-Flash" in out and BUILTIN in out, "各席解析值要给人看"
+    assert "Mimo-V2.6-Flash" in out and BUILTIN not in out, (
+        "各席解析值要给人看；内置席被硬过滤不得出现（用户明令 2026-10-15）"
+    )
     assert "仲裁团构成：glm+kimi+qwen" in out
     assert "minimum（独立，不随预设走）" in out
     assert "未激活" not in out
 
 
 def test_status_lines_deepseek_activated(iso_state, iso_registry):
-    """回填后 deepseek 照常出声面：席链读数含 BYOK UUID 与内置回退，无「未激活」。"""
+    """deepseek 出声面：席链读数含 BYOK UUID、**不含任何内置席**，无「未激活」。"""
     write_preset("deepseek")
     reg = registry.Registry.load()
     out = "\n".join(presets.status_lines(reg))
     assert "预设 deepseek" in out and "未激活" not in out
-    assert DS_UUID in out and DS_BUILTIN in out, "main 席链=UUID → 内置同名回退"
+    assert DS_UUID in out and DS_BUILTIN not in out, (
+        "用户明令 2026-10-15：禁内置 DeepSeek——读数不得出现内置席"
+    )
 
 
 def test_status_lines_warn_when_seats_emptied(iso_state, iso_dispatch):
@@ -168,8 +176,8 @@ def test_status_lines_warn_when_seats_emptied(iso_state, iso_dispatch):
 def _seed_dispatch_presets(state):
     set_presets(
         state,
-        mimo={"main": [A, BUILTIN], "pro": [P1, BUILTIN]},
-        qwen={"main": [B, BUILTIN], "pro": [P1, BUILTIN]},
+        mimo={"main": [A, B], "pro": [P1, B]},
+        qwen={"main": [B, A], "pro": [P1, A]},
         deepseek={"main": [], "pro": []},
     )
 
@@ -270,25 +278,24 @@ def test_deepseek_activation_uses_uuid_first_for_same_name(iso_dispatch, monkeyp
         "台账 model 记 UUID 读数（success_criteria 那条）"
     )
     out = "\n".join(presets.status_lines(registry.Registry.load()))
-    assert DS_UUID in out and DS_BUILTIN in out and "未激活" not in out
+    assert DS_UUID in out and DS_BUILTIN not in out and "未激活" not in out
 
 
-def test_deepseek_byok_failure_demotes_to_same_named_builtin(iso_dispatch, monkeypatch):
-    """同名回退席照常 #80 粘滞：BYOK 席额度失败 → 本跳落到内置 DeepSeek-Flash。"""
+def test_deepseek_byok_failure_fails_loud_no_builtin_fallback(
+    iso_dispatch, monkeypatch
+):
+    """用户明令 2026-10-15：BYOK 失败**直接失败告警**，绝不回退到 Qoder 内置渠道
+    （内置扣 Qoder 积分且用户额度已耗尽——2026-10-15 事故根因之一）。"""
     set_presets(iso_dispatch, mimo={"main": ["M1", BUILTIN], "pro": ["P1", BUILTIN]})
     write_preset("deepseek")
     calls = fake_headless(
         monkeypatch,
-        lambda n, cmd: (
-            envelope(QUOTA_TEXT)
-            if n == 1
-            else envelope(OK_BODY, is_error=False, stop="end_turn", rc=0)
-        ),
+        lambda n, cmd: envelope(QUOTA_TEXT),
     )
     o = dispatch.do_dispatch("quotamember", text="出图", quiet=True, no_checks=True)
-    assert o.kind == "result"
-    assert [cmd_model(c) for c in calls] == [DS_UUID, DS_BUILTIN], (
-        "BYOK 失败沿同名回退席下探——两席同名但值不同，dedupe 不得吞掉内置席"
+    assert o.kind != "result", "BYOK 不可用必须失败，不得静默降级"
+    assert [cmd_model(c) for c in calls] == [DS_UUID], (
+        "只打 BYOK 席——任何情况下不得尝试内置席（含同名 DeepSeek-Flash）"
     )
 
 
@@ -369,8 +376,8 @@ def test_preset_chain_sticky_demotion_and_alert(
     o = dispatch.do_dispatch("quotamember", text="出图", quiet=False, no_checks=True)
     out = capsys.readouterr().out
     assert o.kind == "result" and len(calls) == 2
-    assert cmd_model(calls[0]) == A and cmd_model(calls[1]) == BUILTIN, (
-        "预设链的第二席=内置默认（共通语义：跳过故障席→内置）"
+    assert cmd_model(calls[0]) == A and cmd_model(calls[1]) == B, (
+        "预设链的第二席=下一 BYOK 席（跳过故障席→换 BYOK；内置席已硬过滤，用户明令 2026-10-15）"
     )
     assert "[!] 档位回退：main 席seat-a不可用" in out
     events = [
@@ -380,9 +387,9 @@ def test_preset_chain_sticky_demotion_and_alert(
         .splitlines()
         if line.strip()
     ]
-    assert events and events[0]["tier"] == "main" and events[0]["to"] == BUILTIN
+    assert events and events[0]["tier"] == "main" and events[0]["to"] == B
     line = (iso_dispatch / "ledger.jsonl").read_text(encoding="utf-8")
-    assert BUILTIN in line, "台账 model 记实际所用席位"
+    assert B in line, "台账 model 记实际所用席位（BYOK 席，内置已过滤）"
 
 
 # ---------------------------------------------------------------------------

@@ -331,13 +331,14 @@ def _seed_presets(state):
 
 
 def test_daytime_chain_follows_configured_preset(iso_dispatch):
-    """峰段基线：main/pro 各取本预设席（隐性态不许在峰时偷偷改任何东西）。"""
+    """峰段基线：main/pro 各取本预设席（隐性态不许在峰时偷偷改任何东西）；
+    跟踪面若配内置席，执行面**硬过滤**剔除（用户明令 2026-10-15）。"""
     _seed_presets(iso_dispatch)
     reg = registry.Registry.load()
-    assert reg.model_chain("main") == [MIMO_MAIN, BUILTIN]
-    assert reg.model_chain("pro") == ["seat-mimo-pro", BUILTIN]
+    assert reg.model_chain("main") == [MIMO_MAIN]
+    assert reg.model_chain("pro") == ["seat-mimo-pro"]
     write_preset("qwen")
-    assert reg.model_chain("main") == [QWEN_MAIN, BUILTIN]
+    assert reg.model_chain("main") == [QWEN_MAIN]
 
 
 def test_hidden_mode_chain_and_panel_follow_valley(iso_dispatch, valley_clock):
@@ -345,9 +346,10 @@ def test_hidden_mode_chain_and_panel_follow_valley(iso_dispatch, valley_clock):
     _seed_presets(iso_dispatch)
     write_preset("qwen")
     reg = registry.Registry.load()
-    assert reg.model_chain("main") == [DS_UUID, DS_BUILTIN]
-    assert reg.model_chain("pro") == ["seat-qwen-pro", BUILTIN], (
-        "pro 席不被时间覆盖（用户终裁 2026-10-13：隐性态下 pro 保持原席，提高工作质量）"
+    assert reg.model_chain("main") == [DS_UUID]
+    assert reg.model_chain("pro") == ["seat-qwen-pro"], (
+        "pro 席不被时间覆盖（用户终裁 2026-10-13：隐性态下 pro 保持原席，提高工作质量）；"
+        "内置席一律被硬过滤（用户明令 2026-10-15）"
     )
     assert routing.hidden_valley_preset() == "deepseek"
     assert routing.producer_family() == "deepseek"

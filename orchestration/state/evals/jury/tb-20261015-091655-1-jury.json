@@ -1,0 +1,342 @@
+{
+  "case_id": "tb-20261015-091655-1-jury",
+  "case_file": "data\\taskbooks\\tb-20261015-091655-1-jury.md",
+  "ts": "2026-10-15T09:26:15+08:00",
+  "question": "项目出现「总结类交付信息散而不聚」缺陷（用户驳回实例：硬性时间节点散落各节、\n无集中章节）。组长已产出机制性改进方案（见证据）。请裁定：**哪种状态对项目更好**——\n改进方案实施后的状态，还是目前项目真实现状？",
+  "options": {
+    "A": "**改进方案实施后的状态**：验收纪律新增「高频查阅维度集中呈现」硬判据——设计\n交付类任务书时反推用户查阅场景（时间/地点/金额/待办/口径差异等），高频维度必须\n有集中章节且写进 success_criteria 机械可验；拆解指导补指针；同类「散而不聚」缺陷\n以后可被机械验收直接拦截。代价：任务书设计多一步反推流程、验收面多一条判据。",
+    "B": "**目前项目真实现状**：验收纪律无信息架构原则，交付物信息组织全凭组长/组员临场\n自觉；总结类交付按事项性质自然分节，高频维度可预见地继续散落；用户每次查阅需\n全文扫读；同类缺陷只能靠用户逐次驳回发现。无新增流程负担。"
+  },
+  "targets": [
+    "data/taskbooks/tb-20261015-091655-1.a2-解决方案.md",
+    "orchestration/skills/orchestration/references/acceptance-discipline.md"
+  ],
+  "dossier_hash": "59ea6eb1e5736706",
+  "dossier_chars": 3578,
+  "dossier": "# 案卷 tb-20261015-091655-1-jury\n\n## 问题\n项目出现「总结类交付信息散而不聚」缺陷（用户驳回实例：硬性时间节点散落各节、\n无集中章节）。组长已产出机制性改进方案（见证据）。请裁定：**哪种状态对项目更好**——\n改进方案实施后的状态，还是目前项目真实现状？\n\n## 选项 A\n**改进方案实施后的状态**：验收纪律新增「高频查阅维度集中呈现」硬判据——设计\n交付类任务书时反推用户查阅场景（时间/地点/金额/待办/口径差异等），高频维度必须\n有集中章节且写进 success_criteria 机械可验；拆解指导补指针；同类「散而不聚」缺陷\n以后可被机械验收直接拦截。代价：任务书设计多一步反推流程、验收面多一条判据。\n\n## 选项 B\n**目前项目真实现状**：验收纪律无信息架构原则，交付物信息组织全凭组长/组员临场\n自觉；总结类交付按事项性质自然分节，高频维度可预见地继续散落；用户每次查阅需\n全文扫读；同类缺陷只能靠用户逐次驳回发现。无新增流程负担。\n\n## 证据\n- 成因分析报告：data/taskbooks/tb-20261015-091655-1.a1-成因分析.md（缺陷定式=判据缺失，非执行疏忽）\n- 解决方案报告：data/taskbooks/tb-20261015-091655-1.a2-解决方案.md（原则条款/任务书判据化/反推法三件套）\n- 用户驳回批语原文：见任务书 tb-20261015-091655-1（「建议补充硬性时间节点章节……集中总结，方便我关注」）\n\n## 自动附着材料（CLI 确定性抓取，非撰写者所写）\n\n### git diff --stat\n.qoder/rules/leader-only.md                    |  7 ++++---\n data/taskbooks/tb-20261015-072342-1.state.json | 11 ++++++++---\n 2 files changed, 12 insertions(+), 6 deletions(-)\n\n### git diff\ndiff --git a/.qoder/rules/leader-only.md b/.qoder/rules/leader-only.md\nindex 524d8bc..60fd409 100644\n--- a/.qoder/rules/leader-only.md\n+++ b/.qoder/rules/leader-only.md\n@@ -62,11 +62,11 @@ alwaysApply: true\n | id | 职责 | 典型派发 |\n |---|---|---|\n | sim | 数值仿真（COMSOL 等） | 仿真、参数扫描 |\n-| figure | 论文插图 | 论文图表 |\n+| figure | 论文插图（mpl技术栈） | 论文图表、需程序化绘制的图像 |\n | writing | 论文写作＋**办公文档**（doc/docx/ppt/pptx/xlsx 等） | 报告、文档、幻灯片 |\n | theory | 理论推导与计算 | 推导、解析计算 |\n-| lit | **文献研究（科研文章，多为 pdf）** | 检索、文献阅读、综述 |\n-| drawing | AI 作画、效果图 | 视觉素材 |\n+| lit | **文献研究（科研文章，多为 pdf）** | 文献获取/检索/阅读/综述 |\n+| drawing | AI 作画、效果图 | 视觉素材、美学设计 |\n | model3d | 3D 建模 | 模型、场景 |\n | deputy | 跨域简单任务单体执行＋技术顾问（平级，有拒绝权+异议义务） | 归属不明、咨询 |\n | reviewer | 期刊审稿式主观质量审查（可选重炮，非硬门） | 用户点名或 review:true |\n@@ -77,3 +77,4 @@ alwaysApply: true\n \n - **lit ↔ writing 分工**：科研文章（pdf）归 lit，办公文档（doc/docx/ppt/pptx）归\n   writing——2026-10-15 实派偏过（doc/docx 误派 lit），拿不准先问 deputy。\n+- **figure ↔ drawing 分工**：数据驱动/精确绘制归 figure，美术素材/审美指导归 drawing。常见协作——drawing 产出科研绘图审美参考图，figure 用mpl精确实现并加入真实数据落地。\n\\ No newline at end of file\ndiff --git a/data/taskbooks/tb-20261015-072342-1.state.json b/data/taskbooks/tb-20261015-072342-1.state.json\nindex 267c5c4..a660462 100644\n--- a/data/taskbooks/tb-20261015-072342-1.state.json\n+++ b/data/taskbooks/tb-20261015-072342-1.state.json\n@@ -2,13 +2,18 @@\n   \"id\": \"tb-20261015-072342-1\",\n   \"ts\": \"2026-10-15T07:23:42+08:00\",\n   \"title\": \"1 开题文档阅读与待关注事项整理\",\n-  \"status\": \"delivered\",\n+  \"status\": \"rejected\",\n   \"source\": \"mirror-tui\",\n   \"priority\": \"low\",\n   \"mode\": \"\",\n   \"rework_of\": \"\",\n   \"rework_round\": 0,\n   \"plan_id\": \"tb-1-docs-20261015.plan\",\n-  \"rejections\": [],\n-  \"updated\": \"2026-10-15T07:49:31+08:00\"\n+  \"rejections\": [\n+    {\n+      \"ts\": \"2026-10-15T09:16:55+08:00\",\n+      \"note\": \"建议补充硬性时间节点章节——比如说，“在开放期内提交申请”具体是什么时候？如果原文确实没提，可以不管；但如果有，建议将所有这些硬性时间节点集中总结，方便我关注。\"\n+    }\n+  ],\n+  \"updated\": \"2026-10-15T09:16:55+08:00\"\n }\n\n### git log --oneline -5\ncbf6908 fix(state): 补入 git 两个失跟踪内容面（devops 建议 20261015-085823）+ leader-only §5 成员表\n859bb49 Merge branch 'wt-ta[REDACTED]'\nd7b13dc feat(orch): TUI 任务书列表状态徽标 + 详情页流程报告（批复参考）\n72a41c4 Merge branch 'wt-20261015-073621-devops'\n34e44e3 test(orchestration): 预设面隔离修复——model_refresh/flash_channel_swap 的 iso_reg 补 SETTINGS_PATH\n\n### 涉事文件字节读数\n- data/taskbooks/tb-20261015-091655-1.a2-解决方案.md: 3181 B / 55 行 / sha256=f96361df02d0a262\n- orchestration/skills/orchestration/references/acceptance-discipline.md: 2624 B / 38 行 / sha256=6bdbaa9a9a8d1836\n\n### 相关台账行\n- 2026-10-14T12:29:18+08:00 devops kind=result plan={'tier': 'main', 'usable': ['1a54cc57-e614-4521-80cc-447de31dc896', 'DeepSeek-Flash'], 'skipped': [], 'forced_probe': ''} turns=41 tags=-\n",
+  "brief": {
+    "path": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\orchestration\\state\\evals\\jury-brief.md",
+    "approved": false,
+    "hash": "4e026d2b65bb85e1"
+  },
+  "seats": [
+    {
+      "name": "glm",
+      "model": "glm-5.3",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "key_env": "GLM_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "kimi",
+      "model": "kimi-k2.6",
+      "base_url": "https://api.moonshot.cn/v1",
+      "key_env": "KIMI_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "mimo",
+      "model": "mimo-v2.6-pro",
+      "base_url": "https://api.xiaomimimo.com/v1",
+      "key_env": "MIMO_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "siliconflow",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "key_env": "SILICONFLOW_API_KEY",
+      "role": "fallback",
+      "defect": "",
+      "reason": "被评模型 deepseek 同族，依 §4 不得入庭",
+      "usable": true
+    }
+  ],
+  "routing": {
+    "preset": "deepseek",
+    "hidden": false,
+    "producer": "deepseek",
+    "panel": [
+      "glm",
+      "kimi",
+      "mimo"
+    ]
+  },
+  "fallback": {
+    "enabled": true,
+    "used": false,
+    "notice": "",
+    "missing_primary": []
+  },
+  "panel": [
+    "glm-5.3",
+    "kimi-k2.6",
+    "mimo-v2.6-pro"
+  ],
+  "attempts": 2,
+  "jurors": [
+    {
+      "seat": "glm",
+      "model": "glm-5.3",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "仅涉组长自身验收纪律属直通范围；state.客观记录用户驳回，新判据可机械验证，案卷未见明确危害。",
+          "confidence": 0.88,
+          "usage": {
+            "completion_tokens": 1945,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1888
+            },
+            "prompt_tokens": 2902,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 4847
+          },
+          "error": ""
+        },
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "案卷定义A=现状B=实施。驳回实证（state.）散而不聚为判据缺失，B将其写入success_criteria可机械拦截，代价仅设计一步。",
+          "confidence": 0.85,
+          "usage": {
+            "completion_tokens": 3937,
+            "completion_tokens_details": {
+              "reasoning_tokens": 3874
+            },
+            "prompt_tokens": 2902,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 6839
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 5804,
+        "completion_tokens": 5882,
+        "total_tokens": 11686
+      }
+    },
+    {
+      "seat": "kimi",
+      "model": "kimi-k2.6",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户驳回批语实证痛点，成因系判据缺失；反推法与机械可验条款补流程硬依赖。",
+          "confidence": 0.85,
+          "usage": {
+            "prompt_tokens": 2676,
+            "completion_tokens": 3101,
+            "total_tokens": 5777,
+            "cached_tokens": 1024,
+            "completion_tokens_details": {
+              "reasoning_tokens": 3055
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户已驳回证实缺陷；新增判据使高频维度机械可验，提升可审计性与可靠性，符合项目优化面。",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 2676,
+            "completion_tokens": 1016,
+            "total_tokens": 3692,
+            "cached_tokens": 1024,
+            "completion_tokens_details": {
+              "reasoning_tokens": 969
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 5352,
+        "completion_tokens": 4117,
+        "total_tokens": 9469
+      }
+    },
+    {
+      "seat": "mimo",
+      "model": "mimo-v2.6-pro",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户驳回批语证实缺陷；判据化可机械验收拦截，符合可靠性目标，仅增一步反推无明确危害",
+          "confidence": 0.82,
+          "usage": {
+            "completion_tokens": 144,
+            "prompt_tokens": 3116,
+            "total_tokens": 3260,
+            "completion_tokens_details": {
+              "reasoning_tokens": 92
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "附着state.json驳回批语证实「散而不聚」缺陷；判据化可机械拦截同类问题，成本仅一步反推，符合可靠性与可审计目标。",
+          "confidence": 0.78,
+          "usage": {
+            "completion_tokens": 483,
+            "prompt_tokens": 3116,
+            "total_tokens": 3599,
+            "completion_tokens_details": {
+              "reasoning_tokens": 421
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 3072
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 6232,
+        "completion_tokens": 627,
+        "total_tokens": 6859
+      }
+    }
+  ],
+  "votes": {
+    "glm": "A",
+    "kimi": "A",
+    "mimo": "A"
+  },
+  "tally": {
+    "A": 3,
+    "B": 0
+  },
+  "inconclusive": [],
+  "verdict": "A",
+  "escalate": "",
+  "final_verdict": "",
+  "decided_by": "",
+  "twin": null,
+  "usage": {
+    "prompt_tokens": 17388,
+    "completion_tokens": 10626,
+    "total_tokens": 28014
+  },
+  "usage_by_model": {
+    "glm-5.3": {
+      "prompt_tokens": 5804,
+      "completion_tokens": 5882,
+      "total_tokens": 11686
+    },
+    "kimi-k2.6": {
+      "prompt_tokens": 5352,
+      "completion_tokens": 4117,
+      "total_tokens": 9469
+    },
+    "mimo-v2.6-pro": {
+      "prompt_tokens": 6232,
+      "completion_tokens": 627,
+      "total_tokens": 6859
+    }
+  },
+  "cost": {
+    "amount": null,
+    "unit": "",
+    "note": "无价目表：registry.jury.pricing 未覆盖任何 panel 型号（成本不猜）",
+    "priced": [],
+    "unpriced": [
+      "glm-5.3",
+      "kimi-k2.6",
+      "mimo-v2.6-pro"
+    ]
+  },
+  "verdict_summary": {
+    "winner": "A",
+    "decided_by": "jury",
+    "tally": {
+      "A": 3,
+      "B": 0
+    },
+    "inconclusive": [],
+    "seats": [
+      {
+        "seat": "glm",
+        "model": "glm-5.3",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.88
+      },
+      {
+        "seat": "kimi",
+        "model": "kimi-k2.6",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "mimo",
+        "model": "mimo-v2.6-pro",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.82
+      }
+    ],
+    "majority_reasons": [
+      "glm：仅涉组长自身验收纪律属直通范围；state.客观记录用户驳回，新判据可机械验证，案卷未见明确危害。",
+      "kimi：用户驳回批语实证痛点，成因系判据缺失；反推法与机械可验条款补流程硬依赖。",
+      "mimo：用户驳回批语证实缺陷；判据化可机械验收拦截，符合可靠性目标，仅增一步反推无明确危害"
+    ],
+    "twin": null,
+    "text": "裁决=A（jury 定案；计票 A:3 B:0）｜各席：glm=A/0.88 kimi=A/0.90 mimo=A/0.82｜多数理由：glm：仅涉组长自身验收纪律属直通范围；state.客观记录用户驳回，新判据可机械验证，案卷未见明确危害。；kimi：用户驳回批语实证痛点，成因系判据缺失；反推法与机械可验条款补流程硬依赖。；mimo：用户驳回批语证实缺陷；判据化可机械验收拦截，符合可靠性目标，仅增一步反推无明确危害"
+  }
+}

@@ -55,29 +55,39 @@ class Preset:
 PRESETS: dict[str, Preset] = {
     "qwen": Preset(
         name="qwen",
-        main=("Qwen-3.8-Flash", "Qwen3.8-Flash"),
-        pro=("Qwen-3.8-Max", "Qwen3.8-Flash"),
+        main=("Qwen-3.8-Flash",),
+        pro=("Qwen-3.8-Max",),
         jury=("glm", "kimi", "mimo"),
         pro_members=("twin",),
-        note="pro 席仅 twin（Qwen pro 贵，刻意不规模化）；仲裁团排除 Qwen 同族",
+        note=(
+            "pro 席仅 twin（Qwen pro 贵，刻意不规模化）；仲裁团排除 Qwen 同族；"
+            "**仅 BYOK 席**（用户明令 2026-10-15：禁一切 Qoder 内置渠道，"
+            "BYOK 不可用即失败告警，不落内置兜底）"
+        ),
     ),
     "mimo": Preset(
         name="mimo",
-        main=("Mimo-V2.6-Flash", "Qwen3.8-Flash"),
-        pro=("Mimo-V2.6-Pro", "Qwen3.8-Flash"),
+        main=("Mimo-V2.6-Flash",),
+        pro=("Mimo-V2.6-Pro",),
         jury=("glm", "kimi", "qwen"),
         pro_members=("reviewer", "deputy", "inspector", "twin"),
-        note="pro 席四人组；仲裁团排除 Mimo 同族",
+        note=(
+            "pro 席四人组；仲裁团排除 Mimo 同族；"
+            "**仅 BYOK 席**（用户明令 2026-10-15：禁一切 Qoder 内置渠道，"
+            "BYOK 不可用即失败告警，不落内置兜底）"
+        ),
     ),
     "deepseek": Preset(
         name="deepseek",
-        main=("1a54cc57-e614-4521-80cc-447de31dc896", "DeepSeek-Flash"),
+        main=("1a54cc57-e614-4521-80cc-447de31dc896",),
         pro=(),
         jury=("glm", "kimi", "mimo"),
         pro_members=(),
         note=(
             "全员同档无 pro 席；仲裁团排除 DeepSeek 同族；"
-            "BYOK 与内置同名 'DeepSeek-Flash' → UUID 首席消歧（用户 2026-10-13 供 Key）"
+            "仅 BYOK 席（用户 2026-10-13 供 Key）——**内置 DeepSeek 席已剔除**"
+            "（用户明令 2026-10-15：任何情况下不得使用 Qoder 内置渠道 DeepSeek，"
+            "扣 Qoder 积分且用户额度已耗尽；BYOK 失败即失败出声，绝不落内置）"
         ),
     ),
 }

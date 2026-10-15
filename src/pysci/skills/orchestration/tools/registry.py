@@ -77,6 +77,15 @@ RUNTIME_SEAT_NAMES_KEY: str = "model_seat_names"
 #: ``event_tail``：mirror/status 面「最近 N 条」的 N。
 DEFAULT_MODEL_FALLBACK: dict[str, int] = {"skip_window_s": 3600, "event_tail": 5}
 
+#: **Qoder 内置渠道席位黑名单**（用户明令 2026-10-15：任何情况下不得使用——扣 Qoder
+#: 积分且用户额度已耗尽，2026-10-15 事故根因之一：BYOK 失败沿回退链落内置席烧积分
+#: → 欠费 → 网关 503 全局卡死）。判据形态=内置席位名（无 BYOK UUID）；**执行面硬过滤**：
+#: :meth:`Registry.model_chain` 出口剔除名单内席位，配置面配了也用不上——BYOK 不可用
+#: 即失败告警（quota_exhausted 等分类），绝不静默降级到内置。
+BUILTIN_SEATS: frozenset[str] = frozenset(
+    {"Qwen3.8-Flash", "Qwen3.8-Max", "DeepSeek-Flash"}
+)
+
 #: 同席重试默认参数（``model_fallback.same_seat_retry`` 块可逐键覆盖，fail-open）。
 #: 只给 ``channel_error`` 一档是有意设计（用户裁决 2026-10-13，backlog
 #: 20261013-143000-leader）：渠道级故障是**瞬态**的（Mimo 平台侧算力不足，今日 4 起），
@@ -748,14 +757,19 @@ class Registry:
         """
         role = LEGACY_TIER_ALIASES.get(tier, tier)
         if role in ("main", "pro"):
-            return self.preset_chain(role) or [""]
+            return self._drop_builtin(self.preset_chain(role)) or [""]
         merged = self._merged_model_faces()
         seats = list(merged.get(tier) or merged.get(role) or [""])
         legacy = merged.get(f"{tier}_fallback") or []
         for seat in legacy:
             if seat and seat not in seats:
                 seats.append(seat)
-        return dedupe_seats(seats) or [""]
+        return self._drop_builtin(dedupe_seats(seats)) or [""]
+
+    @staticmethod
+    def _drop_builtin(seats: list[str]) -> list[str]:
+        """剔除内置渠道席位（:data:`BUILTIN_SEATS`，用户明令 2026-10-15 硬过滤）。"""
+        return [s for s in seats if s not in BUILTIN_SEATS]
 
     @property
     def seat_names(self) -> dict[str, str]:

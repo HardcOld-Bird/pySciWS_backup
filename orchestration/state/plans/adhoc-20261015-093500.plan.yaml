@@ -1,0 +1,11 @@
+id: adhoc-20261015-093500
+goal: adhoc：orchestration/pods/devops/inbox/task-20261015-tui-ux.md
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - orchestration/skills/orchestration/references
+  - tests
+  review: false

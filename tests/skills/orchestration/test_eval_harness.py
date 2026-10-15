@@ -658,7 +658,9 @@ def pod_prompt(calls) -> str:
 
 
 def test_attach_replies_false_keeps_reply_pending(iso_dispatch, monkeypatch):
-    set_models(iso_dispatch, minimum="Qwen3.8-Flash")
+    set_models(
+        iso_dispatch, minimum="byok-min"
+    )  # BYOK 样本：内置席被硬过滤（2026-10-15）
     f = seed_reply(iso_dispatch)
     calls = fake_headless(
         monkeypatch,
@@ -679,7 +681,7 @@ def test_attach_replies_false_keeps_reply_pending(iso_dispatch, monkeypatch):
     assert out.kind == "result"
     assert f.exists(), "压测跳不得吃掉组长的审批回复（生产跳还要看它）"
     assert "组长审批" not in pod_prompt(calls)
-    assert cmd_model(calls[0]) == "Qwen3.8-Flash"
+    assert cmd_model(calls[0]) == "byok-min"
 
 
 def test_attach_replies_default_appends_and_archives(iso_dispatch, monkeypatch):

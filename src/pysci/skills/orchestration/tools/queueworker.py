@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -71,6 +72,33 @@ RECLAIM_WAKE_COOLDOWN_S: int = 180
 DELIVERIES_DIR: Path = ORCH_STATE_ROOT / "deliveries"
 
 
+def qodercli_error_tail(*, root: Path | None = None, max_lines: int = 15) -> str:
+    """最近一次 qoderclicn run 日志的报错尾段（第一现场取证，用户明令 2026-10-15）。
+
+    事故教训：网关 503 的报错只存在于 ``~/.qoder-cn/logs/runs/*/qodercli.log``，交付面
+    零可见——组长与用户一起「蒙在鼓里」。跳失败时把 ERROR/WARN/异常行尾段并入交付留档。
+    fail-soft：取证绝不阻塞 worker。``root`` 为测试注入口（默认 ``~/.qoder-cn/logs/runs``）。
+    """
+    try:
+        runs = root or (Path.home() / ".qoder-cn" / "logs" / "runs")
+        if not runs.is_dir():
+            return ""
+        latest = max(runs.iterdir(), key=lambda d: d.stat().st_mtime, default=None)
+        if latest is None:
+            return ""
+        log = latest / "qodercli.log"
+        if not log.is_file():
+            return ""
+        hits = [
+            ln
+            for ln in log.read_text(encoding="utf-8", errors="ignore").splitlines()
+            if re.search(r"ERROR|WARN|Exception|5\d\d |timeout|refused|unavailable", ln)
+        ]
+        return "\n".join(hits[-max_lines:])
+    except Exception:  # noqa: BLE001 - 取证面绝不反噬交付
+        return ""
+
+
 def archive_delivery(
     item: dict[str, Any], result: dict[str, Any], *, body: str, error: str = ""
 ) -> str:
@@ -106,6 +134,14 @@ def archive_delivery(
         ]
         if err:
             head += ["", "## 错误正文", "", err.rstrip()]
+            first_scene = qodercli_error_tail()
+            if first_scene:
+                head += [
+                    "",
+                    "## 第一现场（qoderclicn run 日志报错尾段）",
+                    "",
+                    first_scene,
+                ]
         p.write_text("\n".join(head) + "\n", encoding="utf-8")
         return orchestration_rel(p)
     except Exception:  # noqa: BLE001 - 留档面绝不阻塞 worker（正文仍在队列条目内务面）
