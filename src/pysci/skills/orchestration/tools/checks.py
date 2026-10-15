@@ -86,7 +86,9 @@ def run_checks(
             p = cand_root if cand_root.exists() else member_pod / p
         cmd = [str(part).replace("{path}", _path_arg(p, spec)) for part in spec["cmd"]]
         try:
-            proc = subprocess.run(
+            from . import procs as _procs
+
+            proc = _procs.run_hidden(  # 隐藏窗口：验收链常由无控制台的 worker 触发
                 cmd,
                 cwd=str(PROJECT_ROOT),
                 capture_output=True,

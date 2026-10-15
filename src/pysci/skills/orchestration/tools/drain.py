@@ -963,9 +963,14 @@ def _extract_backlog_ids(body: str) -> list[str]:
 # 孤儿 worktree 清理（reclaim 顺带；与 pysci-dev worktree 同布局：.qoder/worktrees/<name> + wt-<name>）
 # ---------------------------------------------------------------------------
 def _run_git(*args: str) -> tuple[int, str]:
-    """在项目根运行 git，返回 (rc, 合并输出)。超时/异常一律 fail-open（返回非零、不抛）。"""
+    """在项目根运行 git，返回 (rc, 合并输出)。超时/异常一律 fail-open（返回非零、不抛）。
+
+    **走 :func:`procs.run_hidden`**（2026-10-15 加急「空终端风暴」）：本函数是看门狗 tick 与
+    各合并/回收路径的 git 唯一落点，而 tick 由**无控制台**的 pythonw 驱动——裸 ``subprocess.run``
+    会让每次 git 都新开一个可见窗口。
+    """
     try:
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             ["git", *args],
             cwd=str(PROJECT_ROOT),
             capture_output=True,
@@ -1103,13 +1108,25 @@ def worktree_faces() -> list[str]:
     return names
 
 
+#: 「已提交未合并」的 (branch, head) → (unmerged, 分叉点) 缓存（**进程内**；watchdog 长驻）。
+#: 为什么要它（用户 2026-10-15 加急「空终端风暴」）：看门狗 tick 一分钟一次，逐面跑
+#: `worktree_salvage_state`（每面约 4 条 git）＝ 一次 tick 十几到二十几个 console 子进程；
+#: 它们落在**没有控制台**的 pythonw 里 ⇒ 每个都新开可见窗口闪现。改为「两次批量调用 + 结果
+#: 缓存」：**空闲 tick 的 git 派生 = 2**，只有 head 变了的面才再花两条。
+_UNMERGED_CACHE: dict[tuple[str, str], tuple[int, str]] = {}
+
+
 def unmerged_worktree_alerts(*, main_ref: str = "main") -> list[dict[str, Any]]:
     """「**已提交、未合并**」的面 → 只读告警读数（**零新造判据**，backlog 20261015-145045）。
 
     实案（2026-10-15 两起，用户征询后裁定必修）：devops 尾段「提交→合并→推送」被进程杀死
     /跳截断/重启时会停在**已提交未合并**——成果卡在 worktree 里静默躺平（实案 6304 卡 3
-    小时），零告警。判据**复用** :func:`worktree_salvage_state` 的 ``unmerged``
-    （``git rev-list --count main..branch``，``drain.py`` 既有），不新造第二份。
+    小时），零告警。判据**复用** :func:`worktree_salvage_state` 的 ``unmerged`` 口径
+    （``git rev-list --count main..branch``），不新造第二份。
+
+    **批量 + 缓存**（2026-10-15 加急 `adhoc-storm-fix`）：一次 ``worktree list --porcelain``
+    拿全部面、一次 ``for-each-ref`` 拿全部面分支的 head；领先数与分叉点按 ``(branch, head)``
+    缓存——**无变化的 tick 一条 git 都不再花**（空闲 tick 恒 2 条）。
 
     **只检出，不合并**（组长 2026-10-15 裁决）：patrol 自动 merge 进 main 是护栏级写操作
     （与「一个 worktree 一个写者」「合并前交集闸」同级）——故读数里附**现成合并命令**，
@@ -1118,27 +1135,60 @@ def unmerged_worktree_alerts(*, main_ref: str = "main") -> list[dict[str, Any]]:
     Returns:
         每面一条 ``{worktree, branch, head, unmerged, behind_point, merge_cmd, title}``。
     """
-    out: list[dict[str, Any]] = []
-    for name in worktree_faces():
-        st = worktree_salvage_state(name, main_ref=main_ref)
-        n = int(st.get("unmerged") or 0)
+    rc, out = _run_git("worktree", "list", "--porcelain")
+    if rc != 0:
+        return []
+    root = workflow.WORKTREES_ROOT
+    faces: list[tuple[str, str]] = []
+    for line in out.splitlines():
+        if not line.startswith("worktree "):
+            continue
+        p = Path(line[len("worktree ") :].strip())
+        try:
+            rel = p.relative_to(root)
+        except ValueError:
+            continue  # 主树/仓外树：不是本编排的面
+        if rel.parts:
+            name = str(rel.parts[0])
+            faces.append((name, f"wt-{name}"))
+    if not faces:
+        return []
+    rc, refs = _run_git("for-each-ref", "--format=%(refname:short) %(objectname:short)")
+    heads = {
+        parts[0]: parts[1]
+        for parts in (ln.split() for ln in refs.splitlines())
+        if len(parts) >= 2
+    }
+    out_alerts: list[dict[str, Any]] = []
+    for name, branch in faces:
+        head = heads.get(branch)
+        if not head:
+            continue  # 分支不在（已合并删除）→ 不是「已提交未合并」
+        cached = _UNMERGED_CACHE.get((branch, head))
+        if cached is None:
+            rc, cnt = _run_git("rev-list", "--count", f"{main_ref}..{branch}")
+            n = int(cnt.strip()) if rc == 0 and cnt.strip().isdigit() else 0
+            point = "?"
+            if n > 0:
+                rc, base = _run_git("merge-base", main_ref, branch)
+                point = base.strip()[:SALVAGE_HEAD_LEN] if rc == 0 else "?"
+            _UNMERGED_CACHE[(branch, head)] = (n, point)
+        else:
+            n, point = cached
         if n <= 0:
             continue  # 已合并（或无独有提交）→ 不误报
-        rc, base = _run_git("merge-base", main_ref, str(st["branch"]))
-        out.append(
+        out_alerts.append(
             {
                 "worktree": name,
-                "branch": st["branch"],
-                "head": st["head"],
+                "branch": branch,
+                "head": head,
                 "unmerged": n,
-                "behind_point": base.strip()[:SALVAGE_HEAD_LEN] if rc == 0 else "?",
+                "behind_point": point,
                 "merge_cmd": f"pysci-dev worktree merge {name}",
-                "title": (
-                    f"面 {name} 有 {n} 个提交未合并（{st['branch']} @ {st['head']}）"
-                ),
+                "title": f"面 {name} 有 {n} 个提交未合并（{branch} @ {head}）",
             }
         )
-    return out
+    return out_alerts
 
 
 def announce_unmerged_worktrees(
@@ -2368,7 +2418,9 @@ def _spawn_detached(argv: list[str], *, env: dict[str, str], stdout: Any) -> Non
         )
     else:
         kwargs["start_new_session"] = True
-    subprocess.Popen(argv, **kwargs)
+    # 并入**单一隐藏口径**（backlog adhoc-storm-fix 判据①）：本处原有旗标保留（DETACHED_PROCESS
+    # 等），`popen_hidden` 再统一叠加 CREATE_NO_WINDOW——同一能力不留两份口径。
+    procs.popen_hidden(argv, **kwargs)
 
 
 def wake_devops(*, force_dry: bool | None = None) -> tuple[bool, str]:

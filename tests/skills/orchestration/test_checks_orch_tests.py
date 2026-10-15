@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 
 from pysci.paths import ORCHESTRATION_ROOT
-from pysci.skills.orchestration.tools import checks as checks_mod
 from pysci.skills.orchestration.tools import watch
 from pysci.skills.orchestration.tools.checks import run_checks
 from pysci.skills.orchestration.tools.delivery import Artifact
@@ -30,20 +29,17 @@ def _fake_run(monkeypatch, rc: int = 0, out: str = "253 passed"):
             self.stdout = stdout
             self.stderr = ""
 
-    def _run(
-        argv,
-        *,
-        cwd=None,
-        capture_output=True,
-        text=True,
-        encoding=None,
-        errors=None,
-        timeout=None,
-    ):
-        calls.append({"argv": list(argv), "cwd": cwd, "timeout": timeout})
+    def _run(argv, **kw):
+        calls.append(
+            {"argv": list(argv), "cwd": kw.get("cwd"), "timeout": kw.get("timeout")}
+        )
         return _Proc(rc, out)
 
-    monkeypatch.setattr(checks_mod.subprocess, "run", _run)
+    # 验收命令现走 `procs.run_hidden`（2026-10-15 加急：隐藏窗口口径），故打桩落在
+    # `subprocess.run` 上（procs 与 checks 共用同一 subprocess 模块对象）。
+    from pysci.skills.orchestration.tools import procs as _procs
+
+    monkeypatch.setattr(_procs.subprocess, "run", _run)
     return calls
 
 
