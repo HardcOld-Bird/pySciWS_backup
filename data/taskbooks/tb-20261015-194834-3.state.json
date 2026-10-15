@@ -2,14 +2,19 @@
   "id": "tb-20261015-194834-3",
   "ts": "2026-10-15T19:48:34+08:00",
   "title": "3 综合仿真实验绘图任务",
-  "status": "active",
+  "status": "rejected",
   "source": "mirror-tui",
   "priority": "low",
   "mode": "",
   "rework_of": "",
   "rework_round": 0,
   "plan_id": "tb-3-simfig-20261015",
-  "rejections": [],
-  "updated": "2026-10-15T22:19:22+08:00",
+  "rejections": [
+    {
+      "ts": "2026-10-15T22:56:49+08:00",
+      "note": "考虑到本管线初次运行，该结果称得上不错，不过当然应该继续打磨。下面是我能发现的明显不达标问题："
+    }
+  ],
+  "updated": "2026-10-15T22:56:49+08:00",
   "report": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\data\\taskbooks\\tb-20261015-194834-3.report.md"
 }
