@@ -15,6 +15,7 @@ LLM 直接调用，无需了解底层模块实现。
     slides digest    大型 pptx → 图文互证 Markdown 工作区（去重导图/邻近文字/分节分块）
     slides render    把 .pptx 渲染成逐页 PNG（pptx→pdf→page-NNN.png，供视觉判读/交付附件）
     slides verify    机械验收逐页渲染（渲染存在 / 页数=幻灯片数 / 非空白页）
+    slides geometry  只读几何体检（外框边被覆盖 / 图元越界 / 图片互叠，不渲染不写盘）
     verify <pdf>     把 PDF 渲染成 PNG，供 LLM「看图」校对版式
 
 用法（在项目根目录）::
@@ -543,7 +544,31 @@ def cmd_slides_render(args: argparse.Namespace) -> int:
     print("[slides render] 用 Read 逐一查看下列 PNG 做视觉判读：")
     for p in res.pngs:
         print(f"    {p}")
+    # 打印**可直接粘贴**的验收命令：渲染目录非约定位置时不必记住 --render-dir 旗标名。
+    print(
+        f"[slides render] 验收：pysci-compose slides verify '{src}' "
+        f"--render-dir '{res.out_dir}'"
+    )
     return 0
+
+
+def cmd_slides_geometry(args: argparse.Namespace) -> int:
+    from . import slides_visual
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides geometry] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        rep = slides_visual.geometry_report(
+            src, frame=args.frame, tolerance=args.tol, overlap_in2=args.overlap
+        )
+    except Exception as e:
+        print(f"[slides geometry] 分析失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(rep.as_json() if args.json else rep.summary())
+    # 默认**只报告**（版面硬伤需人判读，避免误报当闸）；--strict 才据违规置非零退出码。
+    return 1 if (args.strict and not rep.ok) else 0
 
 
 def cmd_slides_verify(args: argparse.Namespace) -> int:
@@ -918,6 +943,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="空白页阈值：墨迹像素占比低于它即判空白（默认 0.002）",
     )
     sp.set_defaults(func=cmd_slides_verify)
+
+    sp = slidessub.add_parser(
+        "geometry", help="只读几何体检（外框遮挡/越界/图片互叠，不渲染不写盘）"
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument(
+        "--frame", default=None, help="外框形状名（缺省自动挑面积最大的矩形）"
+    )
+    sp.add_argument(
+        "--tol", type=float, default=0.05, help="越界容差（英寸，默认 0.05）"
+    )
+    sp.add_argument(
+        "--overlap",
+        type=float,
+        default=1.0,
+        help="图片互叠面积阈值（in²，默认 1.0）",
+    )
+    sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
+    sp.add_argument(
+        "--strict", action="store_true", help="有违规即退出码非 0（默认只报告）"
+    )
+    sp.set_defaults(func=cmd_slides_geometry)
 
     # --- docx 子命令组 ---
     docx = sub.add_parser("docx", help="DOCX 读写（read/from-markdown/add）")
