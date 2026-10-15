@@ -106,8 +106,29 @@ def test_skips_path_outside_root(repo, tmp_path_factory):
 
 
 # ---------------------------------------------------------------------------
-# ④ 提交失手 fail-soft：不留半挂暂存态（钩子改写的档口）
+# ④ 提交失手 fail-soft：先按「被钩子改写不算失败」重试一次，再退回暂存态
 # ---------------------------------------------------------------------------
+def test_retries_once_after_hook_rewrites(repo, monkeypatch):
+    """首投被 pre-commit 钩子改写中止 → 重新 add 再试一次即成功（实测首投必栽此步）。"""
+    d = _seed_tracked_dir(repo, "data/taskbooks")
+    (d / "tb-2.taskbook.md").write_text("新\n", encoding="utf-8")
+    real = statecommit._git
+    attempts: list[str] = []
+
+    def fake(*args: str):
+        if args and args[0] == "commit":
+            attempts.append("commit")
+            if len(attempts) == 1:
+                return subprocess.CompletedProcess(args, 1, "", "hook modified files")
+        return real(*args)
+
+    monkeypatch.setattr(statecommit, "_git", fake)
+    out = statecommit.commit_face(d, "chore(state): 任务书入库")
+
+    assert out.startswith("[↑]"), out
+    assert len(attempts) == 2, "改写中止后须重试一次（重试仍不过才算失手）"
+
+
 def test_commit_failure_fails_soft_and_unstages(repo, monkeypatch):
     d = _seed_tracked_dir(repo, "data/taskbooks")
     (d / "tb-1.taskbook.md").write_text("新\n", encoding="utf-8")
@@ -124,6 +145,7 @@ def test_commit_failure_fails_soft_and_unstages(repo, monkeypatch):
     out = statecommit.commit_face(d, "chore(state): 任务书入库")
 
     assert "自动提交失败" in out and "boom" in out, out
+    assert [c[0] for c in calls].count("commit") == 2, "重试一次后仍失败才算真失手"
     assert ("reset", "-q", "--", "data/taskbooks") in calls, "失手须退回暂存态"
 
 
