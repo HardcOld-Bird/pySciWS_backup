@@ -391,16 +391,23 @@ def dirs_with_taskbook_whitelist(dirs: list[str], taskbook: Path | None) -> list
     """
     out = list(dirs)
     entries = taskbook_whitelist_dirs(taskbook)
-    if not entries and not out and taskbook is not None:
+    # 声明面「写了」却**一条都解析不出**，无论显式 dirs 有无，都要出声（backlog 20261015-
+    # 222249：格式微调即失配，而注入侧静默得空集——组员到写文件才发现 whitelist_conflict）。
+    if not entries and taskbook is not None:
         try:
             text = taskbook.read_text(encoding="utf-8")
         except OSError:
             text = ""
         if _WHITELIST_HEAD_RE.search(text):
+            tail = (
+                "、且无 --dirs）——组员写入会被 pod-guard 拦成 whitelist_conflict；"
+                if not out
+                else "）——声明面被静默丢弃，本次只按显式 dirs 注入；"
+            )
             print(
-                f"[!] 任务书 {taskbook.name} 声明了「白名单（写权限）」段，但解析不出任何目录"
-                "（且无 --dirs）——组员写入会被 pod-guard 拦成 whitelist_conflict；"
-                "请检查条目形态（每行一条仓库相对路径）或补 --dirs"
+                f"[!] 任务书 {taskbook.name} 声明了「白名单（写权限）」段，但解析不出任何目录（格式？"
+                + tail
+                + "请检查条目形态（每行一条仓库相对路径）"
             )
     for d in entries:
         if d not in out:
@@ -564,7 +571,11 @@ def _step_promise_warning(
 
 
 #: 「白名单」段标题与任意标题（用于切出白名单段的边界）。
-_WHITELIST_HEAD_RE = re.compile(r"^#{1,6}\s*白名单")
+#: 「白名单」段标题。**必须 re.M**（backlog 20261015-222249）：声明面「写了却解析不出」的
+#: 告警用的是本式 ``.search(text)``，而无 re.M 时 ``^`` 只锚**串首**——真实任务书都以
+#: 「# 任务书…／背景／目标」开头，白名单段在中间，于是那条告警实测**从不触发**（静默失败
+#: 的静默修复也静默失效）。逐行 ``.match(ln)`` 的用法不受影响。
+_WHITELIST_HEAD_RE = re.compile(r"^#{1,6}\s*白名单", re.M)
 _ANY_HEAD_RE = re.compile(r"^#{1,6}\s")
 
 #: 正文点名的**仓库路径**（顶层目录起；前后不许接路径字符，避免咬进长串）。

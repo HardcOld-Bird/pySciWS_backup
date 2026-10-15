@@ -24,6 +24,9 @@ pysci-orch taskbooks list|show <id>|link <id> --plan <pid>|sync|report <id>  # �
 pysci-orch queues list | queues enqueue <member> --text "..." [--review]  # 成员 FIFO 队列（含 devops）
 pysci-orch events drain | events list  # 统一事件流：排空积压（幂等）/水位
 pysci-orch plan amend <id>               # 编辑 plan YAML 后校验对账
+pysci-orch plan edit <id> --step S (--brief|--append-brief|--dirs)  # 结构化改环节字段
+#   └ **改环节别手编 YAML**（`plan new` 会重排折行，old_string 逐字对不上）：用本命令说
+#     「改什么」即可，自动写盘并对账（护栏同 amend）
 pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步：**同步阻塞到完成**
 #   └ 内部走 `plan run`（等本计划全部在途收尾）⇒ **与 `plan advance` 的「入队即返回」相反**；
 #     长任务**必须后台**（run_in_background），否则撞 Bash 工具超时（backlog 20261015-211200）
@@ -32,7 +35,7 @@ pysci-orch suggestions                   # 待审批改进建议（附质检标�
 pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<理由>")
         [--note "..."] [--no-wake] [--criteria "<判据>"] [--solo]  # 四态必居其一
         # 例外=缺陷×当跳 blocked；判决包 verdict-package.md
-#   └ 组长立单（**无命令**，手写即立案）：落点 `orchestration/state/suggestions/<ts>-<member>.md`
+#   └ 组长立单（**无命令**，手写即立案）：落点 `state/suggestions/<ts>-<member>.md`
 #     （`<ts>`=YYYYMMDD-HHMMSS；后缀是**来源**成员，组长代补时写**目标**成员——判断来源看正文）。
 #     列表 `[member]` 列**即**该后缀 ⇒ 代补单显示**目标**成员。正文须含 `kind: defect|usability`
 #     与 `success_criteria:` 段；实质正文（去空白/标题/`kind:|source:|fingerprint:` 行）≥40 字，
@@ -51,26 +54,26 @@ pysci-orch review <产物> --origin <member> [--rubric generic]
         [--goal-from <原生产任务书> | --goal "<目标陈述>"]  # --goal* 供 G2 独立核验
         # 审查链：VERDICT → FAIL 回派返工 → 复审一次 → 二次 FAIL 升级仲裁
 pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（非 Qwen 双序对局，阻塞出裁决；
-        # 不可达入队 rc=1；jury-panel.md/jury-channels.md）
+        # 不可达入队 rc=1；jury-panel/jury-channels.md）
 pysci-orch eval run (--case <id>|--all) [--label L]
         # Tier B 压测**抽检面**（runner=leader）；套件本体归 bencher
 pysci-orch bench-add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]
         [--label L] [--tier minimum] [--brief T] [--start]  # 测量任务入队（不阻塞）
 pysci-orch bench-up [--dry] | bench-queue [--all] | bench-seen <id> | bench-stop
-        # bencher 生命周期（FIFO 非常驻）；判决进 status「待查看」不即时唤醒（§5.1-B）；
-        # 要领 drain-watch.md、harness-eval.md
+        # bencher 生命周期（FIFO 非常驻）；判决进 status「待查看」不即时唤醒（§5.1-B）；要领
+        # drain-watch.md、harness-eval.md
 pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（未生效即拒；twin-taste-mirror.md）
 pysci-orch inspector-up [--dry|--force] | inspector-status | inspector-patrol [--target 菜单id]
         [--start] | inspector-assign --brief T [--start] | inspector-on|inspector-off
-        # 巡检引擎（§7）：内嵌 status/approve/dispatch；inspector-engine.md
+        # 巡检引擎（§7）：内嵌 status/approve/dispatch
 pysci-orch stats [--plan id|--member m|--days N]
 # —— 低频顶层命令 ——
 pysci-orch requeue <条目id> [--note "…"]   # 回排：needs_leader → pending 并唤醒 drain（组长面正门）
 pysci-orch resolve <条目id> --note "…"     # 销账：确认已达标的 needs_leader 条目 → done（--note 必填留痕）
 #   └ 两者作用域**同**：backlog 条目且 **status=needs_leader**；**不收建议单 id**（见立单块）
-pysci-orch watchdog start|stop|status       # 看门狗生命周期：start 幂等 / stop 广播纪元停全部 / status 报读数（含逻辑实例数）
-pysci-orch drain-stop                       # 请求 devops worker 协作式停止（计划器 + devops FIFO worker 两处 cancel）
-pysci-orch refresh-models                   # 按 --list-models 刷新 registry 模型映射（drain 启动亦自动执行一次）
+pysci-orch watchdog start|stop|status       # 看门狗生命周期：start 幂等 / stop 广播纪元停全部 / status 报读数
+pysci-orch drain-stop                       # 请求 devops worker 协作式停止（计划器 + FIFO worker 两处 cancel）
+pysci-orch refresh-models                   # 按 --list-models 刷新 registry 模型映射（drain 启动亦自动执行）
 pysci-orch twin-review [case] (--list|--confirm|--reject) [--note "…"]  # 用户复核 twin 裁决（否决入 override 账）
 # —— 底层命令面（降级/调试）——
 pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
@@ -82,10 +85,9 @@ pysci-orch ledger [--member --days --stats] | sync [--check]
 bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 
 **队列成员**（上列三条路径可直派）＝ 7 专职 + deputy + reviewer + **devops**；非队列成员三闸均拒。
-**devops 双通道并存**（plan 直派 `kind=produce` / backlog FIFO 组包 `kind=backlog-batch`，同队列
-同 worker）；bencher/inspector 各有专用队列，**不经** `queues enqueue`。细则见 `dispatch-playbook.md`。
+**devops 双通道并存**（直派 / backlog 组包，同队列同 worker）；bencher/inspector 各有专用队列，**不经** `queues enqueue`。细则见 `dispatch-playbook.md`。
 
 用户控制台 `pysci`：裸跑进 TUI（人类正道）；`pysci status|journal|decisions`＝LLM 静态通道。
 
 **四态审批**：`approve` 必带 `--jury`/`--bench`/`--override` 之一；例外=缺陷×当跳 blocked。
-判决包结构与用量/override 率口径见 `verdict-package.md`。
+判决包结构见 `verdict-package.md`。
