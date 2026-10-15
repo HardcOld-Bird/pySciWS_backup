@@ -1,9 +1,13 @@
-"""失败三分类器：bandwidth / outage / quota / unknown（用户设计 2026-10-13）。
+"""失败分类器：bandwidth / outage / quota / model_glitch / unknown（用户设计 2026-10-13）。
 
 **为什么需要它**（backlog 20261013-180000-leader）：所有提供商的并发带宽限制与项目需求
 同量级（mimo 明确 10 RPM / 10M TPM），「带宽不足」与「渠道真不可用」必须分开——前者
 正确处置是**等**（延期），后者才是换席/停链。而区分二者只能看 provider 报错原文，故本单
 同时把原文入台账（``error_text``）并给出分类器。
+
+**model_glitch**（backlog 20261016-042500-devops）：mid-run 工具回合中断（模型发出畸形/
+未名的工具调用、流式截断）——stop_reason 落在 ``tool_use``/``stop_sequence`` 而原文常为空。
+席位与渠道都活着，正确处置是**重试一次**（resume 续跑），故必须与上面三类分开。
 
 关键词表落 :data:`CLASSES_PATH`（``state/failure-classes.json``，git 跟踪），**文件形状
 即协议**，纪律同 :mod:`failure_tags`：增补 pattern 须附定义（``definition`` 非空）。
@@ -63,10 +67,13 @@ DEFAULT_CLASSES: dict[str, tuple[str, ...]] = {
         r"internal server error",
         r"\b(500|502|503|504)\b",
     ),
+    "model_glitch": (r"\btool_use\b", r"\bstop_sequence\b"),
 }
 
 #: 判定优先级（同现时取**更硬**者：额度耗尽须充值、带宽只要等）。文件可覆盖。
-PRECEDENCE: tuple[str, ...] = ("quota", "bandwidth", "outage")
+#: ``model_glitch`` 排最后：它是「模型侧打嗝」（mid-run 工具回合中断），原文通常是
+#: stop_reason 短码本身——只有没有更硬的 provider 报错在场时才归它。
+PRECEDENCE: tuple[str, ...] = ("quota", "bandwidth", "outage", "model_glitch")
 
 #: 编译缓存：键 = 该类当前 patterns 元组（词表改了就自动重编，不必重启）。
 _RE_CACHE: dict[tuple[str, ...], re.Pattern[str]] = {}

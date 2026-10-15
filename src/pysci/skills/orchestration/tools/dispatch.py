@@ -241,6 +241,66 @@ def _seat_reason_text(reason: str) -> str:
     return SYSTEMIC_TEXT.get(reason, (reason, reason))[1]
 
 
+#: mid-run「模型打嗝」的 stop_reason（畸形/中断的工具回合）。席位与渠道都活着，
+#: 重试一次（resume 续跑）有意义——不是换席也不是停链。
+MIDRUN_GLITCH_STOPS: tuple[str, ...] = ("tool_use", "stop_sequence")
+
+
+def _is_midrun_glitch(env: Envelope) -> bool:
+    """跑了一半断在工具回合？（``stop_reason`` ∈ :data:`MIDRUN_GLITCH_STOPS` 且已过回合）"""
+    return env.num_turns > 0 and (env.stop_reason or "") in MIDRUN_GLITCH_STOPS
+
+
+def _stdout_scene(out: str, limit: int = 200) -> str:
+    """stdout 里 envelope JSON **之前**的杂讯尾部（工具报错的第一现场常在此）。"""
+    text = (out or "").strip()
+    cut = text.rfind("\n{")
+    head = text[:cut] if cut > 0 else ""
+    return head.strip()[-limit:]
+
+
+def _last_tool_calls(sid: str) -> str:
+    """会话档尾部的末次工具调用形态（best-effort；读不动即空串）。"""
+    if not sid:
+        return ""
+    try:
+        from . import transcript as _transcript
+
+        return _transcript.tail_tool_calls(sid)
+    except Exception:  # noqa: BLE001 - 留档增强绝不让失败路径自身崩
+        return ""
+
+
+def _enriched_error(
+    env: Envelope,
+    err: str,
+    out: str,
+    *,
+    retried: bool,
+    first_stop: str = "",
+) -> str:
+    """失败留档的错误正文：原文优先 + 结构化上下文，短码不再孤零零（backlog 20261016-042500-devops）。
+
+    原文取序：stderr 尾 → envelope ``result`` 尾 → stdout 杂讯尾 → 空。无论命中与否都追加
+    ``[判读：stop_reason=… num_turns=… class=… retried=…]`` 与末次工具调用形态——后者把
+    「断在哪次工具调用上」写进留档，追查不必再翻原始会话档。
+    """
+    raw = (
+        (err or "").strip()[-400:]
+        or (env.result or "").strip()[-400:]
+        or _stdout_scene(out)
+    )
+    cls = failure_classes.classify_failure(raw, env.stop_reason, is_error=True)
+    bits = [f"stop_reason={env.stop_reason or '?'}", f"num_turns={env.num_turns}"]
+    if cls != failure_classes.UNKNOWN:
+        bits.append(f"class={cls}")
+    if retried:
+        bits.append(f"retried=1(first={first_stop or '?'})")
+    tools = _last_tool_calls(env.session_id or "")
+    tail = f" 末次工具：{tools}" if tools else ""
+    return f"{raw or '（无原文）'} [判读：{' '.join(bits)}]{tail}"
+
+
 def _boundary_hold(
     reg: Registry, *, no_hold: bool, quiet: bool = False
 ) -> tuple[str, int]:
@@ -1348,15 +1408,36 @@ def do_dispatch(
     systemic = _detect_systemic(env_json, out, err, member=m, sid=sid) if failed else ""
     broken = _seat_broken(env_json, rc, systemic)
 
+    #: 本跳是否已自动重试过 / 首跑（重试前）的 stop_reason——落进错误正文供追查。
+    retried_once = False
+    first_stop_reason = ""
+
+    glitch = _is_midrun_glitch(env_json)
     if failed and not no_retry and not broken:
+        # mid-run 工具回合中断（stop_reason=tool_use/stop_sequence、num_turns>0）本就落在本通道
+        # （席位与渠道都活着 → broken 为空），这里给**中断成因**一个专名：日志可读，且重试提示
+        # 能对症（backlog 20261016-042500-devops——此前 stderr 空时提示只报一句「异常中断」，
+        # 组长无从下手；实测缓解手段是分批读图/减少单次大输出）。
         if not quiet:
             print(
-                f"[!] 首跑失败（rc={rc}, stop={env_json.stop_reason}），自动重试一次…"
+                f"[!] 首跑失败（rc={rc}, stop={env_json.stop_reason}"
+                + ("，mid-run 工具回合中断" if glitch else "")
+                + "），自动重试一次…"
             )
+        first_stop_reason = env_json.stop_reason
+        retried_once = True
         retry_prompt = (
-            f"上一次运行异常中断（rc={rc}；stderr 摘要：{err.strip()[-400:]}）。"
-            f"请继续完成任务书 {taskbook}，按交付协议收尾。\n\n{PROTOCOL_REMINDER}"
-        )
+            (
+                f"上一次运行在**工具回合**中断（stop_reason={env_json.stop_reason}，"
+                f"已跑 {env_json.num_turns} 回合）。请继续完成任务书 {taskbook}，按交付协议收尾；"
+                f"若上一步因上下文过大 / 单次输出过多而打嗝，改为分批读取或分次输出。"
+            )
+            if glitch
+            else (
+                f"上一次运行异常中断（rc={rc}；stderr 摘要：{err.strip()[-400:]}）。"
+                f"请继续完成任务书 {taskbook}，按交付协议收尾。"
+            )
+        ) + f"\n\n{PROTOCOL_REMINDER}"
         cmd2 = build_command(
             m,
             retry_prompt,
@@ -1559,7 +1640,13 @@ def do_dispatch(
 
     if failed:
         kind = systemic or "run_failed"
-        err_text = (err.strip()[-400:] or env_json.stop_reason).strip()
+        err_text = _enriched_error(
+            env_json,
+            err,
+            out,
+            retried=retried_once,
+            first_stop=first_stop_reason,
+        )
         if systemic:
             # 台账 error 面须分辨两类系统性故障（backlog 20261012-194500-leader 要求 3）：
             # 两类的原始读数可能完全相同（渠道故障常只报 stop_sequence），不带 kind 就分不开

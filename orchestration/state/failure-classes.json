@@ -1,8 +1,15 @@
 {
   "version": 1,
-  "discipline": "失败三分类器的关键词表（user 设计 2026-10-13，backlog 20261013-180000-leader）。**文件形状即协议**：{\"version\":1,\"discipline\":\"…\",\"classes\":{\"<类>\":{\"definition\":\"…\",\"patterns\":[正则…]}}}。三类 + 隐含的 unknown（无匹配）。增补 pattern **须附/保持 definition 非空**（同 failure-tags.json 纪律）：词表改动会改变全队的失败分类面与延期/回退策略，不是本地偏好。库侧唯一读取口：pysci.skills.orchestration.tools.failure_classes.load_classes()；dispatch 的 quota/channel 识别与后续延期机制都**只**从这里取词，不在别处硬编码。**precedence** 见模块常量：quota > bandwidth > outage——同一段原文多类同现时取更硬的那个（额度耗尽要充值、带宽不足只要等）。",
-  "precedence": ["quota", "bandwidth", "outage"],
+  "discipline": "失败三分类器的关键词表（user 设计 2026-10-13，backlog 20261013-180000-leader）。**文件形状即协议**：{\"version\":1,\"discipline\":\"…\",\"classes\":{\"<类>\":{\"definition\":\"…\",\"patterns\":[正则…]}}}。四类（quota / bandwidth / outage / model_glitch）+ 隐含的 unknown（无匹配）。增补 pattern **须附/保持 definition 非空**（同 failure-tags.json 纪律）：词表改动会改变全队的失败分类面与延期/回退策略，不是本地偏好。库侧唯一读取口：pysci.skills.orchestration.tools.failure_classes.load_classes()；dispatch 的 quota/channel 识别与后续延期机制都**只**从这里取词，不在别处硬编码。**precedence** 见模块常量：quota > bandwidth > outage > model_glitch——同一段原文多类同现时取更硬的那个（额度耗尽要充值、带宽不足只要等、模型打嗝只要重试）。",
+  "precedence": ["quota", "bandwidth", "outage", "model_glitch"],
   "classes": {
+    "model_glitch": {
+      "definition": "模型侧打嗝类：mid-run 工具回合中断（模型发出畸形/未名的工具调用或流式截断），envelope 的 stop_reason 落在 tool_use / stop_sequence 且原文常为空。**非席位故障**（席位与渠道都活着）——正确处置是**重试一次**（resume 续跑），不是换席或停链；排在其他三类之后，只有没有更硬的 provider 报错在场时才归它（backlog 20261016-042500-devops）。",
+      "patterns": [
+        "\\btool_use\\b",
+        "\\bstop_sequence\\b"
+      ]
+    },
     "bandwidth": {
       "definition": "带宽/限流类：并发与速率上限、TPM/RPM 配额、429、上游过载——**瞬态**，正确处置是等待或延期，不是切更贵的席位。本项目实测的典型面是 mimo 的 10 RPM/10M TPM 限流文案。",
       "patterns": [
