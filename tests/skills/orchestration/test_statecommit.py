@@ -177,3 +177,36 @@ def test_archive_delivery_commits_face(tmp_path, monkeypatch):
     rel = queueworker.archive_delivery({"id": "j1", "member": "sim"}, {}, body="正文")
 
     assert rel and seen == [str(tmp_path / "deliveries")], seen
+
+
+# ---------------------------------------------------------------------------
+# ⑥ 任务书**状态改写**也即写即提交（backlog 20261015-153541-tier-a：
+#    该面的 state.json 曾以改动态滞留 main，拦下别人的合并交集闸 → merge_dirty_face）
+# ---------------------------------------------------------------------------
+def test_taskbook_state_rewrite_leaves_the_face_clean(repo, monkeypatch):
+    from pysci import paths as _paths
+    from pysci.skills.orchestration.tools import taskbooks
+
+    d = _seed_tracked_dir(
+        repo, "data/taskbooks"
+    )  # 面已入册（真实场景：面本就有跟踪文件）
+    monkeypatch.setattr(taskbooks, "TASKBOOKS_DIR", d)
+    monkeypatch.setattr(_paths, "DATA_ROOT", repo / "data")
+
+    tid = taskbooks.create("演示大任务", "正文")["id"]  # 创建：新文件即提交
+    taskbooks.link_plan(tid, "p1")  # **改写** state.json：此前会留 ` M` 脏面
+
+    status = _git(repo, "status", "--porcelain", "--", "data/taskbooks").stdout
+    assert status.strip() == "", (
+        f"改写须即写即提交、不留脏面（曾因此拦下别人合并）：{status!r}"
+    )
+
+
+def test_taskbook_state_save_is_wired_to_commit_face():
+    """接线在场（改回「只写不提交」即红）。"""
+    from pathlib import Path
+
+    from pysci.skills.orchestration.tools import taskbooks
+
+    src = Path(taskbooks.__file__).read_text(encoding="utf-8")
+    assert "statecommit.commit_face(TASKBOOKS_DIR, TASKBOOK_COMMIT_MSG)" in src
