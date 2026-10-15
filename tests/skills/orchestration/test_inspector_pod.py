@@ -270,10 +270,10 @@ def test_inspector_has_no_override_surface():
 
 
 def test_patrol_menu_is_engine_owned_and_complete():
-    """巡检菜单八项在**引擎侧**固定（组员不自选），且 id 索引与自覆盖标注自洽。"""
+    """巡检菜单九项在**引擎侧**固定（组员不自选），且 id 索引与自覆盖标注自洽。"""
     from pysci.skills.orchestration.tools import inspectd
 
-    assert len(inspectd.PATROL_MENU) == 8
+    assert len(inspectd.PATROL_MENU) == 9
     ids = [e["id"] for e in inspectd.PATROL_MENU]
     assert len(set(ids)) == len(ids), "菜单 id 重复会让 PATROL_BY_ID 静默吞项"
     assert set(inspectd.PATROL_BY_ID) == set(ids)
