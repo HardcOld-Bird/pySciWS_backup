@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 from datetime import datetime, timedelta
 
 from pysci.skills.orchestration.tools import drain
@@ -65,6 +67,46 @@ def test_corrupt_lock_is_taken_over(iso_state):
     iso_state.mkdir(parents=True, exist_ok=True)
     (iso_state / "devops.lock").write_text("{ not json", encoding="utf-8")
     assert drain.read_lock() is None  # 损坏 → 视为无锁
+    rec = drain.acquire_lock("b.log")
+    assert rec is not None and rec["pid"] == os.getpid()
+
+
+def test_half_written_lock_is_not_stolen(iso_state):
+    """**半写载荷窗口**（2026-10-15 看门狗双生单）：他方刚 ``O_EXCL`` 建成、payload 尚未
+    落盘时，竞争者不得据「读成空」立刻偷锁——那会让两个实例各自以为自己持锁。
+
+    旧实现此处返回记录（偷锁成功），实测双生就是这么来的。
+    """
+    lock = drain.LOCK_PATH
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+
+    def _finish_write() -> None:
+        time.sleep(0.05)  # 真实窗口是两次 syscall（微秒级），此处放大 4 个数量级
+        payload = {
+            "pid": os.getpid(),
+            "started": drain._now(),
+            "run_log": "r.log",
+        }
+        os.write(fd, (json.dumps(payload) + "\n").encode("utf-8"))
+        os.close(fd)
+
+    t = threading.Thread(target=_finish_write)
+    t.start()
+    try:
+        rec = drain.acquire_lock("b.log")
+    finally:
+        t.join(10)
+
+    assert rec is None, "空载荷窗口内偷走了仍在写入的活锁（双实例窄窗）"
+    assert json.loads(lock.read_text(encoding="utf-8"))["pid"] == os.getpid()
+
+
+def test_empty_lock_left_behind_still_taken_over(iso_state):
+    """宽限不是挡路：真残骸（空文件、无人再写）仍被接管，语义不变。"""
+    lock = drain.LOCK_PATH
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text("", encoding="utf-8")
     rec = drain.acquire_lock("b.log")
     assert rec is not None and rec["pid"] == os.getpid()
 
