@@ -56,3 +56,24 @@ alwaysApply: true
   才需重认。主会话迁移 = 新会话跑 `wake-claim` 接管。
 - 组长不在场时事件**不丢**（持久水位+迟到唤醒兜底）——**不存在「转投其他会话」语义**，
   次要会话被唤醒即属缺陷（机制细节：编排技能 references/patrol-watchdog.md）。
+
+## 5. 组员派发速查（派发决策必须对照本表，2026-10-15 用户裁决）
+
+| id | 职责 | 典型派发 |
+|---|---|---|
+| sim | 数值仿真（COMSOL 等） | 仿真、参数扫描 |
+| figure | 论文插图 | 论文图表 |
+| writing | 论文写作＋**办公文档**（doc/docx/ppt/pptx/xlsx 等） | 报告、文档、幻灯片 |
+| theory | 理论推导与计算 | 推导、解析计算 |
+| lit | **文献研究（科研文章，多为 pdf）** | 检索、文献阅读、综述 |
+| drawing | AI 作画、效果图 | 视觉素材 |
+| model3d | 3D 建模 | 模型、场景 |
+| deputy | 跨域简单任务单体执行＋技术顾问（平级，有拒绝权+异议义务） | 归属不明、咨询 |
+| reviewer | 期刊审稿式主观质量审查（可选重炮，非硬门） | 用户点名或 review:true |
+| devops | 基建维护（orch/guards/技能/测试/文档） | 改代码、修设施 |
+| bencher | harness 压测与 A/B 判决 | 回归集、压测 |
+| twin | 用户偏好代理＋终裁 | 夜航决策、审美裁决 |
+| inspector | 闲时巡检（发现→分类→分流） | 自动运转，不派发 |
+
+- **lit ↔ writing 分工**：科研文章（pdf）归 lit，办公文档（doc/docx/ppt/pptx）归
+  writing——2026-10-15 实派偏过（doc/docx 误派 lit），拿不准先问 deputy。

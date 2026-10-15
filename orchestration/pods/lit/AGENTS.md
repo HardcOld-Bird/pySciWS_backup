@@ -15,3 +15,12 @@
 - arxiv MCP（2026-10-10 冒烟实测）：首调可能 50s 超时并随后被 arXiv 限流（HTTP 429，
   retry_after≈60s），等待约 2-3 分钟后即恢复且响应很快。遇到 429/超时不要连续快速重试
   （会加深限流），按 server 提示的 retry_after 等待后再试一次即可。
+
+## 文档提取工具链（2026-10-15 实测可用）
+
+- `.docx` → `python-docx`；`.pdf` → `PyMuPDF (fitz)`（比 pypdf 好，能判每页文本长度以
+  识别扫描/纯图页）；`.doc`（旧版）→ **`antiword`（PATH 已含，`/mingw64/bin/antiword`）**，
+  中文与表格渲染良好，`-m UTF-8.txt` 指定映射。
+- LibreOffice 在 `D:/XiGPrograms/libreOffice/base/program/soffice`（非默认安装路径，
+  `which soffice` 找不到，需用绝对路径）；本机**无** `olefile`/`textract`/`catdoc`/`wvText`。
+- 图表/流程图页的文本层只给零散节点词，箭头逻辑无法还原——如实标注，勿臆测。

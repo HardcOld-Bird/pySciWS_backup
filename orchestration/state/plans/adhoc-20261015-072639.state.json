@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261015-072639",
+  "created": "2026-10-15T07:26:39+08:00",
+  "goal": "adhoc：orchestration/pods/devops/inbox/task-20261015-delivery-archi",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "failed",
+      "task_file": "orchestration/pods/devops/inbox/task-20261015-delivery-archive.md",
+      "session_id": "828a0c4d-8ea2-44a8-8fc3-0fe07d846a02",
+      "kind": "result",
+      "review": "pending",
+      "job_id": "devops-20261015-072639-adhoc-20261015-072639-s1"
+    }
+  ],
+  "completed_at": null
+}

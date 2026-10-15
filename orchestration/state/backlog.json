@@ -2266,6 +2266,35 @@
       "done_at": "2026-10-14T19:36:26+08:00",
       "batch_size": 1,
       "batch_seed": "20261014-135935-devops"
+    },
+    {
+      "id": "20261015-073621-devops",
+      "member": "devops",
+      "summary": "main 现存 2 条与本单无关的红（`test_flash_channel_swap.py::test_legacy_single_value_and_fallback_key_still_read` 与 `test_model_refresh.py::test_three_level_fallback_order`），在无本单代码的 main 上同样复现：断言 `['1a54cc57-…','",
+      "kind": "defect",
+      "success_criteria": "- 在无本单代码的 main 上复现这 2 条失败（已实测）；\n- 判明是「配置合法演进」还是「代码回归」；前者改用例锚代码默认值、后者修代码；两案均须全量转绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261015-073621-devops.md",
+      "status": "done",
+      "proposed": "2026-10-15T07:45:29+08:00",
+      "note": "drain 批量销账（commit 72a41c4）",
+      "started_at": "2026-10-15T07:45:31+08:00",
+      "worktree": "20261015-073621-devops",
+      "done_at": "2026-10-15T07:53:53+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261015-073621-devops"
+    },
+    {
+      "id": "20261015-085823-devops",
+      "member": "devops",
+      "summary": "**声明「入 git」的两个内容面实际全部未跟踪：`orchestration/state/deliveries/` 与 `data/taskbooks/`**",
+      "kind": "defect",
+      "success_criteria": "- `git ls-files orchestration/state/deliveries/ data/taskbooks/` 的输出与「落点是否入 git」的声明一致（要么非空、要么注释改口），且 `git status` 不再出现这两个目录的 `?? `；判据可用上面同一组命令复核。\n- 若选 ①：新生成的一件交付留档在 `git log --stat` 可见；若选 ②：源码内不再存在「（入 git）」与「未跟踪」并存的矛盾表述（grep 复核）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261015-085823-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-15T08:59:48+08:00",
+      "note": "",
+      "started_at": "2026-10-15T08:59:50+08:00",
+      "worktree": "20261015-085823-devops"
     }
   ]
 }

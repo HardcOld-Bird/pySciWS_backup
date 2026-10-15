@@ -1,0 +1,17 @@
+{
+  "plan_id": "tb-1-docs-20261015.plan",
+  "created": "2026-10-15T07:46:18+08:00",
+  "goal": "开题文档阅读与待关注事项整理——三份材料阅读总结，落盘同目录 md（tb-20261015-072342-1）",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "task_file": "orchestration/pods/lit/inbox/task-20261015-tb-1-docs-s1.md",
+      "session_id": "6fe5fb14-f604-4d7f-81b6-8e4f4df05bf6",
+      "kind": "result",
+      "review": "pending",
+      "job_id": "lit-20261015-074703-tb-1-docs-20261015.plan-s1"
+    }
+  ],
+  "completed_at": "2026-10-15T07:48:59+08:00"
+}
