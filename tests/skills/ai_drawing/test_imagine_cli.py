@@ -25,7 +25,7 @@ from pysci.skills.ai_drawing.tools import ledger as _ledger
 # ---------------------------------------------------------------------------
 # fixture
 # ---------------------------------------------------------------------------
-_DATA_DIRS = ("assets", "gallery", "recipes", "prompts", "cache", "runs")
+_DATA_DIRS = ("assets", "gallery", "recipes", "prompts", "cache", "runs", "trash")
 
 
 @pytest.fixture

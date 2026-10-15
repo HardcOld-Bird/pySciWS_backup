@@ -131,6 +131,7 @@ class Settings:
     prompts_dir: Path  # prompt 配方库
     cache_dir: Path  # 临时预览/中间产物（如图层拆分的分层输出）
     runs_dir: Path  # 云端响应原始 JSON 快照 + 日志（排障用）
+    trash_dir: Path  # 破坏性写前的**原件回收区**（带时间戳；backlog 20261015-210400）
 
     # --- 后端 ---
     default_backend: str  # "ark"（云端出图）| "imagegen"（Qoder 内置，Agent 直接调）
@@ -176,6 +177,7 @@ class Settings:
             f"prompts_dir      : {self.prompts_dir}",
             f"cache_dir        : {self.cache_dir}",
             f"runs_dir         : {self.runs_dir}",
+            f"trash_dir        : {self.trash_dir}",
             "",
             f"default_backend  : {self.default_backend}",
             "",
@@ -201,7 +203,16 @@ def build_settings() -> Settings:
     prompts_dir = MODULE_DIR / "prompts"
     cache_dir = MODULE_DIR / "cache"
     runs_dir = MODULE_DIR / "runs"
-    for d in (assets_dir, gallery_dir, recipes_dir, prompts_dir, cache_dir, runs_dir):
+    trash_dir = MODULE_DIR / "trash"
+    for d in (
+        assets_dir,
+        gallery_dir,
+        recipes_dir,
+        prompts_dir,
+        cache_dir,
+        runs_dir,
+        trash_dir,
+    ):
         d.mkdir(parents=True, exist_ok=True)
 
     timeout_raw = _get_env("AI_DRAWING_TIMEOUT")
@@ -224,6 +235,7 @@ def build_settings() -> Settings:
         prompts_dir=prompts_dir,
         cache_dir=cache_dir,
         runs_dir=runs_dir,
+        trash_dir=trash_dir,
         default_backend=(_get_env("AI_DRAWING_BACKEND", "ark") or "ark").lower(),
         ark_base_url=_get_env("ARK_BASE_URL", DEFAULT_ARK_BASE_URL)
         or DEFAULT_ARK_BASE_URL,

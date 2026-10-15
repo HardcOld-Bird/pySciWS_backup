@@ -332,6 +332,7 @@ def cmd_adjust(args: argparse.Namespace) -> int:
         return 1
     out = Path(args.out).expanduser()
     assert_within_data(out, what="后处理产物")
+    backups: list[tuple[Path, Path]] = []
     try:
         written = _pp.adjust_image(
             src,
@@ -344,10 +345,15 @@ def cmd_adjust(args: argparse.Namespace) -> int:
             pad_color=tuple(args.pad_color) if args.pad_color else (255, 255, 255),
             quality=args.quality,
             fmt=args.format,
+            allow_in_place=bool(getattr(args, "confirm", False)),
+            trash_dir=settings.trash_dir,
+            on_backup=lambda orig, bak: backups.append((orig, bak)),
         )
-    except ValueError as e:
+    except (ValueError, OSError) as e:
         print(f"[imagine] adjust 失败：{e}", file=sys.stderr)
         return 1
+    for orig, bak in backups:
+        print(f"  ↺ 原件已入回收区（可完整找回）：{bak}")
     print(f"后处理完成：{written}")
     print(f"  ✓ 视觉校验：Read '{written}'")
     return 0
@@ -1492,6 +1498,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--format", default=None, help="显式输出格式（覆盖后缀推断）")
     s.add_argument("--quality", type=int, default=95, help="JPEG/WEBP 质量（1-100）")
+    s.add_argument(
+        "--confirm",
+        action="store_true",
+        help="允许**就地覆盖**（--out 与 --src 同一文件）；不加则拒绝。"
+        "任何覆盖既有文件的写都会先把原件复制进 data/skills/ai_drawing/trash/ 回收区",
+    )
     s.set_defaults(func=cmd_adjust)
 
     s = sub.add_parser(

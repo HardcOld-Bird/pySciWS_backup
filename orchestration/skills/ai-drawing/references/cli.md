@@ -64,6 +64,11 @@ than re-compressed. `imagine ledger --render` rebuilds `LEDGER.md` from `manifes
 4. HTTP 400 on a flag combination: run the same command with `--dry-run` and read the request body
    against `imagine models`. Usual culprits: `--output-format png` on a non-5.0 model,
    `--group` on 5.0-pro, too many `--image` refs, `--seed` out of `[0, 65535]`.
+4. `adjust` **never destroys your original**: an in-place overwrite (`--out` == `--src`) is
+   **refused** unless you pass `--confirm`, and any write that would replace an existing file first
+   copies it into the recycle area `data/skills/ai_drawing/trash/` (timestamped) — so a mis-typed
+   call is always recoverable. The write itself is atomic (`.tmp` + rename), so a failure never
+   leaves a truncated target (backlog 20261015-210400).
 5. `img <op>` prints an install command: `uv pip install -e ".[imaging]"`. **This extra does not
    survive a sync** — `pysci-dev venv-sync` (uv sync) syncs the env to the default dependency set and
    prunes anything outside it, so scikit-image/OpenCV silently disappear. For durable availability put
