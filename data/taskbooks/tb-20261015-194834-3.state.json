@@ -2,13 +2,13 @@
   "id": "tb-20261015-194834-3",
   "ts": "2026-10-15T19:48:34+08:00",
   "title": "3 综合仿真实验绘图任务",
-  "status": "new",
+  "status": "planning",
   "source": "mirror-tui",
   "priority": "low",
   "mode": "",
   "rework_of": "",
   "rework_round": 0,
-  "plan_id": "",
+  "plan_id": "tb-3-simfig-20261015",
   "rejections": [],
-  "updated": "2026-10-15T19:48:34+08:00"
+  "updated": "2026-10-15T20:08:14+08:00"
 }
