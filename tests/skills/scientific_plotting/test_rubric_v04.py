@@ -1,9 +1,10 @@
-"""rubric v0.3 六处校准 + v0.4 三处强化 的在场性（backlog 20261015-204912 / 返工1 M3）。
+"""rubric v0.3 六处校准 + v0.4 三处强化 + v0.4.1 两处可执行性 的在场性。
 
 v0.3 来源：I.i3 校准审查报告 §4.1–4.7（首份实审对 v0.2 的可执行性观察，组长转立单）。
 v0.4 来源：返工1 成因分析（a1）§环3/§4——「数字对但语义错」全链无环可拦、常识排版纪律
-未入判定词表。本文件把「各条各有一处对应措辞（可逐条 grep 命中）」钉成机械判据，并交叉
-核对工具面在场与 8KB 预算。
+未入判定词表。v0.4.1 来源：b3 终审（reviewer-20261016-003734）v0.4 首战校准——H4① 未直书
+「彩色数据区」、遮挡判法未给像素级口径（bbox 8 报 8 假阳）。本文件把「各条各有一处对应
+措辞（可逐条 grep 命中）」钉成机械判据，并交叉核对工具面在场与 8KB 预算。
 """
 
 from __future__ import annotations
@@ -32,9 +33,43 @@ def _lines_with(md: str, token: str) -> list[str]:
 # ---------------------------------------------------------------------------
 def test_version_bumped_and_changelog():
     md = _rubric()
-    assert "scientific-plotting）v0.4" in md
-    assert "v0.4（2026-10-15）" in md, "缺 v0.4 修订说明"
+    assert "scientific-plotting）v0.4.1" in md
+    assert "v0.4.1（2026-10-16）" in md, "缺 v0.4.1 修订说明"
+    assert "v0.4（2026-10-15）" in md, "v0.4 修订史应保留"
     assert "v0.3（2026-10-15）" in md, "v0.3 修订史应保留"
+
+
+# ---------------------------------------------------------------------------
+# v0.4.1 两处可执行性（b3 终审校准）：H4① 彩色数据区 / 像素级判法 + bbox 警示
+# ---------------------------------------------------------------------------
+def test_item_v041_h4_covers_colour_data_area():
+    """①H4① 直书「彩色数据区」（此前只写「图线」，压场图色块需类推才命中）。"""
+    md = _rubric()
+    h4 = " ".join(_lines_with(md, "| H4 |"))
+    assert "彩色数据区" in h4, "H4① 未直书彩色数据区"
+    assert "18px" in h4, "缺 b3 的 18px 回归样例（判法须能复现其结论）"
+
+
+def test_item_v041_h4_pixel_method_and_bbox_warning():
+    """②H4 判法注明像素级口径（真源自足、可照做）与 bbox 假阳性警示。"""
+    md = _rubric()
+    h4 = " ".join(_lines_with(md, "| H4 |"))
+    assert "像素级为真源" in h4
+    for token in ("差分白字渲染", "蒙版求交", "墨迹蒙版", "交叠即遮挡"):
+        assert token in h4, f"缺像素级判法要素：{token}"
+    assert "bbox" in h4 and ("粗筛" in h4 or "假阳" in h4), "缺 bbox 假阳性警示"
+
+
+def test_item_v041_d5_wordlist_includes_colour_data_area():
+    md = _rubric()
+    d5 = " ".join(_lines_with(md, "| D5 "))
+    assert "彩色数据区" in d5
+
+
+def test_item_v041_verdict_quantifies_what():
+    """顺带：evidence 量值须注明量的是什么（H4 由 bbox 转像素级后尤需）。"""
+    md = _rubric()
+    assert "量值须注明量的是什么" in md
 
 
 # ---------------------------------------------------------------------------
