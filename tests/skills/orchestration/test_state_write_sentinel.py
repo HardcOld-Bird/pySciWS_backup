@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import pathlib
+import subprocess
+import sys
 
 import pytest
 
@@ -65,3 +67,33 @@ def test_sentinel_exempt_allows_real_write():
         assert probe.is_file()
     finally:
         probe.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# 留痕不占据 tail 末尾（backlog 20261015-132939-fix3；实案 A.a5 误杀的前提核验）
+# ---------------------------------------------------------------------------
+def test_exemption_note_is_not_the_last_stdout_line():
+    """**实测**：留痕块不在 stdout 末尾——pytest 的计数行（``N passed in Xs``）在收尾 hook
+    **之后**才写，故 ``checks.run_checks`` 取的 ``output_tail`` 末行永远是判据摘要。
+
+    这条把「留痕不占据 tail」钉成事实（挪动 hook 到更晚阶段、或让留痕成为最后输出，立即红）；
+    留痕本身仍走 stdout（改 stderr 会被 pytest 捕获吞掉 → 成功路径上审计线消失）。
+    """
+    target = pathlib.Path(__file__).resolve()
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            f"{target}::test_sentinel_exempt_allows_real_write",
+            "-q",
+        ],
+        cwd=str(_paths.PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert proc.returncode == 0, proc.stdout[-400:]
+    assert "豁免留痕" in proc.stdout, "该用例须真触发豁免留痕（否则本判据空转）"
+    last = [ln for ln in proc.stdout.splitlines() if ln.strip()][-1]
+    assert "passed" in last, f"末行应为判据摘要，实为：{last!r}"

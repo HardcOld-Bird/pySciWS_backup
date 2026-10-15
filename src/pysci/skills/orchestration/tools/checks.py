@@ -31,7 +31,9 @@ def run_checks(
 
     Returns:
         每条产物的验收结果字典列表：
-        ``{path, check, verdict: pass|fail|unrouted|skipped, output_tail}``。
+        ``{path, check, verdict: pass|fail|unrouted|skipped, output_tail, returncode}``。
+        ``returncode`` 是判据真源（``None``＝命令没能跑起来）；``output_tail`` 只作**人读**
+        摘要，其首位固定是 ``[check exit=N]`` 锚（backlog 20261015-132939-fix3）。
     """
     results: list[dict[str, Any]] = []
     for art in artifacts:
@@ -74,17 +76,25 @@ def run_checks(
                 timeout=CHECK_TIMEOUT_S,
             )
             verdict = "pass" if proc.returncode == 0 else "fail"
-            tail = (proc.stdout or proc.stderr or "")[-600:]
+            # 摘要把**退出码写在最前**（backlog 20261015-132939-fix3）：判据本来就只认
+            # 退出码（下一行的 verdict），把口径摆在摘要首位，读 tail 的人不会再拿尾部
+            # 文本当判据（实案 A.a5 的误读土壤）。
+            tail = (
+                f"[check exit={proc.returncode}] "
+                + (proc.stdout or proc.stderr or "")[-600:]
+            )
         except subprocess.TimeoutExpired:
-            verdict, tail = "fail", f"验收命令超时（>{CHECK_TIMEOUT_S}s）"
+            verdict, tail, proc = "fail", f"验收命令超时（>{CHECK_TIMEOUT_S}s）", None
         except OSError as exc:
-            verdict, tail = "fail", f"验收命令无法执行：{exc}"
+            verdict, tail, proc = "fail", f"验收命令无法执行：{exc}", None
         results.append(
             {
                 "path": str(p),
                 "check": art.check,
                 "verdict": verdict,
                 "output_tail": tail,
+                # 判据真源＝退出码（None=未能执行）：台账/报告据此复核，不必从 tail 里猜。
+                "returncode": proc.returncode if proc is not None else None,
             }
         )
     return results
