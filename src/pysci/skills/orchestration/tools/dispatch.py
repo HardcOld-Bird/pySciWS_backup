@@ -364,6 +364,58 @@ def collect_replies(member_id: str) -> tuple[str, list[Path]]:
     return body, files
 
 
+def taskbook_whitelist_dirs(taskbook: Path | None) -> list[str]:
+    """任务书「白名单（写权限）」段声明的目录——**声明即注入**（backlog 20261015-132939-fix3）。
+
+    此前声明面与注入面脱节：白名单段只喂给 lint 的 ``whitelist`` 规则（告警不阻断），而
+    pod-guard 的 ``PYSCI_TASK_DIRS`` 只来自 ``--dirs`` / plan step ``dirs``——任务书**声明了**
+    改动目标也被照拦成 ``whitelist_conflict``（实案 b2）。解析复用 lint 的同一实现
+    （:func:`_whitelist_entries`），不留第二份口径。
+    """
+    if taskbook is None:
+        return []
+    try:
+        lines = taskbook.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    entries, _used = _whitelist_entries(lines)
+    return entries
+
+
+def dirs_with_taskbook_whitelist(dirs: list[str], taskbook: Path | None) -> list[str]:
+    """显式 dirs ＋ 任务书白名单声明 → 去重（保序：显式来源在前，声明面追加）。"""
+    out = list(dirs)
+    for d in taskbook_whitelist_dirs(taskbook):
+        if d not in out:
+            out.append(d)
+    return out
+
+
+def _archive_replies(
+    reply_files: list[Path], *, trace: Callable[..., None] | None = None
+) -> None:
+    """把已附送的审批回复移入 ``sent/``——**幂等且绝不反噬派发**（backlog 20261015-132939-fix3）。
+
+    源文件可能已被人工或上一跳移走，此前裸 ``shutil.move`` 抛出的 ``FileNotFoundError``
+    会逃出 :func:`do_dispatch` → 整个**批次**异常退出 → 「已派发、未结账」的条目随后被重派
+    → 同一隔离面出现两个并发写者（实案 job 20261015-122406）。故：源已不在＝**已归档**，
+    静默跳过；其余 ``OSError`` 同样跳过——回复正文早已随任务书附送、也已在交付正文与台账
+    内务面，归档只是收拾目录。
+    """
+    for p in reply_files:
+        try:
+            if not p.exists():
+                if trace is not None:
+                    trace("reply_already_archived", reply=p.name)
+                continue
+            sent = p.parent / "sent"
+            sent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(p), str(sent / p.name))
+        except OSError as exc:
+            if trace is not None:
+                trace("reply_archive_skipped", reply=p.name, err=type(exc).__name__)
+
+
 def deployed_skills_for(pod: Path) -> list[str]:
     """从 manifest 解析部署到指定 pod 的技能名（pod-guard 保护部署副本）。"""
     names: list[str] = []
@@ -550,6 +602,11 @@ def _whitelist_entries(lines: list[str]) -> tuple[list[str], set[int]]:
             used.add(i)
             for seg in re.split(r"[、,，;；]", ln):
                 raw = re.sub(r"[`（）()【】\[\]]", "", seg).strip().replace("\\", "/")
+                # 列表标记先剥（backlog 20261015-132939-fix3）：任务书白名单一律写成
+                # `- path` 项目符号，而下面那个 tok 正则**认得 `-`**（它在字符类里），
+                # 于是每行都被判成 tok="-" 后丢弃 → 整段解析为空。实测：真实任务书
+                # （含本单自己的）一律解析出 []，声明面从来没被读到过。
+                raw = re.sub(r"^[-*+•]\s+", "", raw)
                 # 只取行首的路径样片段：条目常带中文注记（`data/taskbooks/**`（新建））
                 m = re.match(r"[A-Za-z0-9_./\-*]+", raw)
                 if not m:
@@ -1219,7 +1276,8 @@ def do_dispatch(
     prompt = "\n".join(parts)
 
     extra_dirs = list(m.raw.get("extra_dirs", []))
-    all_dirs = list(dirs or []) + extra_dirs
+    # 任务书「白名单（写权限）」段声明即注入 pod-guard（backlog 20261015-132939-fix3）
+    all_dirs = dirs_with_taskbook_whitelist(list(dirs or []) + extra_dirs, taskbook)
     cmd = build_command(
         m,
         prompt,
@@ -1590,10 +1648,8 @@ def do_dispatch(
     )
     if not eval_hop:
         append(entry)
-    for p in reply_files:  # 审批回复已附送 → 归档 sent/
-        sent = p.parent / "sent"
-        sent.mkdir(exist_ok=True)
-        shutil.move(str(p), str(sent / p.name))
+    # 审批回复已附送 → 归档 sent/（源缺失幂等跳过，见 :func:`_archive_replies`）
+    _archive_replies(reply_files, trace=_trace)
     _sessions.touch_session(
         m, sid, chars_offset=chars_after, ctx_ratio=env_json.context_usage_ratio
     )

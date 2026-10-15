@@ -137,6 +137,41 @@ def test_run_checks_orch_tests_fail_verdict(monkeypatch):
     assert "3 failed" in results[0]["output_tail"]
 
 
+# ---------------------------------------------------------------------------
+# 判据防污染（backlog 20261015-132939-fix3；实案 A.a5 误杀）
+# ---------------------------------------------------------------------------
+def test_output_tail_is_anchored_by_the_exit_code(monkeypatch):
+    """摘要把退出码摆在**首位**，且 ``returncode`` 作为字段单列——读 tail 的人不必从
+    尾部文本里猜判据（实案 A.a5 的误读土壤）。"""
+    _fake_run(monkeypatch, rc=0, out="253 passed")
+    results = run_checks(
+        [Artifact(path="x", check="orch-tests")], Registry.load(), member_pod=Path(".")
+    )
+    assert results[0]["output_tail"].startswith("[check exit=0]")
+    assert results[0]["returncode"] == 0
+
+
+def test_sentinel_note_in_stdout_cannot_flip_a_green_run(monkeypatch):
+    """A.a5 同款：stdout 末尾是「防写穿哨兵豁免留痕」块、进程退出码 0 → 判据仍 **pass**。
+
+    （留痕本身已改走 stderr，见 ``test_state_write_sentinel``；此处再钉一层「判据只认
+    退出码」——即便摘要里出现留痕字样也不得动摇 verdict。）
+    """
+    out = (
+        "1621 passed, 3 skipped in 114.80s\n"
+        + "=" * 25
+        + " 防写穿哨兵豁免留痕（allow_real_state） "
+        + "=" * 25
+        + "\n  - tests/skills/orchestration/test_state_write_sentinel.py::x\n"
+    )
+    _fake_run(monkeypatch, rc=0, out=out)
+    results = run_checks(
+        [Artifact(path="x", check="orch-tests")], Registry.load(), member_pod=Path(".")
+    )
+    assert results[0]["verdict"] == "pass"
+    assert results[0]["returncode"] == 0
+
+
 def test_registry_load_save_roundtrip_preserves_orch_tests(tmp_path, monkeypatch):
     """Registry.load→save→load 往返保留 checks 块两条（save 走原子写 tmp→replace）。"""
     src = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
