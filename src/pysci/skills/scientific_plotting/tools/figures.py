@@ -10,7 +10,7 @@
     ... figures preview <figdir> --style nature
     ... figures audit <figdir> --panels
 
-子命令分组：doctor / styles / new / build / preview / audit / inspect / raster-panel / field-panel / compose-grid / list。
+子命令分组：doctor / styles / new / build / preview / audit / inspect / overlap / raster-panel / field-panel / compose-grid / list。
 build/preview 会在图目录的 out/ 下产出交付件与 _preview.png，供 Agent Read 视觉校验。
 """
 
@@ -28,6 +28,7 @@ matplotlib.use("Agg")
 from . import audit as _audit  # noqa: E402
 from . import field as _field  # noqa: E402
 from . import imgcheck as _imgcheck  # noqa: E402
+from . import occlusion as _occ  # noqa: E402
 from . import palette as _palette  # noqa: E402
 from . import raster as _raster  # noqa: E402
 from . import runner as _runner  # noqa: E402
@@ -237,6 +238,71 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     else:
         print("verdict: 边缘带无标记 ✓")
     return rc
+
+
+# ---------------------------------------------------------------------------
+# overlap（零遮挡像素判据；backlog 20261016-014160）
+# ---------------------------------------------------------------------------
+def cmd_overlap(args: argparse.Namespace) -> int:
+    """零遮挡判据：文字墨迹 ∩ 彩色数据区 / 图线真身，含**缓存自防护**。
+
+    每份 ``--white <png>`` 是一层**删文字版**（同版式、把标注/刻度文字置白后重渲染）。派生缓存
+    早于受审图即**过期**：给 ``--rebuild`` 则先重生成再复检，否则 rc=2 退出——绝不用过期缓存
+    出读数（判法方法学见 ``occlusion`` 模块 docstring）。
+    """
+    img = Path(args.image)
+    layers = [(Path(p), Path(p).stem) for p in args.white]
+    check = _occ.check_caches(img, [p for p, _ in layers], rebuild=args.rebuild)
+    print(f"[overlap] 受审图 {img}")
+    print(f"[overlap] {check.message}")
+    if not check.ok:
+        return 2
+    try:
+        audited = _occ.load_or_raise(img)
+    except OSError as e:
+        print(f"[overlap] {e}", file=sys.stderr)
+        return 2
+    box = tuple(args.box) if args.box else None
+    overall = True
+    for path, label in layers:
+        try:
+            rep = _occ.render_ink_verdict(
+                audited,
+                _occ.load_or_raise(path),
+                ink_tol=args.ink_tol,
+                chroma_min=args.chroma_min,
+                line_lum_max=args.line_lum_max,
+                line_chroma_max=args.line_chroma_max,
+                box=box,
+            )
+        except (OSError, ValueError) as e:
+            print(f"[overlap] 层 {label}：{e}", file=sys.stderr)
+            return 2
+        d = rep["ink_line_min_px"]
+        dmm = (
+            " n/a"
+            if (d is None or args.mm_per_px is None)
+            else f" = {float(d) * args.mm_per_px:.2f}mm"
+        )
+        print(
+            f"[overlap] 层 {label}（{path.name}）：墨迹={rep['ink_px']}px  "
+            f"彩色数据区={rep['colored_px']}px  图线真身={rep['line_px']}px"
+        )
+        print(
+            f"    墨迹∩彩色数据区 = {rep['ink_colored_px']}px -> "
+            f"{'PASS' if rep['ink_colored_px'] == 0 else 'FAIL'}"
+        )
+        print(
+            f"    墨迹∩图线真身   = {rep['ink_line_px']}px -> "
+            f"{'PASS' if rep['ink_line_px'] == 0 else 'FAIL'}"
+        )
+        print(
+            f"    墨迹→图线真身 min = "
+            f"{'n/a' if d is None else f'{float(d):.1f}px'}{dmm}"
+        )
+        overall = overall and bool(rep["pass"])
+    print(f"[overlap] 总判：{'PASS' if overall else 'FAIL'}")
+    return 0 if overall else 1
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +523,57 @@ def build_parser() -> argparse.ArgumentParser:
         help="边缘带宽度（px）；默认 max(4, 短边×2%%)",
     )
     s.set_defaults(func=cmd_inspect)
+
+    # overlap（零遮挡像素判据：墨迹 ∩ 彩色数据区/图线真身；判据唯一实现，bench 调它）
+    s = sub.add_parser(
+        "overlap",
+        help="零遮挡判据：文字墨迹∩彩色数据区/图线真身（含缓存自防护）",
+        epilog="例：pysci-figures overlap out/x.png --white bench/white_field.png "
+        "--rebuild 'uv run --no-sync python bench/make_white.py'",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s.add_argument("image", type=Path, help="受审图（PNG/JPG）")
+    s.add_argument(
+        "--white",
+        action="append",
+        required=True,
+        metavar="PNG",
+        help="一层删文字版（同版式、文字置白后重渲染；可多次，标签取文件名 stem）",
+    )
+    s.add_argument("--ink-tol", type=int, default=_occ.INK_TOL, dest="ink_tol")
+    s.add_argument(
+        "--chroma-min", type=float, default=_occ.CHROMA_MIN, dest="chroma_min"
+    )
+    s.add_argument(
+        "--line-lum-max", type=float, default=_occ.LINE_LUM_MAX, dest="line_lum_max"
+    )
+    s.add_argument(
+        "--line-chroma-max",
+        type=float,
+        default=_occ.LINE_CHROMA_MAX,
+        dest="line_chroma_max",
+    )
+    s.add_argument(
+        "--mm-per-px",
+        type=float,
+        default=None,
+        dest="mm_per_px",
+        help="像素→毫米换算（给了才打印 mm；如 600dpi 用 0.042333）",
+    )
+    s.add_argument(
+        "--box",
+        type=int,
+        nargs=4,
+        default=None,
+        metavar=("X0", "X1", "Y0", "Y1"),
+        help="只在该裁切窗内判读（多面板图逐面板量）",
+    )
+    s.add_argument(
+        "--rebuild",
+        default=None,
+        help="缓存过期/缺失时的重生成命令（shell 串）；不给则过期即 rc=2 报错",
+    )
+    s.set_defaults(func=cmd_overlap)
 
     # list
     s = sub.add_parser("list", help="列出某研究线下已有的图管线")
