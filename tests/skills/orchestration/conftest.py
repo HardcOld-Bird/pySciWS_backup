@@ -38,6 +38,7 @@ from pysci.skills.orchestration.tools import (
     registry,
     routing,
     settings,
+    taskbooks,
     taste,
     verdict,
     watch,
@@ -379,6 +380,11 @@ def iso_state(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(failure_classes, "CLASSES_PATH", state / "failure-classes.json")
+    # 任务书面（backlog 20261015-160502-devops）：``data/taskbooks/`` 是 **git 跟踪**面——
+    # worktree 里只有**分支快照**、main 里是实时面，同一用例两侧可异判（实案：
+    # ``test_queue_pressure_quiet_when_session_has_progress`` 因快照里一份 ``status=new``
+    # 的任务书而 worktree 恒红、main 恒绿）。隔离后 ``taskbooks.list_all()`` 的读数与 cwd 无关。
+    monkeypatch.setattr(taskbooks, "TASKBOOKS_DIR", state / "taskbooks")
     return state
 
 

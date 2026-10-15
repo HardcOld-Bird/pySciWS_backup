@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -21,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from pysci import paths as _paths
 from pysci.skills.orchestration.tools import (
     backpressure,
     drain,
@@ -30,6 +32,7 @@ from pysci.skills.orchestration.tools import (
     queueworker,
     runner,
     stallwatch,
+    taskbooks,
     watch,
     workq,
 )
@@ -394,6 +397,61 @@ def test_queue_pressure_quiet_when_session_has_progress(
 
     assert "疑似 worker 卡死" not in "；".join(read["reasons"])
     assert read["pending"] is False and read["stall"] == []
+
+
+def _plant_new_taskbook(dir_: Path) -> str:
+    """在给定 taskbooks 面里放一份 ``status=new`` 的任务书状态文件（判据的输入）。"""
+    dir_.mkdir(parents=True, exist_ok=True)
+    tid = "tb-20261015-999999-faceprobe"
+    (dir_ / f"{tid}.state.json").write_text(
+        json.dumps(
+            {
+                "id": tid,
+                "ts": "2026-10-15T20:00:00+08:00",
+                "title": "face probe",
+                "status": taskbooks.STATUS_NEW,
+                "source": "probe",
+                "priority": "normal",
+                "mode": "",
+                "rework_of": "",
+                "rework_round": 0,
+                "plan_id": "",
+                "rejections": [],
+                "updated": "2026-10-15T20:00:00+08:00",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return tid
+
+
+def test_queue_pressure_taskbook_face_is_isolated(iso_state, iso_registry):
+    """回归（backlog 20261015-160502-devops）：``queue_pressure`` 的 taskbooks 面必须被隔离。
+
+    该面是 **git 跟踪**的 ``data/taskbooks/``：worktree 里只有**分支快照**、main 里是**实时
+    面**。它曾未被 ``iso_state`` 隔离，于是同一条用例在两面异判（实案：快照里一份
+    ``status=new`` 的任务书让 ``test_queue_pressure_quiet_when_session_has_progress`` 在
+    worktree 恒红、main 恒绿——那条红与任何改动无关，只会被误读成「自己改坏了」）。
+
+    两步钉死（造「worktree 空面」与「main 实时面」两种 cwd 面，判据须同判）：
+      1. iso_state 已把该面重定向出真实 ``data/`` ⇒ 读数与 cwd 面无关；
+      2. 该面**确实是**判定变量——空面不报（= worktree 面），放入一份 new 任务书即报
+         （= 实时面里有新单）——正因它是变量，隔离它才让本文件的判定确定下来。
+    """
+    real_face = _paths.PROJECT_ROOT / "data" / "taskbooks"
+    assert taskbooks.TASKBOOKS_DIR != real_face
+    assert real_face not in taskbooks.TASKBOOKS_DIR.parents
+    assert str(taskbooks.TASKBOOKS_DIR).startswith(str(iso_state))
+
+    # 面 1（worktree 形，空面）：无新单 ⇒ 不报
+    read_worktree_face = watch.queue_pressure()
+    assert read_worktree_face["pending"] is False, read_worktree_face["reasons"]
+
+    # 面 2（main 形，实时面里有新单）：同一判据链 ⇒ 报「taskbooks … new 态未处理」
+    _plant_new_taskbook(taskbooks.TASKBOOKS_DIR)
+    joined = "；".join(watch.queue_pressure()["reasons"])
+    assert "taskbooks" in joined and "new 态未处理" in joined, joined
 
 
 # ===========================================================================
