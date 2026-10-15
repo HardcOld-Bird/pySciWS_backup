@@ -496,3 +496,139 @@ def rigid_waveguide_pressure(
     """刚壁波导中沿 x 的平面波解析解 p = A*exp(i*k*x*direction)（低于截止频率的单模）。"""
     k = 2.0 * math.pi * freq / c0
     return amplitude * np.exp(1j * k * np.asarray(x, dtype=float) * direction)
+
+
+# ---------------------------------------------------------------------------
+# 品牌标记（COMSOL logo）的探测与抹除（backlog 20261015-204911）
+# ---------------------------------------------------------------------------
+#: 品牌标记的探测窗口（相对图像的宽/高比例，锚**右上角**）。COMSOL 把 logo 画在渲染图右上角
+#: 的固定小方块里——实测 900×900 导出图上占据 x∈[877,892]、y∈[8,20]（宽 1.7% / 高 1.4%）。
+#: 窗口取 22%×8% 足以容纳更大的导出尺寸，又能把图内数据（colormap 常占据中部）排除在外。
+BRAND_WINDOW_FRAC: tuple[float, float] = (0.22, 0.08)
+
+
+def _brand_colors(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """在 ``(H, W, 3)`` uint8/float 数组上判「品牌蓝」「品牌黄」。
+
+    COMSOL logo = 深蓝方块 + 黄色字块。实测像素：蓝 ≈ (96–112, 144, 192–208)、
+    黄 ≈ (240, 240, 96)。判据取**色相主导**而非固定值，故对缩放/抗锯齿的浅化也稳。
+    """
+    r, g, b = (
+        rgb[..., 0].astype(float),
+        rgb[..., 1].astype(float),
+        rgb[..., 2].astype(float),
+    )
+    blue = (b > g) & (g > r) & (b >= 140.0) & ((b - r) >= 55.0) & ((g - r) >= 15.0)
+    yellow = (r >= 175.0) & (g >= 175.0) & (b <= 150.0) & (np.abs(r - g) <= 70.0)
+    return blue, yellow
+
+
+def find_brand_box(
+    rgb: np.ndarray, *, frac: tuple[float, float] = BRAND_WINDOW_FRAC
+) -> tuple[int, int, int, int] | None:
+    """在**右上角窗口**内找 COMSOL 品牌标记，返回 ``(x0, y0, x1, y1)``（含端）；无 → ``None``。
+
+    防误报的核心是**蓝+黄成对**判据：图内数据（等高线/色标/散点）可能单独出现黄或蓝，
+    但「深蓝块紧邻黄块」的方形标记只有品牌 logo 有。窗口限定在角区，进一步把数据面排除。
+    """
+    h, w = rgb.shape[0], rgb.shape[1]
+    bw, bh = max(1, int(w * frac[0])), max(1, int(h * frac[1]))
+    x_off, y_off = w - bw, 0
+    win = rgb[y_off : y_off + bh, x_off : x_off + bw]
+    blue, yellow = _brand_colors(win)
+    if not (blue.any() and yellow.any()):
+        return None
+    ys, xs = np.where(blue | yellow)
+    return (
+        int(xs.min()) + x_off,
+        int(ys.min()) + y_off,
+        int(xs.max()) + x_off,
+        int(ys.max()) + y_off,
+    )
+
+
+def read_rgb_png(path: str | Path) -> np.ndarray | None:
+    """读 PNG 为 ``(H, W, 3)`` uint8 数组（origin 顶左）；读取失败返回 ``None``。
+
+    用 ``np.array(...)`` 而非 ``asarray``：PIL 转出的缓冲是**只读**的，就地改绘会抛
+    ``assignment destination is read-only``（实测）。
+    """
+    try:
+        from PIL import Image  # noqa: PLC0415 - 仅栅格改绘需要
+
+        with Image.open(path) as im:
+            return np.array(im.convert("RGB"), dtype=np.uint8)
+    except Exception:  # noqa: BLE001 - 栅格通道绝不抛断主流程
+        return None
+
+
+def _ring_median(
+    arr: np.ndarray, box: tuple[int, int, int, int], pad: int
+) -> np.ndarray:
+    """取 ``box`` 外扩 ``pad`` 圈的像素**中位数**色（= 标记周围的底色，自适应深浅背景）。
+
+    内框用**坐标掩膜**剔除（不用颜色比较——底色与标记色可能撞上）。
+    """
+    h, w = arr.shape[0], arr.shape[1]
+    x0, y0, x1, y1 = box
+    ox0, oy0 = max(0, x0 - pad), max(0, y0 - pad)
+    ox1, oy1 = min(w - 1, x1 + pad), min(h - 1, y1 + pad)
+    sub = arr[oy0 : oy1 + 1, ox0 : ox1 + 1]
+    mask = np.ones(sub.shape[:2], dtype=bool)
+    mask[y0 - oy0 : y1 - oy0 + 1, x0 - ox0 : x1 - ox0 + 1] = False
+    ring = sub[mask]
+    if ring.size == 0:
+        return np.array([255, 255, 255], dtype=float)
+    return np.median(ring.astype(float), axis=0)
+
+
+def strip_brand(path: str | Path, *, pad: int = 3) -> dict[str, Any]:
+    """就地把 PNG 右上角的 COMSOL 品牌标记抹除（周边底色填充）；返回审计读数。
+
+    用途：`export image --clean` / `--strip-brand` 的**像素级兜底**——COMSOL 的原生开关
+    （image 导出节点的 ``options*d=on`` + ``logo*d=off``）在部分版本/绘图组类型上可能不生效，
+    故导出后一律核验一次：仍在就地抹除并在 sidecar 留痕，保证「角区品牌像素 0 命中」。
+
+    Returns:
+        ``{"found", "bbox", "fill", "pixels"}``；读不到图像时 ``{"found": False, "error": ...}``。
+    """
+    arr = read_rgb_png(path)
+    if arr is None:
+        return {"found": False, "error": "PNG 读不到"}
+    box = find_brand_box(arr)
+    if box is None:
+        return {"found": False, "bbox": None}
+    fill = _ring_median(arr, box, pad)
+    h, w = arr.shape[0], arr.shape[1]
+    x0, y0 = max(0, box[0] - pad), max(0, box[1] - pad)
+    x1, y1 = min(w - 1, box[2] + pad), min(h - 1, box[3] + pad)
+    region = arr[y0 : y1 + 1, x0 : x1 + 1]
+    n = int(region.shape[0] * region.shape[1])
+    region[:, :] = np.round(fill).astype(np.uint8)
+    try:
+        from PIL import Image  # noqa: PLC0415
+
+        Image.fromarray(arr, mode="RGB").save(str(path))
+    except Exception as exc:  # noqa: BLE001 - 落盘失败只回报，不抛断导出主流程
+        return {"found": True, "bbox": list(box), "error": f"回写失败：{exc}"}
+    return {
+        "found": True,
+        "bbox": list(box),
+        "fill": [int(v) for v in np.round(fill)],
+        "pixels": n,
+    }
+
+
+def count_brand_pixels(path: str | Path) -> int:
+    """角区品牌像素计数（核验口径，复用 I.i3 报告的方法）；读不到 → ``-1``。"""
+    arr = read_rgb_png(path)
+    if arr is None:
+        return -1
+    h, w = arr.shape[0], arr.shape[1]
+    bw, bh = (
+        max(1, int(w * BRAND_WINDOW_FRAC[0])),
+        max(1, int(h * BRAND_WINDOW_FRAC[1])),
+    )
+    win = arr[0:bh, w - bw : w]
+    blue, yellow = _brand_colors(win)
+    return int((blue | yellow).sum())
