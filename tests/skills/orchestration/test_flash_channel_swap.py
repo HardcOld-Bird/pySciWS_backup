@@ -146,16 +146,16 @@ def test_tracked_registry_is_ordered_chains():
     # 钉死整串会把**授权的配置变更**误报成代码回归——路由 v3 在 main/pro 链里插了
     # DeepSeek 席（`987f80c`）之后，本测试就在 main 上恒红。中间席可有授权覆盖，
     # 首尾两端才是出厂不变量。
-    assert _chain_shape_ok(face["mimo"]["main"], MIMO_FLASH_UUID, BUILTIN_FLASH), (
+    assert _chain_shape_ok(face["mimo"]["main"], MIMO_FLASH_UUID), (
         f"mimo.main 形态非法：{face['mimo']['main']}"
     )
-    assert _chain_shape_ok(face["mimo"]["pro"], MIMO_PRO_UUID, BUILTIN_FLASH), (
+    assert _chain_shape_ok(face["mimo"]["pro"], MIMO_PRO_UUID), (
         f"mimo.pro 形态非法：{face['mimo']['pro']}"
     )
-    assert _chain_shape_ok(face["qwen"]["main"], BYOK_FLASH_UUID, BUILTIN_FLASH), (
+    assert _chain_shape_ok(face["qwen"]["main"], BYOK_FLASH_UUID), (
         f"qwen.main 形态非法：{face['qwen']['main']}"
     )
-    assert _chain_shape_ok(face["qwen"]["pro"], BYOK_MAX_UUID, BUILTIN_FLASH), (
+    assert _chain_shape_ok(face["qwen"]["pro"], BYOK_MAX_UUID), (
         f"qwen.pro 形态非法：{face['qwen']['pro']}"
     )
     assert "deepseek" not in face, (
@@ -167,16 +167,18 @@ def test_tracked_registry_is_ordered_chains():
     )
 
 
-def _chain_shape_ok(chain: list[str], head: str, tail: str) -> bool:
-    """跟踪席链的**授权形态**：首席=预设出厂首席、末席=内置兜底、无重复。
+def _chain_shape_ok(chain: list[str], head: str) -> bool:
+    """跟踪席链的**授权形态**（用户明令 2026-10-15 反转）：首席=预设出厂首席、
+    **链内无任何内置席**（禁 Qoder 内置渠道）、无重复。
 
     为什么不锁「此刻读数」：见用例内注释（教训「回归测试别锁运行面当前值」）。
     """
     return (
         bool(chain)
         and chain[0] == head
-        and chain[-1] == tail
         and len(set(chain)) == len(chain)
+        and BUILTIN_FLASH not in chain
+        and "DeepSeek-Flash" not in chain
     )
 
 
@@ -186,20 +188,20 @@ def test_chain_shape_predicate_bites_on_unauthorized_face():
     缺了这一支，`_chain_shape_ok` 写成 `return True` 也全绿（「阳性用例不红=没测到」）。
     """
     assert _chain_shape_ok(
-        [MIMO_FLASH_UUID, "1a54cc57-e614-4521-80cc-447de31dc896", BUILTIN_FLASH],
+        [MIMO_FLASH_UUID, "1a54cc57-e614-4521-80cc-447de31dc896"],
         MIMO_FLASH_UUID,
-        BUILTIN_FLASH,
-    ), "中间插授权席（路由 v3 的 DeepSeek）应判合规"
-    assert not _chain_shape_ok(
-        ["foreign-id", BUILTIN_FLASH], MIMO_FLASH_UUID, BUILTIN_FLASH
+    ), "中间插授权席（路由 v3 的 DeepSeek BYOK）应判合规"
+    assert not _chain_shape_ok([MIMO_FLASH_UUID, BUILTIN_FLASH], MIMO_FLASH_UUID), (
+        "内置席在链即非法（用户明令 2026-10-15）"
     )
-    assert not _chain_shape_ok([MIMO_FLASH_UUID, "x"], MIMO_FLASH_UUID, BUILTIN_FLASH)
-    assert not _chain_shape_ok(
-        [MIMO_FLASH_UUID, MIMO_FLASH_UUID, BUILTIN_FLASH],
-        MIMO_FLASH_UUID,
-        BUILTIN_FLASH,
+    assert not _chain_shape_ok([MIMO_FLASH_UUID, "DeepSeek-Flash"], MIMO_FLASH_UUID), (
+        "内置 DeepSeek 在链即非法"
     )
-    assert not _chain_shape_ok([], MIMO_FLASH_UUID, BUILTIN_FLASH)
+    assert not _chain_shape_ok(["foreign-id"], MIMO_FLASH_UUID), "首席必须出厂首席"
+    assert not _chain_shape_ok([MIMO_FLASH_UUID, MIMO_FLASH_UUID], MIMO_FLASH_UUID), (
+        "重复席非法"
+    )
+    assert not _chain_shape_ok([], MIMO_FLASH_UUID), "空链非法"
 
 
 # ---------------------------------------------------------------------------
