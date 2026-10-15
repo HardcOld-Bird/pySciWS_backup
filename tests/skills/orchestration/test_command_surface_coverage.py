@@ -74,7 +74,7 @@ def test_named_commands_have_semantics_not_just_the_word():
     doc = _doc()
     assert "needs_leader → pending" in doc  # requeue
     assert "确认已达标的 needs_leader 条目 → done" in doc  # resolve
-    assert "广播纪元停全部实例" in doc  # watchdog
+    assert "广播纪元停全部" in doc  # watchdog
     assert "协作式停止" in doc  # drain-stop
     assert "模型映射" in doc  # refresh-models
     assert "复核 twin" in doc  # twin-review

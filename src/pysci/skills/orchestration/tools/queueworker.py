@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pysci.paths import ORCH_STATE_ROOT
+from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import backpressure, events, queues, stallwatch, statecommit, workq
 from . import drain as _drain
@@ -463,6 +463,43 @@ def _defer_plan(outcome: Any, item: dict[str, Any], now: float):
     return _bandwidth_defer_plan(outcome, item, now)
 
 
+def _delivery_note(result: dict[str, Any] | None) -> str:
+    """事件细节里的「交付全文留档」段（**绝对路径**，可直接 Read）。
+
+    为什么放进事件（backlog 20261015-205906）：组长若想在 `plan advance`（结算+派发）**之前**
+    先读完整交付把关，此前只能猜目录/翻 ledger/`find`——而路径其实早就在结果里
+    （``body_file``），只是没透到事件面。事件细节会原样进 watch 唤醒行与 `events drain`
+    输出（``watch._wake_message``），故一处补齐两处可见。``events.jsonl`` 属 gitignore 的
+    运行面，写机器绝对路径无碍；留档缺失（写失败 fail-soft）时返回空串、不加噪声。
+    """
+    rel = str((result or {}).get("body_file") or "").strip()
+    if not rel:
+        return ""
+    p = Path(rel)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+    return f"｜交付全文留档：{p}"
+
+
+def _host_delivery_note(host_id: str, host_member: str, *, root: Path | None) -> str:
+    """合并单元（宿主+review）在 review 收尾时发的事件：优先给**宿主**的留档路径。
+
+    取不到宿主条目就退回 review 自己那条的（best-effort，绝不抛）。
+    """
+    try:
+        host = next(
+            (
+                i
+                for i in queues.items(host_member, root=root)
+                if str(i.get("id")) == str(host_id)
+            ),
+            None,
+        )
+    except Exception:  # noqa: BLE001 - 事件面绝不阻塞生产
+        host = None
+    return _delivery_note(host)
+
+
 def _notify(
     q: Path,
     item: dict[str, Any],
@@ -487,7 +524,11 @@ def _notify(
                 events.emit(
                     events.STEP_REVIEW_DONE,
                     subject=host_id,
-                    detail=f"{host_member} 环节 + review 合并完成（{why}）",
+                    detail=f"{host_member} 环节 + review 合并完成（{why}）"
+                    + (
+                        _host_delivery_note(host_id, host_member, root=root)
+                        or _delivery_note(result)
+                    ),
                     action="orch events drain 后逐 plan 推进；orch status 看交付明细",
                 )
             return
@@ -499,14 +540,16 @@ def _notify(
                 events.emit(
                     events.STEP_REVIEW_DONE,
                     subject=str(item["id"]),
-                    detail=f"{member} 环节 + review 合并完成（{why}）",
+                    detail=f"{member} 环节 + review 合并完成（{why}）"
+                    + _delivery_note(result),
                     action="orch events drain 后逐 plan 推进；orch status 看交付明细",
                 )
             return  # AWAITING_REVIEW → 等 review 子 job 收尾时那一支发
         events.emit(
             events.JOB_DONE,
             subject=str(item["id"]),
-            detail=f"{member} job 收尾：{status}（{result.get('kind', '')}）",
+            detail=f"{member} job 收尾：{status}（{result.get('kind', '')}）"
+            + _delivery_note(result),
             action="orch events drain 后接续下一份工作；orch plan advance 推进",
         )
     except Exception:  # noqa: BLE001 - 事件面绝不阻塞生产（§0.6）
