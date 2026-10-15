@@ -444,3 +444,23 @@ def test_reapproval_keeps_both_archived_originals(iso_state):
 
     assert workflow.cmd_approve(_args("dup-1", override=REASON)) == 0
     assert len(list((iso_state / "suggestions" / "approved").glob("dup-1*.md"))) == 2
+
+
+# ===========================================================================
+#  6. 文档面：审查链的缺陷指纹口径在场且两口径适用面划清（backlog 20261016-014159）
+# ===========================================================================
+def test_review_chain_fingerprint_doc_defines_calibers():
+    from pysci.paths import ORCHESTRATION_ROOT
+
+    md = (
+        ORCHESTRATION_ROOT
+        / "skills"
+        / "orchestration"
+        / "references"
+        / "verdict-package.md"
+    ).read_text(encoding="utf-8")
+    assert md.count("指纹") >= 2, "指纹定义应可 grep 且自洽"
+    for token in ("缺陷元素", "成因", "验收命令"):  # 指纹 = 三元组
+        assert token in md, f"缺指纹三元组要素：{token}"
+    # 两条计数口径的适用面须划清（机械验收 vs 主观/视觉审查）
+    assert "机械验收面" in md and "主观/视觉审查" in md
