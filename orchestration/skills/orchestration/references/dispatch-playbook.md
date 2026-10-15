@@ -72,3 +72,15 @@ pod 的 `inbox/task-<时间戳>-<plan>-<step>.task.md`（**别手写 inbox**）�
 
 组员看不到你的会话上下文——**这五段就是全部交代**；写不出的段 = 这一刀切错了
 （粒度判据见 `plan-decomposition.md` §2）。
+
+## 三种审查表达（`review: true` / `member: reviewer` / `orch review`）
+
+backlog 20261015-202600：三者关系原先只在单行提及里，组长无从评估用哪个。
+
+| 表达 | 形态 | 机械行为（实现为准） | 何时用 |
+|---|---|---|---|
+| 叶子 `review: true` | 该叶子派发时给**宿主 job** 带 review 标记 | 宿主**交付成功后 worker 自动**向 reviewer 队投**附属子 job**（`queues.spawn_review`）；宿主**不发** JOB-DONE——等宿主与 review **都收尾**才发一次 `STEP-REVIEW-DONE`，中间态 `awaiting_review`（由 `queues.completion` 派生） | 环节**必须过审才算完**，且不希望多一个环节位 |
+| 叶子 `member: reviewer` | 审查是一个**独立环节**（自己的 id/brief/dirs 与任务书） | 与普通叶子同：占工作清单位、参与依赖；不带 review 标记 → 不再套一层附属子 job | 审查要有**独立位置/先后依赖**（视觉审核、跨产物比对），或结论要进 `plan advance` 工作清单 |
+| `orch review <产物> --origin <member> [--goal…]` | **手动一次性**命令 | 由**当前会话**跑审查链（VERDICT → FAIL 回派返工 → 复审一次 → 二次 FAIL 升级仲裁） | 计划外产物复核；或要**马上**拿结论、不等队列 |
+
+`queues enqueue <member> … --review` 是同一机制的**队列入口**（无 plan 时手投宿主 job 用）。
