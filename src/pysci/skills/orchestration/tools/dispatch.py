@@ -383,9 +383,26 @@ def taskbook_whitelist_dirs(taskbook: Path | None) -> list[str]:
 
 
 def dirs_with_taskbook_whitelist(dirs: list[str], taskbook: Path | None) -> list[str]:
-    """显式 dirs ＋ 任务书白名单声明 → 去重（保序：显式来源在前，声明面追加）。"""
+    """显式 dirs ＋ 任务书白名单声明 → 去重（保序：显式来源在前，声明面追加）。
+
+    **声明了却什么都注入不进去**时在派发口出声（backlog 20261015-130838-writing 判据：
+    「声明了白名单段但 dirs 为空」须可见）——否则组员照旧被 pod-guard 拦成
+    ``whitelist_conflict``，而声明面看着「写了」。
+    """
     out = list(dirs)
-    for d in taskbook_whitelist_dirs(taskbook):
+    entries = taskbook_whitelist_dirs(taskbook)
+    if not entries and not out and taskbook is not None:
+        try:
+            text = taskbook.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        if _WHITELIST_HEAD_RE.search(text):
+            print(
+                f"[!] 任务书 {taskbook.name} 声明了「白名单（写权限）」段，但解析不出任何目录"
+                "（且无 --dirs）——组员写入会被 pod-guard 拦成 whitelist_conflict；"
+                "请检查条目形态（每行一条仓库相对路径）或补 --dirs"
+            )
+    for d in entries:
         if d not in out:
             out.append(d)
     return out
@@ -601,14 +618,20 @@ def _whitelist_entries(lines: list[str]) -> tuple[list[str], set[int]]:
         if on:
             used.add(i)
             for seg in re.split(r"[、,，;；]", ln):
-                raw = re.sub(r"[`（）()【】\[\]]", "", seg).strip().replace("\\", "/")
+                s = seg.strip().replace("\\", "/")
                 # 列表标记先剥（backlog 20261015-132939-fix3）：任务书白名单一律写成
-                # `- path` 项目符号，而下面那个 tok 正则**认得 `-`**（它在字符类里），
-                # 于是每行都被判成 tok="-" 后丢弃 → 整段解析为空。实测：真实任务书
-                # （含本单自己的）一律解析出 []，声明面从来没被读到过。
-                raw = re.sub(r"^[-*+•]\s+", "", raw)
-                # 只取行首的路径样片段：条目常带中文注记（`data/taskbooks/**`（新建））
-                m = re.match(r"[A-Za-z0-9_./\-*]+", raw)
+                # `- path` 项目符号，而路径样正则**认得 `-`**（它在字符类里），于是每行都被
+                # 判成 tok="-" 后丢弃 → 整段解析为空（实测：真实任务书一律解析出 []）。
+                s = re.sub(r"^[-*+•]\s+", "", s)
+                # 行首**包裹符**先去掉（`` `src/x` `` 是仓库里的常见写法）——但只在行首：
+                # 行中的括号/反引号要留作**终止符**，好让 `data/taskbooks/**（新建）` 的
+                # 注记不被粘进路径（下面那条注释）。
+                s = re.sub(r"^[`（(【\[]+", "", s)
+                # 行首取「路径样」片段，**在剥括号之前**取——这样 `（新建）` 一类括号注记
+                # 天然成为终止符。字符类**收中文**，因为 `data/大任务/` 是合法目录名：原实现
+                # 把它截成上级 `data`，**比声明更宽**（等于放行整棵 data/）——既是漏读也是
+                # 越权（backlog 20261015-130838-writing）。
+                m = re.match(r"[^\s`（）()【】\[\],，;；、]+", s)
                 if not m:
                     continue
                 tok = m.group(0)

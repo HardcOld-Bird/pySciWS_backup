@@ -111,3 +111,76 @@ def test_injection_point_is_wired_into_dispatch():
     src = Path(dispatch.__file__).read_text(encoding="utf-8")
     assert "dirs_with_taskbook_whitelist(" in src
     assert "all_dirs = list(dirs or []) + extra_dirs\n" not in src, "旧式裸拼接已退役"
+
+
+# ---------------------------------------------------------------------------
+# 中文路径条目 + 括号注记 + 「声明了却解析不出」告警（backlog 20261015-130838-writing）
+# ---------------------------------------------------------------------------
+TB_CJK = """# 任务书 demo
+
+## 白名单（写权限）
+
+- data/大任务/
+- tests/
+
+（白名单外功能必需才动、最小改动、显式声明。）
+"""
+
+
+def test_cjk_whitelist_entry_is_kept_whole(tmp_path):
+    """含中文的目录名**整条保留**——原实现截成上级 `data`，**比声明更宽**（等于放行整棵
+    data/），既是漏读也是越权（实案：writing 单声明 `data/大任务/…`）。"""
+    p = tmp_path / "tb-cjk.md"
+    p.write_text(TB_CJK, encoding="utf-8")
+
+    assert dispatch.taskbook_whitelist_dirs(p) == ["data/大任务", "tests"]
+
+
+def test_bracket_annotation_is_not_glued_onto_the_path(tmp_path):
+    """`- data/taskbooks/**（新建）` → 路径不带注记（取 token 时括号即终止符）。"""
+    p = tmp_path / "tb-anno.md"
+    p.write_text(
+        "## 白名单（写权限）\n\n- data/taskbooks/**（新建）\n- tests/\n",
+        encoding="utf-8",
+    )
+
+    assert dispatch.taskbook_whitelist_dirs(p) == ["data/taskbooks", "tests"]
+
+
+@NODE_REQUIRED
+def test_declared_cjk_dir_is_allowed_but_its_parent_is_not(tmp_path):
+    """端到端真 guard：声明的**中文目录**放行；其**父目录**照旧拦（注入既生效也不过宽）。"""
+    p = tmp_path / "tb-cjk.md"
+    p.write_text(TB_CJK, encoding="utf-8")
+    dirs = dispatch.dirs_with_taskbook_whitelist([], p)
+    pod = tmp_path / "pod"
+    pod.mkdir()
+
+    inside = PROJECT_ROOT / "data" / "大任务" / "1_文档阅读" / "x.md"
+    rc_in, err_in = run_guard(
+        file_path=str(inside),
+        pod=str(pod),
+        project_root=str(PROJECT_ROOT),
+        task_dirs=dirs,
+    )
+    outside = PROJECT_ROOT / "data" / "others" / "y.md"
+    rc_out, _err_out = run_guard(
+        file_path=str(outside),
+        pod=str(pod),
+        project_root=str(PROJECT_ROOT),
+        task_dirs=dirs,
+    )
+
+    assert rc_in == 0, err_in
+    assert rc_out == 2, "父目录不得被顺带放行（原截断版会放行整棵 data/）"
+
+
+def test_warns_when_whitelist_section_yields_nothing(tmp_path, capsys):
+    """判据：「声明了白名单段但 dirs 为空」在派发口**可见**（不再静默拦死组员）。"""
+    p = tmp_path / "tb-none.md"
+    p.write_text("## 白名单（写权限）\n\n（无条目）\n", encoding="utf-8")
+
+    assert dispatch.dirs_with_taskbook_whitelist([], p) == []
+
+    out = capsys.readouterr().out
+    assert "解析不出任何目录" in out and "whitelist_conflict" in out, out
