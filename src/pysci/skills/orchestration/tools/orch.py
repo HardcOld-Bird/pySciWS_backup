@@ -119,6 +119,26 @@ def cmd_status(args: argparse.Namespace) -> int:
     for line in _routing.status_lines():
         print(line)
 
+    # 夜航读数（backlog adhoc-guidance-fixes ①）：真源 `data/pysci_settings.toml [night] enabled`
+    # 且**热切换**——不看这一行就得上手 grep 才知道在不在夜航。判据复用 `settings.night_enabled`
+    # （单一实现），fail-open：读不出/坏文件 → 显示「未知」而不是崩。
+    from .settings import night_enabled
+
+    try:
+        on, _warns = night_enabled(None)
+        print("== 夜航 ==")
+        print(f"  夜航：{'开启（热切换，改 toml 一行即生效）' if on else '关闭'}")
+        if on:
+            print(
+                "  行为提示：授权等同用户——决策留痕、AskUserQuestion 被机械拦截→转 "
+                "consult-twin/twin 终裁；**不得因等待用户而停滞观望**"
+            )
+            print(
+                "  细则：orchestration/skills/orchestration/references/patrol-watchdog.md §5"
+            )
+    except Exception:  # noqa: BLE001 - 读数面 fail-open（settings 缺失/损坏不塌 status）
+        print("== 夜航 ==\n  夜航：未知（settings 读不出）")
+
     print("== 成员 ==")
     reg = Registry.load()
     members = reg.data.get("members", {})

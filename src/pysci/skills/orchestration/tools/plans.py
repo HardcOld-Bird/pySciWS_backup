@@ -1030,20 +1030,54 @@ def cmd_plan_advance(args) -> int:
     return 0
 
 
+def _capacity_returned(plan_id: str, step: dict, sy: dict) -> bool:
+    """该环节上次交回是否属 **capacity/余量耗尽**（backlog adhoc-guidance-fixes ③）。
+
+    判据取自该环节队列条目的交付面：``tags`` 含 ``capacity``/``model_capability``，
+    或 blocked 正文含「余量/capacity/耗尽」类字样。**为什么值得判**：capacity 交回时原会话
+    余量已尽，而 [NEXT] 原先写「续作自动复用本环节会话」——照做就派进死会话（实案
+    2026-10-15 `adhoc-20261015-154311` 首跳），与 SKILL.md「续作必须 `--session new`」打架。
+    """
+    try:
+        member = str(sy.get("member") or step.get("member") or "")
+        item = _queue_item_for_step(plan_id, str(step.get("id") or ""), member)
+        result = (item or {}).get("result") or {}
+        tags = {str(t).lower() for t in (result.get("tags") or [])}
+        if tags & {"capacity", "model_capability"}:
+            return True
+        body = str(result.get("body") or "") + str(result.get("error") or "")
+    except Exception:  # noqa: BLE001 - 读数面 fail-open（判不出就按普通 blocked 提示）
+        return False
+    return any(w in body for w in ("余量", "capacity", "配额", "quota"))
+
+
 def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
     sid8 = (step.get("session_id") or "")[:8]
+    exhausted = _capacity_returned(plan_id, step, sy)
     print()
     print("[NEXT] 可选：")
-    print(
-        f'  1) 补充信息续作本环节：uv run --no-sync pysci-orch plan run {plan_id} --text "<补充>"'
-    )
+    if exhausted:
+        print(
+            "  1) 补充信息续作本环节（**本环节会话余量已尽 → 必须换新会话**）："
+            f'uv run --no-sync pysci-orch plan run {plan_id} --session new --text "<补充>"'
+        )
+        print(
+            "     原因：capacity/余量交回时原会话已耗尽，续作进它＝派进死会话"
+            "（SKILL.md 派发要领「续作必须 --session new」）。"
+        )
+    else:
+        print(
+            f'  1) 补充信息续作本环节：uv run --no-sync pysci-orch plan run {plan_id} --text "<补充>"'
+        )
     print('  2) 咨询副组长：uv run --no-sync pysci-orch consult "<问题>"')
     print(
         f"  3) 修改计划（编辑 {_plan_path(plan_id).name} 后重新 plan run；或跳过本环节：--skip）"
     )
     print("  4) 中止计划并上报用户")
-    if sid8:
+    if sid8 and not exhausted:
         print(f"  （本环节会话 {sid8}，续作自动复用）")
+    elif exhausted:
+        print("  （本环节会话余量已尽，**不复用**——见 1) 的 `--session new`）")
 
 
 def _report_handoff(
@@ -1129,6 +1163,26 @@ def _report_plan_complete(plan_id: str, state: dict) -> None:
     print(
         "  → 向用户交付汇总：成果路径 + 上述统计 + 未决事项（含待审批建议）+ 你自己的改进建议（可选）"
     )
+    # taskbook 联动提示（backlog adhoc-guidance-fixes ②）：plan 被任务书 link 过时，收尾的
+    # 两条命令**直接给出**——否则全凭组长记得 `taskbooks sync` + `taskbooks report <id>`
+    # （实测漏了得回头补）。未关联则**不加噪声**。
+    tb_ids: list[str] = []
+    try:
+        from . import taskbooks as _tb
+
+        tb_ids = [
+            str(t.get("id"))
+            for t in _tb.list_all()
+            if str(t.get("plan_id") or "") == plan_id
+        ]
+    except Exception:  # noqa: BLE001 - 读数面 fail-open（提示加不上不影响收尾）
+        tb_ids = []
+    if tb_ids:
+        print(
+            f"  → 本 plan 关联任务书 {', '.join(tb_ids)}：跑 "
+            "`pysci-orch taskbooks sync`（对账 delivered）→ "
+            f"`pysci-orch taskbooks report {tb_ids[0]}`（组装全流程报告，TUI 详情页即读它）"
+        )
 
 
 # ---------------------------------------------------------------------------
