@@ -31,7 +31,7 @@ from typing import Any
 
 from pysci.paths import ORCH_STATE_ROOT
 
-from . import backpressure, events, queues, stallwatch, workq
+from . import backpressure, events, queues, stallwatch, statecommit, workq
 from . import drain as _drain
 from .drain import (
     BACKLOG_BATCH_KIND,
@@ -70,6 +70,9 @@ RECLAIM_WAKE_COOLDOWN_S: int = 180
 #: 2026-10-15：黄金任务回归集需要全文参照）。一 job 一文件 ``<job_id>.md``。每次现读模块常量
 #: 便于测试 monkeypatch 隔离（同 :data:`QUEUE_WORKER_ROOT`）。
 DELIVERIES_DIR: Path = ORCH_STATE_ROOT / "deliveries"
+
+#: 新留档的**落盘即提交**信息（:mod:`statecommit`）——「入 git」是声明，不是希望。
+DELIVERY_COMMIT_MSG: str = "chore(state): 交付全文留档入库（新留档即提交）"
 
 
 def qodercli_error_tail(*, root: Path | None = None, max_lines: int = 15) -> str:
@@ -143,9 +146,12 @@ def archive_delivery(
                     first_scene,
                 ]
         p.write_text("\n".join(head) + "\n", encoding="utf-8")
-        return orchestration_rel(p)
     except Exception:  # noqa: BLE001 - 留档面绝不阻塞 worker（正文仍在队列条目内务面）
         return ""
+    # 声明「入 git」的面落盘即提交（backlog 20261015-085823-devops）：不提交则新留档永远
+    # 停在 ``??``，远端/新克隆取不到交付全文——详情页引用的路径在远端悬空。fail-soft。
+    statecommit.commit_face(DELIVERIES_DIR, DELIVERY_COMMIT_MSG)
+    return orchestration_rel(p)
 
 
 def member_paths(member: str, *, root: Path | None = None) -> WorkerPaths:
