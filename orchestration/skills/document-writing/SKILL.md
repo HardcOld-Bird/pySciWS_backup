@@ -102,5 +102,6 @@ errors are already parsed to `file:line`; open that line in `main.tex`. Backend 
 
 - [latex.md](references/latex.md) — the LaTeX workflow in depth: templates (revtex / article / **beamer**), engines, the compile→verify loop, bibliography handling, manuscript-quality guidance, lint.
 - [read.md](references/read.md) — reading **and writing** pptx / docx / pdf: backends, caches, what each extractor preserves, Markdown outline conventions.
+- [visual-qa.md](references/visual-qa.md) — pptx 逐页渲染视觉验收；网页截图用 playwright。
 - [digest.md](references/digest.md) * — the `slides digest` interpretation workflow: per-figure loop, SearchReplace anchors, duplicate-figure reuse, resumable status ledger, batch cadence, narrative-review finish.
 - [maintenance.md](references/maintenance.md) * — how the backend works and how to fix or extend it (config, log parsing, adding templates, LibreOffice conversion).

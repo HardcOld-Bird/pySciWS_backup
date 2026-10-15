@@ -196,6 +196,17 @@
         "tests/skills/devops/test_guard_probe.py",
         "-q"
       ]
+    },
+    "pptx-visual": {
+      "cmd": [
+        "uv",
+        "run",
+        "--no-sync",
+        "pysci-compose",
+        "slides",
+        "verify",
+        "{path}"
+      ]
     }
   },
   "model_chains": {
