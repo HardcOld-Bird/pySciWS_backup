@@ -44,8 +44,8 @@ auto-fallback to TeX Gyre Heros / Arial when Helvetica isn't installed).
 - Per-figure pipeline scaffolding + discovery + run.
 
 **Not yet (v2):** rasterizing external SVG (Blender, hand-edited); extra journal presets.
-External **raster** media is supported precisely: `raster-panel` crops the axis frame via the comsol
-sidecar (`crop_box_px` + `extent`) and overlays in **data coordinates** (no eyeball calibration).
+External **raster** media: `raster-panel` crops the axis frame via the comsol sidecar
+(`crop_box_px` + `extent`) and overlays in **data coordinates**.
 
 ## Commands at a glance
 
@@ -96,9 +96,8 @@ data/research/<n>_<name>/article/figures/<slug>/
 already inherit figsize, fonts, sizes and the colorblind cycle. Declare only the kwargs you need
 (`style`, `research_dir`); extras are ignored safely.
 
-The three common iteration needs map to (`references/plotting.md` has the playbook):
-- **data only** → edit the data-loading part; **plot only** → edit the plotting calls;
-- **journal only** → re-run with `--style nature` (no code change).
+Iteration playbook (`references/plotting.md`): **data only** → edit the data-loading part;
+**plot only** → edit plotting calls; **journal only** → re-run `--style nature`.
 
 A figures-root `STYLE.yaml` sets preset/width defaults; a per-figure one overrides **key by
 key**; CLI wins. `audit` measures the exported `out/<stem>.eps` and WARNs (`width-deliverable`)
@@ -110,10 +109,9 @@ file it rendered (no silent placeholder). Force figdir: `--pipeline-in-figdir`, 
 
 ## Visual closed loop
 
-`build` / `preview` always emit `out/<stem>_preview.png`. **Read it** to see the figure, then
-edit the pipeline script in `src/pysci/research/<name>/article/figures/<slug>.py` and re-run.
-This is the same render→Read pattern as the comsol/document skills.
-Don't ask the user to eyeball intermediates.
+`build` / `preview` always emit `out/<stem>_preview.png`. **Read it**, then edit the pipeline
+script in `src/pysci/research/<name>/article/figures/<slug>.py` and re-run (same render→Read
+pattern as the comsol/document skills). Don't ask the user to eyeball intermediates.
 
 ## Output locations
 
@@ -129,9 +127,10 @@ Don't ask the user to eyeball intermediates.
 ## Typesetting, zero-occlusion & style
 
 **零遮挡铁律（硬伤）**：①文字/刻度不压图线 ②图体与标题留间距
-③colorbar 标题↔色标、色标↔子图留边距 ④任何元素重叠=FAIL 无例外。**scienceplots（可选审美层，
-契约层优先）**：`STYLE.yaml scienceplots: true` 或 `style_context(..., scienceplots=True)`。
-细则与排障 → `references/plotting-03-typesetting-and-style.md`。
+③colorbar 标题↔色标、色标↔子图留边距 ④任何元素重叠=FAIL 无例外。**判据命令**：
+`figures overlap <img> --white <删文字版.png>`（墨迹∩彩色/图线；缓存自防护）。
+**scienceplots（可选审美层，契约层优先）**：`STYLE.yaml scienceplots: true` 或
+`style_context(..., scienceplots=True)`。细则与排障 → `references/plotting-03-typesetting-and-style.md`。
 
 ## Reference files
 

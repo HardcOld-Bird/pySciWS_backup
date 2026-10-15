@@ -56,8 +56,8 @@ def load_rgb(path: str | Path) -> np.ndarray | None:
         return None
 
 
-def _chroma(arr: np.ndarray) -> np.ndarray:
-    """逐像素色度 = max(R,G,B) − min(R,G,B)。"""
+def chroma(arr: np.ndarray) -> np.ndarray:
+    """逐像素色度 = max(R,G,B) − min(R,G,B)（公开：occlusion.py 复用，杜绝第二实现）。"""
     f = arr.astype(np.int16)
     return (f.max(axis=-1) - f.min(axis=-1)).astype(float)
 
@@ -98,7 +98,7 @@ def border_band_marks(
     band_mask[:band, :] = band_mask[-band:, :] = True
     band_mask[:, :band] = band_mask[:, -band:] = True
 
-    ch = _chroma(arr)
+    ch = chroma(arr)
     neutral = band_mask & (ch <= CHROMA_NEUTRAL)
     bg = (
         np.median(arr[neutral].astype(float), axis=0)
@@ -138,7 +138,7 @@ def image_health(
 ) -> dict[str, Any]:
     """图像体检读数（纯函数）：尺寸 / 色域占用 / 饱和像素占比 / 边缘标记。"""
     h, w = arr.shape[0], arr.shape[1]
-    ch = _chroma(arr)
+    ch = chroma(arr)
     colored = ch > CHROMA_NEUTRAL
     colored_ratio = float(colored.mean())
     saturated_ratio = float((ch > CHROMA_SATURATED).mean())
