@@ -28,6 +28,14 @@ layered**: subject → composition → style → lighting/color → quality tags
 [negative]       what to avoid: (see below)
 ```
 
+## Palette restraint (user ruling 2026-10-15)
+
+**Design colors use 1–2 color families** (curves / labels / borders / background / decoration) — four
+families in one figure read as noisy. A data colormap is **exempt from the count but not from
+harmony**: when a Rainbow-type colormap is mandated, take design colors from its family or a
+coordinating neutral (greys, warm/cool same-spectrum accents) and avoid starting another family.
+Operational reading: “1–2 families” = the data colormap's family + at most one coordinating accent.
+
 ## Recipe — journal cover
 
 ```
