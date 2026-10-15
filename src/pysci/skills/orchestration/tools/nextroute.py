@@ -170,14 +170,30 @@ def collect_actions() -> list[dict[str, Any]]:
                 }
             )
         elif status == "new":
-            actions.append(
-                {
-                    **common,
-                    "category": "dispatch",
-                    "action": "拆解新任务书（建 plan 并 link）",
-                    "command": f"pysci-orch plan new <file> && pysci-orch taskbooks link {tb_id} --plan <pid>",
-                }
-            )
+            if st.get(
+                "rework_of"
+            ):  # 返工件：下一步是生成返工骨架，不是 plan new（引导缺口实锤）
+                mode = str(st.get("mode") or "full")
+                actions.append(
+                    {
+                        **common,
+                        "category": "dispatch",
+                        "action": "生成返工骨架并登记（plan rework）",
+                        "command": (
+                            f"pysci-orch plan rework {tb_id} --mode {mode}"
+                            f" && pysci-orch taskbooks link {tb_id} --plan rework-{tb_id}"
+                        ),
+                    }
+                )
+            else:
+                actions.append(
+                    {
+                        **common,
+                        "category": "dispatch",
+                        "action": "拆解新任务书（建 plan 并 link）",
+                        "command": f"pysci-orch plan new <file> && pysci-orch taskbooks link {tb_id} --plan <pid>",
+                    }
+                )
     return actions
 
 

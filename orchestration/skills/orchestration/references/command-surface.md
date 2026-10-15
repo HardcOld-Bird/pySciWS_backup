@@ -9,6 +9,9 @@ pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §
 pysci-orch plan run <id> --text "<当前环节任务书>" [--evidence <报告.md>]  # 推进（交接处暂停；成员含 devops）
 pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
 #   └ --evidence：收尾 kind:self 组长环节（文件存在 + 标题段 lint 通过才置 done，PSEP_3 §2.1）
+pysci-orch plan rework <tb-id> [--mode full|no_inspector|rework_only] [--plan-id X] [--force]
+        # 返工任务书 → 三档模板骨架（A 综合项目改进／B 返工生产／C 最终报告）并登记（§4.2）；
+        # 必有 [NEXT] 给「taskbooks link → advance」两步（返工件不走 plan new）
 pysci-orch next [--limit N]              # 跨任务路由：优先级→动作类别→序；置顶任务卡片 + 简表（PSEP_3 §3.2）
 pysci-orch taskbooks list|show <id>|link <id> --plan <pid>|sync|report <id>  # 用户大任务书（report=全流程报告）
 pysci-orch queues list | queues enqueue <member> --text "..." [--review]  # 成员 FIFO 队列（含 devops）

@@ -240,9 +240,24 @@ def _guide_self_step(plan_id: str, plan: dict, state: dict, cur: dict, sy: dict)
     if str(cur.get("status")) != SELF_AWAITING:
         cur["status"] = SELF_AWAITING
         _save_state(plan_id, state)
+    _sync_taskbook_active(plan_id)  # 首环节开始执行 → 所链任务书「执行中」
     _print_self_guidance(plan_id, cur, sy, plan=plan)
     _print_worklist(plan_id, plan, state)
     return 0
+
+
+def _sync_taskbook_active(plan_id: str) -> None:
+    """计划**开始执行**（首环节入队/自办引导）→ 所链任务书 ``planning → active``。
+
+    回写实现是单点（:func:`taskbooks.sync_active`，幂等），此处只负责在推进的两个执行
+    分支上触发。失败不阻塞推进（观察面 fail-soft，§0.6）。
+    """
+    try:
+        from . import taskbooks as _tb
+
+        _tb.sync_active(plan_id)
+    except Exception:  # noqa: BLE001 - 对账绝不阻塞推进
+        pass
 
 
 #: ``plan run`` 的同步等待上限（秒）——与成员 registry ``timeout_s`` 默认（3h）同量级：
@@ -633,6 +648,7 @@ def cmd_plan_run(args) -> int:
     if args.task:
         cur["task_file"] = args.task
     _save_state(plan_id, state)
+    _sync_taskbook_active(plan_id)  # 首环节入队即「执行中」
 
     _, wake_msg = queueworker.wake_member(member)
     outcomes = _wait_all_inflight(plan_id, plan, state)
@@ -976,6 +992,7 @@ def cmd_plan_advance(args) -> int:
     if args.task:
         cur["task_file"] = args.task
     _save_state(plan_id, state)
+    _sync_taskbook_active(plan_id)  # 首环节入队即「执行中」
 
     _, msg = queueworker.wake_member(member, dry=bool(getattr(args, "dry", False)))
     print(
@@ -1446,6 +1463,14 @@ def cmd_plan_rework(args) -> int:
         print(
             f"    - {indent}{leaf.path}: {who} | {str(leaf.yaml.get('brief', ''))[:50]}{gate}"
         )
+    # [NEXT] 引导（用户 2026-10-15「返工要自行 grep 才找到 plan rework」）：骨架登记完的
+    # 下一步是**链接任务书 + 推进首环节**，两条命令原样写出（不再靠 grep 找入口）。
+    print("\n[NEXT]")
+    print("  1) 链接任务书（记 plan_id 并置 planning）：")
+    print(f"     orch taskbooks link {tb_id} --plan {plan_id}")
+    print(f"  2) 推进首环节（执行即置任务书 active）：orch plan advance {plan_id}")
+    print("     首环节若为组长自办（kind:self），会打印 evidence 规格与收尾命令")
+    print(f"  3) 看返工卡片与流程报告：pysci（TUI）→ 任务书 → 选中 {tb_id} → Enter")
     return 0
 
 

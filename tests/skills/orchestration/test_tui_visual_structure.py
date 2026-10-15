@@ -15,6 +15,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from textual.binding import Binding
 
 from pysci import paths as _paths
 from pysci.skills.orchestration.tools import taskbooks
@@ -37,7 +38,12 @@ def tbdir(tmp_path, monkeypatch):
 
 
 #: action 名 → 键（从 BINDINGS 反推，避免手工表漂移）。
-KEY_OF_ACTION: dict[str, str] = {a: k for k, a, _ in tui.PysciTUI.BINDINGS}
+#: BINDINGS 允许混用「三元组」与 ``Binding`` 实例（Textual ``Binding.make_bindings`` 同规则）
+#: ——详情页滚动键用 ``Binding(..., show=False)`` 声明（**不进 footer 广告面**，其可见性由
+#: 位置指示行承担），故这里统一按 Textual 自己的归一化读。
+KEY_OF_ACTION: dict[str, str] = {
+    b.action: b.key for b in Binding.make_bindings(tui.PysciTUI.BINDINGS)
+}
 
 #: 详情页三区组件。
 _DETAIL_IDS = ("#detail", "#detail-title", "#detail-body", "#detail-hint")
