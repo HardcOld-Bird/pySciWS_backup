@@ -64,7 +64,10 @@ than re-compressed. `imagine ledger --render` rebuilds `LEDGER.md` from `manifes
 4. HTTP 400 on a flag combination: run the same command with `--dry-run` and read the request body
    against `imagine models`. Usual culprits: `--output-format png` on a non-5.0 model,
    `--group` on 5.0-pro, too many `--image` refs, `--seed` out of `[0, 65535]`.
-5. `img <op>` prints an install command: `uv pip install -e ".[imaging]"`.
+5. `img <op>` prints an install command: `uv pip install -e ".[imaging]"`. **This extra does not
+   survive a sync** — `pysci-dev venv-sync` (uv sync) syncs the env to the default dependency set and
+   prunes anything outside it, so scikit-image/OpenCV silently disappear. For durable availability put
+   them in `pyproject.toml`'s default deps instead (backlog 20261015-203158).
 6. Wasted spend / can't get a good image back: it is **not** in the ledger's power to restore it —
    Ark doesn't guarantee prompt/seed determinism. `imagine ledger --contains '<kw>'` recovers the
    prompt so you can re-roll deliberately; `gallery/` is where survivors should already be.
