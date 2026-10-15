@@ -15,9 +15,9 @@
       }
     },
     "devops": {
-      "source_hash": "e6fd2fae94b55a6a8af49a8f7d53e28abeba9be404fa5104911617c401837305",
+      "source_hash": "c8a6522f215895eeb579ea28f7fc853504baf6cf798f1d798aa1fe6b93b534e3",
       "targets": {
-        "orchestration/pods/devops/.qoder/skills/devops": "e6fd2fae94b55a6a8af49a8f7d53e28abeba9be404fa5104911617c401837305"
+        "orchestration/pods/devops/.qoder/skills/devops": "c8a6522f215895eeb579ea28f7fc853504baf6cf798f1d798aa1fe6b93b534e3"
       }
     },
     "comsol-simulation": {
@@ -49,10 +49,10 @@
       }
     },
     "ai-drawing": {
-      "source_hash": "8b82a2086102826bddd81777ca71a6ec28a729a512af608427d22b0f4dfdeffa",
+      "source_hash": "d86a624f4e9733ec022299843385105f6d62ce398b525ece413d897102fb7051",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/ai-drawing": "8b82a2086102826bddd81777ca71a6ec28a729a512af608427d22b0f4dfdeffa",
-        "orchestration/pods/drawing/.qoder/skills/ai-drawing": "8b82a2086102826bddd81777ca71a6ec28a729a512af608427d22b0f4dfdeffa"
+        "orchestration/pods/deputy/.qoder/skills/ai-drawing": "d86a624f4e9733ec022299843385105f6d62ce398b525ece413d897102fb7051",
+        "orchestration/pods/drawing/.qoder/skills/ai-drawing": "d86a624f4e9733ec022299843385105f6d62ce398b525ece413d897102fb7051"
       }
     },
     "modeling3d": {
