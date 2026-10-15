@@ -147,7 +147,7 @@ def test_create_rework_marks_original_and_inherits(rface):
     assert o["rejections"][-1]["note"] == "拆得不对"
     assert ne["rework_of"] == orig and ne["rework_round"] == 1
     assert ne["mode"] == "no_inspector" and ne["priority"] == "low"
-    assert ne["title"] == "目标大任务"  # 继承名称
+    assert ne["title"] == "目标大任务（返工第 1 轮）"  # 继承名称 + 轮次后缀
     assert "简介文本" in taskbooks.read_body(ne["id"])  # 继承简介
     # 第 2 轮：round 自增
     taskbooks.transition(ne["id"], "active")

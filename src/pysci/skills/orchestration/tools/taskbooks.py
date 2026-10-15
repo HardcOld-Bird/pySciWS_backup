@@ -203,15 +203,30 @@ def create(
     # 「入 git」是声明不是希望：新任务书落盘即提交（两文件一笔），否则远端/新克隆取不到。
     statecommit.commit_face(TASKBOOKS_DIR, TASKBOOK_COMMIT_MSG)
     # 落盘即发 TASKBOOK-NEW（§3.4：用户投递任务书立即唤醒组长）。写失败 fail-open。
+    # **返工任务书走专属引导**（用户 2026-10-15 实锤：返工时只给「taskbooks link」通用
+    # 引导，组长得自己 grep 才找到 `plan rework`——引导缺口。返工的下一步是**生成返工
+    # 骨架**，不是 `plan new`）。
+    if rework_of:
+        detail = (
+            f"返工任务书（第 {int(rework_round)} 轮）已生成：{title}；"
+            f"原任务书 {rework_of} 已驳回留档"
+        )
+        action = (
+            f"orch plan rework {ident} --mode {mode or MODE_FULL} 生成返工骨架"
+            f"（三档模板 {'/'.join(MODES)}）→ 送审 gate 过后 plan advance 推进"
+        )
+    else:
+        detail = f"用户投递了新任务书：{title}（source={source}）"
+        action = (
+            "orch taskbooks list 查看 → taskbooks link <id> --plan <pid> 拆解推进"
+            "（用户 accept/reject 只经 TUI）"
+        )
     try:
         events.emit(
             events.TASKBOOK_NEW,
             subject=ident,
-            detail=f"用户投递了新任务书：{title}（source={source}）",
-            action=(
-                "orch taskbooks list 查看 → taskbooks link <id> --plan <pid> 拆解推进"
-                "（用户 accept/reject 只经 TUI）"
-            ),
+            detail=detail,
+            action=action,
         )
     except Exception:  # noqa: BLE001 - 事件面绝不阻塞落盘（§0.6）
         pass
@@ -321,6 +336,19 @@ def reject(tb_id: str, note: str) -> dict[str, Any]:
     return transition(tb_id, STATUS_NEW)
 
 
+#: 返工标题后缀（:func:`rework_title` 增补）：重入时先剥旧的再补新的，防逐轮叠加成
+#: 「（返工第 1 轮）（返工第 2 轮）」（返工件本身又当原件的链式返工是常规路径）。
+_REWORK_SUFFIX_RE = re.compile(r"（返工第 \d+ 轮）\s*$")
+
+
+def rework_title(base: str, rnd: int) -> str:
+    """返工任务书标题：``<原名>（返工第 n 轮）``——同名返工件在列表/详情里可辨。
+
+    用户 2026-10-15：返工任务与原任务同名，列表上一串同名项分不出哪件是哪轮。
+    """
+    return f"{_REWORK_SUFFIX_RE.sub('', str(base)).rstrip()}（返工第 {int(rnd)} 轮）"
+
+
 def create_rework(
     orig_id: str,
     *,
@@ -335,6 +363,9 @@ def create_rework(
     ② 新建任务书继承原**名称/简介**，字段 ``rework_of/rework_round(=原轮次+1)/mode/priority``
     齐全，入大任务待办（``new``＋TASKBOOK-NEW 唤醒）。返回**新**任务书状态。
 
+    标题**自动增补「（返工第 n 轮）」**（用户 2026-10-15：返工件与原件同名，列表里分不清
+    哪件是哪轮）——只在**数据面**改 title，列表/详情/TUI/卡片均直读该字段，不需各视图另写。
+
     Raises:
         ValueError: 原任务书不存在 / 模式或优先级非法。
     """
@@ -347,7 +378,7 @@ def create_rework(
         raise ValueError(f"未知优先级：{priority}（合法：{'、'.join(PRIORITIES)}）")
     transition(orig_id, STATUS_REJECTED, note=note)  # 原任务书终态留档
     rnd = int(orig.get("rework_round") or 0) + 1
-    title = str(orig.get("title") or "返工大任务")
+    title = rework_title(str(orig.get("title") or "返工大任务"), rnd)
     body = (read_body(orig_id) or "").strip()
     new_body = f"（返工第 {rnd} 轮，原任务书 {orig_id}；模式 {mode}）\n\n{body}"
     if note:
@@ -765,6 +796,30 @@ def rework_card(tb_id: str) -> list[str]:
         out.append("—— superstep 进度树 ——")
         out.extend("  " + ln for ln in _plans.plan_tree_lines(pid))
     return out
+
+
+def sync_active(plan_id: str) -> list[str]:
+    """幂等对账：所链 plan **已开始执行**（有环节入队/自办引导）→ 任务书 ``planning → active``。
+
+    ``active`` 的语义＝「计划执行中」，此前**无人触发**（ALLOWED 里有 ``planning → active``
+    但全仓无调用点，是死状态）。触发点＝``plans`` 推进首环节的那一刻（入队或 ``kind:self``
+    引导），实现只此一处（组长 2026-10-15：单点不复制）。
+
+    Returns:
+        本次推进的任务书 id 列表（空=无变化；已是 active 的不重复计入）。
+    """
+    started: list[str] = []
+    for st in list_all():
+        if str(st.get("status") or "") != STATUS_PLANNING:
+            continue
+        if str(st.get("plan_id") or "") != str(plan_id):
+            continue
+        try:
+            transition(str(st["id"]), STATUS_ACTIVE)
+        except ValueError:  # 单件坏读数不塌对账（观察面）
+            continue
+        started.append(str(st["id"]))
+    return started
 
 
 def sync_delivered() -> list[str]:

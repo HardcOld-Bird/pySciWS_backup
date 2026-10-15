@@ -27,7 +27,7 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
 ## 命令面（速查）
 
 ```
-pysci-orch status | plan {new,run,advance,amend,adhoc,list,drop} | taskbooks ...
+pysci-orch status | plan {new,run,advance,rework,amend,adhoc,list,drop} | taskbooks ...
 pysci-orch queues {list,enqueue} | events {drain,list} | suggestions | approve | reject
 pysci-orch watch | consult | consult-twin | review <产物> | jury <案卷> | eval run | stats
 pysci-orch bench-add|bench-up|bench-queue|bench-seen|bench-stop    # 压测入队/生命周期

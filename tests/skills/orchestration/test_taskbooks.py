@@ -250,7 +250,7 @@ def test_pilot_accept_and_reject_selected(tbdir):
     assert rw["status"] == "new" and rw["source"] == "mirror-tui"
     assert rw["rework_of"] == seen["second"] and rw["rework_round"] == 1
     assert rw["mode"] == "no_inspector" and rw["priority"] == "low"
-    assert rw["title"] == "乙"  # 继承原名
+    assert rw["title"] == "乙（返工第 1 轮）"  # 继承原名 + 轮次后缀（同名返工件可辨）
 
 
 def test_pilot_taskbook_panel_reachable_and_esc_returns(tbdir):

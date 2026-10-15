@@ -17,7 +17,8 @@ from __future__ import annotations
 import sys
 
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
     Button,
     Footer,
@@ -63,6 +64,30 @@ _ACTIONS_BY_VIEW: dict[str, frozenset[str]] = {
 _GATED_ACTIONS: frozenset[str] = frozenset(
     {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
 )
+
+#: 详情页**滚动** action（用户 2026-10-15：「详情页无法滚动，最大化窗口仍看不全」）。
+#: 单独一张闸（不进 `_GATED_ACTIONS`）：滚动键不进 footer 广告面（那会把提示行挤满），
+#: 只在两个详情视图生效——位置指示行本身就是它的可见性线索。
+_SCROLL_ACTIONS: frozenset[str] = frozenset(
+    {
+        "detail_scroll_up",
+        "detail_scroll_down",
+        "detail_page_up",
+        "detail_page_down",
+        "detail_scroll_home",
+        "detail_scroll_end",
+    }
+)
+
+#: 可滚动的详情视图：``视图名 → (滚动容器 id, 正文 id, 位置指示 id)``。
+#: **两处同构**（模块详情 / 任务书详情），故用一张表而不是两套方法（§2.5 不留两份）。
+_SCROLL_PANES: dict[str, tuple[str, str, str]] = {
+    "detail": ("#detail-body", "#detail-body-text", "#detail-scroll"),
+    "tb-detail": ("#tb-detail-body", "#tb-detail-body-text", "#tb-detail-scroll"),
+}
+
+#: 位置指示前缀（测试与用户读同一串）。
+_SCROLL_MARK_HEAD = "滚动：↑↓/PgUp/PgDn/Home/End ｜ 位置 "
 
 #: 返工三档模式 / 优先级在 TUI 里的**显示序**（RadioSet 下标 → 数据层取值）。
 _REWORK_MODE_BY_INDEX: tuple[str, ...] = ("full", "no_inspector", "rework_only")
@@ -126,6 +151,16 @@ class PysciTUI(App):
         ("r", "tb_reject", "驳回选中"),
         ("j", "journal", "口述"),
         ("q", "quit", "退出"),
+        # 详情页滚动（只在 detail/tb-detail 生效，见 check_action；不占 footer 广告面）
+        Binding("up", "detail_scroll_up", "上滚", show=False),
+        Binding("down", "detail_scroll_down", "下滚", show=False),
+        Binding("pageup", "detail_page_up", "上翻页", show=False),
+        Binding("pagedown", "detail_page_down", "下翻页", show=False),
+        Binding("home", "detail_scroll_home", "到顶", show=False),
+        Binding("end", "detail_scroll_end", "到底", show=False),
+        # vim 风格到顶/到底（与 TUI 单字母键位同族）
+        Binding("g", "detail_scroll_home", "到顶", show=False),
+        Binding("G", "detail_scroll_end", "到底", show=False),
     ]
     CSS = f"""
     #menu {{ {_T_BORDER} height: 1fr; {_T_BG} }}
@@ -136,8 +171,10 @@ class PysciTUI(App):
     #summary {{ height: auto; {_T_INSET} {_T_SUBTLE} }}
     #detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
     #detail-title {{ {_T_TITLE} }}
-    #detail-body {{ {_T_BODY} height: 1fr; }}
+    #detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }}
+    #detail-body-text {{ height: auto; }}
     #detail-hint {{ {_T_HINT} margin-top: 1; }}
+    #detail-scroll {{ {_T_SUBTLE} height: 1; }}
     #journal {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
     #journal-title {{ {_T_TITLE} }}
     #journal-result {{ color: $success; }}
@@ -155,8 +192,10 @@ class PysciTUI(App):
     #tb-reject-msg {{ color: $success; }}
     #tb-detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
     #tb-detail-title {{ {_T_TITLE} }}
-    #tb-detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; }}
+    #tb-detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }}
+    #tb-detail-body-text {{ height: auto; }}
     #tb-detail-hint {{ {_T_HINT} margin-top: 1; }}
+    #tb-detail-scroll {{ {_T_SUBTLE} height: 1; }}
     """
 
     def __init__(self, *, mods: list[Module] | None = None, seen_path=None) -> None:
@@ -179,6 +218,11 @@ class PysciTUI(App):
         self.tb_detail_title = ""
         self.tb_detail_body = ""
         self.tb_detail_hint = ""
+        # 详情页滚动态（用户 2026-10-15「详情页无法滚动」）：行偏移 + 位置指示文案
+        self.detail_scroll = 0
+        self.detail_scroll_mark = ""
+        self.tb_detail_scroll = 0
+        self.tb_detail_scroll_mark = ""
         self.journal_result = ""
         self.tb_items: list[dict] = []
         self.tb_msg = ""
@@ -199,8 +243,12 @@ class PysciTUI(App):
             yield Static("", id="summary")
             with Vertical(id="detail"):
                 yield Static("", id="detail-title")
-                yield Static("", id="detail-body")
+                with VerticalScroll(
+                    Static("", id="detail-body-text"), id="detail-body", can_focus=False
+                ):
+                    pass
                 yield Static("", id="detail-hint")
+                yield Static("", id="detail-scroll")
             with Vertical(id="journal"):
                 yield Static(
                     "口述：这条内容是——（空格勾选①/②，回车在输入框里提交）",
@@ -250,8 +298,14 @@ class PysciTUI(App):
                 yield Static("", id="tb-new-msg")
             with Vertical(id="tb-detail"):
                 yield Static("", id="tb-detail-title")
-                yield Static("", id="tb-detail-body")
+                with VerticalScroll(
+                    Static("", id="tb-detail-body-text"),
+                    id="tb-detail-body",
+                    can_focus=False,
+                ):
+                    pass
                 yield Static("", id="tb-detail-hint")
+                yield Static("", id="tb-detail-scroll")
             with Vertical(id="tb-reject"):
                 yield Static(
                     "驳回交付（返工=新大任务）：① 返工模式 → ② 优先级 → ③ 批语",
@@ -362,16 +416,116 @@ class PysciTUI(App):
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         """footer 键位广告与守卫一致化（f1）：受管 action 在当前视图无效果 → 返回 `False`
         （Textual 语义：`False` = 禁用且**不显示**于 Footer；`None` 只是禁用但仍显示）。
-        其余 action（`back`/`quit` 与 widget 内部导航/提交）一律放行，绝不干预光标与输入。"""
+        其余 action（`back`/`quit` 与 widget 内部导航/提交）一律放行，绝不干预光标与输入。
+
+        滚动 action 另走一张闸（:data:`_SCROLL_ACTIONS`）：只在**详情视图**可用——别处按
+        上下/翻页键是列表光标与输入框的正常语义，绝不能被详情页的滚动抢走。
+        """
+        if action in _SCROLL_ACTIONS:
+            return self.view in _SCROLL_PANES
         if action not in _GATED_ACTIONS:
             return True
         return action in _ACTIONS_BY_VIEW.get(self.view, frozenset())
 
+    # ---- 详情页滚动（用户 2026-10-15：最大化窗口仍看不全）--------------------
+    def _scroll_widgets(self) -> tuple[VerticalScroll, Static, Static] | None:
+        """当前视图的（滚动容器, 正文, 位置指示）；非详情视图 → ``None``。"""
+        pair = _SCROLL_PANES.get(self.view)
+        if pair is None:
+            return None
+        try:
+            return (
+                self.query_one(pair[0], VerticalScroll),
+                self.query_one(pair[1], Static),
+                self.query_one(pair[2], Static),
+            )
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件（观察面 fail-open）
+            return None
+
+    def _refresh_scroll_mark(self) -> None:
+        """把滚动位置写成指示行（`顶` / `45%` / `底`）并落进可断言的态。"""
+        got = self._scroll_widgets()
+        if got is None:
+            return
+        pane, _text, mark = got
+        max_y = int(pane.max_scroll_y)
+        y = int(pane.scroll_y)
+        if max_y <= 0:
+            text = f"{_SCROLL_MARK_HEAD}整屏（无需滚动）"
+        else:
+            # 中间位置夹到 1–99%：否则第 1/284 行显示「0%」（与「顶」撞车）、
+            # 倒数第 1 行显示 100%（与「底」撞车）——位置指示不能自相矛盾。
+            pct = min(99, max(1, round(100 * y / max_y)))
+            pos = "顶" if y <= 0 else ("底" if y >= max_y else f"{pct}%")
+            text = f"{_SCROLL_MARK_HEAD}{pos}（第 {y}/{max_y} 行）"
+        mark.update(text)
+        if self.view == "tb-detail":
+            self.tb_detail_scroll, self.tb_detail_scroll_mark = y, text
+        else:
+            self.detail_scroll, self.detail_scroll_mark = y, text
+
+    def _scroll_body(self, delta: int) -> None:
+        """滚动当前详情正文（delta=行数；Textual 内部会夹到有效区间）。"""
+        got = self._scroll_widgets()
+        if got is None:
+            return
+        pane = got[0]
+        pane.scroll_y = max(0, min(pane.scroll_y + delta, pane.max_scroll_y))
+        self._refresh_scroll_mark()
+
+    def _scroll_body_home(self, *, end: bool) -> None:
+        """跳到顶（``end=False``）或底（``end=True``）。"""
+        got = self._scroll_widgets()
+        if got is None:
+            return
+        pane = got[0]
+        pane.scroll_y = pane.max_scroll_y if end else 0
+        self._refresh_scroll_mark()
+
+    def action_detail_scroll_up(self) -> None:
+        self._scroll_body(-1)
+
+    def action_detail_scroll_down(self) -> None:
+        self._scroll_body(1)
+
+    def action_detail_page_up(self) -> None:
+        self._scroll_body(-self._page_rows())
+
+    def action_detail_page_down(self) -> None:
+        self._scroll_body(self._page_rows())
+
+    def action_detail_scroll_home(self) -> None:
+        self._scroll_body_home(end=False)
+
+    def action_detail_scroll_end(self) -> None:
+        self._scroll_body_home(end=True)
+
+    def _page_rows(self) -> int:
+        """翻页步长：可视区行数（一屏）减 1 行留重叠，最小 1。"""
+        got = self._scroll_widgets()
+        if got is None:
+            return 1
+        return max(1, int(got[0].size.height) - 1)
+
+    def _reset_scroll(self) -> None:
+        """打开/刷新详情：滚动回顶，并按**首帧后**的布局重算位置指示。
+
+        首帧前 ``max_scroll_y`` 还是旧值（内容刚 update、尚未重新布局），故先算一次让
+        状态面立刻可用，再 ``call_after_refresh`` 用真实布局覆盖（否则指示会谎报「整屏」）。
+        """
+        got = self._scroll_widgets()
+        if got is None:
+            return
+        got[0].scroll_y = 0
+        self._refresh_scroll_mark()
+        self.call_after_refresh(self._refresh_scroll_mark)
+
     def _open_tb_detail(self, idx: int) -> None:
         """任务书**详情页**（任何状态可进）：正文/批语/流程报告/返工卡片（数据层 :func:`taskbooks.detail_lines`）。
 
-        三区渲染沿用模块详情页的分区（标题 / 读数 / 操作提示）；`#tb-detail-body` 可滚动
-        （交付报告可能很长，用户要能读完）。
+        三区渲染沿用模块详情页的分区（标题 / 读数 / 操作提示）；正文区是**可滚动**的
+        ``VerticalScroll``（交付报告可能很长），滚动位置由 :meth:`_reset_scroll` 复位到顶、
+        并在底部指示行报位置。
         """
         from .. import taskbooks as _tb
 
@@ -390,11 +544,12 @@ class PysciTUI(App):
         self.tb_detail_hint = "  ".join([*hints, "Esc/← 返回任务书列表"])
         self._hide_all_views()
         self.query_one("#tb-detail-title", Static).update(self.tb_detail_title)
-        self.query_one("#tb-detail-body", Static).update(
+        self.query_one("#tb-detail-body-text", Static).update(
             self.tb_detail_body or "（无内容）"
         )
         self.query_one("#tb-detail-hint", Static).update(self.tb_detail_hint)
         self.query_one("#tb-detail", Vertical).display = True
+        self._reset_scroll()
 
     def action_back(self) -> None:
         """Esc/←：任务书详情页 → 任务书列表；其余子视图 → 主菜单；主菜单 → 退出。"""
@@ -463,12 +618,15 @@ class PysciTUI(App):
         self.detail_body = "\n".join(body)
         self.detail_hint = "  ".join([*hints, "Esc/← 返回主菜单"])
         self.query_one("#detail-title", Static).update(self.detail_title)
-        self.query_one("#detail-body", Static).update(self.detail_body or "（无读数）")
+        self.query_one("#detail-body-text", Static).update(
+            self.detail_body or "（无读数）"
+        )
         self.query_one("#detail-hint", Static).update(self.detail_hint)
         self.query_one("#detail", Vertical).display = True
         self.query_one("#menu", ListView).display = False
         self.query_one("#summary", Static).display = False
         self.query_one("#journal", Vertical).display = False
+        self._reset_scroll()
         self._mark_seen(mod)
 
     def _tick_detail(self) -> None:
@@ -488,8 +646,11 @@ class PysciTUI(App):
             [f"{mod.title}　详情", "", *body, "", *hints, "Esc/← 返回主菜单"]
         )
         self.detail_hint = "  ".join([*hints, "Esc/← 返回主菜单"])
-        self.query_one("#detail-body", Static).update(self.detail_body or "（无读数）")
+        self.query_one("#detail-body-text", Static).update(
+            self.detail_body or "（无读数）"
+        )
         self.query_one("#detail-hint", Static).update(self.detail_hint)
+        self._refresh_scroll_mark()  # 每秒重算只更读数，**不动滚动位置**（用户正读的那屏不跳）
         self._mark_seen(mod)  # 用户正看着：把最新读数记为已见，徽标不自亮
 
     def _open_journal(self) -> None:
@@ -684,9 +845,12 @@ class PysciTUI(App):
             self._set_tb_reject_msg(f"[!] {exc}")
             return
         self.last_rework = str(new["id"])
+        # 落账即给下一步命令（用户 2026-10-15：返工引导缺口——逐字写出 plan rework，
+        # 不让组长去 grep 才知道有这个入口）
         msg = (
             f"[√] {tb_id} → rejected（留档）；已生成返工任务书 {new['id']}"
             f"（模式 {mode}，优先级 {priority}，第 {new['rework_round']} 轮）"
+            f"　下一步：orch plan rework {new['id']} --mode {mode} 生成返工骨架"
         )
         self._set_tb_reject_msg(msg)
         self._open_taskbooks()  # 回列表并重建（原项状态已变）
