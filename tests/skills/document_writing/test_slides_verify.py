@@ -159,3 +159,54 @@ def test_render_pptx_pages_real_chain(tmp_path):
     assert all(p.exists() for p in res.pngs)
     assert not any(slides_visual.page_is_blank(p) for p in res.pngs)
     assert slides_visual.verify_pptx_render(deck).ok
+
+
+# ---------------------------------------------------------------------------
+# 渲染目录解析（backlog 20261016-042501-devops）：用户指定目录**单份**即过关
+# ---------------------------------------------------------------------------
+def test_render_in_a_custom_sibling_dir_passes(tmp_path):
+    """渲染件只落用户指定的 `render/` 一份（无 `<stem>_render/`）→ PASS（不再要双份）。"""
+    deck = _mini_pptx(tmp_path / "deck.pptx", 2)
+    custom = tmp_path / "render"
+    custom.mkdir()
+    for i in (1, 2):
+        _write_png(custom / f"page-{i:03d}.png", blank=False)
+    rep = slides_visual.verify_pptx_render(deck)
+    assert rep.ok, rep.problems
+    assert rep.render_dir == custom and rep.render_dir_source == "discovered"
+
+
+def test_convention_dir_still_wins_when_present(tmp_path):
+    """默认行为兼容：约定目录非空时优先用它（不去猜同级别的目录）。"""
+    deck = _mini_pptx(tmp_path / "deck.pptx", 1)
+    _seed_render(deck, n_pngs=1)
+    other = tmp_path / "render"
+    other.mkdir()
+    _write_png(other / "page-001.png", blank=False)
+    rep = slides_visual.verify_pptx_render(deck)
+    assert rep.ok and rep.render_dir_source == "default", rep.problems
+
+
+def test_discovery_prefers_the_dir_matching_slide_count(tmp_path):
+    """同级多目录但恰有一个页数吻合 → 用它（歧义只在无人吻合时）。"""
+    deck = _mini_pptx(tmp_path / "deck.pptx", 2)
+    for name, n in (("render_ok", 2), ("render_x", 5)):
+        d = tmp_path / name
+        d.mkdir()
+        for i in range(1, n + 1):
+            _write_png(d / f"page-{i:03d}.png", blank=False)
+    rep = slides_visual.verify_pptx_render(deck)
+    assert rep.ok and rep.render_dir_source == "discovered", rep.problems
+
+
+def test_ambiguous_sibling_dirs_fail_with_candidates(tmp_path):
+    """同级多个含 PNG 目录且无一页数吻合 → 报歧义并列候选（不猜）。"""
+    deck = _mini_pptx(tmp_path / "deck.pptx", 2)
+    for name, n in (("render_a", 3), ("render_b", 5)):
+        d = tmp_path / name
+        d.mkdir()
+        for i in range(1, n + 1):
+            _write_png(d / f"page-{i:03d}.png", blank=False)
+    rep = slides_visual.verify_pptx_render(deck)
+    assert not rep.ok and any("歧义" in p for p in rep.problems), rep.problems
+    assert rep.render_dir_source == "ambiguous"

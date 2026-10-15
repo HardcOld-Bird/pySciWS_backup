@@ -74,6 +74,10 @@ class VerifyReport:
     png_count: int = 0
     blank_pages: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    #: 渲染目录的来源（:func:`resolve_render_dir` 的第 2 返回值）：``explicit``/``default``/
+    #: ``discovered``/``missing``/``ambiguous``。非 ``default`` 时写进摘要——「用了别的目录」
+    #: 这件事必须可见，免得静默换面。
+    render_dir_source: str = "default"
 
     @property
     def ok(self) -> bool:
@@ -82,9 +86,14 @@ class VerifyReport:
 
     def summary(self) -> str:
         head = "PASS" if self.ok else "FAIL"
+        src_note = (
+            ""
+            if self.render_dir_source in ("default", "")
+            else f"，目录来源={self.render_dir_source}"
+        )
         lines = [
             f"[slides verify] {head} {self.pptx.name}：幻灯片 {self.slide_count} 页 / "
-            f"渲染 {self.png_count} 张（{self.render_dir}）"
+            f"渲染 {self.png_count} 张（{self.render_dir}{src_note}）"
         ]
         lines.extend(f"    ✗ {p}" for p in self.problems)
         return "\n".join(lines)
@@ -147,6 +156,50 @@ def page_is_blank(
     return page_ink_ratio(png) < min_ink_ratio
 
 
+def _png_count(d: Path) -> int:
+    try:
+        return len(list(d.glob("*.png")))
+    except OSError:
+        return 0
+
+
+def resolve_render_dir(
+    pptx: str | Path, *, render_dir: str | Path | None = None, slide_count: int = 0
+) -> tuple[Path, str, list[str]]:
+    """定位逐页渲染图目录，返回 ``(目录, 来源, 同级候选)``。
+
+    解析顺序（backlog 20261016-042501-devops：不再逼交付维护双份渲染目录）：
+
+    1. **显式** ``--render-dir``（最高优先，原样采用）；
+    2. 约定 ``<stem>_render/``（原默认，非空即用——默认行为兼容）；
+    3. pptx **同级**含 PNG 的子目录：唯一一个即用；多个时取页数吻合者；仍歧义 → 报候选、
+       判 ``ambiguous``（不猜）。
+
+    来源取值：``explicit`` / ``default`` / ``discovered`` / ``missing`` / ``ambiguous``。
+    """
+    src = Path(pptx)
+    if render_dir is not None and str(render_dir).strip():
+        return Path(render_dir), "explicit", []
+    default = default_render_dir(src)
+    if _png_count(default) > 0:
+        return default, "default", []
+    parent = src.parent
+    cands = (
+        [d for d in sorted(parent.iterdir()) if d.is_dir() and _png_count(d) > 0]
+        if parent.is_dir()
+        else []
+    )
+    if not cands:
+        return default, "missing", []
+    desc = [str(d) for d in cands]
+    exact = [d for d in cands if _png_count(d) == slide_count]
+    if len(exact) == 1:
+        return exact[0], "discovered", desc
+    if len(cands) == 1:
+        return cands[0], "discovered", desc
+    return default, "ambiguous", desc
+
+
 def verify_pptx_render(
     pptx: str | Path,
     *,
@@ -155,32 +208,48 @@ def verify_pptx_render(
 ) -> VerifyReport:
     """机械验收一份 pptx 的**逐页渲染**（渲染存在 / 页数一致 / 非空白）。
 
-    只读已落盘的渲染图（不自行渲染）——故「缺渲染」会被如实抓住。判据三条任一不过即
+    只读已落盘的渲染图（不自行渲染）——故「缺渲染」会被如实抓住。渲染目录由
+    :func:`resolve_render_dir` 定位（显式 → 约定 → 同级发现），故渲染件落在用户指定的
+    `render/` 一类目录里也能过关，不必再复制一份到 `<stem>_render/`。判据三条任一不过即
     计入 :attr:`VerifyReport.problems`，:attr:`VerifyReport.ok` 随之 False。
 
     Args:
         pptx: 源 .pptx。
-        render_dir: 渲染图目录；默认 :func:`default_render_dir`。
+        render_dir: 渲染图目录（显式指定时最高优先）；缺省走 :func:`resolve_render_dir`。
         min_ink_ratio: 空白页判定阈值（墨迹占比低于它即空白）。
 
     Returns:
         VerifyReport。
     """
     src = Path(pptx)
-    rdir = Path(render_dir) if render_dir else default_render_dir(src)
     problems: list[str] = []
     if not src.exists():
-        return VerifyReport(pptx=src, render_dir=rdir, problems=[f"产物不存在：{src}"])
+        return VerifyReport(
+            pptx=src,
+            render_dir=Path(render_dir) if render_dir else default_render_dir(src),
+            problems=[f"产物不存在：{src}"],
+        )
 
     slide_count = len(pptx_io.read_pptx(src))
+    rdir, how, cands = resolve_render_dir(
+        src, render_dir=render_dir, slide_count=slide_count
+    )
     pngs = sorted(rdir.glob("*.png")) if rdir.is_dir() else []
 
-    if not pngs:
+    if how == "ambiguous":
+        problems.append(
+            "渲染目录歧义：pptx 同级有多个含 PNG 的目录（"
+            + "、".join(cands)
+            + "）——用 `--render-dir` 指定"
+        )
+    elif not pngs:
         problems.append(
             f"缺渲染：未找到逐页渲染 PNG（{rdir}）——先跑 `compose slides render` 并在交付中附上"
         )
     elif len(pngs) != slide_count:
-        problems.append(f"页数不符：渲染 {len(pngs)} 页 ≠ 幻灯片 {slide_count} 页")
+        problems.append(
+            f"页数不符：渲染 {len(pngs)} 页 ≠ 幻灯片 {slide_count} 页（目录 {rdir}）"
+        )
 
     blank = [p.name for p in pngs if page_is_blank(p, min_ink_ratio)]
     if blank:
@@ -193,6 +262,7 @@ def verify_pptx_render(
         png_count=len(pngs),
         blank_pages=blank,
         problems=problems,
+        render_dir_source=how,
     )
 
 

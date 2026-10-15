@@ -638,6 +638,59 @@ def find_session(sid: str, *, root: Path | None = None) -> Path | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def tail_tool_calls(
+    sid: str, *, n: int = 3, tail_bytes: int = 262144, root: Path | None = None
+) -> str:
+    """会话档**尾部**里最近 ``n`` 次工具调用的 ``名称(状态)`` 串（读不动 → 空串）。
+
+    用途：失败留档的「末次工具调用形态」（backlog 20261016-042500-devops——``stop_reason``
+    短码之外，让错误正文能自足追查到「断在哪次工具调用上」）。状态取自配对的 ``tool_result``
+    块的 ``is_error``（实测：成功结果不带该键，失败带 ``True``）；未配对显示 ``?``。
+
+    只读文件尾 ``tail_bytes``：会话档可达上百 MB，派发收尾读全文不值。fail-open——任何异常
+    一律返回空串，绝不让「留档增强」把失败路径本身弄崩。
+    """
+    path = find_session(sid, root=root)
+    if path is None:
+        return ""
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as fh:
+            if size > tail_bytes:
+                fh.seek(size - tail_bytes)
+                fh.readline()  # 丢掉可能被截断的首行
+            chunk = fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    calls: list[list[str]] = []  # [名称, 状态]，状态先占 "?" 待配对
+    index: dict[str, int] = {}
+    for line in chunk.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        blocks = (
+            (rec.get("message") or {}).get("content") if isinstance(rec, dict) else None
+        )
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype == "tool_use":
+                index[str(block.get("id") or "")] = len(calls)
+                calls.append([str(block.get("name") or "?"), "?"])
+            elif btype == "tool_result":
+                i = index.get(str(block.get("tool_use_id") or ""))
+                if i is not None:
+                    calls[i][1] = "err" if block.get("is_error") else "ok"
+    return "；".join(f"{nm}({st})" for nm, st in calls[-n:])
+
+
 def _render_record(no: int, rec: dict[str, Any]) -> str:
     """把一条记录渲染成有界文本（工具结果/长正文截断并标注实际大小）。"""
     body = json.dumps(rec, ensure_ascii=False)
