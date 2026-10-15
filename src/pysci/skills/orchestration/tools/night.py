@@ -14,6 +14,10 @@
 全文、开→关＝刹车差分），由该钩子走既有的 rewake 通道（stderr + exit 2）在**下一轮**注入；
 无变化零输出、零打扰。开关**只归用户手动**：本模块不实现自拨回、不实现时限到期。
 
+**基线落点**（2026-10-15 缺陷修补）：SessionStart 注入时**顺手落基线**（:func:`record_baseline`）
+——只靠首个 Stop 补记的话，「注入后、首个 Stop 前」的拨动会被当基线吞掉。PostCompact
+**不**落（只补注入、不动读数）。
+
 为什么挂 SessionStart + PostCompact 而非每回合 Stop（PSEP_2 §3.2）：逐回合注入烧
 token；而上下文压缩正是政策**最易丢**的时刻——PostCompact 补一针即覆盖真风险。
 （差分口不是「每回合注入」：只在跳变的那一轮出声。）
@@ -171,6 +175,32 @@ def policy_hook_output(
     }
 
 
+def record_baseline(session_id: str, *, data: dict[str, Any] | None = None) -> str:
+    """SessionStart 注入时**顺手落基线**（与 ``--diff`` 同一落点与键，单点）。
+
+    为什么必须在这里落（2026-10-15 真机缺陷）：基线原本只由**首个 Stop 钩子**补记——开关若
+    在 SessionStart 之后、首个 Stop 之前被拨动，那次真跳变会被当作基线吞掉，刹车差分静默
+    丢失（实案：会话起始 on、中途拨 off，`night_seen` 被记成 off，本应是一条刹车差分）。
+    SessionStart 是「本会话此刻开关读数」的最早可信落点，落在这里，跳变就再也躲不过。
+
+    **只在 SessionStart 调**：PostCompact 只补注入、不动读数——它若重写基线，就会把
+    「SessionStart → 拨动 → 下一次注入」之间的跳变盖掉（本缺陷的同一形态）。
+
+    Returns:
+        落下的读数（``"on"``/``"off"``）；无 session_id 或读开关异常 → 空串（fail-open 不落）。
+    """
+    sid = str(session_id or "").strip()
+    if not sid:
+        return ""
+    try:
+        on, _warnings = night_enabled(data)
+    except Exception:  # noqa: BLE001 - 读开关异常不落基线（下次现读）
+        return ""
+    value = "on" if on else "off"
+    _seen_write(sid, value)
+    return value
+
+
 def _read_settings_file(path: Path) -> dict[str, Any]:
     """按显式路径读配置（钩子传 ``--settings``）；读不出返回 ``{}``（fail-open 上游兜）。"""
     try:
@@ -239,16 +269,23 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 - stdin 不可读 = 无触发名，按缺省
         raw_payload = ""
     event = "SessionStart"
+    sid = ""
     try:
         parsed = json.loads(raw_payload)
         name = parsed.get("hook_event_name")
         event = (
             name.strip() if isinstance(name, str) and name.strip() else "SessionStart"
         )
+        raw_sid = parsed.get("session_id")
+        sid = raw_sid.strip() if isinstance(raw_sid, str) else ""
     except (json.JSONDecodeError, TypeError, AttributeError):
         pass
     try:
         data = _read_settings_file(Path(args.settings)) if args.settings else None
+        if event == "SessionStart":
+            # SessionStart 顺手落基线（本单缺陷修复）：否则「注入后、首个 Stop 前」的拨动
+            # 会被首个 Stop 当基线吞掉，刹车差分丢失。PostCompact 不写（见 record_baseline）。
+            record_baseline(sid, data=data)
         out = policy_hook_output(event, data=data)
     except Exception:  # noqa: BLE001 - fail-open：任何异常零输出 exit 0
         return 0
