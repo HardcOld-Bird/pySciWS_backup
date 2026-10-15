@@ -11,9 +11,11 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -77,6 +79,101 @@ def test_on_to_off_injects_brake_diff_without_stop_autonomy_wording(toml):
         assert banned not in msg, f"关闭差分出现禁令字样：{banned}"
     # 必含要素：授权书失效 / 拦截放行 / 恢复一问一答
     assert "授权书失效" in msg and "AskUserQuestion" in msg and "一问一答" in msg
+
+
+# ---------------------------------------------------------------------------
+# ①′ 基线缺口（2026-10-15 真机缺陷）：SessionStart 注入即落基线
+# ---------------------------------------------------------------------------
+def _run_injection(toml_path, event: str, sid: str, monkeypatch, capsys) -> str:
+    """按钩子的实际形态跑一次政策注入（stdin 载荷带 hook_event_name + session_id）。"""
+    payload = json.dumps({"hook_event_name": event, "session_id": sid})
+    monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
+    assert night.main(["--settings", str(toml_path)]) == 0
+    return capsys.readouterr().out
+
+
+def test_session_start_records_baseline(toml, monkeypatch, capsys):
+    """SessionStart 注入时顺手落基线——否则基线只能等首个 Stop 补记（缺陷根因）。"""
+    toml(True)
+    out = _run_injection(
+        settings.SETTINGS_PATH, "SessionStart", "s1", monkeypatch, capsys
+    )
+    assert (
+        json.loads(out)["hookSpecificOutput"]["additionalContext"] == night.NIGHT_POLICY
+    )
+    assert watch.load_state()["night_seen"]["s1"] == "on", (
+        "SessionStart 必须落基线（旧行为：等首个 Stop 才记，期间拨动会被当基线吞掉）"
+    )
+
+
+def test_toggle_after_session_start_is_not_swallowed(toml, monkeypatch, capsys):
+    """本单核心回归：SessionStart(on) → 拨 off → 首个 Stop → **刹车差分照常产出**。"""
+    toml(True)
+    _run_injection(settings.SETTINGS_PATH, "SessionStart", "s1", monkeypatch, capsys)
+    toml(False)  # 用户拨 off（发生在首个 Stop 之前）
+    assert night.diff_message("s1") == night.NIGHT_DIFF_OFF, (
+        "真实跳变被当基线吞掉=刹车差分丢失（本单缺陷）"
+    )
+
+
+def test_session_start_with_switch_off_records_off(toml, monkeypatch, capsys):
+    """反向同理：起始 off 落基线 off → 此后拨 on 才会产出授权书全文。"""
+    toml(False)
+    _run_injection(settings.SETTINGS_PATH, "SessionStart", "s1", monkeypatch, capsys)
+    assert watch.load_state()["night_seen"]["s1"] == "off"
+    toml(True)
+    assert night.diff_message("s1") == night.NIGHT_POLICY
+
+
+def test_postcompact_does_not_rewrite_baseline(toml, monkeypatch, capsys):
+    """PostCompact 只补注入、**不动读数**：否则它会把 SessionStart 之后的跳变盖掉。"""
+    toml(True)
+    _run_injection(settings.SETTINGS_PATH, "SessionStart", "s1", monkeypatch, capsys)
+    toml(False)  # 拨 off
+    out = _run_injection(
+        settings.SETTINGS_PATH, "PostCompact", "s1", monkeypatch, capsys
+    )
+    assert out == "", "off 时 PostCompact 零注入"
+    assert watch.load_state()["night_seen"]["s1"] == "on", (
+        "PostCompact 不得重写基线（它一写，跳变就被盖掉）"
+    )
+    assert night.diff_message("s1") == night.NIGHT_DIFF_OFF
+
+
+def test_session_start_without_session_id_is_silent_noop(toml, monkeypatch, capsys):
+    """载荷缺 session_id（或垃圾载荷）：照常注入、但不落基线、不抛。"""
+    toml(True)
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "SessionStart"}))
+    )
+    assert night.main(["--settings", str(settings.SETTINGS_PATH)]) == 0
+    capsys.readouterr()
+    assert not watch.load_state().get("night_seen"), "无会话身份不落基线"
+    monkeypatch.setattr(sys, "stdin", io.StringIO("{broken"))
+    assert night.main(["--settings", str(settings.SETTINGS_PATH)]) == 0
+    capsys.readouterr()
+
+
+def test_cold_path_without_session_start_still_records_then_differs(toml):
+    """冷路径不回归：没有 SessionStart 时，首个 ``--diff`` 仍只记基线不注入。"""
+    toml(True)
+    assert night.diff_message("cold") is None
+    assert watch.load_state()["night_seen"]["cold"] == "on"
+    toml(False)
+    assert night.diff_message("cold") == night.NIGHT_DIFF_OFF
+
+
+def test_policy_hook_pipes_payload_so_baseline_can_be_written():
+    """SessionStart 落基线的前提：``night-policy.sh`` 必须把 stdin 载荷转给 night.py。
+
+    丢了载荷 → `session_id` 读不到 → 基线静默不落 → 本单缺陷原样复发（且注入看起来正常，
+    最难发现）。故把这条接线钉死。
+    """
+    script = (PROJECT_ROOT / ".qoder" / "hooks" / "night-policy.sh").read_text(
+        encoding="utf-8"
+    )
+    assert '<<<"$PAYLOAD"' in script, "必须把载荷喂给 night.py（否则读不到 session_id）"
+    assert "pysci.skills.orchestration.tools.night" in script
 
 
 # ---------------------------------------------------------------------------
