@@ -244,8 +244,19 @@ def load_state(tb_id: str) -> dict[str, Any] | None:
 
 
 def _save_state(tb_id: str, state: dict[str, Any]) -> dict[str, Any]:
+    """落状态真源，并**即写即提交**该内容面（backlog 20261015-153541-tier-a）。
+
+    为什么改写也要提交（此前只在新文件诞生时提交，见 :mod:`statecommit` docstring）：
+    `data/taskbooks/` 是**声明入 git** 的面，而它的 ``state.json`` 由运行期（TUI 推进/批复/
+    对账）反复改写 → 忠实停在 main 工作区改动态。后果不是「看着脏」而是**合并被拦**：
+    别的成员合并时 `pysci-dev worktree merge` 的交集闸报 rc=2（Tier A 立案的 3 次
+    `merge_dirty_face` 里，2026-10-15T13:34 那次正是 `data/taskbooks/tb-…state.json` 相交）。
+    ``commit_face`` 只提交**本面**（``data/taskbooks/``），不碰别人的在飞编辑——故这是
+    「机械收尾提交」在**内容面**上的安全落点（组长 2026-10-15 的取舍指向此路）。
+    """
     state["updated"] = _now()
     _write(_state_path(tb_id), json.dumps(state, ensure_ascii=False, indent=2) + "\n")
+    statecommit.commit_face(TASKBOOKS_DIR, TASKBOOK_COMMIT_MSG)
     return state
 
 
