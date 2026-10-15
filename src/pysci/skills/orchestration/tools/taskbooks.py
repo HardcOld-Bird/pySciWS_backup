@@ -24,10 +24,15 @@ from typing import Any
 
 from pysci.paths import DATA_ROOT, assert_within_data
 
-from . import events
+from . import events, statecommit
 
-#: 任务书目录（**入 git**；用户裁决 ① 的落点）。
+#: 任务书目录（**入 git**；用户裁决 ① 的落点）。新建文件由 :mod:`statecommit` 落盘即提交
+#: （backlog 20261015-085823-devops：此前只声明不提交，远端/新克隆取不到任务书）。
 TASKBOOKS_DIR: Path = DATA_ROOT / "taskbooks"
+
+#: 新任务书 / 新报告的落盘即提交信息（:mod:`statecommit`）。
+TASKBOOK_COMMIT_MSG: str = "chore(state): 任务书入库（新建即提交）"
+REPORT_COMMIT_MSG: str = "chore(state): 任务书全流程报告入库（新报告即提交）"
 
 STATUS_NEW = "new"
 STATUS_PLANNING = "planning"
@@ -195,6 +200,8 @@ def create(
     md = "\n".join(front) + "\n---\n\n" + f"{body.rstrip()}\n"
     _write(_md_path(ident), md)
     _write(_state_path(ident), json.dumps(state, ensure_ascii=False, indent=2) + "\n")
+    # 「入 git」是声明不是希望：新任务书落盘即提交（两文件一笔），否则远端/新克隆取不到。
+    statecommit.commit_face(TASKBOOKS_DIR, TASKBOOK_COMMIT_MSG)
     # 落盘即发 TASKBOOK-NEW（§3.4：用户投递任务书立即唤醒组长）。写失败 fail-open。
     try:
         events.emit(
@@ -669,6 +676,7 @@ def build_report(tb_id: str) -> str:
     """
     text = "\n".join(report_sections(tb_id)).rstrip() + "\n"
     _write(report_path(tb_id), text)
+    statecommit.commit_face(TASKBOOKS_DIR, REPORT_COMMIT_MSG)
     st = load_state(tb_id) or {}
     st["report"] = str(report_path(tb_id))
     _save_state(tb_id, st)
