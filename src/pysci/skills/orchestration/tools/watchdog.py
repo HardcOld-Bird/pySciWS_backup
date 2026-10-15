@@ -82,6 +82,20 @@ ARM_SCRIPT: Path = PROJECT_ROOT / ".qoder" / "hooks" / "watch-arm.sh"
 #: 内部命令名（``orch _watchdog-loop``）。
 _INTERNAL_CMD = "_watchdog-loop"
 
+#: ``start`` 的「查在跑 → 派生」互斥标记的存在上限（秒）：持有者若卡死/被杀，标记超龄即被
+#: 回收，不永久挡住下一次 start。取 120s（远大于「派生 + 等它上锁」的真实耗时）。
+SPAWN_MARKER_TTL_S: float = 120.0
+
+#: 竞争者等标记释放的上限（秒）——等不到就如实回报「正在拉起中」，不重复派生。
+SPAWN_MARKER_WAIT_S: float = 10.0
+
+#: 派生后等子进程**持锁**的上限（秒）：只查锁不等待的话，紧随其后的第二次 start 会在
+#: 子进程上锁前看到「不在跑」而各自再派生一个（同秒并发双生）。
+SPAWN_LOCK_WAIT_S: float = 3.0
+
+#: 上式与标记等待的轮询步长（秒）。
+_SPAWN_POLL_S: float = 0.02
+
 
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -166,7 +180,10 @@ def run_watchdog(
     早于它的陈旧纪元不误停（backlog 20261014-135935-devops）。
     """
     if acquire_lock(orchestration_rel(run_log), WATCHDOG_PATHS) is None:
-        return {"skipped": "lock_busy"}
+        # 留痕：抢不到锁的实例**秒退**，但它的 run_log 已被 new_run_log 建成空文件——
+        # 不留一行就取证成谜（2026-10-15 双生单：双生之一或纯空跑看不出差别的现场）。
+        _log("[=] 未取到锁（lock_busy）：另一实例在跑，本实例退出", run_log)
+        return {"skipped": "lock_busy", "run_log": orchestration_rel(run_log)}
     sleep = _drain._sleep if sleeps is None else sleeps
     started_iso = _now()
     summary: dict[str, Any] = {
@@ -253,40 +270,108 @@ def run_watchdog(
 # ---------------------------------------------------------------------------
 # 生命周期：start / stop / status（orch 命令面）
 # ---------------------------------------------------------------------------
+def _spawn_marker() -> Path:
+    """派生互斥标记的落点（跟随 ``WATCHDOG_PATHS``——用例可整体改道到隔离面）。"""
+    return WATCHDOG_PATHS.lock.with_name(WATCHDOG_PATHS.lock.stem + ".spawn")
+
+
+def _take_spawn_marker(*, wait_s: float = SPAWN_MARKER_WAIT_S) -> bool:
+    """原子占用派生标记（``O_EXCL`` 建成即得）；占不到就等到 ``wait_s`` 或标记超龄回收。
+
+    判据只看**存在性**、不读内容——故不存在 ``acquire_lock`` 那种「半写载荷」窗口
+    （内容不参与判定）。超龄（> :data:`SPAWN_MARKER_TTL_S`）视为持有者卡死，回收后重试。
+    """
+    mark = _spawn_marker()
+    deadline = time.time() + wait_s
+    mark.parent.mkdir(parents=True, exist_ok=True)
+    while True:
+        try:
+            fd = os.open(str(mark), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                age = time.time() - mark.stat().st_mtime
+            except OSError:
+                continue  # 刚好被释放：下一轮直接抢
+            if age > SPAWN_MARKER_TTL_S:
+                try:
+                    mark.unlink()
+                except OSError:
+                    pass
+                continue
+            if time.time() >= deadline:
+                return False
+            time.sleep(_SPAWN_POLL_S)
+            continue
+        except OSError:
+            return False
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(f"{os.getpid()} {_now()}\n")
+        return True
+
+
+def _release_spawn_marker() -> None:
+    try:
+        _spawn_marker().unlink()
+    except OSError:
+        pass
+
+
+def _await_lock_running(*, wait_s: float = SPAWN_LOCK_WAIT_S) -> bool:
+    """等看门狗锁变成 ``running``（派生成功的前兆）；超时返回 False（如实回报，不当失败）。"""
+    deadline = time.time() + wait_s
+    while True:
+        if lock_status(WATCHDOG_PATHS).get("state") == "running":
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(_SPAWN_POLL_S)
+
+
 def start_watchdog(
     *, interval_s: int = CHECK_INTERVAL_S, stale_s: int = HEARTBEAT_STALE_S
 ) -> tuple[bool, str]:
     """幂等拉起看门狗（分离进程；已在跑则不动）。
 
+    「查在跑 → 派生」整段持 :func:`_take_spawn_marker` 互斥，且派生后**等子进程上锁**才
+    归还标记：否则两次 start 相隔毫秒级（手工 start 与 watch-arm 钩子自启动撞车）会双双
+    通过幂等判定、各派生一个（2026-10-15 双生单的竞态窗口）。
+
     Returns:
-        ``(spawned, message)``——``False`` = 已在跑（不重复派生）。
+        ``(spawned, message)``——``False`` = 已在跑 / 他方正在拉起（不重复派生）。
     """
-    if lock_status(WATCHDOG_PATHS).get("state") == "running":
-        return False, "看门狗已在跑（幂等：不重复派生）"
-    WATCHDOG_PATHS.runs.mkdir(parents=True, exist_ok=True)
-    run_log = new_run_log(WATCHDOG_PATHS)
-    argv = [
-        sys.executable,
-        "-m",
-        "pysci.skills.orchestration.tools.orch",
-        _INTERNAL_CMD,
-        "--run-log",
-        str(run_log),
-        "--interval",
-        str(interval_s),
-        "--stale",
-        str(stale_s),
-    ]
-    env = {**os.environ, "PYTHONUTF8": "1"}
+    if not _take_spawn_marker():
+        return False, "看门狗正在拉起中（派生互斥标记被占，不重复派生）"
     try:
-        with run_log.open("ab") as fh:
-            _spawn_detached(argv, env=env, stdout=fh)
-    except OSError as exc:
-        return False, f"看门狗拉起失败：{exc}"
-    return (
-        True,
-        f"看门狗已后台启动（日志 {orchestration_rel(WATCHDOG_PATHS.runs / 'watchdog.log')}）",
-    )
+        if lock_status(WATCHDOG_PATHS).get("state") == "running":
+            return False, "看门狗已在跑（幂等：不重复派生）"
+        WATCHDOG_PATHS.runs.mkdir(parents=True, exist_ok=True)
+        run_log = new_run_log(WATCHDOG_PATHS)
+        argv = [
+            sys.executable,
+            "-m",
+            "pysci.skills.orchestration.tools.orch",
+            _INTERNAL_CMD,
+            "--run-log",
+            str(run_log),
+            "--interval",
+            str(interval_s),
+            "--stale",
+            str(stale_s),
+        ]
+        env = {**os.environ, "PYTHONUTF8": "1"}
+        try:
+            with run_log.open("ab") as fh:
+                _spawn_detached(argv, env=env, stdout=fh)
+        except OSError as exc:
+            return False, f"看门狗拉起失败：{exc}"
+        _await_lock_running()  # 等它上锁，幂等判定才对紧随其后的 start 生效
+        return (
+            True,
+            "看门狗已后台启动（日志 "
+            f"{orchestration_rel(WATCHDOG_PATHS.runs / 'watchdog.log')}）",
+        )
+    finally:
+        _release_spawn_marker()
 
 
 def stop_watchdog() -> tuple[bool, str]:

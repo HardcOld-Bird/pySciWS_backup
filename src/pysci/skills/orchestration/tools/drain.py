@@ -126,6 +126,15 @@ STOP_SCOPE_ALL: str = "all"
 #: acquire 抢锁重试轮数（竞态窗口 + 残骸清除）。
 ACQUIRE_RETRIES: int = 3
 
+#: 「半写载荷」宽限（秒）：锁文件已由他方 ``O_EXCL`` 建成、payload 尚未落盘的窗口。
+#: 竞争者在此窗口内不得据「读成空/损坏」立刻偷锁（见 :func:`_await_payload`）。真实窗口
+#: 是同一进程内两次 syscall 之间（微秒级），宽限取 0.2s = 四个数量级余量；连宽限都读不出
+#: 载荷才按残骸接管——残骸不得挡路。
+LOCK_PAYLOAD_GRACE_S: float = 0.2
+
+#: 上者的轮询步长（秒）。
+LOCK_PAYLOAD_POLL_S: float = 0.01
+
 _COMMIT_RE = re.compile(r"commit[^0-9a-f]{0,16}\b([0-9a-f]{7,40})\b", re.IGNORECASE)
 
 #: 交付正文的 ``backlog id=<id1>,<id2>,…`` 清单（批量消化逐 id 销账依据）。id 仅含
@@ -375,6 +384,28 @@ def _lock_live(data: dict[str, Any] | None, paths: WorkerPaths | None = None) ->
     return _pid_alive(int(data.get("pid", 0) or 0))
 
 
+def _await_payload(paths: WorkerPaths | None = None) -> bool:
+    """等锁文件长出**可解析的载荷**（他方刚建成、正在写入的窄窗）。
+
+    返回 ``True`` = 宽限内读到了载荷（调用方必须再判活决定是否让位）；``False`` = 空/损坏
+    载荷一直读不出（真残骸，按既有语义接管）。文件消失同样返回 ``False``——空位本就该被抢占。
+
+    为什么需要（2026-10-15 看门狗双生单）：``acquire_lock`` 先 ``O_EXCL`` 建文件、后写
+    payload，两步之间文件是空的；``read_lock`` 把空文件与损坏文件一并读成 ``None``，
+    竞争者据此立刻 ``unlink`` 即成**偷锁**——两个实例各自都以为自己持锁。
+    """
+    p = paths or _devops_paths()
+    deadline = time.time() + LOCK_PAYLOAD_GRACE_S
+    while True:
+        if read_lock(p) is not None:
+            return True
+        if not p.lock.exists():
+            return False
+        if time.time() >= deadline:
+            return False
+        time.sleep(LOCK_PAYLOAD_POLL_S)
+
+
 def acquire_lock(
     run_log: str, paths: WorkerPaths | None = None
 ) -> dict[str, Any] | None:
@@ -403,6 +434,13 @@ def acquire_lock(
         except FileExistsError:
             # 竞态：他方刚抢占。若其存活则退出；若仍是 stale 残留则清除后重试。
             if _lock_live(read_lock(p), p):
+                return None
+            # **半写载荷窗口**：他方 ``O_EXCL`` 建成与 ``write(payload)`` 之间，锁文件是
+            # 空的；``read_lock`` 把空文件读成 None（同「损坏锁」），若据此立刻 unlink 就
+            # **偷走仍在写入的活锁** —— 两个实例各自以为自己持锁，双生（2026-10-15 看门狗
+            # 双生单：并发 start 撞开这道窄窗即可复现）。先给一拍：载荷出现且判活就让位，
+            # 仍读不出才认作残骸（残骸不得挡路，语义不变）。
+            if _await_payload(p) and _lock_live(read_lock(p), p):
                 return None
             try:
                 os.unlink(str(p.lock))
