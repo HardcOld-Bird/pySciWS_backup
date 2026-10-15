@@ -144,3 +144,30 @@ def test_outcome_from_job_carries_body_file(iso_state):
     }
     oc = plans._outcome_from_job("sim", item)
     assert oc.body_file == "orchestration/state/deliveries/j1.md"
+
+
+def test_batch_item_result_carries_body_file(iso_state, monkeypatch):
+    """backlog-batch 条目终态存的是**账务行**（非交付正文）——`body_file` 必须一并补挂，
+    否则留档虽在盘上、读取面却拿不到全文路径（2026-10-15 核验实测：10/10 批次条目缺该字段）。
+    """
+    from pysci.skills.orchestration.tools import drain, queues, workq
+
+    from .conftest import seed_backlog
+
+    seed_backlog(
+        iso_state,
+        [{"id": "s1", "status": "pending", "summary": "种子", "member": "devops"}],
+    )
+    drain.drain_backlog(drain.new_run_log())
+    assert queues.items("devops")[0]["kind"] == drain.BACKLOG_BATCH_KIND
+
+    monkeypatch.setattr(dispatch, "do_dispatch", lambda member, **kw: _out(LONG))
+    wpaths = queueworker.member_paths("devops")
+    wpaths.runs.mkdir(parents=True, exist_ok=True)
+    queueworker.run_worker("devops", queueworker.new_run_log(wpaths))
+
+    it = queues.items("devops")[0]
+    assert it["status"] == workq.STATUS_DONE
+    assert it["result"]["body_file"], "批次条目终态须带 body_file"
+    text = (PROJECT_ROOT / it["result"]["body_file"]).read_text(encoding="utf-8")
+    assert LONG in text, "补挂的引用须指向全文留档（非截断）"

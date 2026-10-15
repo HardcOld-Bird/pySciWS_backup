@@ -525,6 +525,7 @@ def _settle_batch_item(
     dry: bool,
     error: str = "",
     root: Path | None = None,
+    result: dict[str, Any] | None = None,
 ) -> None:
     """backlog 批次条目的执行收尾：drain 账务（唯一实现）→ 队列条目终态。
 
@@ -535,6 +536,8 @@ def _settle_batch_item(
     - dry（干跑演练）→ 模拟逐 id 销账（与计划器 dry 支同源）。
     - ``outcome is None``（**派发抛异常**，非 dry）→ 按 ``run_failed`` 合成结果结算——
       绝不能误走 dry 支把失败批次销账成 done（2026-10-14 子代理实测抓到的接线缺陷）。
+    - ``result``（``_execute`` 的交付结果）仅供补挂 ``body_file``：批次条目终态存的是
+      backlog 账务行，全文留档路径不带上就丢在读取面之外。
 
     账务行落**本 worker 的 run 日志**（执行账与计划账分列，见 drain 模块 docstring）。
     """
@@ -585,6 +588,10 @@ def _settle_batch_item(
         )
         return
     status = workq.STATUS_DONE if work_status == "done" else workq.STATUS_FAILED
+    # 批次条目终态存的是 backlog 账务行（非交付正文），`_execute` 算出的 `body_file`
+    # 会在这里被丢掉——补挂上去，读取面才拿得到全文路径（留档本身已由 `_execute` 写好）。
+    if str((result or {}).get("body_file") or ""):
+        first["body_file"] = str(result["body_file"])
     workq.finish(q, str(item["id"]), status, first)
     summary["items"].append(
         {"id": str(item["id"]), "status": work_status, "backlog_results": results}
@@ -904,6 +911,7 @@ def run_worker(
                     dry=dry,
                     error=str(result.get("error") or ""),
                     root=root,
+                    result=result,
                 )
                 last = (
                     str(summary["items"][-1].get("status", ""))
