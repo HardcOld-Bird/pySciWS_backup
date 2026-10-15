@@ -15,6 +15,26 @@ from pysci.paths import PROJECT_ROOT
 from .delivery import Artifact
 from .registry import Registry
 
+
+def _path_arg(p: Path, spec: dict[str, Any]) -> str:
+    """``{path}`` 的取值（backlog 20261015-132143-devops 判据①）。
+
+    默认＝产物路径本身（同 ``figure-audit`` 的形状）。注册项可给 ``path_default``：
+    当产物**不是本 check 吃得下的形态**时回落到它——`orch-tests` 收的是 **pytest 目标**
+    （``tests/`` 下的路径或 ``test_*.py``），而交付常声明源码产物（如 ``plans.py``）；
+    若把源码路径喂给 ``pytest``，它会**零收集并以退出码 5 判 fail** ——那正是本单要消灭的
+    「假 FAIL」。故：是 pytest 目标 → 收窄到该目标（自指套件）；否则 → 回落到整目录默认面。
+    """
+    fallback = str(spec.get("path_default") or "")
+    if not fallback:
+        return str(p)
+    posix = p.as_posix()
+    is_test_target = ("/tests/" in posix or posix.startswith("tests/")) or (
+        p.suffix == ".py" and p.name.startswith("test_")
+    )
+    return str(p) if is_test_target else fallback
+
+
 #: 单次验收命令的墙钟上限（秒）——验收必须是轻量确定性检查。
 CHECK_TIMEOUT_S = 600
 
@@ -64,7 +84,7 @@ def run_checks(
         if not p.is_absolute():
             cand_root = PROJECT_ROOT / p
             p = cand_root if cand_root.exists() else member_pod / p
-        cmd = [str(part).replace("{path}", str(p)) for part in spec["cmd"]]
+        cmd = [str(part).replace("{path}", _path_arg(p, spec)) for part in spec["cmd"]]
         try:
             proc = subprocess.run(
                 cmd,
