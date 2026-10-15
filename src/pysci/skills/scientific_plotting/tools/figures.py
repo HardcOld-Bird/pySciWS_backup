@@ -10,7 +10,7 @@
     ... figures preview <figdir> --style nature
     ... figures audit <figdir> --panels
 
-子命令分组：doctor / styles / new / build / preview / audit / raster-panel / field-panel / compose-grid / list。
+子命令分组：doctor / styles / new / build / preview / audit / inspect / raster-panel / field-panel / compose-grid / list。
 build/preview 会在图目录的 out/ 下产出交付件与 _preview.png，供 Agent Read 视觉校验。
 """
 
@@ -27,6 +27,7 @@ matplotlib.use("Agg")
 
 from . import audit as _audit  # noqa: E402
 from . import field as _field  # noqa: E402
+from . import imgcheck as _imgcheck  # noqa: E402
 from . import palette as _palette  # noqa: E402
 from . import raster as _raster  # noqa: E402
 from . import runner as _runner  # noqa: E402
@@ -205,6 +206,27 @@ def cmd_audit(args: argparse.Namespace) -> int:
     )
     print(rep.report())
     return 0 if rep.ok else 1
+
+
+# ---------------------------------------------------------------------------
+# inspect（不依赖管线的图像体检；backlog 20261015-204912 §4.4）
+# ---------------------------------------------------------------------------
+def cmd_inspect(args: argparse.Namespace) -> int:
+    """体检单张图：尺寸 / 色域占用 / 饱和像素占比 / 边缘水印·logo 检测。
+
+    供**非 scaffold 产物**用（那类目录 `audit` 恒 N/A，审查的「步骤 2 工具核验」此前无工具）。
+    """
+    health, rc = _imgcheck.inspect_image(args.image, band=args.band)
+    if not health:
+        print(f"[!] 图像读不到：{args.image}")
+        return rc
+    for line in _imgcheck.report_lines(health):
+        print(line)
+    if rc:
+        print("verdict: 有边缘标记（疑似外部渲染器水印/logo 未清除）")
+    else:
+        print("verdict: 边缘带无标记 ✓")
+    return rc
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +431,22 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--panels", action="store_true", help="要求多子图带 (a)(b)(c) 角标")
     s.add_argument("--min-fontsize", type=float, default=None, dest="min_fontsize")
     s.set_defaults(func=cmd_audit)
+
+    # inspect（不依赖管线：对任意 PNG/JPG 体检；非 scaffold 产物的工具核验面）
+    s = sub.add_parser(
+        "inspect",
+        help="图像体检（不依赖管线）：尺寸/色域占用/饱和像素占比/边缘水印·logo 检测",
+        epilog="例：pysci-figures inspect raw/far_full_L.png",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s.add_argument("image", type=Path, help="单张图片路径（PNG/JPG）")
+    s.add_argument(
+        "--band",
+        type=int,
+        default=None,
+        help="边缘带宽度（px）；默认 max(4, 短边×2%%)",
+    )
+    s.set_defaults(func=cmd_inspect)
 
     # list
     s = sub.add_parser("list", help="列出某研究线下已有的图管线")
