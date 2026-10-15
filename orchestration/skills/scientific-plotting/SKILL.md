@@ -7,13 +7,13 @@ description: Produce publication-grade scientific figures (multi-panel, nested, 
 
 One CLI drives the whole figure workflow: **scaffold → draw → export → audit → visually verify**.
 
-The backend lives in `src/pysci/skills/scientific_plotting/` (style / palette / layout / export /
-runner / audit / scaffold + a `figures` facade). **Treat it as a black box** and drive everything
-through the `figures` CLI below. Only open the code when maintaining it.
+The backend (`src/pysci/skills/scientific_plotting/`: style/palette/layout/export/runner/audit/
+scaffold + a `figures` facade) is a **black box** — drive it through the `figures` CLI below; open
+the code only when maintaining it.
 
-The key design split: **this skill owns the publication *contract*** (widths, fonts, italics,
-colorblind palettes, export, self-check); **each paper figure's actual drawing lives as a small
-pipeline script** (`build_figure`) under the research's asset dir, so figures iterate in place.
+Design split: **this skill owns the publication *contract*** (widths, fonts, italics, palettes,
+export, self-check); **each figure's drawing lives as a small pipeline script** (`build_figure`)
+under the research's asset dir, so figures iterate in place.
 
 ## Invocation
 
@@ -31,20 +31,21 @@ Below, `figures …` is shorthand for `pysci-figures …`. (Fallback if the entr
 ## Capability boundary (read this first)
 
 **Available now:**
-- Journal style presets: `aps` (Arial 8pt, 85/170 mm) and `nature` (Helvetica 7pt, 89/183 mm,
-  with automatic fallback to TeX Gyre Heros / Arial when Helvetica isn't installed).
+- Journal style presets: `aps` (Arial 8pt, 85/170 mm) and `nature` (Helvetica 7pt, 89/183 mm;
+auto-fallback to TeX Gyre Heros / Arial when Helvetica isn't installed).
 - Colorblind-safe palettes (Okabe-Ito default, Tol bright/vibrant).
+- **Restrained design colors** (user ruling 2026-10-15)：设计用色限 **1~2 个色系**；数据
+  colormap 不计入，必选时（Rainbow 类）设计用色取其**同族或中性色**，勿另起色系。
 - Multi-panel & nested layouts with automatic `(a)(b)(c)` panel labels.
 - Export: EPS / PDF / SVG (text kept editable via fonttype=42 / svg fonttype=none) + PNG.
 - **PNG preview** for the agent's visual loop (EPS/SVG can't be Read directly).
-- Publication audit: width vs design width, min fontsize, font embedding, panel labels,
-  colorblind distinguishability.
+- Publication audit: width vs design, min fontsize, font embedding, panel labels, colorblind
+  distinguishability.
 - Per-figure pipeline scaffolding + discovery + run.
 
-**Not yet (v2):** rasterizing externally-produced SVG (Blender renders, hand-edited SVG);
-journal-specific presets beyond aps/nature. External **raster** media (COMSOL renders etc.) is
-supported precisely: `raster-panel` crops the axis frame via the comsol export sidecar
-(`crop_box_px` + `extent`) and overlays annotations in **data coordinates** (no eyeball calibration).
+**Not yet (v2):** rasterizing external SVG (Blender, hand-edited); presets beyond aps/nature.
+External **raster** media is supported precisely: `raster-panel` crops the axis frame via the comsol
+sidecar (`crop_box_px` + `extent`) and overlays in **data coordinates** (no eyeball calibration).
 
 ## Commands at a glance
 
@@ -91,9 +92,9 @@ data/research/<n>_<name>/article/figures/<slug>/
 └── out/             # fig.eps (submit), .pdf, .svg (manual tweak), _preview.png (agent eyes)
 ```
 
-`build_figure` is called **inside** the journal `style_context`, so `plt.subplots()` /
-`layout.grid()` already inherit the correct figsize, fonts, sizes and colorblind cycle. Declare
-only the kwargs you need (`style`, `research_dir`); extras are ignored safely.
+`build_figure` runs **inside** the journal `style_context`: `plt.subplots()` / `layout.grid()`
+already inherit figsize, fonts, sizes and the colorblind cycle. Declare only the kwargs you need
+(`style`, `research_dir`); extras are ignored safely.
 
 The three common iteration needs map to:
 - **change data, keep plot** → edit the data-loading part of `build_figure`.
@@ -113,7 +114,7 @@ file it rendered (no silent placeholder). Force figdir: `--pipeline-in-figdir`, 
 `build` / `preview` always emit `out/<stem>_preview.png`. **Read it** to see the figure, then
 edit the pipeline script in `src/pysci/research/<name>/article/figures/<slug>.py` and re-run.
 This is the same render→Read pattern as the comsol/document skills.
-Do not ask the user to eyeball intermediate results — use the preview yourself.
+Don't ask the user to eyeball intermediates — use the preview yourself.
 
 ## Output locations
 
@@ -139,5 +140,5 @@ Do not ask the user to eyeball intermediate results — use the preview yourself
 
 （`*`=分册索引，按需读单册）
 
-- [plotting.md](references/plotting.md) * — publication conventions: mathtext, palettes,
-  design widths, SVG/EPS, iteration playbook, CLI argument forms.
+- [plotting.md](references/plotting.md) * — publication conventions: mathtext, palettes, widths,
+  SVG/EPS, iteration playbook, CLI argument forms.

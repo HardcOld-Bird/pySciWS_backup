@@ -18,8 +18,8 @@ to bring an orchestrator back: [backends.md](references/backends.md). The backen
 ## Invocation
 
 From the **project root**: `pysci-imagine <command> [options]`, below `imagine …` (fallback:
-`uv run --no-sync python -m pysci.skills.ai_drawing.tools.imagine …`). This CLI prints Chinese — apply
-`.qoder/rules/basic.md` §3 or read mojibake. Setup: `ARK_API_KEY=<key>` in project-root `.env`
+`uv run --no-sync python -m pysci.skills.ai_drawing.tools.imagine …`). Prints Chinese — apply
+`.qoder/rules/basic.md` §3. Setup: `ARK_API_KEY=<key>` in project-root `.env`
 ([walkthrough](references/backends-02-provider-options-pluggable.md)); OpenCV / scikit-image operators also
 need `uv pip install -e ".[imaging]"`.
 
@@ -27,18 +27,18 @@ need `uv pip install -e ".[imaging]"`.
 > Default to **one** image; `--n` is explicit and clamped. Preview new flags with `--dry-run` — free,
 > keyless, prints the exact request body. `Read` the result before spending again.
 
-> **Retention rule:** Ark does **not** guarantee the same image from the same prompt+seed, so the ledger
-> is **provenance, not a reproduction recipe**. The moment you `Read` a result worth keeping, run
-> `imagine gallery --add <png> --slug S` — that curated copy is the only reliable way to still have it.
+> **Retention rule:** Ark does **not** guarantee the same image from the same prompt+seed — the ledger
+> is **provenance, not a reproduction recipe**. The moment you `Read` a keeper, run
+> `imagine gallery --add <png> --slug S`: that curated copy is the only reliable way to still have it.
 
 ## Capability boundary
 
 - **Tier 0 — Qoder built-in `ImageGen`** (zero install, no key): call the tool directly for
-  text-to-image, get a `file_path`. Concept sketches, covers, and the fallback with no key. No input
-  image, no model/size control. Then `imagine ingest` to file + ledger it.
+  text-to-image, get a `file_path`. Concept sketches, covers, no-key fallback; no input image, no
+  model/size control. Then `imagine ingest` to file + ledger it.
 - **Tier 1 — Ark direct** (needs only `ARK_API_KEY`): text-to-image, image-to-image, multi-reference,
   marker-driven editing, layer decomposition. On **this account** only 5.0-flash (default) and 5.0-pro
-  are live; coherent groups and direct PNG need delisted tiers. **Never guess capabilities:**
+  are live (groups/direct-PNG need delisted tiers). **Never guess capabilities:**
   `imagine models` prints the matrix, `models --live` the catalog (**catalog ≠ activation**).
 - Everything else is **pure Python, offline, keyless** except these seven (need the `imaging`
   extra): `fuse` `inpaint` `mask` `morph` `warp` `measure` `align`.
@@ -55,7 +55,12 @@ need `uv pip install -e ".[imaging]"`.
 | file | `ingest --src I [--slug S] [--research R]` | file an ImageGen / external image + ledger it |
 | bridge | `bridge --ref I --research R --slug S` | aesthetic ref → real figure pipeline |
 
-Full flags for all 24: [cli.md](references/cli.md#full-command-table), or `imagine <cmd> -h`.
+Flags for all 24: [cli.md](references/cli.md#full-command-table), or `imagine <cmd> -h`.
+
+## Aesthetic rule — restrained colors (2026-10-15 用户裁决)
+
+设计用色限 **1~2 个色系**；数据 colormap 不计入，但必选时（Rainbow 类）设计用色须取其
+**同族或中性色**，勿另起色系（[prompting-01-overview.md](references/prompting-01-overview.md)）。
 
 ## Workflow A — aesthetic reference → data-accurate reproduction (the killer feature)
 
@@ -71,32 +76,31 @@ reproduce with real data via `scientific-plotting`:
 - [ ] 6. Read the _preview.png, compare against the reference, iterate
 ```
 
-Step 3's mechanics + worked example: [bridge.md](references/bridge.md). **Workflows B–E:**
-[workflows.md](references/workflows.md) — **B** direct artwork · **C** `mark` → `edit` (Ark has **no
-per-region parameter** — the binding lives in the prompt text) · **D** layers → recomposite (only
-step 1 costs) · **E** local cleanup / blend / measure (free). Gotcha: `fuse` transfers **gradients, not
-absolute color** — a flat element on a flat background **vanishes**; to *paste*, use `img composite`.
+Step 3's mechanics: [bridge.md](references/bridge.md). **Workflows B–E:**
+[workflows.md](references/workflows.md) — **B** artwork · **C** `mark`→`edit` (no per-region
+parameter; the binding lives in the prompt) · **D** layers→recomposite (only step 1 costs) ·
+**E** local cleanup/blend/measure (free). Gotcha: `fuse` transfers **gradients, not color** — a flat
+element on a flat background **vanishes**; to *paste*, use `img composite`.
 
 ## Visual closed loop
 
-Every generation/edit prints a `✓ 视觉校验：Read '<path>'` line. **Read the PNG** to actually *see* it,
-then iterate on the prompt (Tier 1) or the adjust/img params — never ask the user to eyeball
-intermediates. `sheet` / `gallery --sheet` compare many in one `Read`.
+Every generation/edit prints a `✓ 视觉校验：Read '<path>'` line. **Read the PNG** to *see* it, then
+iterate on the prompt (Tier 1) or the adjust/img params — never ask the user to eyeball intermediates.
+`sheet` / `gallery --sheet` compare many in one `Read`.
 
 ## Output locations
 
-Under `data/skills/ai_drawing/`, what matters is `assets/` (git-ignored, **not** regenerable from the
-ledger) versus `gallery/` (the tracked curated copy). Finished artwork for a research line goes to
-`data/research/<n>_<name>/article/artwork/`. Path table and the double provenance record:
+Under `data/skills/ai_drawing/`: `assets/` (git-ignored, **not** regenerable from the ledger) vs
+`gallery/` (the tracked curated copy). Finished artwork goes to
+`data/research/<n>_<name>/article/artwork/`. Path table + double provenance:
 [cli.md](references/cli.md#output-paths-and-provenance-stored-twice).
 
 ## When something breaks
 
 `imagine doctor` first. The three that matter: **"未配置 ARK_API_KEY"** → add it to `.env` ·
-**401 / 403 with a valid key** → the *model isn't activated* (Ark activates each Seedream tier
-individually in 模型广场; a rejected 1K probe is the cheapest test — only successes are billed) ·
-**400 on flags** → re-run with `--dry-run`, read the body against `imagine models`. Everything else:
-[cli.md](references/cli.md#troubleshooting-in-full).
+**401/403 with a valid key** → the *model isn't activated* (a rejected 1K probe is the cheapest test
+— only successes are billed) · **400 on flags** → re-run with `--dry-run`, read the body against
+`imagine models`. Else: [cli.md](references/cli.md#troubleshooting-in-full).
 
 ## Reference files
 
@@ -104,8 +108,8 @@ individually in 模型广场; a rejected 1K probe is the cheapest test — only 
 
 - [cli.md](references/cli.md) — every flag for all 24 commands, output paths, provenance, troubleshooting.
 - [workflows.md](references/workflows.md) — checklists B (artwork), C (`mark`→`edit`), D (layers), E (local bitmap).
-- [backends.md](references/backends.md) * — Tier 0 vs Tier 1 matrix, why ComfyUI was removed (and when to
-  bring a node graph back), `ARK_API_KEY` walkthrough, cost.
+- [backends.md](references/backends.md) * — Tier 0 vs Tier 1 matrix, why ComfyUI was removed,
+  `ARK_API_KEY` walkthrough, cost.
 - [prompting.md](references/prompting.md) * — recipes (cover / graphical abstract / schematic / bridge ref),
   negative constraints, `edit` / `layers`, seed-size-model truth.
 - [bridge.md](references/bridge.md) — the aesthetic-reference → data-reproduction playbook and its deliberate limits.
