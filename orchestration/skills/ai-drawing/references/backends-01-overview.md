@@ -29,6 +29,11 @@ environment for one skill. Instead we call **cloud** image models and keep pysci
 **Default path:** Tier 0 for a fast first look or when no key is configured; Tier 1 whenever you need
 reference images, editing, or model/size control. `imagine doctor` tells you which is live.
 
+> **⚠ Tier 0 is currently unavailable** (measured 2026-10-15, backlog 20261015-205821-drawing): the
+> built-in `ImageGen` tool fails on every call with
+> `400 invalid_model_error: Unsupported model "1a54cc57-…"`. Until the platform is fixed, **fall back
+> to Tier 1** (`ARK_API_KEY`); `imagine doctor` prints the same warning.
+
 **Catalog ≠ activation.** `GET /models` (`imagine models --live`) lists the IDs the endpoint knows —
 including **delisted** ones — so “visible in /models” never proves “my account may run it”.
 Activation is per-model in the console 「开通管理」 and is observable elsewhere only by attempting a

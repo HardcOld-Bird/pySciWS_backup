@@ -20,12 +20,12 @@ to bring an orchestrator back: [backends.md](references/backends.md). The backen
 From the **project root**: `pysci-imagine <command> [options]`, below `imagine …` (fallback:
 `uv run --no-sync python -m pysci.skills.ai_drawing.tools.imagine …`). Prints Chinese — apply
 `.qoder/rules/basic.md` §3. Setup: `ARK_API_KEY=<key>` in project-root `.env`
-([walkthrough](references/backends-02-provider-options-pluggable.md)); OpenCV / scikit-image operators also
+([walkthrough](references/backends-02-provider-options-pluggable.md)); OpenCV/scikit-image ops also
 need `uv pip install -e ".[imaging]"`.
 
 > **Cost rule:** every Tier 1 `gen` / `i2i` / `edit` / `layers` call spends real money (~¥0.2/image).
 > Default to **one** image; `--n` is explicit and clamped. Preview new flags with `--dry-run` — free,
-> keyless, prints the exact request body. `Read` the result before spending again.
+> keyless, prints the exact body. `Read` the result before spending again.
 
 > **Retention rule:** Ark does **not** guarantee the same image from the same prompt+seed — the ledger
 > is **provenance, not a reproduction recipe**. The moment you `Read` a keeper, run
@@ -34,14 +34,14 @@ need `uv pip install -e ".[imaging]"`.
 ## Capability boundary
 
 - **Tier 0 — Qoder built-in `ImageGen`** (zero install, no key): call the tool directly for
-  text-to-image, get a `file_path`. Concept sketches, covers, no-key fallback; no input image, no
-  model/size control. Then `imagine ingest` to file + ledger it.
+  text-to-image → `file_path`. Concept sketches, covers, no-key fallback; no input image, no
+  model/size control. Then `imagine ingest` to file + ledger it. **⚠ Currently unavailable —
+  platform-side `invalid_model_error`; use Tier 1** (backends.md).
 - **Tier 1 — Ark direct** (needs only `ARK_API_KEY`): text-to-image, image-to-image, multi-reference,
   marker-driven editing, layer decomposition. On **this account** only 5.0-flash (default) and 5.0-pro
   are live (groups/direct-PNG need delisted tiers). **Never guess capabilities:**
-  `imagine models` prints the matrix, `models --live` the catalog (**catalog ≠ activation**).
-- Everything else is **pure Python, offline, keyless** except these seven (need the `imaging`
-  extra): `fuse` `inpaint` `mask` `morph` `warp` `measure` `align`.
+  `imagine models` prints the matrix, `models --live` the catalog (≠ activation).
+- Everything else is **pure Python, offline, keyless** except these 7 (`imaging` extra): `fuse` `inpaint` `mask` `morph` `warp` `measure` `align`.
 
 ## Commands
 
@@ -51,7 +51,7 @@ need `uv pip install -e ".[imaging]"`.
 | inventory | `list` · `ledger` · `gallery [--add I --slug S] [--sheet]` | what exists; provenance; **retaining** a winner |
 | generate | `gen --prompt P` · `i2i --image I --prompt P` | text-to-image / coherent group; image-to-image / multi-reference |
 | edit | `mark --src I` · `edit --image MARKED --prompt P` · `layers --image I --prompt P` | annotate **before** `edit` (auto A/B/C labels); marker-driven edit; ≤16 alpha layers |
-| local bitmap | `adjust` · `sheet` · `palette` · `img split｜composite｜fuse｜inpaint｜mask｜morph｜warp｜measure｜align` | offline crop/resize/rotate, contact sheet, palette, and the seven `img` ops |
+| local bitmap | `adjust` · `sheet` · `palette` · `img split｜composite｜fuse｜inpaint｜mask｜morph｜warp｜measure｜align` | offline crop/resize/rotate, contact sheet, palette, 7 `img` ops |
 | file | `ingest --src I [--slug S] [--research R]` | file an ImageGen / external image + ledger it |
 | bridge | `bridge --ref I --research R --slug S` | aesthetic ref → real figure pipeline |
 
@@ -62,7 +62,7 @@ Flags for all 24: [cli.md](references/cli.md#full-command-table), or `imagine <c
 设计用色限 **1~2 个色系**；数据 colormap 不计入，但必选时（Rainbow 类）设计用色须取其
 **同族或中性色**，勿另起色系（[prompting-01-overview.md](references/prompting-01-overview.md)）。
 
-## Workflow A — aesthetic reference → data-accurate reproduction (the killer feature)
+## Workflow A — aesthetic reference → data-accurate reproduction
 
 AI images are *beautiful but their data/labels are nonsense*. Use them as **design templates**, then
 reproduce with real data via `scientific-plotting`:
@@ -92,14 +92,14 @@ iterate on the prompt (Tier 1) or the adjust/img params — never ask the user t
 
 Under `data/skills/ai_drawing/`: `assets/` (git-ignored, **not** regenerable from the ledger) vs
 `gallery/` (the tracked curated copy). Finished artwork goes to
-`data/research/<n>_<name>/article/artwork/`. Path table + double provenance:
+`data/research/<n>_<name>/article/artwork/`. Paths + provenance:
 [cli.md](references/cli.md#output-paths-and-provenance-stored-twice).
 
 ## When something breaks
 
 `imagine doctor` first. The three that matter: **"未配置 ARK_API_KEY"** → add it to `.env` ·
 **401/403 with a valid key** → the *model isn't activated* (a rejected 1K probe is the cheapest test
-— only successes are billed) · **400 on flags** → re-run with `--dry-run`, read the body against
+— only successes are billed) · **400 on flags** → re-run with `--dry-run` and compare against
 `imagine models`. Else: [cli.md](references/cli.md#troubleshooting-in-full).
 
 ## Reference files
@@ -112,4 +112,4 @@ Under `data/skills/ai_drawing/`: `assets/` (git-ignored, **not** regenerable fro
   `ARK_API_KEY` walkthrough, cost.
 - [prompting.md](references/prompting.md) * — recipes (cover / graphical abstract / schematic / bridge ref),
   negative constraints, `edit` / `layers`, seed-size-model truth.
-- [bridge.md](references/bridge.md) — the aesthetic-reference → data-reproduction playbook and its deliberate limits.
+- [bridge.md](references/bridge.md) — the aesthetic-ref → data-reproduction playbook + its limits.
