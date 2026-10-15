@@ -1,14 +1,13 @@
 # pysci-orch 命令全表（技能 SKILL.md 的展开）
 
-SKILL.md「命令面（速查）」只给骨干；本文件是逐行语义与旗标。日常敲命令前先扫这一段。
+SKILL.md「命令面（速查）」只给骨干；本文件是逐行语义与旗标。
 
 ```
 pysci-orch status                        # 全景：计划/成员/队列/worker/台账/夜航
 # —— 日常面 ——
 pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
-#   └ id 缺省取**文件名 stem**（建议显式 --id）；登记时把 YAML **复制**进
-#     `state/plans/<id>.plan.yaml`（源文件登记后可删——曾因留着冗余源文件而混淆。
-#     backlog adhoc-guidance-fixes ④）
+#   └ id 缺省取**文件名 stem**（建议显式 --id）；YAML **复制**进 `state/plans/<id>.plan.yaml`
+#     （源文件登记后可删；曾因留冗余源文件而混淆）
 pysci-orch plan run <id> --text "<当前环节任务书>" [--evidence <报告.md>]  # 推进（交接处暂停；成员含 devops）
 pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
 #   └ --evidence：收尾 kind:self 组长环节（文件存在 + 标题段 lint 通过才置 done，PSEP_3 §2.1）
@@ -18,8 +17,8 @@ pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>]  # 事件�
 #     （advance **无** --name/--max-turns；run **无** --dry。--session 默认 latest，
 #      **续作余量已尽必须 new**；--evidence 见上行）
 pysci-orch plan rework <tb-id> [--mode full|no_inspector|rework_only] [--plan-id X] [--force]
-        # 返工任务书 → 三档模板骨架（A 综合项目改进／B 返工生产／C 最终报告）并登记（§4.2）；
-        # 必有 [NEXT] 给「taskbooks link → advance」两步（返工件不走 plan new）
+        # 返工任务书 → 三档骨架（A 综合改进／B 返工／C 报告）并登记（§4.2）；[NEXT] 给
+        # 「taskbooks link → advance」两步（返工件不走 plan new）
 pysci-orch next [--limit N]              # 跨任务路由：优先级→动作类别→序；置顶任务卡片 + 简表（PSEP_3 §3.2）
 pysci-orch taskbooks list|show <id>|link <id> --plan <pid>|sync|report <id>  # 用户大任务书（report=全流程报告）
 pysci-orch queues list | queues enqueue <member> --text "..." [--review]  # 成员 FIFO 队列（含 devops）
@@ -33,10 +32,16 @@ pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<�
         # 例外=缺陷×该跳 blocked。判决包 verdict-package.md；大单 solo-batching.md
 #   └ 组长立单（**无命令**：手写文件即立案，扫的是目录）：
 #     落点 `orchestration/state/suggestions/<ts>-<member>.md`（`<ts>`=YYYYMMDD-HHMMSS；
-#     后缀是**来源**成员，组长代补时写**目标**成员）。正文须含 `kind: defect|usability`
+#     后缀是**来源**成员，组长代补时写**目标**成员。列表 `[member]` 列**即**该后缀 ⇒ 代补单
+#     显示的是**目标**成员（判断来源看正文）。
+#     正文须含 `kind: defect|usability`
 #     与 `success_criteria:` 段；**实质正文**（去空白/首行标题/`kind:|source:|fingerprint:`
 #     标记行）须 ≥40 字，否则 `orch suggestions` 标 `[!] 空壳建议`；合规标 `[]`。
 #     流程：手写 → `orch suggestions` 自检 → `orch approve <id> <四态之一>` → backlog FIFO → worker 销账
+#   └ **重复建议单**：`resolve` **不**收建议单 id（作用域=backlog 条目）；既定
+#     `reject <id> --override "<去重依据：合并至哪单>"`。历史面该单显示「已否决」而事实是
+#     「内容经另单采纳」——审计以 `--override` 正文为准。（`--as-duplicate`／resolve 扩作用域
+#     属判决面语义，**未做**，留组长裁量。）
 pysci-orch watch [--timeout 14400]
         # 等 drain 事件（drain-watch.md §2）；后台挂起，漏挂由 status 补账
 pysci-orch wake-claim [status] [--force [--session-id id]]
@@ -54,14 +59,21 @@ pysci-orch eval run (--case <id>|--all) [--label L]
 pysci-orch bench-add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]
         [--label L] [--tier minimum] [--brief T] [--start]  # 测量任务入队（不阻塞）
 pysci-orch bench-up [--dry] | bench-queue [--all] | bench-seen <id> | bench-stop
-        # bencher 生命周期（FIFO 非常驻）；判决进 status「待查看」不即时唤醒（§5.1-B）
-        # 要领/案卷格式 drain-watch.md、harness-eval.md
+        # bencher 生命周期（FIFO 非常驻）；判决进 status「待查看」不即时唤醒（§5.1-B）；
+        # 要领 drain-watch.md、harness-eval.md
 pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（§9 冷启动+宪章注入；未生效即拒，twin-taste-mirror.md）
 pysci-orch inspector-up [--dry|--force] | inspector-status | inspector-patrol [--target 菜单id]
-        [--start] | inspector-assign --brief T [--start] | inspector-on|off
-        # 巡检引擎（§7）：拉起即内嵌 status/approve/dispatch（幂等；旋钮在代码/registry）。见
-        # references/inspector-engine.md
+        [--start] | inspector-assign --brief T [--start] | inspector-on|inspector-off
+        # 巡检引擎（§7）：内嵌 status/approve/dispatch（幂等；旋钮在代码/registry）；inspector-engine.md
 pysci-orch stats [--plan id|--member m|--days N]
+# —— 低频顶层命令（backlog 20261015-205905）——
+pysci-orch requeue <条目id> [--note "…"]   # 回排：needs_leader → pending 并唤醒 drain（组长面正门）
+pysci-orch resolve <条目id> --note "…"     # 销账：确认已达标的 needs_leader 条目 → done（--note 必填留痕）
+#   └ 两者作用域**同**：backlog 条目且 **status=needs_leader**；**不收建议单 id**（见上方立单块）
+pysci-orch watchdog start|stop|status       # watch 自愈监督者：start 幂等 / stop 广播纪元停全部实例 / status 报读数（含逻辑实例数）
+pysci-orch drain-stop                       # 请求 devops worker 协作式停止（计划器 + devops FIFO worker 两处 cancel）
+pysci-orch refresh-models                   # 按 --list-models 刷新 registry 模型映射（drain 启动亦自动执行一次）
+pysci-orch twin-review [case] (--list|--confirm|--reject) [--note "…"]  # 用户复核 twin 裁决（否决入 override 账；twin-taste-mirror.md）
 # —— 底层命令面（降级/调试）——
 pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
 pysci-orch sessions <member> [--all|--archive <sid> [--distill]|--prune <sid>]
@@ -71,13 +83,11 @@ pysci-orch ledger [--member --days --stats] | sync [--check]
 成员 id：sim figure writing theory lit drawing model3d（专职）；deputy reviewer devops
 bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 
-**队列成员**（`plan run`/`plan advance`/`queues enqueue` 三条路径可直派）＝ 7 专职 + deputy
-+ reviewer + **devops**；非队列成员（打错字）三闸皆拒。**devops 双通道并存（非二选一，
-task-20261014-devops-gap-d1/d2）**：plan 环节直派（`kind=produce`，通用 do_dispatch 结账）
-与 backlog FIFO 组包（`kind=backlog-batch`，worker 经 drain 账务结算）同队列同 worker；
-bencher/inspector 各有既有专用队列，**不经** `queues enqueue`。派发选择见 dispatch-playbook.md。
+**队列成员**（上列三条路径可直派）＝ 7 专职 + deputy + reviewer + **devops**；非队列成员三闸均拒。
+**devops 双通道并存**（plan 直派 `kind=produce` / backlog FIFO 组包 `kind=backlog-batch`，同队列
+同 worker）；bencher/inspector 各有专用队列，**不经** `queues enqueue`。细则见 `dispatch-playbook.md`。
 
 用户控制台 `pysci`：裸跑进 TUI（人类正道）；`pysci status|journal|decisions`＝LLM 静态通道。
 
-**四态审批**：`approve` 必带 `--jury`/`--bench`/`--override` 之一；例外通道=缺陷×当跳
-blocked。判决包结构与用量/override 率口径见 `verdict-package.md`。
+**四态审批**：`approve` 必带 `--jury`/`--bench`/`--override` 之一；例外=缺陷×当跳 blocked。
+判决包结构与用量/override 率口径见 `verdict-package.md`。
