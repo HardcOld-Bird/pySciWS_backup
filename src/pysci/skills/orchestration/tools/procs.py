@@ -158,3 +158,61 @@ def terminate_tree(pid: int) -> tuple[bool, str]:
     except OSError as exc:
         return False, str(exc)
     return True, "SIGTERM"
+
+
+def list_processes_matching(marker: str) -> list[tuple[int, str]] | None:
+    """枚举命令行**含** ``marker`` 的进程 ``(pid, 完整命令行)``。
+
+    本仓不装 psutil，故 Windows 走 PowerShell ``Get-CimInstance Win32_Process`` 过滤、
+    POSIX 读 ``/proc/*/cmdline``；查询一律经 argv 直传（免疫 MSYS 路径转换）。
+
+    Args:
+        marker: 命令行里必须出现的子串（如内部命令名）。
+
+    Returns:
+        命中行的 ``(pid, 命令行)`` 表；**进程面读不到（缺命令/超时/非零退出）→ ``None``**。
+        ``None`` 与空表必须区分：调用方把「读不到」当成「0 个实例」就是假绿
+        （backlog 20261015-182745-devops 的验收口径即建立在「实例数读数可信」之上）。
+    """
+    if sys.platform == "win32":
+        like = "*" + marker + "*"
+        ps = (
+            "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '"
+            + like
+            + '\' } | ForEach-Object { "$($_.ProcessId)`t$($_.CommandLine)" }'
+        )
+        try:
+            proc = run_hidden(
+                ["powershell", "-NoProfile", "-Command", ps],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=QUERY_TIMEOUT_S * 2,
+            )
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            return None
+        if proc.returncode != 0:
+            return None
+        rows: list[tuple[int, str]] = []
+        for line in (proc.stdout or "").splitlines():
+            pid_s, sep, cmd = line.partition("\t")
+            if sep and pid_s.strip().isdigit():
+                rows.append((int(pid_s.strip()), cmd.strip()))
+        return rows
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return None
+    hits: list[tuple[int, str]] = []
+    for d in entries:
+        if not d.name.isdigit():
+            continue
+        try:
+            raw = (d / "cmdline").read_bytes()
+        except OSError:
+            continue
+        cmd = raw.decode("utf-8", errors="replace").replace("\x00", " ").strip()
+        if marker in cmd:
+            hits.append((int(d.name), cmd))
+    return hits

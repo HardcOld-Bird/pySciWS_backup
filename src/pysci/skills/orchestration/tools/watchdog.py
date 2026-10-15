@@ -26,6 +26,7 @@ watcher 的所有**正常**退出路径都留痕（命中 / 被取代 / `rc≠`�
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import time
@@ -37,6 +38,7 @@ from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import drain as _drain
 from . import inspectd as _inspectd
+from . import procs as _procs
 from . import watch as _watch
 from .drain import (
     STOP_SCOPE_ALL,
@@ -385,10 +387,73 @@ def stop_watchdog() -> tuple[bool, str]:
     return request_stop(WATCHDOG_PATHS, broadcast=True)
 
 
+#: 从命令行取 ``--run-log`` 取值（``--run-log X`` / ``--run-log=X``；值可带引号）。
+_RUN_LOG_ARG_RE = re.compile(r"--run-log[=\s]+(?:([\"'])(.+?)\1|(\S+))")
+
+
+def watchdog_instances(
+    processes: list[tuple[int, str]] | None, *, marker: str = _INTERNAL_CMD
+) -> dict[str, Any] | None:
+    """把「命令行表」归并成**逻辑看门狗实例**读数（纯函数，无副作用）。
+
+    为什么不能数进程（backlog 20261015-182745-devops，2026-10-15 实测）：venv 的
+    ``.venv/Scripts/python.exe`` 是**转发垫片**，一个逻辑看门狗恒产生**两个同 argv 进程**
+    （父=垫片、子=uv 托管的真解释器，锁由子进程持有）——按「进程数」验收会把健康的单实例
+    误判成双生（实测同刻：2 进程 / 1 个 ``--run-log``，实例数按进程口径**永远读不到 1**）。
+
+    故口径定为 **distinct ``--run-log`` 数 = 逻辑实例数**；且只认**真 loop 进程**（命令行
+    含标记**且**带 ``--run-log``）——仅「提到了这个字符串」的命令（grep / PowerShell 探针）
+    不计入，防假阳性。
+
+    Args:
+        processes: ``[(pid, 命令行), …]``；``None`` = 进程面读不到（**透传 None**，
+            绝不折算成 0——那会让验收假绿）。
+
+    Returns:
+        ``{"logical", "loop_processes", "run_logs", "mentioned"}``；入参为 ``None`` 时
+        返回 ``None``。
+    """
+    if processes is None:
+        return None
+    logs: list[str] = []
+    seen: set[str] = set()
+    loop_processes = 0
+    mentioned = 0
+    for _pid, cmd in processes:
+        if marker not in cmd:
+            continue
+        m = _RUN_LOG_ARG_RE.search(cmd)
+        if m is None:
+            mentioned += 1
+            continue
+        loop_processes += 1
+        run_log = (m.group(2) or m.group(3) or "").strip()
+        key = os.path.normcase(run_log)
+        if key and key not in seen:
+            seen.add(key)
+            logs.append(run_log)
+    return {
+        "logical": len(logs),
+        "loop_processes": loop_processes,
+        "run_logs": logs,
+        "mentioned": mentioned,
+    }
+
+
 def status_lines(
-    *, now: float | None = None, stale_s: int = HEARTBEAT_STALE_S
+    *,
+    now: float | None = None,
+    stale_s: int = HEARTBEAT_STALE_S,
+    instances: bool = True,
+    scan: Any = None,
 ) -> list[str]:
-    """看门狗/监听读数（`orch watchdog status`）。"""
+    """看门狗/监听读数（`orch watchdog status`）。
+
+    ``instances``（默认开）附**逻辑实例数**：口径 = distinct ``--run-log``
+    （见 :func:`watchdog_instances`）——垫片+托管解释器两个进程算**一个**实例；按进程数
+    验收会把健康的单实例误判成双生。进程面读不到时显式打 ``?`` 而非 ``0``（防假绿）。
+    ``scan`` 是测试注入口（默认 :func:`procs.list_processes_matching`）。
+    """
     st = lock_status(WATCHDOG_PATHS)
     age = heartbeat_age_s(now=now)
     age_txt = "∞（无心跳）" if age == float("inf") else f"{age:.0f}s"
@@ -397,6 +462,22 @@ def status_lines(
         f"  watch 心跳 age = {age_txt}（判死阈值 {stale_s}s）",
         f"  listener = {'活着' if age <= stale_s else 'stale/无（看门狗将重臂）'}",
     ]
+    if instances:
+        rows = (scan or _procs.list_processes_matching)(_INTERNAL_CMD)
+        got = watchdog_instances(rows)
+        if got is None:
+            out.append(
+                "  逻辑实例数 = ?（进程面读不到，不得按 0 记；口径：distinct --run-log）"
+            )
+        else:
+            out.append(
+                f"  逻辑实例数 = {got['logical']}（loop 进程 {got['loop_processes']}；"
+                "口径：distinct --run-log——venv 垫片与托管解释器同 argv，算一个）"
+            )
+            if got["mentioned"]:
+                out.append(
+                    f"  （另有 {got['mentioned']} 个进程仅提及标记、非 loop，未计入）"
+                )
     epoch = cancel_status(WATCHDOG_PATHS)
     if epoch and str(epoch.get("scope") or "") == STOP_SCOPE_ALL:
         out.append(
