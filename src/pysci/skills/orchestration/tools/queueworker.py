@@ -74,6 +74,186 @@ DELIVERIES_DIR: Path = ORCH_STATE_ROOT / "deliveries"
 #: 新留档的**落盘即提交**信息（:mod:`statecommit`）——「入 git」是声明，不是希望。
 DELIVERY_COMMIT_MSG: str = "chore(state): 交付全文留档入库（新留档即提交）"
 
+#: 双写者防护：同 plan/step 已有**活跃写者**时，本条**延期**回队多久（秒）再复核
+#: （backlog 20261015-140209-f3-writer-guard）。够过期：写者要么已收尾（下次取出即正常跑），
+#: 要么仍在跑（再延一轮，人工看得到那双写者证据）。
+WRITER_HOLD_DEFER_S: int = 300
+
+
+def _live_writer_of_sid(m: Any, sid: str) -> dict[str, Any] | None:
+    """``sid`` 的上一跳进程是否仍活——**复用** sid 在途闸（pid 判活 + argv 核 sid 两闸）。
+
+    不新造探活：判据与 :func:`dispatch._sid_inflight` 同一份（实案 20261012-184000 的原话
+    「桩只给 pid 不给 argv 核对就把闸测成哑巴」）。
+    """
+    if not sid or sid in ("latest",):
+        return None
+    try:
+        from . import dispatch as _dispatch
+
+        return _dispatch._sid_inflight(m, sid)
+    except Exception:  # noqa: BLE001 - 探活面 fail-open（不冤枉正常跑）
+        return None
+
+
+def writer_occupancy(
+    member: str, item: dict[str, Any], *, root: Path | None = None
+) -> dict[str, Any] | None:
+    """同 plan/step 是否已有**活跃写者** → 占用证据 ``{pid, task, sid, via}``；无 → ``None``。
+
+    为什么要它（backlog 20261015-140209-f3-writer-guard）：实案 job 20261015-122406 批次派发
+    崩在「已派发、未结账」，条目坠落重派 → 同一份工单出现**两个活跃写者**（会话 6304 与重派
+    会话抢写同一份 TUI 改进包），靠执行端自己认出双写者才没互踩。
+
+    三条锚（任一给出「进程活着且 argv 里就是那个 sid」即判占用，全部 fail-open）：
+    1. **会话池的 pid_task**——派发瞬间 ``note_hop_pid`` 把任务书名（``…-<plan>-<step>.md``）
+       写进会话条目，按 ``-<plan>-<step>.md`` 后缀精确命中；
+    2. **同队列里同 plan/step 的其它在途条目**的 ``session``；
+    3. **plan state 该环节行**的 ``session_id``（上一次派发实际用的整条 sid）。
+    """
+    plan_id = str(item.get("plan") or "")
+    step_id = str(item.get("step") or "")
+    if not plan_id or not step_id:
+        return None  # 计划外条目（adhoc / backlog 组包）无 plan/step 归属，不做此判
+    try:
+        from . import registry as _reg
+
+        m = _reg.Registry.load().member(member)
+    except Exception:  # noqa: BLE001 - 注册表读不到即不判（fail-open）
+        return None
+
+    # 锚 1：会话池里 pid_task 指向本 plan/step 任务书的活会话
+    needle = f"-{plan_id}-{step_id}.md"
+    try:
+        for sess in getattr(m, "sessions", []) or []:
+            if needle not in str(sess.get("pid_task") or ""):
+                continue
+            sid = str(sess.get("sid") or "")
+            if occ := _live_writer_of_sid(m, sid):
+                return {**occ, "sid": sid, "via": "session-pool"}
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 锚 2/3：队列同 plan/step 在途条目的 session ／ plan state 该行的 session_id
+    sids: list[tuple[str, str]] = []
+    try:
+        for other in workq.load(queues.queue_path(member, root=root)):
+            if str(other.get("id")) == str(item.get("id")):
+                continue
+            if (
+                str(other.get("plan") or "") == plan_id
+                and str(other.get("step") or "") == step_id
+                and str(other.get("status") or "") == workq.STATUS_IN_PROGRESS
+            ):
+                sids.append((str(other.get("session") or ""), "queue-item"))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from . import plans as _plans
+
+        row = next(
+            (
+                s
+                for s in _plans._load_state(plan_id).get("steps", [])
+                if str(s.get("id")) == step_id
+            ),
+            None,
+        )
+        if row:
+            sids.append((str(row.get("session_id") or ""), "plan-state"))
+    except Exception:  # noqa: BLE001
+        pass
+    seen: set[str] = set()
+    for sid, via in sids:
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        if occ := _live_writer_of_sid(m, sid):
+            return {**occ, "sid": sid, "via": via}
+    return None
+
+
+def _hold_for_writer(q: Path, item: dict[str, Any], occ: dict[str, Any]) -> None:
+    """把本条**延期回队**（pending + ``defer_until``）并留证据 note——不丢、不抢、不互踩。"""
+    note = (
+        f"双写者防护：同 plan/step 已有活跃写者 pid={occ['pid']} sid={occ['sid']} "
+        f"任务书 {occ['task']}（锚 {occ['via']}）——本条延期 {WRITER_HOLD_DEFER_S}s 再复核"
+    )
+    workq.mutate(
+        q,
+        str(item["id"]),
+        status=workq.STATUS_PENDING,
+        started_at="",
+        defer_until=time.time() + WRITER_HOLD_DEFER_S,
+        note=note,
+    )
+
+
+def announce_writer_hold(member: str, action: str, rows: list[dict[str, Any]]) -> None:
+    """把「因活跃写者而暂缓」的决策**出声**到组长面（NEEDS_LEADER；fail-soft）。
+
+    为什么走事件而不 `print`：worker 进程**不写 stdout**（它的可读面是 run 日志 + ``.done``，
+    ``queueworker`` 全篇零 `print`）——出声要落到组长真能看见的地方。证据（pid/sid/任务书/
+    锚）同时进了条目 note 与 run 日志（``writer_occupied_hold``/``orphan_held_writer_alive``）。
+    """
+    detail = "；".join(
+        f"{r['id']}：写者 pid={r['pid']} sid={r['sid']} 任务书 {r['task']}（锚 {r['via']}）"
+        for r in rows
+    )
+    try:
+        events.emit(
+            events.NEEDS_LEADER,
+            subject=f"{member}:{rows[0]['id'] if rows else '?'}",
+            detail=f"{member} {action} {len(rows)} 项（双写者防护，已延期回队不重派）：{detail}",
+            action=(
+                f"确认该写者是否真在跑（pid={rows[0]['pid'] if rows else '?'}）；"
+                "人为放弃则手工清该条目 note 后改 pending"
+            ),
+        )
+    except Exception:  # noqa: BLE001 - 出声失败不改派发结局
+        pass
+
+
+def orphans_guarded(
+    q: Path, member: str, *, trace: Any = None
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """孤儿复位**合一**写者核验（backlog 20261015-140209-f3-writer-guard）。
+
+    获锁一刻仍在 ``in_progress`` 的条目**未必**是孤儿——也可能是**上一个 worker 被误判死**
+    而它的会话进程还在写。老做法无条件复位 → 重派 → 双写者互踩（实案 20261015-122406 链）。
+    故逐条核验上一写者死活：
+
+    - **死** → 正常复位 ``pending``（复用 :func:`_reset_inflight`，字段语义同 ``reset_orphans``）；
+    - **活** → **不复位不重派**，原地留证据 note 并**出声**（进 ``held`` 供调用方打日志/摘要），
+      等下一轮巡更再核（写者收尾后自然放行）。
+
+    Returns:
+        ``(reset_ids, held_rows)``。
+    """
+    reset: list[str] = []
+    held: list[dict[str, Any]] = []
+    for it in workq.load(q):
+        if str(it.get("status")) != workq.STATUS_IN_PROGRESS:
+            continue
+        occ = writer_occupancy(member, it, root=q.parent.parent)
+        if occ is None:
+            if _reset_inflight(
+                q,
+                str(it.get("id")),
+                note=f"孤儿回收（{it.get('started_at', '?')} 起的在途项）",
+            ):
+                reset.append(str(it.get("id")))
+            continue
+        note = (
+            f"孤儿回收**暂缓**：上一写者仍活 pid={occ['pid']} sid={occ['sid']} "
+            f"任务书 {occ['task']}（锚 {occ['via']}）——不复位不重派，等其收尾后再核"
+        )
+        workq.mutate(q, str(it.get("id")), note=note)
+        held.append({"id": str(it.get("id")), **occ})
+        if trace is not None:
+            trace("orphan_held_writer_alive", item=str(it.get("id")), pid=occ["pid"])
+    return reset, held
+
 
 def qodercli_error_tail(*, root: Path | None = None, max_lines: int = 15) -> str:
     """最近一次 qoderclicn run 日志的报错尾段（第一现场取证，用户明令 2026-10-15）。
@@ -530,11 +710,17 @@ def reclaim_orphans(*, now: float | None = None, wake: bool = True) -> dict[str,
             if str(i.get("status")) == workq.STATUS_IN_PROGRESS
         ]
         if inflight:
-            done = workq.reset_orphans(q)
+            done, held = orphans_guarded(q, member)
             out["reclaimed"][member] = done
             out["notes"].append(
                 f"{member}：孤儿在途 {len(done)} 项已复位 pending（无活 worker）"
             )
+            if held:
+                out.setdefault("held", {})[member] = held
+                out["notes"].append(
+                    f"{member}：{len(held)} 项**未复位**——上一写者进程仍活（不重派，等其收尾后再核）"
+                )
+                announce_writer_hold(member, "孤儿复位暂缓", held)
             try:
                 events.emit(
                     events.NEEDS_LEADER,
@@ -635,10 +821,13 @@ def run_worker(
     ).start()
     try:
         trace("reset_orphans_begin")
-        orphans = workq.reset_orphans(q)
+        orphans, orphan_held = orphans_guarded(q, member, trace=trace)
         if orphans:
             summary["reclaimed"] = orphans
             trace("reset_orphans_done", count=len(orphans))
+        if orphan_held:
+            summary["orphan_held"] = orphan_held
+            announce_writer_hold(member, "孤儿复位暂缓", orphan_held)
         while True:
             # 每条新迭代先解除上一轮的监护：条目已结账（或已延期），它的「无进展」判词
             # 不再有意义——带着旧判据继续计时就会把已收尾的 job 判成卡死（误杀）。
@@ -656,6 +845,22 @@ def run_worker(
                     _drain._sleep(min(wait, float(DEFER_MAX_SLEEP_S)))
                     continue
                 break
+            # 双写者防护（backlog 20261015-140209-f3-writer-guard）：同 plan/step 已有活跃
+            # 写者 → **不派发**，延期回队 + 留证据 note + 出声；等写者收尾后下一轮自然放行。
+            occ = writer_occupancy(member, item, root=root)
+            if occ is not None:
+                _hold_for_writer(q, item, occ)
+                trace(
+                    "writer_occupied_hold",
+                    item=str(item["id"]),
+                    pid=occ["pid"],
+                    sid=occ["sid"],
+                    via=occ["via"],
+                )
+                announce_writer_hold(
+                    member, "拒绝派发", [{"id": str(item["id"]), **occ}]
+                )
+                continue
             guard.arm(str(item["id"]), member)  # 本跳起跑线（无进展判据在此归零）
             trace("item_taken", item=str(item["id"]), kind=str(item.get("kind") or ""))
             # 单条目异常**就地结账**（2026-10-14 实测：`task=` 参数名写错 → TypeError 逃出
