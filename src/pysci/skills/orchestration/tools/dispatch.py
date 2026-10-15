@@ -1074,8 +1074,11 @@ def do_dispatch(
     tier = role
     # 席位选择（沿 #80：角色 → **有序回退链**，首席在前）：链里落在降级粘滞窗内的席本跳
     # 不探测（省跳数），但仍要逐席打出来——故障可查性不能换成安静。
-    plan = _channels.plan_seats(reg, tier)
-    chain = list(plan.usable)
+    # 变量名 `seat_plan` 而非 `plan`：`plan` 是本函数的**入参**（计划 id），曾于 2026-10-13
+    # 「档位退役改预设」时被同名局部量遮蔽 → 台账 `LedgerEntry.plan` 落的是席表对象，
+    # 而消费面（计划完成统计 / stats --plan / 本 TUI 的环节耗时）全按 id 比对 → 静默读空。
+    seat_plan = _channels.plan_seats(reg, tier)
+    chain = list(seat_plan.usable)
     gate = presets.preset_gate(reg, tier)
     if gate:
         # 本预设该档席表为空 = 没配席：**拒绝激活**而不是悄悄落回上一个预设——静默回落
@@ -1091,10 +1094,10 @@ def do_dispatch(
             print(f"[!] {warn}")
     model = chain[0] if chain else str(reg.models.get(tier, ""))
     if not quiet:
-        for item in plan.skipped:
+        for item in seat_plan.skipped:
             print(_channels.skip_line(item))
-        if plan.forced_probe:
-            print(_channels.forced_line(plan))
+        if seat_plan.forced_probe:
+            print(_channels.forced_line(seat_plan))
     slug = slug or (Path(task_file).stem if task_file else f"adhoc-{_ts()}")
 
     # 会话选择（README §3.2：默认续最近活跃会话）

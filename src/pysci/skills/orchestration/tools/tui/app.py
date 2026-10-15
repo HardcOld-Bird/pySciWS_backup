@@ -52,6 +52,9 @@ _ACTIONS_BY_VIEW: dict[str, frozenset[str]] = {
     "taskbooks": frozenset(
         {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
     ),
+    # 任务书详情页（Enter）：**批复就在读报告处**——`a`/`r` 在此可用（`n` 新增不可用：
+    # 详情页不是列表，新增无处落）。
+    "tb-detail": frozenset({"taskbooks", "tb_accept", "tb_reject", "journal"}),
     "tb-new": frozenset(),
     "tb-reject": frozenset(),
 }
@@ -150,6 +153,10 @@ class PysciTUI(App):
     #tb-reject {{ height: 1fr; {_T_INSET} {_T_BORDER_SOFT} {_T_BG} }}
     #tb-reject-title {{ {_T_TITLE} }}
     #tb-reject-msg {{ color: $success; }}
+    #tb-detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #tb-detail-title {{ {_T_TITLE} }}
+    #tb-detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; }}
+    #tb-detail-hint {{ {_T_HINT} margin-top: 1; }}
     """
 
     def __init__(self, *, mods: list[Module] | None = None, seen_path=None) -> None:
@@ -158,13 +165,20 @@ class PysciTUI(App):
         self._seen_path = seen_path
         self._seen = watermark.load_seen(seen_path)
         # 可断言的状态面（测试不依赖 widget 内部）：视图 + 选中下标 + 详情正文 + 徽标/口述读数。
-        self.view = "menu"  # "menu" | "detail" | "journal"
+        self.view = (
+            "menu"  # "menu" | "detail" | "journal" | "taskbooks" | "tb-detail" | …
+        )
         self.selected = 0
         self.detail_text = ""
         # 详情三区（f2 分区渲染）——textual 8 的 Static 没有 .renderable，测试读这里
         self.detail_title = ""
         self.detail_body = ""
         self.detail_hint = ""
+        # 任务书详情页三区（同上：三区分离，测试读属性不读 widget 内部）
+        self.tb_detail_id = ""
+        self.tb_detail_title = ""
+        self.tb_detail_body = ""
+        self.tb_detail_hint = ""
         self.journal_result = ""
         self.tb_items: list[dict] = []
         self.tb_msg = ""
@@ -211,7 +225,8 @@ class PysciTUI(App):
                 yield Static("", id="journal-result")
             with Vertical(id="taskbook"):
                 yield Static(
-                    "任务书：↑↓ 选；n 新增；a 接受选中（delivered→accepted）；"
+                    "任务书：↑↓ 选；Enter 看详情（正文＋流程报告，delivered 态即批复参考）；"
+                    "n 新增；a 接受选中（delivered→accepted）；"
                     "r 驳回选中（三段式：① 模式 → ② 优先级 → ③ 批语）",
                     id="tb-title",
                 )
@@ -233,6 +248,10 @@ class PysciTUI(App):
                 yield TextArea(id="tb-new-body")
                 yield Button("投递", id="tb-new-submit")
                 yield Static("", id="tb-new-msg")
+            with Vertical(id="tb-detail"):
+                yield Static("", id="tb-detail-title")
+                yield Static("", id="tb-detail-body")
+                yield Static("", id="tb-detail-hint")
             with Vertical(id="tb-reject"):
                 yield Static(
                     "驳回交付（返工=新大任务）：① 返工模式 → ② 优先级 → ③ 批语",
@@ -282,6 +301,7 @@ class PysciTUI(App):
         self.query_one("#taskbook", Vertical).display = False
         self.query_one("#tb-new", Vertical).display = False
         self.query_one("#tb-reject", Vertical).display = False
+        self.query_one("#tb-detail", Vertical).display = False
         self._render_summary(0)
         self.query_one("#menu", ListView).focus()
         # 详情倒计时**每秒跳动**（「距下次切换还有 X 分 X 秒」，用户 2026-10-14 实测反馈）：
@@ -328,7 +348,8 @@ class PysciTUI(App):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Enter：主菜单 → 详情；「任务书」模块 → **专用面板**（＝`t`，f1 用户路径修复：
-        菜单→Enter→`n` 必须可用）；任务书列表 → 看正文（批复走 `a`/`r`）。"""
+        菜单→Enter→`n` 必须可用）；任务书列表 → **任务书详情页**（正文 + 流程报告；
+        批复就读报告处的 `a`/`r`）。"""
         if event.list_view.id == "menu":
             idx = int(event.list_view.index or 0)
             if self._mods[idx].key == "taskbooks":
@@ -336,7 +357,7 @@ class PysciTUI(App):
             else:
                 self._open_detail(idx)
         elif event.list_view.id == "tb-list":
-            self._tb_show_body(int(event.list_view.index or 0))
+            self._open_tb_detail(int(event.list_view.index or 0))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         """footer 键位广告与守卫一致化（f1）：受管 action 在当前视图无效果 → 返回 `False`
@@ -346,22 +367,40 @@ class PysciTUI(App):
             return True
         return action in _ACTIONS_BY_VIEW.get(self.view, frozenset())
 
-    def _tb_show_body(self, idx: int) -> None:
+    def _open_tb_detail(self, idx: int) -> None:
+        """任务书**详情页**（任何状态可进）：正文/批语/流程报告/返工卡片（数据层 :func:`taskbooks.detail_lines`）。
+
+        三区渲染沿用模块详情页的分区（标题 / 读数 / 操作提示）；`#tb-detail-body` 可滚动
+        （交付报告可能很长，用户要能读完）。
+        """
         from .. import taskbooks as _tb
 
         if idx >= len(self.tb_items):
             return
         tid = str(self.tb_items[idx].get("id"))
         try:
-            card = _tb.rework_card(tid)  # 返工卡片（§4.3 #8）；普通任务书返回空
-        except Exception:  # noqa: BLE001 - 卡片读数坏一项不塌正文（观察面 fail-open）
-            card = []
-        head = ("—— 返工卡片 ——\n" + "\n".join(card) + "\n\n") if card else ""
-        self._set_tb_msg(f"{head}—— {tid} 正文 ——\n{_tb.read_body(tid)[:400]}")
+            raw = list(_tb.detail_lines(tid))
+        except Exception as exc:  # noqa: BLE001 - 读数坏一项不塌详情（观察面 fail-open）
+            raw = [f"任务书 {tid}", f"[!] 详情读数失败：{type(exc).__name__}: {exc}"]
+        body, hints = _split_detail(raw)
+        self.view = "tb-detail"
+        self.tb_detail_id = tid
+        self.tb_detail_title = f"{tid}　详情"
+        self.tb_detail_body = "\n".join(body)
+        self.tb_detail_hint = "  ".join([*hints, "Esc/← 返回任务书列表"])
+        self._hide_all_views()
+        self.query_one("#tb-detail-title", Static).update(self.tb_detail_title)
+        self.query_one("#tb-detail-body", Static).update(
+            self.tb_detail_body or "（无内容）"
+        )
+        self.query_one("#tb-detail-hint", Static).update(self.tb_detail_hint)
+        self.query_one("#tb-detail", Vertical).display = True
 
     def action_back(self) -> None:
-        """Esc/←：任何子视图（详情/口述/任务书）→ 主菜单；主菜单 → 退出。"""
-        if self.view != "menu":
+        """Esc/←：任务书详情页 → 任务书列表；其余子视图 → 主菜单；主菜单 → 退出。"""
+        if self.view == "tb-detail":
+            self._open_taskbooks()
+        elif self.view != "menu":
             self._show_menu()
         else:
             self.exit()
@@ -388,6 +427,7 @@ class PysciTUI(App):
             "#taskbook",
             "#tb-new",
             "#tb-reject",
+            "#tb-detail",
         ):
             try:
                 self.query_one(sel).display = False
@@ -504,7 +544,13 @@ class PysciTUI(App):
         lv = self.query_one("#tb-list", ListView)
         lv.clear()
         for d in self.tb_items:
-            lv.append(ListItem(Static(f"[{d.get('status')}] {d.get('title')}")))
+            lv.append(
+                ListItem(
+                    Static(
+                        f"{_tb.status_badge(str(d.get('status')))}　{d.get('title')}"
+                    )
+                )
+            )
         lv.index = 0  # 重建后选中态回到首项（clear/append 后 index 可能为 None）
         self._set_tb_msg("")
         self._hide_all_views()
@@ -533,12 +579,24 @@ class PysciTUI(App):
 
     def action_tb_reject(self) -> None:
         """`r`：对**选中交付项**开三段式驳回面板（模式→优先级→批语，PSEP_3 §4.1）。"""
-        if self.view != "taskbooks":
+        if self.view not in ("taskbooks", "tb-detail"):
             return
-        idx = int(self.query_one("#tb-list", ListView).index or 0)
+        idx = self._tb_selected_index()
         if idx >= len(self.tb_items):
             return
         self._open_reject_panel(str(self.tb_items[idx].get("id")))
+
+    def _tb_selected_index(self) -> int:
+        """当前批复目标下标：详情页＝进入时那一项；列表＝``#tb-list`` 高亮行。
+
+        详情页里 ``#tb-list`` 仍持原高亮（进详情不清列表），但显式以 ``tb_detail_id``
+        为准——用户可能在详情页停留期间列表被别处重建。
+        """
+        if self.view == "tb-detail" and self.tb_detail_id:
+            for i, d in enumerate(self.tb_items):
+                if str(d.get("id")) == self.tb_detail_id:
+                    return i
+        return int(self.query_one("#tb-list", ListView).index or 0)
 
     def _open_reject_panel(self, tb_id: str) -> None:
         self.view = "tb-reject"
@@ -553,13 +611,16 @@ class PysciTUI(App):
         self.query_one("#tb-reject-mode", RadioSet).focus()
 
     def _tb_act(self, *, accept: bool) -> None:
-        """对**选中项**批复：accept（驳回走三段式面板，见 :meth:`action_tb_reject`）。"""
-        if self.view != "taskbooks":
+        """对**选中项**批复：accept（驳回走三段式面板，见 :meth:`action_tb_reject`）。
+
+        列表与**详情页**都可批复（用户 2026-10-15：读完流程报告就地处批复）。
+        """
+        if self.view not in ("taskbooks", "tb-detail"):
             return
         del accept
         from .. import taskbooks as _tb
 
-        idx = int(self.query_one("#tb-list", ListView).index or 0)
+        idx = self._tb_selected_index()
         if idx >= len(self.tb_items):
             return
         tid = str(self.tb_items[idx].get("id"))

@@ -248,13 +248,14 @@ def test_tui_enter_shows_rework_card(cface, capsys):
             idx = next(i for i, d in enumerate(app.tb_items) if d["id"] == tb2)
             lv.index = idx
             await pilot.pause()
-            for _ in range(3):  # 键驱动有竞态：按 Enter 直到选中回调落到 tb_msg
+            for _ in range(3):  # 键驱动有竞态：按 Enter 直到详情页落定
                 await pilot.press("enter")
                 await pilot.pause()
-                if "返工卡片" in app.tb_msg:
+                if app.view == "tb-detail":
                     break
-            assert "返工卡片" in app.tb_msg
-            assert "第 1 轮返工" in app.tb_msg
+            assert app.view == "tb-detail"
+            assert "返工卡片" in app.tb_detail_body
+            assert "第 1 轮返工" in app.tb_detail_body
 
     asyncio.run(_go())
 
