@@ -427,6 +427,25 @@ def cmd_export_data(args: argparse.Namespace) -> int:
     return 0 if _with_model(args.mph, args.cores, fn) else 1
 
 
+def cmd_export_polar(args: argparse.Namespace) -> int:
+    def fn(m):
+        r = _export.export_polar_csv(
+            m,
+            args.out,
+            expr=args.expr,
+            radius=args.radius,
+            center=tuple(args.center),
+            angle_min=args.angle_range[0],
+            angle_max=args.angle_range[1],
+            angle_step=args.angle_step,
+            source=args.source,
+        )
+        print(r.report())
+        return r.ok
+
+    return 0 if _with_model(args.mph, args.cores, fn) else 1
+
+
 def cmd_export_table(args: argparse.Namespace) -> int:
     def fn(m):
         r = _export.export_table(m, args.table, args.out)
@@ -782,6 +801,47 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--expr", default=None, help="场表达式（含场值；默认仅坐标）")
     s.add_argument("--cores", type=int, default=None)
     s.set_defaults(func=cmd_export_data)
+    s = exsub.add_parser(
+        "polar", help="沿角度序列导出场量为 CSV（远场/外场极坐标扫描）"
+    )
+    s.add_argument("--mph", **p_model, required=True)
+    s.add_argument("--expr", required=True, help="场表达式，如 acpr.efc1.pext")
+    s.add_argument("--out", type=Path, required=True)
+    s.add_argument(
+        "--radius",
+        type=float,
+        required=True,
+        help="采样圆弧半径（模型长度单位；须落在求解域外的远场区）",
+    )
+    s.add_argument(
+        "--center",
+        type=float,
+        nargs=2,
+        default=(0.0, 0.0),
+        metavar=("X0", "Y0"),
+        help="采样圆心（默认原点）",
+    )
+    s.add_argument(
+        "--angle-range",
+        type=float,
+        nargs=2,
+        default=(0.0, 180.0),
+        dest="angle_range",
+        metavar=("MIN", "MAX"),
+        help="角度序列（度），默认 0 180",
+    )
+    s.add_argument(
+        "--angle-step",
+        type=float,
+        default=1.0,
+        dest="angle_step",
+        help="角度步长（度），默认 1",
+    )
+    s.add_argument(
+        "--source", default=None, help="底数据集/绘图组 tag（默认首个数据集）"
+    )
+    s.add_argument("--cores", type=int, default=None)
+    s.set_defaults(func=cmd_export_polar)
     s = exsub.add_parser("table", help="结果表 → CSV")
     s.add_argument("--mph", **p_model, required=True)
     s.add_argument("--table", required=True)

@@ -395,6 +395,124 @@ def export_data(
     return ExportResult(False, "data", None, f"run() 后未生成文件：{out}")
 
 
+def _free_dataset_tag(seq: Any, prefix: str) -> str:
+    """生成一个在该 dataset 序列中尚未占用的 tag（``prefix`` + 最小空闲序号）。"""
+    used = {str(t) for t in _tags(seq)}
+    n = 1
+    while f"{prefix}{n}" in used:
+        n += 1
+    return f"{prefix}{n}"
+
+
+def _set_coerced(node: Any, prop: str, value: Any) -> bool:
+    """设置一个属性，依次尝试原生类型 → 字符串形态（COMSOL 各版本对 double/int/bool
+    属性的 Java 签名敏感，JPype 重载解析未必命中；失败再降级为字符串）。"""
+    for v in (value, str(value)):
+        try:
+            node.set(prop, v)
+            return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
+def export_polar_csv(
+    model: Any,
+    out_file: str | Path,
+    *,
+    expr: str | Sequence[str],
+    radius: float,
+    center: tuple[float, float] = (0.0, 0.0),
+    angle_min: float = 0.0,
+    angle_max: float = 180.0,
+    angle_step: float = 1.0,
+    source: str | None = None,
+    dataset_tag: str | None = None,
+    tag: str | None = None,
+) -> ExportResult:
+    """沿**角度序列**把场量导出为数值 CSV（外场/远场极坐标扫描的数值通道）。
+
+    在 ``source`` 底数据集上建一个 ``ParCurve2D``（参数曲线）采样数据集：以 ``center`` 为
+    圆心、``radius`` 为半径、``alpha`` 为参数（**单位：度**，``angle_min..angle_max`` 步长
+    ``angle_step``）的圆弧；逐点求值 ``expr``，再用 Data 导出节点把「角度 + 场值」写成 CSV。
+
+    外场量（如 ``acpr.efc1.pext``）须在**网格外**求值，故数据集置 ``global=on``（COMSOL
+    手册：ParCurve2D 的 global 属性正是为 far-field results processing 在网格外求全局表达式
+    而设）；因此 ``radius`` 应落在求解域之外（远场区），否则取值不具外场语义。
+
+    Args:
+        expr: 场表达式（如 ``"acpr.efc1.pext"``）；多个则逐列导出。
+        radius: 采样圆弧半径（模型长度单位）。
+        center: 圆心 ``(x0, y0)``（模型长度单位）。
+        angle_min/angle_max/angle_step: 角度序列（**度**）；默认 0→180 步 1 = 181 点。
+        source: 底数据集 tag 或绘图组 tag；None → 首个可用数据集。
+        dataset_tag/tag: 显式指定临时 ParCurve2D / 导出节点 tag；默认自动生成（不落盘模型，
+            故不留污染）。
+    """
+    out = Path(out_file)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    jm = _jmodel(model)
+    ds = _resolve_dataset(model, source)
+    if ds is None:
+        return ExportResult(False, "polar", None, f"无法解析数据集（source={source}）")
+    span = (angle_max - angle_min) / angle_step if angle_step else 0
+    n = int(round(span)) + 1
+    if n < 2:
+        return ExportResult(
+            False, "polar", None, f"角度序列点数不足：range/step={span}（须 ≥1 段）"
+        )
+    warnings: list[str] = []
+    dtag = dataset_tag or _free_dataset_tag(jm.result().dataset(), "pc2d")
+    cx, cy = center
+    try:
+        dnode = jm.result().dataset().create(dtag, "ParCurve2D")
+        if dnode is None:
+            return ExportResult(False, "polar", None, "无法创建 ParCurve2D 数据集")
+        # 参数以「度」为单位，避免下游把弧度量误当角度量。
+        for prop, val in (
+            ("data", ds),
+            ("par1", "alpha"),
+            ("parmin1", float(angle_min)),
+            ("parmax1", float(angle_max)),
+            ("res", int(n)),
+            ("exprx", f"({cx})+({radius})*cos(alpha*pi/180)"),
+            ("expry", f"({cy})+({radius})*sin(alpha*pi/180)"),
+            ("global", True),
+        ):
+            if not _set_coerced(dnode, prop, val):
+                warnings.append(f"ParCurve2D 属性 {prop} 未能设置")
+    except Exception as e:  # noqa: BLE001
+        return ExportResult(
+            False, "polar", None, f"{type(e).__name__}: {e}", warnings=warnings
+        )
+
+    exprs = list(expr) if isinstance(expr, (list, tuple)) else [str(expr)]
+    etag = tag or _free_export_tag(model, "data")
+    try:
+        enode = _create_export(model, etag, "Data")
+        if enode is None:
+            return ExportResult(False, "polar", None, "无法创建 Data 导出节点")
+        enode.set("data", dtag)
+        try:
+            enode.set("expr", ["alpha", *exprs])  # 首列即角度（度）
+        except Exception:  # noqa: BLE001
+            enode.set("expr", exprs)
+            warnings.append("角度列 alpha 未能加入 expr；角度可由 x/y 列反算")
+        if _set_first_ok(enode, ("filename",), str(out)) is None:
+            return ExportResult(False, "polar", None, "无法设置数据输出文件名属性")
+        enode.run()
+    except Exception as e:  # noqa: BLE001
+        return ExportResult(
+            False, "polar", None, f"{type(e).__name__}: {e}", warnings=warnings
+        )
+
+    if out.exists():
+        return ExportResult(True, "polar", out, warnings=warnings)
+    return ExportResult(
+        False, "polar", None, f"run() 后未生成文件：{out}", warnings=warnings
+    )
+
+
 # ---------------------------------------------------------------------------
 # 探针表（CSV/TXT）
 # ---------------------------------------------------------------------------

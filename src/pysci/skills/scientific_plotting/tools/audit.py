@@ -63,6 +63,9 @@ class AuditIssue:
 class AuditReport:
     figdir: Path | None = None
     style: str | None = None
+    #: 审计是否适用。False = 目标非 scaffold 产物（无管线可重建）——此时 issues 只含一条
+    #: INFO 边界说明，verdict 显示 N/A（**非** FAIL），调用方须改走视觉判读/数据追溯。
+    applicable: bool = True
     issues: list[AuditIssue] = field(default_factory=list)
     metrics: dict[str, Any] = field(default_factory=dict)
 
@@ -91,7 +94,10 @@ class AuditReport:
             lines.append("  (none) ✓")
         else:
             lines.extend("  " + i.line() for i in self.issues)
-        verdict = "PASS" if self.ok else "FAIL"
+        if not self.applicable:
+            verdict = "N/A (非 scaffold 产物，audit 不适用)"
+        else:
+            verdict = "PASS" if self.ok else "FAIL"
         lines.append(
             f"verdict: {verdict} ({len(self.errors)} error, "
             f"{len([i for i in self.issues if i.level == WARN])} warn)"
@@ -403,10 +409,35 @@ def audit_figure_dir(
 
     额外量取 out/ 里**已导出交付件**的实际宽度，与判定目标比对（假绿防护）——若从未
     build 过（无交付件）则跳过该项，不误报。
+
+    **适用边界**：本审计依赖图目录内的管线 `.py`（或 src 侧同名脚本）来**重建** Figure。
+    散落脚本产出的图目录（无 scaffold 管线）无法重建，返回 ``applicable=False`` 的
+    ``N/A`` 副值（**非 FAIL**）——调用方应退回视觉判读 + 数据追溯。
     """
     from . import runner as _runner
 
     figdir = Path(figdir)
+    # 先探边界：无任何管线模块 = 非 scaffold 产物，audit 不适用（区别于「管线存在但构建失败」）。
+    try:
+        _runner.discover_pipeline(figdir, warn=False)
+    except FileNotFoundError as e:
+        stray = (
+            [p for p in figdir.glob("*.py") if not p.name.startswith("_")]
+            if figdir.is_dir()
+            else []
+        )
+        rep = AuditReport(figdir=figdir, style=style)
+        if figdir.is_dir() and not stray:
+            rep.applicable = False
+            rep.add(
+                INFO,
+                "not-scaffold",
+                f"图目录无 scaffold 管线（{e}）；audit 不适用于本产物——"
+                "退回视觉判读（Read PNG）与数据追溯（raw/*.csv），并在 evidence 注明工具不适用",
+            )
+        else:
+            rep.add(ERROR, "build", f"构建管线失败：{e!r}")
+        return rep
     try:
         # 交付件定位须与 build_figure_dir 一致：stem=cfg.stem|figdir.name，
         # out_dir=figdir/(cfg.out_subdir|"out")。
