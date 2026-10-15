@@ -21,9 +21,8 @@
 
 ## 2. 切分粒度（一个叶子 = 一份任务书 = 一次可验收交付）
 
-- **一个叶子一件事**，且**一次能验收**：交付面自包含（目标/路径/白名单/验收预期），
-  换一个会话照着也能干。做不到自包含 = 切太细 + 任务书没写全，或两件事塞进一个
-  叶子 = 切太粗。
+- **一个叶子一件事**且**一次能验收**：交付面自包含（目标/路径/白名单/验收预期）——
+  做不到自包含 = 切太细 + 任务书没写全；两件事塞进一个叶子 = 切太粗。
 - **粒度对齐任务书**：你写不出这份环节的完整任务书 → 说明这一刀切错了。
 - **过碎信号**：并行组宽度 >3、嵌套深度 >3——orch 会软提示。常见于「把同一成员
   的连续工序硬拆成并行」；此时应合并回串行链。
@@ -41,9 +40,7 @@
 3. **同成员不并行**：per-member FIFO 下，两个叶子若 `member` 相同，**实际串行**
    （队列排队），写进并行组只会误导。orch 会软提示——应改放串行链，或换成员。
 
-反例：`{member: devops}` 与 `{member: devops}` 放同一并行组 → 看似并行、实则排队，
-且大概率撞同一面文件。正例：`{member: sim, dirs: [data/…]}` 与
-`{member: figure, dirs: [out/figs/]}`——不同成员、不同目录，真并行。
+反例：同成员两叶放同一并行组（看似并行、实则排队）；正例：不同成员 + `dirs` 不交。
 
 ## 4. superstep 嵌套表达选择
 
@@ -90,14 +87,36 @@
   共同表达——**别靠口头约定**。
 - 交付类（总结 / 报告 / 综述）环节的任务书另须含**信息架构**判据：见验收纪律
   `acceptance-discipline.md` §4「高频查阅维度集中呈现」（原则与判据形态只在该节维护）。
-- `review: true` 标记重炮审查（默认不发起，见 SKILL.md 派发要领）。
 
 ## 7. 交付前自查清单
 
 - [ ] 每个叶子 = 一份可自包含写成的任务书、一次可验收交付；
 - [ ] 依赖级（完成级/派发级）判对，串行/并行组选对；
 - [ ] 并行分支**产物无交集**（目录不重叠、不改同一文件、不同成员）；
-- [ ] 组长自办环节用 `kind: self` 且写清 `evidence_sections`；
 - [ ] 宽度 ≤3、深度 ≤3（否则回看是否过碎）；
 - [ ] 含 superstep 或叶子 ≥5 时，plan YAML 补 `read: plan-decomposition.md` 标记行
       （`plan new`/`plan amend` 会 lint 提示）。
+
+## 8. plan YAML 字段速查表（backlog 20261015-202558）
+
+一处查全：顶层与树节点共用一套键；**有 `children` 的节点是 superstep**（须 `mode`、不被
+派发），其余是**叶子**（须 `member`，除非 `kind: self`）。
+
+| 字段 | 合法值 / 形态 | 何时用（缺省=不写） |
+|---|---|---|
+| `id` | 字符串 | 必填；叶子在 state 里扁平化为**点路径**（`G.P1.p1-1`） |
+| `goal` | 字符串 | 顶层必填：一句话计划目标 |
+| `read` | `plan-decomposition.md`（可列表） | 含 superstep 或叶子 ≥5 时**建议**加；缺则 `plan new` lint 软提示 |
+| `steps` | 列表 | 顶层必填：树根 |
+| `mode` | `serial` \| `parallel` | 仅 superstep：serial=完成级、parallel=派发级 |
+| `children` | 列表 | 仅 superstep |
+| `brief` | 字符串 | 环节一句话描述（引导时回显） |
+| `member` | 成员 id（清单见 `command-surface.md`） | 叶子派发目标；`kind: self` 时省略 |
+| `kind` | `dispatch`（默认）\| `self` | `self`=组长自办（不入队列，须 `--evidence` 收尾） |
+| `dirs` | `[a, b]` 或 `"a,b"` | 叶子白名单；并行组互斥判据 |
+| `effort` | `auto`\|`none`\|`low`\|`medium`\|`high` | 环节推理强度；CLI `--effort` 优先于它 |
+| `role` | `cause`\|`solution`\|`review`\|`improvement_plan`\|`rework_plan`\|`final_report` | `kind: self` 的 evidence **缺省**特征段（真源 `plans.ROLE_EVIDENCE_SECTIONS`） |
+| `evidence_sections` | `[标题段, …]` | 显式声明 evidence 必含的 Markdown 标题段（优先于 `role` 缺省） |
+| `gate_jury` | 案卷 id | 送审 gate：本叶派发前须案卷 `verdict=A` |
+| `review` | `true` | 重炮审查（见 SKILL.md 派发要领） |
+| `expand_history` | `true` | 返工 `a1`（round≥2）：[NEXT] 全文展开历次改进报告 |

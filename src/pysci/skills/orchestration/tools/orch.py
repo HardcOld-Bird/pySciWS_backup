@@ -930,7 +930,14 @@ def _plan_router(action: str):
     }
 
     def _run(args: argparse.Namespace) -> int:
-        return handlers[action](args)
+        try:
+            return handlers[action](args)
+        except _plans.PlanYamlError as exc:
+            # 统一收口（backlog 20261015-202556）：任何 plan 子命令读到坏 YAML（手写缩进错位
+            # 最常见）都只印**一行**可读错误（含 file:line:col + 成因提示），不把 10 余行
+            # traceback 糊给组长。`plan new` 另在其内层用真实源文件路径报错（更准）。
+            print(exc.render())
+            return 2
 
     return _run
 

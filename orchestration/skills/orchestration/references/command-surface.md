@@ -12,8 +12,11 @@ pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §
 pysci-orch plan run <id> --text "<当前环节任务书>" [--evidence <报告.md>]  # 推进（交接处暂停；成员含 devops）
 pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
 #   └ --evidence：收尾 kind:self 组长环节（文件存在 + 标题段 lint 通过才置 done，PSEP_3 §2.1）
-#   └ 两者公共旗标（以 `-h` 实测为准）：--session <latest|new|sid>（**续作余量已尽必须 new**）
-#     /--name <slug>/--model-tier/--effort/--max-turns/--dirs a,b/--dry/--task <文件>
+#   └ 两子命令旗标**各自独立**（照抄对方会被 argparse 拒，backlog 20261015-202557）：
+#     run 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --evidence
+#     advance 旗标：--text --task --session --model-tier --effort --dirs --dry --evidence
+#     （advance **无** --name/--max-turns；run **无** --dry。--session 默认 latest，
+#      **续作余量已尽必须 new**；--evidence 见上行）
 pysci-orch plan rework <tb-id> [--mode full|no_inspector|rework_only] [--plan-id X] [--force]
         # 返工任务书 → 三档模板骨架（A 综合项目改进／B 返工生产／C 最终报告）并登记（§4.2）；
         # 必有 [NEXT] 给「taskbooks link → advance」两步（返工件不走 plan new）

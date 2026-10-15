@@ -281,8 +281,49 @@ def _state_path(plan_id: str) -> Path:
     return PLANS_DIR / f"{plan_id}.state.json"
 
 
+class PlanYamlError(yaml.YAMLError):
+    """计划 YAML 解析失败：带 ``file:line:col`` 与人话成因提示（CLI 单行报错用）。
+
+    继承 :class:`yaml.YAMLError` 是**兼容性选择**：既有读面（dispatch / nextroute /
+    taskbooks）里「接住 ``yaml.YAMLError``」的代码不受影响；而想给单行可读报错的调用方用
+    :meth:`render`，定位与常见成因已经备好。
+
+    为什么需要它（backlog 20261015-202556）：裸 ``safe_load`` 的失败形态是 10 余行 traceback，
+    且把文件名显示成 ``<unicode string>``——手写 plan 缩进错一格就被糊脸，看不出是哪个文件
+    的哪一行、更看不出成因。
+    """
+
+    def __init__(self, path: Path | str | None, exc: yaml.YAMLError) -> None:
+        mark = getattr(exc, "problem_mark", None) or getattr(exc, "context_mark", None)
+        self.path = str(path) if path is not None else ""
+        self.line = int(getattr(mark, "line", -1)) + 1
+        self.col = int(getattr(mark, "column", -1)) + 1
+        self.problem = str(getattr(exc, "problem", None) or exc)
+        super().__init__(self.render())
+
+    def render(self) -> str:
+        loc = (
+            f"{self.path}:{self.line}:{self.col}"
+            if self.path
+            else f"line {self.line} col {self.col}"
+        )
+        return (
+            f"[!] YAML 解析失败 {loc} {self.problem}"
+            "（常见成因：层级缩进错位 / 冒号后缺空格 / 混入 Tab）"
+        )
+
+
+def parse_plan_yaml(src: Path | str) -> dict:
+    """读并解析计划 YAML；坏 YAML → :class:`PlanYamlError`（带 file:line:col 与成因提示）。"""
+    p = Path(src)
+    try:
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise PlanYamlError(p, exc) from exc
+
+
 def _load_yaml(plan_id: str) -> dict:
-    return yaml.safe_load(_plan_path(plan_id).read_text(encoding="utf-8")) or {}
+    return parse_plan_yaml(_plan_path(plan_id))
 
 
 def _load_state(plan_id: str) -> dict:
@@ -401,7 +442,11 @@ def cmd_plan_new(args) -> int:
     if not src.exists():
         print(f"[!] 计划文件不存在：{src}")
         return 2
-    plan = yaml.safe_load(src.read_text(encoding="utf-8")) or {}
+    try:
+        plan = parse_plan_yaml(src)
+    except PlanYamlError as exc:
+        print(exc.render())
+        return 2
     if not plan.get("steps"):
         print("[!] 计划缺少 steps（格式见 README §4.2）")
         return 2

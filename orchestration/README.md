@@ -61,7 +61,8 @@
 自办（`plan advance --evidence` 收尾）；`advance` 收尾全部终态 + [NEXT] **三栏工作清单**、`run` 等全部
 在途。**返工流**：TUI 三段式驳回 → `plan rework` 三档骨架 → 送审 gate（verdict=A 才派单）/两次不过
 中止 → `taskbooks report` 全流程报告。**跨任务路由 `next`**（优先级→动作类别→序：任务卡片 + 四机械
-推送点）。**全量见 `references/plan-and-routing.md`。**
+推送点）。**全量见 `orchestration/references/plan-and-routing.md`**（细节块统一在
+`orchestration/references/` 下——技能侧 `references/` 是**另一套**，勿混）。
 
 **4.3 设计红线**：① 每条命令输出自含「下一步」；② fail-open（orch 故障按**附录 A** 降级，state 全可读）；
 ③ orch 自身也是 devops 维护对象，改进走同一 backlog 循环（§6）。
