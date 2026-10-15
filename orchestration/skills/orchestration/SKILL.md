@@ -46,10 +46,12 @@ harness-eval.md；巡检引擎 references/inspector-engine.md；判决包 verdic
 并行判定 / `kind:self` 时机 / superstep 嵌套选择 / 验收点）。
 
 **夜航速查**（细则 `references/patrol-watchdog.md` §5）：开关真源
-`data/pysci_settings.toml [night] enabled`（**热切换**，`orch status` 可读）。ON 时经
-SessionStart/PostCompact 注入政策全文＝**限时预授权**（决策权等同用户、事后追溯、留痕）；
-`AskUserQuestion` 被机械拦截 → 该问的转 `consult-twin`/twin 终裁；**不得因等用户停滞观望**。
-终态两态：全部完成／严重阻碍——收尾写总结并把 `enabled` 改回 `false`。
+`data/pysci_settings.toml [night] enabled`——改一行**下一轮即生效**（Stop 钩子按会话差分
+注入，无变化零输出）。ON 时经 SessionStart/PostCompact 注入政策全文＝**限时预授权**
+（决策权等同用户、事后追溯、留痕）；`AskUserQuestion` 被机械拦截 → 该问的转
+`pysci-orch consult-twin <案卷.md>`（twin 终裁）或 `pysci-orch consult "<问题>"`（副组长）；
+**不得因等用户停滞观望**。终态两态：全部完成／严重阻碍——**收尾写总结即结束推进；开关只归
+用户手动，LLM 永不改写**。
 
 ## 派发要领
 

@@ -11,9 +11,9 @@
 | 会话级（②） | **队列感知巡更伪事件**（`PENDING-WORK`/`STALL`，随 ① 同帧判定） | 随 ① 同生命周期（**自动起止**：队列全空即零唤醒） | 没有事件但**状态该看而没人看**（队列/backlog/事件流/任务书非空、条目停滞） |
 | 机器级（③） | `pysci-watchdog`（`orch watchdog start`；OS 计划任务每 5 min 幂等点火） | 独立于会话/机器重启（③ 的 OS 注册在） | listener/watchdog **被无声杀死**、会话消亡连坐 |
 
-关系：① 主路（零轮询、事件驱动）；② 队列感知巡更（补「没事件但该知道」，判据单点
-`watch.queue_pressure`，**无需挂/撤 cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳
-stale → 重臂）。三层互相独立：任一层坏掉，另两层仍在。
+关系：① 主路（零轮询、事件驱动）；② 队列感知巡更（补「没事件但该知道」，**无需挂/撤
+cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳 stale → 重臂）。三层互相独立：任一层
+坏掉，另两层仍在。
 
 ## 2. 巡更（②：队列感知，自动起止）
 
@@ -97,9 +97,9 @@ stale → 重臂）。三层互相独立：任一层坏掉，另两层仍在。
 
 ## 5. 夜航模式（PSEP_2；总开关 `data/pysci_settings.toml [night] enabled`）
 
-用户离机无人值守推进：**手动单开关、热切换**（钩子每回合现读）。**政策注入**
-（`night-policy.sh`，SessionStart/PostCompact 经 `additionalContext` 注入授权书全文）+
-**判据**（`night-gate.sh` 夜航内拒 `AskUserQuestion` 并转 `consult-twin`；
-`mirror-pending.json` 非空 → 夜航 `PENDING-WORK`）；两层皆 **fail-open**。保险丝层**缓行**
-（预留键勿设，PSEP_2 §3.4）；twin 代裁追溯/复核走 `orch twin-review`（授权依据标「夜航
-预授权」）。**全文、授权书与实测面见 README §4.5「夜航模式」**。
+用户离机无人值守推进：**手动单开关**（钩子每回合现读）。**政策注入**（`night-policy.sh`：
+SessionStart/PostCompact 注授权书全文；**开关变更下一轮生效**——Stop 钩子按会话差分注入，
+无变化零输出）+ **判据**（`night-gate.sh` 拒 `AskUserQuestion` 转 `consult-twin`；
+`mirror-pending.json` 非空 → 夜航 `PENDING-WORK`）；两层 **fail-open**。**开关只归用户手动**
+（LLM 永不改写），终态写总结即结束推进。保险丝层**缓行**（预留键勿设，§3.4）；twin 代裁走
+`orch twin-review`。全文见 README §4.5。
