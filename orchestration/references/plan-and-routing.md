@@ -1,7 +1,7 @@
 # 计划驱动与跨任务路由（README §4.2 全量）
 
 > 由 `orchestration/README.md §4.2` 迁入（细则块；**唯一权威仍是 README**）。命令表见
-> `command-surface.md`；拆解方法论见 `plan-decomposition.md`。
+> `command-surface.md`；拆解方法论与 **plan YAML 字段速查表（§8）**见 `plan-decomposition.md`。
 
 **plan-first**：一切工作走 plan。`steps[]` 元素二型**递归**——普通 step 与 **superstep**
 （`{id, mode: serial|parallel, children:[…]}`）；叶子在 state.json 扁平化为**点路径 id**
