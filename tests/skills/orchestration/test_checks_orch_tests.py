@@ -172,6 +172,87 @@ def test_sentinel_note_in_stdout_cannot_flip_a_green_run(monkeypatch):
     assert results[0]["returncode"] == 0
 
 
+# ---------------------------------------------------------------------------
+# 无关在飞脏面 → 降级 advisory，不判交付（backlog 20261015-130555/132143-devops）
+# ---------------------------------------------------------------------------
+DIRTY = ["orchestration/state/registry.json", "orchestration/state/backlog.json"]
+
+
+def test_contaminated_fail_degrades_to_advisory(monkeypatch):
+    """判据②：现场有**无关**在飞脏面时，FAIL 降级 advisory——不写进 failed_checks，
+    故交付 `code` 不受影响、**不触发抢救与续作**（dispatch 的口径是 `verdict=="fail"`）。"""
+    from pysci.skills.orchestration.tools import checks as cm
+
+    _fake_run(monkeypatch, rc=1, out="2 failed, 1617 passed")
+    monkeypatch.setattr(cm, "_unrelated_dirty_paths", lambda _p: DIRTY)
+
+    results = run_checks(
+        [Artifact(path="x", check="orch-tests")], Registry.load(), member_pod=Path(".")
+    )
+
+    r = results[0]
+    assert r["verdict"] == "advisory", r
+    assert r["dirty_face"] == DIRTY, "须留证（哪些脏面判的）"
+    assert r["output_tail"].startswith("[check advisory:"), r["output_tail"][:80]
+    assert not [c for c in results if c["verdict"] == "fail"], (
+        "advisory 不计入 failed_checks → 交付不判 code=2"
+    )
+
+
+def test_real_failure_without_dirty_face_still_fails(monkeypatch):
+    """对照：现场干净 → 真红照判 fail（降级不是「一律放行」）。"""
+    from pysci.skills.orchestration.tools import checks as cm
+
+    _fake_run(monkeypatch, rc=1, out="3 failed")
+    monkeypatch.setattr(cm, "_unrelated_dirty_paths", lambda _p: [])
+
+    results = run_checks(
+        [Artifact(path="x", check="orch-tests")], Registry.load(), member_pod=Path(".")
+    )
+
+    assert results[0]["verdict"] == "fail"
+    assert "dirty_face" not in results[0]
+
+
+def test_green_delivery_beside_an_unrelated_dirty_face_is_pass(monkeypatch):
+    """判据的阳性组合：主树有无关脏面 + 本交付自证全绿 → 仍 `pass`（`code=0`）。"""
+    from pysci.skills.orchestration.tools import checks as cm
+
+    _fake_run(monkeypatch, rc=0, out="1621 passed")
+    monkeypatch.setattr(cm, "_unrelated_dirty_paths", lambda _p: DIRTY)
+
+    results = run_checks(
+        [Artifact(path="x", check="orch-tests")], Registry.load(), member_pod=Path(".")
+    )
+
+    assert results[0]["verdict"] == "pass" and results[0]["returncode"] == 0
+
+
+def test_unrelated_dirty_paths_excludes_the_artifact_itself(monkeypatch, tmp_path):
+    """「无关」的界定：产物自身（可合法未提交）不算无关脏面。"""
+    from pysci.paths import PROJECT_ROOT
+    from pysci.skills.orchestration.tools import checks as cm
+    from pysci.skills.orchestration.tools import drain
+
+    art = (
+        PROJECT_ROOT
+        / "tests"
+        / "skills"
+        / "orchestration"
+        / "test_checks_orch_tests.py"
+    )
+    porcelain = (
+        f" M {art.relative_to(PROJECT_ROOT).as_posix()}\n"
+        " M orchestration/state/registry.json\n"
+        "?? orchestration/state/__pycache__/x.pyc\n"
+    )
+    monkeypatch.setattr(drain, "_run_git", lambda *a: (0, porcelain))
+
+    dirty = cm._unrelated_dirty_paths(art)
+
+    assert dirty == ["orchestration/state/registry.json"], dirty
+
+
 def test_registry_load_save_roundtrip_preserves_orch_tests(tmp_path, monkeypatch):
     """Registry.load→save→load 往返保留 checks 块两条（save 走原子写 tmp→replace）。"""
     src = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
