@@ -286,8 +286,22 @@ def _load_yaml(plan_id: str) -> dict:
 
 
 def _load_state(plan_id: str) -> dict:
+    """读计划状态（**保 falsy 语义**：文件缺席＝「无此计划」，仍回 ``{}``）。
+
+    只有**文件在册**时才归一 `steps` 键（缺键补空表）——实案：`pysci-orch next --limit 10`
+    崩 `KeyError: 'steps'`（盘上有计划 YAML 却无 state 文件的一批计划 → 读面直接下标）。
+    缺席路径**不动**：多处用 ``if not state:`` 判「计划是否存在」（如 ``cmd_plan_drop``），
+    改成 truthy 会改掉这些调用点的行为。崩溃点本身按空处理，见
+    :func:`_inflight` / :func:`_worklist_panes`（backlog 20261015-154311）。
+    """
     p = _state_path(plan_id)
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    if not p.exists():
+        return {}
+    data = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return {"steps": []}
+    data.setdefault("steps", [])
+    return data
 
 
 #: 公开别名（门面 status 命令读取计划状态用）。
@@ -772,28 +786,34 @@ def _settle_terminal_jobs(
 
 
 def _inflight(state: dict) -> list[dict]:
-    """在途叶子（status=queued）。"""
-    return [s for s in state["steps"] if s.get("status") == "queued"]
+    """在途叶子（status=queued）。
+
+    按**空表**容错读 steps（backlog 20261015-154311）：state 文件缺席时 `_load_state` 保
+    falsy 语义回 `{}`（多处 `if not state:` 依赖它判「计划是否存在」），故容错落在读点上。
+    """
+    return [s for s in (state.get("steps") or []) if s.get("status") == "queued"]
 
 
 def _worklist_panes(plan: dict, state: dict) -> dict[str, list[str]]:
     """三栏工作清单的数据面（可派发/在途/待验收）——[NEXT] 等处共用同一判据。
 
     「在途」含成员队列 job（``queued``）与组长自办环节（``self_awaiting``）——两者都是
-    「已在办、未收尾」，只是驱动者不同（worker vs 组长）。
+    「已在办、未收尾」，只是驱动者不同（worker vs 组长）。**steps 缺席按空表读**（实案
+    `pysci-orch next` 即在此崩 `KeyError: 'steps'`，backlog 20261015-154311）。
     """
     tree = _tree(plan)
     status_of = _status_of(state)
+    rows = state.get("steps") or []
     return {
         "dispatchable": tree.dispatchable(status_of),
         "inflight": [
             str(s["id"])
-            for s in state["steps"]
+            for s in rows
             if str(s.get("status")) in ("queued", SELF_AWAITING)
         ],
         "need_leader": [
             str(s["id"])
-            for s in state["steps"]
+            for s in rows
             if str(s.get("status")) in ("blocked", "failed", "run_failed")
         ],
     }
