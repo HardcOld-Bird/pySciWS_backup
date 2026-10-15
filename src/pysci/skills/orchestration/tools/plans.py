@@ -190,9 +190,15 @@ def _print_self_guidance(
     print("[NEXT]")
     print(f"  环节 {step_state['id']} 为组长自办环节（kind: self）——不入成员队列。")
     print(f"    粗描述原文：{sy.get('brief', '（无）')}")
-    secs = sy.get("evidence_sections") or []
+    secs = sy.get("evidence_sections")
+    if not secs:  # role-only leaf：回退 role 缺省特征段，**与 _check_evidence 同源**
+        # （backlog 20261015-235101-devops）此前引导面只认 evidence_sections，role 缺省段
+        # 不打印 → 组长写 evidence 靠猜关键词（写中「拆解」才过、写「改进派单」被拒）。
+        # 把判据**附送到触发点**：打印与校验取自同一 ROLE_EVIDENCE_SECTIONS。
+        secs = ROLE_EVIDENCE_SECTIONS.get(str(sy.get("role") or ""), ())
     if secs:
-        print(f"  交付 evidence 须含标题段：{'、'.join(str(s) for s in secs)}")
+        src = "本环节声明" if sy.get("evidence_sections") else "role 缺省"
+        print(f"  交付 evidence 须含标题段（{src}）：{'、'.join(str(s) for s in secs)}")
     else:
         print("  交付 evidence 须为 Markdown 报告（含至少一个 `# …` 标题段）")
     print(
@@ -279,6 +285,21 @@ def _plan_path(plan_id: str) -> Path:
 
 def _state_path(plan_id: str) -> Path:
     return PLANS_DIR / f"{plan_id}.state.json"
+
+
+#: 计划 YAML 的序列化宽度：**禁用折行**。PyYAML ``safe_dump`` 默认 ``width=80`` 会把长
+#: ``brief`` 折成多行，于是任何**重新序列化**的计划（plan new/edit/amend/rework/adhoc 都会
+#: 走过 ``safe_dump``）在手写长行计划上产生「未编辑环节也变」的折行漂移——工具重序列化
+#: 即漂移源头（backlog 20261015-235100-devops）。取足够大值使 ``dump(load(x)) == x``
+#: 对**规范形态**（不折行）成立 ⇒ 重序列化幂等、未改动的计划字节不变。
+_PLAN_YAML_WIDTH: int = 10**9
+
+
+def _dump_plan(plan: dict) -> str:
+    """计划 dict → YAML 文本（**稳定/幂等**：不折行；重复序列化字节不变）。"""
+    return yaml.safe_dump(
+        plan, allow_unicode=True, sort_keys=False, width=_PLAN_YAML_WIDTH
+    )
 
 
 class PlanYamlError(yaml.YAMLError):
@@ -456,9 +477,7 @@ def cmd_plan_new(args) -> int:
         return 2
     PLANS_DIR.mkdir(parents=True, exist_ok=True)
     plan["id"] = plan_id
-    _plan_path(plan_id).write_text(
-        yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8"
-    )
+    _plan_path(plan_id).write_text(_dump_plan(plan), encoding="utf-8")
     state = _reconcile(plan, {"plan_id": plan_id, "created": _now()})
     _save_state(plan_id, state)
     tree = _tree(plan)
@@ -1333,7 +1352,12 @@ def _rework_A(tb_id: str, rnd: int) -> dict:
                 "role": "improvement_plan",
                 "gate_jury": f"{tb_id}-jury",
             },
-            {"id": "a5", "member": "devops", "brief": "改进实施"},
+            {
+                "id": "a5",
+                "member": "devops",
+                "brief": "改进实施",
+                "member_placeholder": True,
+            },
         ],
     }
 
@@ -1346,7 +1370,12 @@ def _rework_B(node_id: str, tb_id: str) -> dict:
         "brief": "返工执行",
         "children": [
             {"id": "b1", "kind": "self", "brief": "重拆解返工", "role": "rework_plan"},
-            {"id": "b2", "member": "devops", "brief": "返工生产环节"},
+            {
+                "id": "b2",
+                "member": "devops",
+                "brief": "返工生产环节",
+                "member_placeholder": True,
+            },
             {
                 "id": "b_last",
                 "kind": "self",
@@ -1378,7 +1407,12 @@ def _rework_C(tb_id: str) -> dict:
                 "brief": "拆解派单",
                 "gate_jury": f"{tb_id}-discoverability",
             },
-            {"id": "c4", "member": "devops", "brief": "改进实施"},
+            {
+                "id": "c4",
+                "member": "devops",
+                "brief": "改进实施",
+                "member_placeholder": True,
+            },
         ],
     }
 
@@ -1562,9 +1596,7 @@ def cmd_plan_rework(args) -> int:
         return 2
     PLANS_DIR.mkdir(parents=True, exist_ok=True)
     plan["id"] = plan_id
-    _plan_path(plan_id).write_text(
-        yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8"
-    )
+    _plan_path(plan_id).write_text(_dump_plan(plan), encoding="utf-8")
     _save_state(plan_id, _reconcile(plan, {"plan_id": plan_id, "created": _now()}))
     print(
         f"[√] 返工计划已登记：{plan_id}（模式 {mode}，模板骨架 {len(plan['steps'])} 顶层节点）"
@@ -1576,6 +1608,8 @@ def cmd_plan_rework(args) -> int:
         who = leaf.yaml.get("member") or (
             "self（组长）" if leaf.kind == KIND_SELF else "?"
         )
+        if leaf.yaml.get("member_placeholder"):  # backlog 20261015-235101-devops
+            who += "（占位，按 §5 分工于拆解环节改派）"
         gate = (
             f"  [gate:{leaf.yaml['gate_jury']}]" if leaf.yaml.get("gate_jury") else ""
         )
@@ -1645,9 +1679,7 @@ def cmd_plan_edit(args) -> int:
             print(f"  - {v}")
         return 2
 
-    _plan_path(plan_id).write_text(
-        yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8"
-    )
+    _plan_path(plan_id).write_text(_dump_plan(plan), encoding="utf-8")
     _save_state(plan_id, _reconcile(plan, old))
     print(f"[√] 环节 {sid} 已更新（计划 {plan_id}）：")
     print(f"    brief = {str(leaf.get('brief') or '')[:80]}")
@@ -1753,9 +1785,7 @@ def cmd_plan_adhoc(args) -> int:
         ],
     }
     PLANS_DIR.mkdir(parents=True, exist_ok=True)
-    _plan_path(plan_id).write_text(
-        yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8"
-    )
+    _plan_path(plan_id).write_text(_dump_plan(plan), encoding="utf-8")
     _save_state(plan_id, _reconcile(plan, {"plan_id": plan_id, "created": _now()}))
     print(f"[√] adhoc 计划已登记：{plan_id}")
 
