@@ -29,15 +29,15 @@ pysci-orch plan list | plan drop <id>
 pysci-orch suggestions                   # 待审批改进建议（附质检标记，合规显示 []）
 pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<理由>")
         [--note "..."] [--no-wake] [--criteria "<判据>"] [--solo]  # 四态必居其一
-        # 例外=缺陷×该跳 blocked。判决包 verdict-package.md；大单 solo-batching.md
-#   └ 组长立单（**无命令**：手写文件即立案，扫的是目录）：
+        # 例外=缺陷×当跳 blocked；判决包 verdict-package.md；大单 solo-batching.md
+#   └ 组长立单（**无命令**，手写即立案）：
 #     落点 `orchestration/state/suggestions/<ts>-<member>.md`（`<ts>`=YYYYMMDD-HHMMSS；
 #     后缀是**来源**成员，组长代补时写**目标**成员。列表 `[member]` 列**即**该后缀 ⇒ 代补单
 #     显示的是**目标**成员（判断来源看正文）。
 #     正文须含 `kind: defect|usability`
 #     与 `success_criteria:` 段；**实质正文**（去空白/首行标题/`kind:|source:|fingerprint:`
-#     标记行）须 ≥40 字，否则 `orch suggestions` 标 `[!] 空壳建议`；合规标 `[]`。
-#     流程：手写 → `orch suggestions` 自检 → `orch approve <id> <四态之一>` → backlog FIFO → worker 销账
+#     标记行）≥40 字，否则标 `[!] 空壳建议`；合规标 `[]`。
+#     流程：手写 → suggestions 自检 → approve <id> 四态之一 → backlog FIFO → worker 销账
 #   └ **重复建议单**：`resolve` **不**收建议单 id（作用域=backlog 条目）；既定
 #     `reject <id> --override "<去重依据：合并至哪单>"`。历史面该单显示「已否决」而事实是
 #     「内容经另单采纳」——审计以 `--override` 正文为准。（`--as-duplicate`／resolve 扩作用域
@@ -70,10 +70,10 @@ pysci-orch stats [--plan id|--member m|--days N]
 pysci-orch requeue <条目id> [--note "…"]   # 回排：needs_leader → pending 并唤醒 drain（组长面正门）
 pysci-orch resolve <条目id> --note "…"     # 销账：确认已达标的 needs_leader 条目 → done（--note 必填留痕）
 #   └ 两者作用域**同**：backlog 条目且 **status=needs_leader**；**不收建议单 id**（见上方立单块）
-pysci-orch watchdog start|stop|status       # watch 自愈监督者：start 幂等 / stop 广播纪元停全部实例 / status 报读数（含逻辑实例数）
+pysci-orch watchdog start|stop|status       # 看门狗生命周期：start 幂等 / stop 广播纪元停全部 / status 报读数（含逻辑实例数）
 pysci-orch drain-stop                       # 请求 devops worker 协作式停止（计划器 + devops FIFO worker 两处 cancel）
 pysci-orch refresh-models                   # 按 --list-models 刷新 registry 模型映射（drain 启动亦自动执行一次）
-pysci-orch twin-review [case] (--list|--confirm|--reject) [--note "…"]  # 用户复核 twin 裁决（否决入 override 账；twin-taste-mirror.md）
+pysci-orch twin-review [case] (--list|--confirm|--reject) [--note "…"]  # 用户复核 twin 裁决（否决入 override 账）
 # —— 底层命令面（降级/调试）——
 pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
 pysci-orch sessions <member> [--all|--archive <sid> [--distill]|--prune <sid>]

@@ -19,6 +19,14 @@ SKILL.md「派发要领 / 归档与成本 / 降级」是压缩版；本文件补
   不进 M，故 M<N 是正常形态，不是漏记。
 - 耗时/成本异常增长的成员会话 → 提请组长归档轮换（见 devops 「巡检清单」）。
 
+## 交付全文留档（`orchestration/state/deliveries/`）
+
+每个 job 的**完整交付正文**落 `orchestration/state/deliveries/<job-id>.md`（头部元数据 + 正文
+原文；**失败交付同样留档**——对返工分析有价值），落盘即提交入 git，远端/新克隆可取。
+**JOB-DONE / STEP-REVIEW-DONE 事件细节自带该留档的绝对路径**：watch 唤醒行与 `events drain`
+输出都能直接看到，故组长想在 `plan advance`（结算+派发）**之前**先读全文把关时，**不必**再猜
+目录或翻 ledger（backlog 20261015-205906）。`plan advance` 的结算段也打印同一路径。
+
 ## devops 派发（双通道，task-20261014-devops-gap-d1/d2）
 
 devops 是**队列成员**，两条通道**并存、非二选一**：
