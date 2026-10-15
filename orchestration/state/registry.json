@@ -99,6 +99,12 @@
       "max_turns": 60,
       "timeout_s": 7200,
       "mcp_config": ".qoder/mcp.json"
+    },
+    "drawing": {
+      "pod": "orchestration\\pods\\drawing",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
     }
   },
   "inspector": {
