@@ -93,6 +93,12 @@
       "max_turns": 60,
       "timeout_s": 7200,
       "mcp_config": ".qoder/mcp.json"
+    },
+    "writing": {
+      "pod": "orchestration\\pods\\writing",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
     }
   },
   "inspector": {
@@ -207,25 +213,21 @@
     "qwen": {
       "main": [
         "ed6f5996-0992-479f-86a8-3f29ce0e794c",
-        "1a54cc57-e614-4521-80cc-447de31dc896",
-        "Qwen3.8-Flash"
+        "1a54cc57-e614-4521-80cc-447de31dc896"
       ],
       "pro": [
         "982ae403-bc5e-4f74-996d-04a9cd66f933",
-        "1a54cc57-e614-4521-80cc-447de31dc896",
-        "Qwen3.8-Flash"
+        "1a54cc57-e614-4521-80cc-447de31dc896"
       ]
     },
     "mimo": {
       "main": [
         "017036af-b630-498a-bfea-883a20c67e33",
-        "1a54cc57-e614-4521-80cc-447de31dc896",
-        "Qwen3.8-Flash"
+        "1a54cc57-e614-4521-80cc-447de31dc896"
       ],
       "pro": [
         "99127e47-626d-421f-b0cb-02ffdbf1ada7",
-        "1a54cc57-e614-4521-80cc-447de31dc896",
-        "Qwen3.8-Flash"
+        "1a54cc57-e614-4521-80cc-447de31dc896"
       ]
     }
   }

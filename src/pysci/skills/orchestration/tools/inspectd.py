@@ -214,6 +214,20 @@ PATROL_MENU: tuple[dict[str, Any], ...] = (
         ),
         "self_cover": False,
     },
+    {
+        "id": "info-architecture",
+        "label": "交付信息架构抽查",
+        "brief": (
+            "按验收纪律 §4「高频查阅维度集中呈现」抽查**近期交付物**——"
+            "`orchestration/state/deliveries/` 留档或 `data/` 下的交付物：先读该节判据"
+            "（真本 `orchestration/skills/orchestration/references/acceptance-discipline.md`），"
+            "再逐条核对该交付物的信息组织质量。**判据的唯一维护点在该节，本项不复述条款**"
+            "（复述一份就等着两处漂移）。不合判据即立案：`kind=usability`，走既有发现→"
+            "分流链——`pysci-inspect finding add` 附被抽交付物路径与未满足的判据条目，"
+            "供对盘复核。"
+        ),
+        "self_cover": False,
+    },
 )
 
 
