@@ -190,38 +190,39 @@ def test_key_matrix_matches_guard_for_all_actions(tbdir):
 
 
 def test_every_advertised_key_has_an_observable_effect():
-    """菜单 → Enter 每模块 → 详情视图下广告的键逐一按下：都有可观察效果（视图切换）。"""
+    """广告的键必须有可观察效果（s4 键位收敛：`t`/`j` **只在主菜单**广告）。
+
+    菜单：`t`/`j` 逐一按下都切视图；详情视图：二者不再出现在 Footer 数据面、
+    按下也无副作用（留在详情）。
+    """
     effects: dict[str, str] = {}
 
     async def _go():
         app = tui.PysciTUI()
         async with app.run_test() as pilot:
             await pilot.pause()
-            lv = app.query_one("#menu", tui.ListView)
-            # 每个模块都用「菜单 → Enter」走一遍（用户路径）
-            for i, mod in enumerate(app._mods):
-                if mod.key == "taskbooks":
-                    continue  # 任务书 Enter 走专用面板（f1），分支见下
-                lv.index = i
-                await pilot.pause()
-                await pilot.press("enter")
-                assert app.view == "detail"
-                await pilot.press("escape")
-                assert app.view == "menu"
-            # 详情视图广告的键：t / j
-            lv.index = 1
-            await pilot.pause()
-            await pilot.press("enter")
-            assert app.view == "detail"
             await pilot.press("t")
             effects["t"] = app.view
             await pilot.press("escape")
             await pilot.press("j")
             effects["j"] = app.view
+            await pilot.press("escape")
+            assert app.view == "menu"
+            lv = app.query_one("#menu", tui.ListView)
+            lv.index = 1
+            await pilot.pause()
+            await pilot.press("enter")
+            assert app.view == "detail"
+            keys = set(app.screen.active_bindings)
+            for k in ("t", "j", "n", "a", "r"):
+                assert k not in keys, f"详情视图不得广告 `{k}`"
+            for k in ("t", "j"):
+                await pilot.press(k)
+                assert app.view == "detail", f"详情视图按 `{k}` 不得有副作用"
 
     _run(_go())
-    assert effects["t"] == "taskbooks", "detail 视图广告的 `t` 必须有效果"
-    assert effects["j"] == "journal", "detail 视图广告的 `j` 必须有效果"
+    assert effects["t"] == "taskbooks", "菜单广告的 `t` 必须有效果"
+    assert effects["j"] == "journal", "菜单广告的 `j` 必须有效果"
 
 
 def test_unadvertised_key_has_no_side_effect():
@@ -299,7 +300,7 @@ def test_walk_every_surface_without_crash():
 
 
 def test_detail_partitioning_three_zones():
-    """详情页分区：标题区 / 读数区 / 操作提示区；s3 起旧「提示字样」行已从数据面清除。"""
+    """详情页三区（标题 / 读数 / 操作提示）：提示由 TUI 生成，**不含 Esc 字样**（s4：Esc 归 Footer）。"""
 
     async def _go():
         app = tui.PysciTUI()
@@ -310,16 +311,11 @@ def test_detail_partitioning_three_zones():
             await pilot.pause()
             await pilot.press("enter")
             assert app.view == "detail"
-            title = app.detail_title
-            body = app.detail_body
-            hint = app.detail_hint
-            assert "详情" in title
-            assert "待决" in body  # 读数在读数区
-            assert "偏差报告" in body  # s3：待决模块新增偏差报告（强制处理队列）区块
-            assert "Esc/← 返回主菜单" in hint
-            # s3 用户点名清理：旧提示行不再出现在读数区或提示区
-            for gone in ("口述动作", "批复入口"):
-                assert gone not in body and gone not in hint
+            assert "详情" in app.detail_title
+            assert "待决" in app.detail_body  # 读数在读数区
+            assert "偏差报告" in app.detail_body  # s3：偏差报告（强制处理队列）区块
+            for gone in ("Esc/← 返回", "口述动作", "批复入口"):
+                assert gone not in app.detail_text, gone
 
     _run(_go())
 

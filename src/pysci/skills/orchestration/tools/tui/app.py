@@ -2,7 +2,7 @@
 
 在 m1 骨架（模块列表 + ↑↓/Enter/Esc）之上长出**主菜单交互模型**（§2.2）与**更新水位**：
 每模块一行「标题（左）＋ 更新徽标（右）」、选中项下方展开 3–5 行概览板、Enter 进全屏详情、
-Esc/← 返回；**进入详情即写该模块水位**（真源 ``state/mirror-seen.json``，见
+Esc 返回上级；**进入详情即写该模块水位**（真源 ``state/mirror-seen.json``，见
 :mod:`.watermark`）。`journal` 的编号分流菜单迁进 TUI 口述动作（主菜单 `j` 与「待决与验收」
 详情内的入口；偏好/指令二分法理不变）。
 
@@ -18,7 +18,8 @@ import sys
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical
+from textual.widget import Widget
 from textual.widgets import (
     Button,
     Footer,
@@ -48,6 +49,7 @@ from .theme import (
     _T_SUBTLE,
     _T_TITLE,
 )
+from .widgets import MarkedList, MarkedVerticalScroll
 
 #: 无更新时的灰点（§2.2：`● NEW` / 数字 / 灰点）。
 _BADGE_NONE = "·"
@@ -59,14 +61,14 @@ _BADGE_NONE = "·"
 #: 用户打字要的是字符，不是快捷键。
 _ACTIONS_BY_VIEW: dict[str, frozenset[str]] = {
     "menu": frozenset({"taskbooks", "journal"}),
-    "detail": frozenset({"taskbooks", "journal"}),
+    # 详情/任务书面板不再是 `t`/`j` 的阵地（用户 2026-10-16：t/j 只在主菜单）——
+    # 跨面板跳转由 Esc 回菜单再进，footer 不广告别处无效的键。
+    "detail": frozenset(),
     "journal": frozenset(),
-    "taskbooks": frozenset(
-        {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
-    ),
+    "taskbooks": frozenset({"tb_new", "tb_accept", "tb_reject"}),
     # 任务书详情页（Enter）：**批复就在读报告处**——`a`/`r` 在此可用（`n` 新增不可用：
     # 详情页不是列表，新增无处落）。
-    "tb-detail": frozenset({"taskbooks", "tb_accept", "tb_reject", "journal"}),
+    "tb-detail": frozenset({"tb_accept", "tb_reject"}),
     "tb-new": frozenset(),
     "tb-reject": frozenset(),
 }
@@ -78,7 +80,7 @@ _GATED_ACTIONS: frozenset[str] = frozenset(
 
 #: 详情页**滚动** action（用户 2026-10-15：「详情页无法滚动，最大化窗口仍看不全」）。
 #: 单独一张闸（不进 `_GATED_ACTIONS`）：滚动键不进 footer 广告面（那会把提示行挤满），
-#: 只在两个详情视图生效——位置指示行本身就是它的可见性线索。
+#: 只在 :data:`_SCROLL_PANES` 所列视图生效——位置指示行本身就是它的可见性线索。
 _SCROLL_ACTIONS: frozenset[str] = frozenset(
     {
         "detail_scroll_up",
@@ -90,11 +92,13 @@ _SCROLL_ACTIONS: frozenset[str] = frozenset(
     }
 )
 
-#: 可滚动的详情视图：``视图名 → (滚动容器 id, 正文 id, 位置指示 id)``。
-#: **两处同构**（模块详情 / 任务书详情），故用一张表而不是两套方法（§2.5 不留两份）。
-_SCROLL_PANES: dict[str, tuple[str, str, str]] = {
-    "detail": ("#detail-body", "#detail-body-text", "#detail-scroll"),
-    "tb-detail": ("#tb-detail-body", "#tb-detail-body-text", "#tb-detail-scroll"),
+#: 可滚动视图：``视图名 → (滚动容器 id, 位置指示 id)``。
+#: **一处同构**（模块详情 / 任务书详情 / 任务书列表），故用一张表而不是多套方法（§2.5 不留两份）。
+#: s5–s8 各自视图落地时**追加本表条目**（新面板自带位置行即自动获得滚动键与实时指示）。
+_SCROLL_PANES: dict[str, tuple[str, str]] = {
+    "detail": ("#detail-body", "#detail-scroll"),
+    "tb-detail": ("#tb-detail-body", "#tb-detail-scroll"),
+    "taskbooks": ("#tb-list", "#tb-scroll"),
 }
 
 #: 位置指示前缀（测试与用户读同一串）。
@@ -114,31 +118,11 @@ _PRIORITY_LABELS: tuple[str, ...] = ("优先级 高", "优先级 中（默认）
 # 主题常量已迁入 :mod:`.theme`（s2 共享层：唯一出处，本文件只插值引用）——
 # 同一视觉参数在 tui/ 全目录源码只硬编码一次（tests/test_tui_visual_structure.py
 # 的运行期拼接 grep 判据钉住）。
+#
+# 提示机制已退役（s4）：数据层详情不再含提示行（s1/s3 清理），逐行辨识提示行的
+# 机制（标记表 + 切分函数）已删——操作提示改由 TUI **生成**纯文本（见
+# `_render_detail`/`_open_tb_detail`），Esc 语义由 Footer 广告承担。
 # ---------------------------------------------------------------------------
-
-#: 详情页里「操作提示行」的辨识标记（渲染分区用：这些行从读数区挪进提示区，**不改数据层**）。
-_DETAIL_HINT_MARKERS = (
-    "按 `t`",
-    "Enter / `t`",
-    "推进：",
-    "多 plan 并行",
-    "审查入口",
-    "批复入口",
-    "口述动作",
-)
-
-
-def _split_detail(lines: list[str]) -> tuple[list[str], list[str]]:
-    """把详情行分成 **读数区** 与 **操作提示区**（只在渲染时分，数据层原样不动）。
-
-    尾部连续命中 :data:`_DETAIL_HINT_MARKERS` 的行归提示区；一行都不命中则提示区只有
-    「Esc/← 返回主菜单」。
-    """
-    body = list(lines)
-    hints: list[str] = []
-    while body and any(m in body[-1] for m in _DETAIL_HINT_MARKERS):
-        hints.insert(0, body.pop())
-    return body, hints
 
 
 class PysciTUI(App):
@@ -170,7 +154,9 @@ class PysciTUI(App):
     .row {{ width: 100%; height: 1; }}
     .row-title {{ width: 1fr; }}
     .row-badge {{ width: auto; color: $warning; text-style: bold; }}
-    #summary {{ height: auto; {_T_INSET} {_T_SUBTLE} }}
+    #summary {{ height: auto; {_T_BORDER_SOFT} {_T_BG} {_T_INSET} }}
+    #summary-title {{ {_T_TITLE} }}
+    #summary-body {{ {_T_BODY} }}
     #detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
     #detail-title {{ {_T_TITLE} }}
     #detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }}
@@ -185,6 +171,7 @@ class PysciTUI(App):
     #tb-list {{ height: 1fr; }}
     #tb-list > ListItem.-highlight {{ {_T_HL} }}
     #tb-msg {{ color: $success; }}
+    #tb-scroll {{ {_T_SUBTLE} height: 1; }}
     #tb-new {{ height: 1fr; {_T_INSET} {_T_BORDER_SOFT} {_T_BG} }}
     #tb-new-title {{ {_T_TITLE} }}
     #tb-new-body {{ height: 1fr; }}
@@ -227,6 +214,9 @@ class PysciTUI(App):
         self.detail_scroll_mark = ""
         self.tb_detail_scroll = 0
         self.tb_detail_scroll_mark = ""
+        # 任务书列表滚动态（s4 收编：ListView 也报位置）
+        self.tb_scroll = 0
+        self.tb_scroll_mark = ""
         self.journal_result = ""
         self.tb_items: list[dict] = []
         self.tb_msg = ""
@@ -244,13 +234,14 @@ class PysciTUI(App):
         yield Header()
         with Vertical(id="body"):
             yield ListView(*self._rows(), id="menu")
-            yield Static("", id="summary")
+            with Vertical(id="summary"):
+                yield Static("", id="summary-title")
+                yield Static("", id="summary-body")
             with Vertical(id="detail"):
                 yield Static("", id="detail-title")
-                with VerticalScroll(
+                yield MarkedVerticalScroll(
                     Static("", id="detail-body-text"), id="detail-body", can_focus=False
-                ):
-                    pass
+                )
                 yield Static("", id="detail-hint")
                 yield Static("", id="detail-scroll")
             with Vertical(id="journal"):
@@ -282,8 +273,9 @@ class PysciTUI(App):
                     "r 驳回选中（三段式：① 模式 → ② 优先级 → ③ 批语）",
                     id="tb-title",
                 )
-                yield ListView(id="tb-list")
+                yield MarkedList(id="tb-list")
                 yield Static("", id="tb-msg")
+                yield Static("", id="tb-scroll")
             with Vertical(id="tb-new"):
                 yield Static(
                     "新增任务书（① 选优先级 → 标题 + 多行正文 → 点「投递」落盘）",
@@ -302,12 +294,11 @@ class PysciTUI(App):
                 yield Static("", id="tb-new-msg")
             with Vertical(id="tb-detail"):
                 yield Static("", id="tb-detail-title")
-                with VerticalScroll(
+                yield MarkedVerticalScroll(
                     Static("", id="tb-detail-body-text"),
                     id="tb-detail-body",
                     can_focus=False,
-                ):
-                    pass
+                )
                 yield Static("", id="tb-detail-hint")
                 yield Static("", id="tb-detail-scroll")
             with Vertical(id="tb-reject"):
@@ -392,9 +383,16 @@ class PysciTUI(App):
                 continue
 
     def _mark_seen(self, mod: Module) -> None:
-        """进入详情即写水位（§2.2）。写失败不挡浏览（观察面 fail-open）。"""
+        """进入详情即写水位（§2.2）。**cursor 与已存水位相同则不写盘**——倒计时每秒
+        tick 不必每秒重写 ``mirror-seen.json``。写失败不挡浏览（观察面 fail-open）。"""
         try:
-            self._seen[mod.key] = mod.cursor()
+            cur = mod.cursor()
+        except Exception:  # noqa: BLE001 - 读数失败不塌浏览
+            return
+        if self._seen.get(mod.key) == cur:
+            return
+        try:
+            self._seen[mod.key] = cur
             watermark.save_seen(self._seen, self._seen_path)
         except Exception:  # noqa: BLE001
             return
@@ -426,8 +424,8 @@ class PysciTUI(App):
         （Textual 语义：`False` = 禁用且**不显示**于 Footer；`None` 只是禁用但仍显示）。
         其余 action（`back`/`quit` 与 widget 内部导航/提交）一律放行，绝不干预光标与输入。
 
-        滚动 action 另走一张闸（:data:`_SCROLL_ACTIONS`）：只在**详情视图**可用——别处按
-        上下/翻页键是列表光标与输入框的正常语义，绝不能被详情页的滚动抢走。
+        滚动 action 另走一张闸（:data:`_SCROLL_ACTIONS`）：只在 :data:`_SCROLL_PANES`
+        所列视图可用——别处按上下/翻页键是列表光标与输入框的正常语义，绝不能被滚动抢走。
         """
         if action in _SCROLL_ACTIONS:
             return self.view in _SCROLL_PANES
@@ -436,26 +434,36 @@ class PysciTUI(App):
         return action in _ACTIONS_BY_VIEW.get(self.view, frozenset())
 
     # ---- 详情页滚动（用户 2026-10-15：最大化窗口仍看不全）--------------------
-    def _scroll_widgets(self) -> tuple[VerticalScroll, Static, Static] | None:
-        """当前视图的（滚动容器, 正文, 位置指示）；非详情视图 → ``None``。"""
+    def _scroll_widgets(self) -> tuple[Widget, Static] | None:
+        """当前视图的（滚动容器, 位置指示）；非可滚视图/缺件 → ``None``。"""
         pair = _SCROLL_PANES.get(self.view)
         if pair is None:
             return None
         try:
             return (
-                self.query_one(pair[0], VerticalScroll),
+                self.query_one(pair[0]),
                 self.query_one(pair[1], Static),
-                self.query_one(pair[2], Static),
             )
         except Exception:  # noqa: BLE001 - 组合面容忍缺件（观察面 fail-open）
             return None
+
+    def on_pane_scrolled(self, pane: Widget) -> None:
+        """滚动知情接线（s2 ``ScrollMarkMixin`` 回调）：**任一**滚动来源——滚轮、滚动条
+        拖动、键盘、程序化赋值——都经 ``scroll_y`` reactive 走到这里 → 立即刷新位置指示。
+
+        修复用户实测缺陷：原先只有键盘路径手调 `_refresh_scroll_mark`，滚轮/滚动条导航
+        时指示不更新。只认**当前视图**的面板（隐藏面板的光标跟随滚动不串台）。
+        """
+        got = self._scroll_widgets()
+        if got is not None and got[0] is pane:
+            self._refresh_scroll_mark()
 
     def _refresh_scroll_mark(self) -> None:
         """把滚动位置写成指示行（`顶` / `45%` / `底`）并落进可断言的态。"""
         got = self._scroll_widgets()
         if got is None:
             return
-        pane, _text, mark = got
+        pane, mark = got
         max_y = int(pane.max_scroll_y)
         y = int(pane.scroll_y)
         if max_y <= 0:
@@ -469,6 +477,8 @@ class PysciTUI(App):
         mark.update(text)
         if self.view == "tb-detail":
             self.tb_detail_scroll, self.tb_detail_scroll_mark = y, text
+        elif self.view == "taskbooks":
+            self.tb_scroll, self.tb_scroll_mark = y, text
         else:
             self.detail_scroll, self.detail_scroll_mark = y, text
 
@@ -532,8 +542,8 @@ class PysciTUI(App):
         """任务书**详情页**（任何状态可进）：正文/批语/流程报告/返工卡片（数据层 :func:`taskbooks.detail_lines`）。
 
         三区渲染沿用模块详情页的分区（标题 / 读数 / 操作提示）；正文区是**可滚动**的
-        ``VerticalScroll``（交付报告可能很长），滚动位置由 :meth:`_reset_scroll` 复位到顶、
-        并在底部指示行报位置。
+        ``MarkedVerticalScroll``（交付报告可能很长），滚动位置由 :meth:`_reset_scroll` 复位到顶、
+        并在底部指示行报位置（滚轮/滚动条/键盘任一来源都实时刷新，见 :meth:`on_pane_scrolled`）。
         """
         from .. import taskbooks as _tb
 
@@ -541,15 +551,15 @@ class PysciTUI(App):
             return
         tid = str(self.tb_items[idx].get("id"))
         try:
-            raw = list(_tb.detail_lines(tid))
+            body = list(_tb.detail_lines(tid))
         except Exception as exc:  # noqa: BLE001 - 读数坏一项不塌详情（观察面 fail-open）
-            raw = [f"任务书 {tid}", f"[!] 详情读数失败：{type(exc).__name__}: {exc}"]
-        body, hints = _split_detail(raw)
+            body = [f"任务书 {tid}", f"[!] 详情读数失败：{type(exc).__name__}: {exc}"]
         self.view = "tb-detail"
         self.tb_detail_id = tid
         self.tb_detail_title = f"{tid}　详情"
         self.tb_detail_body = "\n".join(body)
-        self.tb_detail_hint = "  ".join([*hints, "Esc/← 返回任务书列表"])
+        # 操作提示由 TUI 生成（数据层详情已无提示行，s4 提示机制退役）；Esc 由 Footer 承担。
+        self.tb_detail_hint = "a 接受　r 驳回"
         self._hide_all_views()
         self.query_one("#tb-detail-title", Static).update(self.tb_detail_title)
         self.query_one("#tb-detail-body-text", Static).update(
@@ -574,12 +584,19 @@ class PysciTUI(App):
 
     # ---- 渲染 -------------------------------------------------------------
     def _render_summary(self, idx: int) -> None:
+        """概览板（§2.2）：**标题行**「〔模块名〕概览」＋读数正文（3–5 行，截行逻辑不变）。"""
         mod = self._mods[idx]
         try:
             lines = [ln for ln in mod.summary() if ln][:5]  # §2.2：3–5 行概览板
         except Exception as exc:  # noqa: BLE001 - 读数坏一项不塌菜单
             lines = [f"读数失败：{type(exc).__name__}: {exc}"]
-        self.query_one("#summary", Static).update("\n".join(lines) or "（无读数）")
+        try:
+            self.query_one("#summary-title", Static).update(f"〔{mod.title}〕概览")
+            self.query_one("#summary-body", Static).update(
+                "\n".join(lines) or "（无读数）"
+            )
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件（无头测试无面板时不塌）
+            return
 
     def _hide_all_views(self) -> None:
         for sel in (
@@ -605,7 +622,7 @@ class PysciTUI(App):
         self.detail_hint = ""
         self._hide_all_views()
         self.query_one("#menu", ListView).display = True
-        self.query_one("#summary", Static).display = True
+        self.query_one("#summary", Vertical).display = True
         self._refresh_badges()
         self.query_one("#menu", ListView).focus()
 
@@ -614,28 +631,36 @@ class PysciTUI(App):
         self.view = "detail"
         self.selected = idx
         try:
-            raw = list(mod.detail())
+            body = list(mod.detail())
         except Exception as exc:  # noqa: BLE001
-            raw = [f"读数失败：{type(exc).__name__}: {exc}"]
-        body, hints = _split_detail(raw)
-        # `detail_text` 保留整段（测试与静态通道都要它）；渲染按标题/读数/提示三区
-        self.detail_text = "\n".join(
-            [f"{mod.title}　详情", "", *body, "", *hints, "Esc/← 返回主菜单"]
-        )
+            body = [f"读数失败：{type(exc).__name__}: {exc}"]
+        self._render_detail(mod, body)
+        self.query_one("#detail", Vertical).display = True
+        self.query_one("#menu", ListView).display = False
+        self.query_one("#summary", Vertical).display = False
+        self.query_one("#journal", Vertical).display = False
+        self._reset_scroll()
+        self._mark_seen(mod)
+
+    def _render_detail(self, mod: Module, body: list[str]) -> None:
+        """渲染模块详情三区（标题 / 读数 / 操作提示）＋静态读面 ``detail_text``。
+
+        操作提示由 **TUI 生成**（数据层详情无提示行，s1/s3 已清；s4 退役逐行辨识机制）：
+        模块详情无专属操作可广告 → 留空。**一律不写「Esc/← 返回…」**——Esc 语义由
+        Footer「返回/退出」广告承担（消除「← 无绑定却出现在提示里」的假广告）。
+        """
         self.detail_title = f"{mod.title}　详情"
         self.detail_body = "\n".join(body)
-        self.detail_hint = "  ".join([*hints, "Esc/← 返回主菜单"])
+        self.detail_hint = ""
+        parts = [self.detail_title, "", *body]
+        if self.detail_hint:
+            parts += ["", self.detail_hint]
+        self.detail_text = "\n".join(parts)
         self.query_one("#detail-title", Static).update(self.detail_title)
         self.query_one("#detail-body-text", Static).update(
             self.detail_body or "（无读数）"
         )
         self.query_one("#detail-hint", Static).update(self.detail_hint)
-        self.query_one("#detail", Vertical).display = True
-        self.query_one("#menu", ListView).display = False
-        self.query_one("#summary", Static).display = False
-        self.query_one("#journal", Vertical).display = False
-        self._reset_scroll()
-        self._mark_seen(mod)
 
     def _tick_detail(self) -> None:
         """逐秒刷新详情读数（倒计时用）：只在**系统与路由**详情在场时重算，别处不动。"""
@@ -645,26 +670,17 @@ class PysciTUI(App):
         if mod.key != "system":
             return
         try:
-            raw = list(mod.detail())
+            body = list(mod.detail())
         except Exception:  # noqa: BLE001 - 刷新失败保持上一帧，不塌详情
             return
-        body, hints = _split_detail(raw)
-        self.detail_body = "\n".join(body)
-        self.detail_text = "\n".join(
-            [f"{mod.title}　详情", "", *body, "", *hints, "Esc/← 返回主菜单"]
-        )
-        self.detail_hint = "  ".join([*hints, "Esc/← 返回主菜单"])
-        self.query_one("#detail-body-text", Static).update(
-            self.detail_body or "（无读数）"
-        )
-        self.query_one("#detail-hint", Static).update(self.detail_hint)
+        self._render_detail(mod, body)
         self._refresh_scroll_mark()  # 每秒重算只更读数，**不动滚动位置**（用户正读的那屏不跳）
-        self._mark_seen(mod)  # 用户正看着：把最新读数记为已见，徽标不自亮
+        self._mark_seen(mod)  # 用户正看着：把最新读数记为已见，徽标不自亮（同值不写盘）
 
     def _open_journal(self) -> None:
         self.view = "journal"
         self.query_one("#menu", ListView).display = False
-        self.query_one("#summary", Static).display = False
+        self.query_one("#summary", Vertical).display = False
         self.query_one("#detail", Vertical).display = False
         self.query_one("#journal", Vertical).display = True
         self.query_one("#journal-result", Static).update("")
@@ -725,6 +741,8 @@ class PysciTUI(App):
         self._hide_all_views()
         self.query_one("#taskbook", Vertical).display = True
         lv.focus()
+        # 列表重建 → 滚动回顶并刷新位置行（s4：`#tb-scroll` 与详情页同位指示同源）
+        self._reset_scroll()
         # 进面板 = 进「任务书」模块视图 → 写该模块水位（§2.2「进入详情即写水位」；f1 起
         # Enter 也走这里，故水位在这里写，不再依赖 _open_detail）。
         mod = next((m for m in self._mods if m.key == "taskbooks"), None)
