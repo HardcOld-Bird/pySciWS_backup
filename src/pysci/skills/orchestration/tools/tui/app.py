@@ -63,6 +63,7 @@ from .widgets import (
     ScrollMarkMixin,
     card,
     make_row,
+    section_title,
 )
 
 #: Textual widget id 只允许字母/数字/下划线/连字符——plan id 可能含点号等（如
@@ -125,6 +126,8 @@ _SCROLL_PANES: dict[str, tuple[str, str]] = {
     "taskbooks": ("#tb-list", "#tb-scroll"),
     "plans": ("#plans-list", "#plans-scroll"),
     "plan-detail": ("#plan-detail-body", "#plan-detail-scroll"),
+    "decisions": ("#decisions-list", "#decisions-scroll"),
+    "decision-detail": ("#decision-detail-body", "#decision-detail-scroll"),
 }
 
 #: 位置指示前缀（测试与用户读同一串）。
@@ -241,6 +244,19 @@ class PysciTUI(App):
     #plan-detail-tree {{ height: auto; background: transparent; }}
     #plan-detail-md {{ {_T_BODY} height: auto; margin-top: 1; }}
     #plan-detail-scroll {{ {_T_SUBTLE} height: 1; }}
+    #detail-cards {{ height: auto; }}
+    #detail-cards > Card {{ margin-bottom: 1; }}
+    #decisions {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #decisions-title {{ {_T_TITLE} }}
+    #decisions-list {{ height: 1fr; }}
+    #decisions-list > ListItem.-highlight {{ {_T_HL} }}
+    #decisions-scroll {{ {_T_SUBTLE} height: 1; }}
+    #decision-detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #decision-detail-title {{ {_T_TITLE} {_T_BORDER} {_T_INSET} }}
+    #decision-detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }}
+    #decision-detail-head {{ {_T_BODY} height: auto; }}
+    #decision-detail-md {{ {_T_BODY} height: auto; margin-top: 1; }}
+    #decision-detail-scroll {{ {_T_SUBTLE} height: 1; }}
     """
 
     def __init__(self, *, mods: list[Module] | None = None, seen_path=None) -> None:
@@ -278,7 +294,19 @@ class PysciTUI(App):
         self.plan_detail_head = ""
         self.plan_detail_md = ""
         self.plan_detail_scroll = 0
-        self.plan_detail_scroll_mark = ""
+        self._plan_default_node = (
+            None  # 首帧后要落到的树节点（见 _apply_plan_default_selection）
+        )
+        # 决策审计（s7）：列表行模型 + 详情三区
+        self.decision_rows: list[dict] = []
+        self.decision_detail_id = ""
+        self.decision_detail_title = ""
+        self.decision_detail_head = ""
+        self.decision_detail_md = ""
+        self.decision_detail_scroll = 0
+        self.decision_detail_scroll_mark = ""
+        # 系统倒计时卡文本（每秒 tick 只刷这一张卡；首帧由卡片栈写入）
+        self.detail_countdown_text = ""
         self._plan_default_node = (
             None  # 首帧后要落到的树节点（见 _apply_plan_default_selection）
         )
@@ -310,7 +338,10 @@ class PysciTUI(App):
             with Vertical(id="detail"):
                 yield Static("", id="detail-title")
                 yield MarkedVerticalScroll(
-                    Static("", id="detail-body-text"), id="detail-body", can_focus=False
+                    Static("", id="detail-body-text"),
+                    Vertical(id="detail-cards"),
+                    id="detail-body",
+                    can_focus=False,
                 )
                 yield Static("", id="detail-hint")
                 yield Static("", id="detail-scroll")
@@ -411,6 +442,22 @@ class PysciTUI(App):
                     can_focus=False,
                 )
                 yield Static("", id="plan-detail-scroll")
+            with Vertical(id="decisions"):
+                yield Static(
+                    "决策审计：↑↓ 选（[!] 置顶需审计）｜Enter 看详情｜Esc 返回",
+                    id="decisions-title",
+                )
+                yield _RowMarkedList(id="decisions-list")
+                yield Static("", id="decisions-scroll")
+            with Vertical(id="decision-detail"):
+                yield Static("", id="decision-detail-title")
+                yield MarkedVerticalScroll(
+                    card("", id="decision-detail-head"),
+                    Markdown(id="decision-detail-md"),
+                    id="decision-detail-body",
+                    can_focus=False,
+                )
+                yield Static("", id="decision-detail-scroll")
         yield Footer()
 
     def _rows(self) -> list[ListItem]:
@@ -499,8 +546,10 @@ class PysciTUI(App):
                 await self._open_taskbooks()
             elif key == "plans":
                 await self._open_plans()
+            elif key == "decisions":
+                await self._open_decisions()
             else:
-                self._open_detail(idx)
+                await self._open_detail(idx)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         """footer 键位广告与守卫一致化（f1）：受管 action 在当前视图无效果 → 返回 `False`
@@ -564,6 +613,8 @@ class PysciTUI(App):
             self.tb_scroll, self.tb_scroll_mark = y, text
         elif self.view == "plan-detail":
             self.plan_detail_scroll, self.plan_detail_scroll_mark = y, text
+        elif self.view == "decision-detail":
+            self.decision_detail_scroll, self.decision_detail_scroll_mark = y, text
         else:
             self.detail_scroll, self.detail_scroll_mark = y, text
 
@@ -687,6 +738,8 @@ class PysciTUI(App):
             await self._open_taskbooks()
         elif self.view == "plan-detail":
             await self._open_plans()
+        elif self.view == "decision-detail":
+            await self._open_decisions()
         elif self.view != "menu":
             self._show_menu()
         else:
@@ -724,6 +777,8 @@ class PysciTUI(App):
             "#tb-detail",
             "#plans",
             "#plan-detail",
+            "#decisions",
+            "#decision-detail",
         ):
             try:
                 self.query_one(sel).display = False
@@ -742,15 +797,19 @@ class PysciTUI(App):
         self._refresh_badges()
         self.query_one("#menu", ListView).focus()
 
-    def _open_detail(self, idx: int) -> None:
+    async def _open_detail(self, idx: int) -> None:
         mod = self._mods[idx]
         self.view = "detail"
         self.selected = idx
-        try:
-            body = list(mod.detail())
-        except Exception as exc:  # noqa: BLE001
-            body = [f"读数失败：{type(exc).__name__}: {exc}"]
-        self._render_detail(mod, body)
+        blocks = self._detail_blocks_for(mod.key)
+        if blocks is None:  # 无卡片规格的模块：沿用文本面（s3 语义不变）
+            try:
+                body = list(mod.detail())
+            except Exception as exc:  # noqa: BLE001
+                body = [f"读数失败：{type(exc).__name__}: {exc}"]
+            self._render_detail(mod, body)
+        else:  # s7 看板：卡片栈（卡=card()、分区=section_title()）
+            await self._render_detail_cards(mod, blocks)
         self.query_one("#detail", Vertical).display = True
         self.query_one("#menu", ListView).display = False
         self.query_one("#summary", Vertical).display = False
@@ -777,21 +836,115 @@ class PysciTUI(App):
             self.detail_body or "（无读数）"
         )
         self.query_one("#detail-hint", Static).update(self.detail_hint)
+        # 文本面与卡片栈互斥（s7 看板走卡片，其余模块照旧文本）
+        self._show_detail_text()
+
+    def _show_detail_text(self) -> None:
+        try:
+            self.query_one("#detail-body-text", Static).display = True
+            self.query_one("#detail-cards", Vertical).display = False
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+
+    def _show_detail_cards(self) -> None:
+        try:
+            self.query_one("#detail-body-text", Static).display = False
+            self.query_one("#detail-cards", Vertical).display = True
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+
+    # ---- 看板卡片栈（s7）--------------------------------------------------
+    def _detail_blocks_for(self, key: str) -> list[dict] | None:
+        """该模块的卡片块（无规格 → ``None``＝沿用文本面）；读数坏→单张错误卡。"""
+        from . import cards as _cards
+
+        builder = {
+            "queues": _cards.queues_blocks,
+            "system": _cards.system_blocks,
+            "pending": _cards.pending_blocks,
+        }.get(key)
+        if builder is None:
+            return None
+        try:
+            return builder()
+        except Exception as exc:  # noqa: BLE001 - 看板读数坏不塌详情
+            return [
+                {
+                    "kind": "card",
+                    "lines": [f"[!] 看板读数失败：{type(exc).__name__}: {exc}"],
+                    "id": "card-error",
+                }
+            ]
+
+    @staticmethod
+    def _blocks_text(blocks: list[dict]) -> list[str]:
+        """块 → 文本面（``detail_body`` 读面；分区行 `== 分区 ==` 与 section_title 同语义）。"""
+        lines: list[str] = []
+        for b in blocks:
+            if b.get("kind") == "section":
+                lines.append(f"== {b.get('text')} ==")
+            else:
+                lines.extend(str(ln) for ln in (b.get("lines") or []))
+        return lines
+
+    async def _render_detail_cards(self, mod: Module, blocks: list[dict]) -> None:
+        """卡片栈渲染（卡=``card()``、分区=``section_title()``）＋同步文本面 ``detail_body``。"""
+        box = self.query_one("#detail-cards", Vertical)
+        await box.remove_children()
+        widgets: list[Widget] = []
+        for b in blocks:
+            if b.get("kind") == "section":
+                widgets.append(section_title(str(b.get("text") or "")))
+                continue
+            widgets.append(
+                card(
+                    *[str(ln) for ln in (b.get("lines") or [])],
+                    id=str(b["id"]) if b.get("id") else None,
+                    classes="board-card",
+                    markup=False,  # 卡内纯文本（`[sim]`/`[!]` 别被当 Rich 标签吃掉）
+                )
+            )
+        if widgets:
+            await box.mount(*widgets)
+        self._show_detail_cards()
+        self.detail_title = f"{mod.title}\u3000详情"
+        text_lines = self._blocks_text(blocks)
+        self.detail_body = "\n".join(text_lines)
+        self.detail_hint = ""
+        self.detail_text = "\n".join([self.detail_title, "", *text_lines])
+        self.query_one("#detail-title", Static).update(self.detail_title)
+        # 倒计时卡文本进可断言状态面（每秒 tick 只刷它）
+        for b in blocks:
+            if b.get("id") == "detail-countdown":
+                self.detail_countdown_text = str((b.get("lines") or [""])[0]).strip()
 
     def _tick_detail(self) -> None:
-        """逐秒刷新详情读数（倒计时用）：只在**系统与路由**详情在场时重算，别处不动。"""
+        """逐秒刷新：**只更新系统看板的倒计时卡文本**（其余卡不重建，防闪烁）。
+
+        徽标指纹仍走 `_system_stable`/`_COUNTDOWN_MARK` 排除语义（倒计时跳动不常亮）。
+        """
         if self.view != "detail":
             return
         mod = self._mods[self.selected]
         if mod.key != "system":
             return
+        self._refresh_countdown_card()
+        self._mark_seen(mod)  # 用户正看着：把最新读数记为已见，徽标不自亮（同值不写盘）
+
+    def _refresh_countdown_card(self) -> None:
+        """只刷倒计时卡（其余卡与其控件对象保持不动）。"""
+        from . import cards as _cards
+
         try:
-            body = list(mod.detail())
+            text = _cards.countdown_text()
         except Exception:  # noqa: BLE001 - 刷新失败保持上一帧，不塌详情
             return
-        self._render_detail(mod, body)
-        self._refresh_scroll_mark()  # 每秒重算只更读数，**不动滚动位置**（用户正读的那屏不跳）
-        self._mark_seen(mod)  # 用户正看着：把最新读数记为已见，徽标不自亮（同值不写盘）
+        self.detail_countdown_text = text.strip()
+        try:
+            self.query_one("#detail-countdown", Static).update(text)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+        self._refresh_scroll_mark()  # 每秒只更读数，**不动滚动位置**（用户正读的那屏不跳）
 
     def _open_journal(self) -> None:
         self.view = "journal"
@@ -975,6 +1128,13 @@ class PysciTUI(App):
             index = int(event.index)
             if 0 <= index < len(self.plan_rows):
                 self._open_plan_detail(str(self.plan_rows[index].get("id") or ""))
+            return
+        if event.list_view.id == "decisions-list":
+            if self.view != "decisions":
+                return
+            index = int(event.index)
+            if 0 <= index < len(self.decision_rows):
+                self._open_decision_detail(self.decision_rows[index])
             return
         if self.view != "taskbooks":
             return
@@ -1180,6 +1340,120 @@ class PysciTUI(App):
     def _set_tb_detail_msg(self, text: str) -> None:
         self.tb_detail_msg = text
         self.query_one("#tb-detail-msg", Static).update(text)
+
+    # ---- 决策审计（s7：列表 → 详情：头卡＋Markdown）--------------------------
+    def _build_decision_rows(self) -> list[dict]:
+        """行模型：``inspectd.decision_rows()``（已 attention 置顶、其余 ts 倒序）。"""
+        from .. import inspectd as _insp
+
+        try:
+            return [dict(r) for r in _insp.decision_rows()]
+        except Exception:  # noqa: BLE001 - 读数失败不该塌面板
+            return []
+
+    async def _open_decisions(self) -> None:
+        self.view = "decisions"
+        await self._rebuild_decisions_list()
+        self._hide_all_views()
+        self.query_one("#decisions", Vertical).display = True
+        self.query_one("#decisions-list", _RowMarkedList).focus()
+
+    async def _rebuild_decisions_list(self) -> None:
+        """按行模型重建 ``#decisions-list``（async：``ListView.clear()`` 异步完成，s5 注记）。"""
+        self.decision_rows = self._build_decision_rows()
+        try:
+            lv = self.query_one("#decisions-list", _RowMarkedList)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+        await lv.clear()
+        if not self.decision_rows:
+            lv.append(ChainListItem(Static("（暂无决策记录）"), id="decisions-empty"))
+        else:
+            for r in self.decision_rows:
+                flag = "[!]" if r.get("attention") else "[i]"
+                lv.append(
+                    ChainListItem(
+                        make_row(
+                            flag,
+                            f"{str(r.get('ts') or '')[:19]}  "
+                            f"{r.get('class')}/{r.get('remedy_shape')}",
+                            meta=str(r.get("title") or "")[:40],
+                            markup=False,  # 旗标 `[i]` 别被 Rich 当斜体标签吃掉（s7 实测）
+                        ),
+                        id=f"decrow-{_widget_id(r.get('id'))}",
+                    )
+                )
+        lv.index = 0 if self.decision_rows else None
+        self._reset_scroll()
+
+    def _open_decision_detail(self, row: dict) -> None:
+        """决策详情页：**头卡**（id/ts/class/shape/attention）＋ **Markdown 正文**。"""
+        if not isinstance(row, dict) or not row.get("id"):
+            return
+        did = str(row.get("id"))
+        self.decision_detail_id = did
+        self.decision_detail_title = f"决策 {did}"
+        self.decision_detail_head = self._decision_head_text(row)
+        self.view = "decision-detail"
+        self._hide_all_views()
+        self.query_one("#decision-detail", Vertical).display = True
+        self.query_one("#decision-detail-title", Static).update(
+            self.decision_detail_title
+        )
+        self.query_one("#decision-detail-head", Static).update(
+            self.decision_detail_head
+        )
+        self._set_decision_detail_md(self._decision_markdown(row))
+        self._reset_scroll()
+
+    def _decision_head_text(self, row: dict) -> str:
+        """头卡文本：id / ts / 类别 / 修复形状 / 是否需审计。"""
+        attn = "〔!〕免判决+change——最需人工审计" if row.get("attention") else "常规"
+        return "\n".join(
+            [
+                f"决策 {row.get('id')}",
+                f"时间：{row.get('ts') or '（无）'}",
+                f"类别：{row.get('class') or '（无）'}"
+                f"\u3000修复形状：{row.get('remedy_shape') or '（缺省 change）'}",
+                f"关注：{attn}",
+            ]
+        )
+
+    def _decision_markdown(self, row: dict) -> str:
+        """决策详情 Markdown（**有啥写啥**，无值字段省略）。"""
+        out = [f"# 决策 {row.get('id')}", ""]
+        out += ["## 发现", "", str(row.get("title") or "（无）")]
+        ruling = str(row.get("ruling") or "")
+        verdict_ref = str(row.get("verdict_ref") or "")
+        if verdict_ref or ruling:
+            out += ["", "## 判决", ""]
+            if verdict_ref:
+                out.append(f"- 依据：{verdict_ref}")
+            if ruling:
+                out.append(f"- 裁示：{ruling}")
+        impl: list[str] = []
+        if row.get("commit"):
+            impl.append(f"- 实施 commit：`{row['commit']}`")
+        if row.get("verify"):
+            impl.append(f"- 核验：{row.get('verify')}")
+        if row.get("backlog_status"):
+            impl.append(f"- backlog：{row.get('backlog_status')}")
+        if row.get("finding_status"):
+            impl.append(f"- 发现状态：{row.get('finding_status')}")
+        if row.get("channel"):
+            impl.append(f"- 通道：{row.get('channel')}")
+        if impl:
+            out += ["", "## 实施与核验", "", *impl]
+        if row.get("note"):
+            out += ["", "## 留痕", "", str(row.get("note"))]
+        return "\n".join(out).rstrip() + "\n"
+
+    def _set_decision_detail_md(self, text: str) -> None:
+        self.decision_detail_md = text
+        try:
+            self.query_one("#decision-detail-md", Markdown).update(text)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
 
     # ---- 计划与派发（s6：列表 → 详情：可折叠 Tree＋Markdown 面板）--------------
     def _build_plan_rows(self) -> list[dict]:

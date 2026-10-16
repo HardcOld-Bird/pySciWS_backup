@@ -286,6 +286,9 @@ def test_walk_every_surface_without_crash():
                 elif mod.key == "plans":
                     assert app.view == "plans"  # s6：计划面板
                     await pilot.press("escape")
+                elif mod.key == "decisions":
+                    assert app.view == "decisions"  # s7：决策审计面板
+                    await pilot.press("escape")
                 else:
                     assert app.view == "detail"
                     await pilot.press("escape")
