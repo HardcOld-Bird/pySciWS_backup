@@ -42,6 +42,7 @@ running 只可能是 unlink 失败残留 + 判活说谎（pid 回收 / tasklist 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -422,7 +423,13 @@ def _consumed_map(state: dict[str, Any] | None = None) -> dict[str, str]:
 
 
 def _identity(ev: dict[str, Any]) -> str:
-    """事件身份（去重的键）：流事件用 ``seq``（唯一）；差分事件用 名+主体+指纹。
+    """事件身份（去重的键）：**流事件＝内容身份**（名＋时刻＋主体＋内容散列）；差分事件＝名+主体+指纹。
+
+    为什么流事件不用 ``seq``（backlog 20261016-203600-devops 实锤缺陷）：seq 是**流内序号**，
+    事件流被覆盖/重置后会**回卷复用**（merge cp 覆盖 events.jsonl：45 条被 6 条覆盖、seq
+    重新编号），旧消费账 ``JOB-DONE|#6`` 与回卷后的新 ``#6`` 撞车 → :func:`filter_consumed`
+    静默吞掉真事件（组长零唤醒、PENDING-WORK 失效）。**内容身份抗回卷**：同一底层事实的
+    身份稳定（幂等去重不退化），不同事实哪怕 seq 相同也身份不同（不再误吞）。
 
     差分事件的身份必须**只由底层事实**决定（run 名 / 条目 id / 完成三元组），否则同一
     底层事实在两次独立检测里会算出不同身份、去重失效（2026-10-14 12:44 双唤醒的教训）。
@@ -433,7 +440,10 @@ def _identity(ev: dict[str, Any]) -> str:
     except (TypeError, ValueError):
         seq = 0
     if seq:
-        return f"{name}|#{seq}"
+        payload = "\x1f".join(
+            str(ev.get(k) or "") for k in ("ts", "subject", "detail", "action")
+        )
+        return f"{name}|{hashlib.sha1(payload.encode('utf-8')).hexdigest()[:16]}"
     return f"{name}|{ev.get('subject', '')}|{ev.get('fingerprint', '')}"
 
 
@@ -763,6 +773,11 @@ def detect(
     # 不经流回读——否则同一事件被「直发」与「差分」各报一次（双触发）。
     cur_seq = int(cur.get("events_seq", 0) or 0)
     base_seq = int(base.get("events_seq", 0) or 0)
+    if cur_seq < base_seq:
+        # **流回卷**（backlog 20261016-203600-devops）：基线水位高于当前流最大 seq ⇒ 流被
+        # 覆盖/重置（旧基线对新编号无意义）。**从 0 起重扫**——消费账此时按**内容身份**
+        # 去重（见 :func:`_identity`），已消费过的同一事实不会重复唤醒，新事实不再被吞。
+        base_seq = 0
     if cur_seq > base_seq:
         for ev in _events.read_after(base_seq):
             if str(ev.get("event")) not in _events.STREAM_TYPES:
