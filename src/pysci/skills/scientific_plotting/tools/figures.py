@@ -223,15 +223,18 @@ def cmd_audit(args: argparse.Namespace) -> int:
 # inspect（不依赖管线的图像体检；backlog 20261015-204912 §4.4）
 # ---------------------------------------------------------------------------
 def cmd_inspect(args: argparse.Namespace) -> int:
-    """体检单张图：尺寸 / 色域占用 / 饱和像素占比 / 边缘水印·logo 检测。
+    """体检单张图：尺寸（像素 + **等效 mm**）/ 色域占用 / 饱和像素占比 / 边缘水印·logo 检测。
 
     供**非 scaffold 产物**用（那类目录 `audit` 恒 N/A，审查的「步骤 2 工具核验」此前无工具）。
+    等效物理尺寸由 PNG dpi 元数据换算；样式声明 `savefig.bbox=tight` 时另出一行裁切提示
+    （backlog 20261015-221750：审查员据此判定「自述 mm 尺寸 vs 成品实测」无须反解版面常量）。
     """
     health, rc = _imgcheck.inspect_image(args.image, band=args.band)
     if not health:
         print(f"[!] 图像读不到：{args.image}")
         return rc
-    for line in _imgcheck.report_lines(health):
+    tight = _style.savefig_bbox() == "tight"
+    for line in _imgcheck.report_lines(health, tight_bbox=tight):
         print(line)
     if rc:
         print("verdict: 有边缘标记（疑似外部渲染器水印/logo 未清除）")
