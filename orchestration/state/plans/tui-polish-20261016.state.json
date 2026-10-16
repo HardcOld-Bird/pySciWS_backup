@@ -14,15 +14,19 @@
     },
     {
       "id": "polish-b",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261016-221037-tui-polish-20261016-polish-b",
-      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-b.task.md"
+      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-b.task.md",
+      "session_id": "73d2478d-8fd1-4bb5-978f-65b55b82aeef",
+      "kind": "result"
     },
     {
       "id": "polish-c",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261016-231411-tui-polish-20261016-polish-c",
+      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-c.task.md"
     }
   ],
   "completed_at": null
