@@ -1,8 +1,8 @@
 """组长引导面修缮（backlog adhoc-guidance-fixes）：status 夜航读数 / plan 收尾 taskbook 联动 /
 blocked×capacity 的 --session new。三条各自独立可验（本条任务书「逐条自证」）。
 
-④ 追加（backlog 20261016-215946）：`plan new`/`plan advance`/`plan run` 的 `[NEXT]` 推进引导
-**并列**给出事件驱动 `plan advance`（长任务首选）与同步阻塞 `plan run` 两种姿势。
+④ 追加（源起 backlog 20261016-215946，20261016-220500 定稿）：`plan new`/`plan advance` 的
+`[NEXT]` 推进引导只讲事件驱动 `plan advance`（入队即返回、长任务首选）＋计划外 `plan adhoc`。
 """
 
 from __future__ import annotations
