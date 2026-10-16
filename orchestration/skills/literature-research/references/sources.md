@@ -46,6 +46,14 @@ The `paper-search-mcp` MCP aggregates ~22 sources on the primary path — see `S
   free tier first, falls back to paid, and never blocks (degrades to `search`).
 
 
+## Non-academic web pages — when the page won't fetch
+
+Vendor launch pages, product docs and changelogs you cite in a report (e.g. an OpenAI / Anthropic
+post) are **not** covered by the sources above, and some block automation (403) or are
+region-gated. How to source them, and how to label direct vs second-hand evidence (`[直取]` vs
+`[二手互证]`), is its own standard: [fetch-evidence.md](fetch-evidence.md) (取证规范).
+
+
 ## Debug backdoors — the one caveat to "black box"
 
 One honest caveat to “black box”: every backend module also carries a `python -m …` **debug
