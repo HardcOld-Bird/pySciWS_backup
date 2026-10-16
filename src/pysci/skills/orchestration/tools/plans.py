@@ -515,12 +515,15 @@ def _plan_overview_state(pid: str) -> dict:
 
 
 def _plan_mark(state: dict) -> str:
-    """概览标记（语义同 ``cmd_plan_list``/TUI ``_plan_mark``：completed→✔、abandoned→⊘）。"""
+    """概览标记（语义同 ``cmd_plan_list``/TUI 计划列表：completed→「✔ 完成」、abandoned→「⊘ 中止」）。
+
+    图标后**必带一个空格**再跟文字（用户 2026-10-16 实测：终端下宽字符与文字会重叠）。
+    """
     if state.get("completed_at"):
-        return "✔完成"
+        return "✔ 完成"
     if state.get("abandoned_at"):
-        return "⊘中止"
-    return "▶进行中"
+        return "⊘ 中止"
+    return "▶ 进行中"
 
 
 def _done_total(state: dict) -> tuple[int, int]:
@@ -533,7 +536,7 @@ def overview_rows() -> list[dict]:
     缓存 ``_load_yaml`` 取 goal——回落 fail-soft，YAML 面坏不塌概览）。
 
     每行 ``{id, goal, mark, done, total, created, completed_at, abandoned_at, current}``；
-    ``mark`` ∈ {``▶进行中``, ``✔完成``, ``⊘中止``}；``current`` = 首个非 done/skipped 步
+    ``mark`` ∈ {``▶ 进行中``, ``✔ 完成``, ``⊘ 中止``}；``current`` = 首个非 done/skipped 步
     ``{id, status, session_id, task_file}``（全完成 → ``None``）。
     按 ``created`` 降序（缺 created 者按 id 降序、自然殿后）。
     """
@@ -1611,13 +1614,15 @@ def plan_tree_lines(plan_id: str) -> list[str]:
     plan = _load_yaml(plan_id)
     status_of = _status_of(_load_state(plan_id))
     tree = _tree(plan)
+    # 图标串自带**尾随空格**（图标与文字之间必须隔一个空格——终端宽字符重叠修复，
+    # 且使源码字面量本身不含「图标紧贴字符」形态）；格式化处不再另加空格。
     icons = {
-        "done": "✔",
-        "queued": "▶",
-        "self_awaiting": "✎",
-        "blocked": "✗",
-        "failed": "✗",
-        "run_failed": "✗",
+        "done": "✔ ",
+        "queued": "▶ ",
+        "self_awaiting": "✎ ",
+        "blocked": "✗ ",
+        "failed": "✗ ",
+        "run_failed": "✗ ",
     }
     out: list[str] = []
 
@@ -1631,13 +1636,13 @@ def plan_tree_lines(plan_id: str) -> list[str]:
             kids = raw.get("children")
             if kids:
                 agg = tree.aggregate(path, status_of)
-                mark = "✔" if agg["done"] else ("▶" if agg["started"] else "·")
-                out.append(f"{indent}{mark} {name} [{raw.get('mode') or 'serial'}]")
+                mark = "✔ " if agg["done"] else ("▶ " if agg["started"] else "· ")
+                out.append(f"{indent}{mark}{name} [{raw.get('mode') or 'serial'}]")
                 walk(kids, path, depth + 1)
             else:
                 st = status_of(path)
                 kind = str(raw.get("kind") or "dispatch")
-                out.append(f"{indent}{icons.get(st, '·')} {name} ({kind}={st})")
+                out.append(f"{indent}{icons.get(st, '· ')}{name} ({kind}={st})")
 
     walk(plan.get("steps") or [], "", 0)
     return out
@@ -1966,9 +1971,9 @@ def cmd_plan_list(args) -> int:
     for pid, goal, done, total in plans:
         state = _load_state(pid)
         mark = (
-            "✔完成"
+            "✔ 完成"
             if state.get("completed_at")
-            else ("⊘中止" if state.get("abandoned_at") else "▶进行中")
+            else ("⊘ 中止" if state.get("abandoned_at") else "▶ 进行中")
         )
         print(f"  {pid:<28} {mark}  {done}/{total}  {goal}")
     return 0

@@ -536,14 +536,15 @@ def _role_texts(pid: str) -> tuple[dict[str, str], list[tuple[str, str]]]:
 #: （用户 2026-10-15：TUI 里就要能看到交付报告）。
 DELIVERY_EXCERPT_CHARS: int = 2000
 
-#: 环节状态字形（与 ``plans.plan_tree_lines`` 同族语义）。
+#: 环节状态字形（与 ``plans.plan_tree_lines`` 同族语义）。值自带**尾随空格**——
+#: 图标与文字之间必隔一个空格（终端宽字符重叠修复）；格式化处不再另加。
 _STEP_ICONS: dict[str, str] = {
-    "done": "✔",
-    "queued": "▶",
-    "self_awaiting": "✎",
-    "blocked": "✗",
-    "failed": "✗",
-    "run_failed": "✗",
+    "done": "✔ ",
+    "queued": "▶ ",
+    "self_awaiting": "✎ ",
+    "blocked": "✗ ",
+    "failed": "✗ ",
+    "run_failed": "✗ ",
 }
 
 
@@ -682,9 +683,9 @@ def _flow_body(steps: list[dict[str, Any]]) -> str:
         return ""
     out: list[str] = []
     for s in steps:
-        icon = _STEP_ICONS.get(s["status"], "·")
+        icon = _STEP_ICONS.get(s["status"], "· ")
         dur = f"{s['duration_ms'] / 1000:.0f}s" if s["duration_ms"] else "—"
-        out.append(f"- {icon} {s['id']} [{s['status']}] {s['member']}｜耗时 {dur}")
+        out.append(f"- {icon}{s['id']} [{s['status']}] {s['member']}｜耗时 {dur}")
         if s["brief"]:
             out.append(f"  - 粗描述：{s['brief']}")
         if s["delivery_path"]:

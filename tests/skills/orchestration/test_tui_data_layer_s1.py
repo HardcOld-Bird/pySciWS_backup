@@ -101,7 +101,7 @@ def test_overview_rows_state_only_and_structure(pface, monkeypatch):
     rows = plans.overview_rows()
     by_id = {r["id"]: r for r in rows}
     row = by_id["p1"]
-    assert row["goal"] == "目标" and row["mark"] == "▶进行中"
+    assert row["goal"] == "目标" and row["mark"] == "▶ 进行中"
     assert (row["done"], row["total"]) == (1, 2)
     assert row["created"] == "2026-10-16T10:00:00+08:00"
     assert row["current"] == {
@@ -125,7 +125,7 @@ def test_overview_mark_and_current_none_when_completed(pface):
         },
     )
     (row,) = plans.overview_rows()
-    assert row["mark"] == "✔完成" and row["current"] is None
+    assert row["mark"] == "✔ 完成" and row["current"] is None
     assert (row["done"], row["total"]) == (2, 2)
 
 

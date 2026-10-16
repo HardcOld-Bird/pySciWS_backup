@@ -46,17 +46,43 @@ def _fingerprint_module(
     title: str,
     summary: Callable[[], list[str]],
     detail: Callable[[], list[str]],
+    digest: Callable[[], str] | None = None,
 ) -> Module:
-    """无记录流模块：水位=详情读数指纹，相对旧水位变了即报 1 条。"""
+    """无记录流模块：水位=读数指纹（``digest`` 缺省回落 ``fingerprint(detail())``），变了报 1 条。
+
+    传 ``digest`` 的模块（plans/system）**cursor 不构建全详情**——性能钉：徽标指纹
+    此前每次全量解析 plan YAML / 重算系统详情（用户点名的性能根因）。
+    """
 
     def cursor() -> str:
-        return fingerprint(detail())
+        return digest() if digest is not None else fingerprint(detail())
 
     def updates_since(old: str) -> int:
         cur = cursor()
         return 0 if (not old or old == cur) else 1
 
     return Module(key, title, summary, detail, cursor, updates_since)
+
+
+def _ttl_memo(fn: Callable[..., Any], ttl: float = 2.0) -> Callable[..., Any]:
+    """TTL 复用小工具：``ttl`` 秒内同参调用直接回上次结果。
+
+    套在 digest 族与 count 族（decisions/queues/taskbook/taste 及 plans/system 指纹）——
+    每秒 tick 与徽标刷新不再反复全量读。参数须可哈希（本模块用途均为零参调用）。
+    """
+    cache: dict[Any, tuple[float, Any]] = {}
+
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        key = (args, tuple(sorted(kwargs.items())))
+        now = time.time()
+        hit = cache.get(key)
+        if hit is not None and now - hit[0] < ttl:
+            return hit[1]
+        value = fn(*args, **kwargs)
+        cache[key] = (now, value)
+        return value
+
+    return wrapper
 
 
 def _count_module(
@@ -146,10 +172,6 @@ def _taskbook_detail() -> list[str]:
             out.append(
                 f"  {_tb.status_badge(str(d.get('status')))} {d.get('title')}{tail}"
             )
-    out += [
-        "",
-        "Enter / `t` 进面板块：`n` 新增 / `a` 接受选中 / `r` 驳回选中（批语输入框）",
-    ]
     return out
 
 
@@ -165,26 +187,13 @@ def _taskbook_count() -> int:
 
 
 # ---------------------------------------------------------------------------
-# 计划与派发（§2.4 #2）——复用 plans.list_plans / load_state
+# 计划与派发（§2.4 #2）——复用 plans.overview_rows（只读 state.json 的廉价读数）
 # ---------------------------------------------------------------------------
-def _plan_mark(state: dict) -> str:
-    if state.get("completed_at"):
-        return "✔完成"
-    if state.get("abandoned_at"):
-        return "⊘中止"
-    return "▶进行中"
-
-
-def _plans_rows() -> list[tuple[str, str, int, int]]:
+def _plans_rows() -> list[dict]:
+    """计划概览行（s1 数据层；**只读 state.json**——不再逐 plan 读 state 拼 mark/进度）。"""
     from .. import plans as _plans  # 延迟导入：plans 引 dispatch/ledger
 
-    return _plans.list_plans()
-
-
-def _plan_state(pid: str) -> dict:
-    from .. import plans as _plans
-
-    return _plans.load_state(pid)
+    return _plans.overview_rows()
 
 
 def _plans_summary() -> list[str]:
@@ -194,31 +203,30 @@ def _plans_summary() -> list[str]:
         return [f"[!] 计划读数失败：{type(exc).__name__}: {exc}"]
     if not rows:
         return ["计划 = （暂无；orch plan new 登记）"]
-    n_active = sum(1 for pid, *_ in rows if _plan_mark(_plan_state(pid)) == "▶进行中")
+    n_active = sum(1 for r in rows if r["mark"] == "▶ 进行中")
     out = [f"计划数 = {len(rows)}（进行中 {n_active}）"]
-    for pid, goal, done, total in rows[:5]:
+    for r in rows[:5]:
         out.append(
-            f"  {_plan_mark(_plan_state(pid))} {pid}  {done}/{total}  {goal[:28]}"
+            f"  {r['mark']} {r['id']}  {r['done']}/{r['total']}  {r['goal'][:28]}"
         )
     return out
 
 
 def _plans_detail() -> list[str]:
-    """active plan 清单 + 当前环节/进度 + 环节 session/task_file 关联 + 多 plan 并行读数。"""
-    out = ["—— 计划清单（plans.list_plans / load_state）——"]
+    """计划清单 + 当前环节/进度/会话/任务书（概览行走 overview_rows；环节行每 plan 读一次 state）。"""
+    out = ["—— 计划清单 ——"]
     try:
         rows = _plans_rows()
     except Exception as exc:  # noqa: BLE001
         return out + [f"[!] 读数失败：{type(exc).__name__}: {exc}"]
     if not rows:
         return out + ["  （暂无计划；orch plan new <yaml> 登记）"]
-    for pid, goal, done, total in rows:
-        st = _plan_state(pid)
-        out.append(f"  {_plan_mark(st)} {pid}  {done}/{total}  {goal[:40]}")
-        steps = st.get("steps") or []
-        cur = next(
-            (s for s in steps if s.get("status") not in ("done", "skipped")), None
-        )
+    from .. import plans as _plans
+
+    for r in rows:
+        pid = str(r["id"])
+        out.append(f"  {r['mark']} {pid}  {r['done']}/{r['total']}  {r['goal'][:40]}")
+        cur = r.get("current")
         if cur:
             sid = str(cur.get("session_id") or "-")[:8] or "-"
             tf = Path(str(cur.get("task_file") or "")).name or "-"
@@ -226,17 +234,12 @@ def _plans_detail() -> list[str]:
                 f"      当前环节 {cur.get('id')}｜{cur.get('status')}"
                 f"｜会话 {sid}｜任务书 {tf}"
             )
-        for s in steps:
-            mark = "✔" if s.get("status") in ("done", "skipped") else "·"
+        for s in _plans.load_state(pid).get("steps") or []:
+            mark = "✔ " if s.get("status") in ("done", "skipped") else "· "
             review = (
                 "  [review]" if s.get("review") not in (None, "pending", False) else ""
             )
-            out.append(f"        {mark} {s.get('id')} [{s.get('status')}]{review}")
-    out += [
-        "",
-        "推进：`orch plan advance <id>`（事件驱动，入队即返回）｜`orch plan run <id>`（兼容阻塞）",
-        "多 plan 并行：同成员队列 FIFO 串行、异成员并行（上表逐 plan 列出即并行面）",
-    ]
+            out.append(f"        {mark}{s.get('id')} [{s.get('status')}]{review}")
     return out
 
 
@@ -260,12 +263,12 @@ def _queues_detail() -> list[str]:
 
     members = _q.all_members()
     out = [
-        f"—— 成员队列（{len(members)} 队：7 专职 + deputy + reviewer + 计划步骤入队成员；"
-        "state/queues/*.json）——"
+        f"== 成员队列（{len(members)} 队：7 专职 + deputy + reviewer + 计划步骤入队成员；"
+        "state/queues/*.json）=="
     ]
     out += _safe_lines(_q.water_lines)
     out.append(f"  {_safe_line(mirror._line_defer)}")
-    out.append("—— 支撑席存量（与上面分列，**成员队列皆空 ≠ 支撑席也空**）——")
+    out.append("== 支撑席存量（与上面分列，**成员队列皆空 ≠ 支撑席也空**）==")
     # 口径拆分（用户 2026-10-14「真的为空吗」）：三面各报各的数，不再共用一句「皆空」。
     try:
         member_pending = sum(_q.counts(m).get("pending", 0) for m in _q.all_members())
@@ -309,7 +312,7 @@ def _queues_detail() -> list[str]:
     out.append(
         f"  活跃会话（state/active-sessions.json）live={_bp.active_count(now=time.time())}"
     )
-    out.append("—— 事件水位（state/events.jsonl）——")
+    out.append("== 事件水位（state/events.jsonl）==")
     out += _safe_lines(_ev.status_lines)
     return out
 
@@ -348,28 +351,11 @@ def _review_summary() -> list[str]:
 
 
 def _review_detail() -> list[str]:
-    from .. import queues as _q
-
-    try:
-        c = _q.counts("reviewer")
-        ctext = (
-            f"待={c.get('pending', 0)} 在做={c.get('in_progress', 0)}"
-            f" 完成={c.get('done', 0)} 失败={c.get('failed', 0)}"
-        )
-    except Exception as exc:  # noqa: BLE001
-        ctext = f"[!] 读数失败：{type(exc).__name__}: {exc}"
-    from .. import inspectd as _insp
-
-    stale = _safe_lines(lambda: _insp.stale_queue_items())
+    """盲审与审查读数（reviewer/inspector 明细归队列模块；此面只留盲审/宪章/裁决追溯）。"""
     return [
         "—— 盲审与审查 ——",
         f"  {_safe_line(mirror._line_review)}",
         f"  {_safe_line(mirror._line_charter)}",
-        f"  reviewer 附属队列 = {ctext}（reviewer 队条目）",
-        f"  审查面（inspector 队列）超时项 = {len(stale)}（入队>{_insp.QUEUE_TIMEOUT_S}s；"
-        "已发 QUEUE-TIMEOUT 事件）",
-        "  审查入口：`orch review <产物> --origin <member>`；宿主环节 `review:true` 时",
-        "  由其交付自动投 reviewer 附属子 job（父子联动见 `orch queues list`）",
         "—— twin 判断/裁决追溯（PSEP_2 配套；复核入口 `orch twin-review`）——",
         *_safe_lines(lambda: mirror.twin_ruling_lines()),
     ]
@@ -428,12 +414,13 @@ def _hold_line(fv: Any) -> str:
 
 
 def _system_detail() -> list[str]:
+    """系统与路由详情：**首行=倒计时**（高亮语义）→ 开关/路由 → 路由配置生效值 → 仲裁/回退/告警。"""
     from .. import routing as _rt
 
     fv = _rt.face()
     reading = _rt.state()
     out = [
-        "—— 系统与路由 ——",
+        _countdown_line(reading.next_at, reading.next_mode),
         f"  开关：{_safe_line(mirror._line_switches)}",
         f"  路由：{_safe_line(mirror._line_routing)}",
         "  路由配置生效值 ——",
@@ -443,7 +430,6 @@ def _system_detail() -> list[str]:
         f"    谷时预设 valley_preset = {fv.valley_preset}"
         f"  〔真源：{fv.source('valley_preset')}〕",
         _hold_line(fv),
-        _countdown_line(reading.next_at, reading.next_mode),
         f"  仲裁：{_safe_line(mirror._line_jury)}",
         f"  回退：{_safe_line(mirror._line_fallback)}",
     ]
@@ -475,7 +461,7 @@ def _decisions_summary() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# 待决与验收（§2.4 #7）——mirror-pending / 待批复交付 / 批复入口指向
+# 待决与验收（§2.4 #7）——mirror-pending / 待批复交付 / 偏差报告队列
 # ---------------------------------------------------------------------------
 def _pending_summary() -> list[str]:
     return [mirror._line_pending(), mirror._line_acceptance()]
@@ -497,8 +483,8 @@ def _pending_detail() -> list[str]:
     for d in review[:5]:
         out.append(f"    · [{d.get('status')}] {d.get('title')}")
     out.append(f"  {_safe_line(mirror._line_acceptance)}")
-    out.append("  批复入口：Enter「任务书」→ 选中 → `a` 接受 / `r` 驳回（批语输入框）")
-    out.append("  口述动作：主菜单 `j`（偏好陈述 / 行动指令二分，法理同 journal）")
+    out.append("—— 偏差报告（强制处理队列）——")
+    out += _safe_lines(mirror.deviation_lines) or ["    （无）"]
     return out
 
 
@@ -511,33 +497,57 @@ def _pending_count() -> int:
 
 
 def modules() -> list[Module]:
-    """主菜单七模块（§2.4 归并表顺序）；读数与详情全走既有数据层纯函数。"""
+    """主菜单七模块（§2.4 归并表顺序）；读数与详情全走既有数据层纯函数。
+
+    digest/count 各套 :func:`_ttl_memo`（2 秒复用）：每秒 tick 与徽标刷新不再反复全量读；
+    memo 随模块对象创建（每次 ``modules()`` 一对新缓存），不跨会话残留。``system`` 的
+    **详情**给 ``_system_detail``（含每秒倒计时，供 tick 刷新），**指纹**给
+    ``_system_stable`` 的 fingerprint——徽标不因倒计时跳动而常亮（§2.2 语义不变）。
+    """
+    from .. import plans as _plans  # 延迟导入：plans 引 dispatch/ledger
+
     return [
         _count_module(
             "taskbooks",
             "任务书",
             _taskbook_summary,
             _taskbook_detail,
-            _taskbook_count,
+            _ttl_memo(_taskbook_count),
         ),
-        _fingerprint_module("plans", "计划与派发", _plans_summary, _plans_detail),
+        _fingerprint_module(
+            "plans",
+            "计划与派发",
+            _plans_summary,
+            _plans_detail,
+            digest=_ttl_memo(_plans.plan_digest),
+        ),
         _count_module(
-            "queues", "队列与运行", _queues_summary, _queues_detail, _queues_count
+            "queues",
+            "队列与运行",
+            _queues_summary,
+            _queues_detail,
+            _ttl_memo(_queues_count),
         ),
         _count_module(
             "review",
             "盲审与审查",
             _review_summary,
             _review_detail,
-            mirror.taste_cases,
+            _ttl_memo(mirror.taste_cases),
         ),
-        _fingerprint_module("system", "系统与路由", _system_summary, _system_stable),
+        _fingerprint_module(
+            "system",
+            "系统与路由",
+            _system_summary,
+            _system_detail,
+            digest=_ttl_memo(lambda: fingerprint(_system_stable())),
+        ),
         _count_module(
             "decisions",
             "决策审计",
             _decisions_summary,
             mirror.decisions_detail_lines,  # 现 cmd_decisions 全貌迁入（数据层复用，不复制）
-            mirror.decisions_count,
+            _ttl_memo(mirror.decisions_count),
         ),
         _count_module(
             "pending", "待决与验收", _pending_summary, _pending_detail, _pending_count
