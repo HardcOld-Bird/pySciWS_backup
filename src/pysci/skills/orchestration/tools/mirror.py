@@ -163,6 +163,71 @@ def append_preference(text: str, *, path: Path | None = None) -> dict[str, Any]:
     )
 
 
+#: 偏差处置标签（2_REFACTOR §5.4：是否纠正现有结果——restore=需恢复更改）。
+_REMEDY_LABELS: dict[str, str] = {
+    "restore": "需恢复",
+    "none": "无需改动",
+    "other": "其他处置",
+}
+
+
+def _remedy_label(remedy: str) -> str:
+    """处置码 → 人话标签（未知码原样回显——看得见真值，不吞成占位）。"""
+    r = str(remedy or "")
+    return _REMEDY_LABELS.get(r, r or "未定")
+
+
+def append_deviation(
+    rec: dict[str, Any], *, path: Path | None = None
+) -> dict[str, Any]:
+    """偏差报告入**同一强制处理队列**（§5.4 同队列同待遇；§10 盲审不一致的产物）。
+
+    ``rec``：``{case_id, user_choice, twin_choice, reason, remedy, requirements,
+    taskbook_id?}``（``remedy`` ∈ ``restore|none|other|None``）；本函数补齐
+    ``ts/kind/source/status/text`` 后追加一行 JSON。行 schema 与既有
+    ``{ts,text,status,source}`` 行兼容 ⇒ :func:`pending_directives` 自动可见
+    （**不新建文件**）。返回落盘行。
+    """
+    target = path if path is not None else MIRROR_QUEUE_PATH
+    line: dict[str, Any] = {
+        **rec,
+        "ts": _now(),
+        "kind": "deviation",
+        "source": "blind-review",
+        "status": "pending",
+        "text": (
+            f"偏差报告 {rec.get('case_id') or '?'}："
+            f"用户选 {rec.get('user_choice') or '?'} vs twin 选 {rec.get('twin_choice') or '?'}"
+            f"；处置={_remedy_label(str(rec.get('remedy') or ''))}"
+        ),
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line, ensure_ascii=False) + "\n")
+    return line
+
+
+def pending_deviations(path: Path | None = None) -> list[dict[str, Any]]:
+    """未处置的偏差报告（``kind == "deviation" and status != "done"``）。"""
+    return [
+        r
+        for r in read_queue(path)
+        if r.get("kind") == "deviation" and r.get("status") != "done"
+    ]
+
+
+def deviation_lines(path: Path | None = None) -> list[str]:
+    """待决偏差摘要文本行（待决与验收页用；每条一行：case_id、处置、原因摘要）。
+
+    无待决偏差回空表（占位文案归界面层——数据层只投影事实）。
+    """
+    return [
+        f"  {r.get('case_id') or '?'}：处置={_remedy_label(str(r.get('remedy') or ''))}"
+        f"；原因={str(r.get('reason') or '（无）')[:60]}"
+        for r in pending_deviations(path)
+    ]
+
+
 def taste_cases() -> int:
     """twin 判断/裁决留痕数（``state/evals/taste/*.json``：盲审 taste + consult 代裁同目录）。
 
@@ -236,12 +301,12 @@ def _line_switches() -> str:
 
 
 def _line_queues() -> str:
-    n_dir = len(pending_directives())
+    n_dir = sum(1 for r in pending_directives() if r.get("kind") != "deviation")
     jury_q = ORCH_STATE_ROOT / "evals" / "jury-queue"
     n_jury = len(sorted(jury_q.glob("*.json"))) if jury_q.is_dir() else 0
     return (
         f"行动指令队列待处理 = {n_dir}  jury 待重裁 = {n_jury}"
-        "  偏差报告队列 = 后续单（twin 偏差报告动线，属审查面）"
+        f"  偏差报告待处理 = {len(pending_deviations())}"
     )
 
 
@@ -619,6 +684,7 @@ __all__ = [
     "MENU_ITEMS",
     "MIRROR_QUEUE_PATH",
     "STATUS_ITEMS",
+    "append_deviation",
     "append_directive",
     "append_preference",
     "charter_path",
@@ -628,7 +694,9 @@ __all__ = [
     "cmd_status",
     "decisions_count",
     "decisions_detail_lines",
+    "deviation_lines",
     "main",
+    "pending_deviations",
     "pending_directives",
     "read_queue",
     "route",

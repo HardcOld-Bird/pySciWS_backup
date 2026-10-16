@@ -203,9 +203,13 @@ def next_defer_s(
 def water_lines(*, root: Path | None = None) -> list[str]:
     """观察面：成员队列水位（``orch status`` 队列段用）。
 
+    **每个成员必出一行**（含全零计数，行尾「（空）」明示——修复：旧实现 ``if not c:
+    continue`` 把计数为空的成员整行跳过，9 队只见少数几行）；在途明细行**带成员名**
+    （形如 ``· [m] 在途 <id>（plan·step）起于 …``，归属一眼可辨）。
+
     **「皆空」的唯一合法场景 = pending 与 in_progress 双零**（用户 2026-10-14：在途条目
-    曾被一句「各成员队列皆空」盖住——`plan run` 还在直派、队列照却是空的）。非双零时逐队
-    列计数，并把**在途条目显名 + 起跑时刻**点出来。
+    曾被一句「各成员队列皆空」盖住——`plan run` 还在直派、队列照却是空的）。非双零时
+    逐队列计数，并把**在途条目显名 + 起跑时刻**点出来。
     """
     members = all_members(root=root)
     out: list[str] = []
@@ -218,13 +222,13 @@ def water_lines(*, root: Path | None = None) -> list[str]:
         gip = c.get(workq.STATUS_IN_PROGRESS, 0)
         pending_total += pending
         active_total += gip
-        if not c:
-            continue
         done = c.get(workq.STATUS_DONE, 0)
         failed = c.get(workq.STATUS_FAILED, 0)
+        empty = not (pending or gip or done or failed)
         out.append(
             f"  [{m}] 待={pending} 在做={gip} 完成={done} 失败={failed}"
             + ("  ◀ 有积压" if pending else "")
+            + ("  （空）" if empty else "")
         )
         if gip:
             for it in items(m, root=root):
@@ -234,7 +238,8 @@ def water_lines(*, root: Path | None = None) -> list[str]:
                 step = str(it.get("step") or "")
                 where = f"（{plan}·{step}）" if plan or step else ""
                 inflight.append(
-                    f"    · 在途 {it.get('id')}{where} 起于 {it.get('started_at') or '?'}"
+                    f"    · [{m}] 在途 {it.get('id')}{where}"
+                    f" 起于 {it.get('started_at') or '?'}"
                 )
     header = (
         f"  在途合计：pending={pending_total} in_progress={active_total}"
@@ -244,6 +249,7 @@ def water_lines(*, root: Path | None = None) -> list[str]:
         # 「皆空」只在这里出现：双零才敢这么写（其余情况必须点名在途，见上）。
         return [
             header,
+            *out,
             f"  （{len(members)} 队皆空：pending 与 in_progress 双零"
             "——done/failed 历史不在本行；支撑席存量另报）",
         ]
