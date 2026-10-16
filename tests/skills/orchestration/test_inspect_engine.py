@@ -741,7 +741,7 @@ def test_readonly_checks_cover_both_faces_and_dedupe(iso_engine):
 
 
 def test_assignment_items_use_given_brief_without_menu(monkeypatch, iso_engine):
-    """组长指派项吃自带任务书；``orch inspector-patrol`` 不给 target 时随机补一项。"""
+    """组长指派项吃自带任务书；``orch inspector patrol`` 不给 target 时随机补一项。"""
     item = inspectd.enqueue(
         "assignment", brief="核查：bencher 队列是否 FIFO", summary="核查"
     )

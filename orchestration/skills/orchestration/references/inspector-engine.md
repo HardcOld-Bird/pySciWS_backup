@@ -19,7 +19,7 @@ SKILL.md 的命令面只留一行索引；本文放**为什么这样设计**与*
 组长日常必然敲的，巡检因此天然有激活点。它是 **fail-soft** 的：拉起环节任何异常都不许
 让组长的正事命令失败，异常以消息形式留在读数里（不静默）。
 
-`orch inspector-up` 幂等三态，每种都打印**为什么没拉起**：
+`orch inspector start` 幂等三态，每种都打印**为什么没拉起**：
 
 - 全局开关关闭 → `state/inspector.enabled` 内容为 false（文件缺席=开启）；
 - 已在跑 → `state/inspector.lock` 持有者仍活；
@@ -39,7 +39,7 @@ SKILL.md 的命令面只留一行索引；本文放**为什么这样设计**与*
 
 | 值 | 含义 |
 |---|---|
-| `cooperative` | 收到协作停止请求（`inspector.cancel` 面；`orch inspector-off` 顺带发出） |
+| `cooperative` | 收到协作停止请求（`inspector.cancel` 面；`orch inspector disable` 顺带发出） |
 | `switch_off` | 跑到条目间隙发现全局开关被关 |
 | `budget_hops` / `budget_wallclock` | 跳数 / 墙钟预算到顶（**成本硬上限，到顶自停**） |
 | `yield` | 让路：生产侧正忙，本轮收束 |
@@ -91,18 +91,18 @@ finding 同样自动晋升。
 - 缺 `success_criteria` 的发现判 `rejected` 而非留 `pending`：worker 每轮重扫 pending 的
   机械类，留着就是每跳重跑一次同样的拒绝。靠补判据复活，不靠重试。
 - **M 路（重型 A/B）未接入自主通道**：任务书只要求判断类经 J。值得 A/B 复测的缺口走
-  `bench-probe` 巡检项——inspector 读 `orch bench-queue` 面并**经 bencher 队列提案**，
+  `bench-probe` 巡检项——inspector 读 `orch bench queue` 面并**经 bencher 队列提案**，
   不自己跑压测（§8 所有权）。
 - 不可判（inconclusive）→ `escalate=twin` 挂起，`orch status` 点名待终裁。
 
 ## 7. 组长侧常用动作
 
 ```bash
-pysci-orch inspector-status                 # 闸门/阈值/队列/发现分布
-pysci-orch inspector-patrol --target code-walk --start   # 手动排一项（不给 target 即随机抽）
-pysci-orch inspector-assign --brief '核查 X 是否与 README §2 一致' --start
-pysci-orch inspector-off                    # 成本控制：关开关 + 请求在跑 worker 协作停止
-pysci-orch inspector-on
+pysci-orch inspector status                 # 闸门/阈值/队列/发现分布
+pysci-orch inspector patrol --target code-walk --start   # 手动排一项（不给 target 即随机抽）
+pysci-orch inspector assign --brief '核查 X 是否与 README §2 一致' --start
+pysci-orch inspector disable                    # 成本控制：关开关 + 请求在跑 worker 协作停止
+pysci-orch inspector enable
 ```
 
 阈值与预算**没有 CLI 旋钮**，只在 `state/registry.json` 顶层 `inspector` 块逐键覆盖

@@ -16,7 +16,7 @@
 
 - ``run`` —— 跑一批套件案（``cases`` 列表），复用 :func:`eval.run_case` 且
   ``runner=bencher``：读数进 ``state/ledger/evals.jsonl``，与组长抽检通道
-  （``orch eval run``，``runner=leader``）在台账里可分开。
+  （``orch bench eval``，``runner=leader``）在台账里可分开。
 - ``capture`` —— 基线捕获（§3：记录 ref 的 commit + 归档 pods 的 gitignored harness 面）。
 - ``ab`` —— 副本 A/B：两 ref 各建一份 git worktree 副本、各自跑案内案、出二元判决；
   窗口期污染 → ``inconclusive`` + ``escalate=twin``（§5.5）。
@@ -81,7 +81,7 @@ BENCH_PATHS = WorkerPaths(
 #: 入队项类型（§8 任务面）。
 ITEM_KINDS: tuple[str, ...] = ("run", "capture", "ab", "check")
 
-#: 队列项终态：``done``/``failed`` 都进「待查看」面，直到提请人 ``bench-seen``。
+#: 队列项终态：``done``/``failed`` 都进「待查看」面，直到提请人 ``bench seen``。
 #: 状态词表与队列形状统一由 :mod:`workq` 定义（E4 时这套读写在本模块内部，E5a 抽库后
 #: 这里只留测量业务的薄封装——两处各写一份状态机就是双源漂移的开始）。
 TERMINAL_STATUSES: tuple[str, ...] = workq.TERMINAL_STATUSES
@@ -596,7 +596,7 @@ def bench_status() -> dict[str, Any]:
 # CLI 面（orch bench-*）
 # ---------------------------------------------------------------------------
 def cmd_bench_add(args: argparse.Namespace) -> int:
-    """``orch bench-add``：注入一个测量任务项（``--start`` 则顺手唤醒 worker）。"""
+    """``orch bench add``：注入一个测量任务项（``--start`` 则顺手唤醒 worker）。"""
     try:
         item = enqueue(
             args.kind,
@@ -618,22 +618,22 @@ def cmd_bench_add(args: argparse.Namespace) -> int:
         spawned, msg = wake_bencher()
         print(f"[{'▶' if spawned else 'i'}] {msg}")
     else:
-        print("    [NEXT] `orch bench-up` 拉起 worker（或 --start 入队即拉起）。")
+        print("    [NEXT] `orch bench start` 拉起 worker（或 --start 入队即拉起）。")
     return 0
 
 
 def cmd_bench_up(args: argparse.Namespace) -> int:
-    """``orch bench-up``：拉起后台 worker（dry-run 演练用 ``--dry``）。"""
+    """``orch bench start``：拉起后台 worker（dry-run 演练用 ``--dry``）。"""
     spawned, msg = wake_bencher(force_dry=True if args.dry else None)
     print(f"[{'▶' if spawned else 'i'}] {msg}")
     return 0
 
 
 def cmd_bench_queue(args: argparse.Namespace) -> int:
-    """``orch bench-queue``：列队列条目（``--all`` 含已查看的历史）。"""
+    """``orch bench queue``：列队列条目（``--all`` 含已查看的历史）。"""
     items = queue_load()
     if not items:
-        print("  （队列为空：orch bench-add 注入一项）")
+        print("  （队列为空：orch bench add 注入一项）")
         return 0
     shown = (
         items
@@ -667,7 +667,7 @@ def cmd_bench_queue(args: argparse.Namespace) -> int:
 
 
 def cmd_bench_seen(args: argparse.Namespace) -> int:
-    """``orch bench-seen <id>``：提请人确认已查看（从「待查看」面摘掉）。"""
+    """``orch bench seen <id>``：提请人确认已查看（从「待查看」面摘掉）。"""
     if mark_seen(args.id) is None:
         print(f"[✗] 队列里没有 {args.id}")
         return 2
@@ -676,7 +676,7 @@ def cmd_bench_seen(args: argparse.Namespace) -> int:
 
 
 def cmd_bench_stop(args: argparse.Namespace) -> int:
-    """``orch bench-stop``：请求 worker 协作停止（条目间隙干净退出）。"""
+    """``orch bench stop``：请求 worker 协作停止（条目间隙干净退出）。"""
     del args
     ok, msg = request_stop(BENCH_PATHS)
     print(f"[{'s' if ok else 'i'}] {msg}")

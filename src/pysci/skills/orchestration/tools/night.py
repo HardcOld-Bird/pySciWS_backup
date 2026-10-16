@@ -48,8 +48,8 @@ NIGHT_POLICY: str = (
     "**【夜航模式生效】** 用户已离机并签发以下授权（本授权随 [night] enabled=true "
     "有效，关闭即失效）：① 尽可能持续推进所有事项/大任务，不得因等待用户回复而停滞或"
     "结束回合观望；② 一般决策你自行执行，事后追溯责任在用户；③ 需用户口头授权的高风险"
-    "事项（含护栏级/规则级裁决）**咨询 twin 并依其裁决执行**——`pysci-orch consult-twin "
-    '<案卷.md>`（twin 终裁）、`pysci-orch consult "<问题>"`（副组长）；twin 的决策权等同'
+    "事项（含护栏级/规则级裁决）**咨询 twin 并依其裁决执行**——`pysci-orch twin consult "
+    '<案卷.md>`（twin 终裁）、`pysci-orch deputy consult "<问题>"`（副组长）；twin 的决策权等同'
     "用户（本条为 leader-only.md §3 的限时预授权）；twin 不可达时降级为「副组长咨询 + 自行"
     "决断 + 留痕」，仍不等用户；④ 终态仅两种：**全部完成**或**不得不的严重阻碍**——"
     "达成即写一段收尾总结（进展/遗留/关键决策点）**即结束推进**；开关只归用户手动拨动，"
@@ -63,7 +63,7 @@ NIGHT_POLICY: str = (
 #: 拦截（deny）时注入给模型的转 twin 指令（PSEP_2 §3.3a 文案，task-20261014-psep2-n2）。
 NIGHT_GATE_DENY: str = (
     "夜航模式：用户已离机（[night] enabled=true），提问工具不可用——该决策转 twin 终裁："
-    "`pysci-orch consult-twin <案卷.md>`，依其裁决执行；twin 不可达时降级「副组长咨询 + 自行"
+    "`pysci-orch twin consult <案卷.md>`，依其裁决执行；twin 不可达时降级「副组长咨询 + 自行"
     "决断 + 留痕」，仍不等用户。"
 )
 

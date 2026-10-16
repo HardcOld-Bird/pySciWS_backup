@@ -100,7 +100,7 @@ cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳 stale �
 
 用户离机无人值守推进：**手动单开关**（钩子每回合现读）。**政策注入**（`night-policy.sh`：
 SessionStart/PostCompact 注授权书全文；**开关变更下一轮生效**——Stop 钩子按会话差分注入，
-无变化零输出）+ **判据**（`night-gate.sh` 拒 `AskUserQuestion` 转 `consult-twin`；
+无变化零输出）+ **判据**（`night-gate.sh` 拒 `AskUserQuestion` 转 `twin consult`；
 `mirror-pending.json` 非空 → 夜航 `PENDING-WORK`）；两层 **fail-open**。**开关只归用户手动**
 （LLM 永不改写），终态写总结即结束推进。保险丝层**缓行**（预留键勿设，§3.4）；twin 代裁走
-`orch twin-review`。全文见 README §4.5。
+`orch twin review`。全文见 README §4.5。

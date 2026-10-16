@@ -3,7 +3,7 @@
 全链：案卷 → twin 判断（选择/理由/置信度）→ 记录落盘 ``evals/taste/<case>.json``
 （含**夜航预授权**标记）→ **单一账目源** preference-journal（channel=twin + case_id）→
 审计面逐条可查（mirror.twin_ruling_lines = TUI「盲审与审查」详情的同一数据层）→
-用户复核（``orch twin-review --confirm/--reject`` 留痕；否决入 override 账供后续改进追溯）。
+用户复核（``orch twin review --confirm/--reject`` 留痕；否决入 override 账供后续改进追溯）。
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ def test_night_twin_ruling_full_chain_traceable(face, monkeypatch, capsys):
     face.night(True)
     assert _consult(face, monkeypatch) == 0
     out = capsys.readouterr().out
-    assert "批准方案乙" in out and "夜航预授权" in out and "twin-review" in out
+    assert "批准方案乙" in out and "夜航预授权" in out and "twin", "review" in out
 
     rec = json.loads((face.dir / "night-case.json").read_text(encoding="utf-8"))
     assert rec["record_kind"] == "consult" and rec["case_id"] == "night-case"
@@ -114,7 +114,7 @@ def test_review_reject_leaves_trace_and_override_account(face, monkeypatch, caps
     capsys.readouterr()
     assert (
         orch.main(
-            ["twin-review", "night-case", "--reject", "--note", "结论与 P-07 冲突"]
+            ["twin", "review", "night-case", "--reject", "--note", "结论与 P-07 冲突"]
         )
         == 0
     )
@@ -137,7 +137,7 @@ def test_review_reject_leaves_trace_and_override_account(face, monkeypatch, caps
 def test_review_confirm_records_verdict_account(face, monkeypatch):
     face.night(False)
     _consult(face, monkeypatch)
-    assert orch.main(["twin-review", "night-case", "--confirm"]) == 0
+    assert orch.main(["twin", "review", "night-case", "--confirm"]) == 0
     row = _journal_rows(face.journal)[-1]
     assert row["source"] == "user" and row["kind"] == "verdict"
     assert row["choice"] == "confirmed"
@@ -147,12 +147,12 @@ def test_review_list_and_error_paths(face, monkeypatch, capsys):
     face.night(True)
     _consult(face, monkeypatch)
     capsys.readouterr()
-    assert orch.main(["twin-review", "--list"]) == 0
+    assert orch.main(["twin", "review", "--list"]) == 0
     out = capsys.readouterr().out
     assert "night-case" in out and "待用户复核 = 1" in out
-    assert orch.main(["twin-review", "nope", "--reject"]) == 2
+    assert orch.main(["twin", "review", "nope", "--reject"]) == 2
     assert "无此裁决留痕" in capsys.readouterr().out
-    assert orch.main(["twin-review", "night-case"]) == 2
+    assert orch.main(["twin", "review", "night-case"]) == 2
     assert "--confirm" in capsys.readouterr().out
 
 

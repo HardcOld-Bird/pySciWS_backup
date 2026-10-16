@@ -474,8 +474,8 @@ def test_inspector_enabled_falls_back_to_legacy_when_toml_absent(iso_state):
 
 
 def test_inspector_cli_switch_writes_toml(iso_state, capsys):
-    assert orch.main(["inspector-off"]) == 0
+    assert orch.main(["inspector", "disable"]) == 0
     assert settings.inspector_flag() is False
     assert "开关=false" in capsys.readouterr().out
-    assert orch.main(["inspector-on"]) == 0
+    assert orch.main(["inspector", "enable"]) == 0
     assert settings.inspector_flag() is True

@@ -1,6 +1,6 @@
 """drain 协作式停止（backlog 20261010-drain-cooperative-stop）。
 
-orch drain-stop 写 state/devops.cancel（指向当前锁持有者 pid）；drain 每项间隙消费
+orch devops stop 写 state/devops.cancel（指向当前锁持有者 pid）；drain 每项间隙消费
 信号→干净退出（释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；陈旧信号
 （指向他方 pid）清除且不误停新 worker。
 """
@@ -69,7 +69,7 @@ def test_consume_stop_corrupt_file_false_and_cleans(iso_state):
 def test_drain_stops_between_items_cleanly(iso_state, monkeypatch):
     """条目间隙消费信号（执行侧=FIFO worker 的协作停止）：已处理项落账，未取项仍 pending。
 
-    backlog-fifo-20261014：``orch drain-stop`` 同时写计划器与 devops worker 两处 cancel；
+    backlog-fifo-20261014：``orch devops stop`` 同时写计划器与 devops worker 两处 cancel；
     执行在 worker，故停止语义由 worker 的条目间隙检查承接（停止优先于续计划）。
     """
     seed_backlog(
@@ -84,7 +84,7 @@ def test_drain_stops_between_items_cleanly(iso_state, monkeypatch):
 
     def fake_dispatch(member, **kw):
         calls["n"] += 1
-        if calls["n"] == 1:  # 处理 b1 期间组长敲了 drain-stop（目标=本 worker）
+        if calls["n"] == 1:  # 处理 b1 期间组长敲了 devops stop（目标=本 worker）
             wp.cancel.write_text(json.dumps({"pid": os.getpid()}), encoding="utf-8")
         return DispatchOutcome(code=0, kind="result", body="done commit aaa1111")
 
@@ -128,14 +128,14 @@ def test_stale_signal_does_not_stop_new_worker(iso_state, monkeypatch):
 
 
 def test_cli_drain_stop_wired(iso_state, monkeypatch):
-    """orch drain-stop 端到端：CLI → request_stop → 信号落盘。"""
+    """orch devops stop 端到端：CLI → request_stop → 信号落盘。"""
     _seed_running_lock(iso_state, monkeypatch)
-    rc = orch.main(["drain-stop"])
+    rc = orch.main(["devops", "stop"])
     assert rc == 0
     assert json.loads(drain.CANCEL_PATH.read_text(encoding="utf-8"))["pid"] == 4242
 
 
 def test_cli_drain_stop_idle_rc(iso_state, capsys):
-    rc = orch.main(["drain-stop"])
+    rc = orch.main(["devops", "stop"])
     assert rc == 0
     assert "无需停止" in capsys.readouterr().out

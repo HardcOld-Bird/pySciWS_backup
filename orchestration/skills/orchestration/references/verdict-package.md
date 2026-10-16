@@ -88,10 +88,10 @@ J+M   approve <id> --jury --bench <案id>          先问裁判，核验交给�
 本身不是 KPI——它是「基建判断有多少还全靠人」的读数，抬头就说明该给某个环节补 J 或 M
 通道，而不是该省掉判决。
 
-## 6. consult / consult-twin（可选咨询，与判决包正交）
+## 6. deputy consult / twin consult（可选咨询，与判决包正交）
 
-- `orch consult "<问题>"` → deputy，平级协作，随时可用。
-- `orch consult-twin <案卷.md>` → twin 偏好面。**`taste_enabled=false` 时明确拒绝
+- `orch deputy consult "<问题>"` → deputy，平级协作，随时可用。
+- `orch twin consult <案卷.md>` → twin 偏好面。**`taste_enabled=false` 时明确拒绝
   （rc=2）并提示改走 consult**，不静默降级成 deputy 咨询——「问了个不存在的声音」比
   「问不到」更坏。开关只能由用户本人置位（§5.5），组长无权代按。twin 的判决通道与
   冷启动见 `references/twin-taste-mirror.md`。
@@ -102,7 +102,7 @@ J+M   approve <id> --jury --bench <案id>          先问裁判，核验交给�
   会进 override 率——这正是设计意图，不是惩罚。
 - `--bench` 报取不到 HEAD：在 worktree 外的树里跑 orch 或 git 不可用；先 `git -C <root>
   rev-parse HEAD` 自查。
-- A/B 队列项停在 pending 没落地：bencher worker 未起（`orch bench-up`）或判决未消化，
+- A/B 队列项停在 pending 没落地：bencher worker 未起（`orch bench start`）或判决未消化，
   见 `references/drain-watch.md` 的挂载纪律。
 - 手工核账：`journal.read_records()` 每行含 `channel`；`verdict.health()` 是同一段的
   数据源，两者不一致即为读数面 bug（不是操作问题）。

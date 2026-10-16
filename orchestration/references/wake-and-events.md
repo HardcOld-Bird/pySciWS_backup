@@ -170,14 +170,14 @@ drain/事件的 `exit 2` 被投到次要会话（污染其上下文，用户明�
   个触发点而非每回合 Stop：逐回合注入烧 token，而上下文压缩正是政策最易丢的时刻。判定与
   文本单点 `tools/night.py`（NIGHT_POLICY）。
 - **② 判据层**：`.qoder/hooks/night-gate.sh`（`PreToolUse` matcher=AskUserQuestion）——夜航内
-  **提问工具成不可能**（`exit 2` + 转 `orch consult-twin` 指令）；`watch.queue_pressure`
+  **提问工具成不可能**（`exit 2` + 转 `orch twin consult` 指令）；`watch.queue_pressure`
   第六条夜航判据——`state/mirror-pending.json` 非空 → 夜航 `PENDING-WORK`（沿既有 30 min
   节流；非夜航不加）。两层皆 **fail-open**（任何异常放行/零输出，不塌唤醒主链路）。
 - **③ 保险丝层（缓行，规格先立）**：仅当「有未竟事项且组长无活动」的停滞才打回，两终态
   一律静默；PENDING-WORK 已覆盖大部分停滞面，故**只预留** `periodic_wake_s` 键、实施前勿设。
 - **配套审计（唯一软依赖）**：twin 代裁全链可追溯——记录 `evals/taste/<case>.json`（案卷摘要/
   选择/理由/置信度/时间/**夜航预授权**标记）+ **单一账目源** preference-journal（`channel=twin`
-  + `case_id`）+ `orch twin-review --list/--confirm/--reject`（否决入 override 账，供后续改进
+  + `case_id`）+ `orch twin review --list/--confirm/--reject`（否决入 override 账，供后续改进
   追溯）。判据自动化面：`test_night_policy.py` / `test_night_gate.py` / `test_twin_trace.py`；
   操作步骤与可证伪判据另见技能 `references/patrol-watchdog.md` §5。
 - **手动用法（降级/兜底仍适用）**：组长以 Bash `run_in_background` 启动，进程退出即原生完成

@@ -8,21 +8,25 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
 命令面（plan-first：组长日常走 plan；dispatch/sessions 等为底层命令，降级与调试用）::
 
     uv run --no-sync pysci-orch status
-    ... orch plan new <file> | run <id> [--text/--task ...] | amend <id> | drop <id> | list
+    ... orch plan new <file> | advance <id> [--text/--task ...] | amend <id> | drop <id> | list
     ... orch plan adhoc <member> --text "..."        # 计划外事项的正确姿势
     ... orch approve <sid> (--jury | --bench <案id[,案id]> | --override "<理由>") [--note ...]
     ... orch reject <suggestion-id> --override "<依据>"
-    ... orch suggestions | stats [--plan/--member/--days] | consult "<问题>"
-    ... orch consult-twin <case-file>   # 咨询 twin（未启用则明确拒绝，§5.1）
+    ... orch suggestions | stats [--plan/--member/--days]
+    ... orch deputy consult "<问题>"            # 副组长（平级协作；异议义务已注入）
+    ... orch twin consult <case-file> | twin taste <case-file> | twin review [--list]
+        # twin 族：咨询（§5.1）/ 审美判断（§9）/ 用户复核（PSEP_2 追溯面）
     ... orch dispatch <member> (--task F | --text T | --from-backlog) [--session ...] [--effort …]
     ... orch watch [--timeout S=4h] [--interval S=60]   # 后台挂起等 drain 事件（§4.5）
     ... orch sessions <member> [--all|--archive SID [--distill]|--prune SID]
     ... orch ledger [--member --days --stats] | sync [--check]
     ... orch jury <case-file> [--dry] [--timeout S]   # Tier C 仲裁团（README §5.3）
-    ... orch taste <case-file> [--dry]        # twin 审美判断通道（宪章生效后可用，§9）
-    ... orch bench-add | bench-up | bench-queue | bench-seen | bench-stop   # bencher 测量队列（§8）
-    ... orch inspector-up [--dry|--force] | inspector-status | inspector-patrol |
-        inspector-assign | inspector-on | inspector-off   # 闲时巡检引擎生命周期（§7）
+    ... orch bench add|start|queue|seen|stop   # bencher 测量队列（§8）
+    ... orch bench eval | bench baseline       # 组长抽检（Tier B 套件，§5.5）
+    ... orch inspector start|status|patrol|assign|enable|disable  # 闲时巡检引擎（§7）
+    ... orch devops stop                       # devops 队列协作停止
+
+（5 个下划线内部命令不进 usage；`orch -h` 只列用户面。）
 
 长任务纪律：dispatch / plan adhoc 应以 Bash 工具的 run_in_background 启动（README §4.5
 等待模型）；orch 自身同步阻塞等待组员进程属预期（进程级等待，零 token）。
@@ -131,7 +135,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         if on:
             print(
                 "  行为提示：授权等同用户——决策留痕、AskUserQuestion 被机械拦截→转 "
-                "consult-twin/twin 终裁；**不得因等待用户而停滞观望**"
+                "twin consult/twin 终裁；**不得因等待用户而停滞观望**"
             )
             print(
                 "  细则：orchestration/skills/orchestration/references/patrol-watchdog.md §5"
@@ -287,7 +291,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     if done:
         stopped = done.get("stopped")
         how = (
-            "协作停止（drain-stop）"
+            "协作停止（devops stop）"
             if stopped == "cooperative"
             # 两类系统性故障分列读数（backlog 20261012-194500-leader 要求 3）：处置动作
             # 不同——额度要充值/换渠道，渠道故障等恢复即可，混成一行就丢了这个信息
@@ -384,7 +388,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  ▶ running（pid {block['pid']}，启动 {block['started']}）")
     elif block["state"] == "stale":
         print(
-            f"  ⊘ stale 锁（pid {block['pid']}）——下次 bench-up 自动接管并回收孤儿条目"
+            f"  ⊘ stale 锁（pid {block['pid']}）——下次 bench start 自动接管并回收孤儿条目"
         )
     else:
         print("  idle（worker 非常驻：队列非空才派生，消化完即自毁）")
@@ -397,7 +401,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     if review:
         print(
             f"  [待查看结果] {len(review)} 项（择机查看，不即时打断；"
-            "查详情 `pysci-orch bench-queue`，看完 `bench-seen <id>`）"
+            "查详情 `pysci-orch bench queue`，看完 `bench seen <id>`）"
         )
         for it in review[:5]:
             res = it.get("result") or {}
@@ -945,6 +949,30 @@ def _plan_router(action: str):
 # ---------------------------------------------------------------------------
 # argparse 门面
 # ---------------------------------------------------------------------------
+#: 内部命令（下划线前缀）：由钩子/派生进程调用，**不进** `orch -h` 的 usage 与列表。
+_INTERNAL_CMDS: tuple[str, ...] = (
+    "_watchdog-loop",
+    "_queue-worker",
+    "_drain-devops",
+    "_bench-worker",
+    "_inspect-worker",
+)
+
+
+def _hide_internal_commands(sub: argparse.Action) -> None:
+    """把 :data:`_INTERNAL_CMDS` 从 usage 与帮助列表隐藏（功能保留、照常可调用）。
+
+    argparse 的 ``help=SUPPRESS`` **对子命令无效**（``add_parser`` 判 ``help is not None``
+    就造 ``_ChoicesPseudoAction``，于是打出字面量 ``==SUPPRESS==``）——真源是
+    ``_choices_actions``（帮助列表）与 ``metavar``（usage 里的花括号组），两处都要收。
+    """
+    sub._choices_actions = [  # noqa: SLF001 - argparse 无公开隐藏通道
+        a for a in sub._choices_actions if a.dest not in _INTERNAL_CMDS
+    ]
+    public = [c for c in sub.choices if c not in _INTERNAL_CMDS]
+    sub.metavar = "{" + ",".join(public) + "}"
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI 入口。"""
     parser = argparse.ArgumentParser(
@@ -1147,18 +1175,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=_workflow.cmd_resolve)
 
-    p = sub.add_parser("consult", help="咨询副组长（平级协作：异议义务提醒自动注入）")
-    p.add_argument("question")
-    p.add_argument("--session", help="latest(默认)|new|<sid前缀>")
-    p.set_defaults(func=_workflow.cmd_consult)
+    # ---- deputy / twin：说话人对称化（backlog 20261016-221800）----
+    # 同为「咨询」，两个说话人各占一席：deputy（副组长，平级协作）/ twin（审美孪生）。
+    p = sub.add_parser("deputy", help="副组长面（平级协作咨询）")
+    dsub = p.add_subparsers(dest="deputy_action", required=True)
+    q = dsub.add_parser("consult", help="咨询副组长（平级协作：异议义务提醒自动注入）")
+    q.add_argument("question")
+    q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
+    q.set_defaults(func=_workflow.cmd_consult)
 
-    p = sub.add_parser(
-        "consult-twin",
+    p = sub.add_parser("twin", help="审美孪生面：咨询 / 审美判断 / 用户复核")
+    tsub = p.add_subparsers(dest="twin_action", required=True)
+    q = tsub.add_parser(
+        "consult",
         help="咨询 twin 组员（高风险裁决第二意见；taste_enabled=false 时明确拒绝并提示待上线）",
     )
-    p.add_argument("case_file", help="案卷路径（## 问题 / ## 选项 A / ## 选项 B）")
-    p.add_argument("--session", help="latest(默认)|new|<sid前缀>")
-    p.set_defaults(func=_verdict.cmd_consult_twin)
+    q.add_argument("case_file", help="案卷路径（## 问题 / ## 选项 A / ## 选项 B）")
+    q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
+    q.set_defaults(func=_verdict.cmd_consult_twin)
 
     p = sub.add_parser(
         "review", help="审查产物：VERDICT → FAIL 自动回派返工 → 复审一次 → 升级仲裁"
@@ -1351,7 +1385,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "_watchdog-loop",
-        help="[内部] watch 看门狗监督循环（勿手调；`orch watchdog start` 派生）",
+        # 内部命令：help=SUPPRESS 从 usage/帮助隐藏（功能保留，`orch watchdog start` 照常派生）
+        help=argparse.SUPPRESS,
     )
     p.add_argument("--run-log", default="", help="run 日志路径（默认自动生成）")
     p.add_argument("--interval", type=int, default=None, help="自查周期秒（默认 60）")
@@ -1360,7 +1395,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "_queue-worker",
-        help="[内部] 成员队列 FIFO worker（下划线前缀=内部命令，勿手调）",
+        help=argparse.SUPPRESS,  # 内部：不进 usage（成员队列 worker，入队自动派生）
     )
     p.add_argument("member")
     p.add_argument(
@@ -1369,11 +1404,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dry", action="store_true", help="干跑：不真派发，仅模拟销账")
     p.set_defaults(func=_queueworker.cmd_queue_worker)
 
-    p = sub.add_parser(
-        "drain-stop",
+    # ---- devops：devops 队列面（与 `bench stop` 对称；`drain` 本就指 devops 队列）----
+    p = sub.add_parser("devops", help="devops 队列面（backlog FIFO 计划器 + worker）")
+    vsub = p.add_subparsers(dest="devops_action", required=True)
+    q = vsub.add_parser(
+        "stop",
         help="请求 devops worker 协作式停止（计划器 + devops FIFO worker 两处 cancel）",
     )
-    p.set_defaults(func=cmd_drain_stop)
+    q.set_defaults(func=cmd_drain_stop)
 
     p = sub.add_parser(
         "refresh-models",
@@ -1420,160 +1458,168 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=_jury.cmd_jury)
 
-    # ---- taste：twin 审美判断通道（README §1/§3.1，E6-prep）----
-    _taste._add_parser(sub)
+    # ---- twin taste：审美判断通道（README §1/§3.1，E6-prep）----
+    _taste._add_parser(tsub)
 
-    # ---- twin-review：用户复核 twin 判断/裁决（PSEP_2 配套追溯面，task-20261014-psep2-n3）----
-    p = sub.add_parser(
-        "twin-review",
+    # ---- twin review：用户复核 twin 判断/裁决（PSEP_2 配套追溯面，task-20261014-psep2-n3）----
+    q = tsub.add_parser(
+        "review",
         help="用户复核 twin 判断/裁决：--list 查看；--confirm/--reject 留痕（否决入 override 账）",
     )
-    p.add_argument("case_id", nargs="?", default="", help="裁决 case id（--list 可省）")
-    g = p.add_mutually_exclusive_group()
+    q.add_argument("case_id", nargs="?", default="", help="裁决 case id（--list 可省）")
+    g = q.add_mutually_exclusive_group()
     g.add_argument(
         "--confirm", action="store_true", help="确认该裁决（入 journal verdict）"
     )
     g.add_argument(
         "--reject", action="store_true", help="否决该裁决（批语入 override 账）"
     )
-    p.add_argument("--note", default="", help="批语（否决留痕用）")
-    p.add_argument("--list", action="store_true", help="列出最近裁决与待复核计数")
-    p.add_argument("--limit", type=int, default=8, help="--list 显示条数（默认 8）")
-    p.set_defaults(func=_taste.cmd_twin_review)
+    q.add_argument("--note", default="", help="批语（否决留痕用）")
+    q.add_argument("--list", action="store_true", help="列出最近裁决与待复核计数")
+    q.add_argument("--limit", type=int, default=8, help="--list 显示条数（默认 8）")
+    q.set_defaults(func=_taste.cmd_twin_review)
 
-    # ---- eval：Tier B harness 压测套件（README §5.5 / E2）----
-    p = sub.add_parser(
-        "eval",
-        help="Tier B harness 压测套件：最小成本档跑案卷 → 二元判决 + 基线对照",
-    )
-    ep = p.add_subparsers(dest="eval_action", required=True)
-    pe = ep.add_parser(
-        "run", help="跑一案/全套 → 通过|失败 + 指标行 + before/after 对照"
-    )
-    pg = pe.add_mutually_exclusive_group(required=True)
-    pg.add_argument("--case", help="案卷 id（state/evals/harness/<id>.md 去后缀）")
-    pg.add_argument("--all", action="store_true", help="按文件名序跑全部案卷")
-    pe.add_argument(
-        "--model-tier",
-        type=_presets.normalize_role,
-        choices=list(_presets.ROLE_CHOICES),
-        help="覆盖案内档位（默认案卷的 tier:，缺省 minimum=压测最低成本档）",
-    )
-    pe.add_argument(
-        "--label",
-        help="本轮标签（如 before / after-<commit>）；入台账供 set-baseline 与分组对照",
-    )
-    pe.set_defaults(func=_eval.cmd_eval_run)
-    pb = ep.add_parser("set-baseline", help="把最近一轮压测行回填为 baseline.json")
-    pb.add_argument("--label", help="只取该标签的最近一轮（默认：每案最近一行）")
-    pb.add_argument(
-        "--runner",
-        choices=["leader", "bencher"],
-        help="只取该发起者的行（默认混合；E4 后专测行属 bencher）",
-    )
-    pb.set_defaults(func=_eval.cmd_eval_set_baseline)
+    # ---- bench：压测与测量域（README §5.5 / E4）----
+    # 压测本来就是**一个域**，原先两个伞名（`bench-*`/`eval`）指同一件事。归一把伞后，
+    # 两条通道仍在、由台账 `runner` 字段分开（backlog 20261016-221800）：
+    #   `bench add run|capture|ab|check` = bencher 套件队列（专职测量员消化）；
+    #   `bench eval` / `bench baseline`  = 组长抽检（亲跑，runner=leader）。
+    p = sub.add_parser("bench", help="压测与测量：bencher 套件队列 + 组长抽检")
+    bsub = p.add_subparsers(dest="bench_action", required=True)
 
-    # ---- bench-*：bencher 专职测量员队列（README §5.5 / E4）----
-    p = sub.add_parser(
-        "bench-add",
+    q = bsub.add_parser(
+        "add",
         help="向 bencher 队列注入一个测量任务（run/capture/ab/check）；--start 顺手拉起 worker",
     )
-    p.add_argument("kind", choices=list(_benchd.ITEM_KINDS))
-    p.add_argument("--cases", help="案卷 id，逗号分隔（run/capture/check 用）")
-    p.add_argument("--label", help="本轮标签（进台账供对照/基线回填）")
-    p.add_argument(
+    q.add_argument("kind", choices=list(_benchd.ITEM_KINDS))
+    q.add_argument("--cases", help="案卷 id，逗号分隔（run/capture/check 用）")
+    q.add_argument("--label", help="本轮标签（进台账供对照/基线回填）")
+    q.add_argument(
         "--tier",
         type=_presets.normalize_role,
         choices=list(_presets.ROLE_CHOICES),
         help="覆盖案内档位（缺省=案内 tier，再缺省 minimum）",
     )
-    p.add_argument("--ref", help="capture：被测 ref（默认 HEAD）")
-    p.add_argument("--ref-a", help="ab：基线侧 ref/commit")
-    p.add_argument("--ref-b", help="ab：实施侧 ref/commit")
-    p.add_argument("--brief", help="check：核查说明（派发正文）")
-    p.add_argument("--requested-by", help="提请人（默认 leader）")
-    p.add_argument("--summary", help="队列里展示的一句话（缺省按 kind 生成）")
-    p.add_argument(
-        "--start", action="store_true", help="入队后立即拉起 worker（默认等 bench-up）"
+    q.add_argument("--ref", help="capture：被测 ref（默认 HEAD）")
+    q.add_argument("--ref-a", help="ab：基线侧 ref/commit")
+    q.add_argument("--ref-b", help="ab：实施侧 ref/commit")
+    q.add_argument("--brief", help="check：核查说明（派发正文）")
+    q.add_argument("--requested-by", help="提请人（默认 leader）")
+    q.add_argument("--summary", help="队列里展示的一句话（缺省按 kind 生成）")
+    q.add_argument(
+        "--start",
+        action="store_true",
+        help="入队后立即拉起 worker（默认等 bench start）",
     )
-    p.set_defaults(func=_benchd.cmd_bench_add)
+    q.set_defaults(func=_benchd.cmd_bench_add)
 
-    p = sub.add_parser(
-        "bench-up",
+    q = bsub.add_parser(
+        "start",
         help="拉起 bencher worker 后台消化队列（非空即消化，空即自毁）",
     )
-    p.add_argument(
+    q.add_argument(
         "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
     )
-    p.set_defaults(func=_benchd.cmd_bench_up)
+    q.set_defaults(func=_benchd.cmd_bench_up)
 
-    p = sub.add_parser("bench-queue", help="列 bencher 队列（默认只看在途与待查看）")
-    p.add_argument("--all", action="store_true", help="含已查看的历史条目")
-    p.set_defaults(func=_benchd.cmd_bench_queue)
+    q = bsub.add_parser("queue", help="列 bencher 队列（默认只看在途与待查看）")
+    q.add_argument("--all", action="store_true", help="含已查看的历史条目")
+    q.set_defaults(func=_benchd.cmd_bench_queue)
 
-    p = sub.add_parser(
-        "bench-seen", help="标记某条目已查看（从 orch status 待查看面摘掉）"
+    q = bsub.add_parser("seen", help="标记某条目已查看（从 orch status 待查看面摘掉）")
+    q.add_argument("id", help="队列条目 id（bench queue 可查）")
+    q.set_defaults(func=_benchd.cmd_bench_seen)
+
+    q = bsub.add_parser("stop", help="请求 bencher worker 协作停止（条目间隙干净退出）")
+    q.set_defaults(func=_benchd.cmd_bench_stop)
+
+    # 组长抽检通道（Tier B harness 套件，README §5.5 / E2）：与 bencher 队列同台账不同 runner。
+    q = bsub.add_parser(
+        "eval",
+        help="[组长抽检] 最小成本档跑案卷 → 通过|失败 + 指标行 + before/after 对照",
     )
-    p.add_argument("id", help="队列条目 id（bench-queue 可查）")
-    p.set_defaults(func=_benchd.cmd_bench_seen)
-
-    p = sub.add_parser(
-        "bench-stop", help="请求 bencher worker 协作停止（条目间隙干净退出）"
+    qg = q.add_mutually_exclusive_group(required=True)
+    qg.add_argument("--case", help="案卷 id（state/evals/harness/<id>.md 去后缀）")
+    qg.add_argument("--all", action="store_true", help="按文件名序跑全部案卷")
+    q.add_argument(
+        "--model-tier",
+        type=_presets.normalize_role,
+        choices=list(_presets.ROLE_CHOICES),
+        help="覆盖案内档位（默认案卷的 tier:，缺省 minimum=压测最低成本档）",
     )
-    p.set_defaults(func=_benchd.cmd_bench_stop)
+    q.add_argument(
+        "--label",
+        help="本轮标签（如 before / after-<commit>）；入台账供 baseline 与分组对照",
+    )
+    q.set_defaults(func=_eval.cmd_eval_run)
 
-    # ---- inspector-*：闲时巡检引擎的生命周期面（README §6 / E5a）----
+    q = bsub.add_parser("baseline", help="把最近一轮压测行回填为 baseline.json")
+    q.add_argument("--label", help="只取该标签的最近一轮（默认：每案最近一行）")
+    q.add_argument(
+        "--runner",
+        choices=["leader", "bencher"],
+        help="只取该发起者的行（默认混合；E4 后专测行属 bencher）",
+    )
+    q.set_defaults(func=_eval.cmd_eval_set_baseline)
+
+    # ---- inspector：闲时巡检引擎生命周期面（README §6 / E5a）----
     # 组长侧只有「拉起/开关/读数/指派」四件事：巡检内容本身在 inspector pod 的会话里，
     # 发现的分流在 pysci-inspect（组员侧）。资源闸门（预算/让路/迟滞）没有 CLI 旋钮——
     # §7 要的是「代码保证」，可被随手关掉的成本控制等于没有。
-    p = sub.add_parser(
-        "inspector-up",
+    # `start`（拉起 worker）与 `enable`（全局开关）**语义不同**，名字不再只差两字母。
+    p = sub.add_parser("inspector", help="闲时巡检引擎：拉起 / 开关 / 读数 / 指派")
+    isub = p.add_subparsers(dest="inspector_action", required=True)
+
+    q = isub.add_parser(
+        "start",
         help="幂等拉起 inspector 巡检 worker（开关关/在跑/冷却窗内均 no-op 并说明）",
     )
-    p.add_argument(
+    q.add_argument(
         "--dry", action="store_true", help="干跑：派跳只演练不真派发（演练/测试）"
     )
-    p.add_argument(
+    q.add_argument(
         "--force",
         action="store_true",
         help="跳过冷却窗（一次性自主巡检；不越开关与锁）",
     )
-    p.set_defaults(func=_inspectd.cmd_inspector_up)
+    q.set_defaults(func=_inspectd.cmd_inspector_up)
 
-    p = sub.add_parser("inspector-status", help="巡检引擎面细读（闸门/阈值/队列/发现）")
-    p.set_defaults(func=_inspectd.cmd_inspector_status)
+    q = isub.add_parser("status", help="巡检引擎面细读（闸门/阈值/队列/发现）")
+    q.set_defaults(func=_inspectd.cmd_inspector_status)
 
-    p = sub.add_parser(
-        "inspector-patrol",
+    q = isub.add_parser(
+        "patrol",
         help="手动排入一项巡检（--target 菜单 id，缺省随机抽；queue-first 的插队口）",
     )
-    p.add_argument("--target", default="", help="巡检菜单项 id（空=随机抽取）")
-    p.add_argument("--summary", default="", help="队列里展示的一句话")
-    p.add_argument("--start", action="store_true", help="入队后立即拉起 worker")
-    p.set_defaults(func=_inspectd.cmd_inspector_patrol)
+    q.add_argument("--target", default="", help="巡检菜单项 id（空=随机抽取）")
+    q.add_argument("--summary", default="", help="队列里展示的一句话")
+    q.add_argument("--start", action="store_true", help="入队后立即拉起 worker")
+    q.set_defaults(func=_inspectd.cmd_inspector_patrol)
 
-    p = sub.add_parser(
-        "inspector-assign",
+    q = isub.add_parser(
+        "assign",
         help="给 inspector 排一项指派核查（kind=assignment，正文走巡检队列）",
     )
-    p.add_argument("--brief", required=True, help="指派任务书正文")
-    p.add_argument("--summary", default="", help="队列里展示的一句话")
-    p.add_argument("--start", action="store_true", help="入队后立即拉起 worker")
-    p.set_defaults(func=_inspectd.cmd_inspector_assign)
+    q.add_argument("--brief", required=True, help="指派任务书正文")
+    q.add_argument("--summary", default="", help="队列里展示的一句话")
+    q.add_argument("--start", action="store_true", help="入队后立即拉起 worker")
+    q.set_defaults(func=_inspectd.cmd_inspector_assign)
 
-    p = sub.add_parser("inspector-on", help="打开巡检全局开关（默认态）")
-    p.set_defaults(func=_inspectd.cmd_inspector_on)
-
-    p = sub.add_parser(
-        "inspector-off",
-        help="关闭巡检全局开关（成本控制；在跑的 worker 条目间隙自停）",
+    q = isub.add_parser(
+        "enable", help="打开巡检**全局开关**（默认态；与 `start` 不同）"
     )
-    p.set_defaults(func=_inspectd.cmd_inspector_off)
+    q.set_defaults(func=_inspectd.cmd_inspector_on)
+
+    q = isub.add_parser(
+        "disable",
+        help="关闭巡检**全局开关**（成本控制；在跑的 worker 条目间隙自停）",
+    )
+    q.set_defaults(func=_inspectd.cmd_inspector_off)
 
     # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
     p = sub.add_parser(
         "_drain-devops",
-        help="[内部] approve 自动唤醒派生的 backlog 计划器（组包→入队 devops FIFO）",
+        help=argparse.SUPPRESS,  # 内部：不进 usage（approve 自动唤醒派生）
     )
     p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
     p.add_argument(
@@ -1583,7 +1629,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "_bench-worker",
-        help="[内部] bencher 队列 drain 循环（下划线前缀=内部命令，勿手调）",
+        help=argparse.SUPPRESS,  # 内部：不进 usage
     )
     p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
     p.add_argument(
@@ -1593,7 +1639,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "_inspect-worker",
-        help="[内部] inspector 巡检激活循环（下划线前缀=内部命令，勿手调）",
+        help=argparse.SUPPRESS,  # 内部：不进 usage
     )
     p.add_argument("--run-log", help="run 日志路径（拉起时传入；默认自动生成）")
     p.add_argument(
@@ -1601,6 +1647,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=_inspectd.cmd_inspect_worker)
 
+    _hide_internal_commands(sub)
     args = parser.parse_args(argv)
     return int(args.func(args))
 

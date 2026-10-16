@@ -356,7 +356,7 @@ def _review_detail() -> list[str]:
         "—— 盲审与审查 ——",
         f"  {_safe_line(mirror._line_review)}",
         f"  {_safe_line(mirror._line_charter)}",
-        "—— twin 判断/裁决追溯（PSEP_2 配套；复核入口 `orch twin-review`）——",
+        "—— twin 判断/裁决追溯（PSEP_2 配套；复核入口 `orch twin review`）——",
         *_safe_lines(lambda: mirror.twin_ruling_lines()),
     ]
 

@@ -13,7 +13,7 @@ SKILL.md 只留决策面；本文放**怎么取证**与**哪些读数是假的**
 | `pipeline-self` | 读 `tools/{orch,drain,benchd,inspectd,verdict,jury}.py` 与 guards | **文档承诺但代码没实现**的条款（最坏的一类漂移） |
 | `intent-drift` | README/charter 摘一句 → 写成命令 | 实际输出与宣称不符即 mechanical；符合与否需判断则 judgment |
 | `design-rubric` | `rubrics/design-review.md` 三维 | 见 §3 |
-| `bench-probe` | `orch bench-queue --all` + `pysci-bench report`（只读） | 缺口提案，不自己跑压测 |
+| `bench-probe` | `orch bench queue --all` + `pysci-bench report`（只读） | 缺口提案，不自己跑压测 |
 
 ## 2. 假读数坑（先排除这些，再报发现）
 

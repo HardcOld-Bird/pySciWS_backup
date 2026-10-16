@@ -10,7 +10,7 @@ pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §
 #     （源文件任意位置、登记后可删；**勿与目标同名**——同名行为未定义）
 pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
 #   └ --evidence：收尾 kind:self 组长环节（文件存在 + 标题段 lint 通过才置 done，PSEP_3 §2.1）
-#   └ 旗标（backlog 20261016-220500：同步推进子命令已废弃，其独有旗标并入 advance）：
+#   └ 旗标（原同步子命令已废，其独有旗标并入本命令）：
 #     advance 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --dry --evidence
 #     （--session 默认 latest，**续作余量已尽必须 new**；--evidence 见上行）
 pysci-orch plan rework <tb-id> [--mode full|no_inspector|rework_only] [--plan-id X] [--force]
@@ -44,30 +44,31 @@ pysci-orch watch [--timeout 14400]  # 等 drain 事件（drain-watch.md §2）�
 pysci-orch wake-claim [status] [--force [--session-id id]]
         # 唤醒权读数与应急面；归属由钩子按载荷 session_id 自动完成（README §4.5）
 pysci-orch reject <建议id> --override "<判决依据>"   # 否决：依据必填、留痕（J/M 判决的驳回不计）
-pysci-orch consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
-pysci-orch consult-twin <案卷.md>  # 咨询 twin（未启用即拒 rc=2）
+pysci-orch deputy consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
+pysci-orch twin consult <案卷.md>  # 咨询 twin（未启用即拒 rc=2）
 pysci-orch review <产物> --origin <member> [--rubric generic]
         [--goal-from <原生产任务书> | --goal "<目标陈述>"]  # --goal* 供 G2 独立核验
         # 审查链：VERDICT → FAIL 回派返工 → 复审一次 → 二次 FAIL 升级仲裁
 pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（双序对局；不可达入队 rc=1）
-pysci-orch eval run (--case <id>|--all) [--label L]  # Tier B 压测**抽检面**；套件本体归 bencher
-pysci-orch bench-add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]
+pysci-orch bench eval (--case <id>|--all) [--label L]  # Tier B 压测**抽检面**（runner=leader）
+pysci-orch bench baseline [--label L] [--runner leader|bencher]  # 回填 baseline.json（不指定=混合，慎）
+pysci-orch bench add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]
         [--label L] [--tier minimum] [--brief T] [--start]  # 测量任务入队（不阻塞）
-pysci-orch bench-up [--dry] | bench-queue [--all] | bench-seen <id> | bench-stop
+pysci-orch bench start [--dry] | bench queue [--all] | bench seen <id> | bench stop
         # bencher 生命周期（FIFO 非常驻）；判决进 status「待查看」不即时唤醒（§5.1-B）；要领
         # drain-watch.md、harness-eval.md
-pysci-orch taste <案卷.md> [--dry]  # twin 判断通道（未生效即拒；twin-taste-mirror.md）
-pysci-orch inspector-up [--dry|--force] | inspector-status | inspector-patrol [--target 菜单id]
-        [--start] | inspector-assign --brief T [--start] | inspector-on|inspector-off  # 巡检引擎（§7）
+pysci-orch twin taste <案卷.md> [--dry]  # twin 判断通道（未生效即拒；twin-taste-mirror.md）
+pysci-orch inspector start [--dry|--force] | inspector status | inspector patrol [--target 菜单id]
+        [--start] | inspector assign --brief T [--start] | inspector enable|disable  # 巡检（§7；start=拉起，enable/disable=全局开关）
 pysci-orch stats [--plan id|--member m|--days N]
 # —— 低频顶层命令 ——
 pysci-orch requeue <条目id> [--note "…"]   # 回排：needs_leader → pending 并唤醒 drain（组长面正门）
 pysci-orch resolve <条目id> --note "…"     # 销账：确认已达标的 needs_leader 条目 → done（--note 必填留痕）
 #   └ 两者作用域**同**：backlog 条目且 **status=needs_leader**；**不收建议单 id**（见立单）
 pysci-orch watchdog start|stop|status       # 看门狗生命周期：start 幂等 / stop 广播纪元停全部 / status 报读数
-pysci-orch drain-stop                       # 请求 devops worker 协作式停止（计划器 + FIFO worker 两处 cancel）
+pysci-orch devops stop                       # 请求 devops worker 协作式停止（计划器 + FIFO worker 两处 cancel）
 pysci-orch refresh-models                   # 按 --list-models 刷新 registry 模型映射（drain 启动亦自动执行）
-pysci-orch twin-review [case] (--list|--confirm|--reject) [--note "…"]  # 用户复核 twin 裁决（否决入 override 账）
+pysci-orch twin review [case] (--list|--confirm|--reject) [--note "…"]  # 用户复核 twin 裁决（否决入 override 账）
 # —— 底层命令面（降级/调试）——
 pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
 pysci-orch sessions <member> [--all|--archive <sid> [--distill]|--prune <sid>]
@@ -76,6 +77,8 @@ pysci-orch ledger [--member --days --stats] | sync [--check]
 
 成员 id：sim figure writing theory lit drawing model3d（专职）；deputy reviewer devops
 bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
+
+> 内部命令（`_watchdog-loop` 等 5 个）由钩子/派生进程调用，**不进 `orch -h`**（功能保留，勿手调）。
 
 **队列成员**（三条路径可直派）＝ 7 专职 + deputy + reviewer + **devops**；非队列成员三闸均拒。
 **devops 双通道并存**（直派／组包，同队列同 worker）；bencher/inspector 各有专用队列，**不经**

@@ -923,7 +923,7 @@ def _remedy_shape_instruction(item: dict) -> str:
             "\n**修复形状约束（remedy_shape=change，免判决通道——先读这一段）**：\n"
             "本条经 inspector mechanical 通道入账，无 J/M/twin 判决记录，而其修复形状="
             "「改变声明行为/策略/权衡面」。按修复形状分流规则，实施前必须先过判决包"
-            "（`pysci-orch jury` 或 consult-twin）。**未经判决不得实施**：若本任务书未附"
+            "（`pysci-orch jury` 或 twin consult）。**未经判决不得实施**：若本任务书未附"
             "判决记录（案卷 id/计票），直接交付 <blocked>（正文注明「remedy_shape=change "
             "缺判决记录」），由组长补判决后重派。\n"
         )
@@ -1272,7 +1272,7 @@ def cmd_approve(args) -> int:
                 f"[!] 仲裁模棱两可 → escalate=twin 且 twin 不可达/未表态 → 保守回退挂起："
                 f"提案保持待审批，未入队。\n"
                 f"    {run.message}\n"
-                "    人工终裁走 orch consult-twin；眼下要定案："
+                "    人工终裁走 orch twin consult；眼下要定案："
                 '--override "<理由>"（计入 override 率）。'
             )
             return 1

@@ -1,4 +1,4 @@
-"""twin 判断通道（``orch taste``）：宪章注入 + 冷启动单跳 + 结构化留痕（README §1/§3.1，E6-prep）。
+"""twin 判断通道（``orch twin taste``）：宪章注入 + 冷启动单跳 + 结构化留痕（README §1/§3.1，E6-prep）。
 
 为什么长这样：
 
@@ -554,7 +554,7 @@ def apply_review(
     """
     path = record_path(case_id)
     if not path.exists():
-        return 2, f"[!] 无此裁决留痕：{_rel(path)}（orch twin-review --list 看现有）"
+        return 2, f"[!] 无此裁决留痕：{_rel(path)}（orch twin review --list 看现有）"
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -593,14 +593,14 @@ def apply_review(
 
 
 def cmd_twin_review(args: argparse.Namespace) -> int:
-    """``orch twin-review``：复核入口——``--list`` 看最近裁决；``--confirm|--reject`` 留痕。"""
+    """``orch twin review``：复核入口——``--list`` 看最近裁决；``--confirm|--reject`` 留痕。"""
     case_id = str(getattr(args, "case_id", "") or "")
     if getattr(args, "list", False) or not case_id:
         for line in ruling_lines(limit=int(getattr(args, "limit", 8) or 8)):
             print(line)
         print(
             f"  待用户复核 = {pending_review_count()}"
-            '（复核：orch twin-review <case_id> --confirm|--reject [--note "…"]）'
+            '（复核：orch twin review <case_id> --confirm|--reject [--note "…"]）'
         )
         return 0
     if not (getattr(args, "confirm", False) or getattr(args, "reject", False)):
@@ -616,7 +616,7 @@ def cmd_twin_review(args: argparse.Namespace) -> int:
 
 
 def cmd_taste(args: argparse.Namespace) -> int:
-    """``orch taste <case-file> [--dry] [--model-tier …]``——twin 判断单跳。
+    """``orch twin taste <case-file> [--dry] [--model-tier …]``——twin 判断单跳。
 
     退出码：0=已表态并落盘；1=派发失败或读不出选择；2=未生效/案卷不可用/宪章缺失。
     """
@@ -641,7 +641,7 @@ def cmd_taste(args: argparse.Namespace) -> int:
 
 
 def _add_parser(sub: Any) -> None:
-    """注册 ``orch taste`` 子命令（由 orch.py 门面调用，保持 CLI 装配单点）。"""
+    """注册 ``orch twin taste`` 子命令（由 orch.py 门面调用，保持 CLI 装配单点）。"""
     p = sub.add_parser(
         "taste",
         help="twin 审美孪生判断（README §1/§3.1）：宪章注入 + 冷启动单跳 → {选择,理由,置信度}",

@@ -27,7 +27,7 @@
   在 worker 侧经 :func:`settle_backlog_batch` → :func:`_settle_outcome` 落定；计划日志与
   ``<ts>.done``（``kind="plan"``）留 ``state/devops-runs/``，执行日志与 .done 在
   ``state/queues-runs/devops/``；完成唤醒走统一事件流 ``QUEUE-EMPTY``（worker 退出时发）。
-  分离进程无 kill 之外的规范停止手段，故补**协作式停止**：``orch drain-stop`` 写计划器
+  分离进程无 kill 之外的规范停止手段，故补**协作式停止**：``orch devops stop`` 写计划器
   ``state/devops.cancel`` **与 devops 队列 worker 的 ``state/queues/devops.cancel``**；
   两侧都在间隙检查——指向本进程则干净退出（释放锁、写含 ``stopped=cooperative`` 的部分
   .done、cancel 自删）；指向他方的陈旧信号顺手清除，绝不误停新 worker。
@@ -111,7 +111,7 @@ LOCK_STALE_S: int = 45 * 60
 #: 干跑开关环境变量：置真值时 wake 派生的 drain 走 --dry（不真派发，演练/验证唤醒链用）。
 DRY_ENV: str = "PYSCI_ORCH_DRAIN_DRY"
 
-#: 协作式停止信号（JSON: pid/requested_at）；orch drain-stop 写，drain 消费自删。
+#: 协作式停止信号（JSON: pid/requested_at）；orch devops stop 写，drain 消费自删。
 CANCEL_PATH: Path = ORCH_STATE_ROOT / "devops.cancel"
 
 #: 锁记录的「已释放」标记键：unlink 删不掉锁时把锁改写为该标记的**墓碑**——
@@ -593,12 +593,12 @@ def _stale_run_crashed(data: dict[str, Any]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# 协作式停止（orch drain-stop ↔ drain 循环间隙消费）
+# 协作式停止（orch devops stop ↔ drain 循环间隙消费）
 # ---------------------------------------------------------------------------
 def request_stop(
     paths: WorkerPaths | None = None, *, broadcast: bool = False
 ) -> tuple[bool, str]:
-    """写协作停止信号，目标为当前持锁 worker。供 ``orch drain-stop`` 调用。
+    """写协作停止信号，目标为当前持锁 worker。供 ``orch devops stop`` 调用。
 
     ``broadcast=True``（watchdog 用，backlog 20261014-135935-devops）：写**停止纪元**
     （``scope="all"``）而非单个 pid——同刻**全部** ``_watchdog-loop`` 实例（含不持锁的

@@ -194,7 +194,7 @@ def test_docs_handoff_records_bencher_ownership():
     leader_skill = (
         PROJECT_ROOT / "orchestration" / "skills" / "orchestration" / "SKILL.md"
     ).read_text(encoding="utf-8")
-    for face in ("bench-add", "bench-up", "bench-queue", "bench-seen", "bench-stop"):
+    for face in ("bench {add,start,queue,seen,stop,eval,baseline}",):
         assert face in leader_skill, f"组长技能缺 CLI 面：{face}"
 
 
@@ -210,10 +210,10 @@ def test_harness_eval_reference_declares_two_channels():
     ).read_text(encoding="utf-8")
     assert "通道归属" in text, "移交后必读段落缺席：读者无从知道套件归谁"
     section = text.split("## 通道归属", 1)[1].split("\n## ", 1)[0]
-    for token in ("orch eval run", "pysci-bench", "leader", "bencher"):
+    for token in ("orch bench eval", "pysci-bench", "leader", "bencher"):
         assert token in section, f"通道归属段缺 {token}（两条通道必须同段对照）"
     assert "runner" in section, "台账字段名要在归属段点名（分开读数的依据）"
-    assert "--runner" in text, "set-baseline/report 的通道过滤读法必须写明"
+    assert "--runner" in text, "baseline/report 的通道过滤读法必须写明"
 
 
 def test_bencher_deployed_copy_matches_source_when_present():

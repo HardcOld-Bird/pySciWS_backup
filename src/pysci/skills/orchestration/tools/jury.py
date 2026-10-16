@@ -1472,7 +1472,7 @@ def cmd_jury(args: argparse.Namespace) -> int:
         else:
             print(
                 "[NEXT] escalate=twin 且 twin 不可达/未表态 → **保守回退挂起**："
-                "提案维持待审批、未入队；请人工终裁（orch consult-twin 或 --override）"
+                "提案维持待审批、未入队；请人工终裁（orch twin consult 或 --override）"
             )
         return 0
     if run.status == "queued":

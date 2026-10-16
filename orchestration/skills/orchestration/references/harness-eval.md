@@ -1,4 +1,4 @@
-# Tier B harness 压测套件（orch eval）
+# Tier B harness 压测套件（orch bench eval）
 
 Tier A（tier-a-tags.md）是**被动**故障统计，Tier B 是**主动**压测：拿一组固定案卷，
 以最低成本档真派发，测「这套 harness 现在能不能干活、比上一轮好还是坏」。设计出处
@@ -8,13 +8,13 @@ README §5.5/§3.5；A/B 副本与套件归属见下（E4）。
 
 | 面 | 归属 | 命令 | 台账 `runner` |
 |---|---|---|---|
-| 组长**抽检** | 组长 | `orch eval run` / `eval set-baseline` | `leader` |
-| 套件本体（案卷/基线/A/B/判决口径） | **bencher** | `orch bench-add`/`bench-up` → `pysci-bench` | `bencher` |
+| 组长**抽检** | 组长 | `orch bench eval` / `bench baseline` | `leader` |
+| 套件本体（案卷/基线/A/B/判决口径） | **bencher** | `orch bench add`/`bench start` → `pysci-bench` | `bencher` |
 
 - 两条通道写**同一个** `state/ledger/evals.jsonl`，靠 `runner` 字段分开；E2 前的旧行无此
   字段，读法按 `leader` 回退（不是缺陷）。对照/回填基线时**必须带 `--runner`**，否则判决
   成了两条通道的平均数。
-- devops 侧的 `orch eval` 过渡授权（用户裁决 2026-10-12）已随 E4 退役：devops 只维护
+- devops 侧的 `orch bench eval` 过渡授权（用户裁决 2026-10-12）已随 E4 退役：devops 只维护
   checks 注册表与本文件的机械部分，不再自跑压测。
 - 基线捕获与副本 A/B 的机制、污染闸、清理纪律：bencher 技能 `references/bench-ops.md`；
   组长侧入队要领：`references/drain-watch.md` §3。
@@ -22,11 +22,11 @@ README §5.5/§3.5；A/B 副本与套件归属见下（E4）。
 ## 命令面
 
 ```
-uv run --no-sync pysci-orch eval run --case <id>        # 跑一案
-uv run --no-sync pysci-orch eval run --all              # 跑全套（按文件名序）
+uv run --no-sync pysci-orch bench eval --case <id>        # 跑一案
+uv run --no-sync pysci-orch bench eval --all              # 跑全套（按文件名序）
         [--model-tier max|flash|minimum]      # 覆盖案卷档位（默认案卷里的 minimum）
         [--label <轮次名>]                     # 本轮打标，供 set-baseline 精确回取
-uv run --no-sync pysci-orch eval set-baseline [--label <轮次名>] [--runner leader|bencher]
+uv run --no-sync pysci-orch bench baseline [--label <轮次名>] [--runner leader|bencher]
         # 以最近（或指定）一轮回填基线；E4 后不带 --runner 就是混合通道（慎用）
 ```
 
@@ -77,7 +77,7 @@ figure 自己的 `AGENTS.md`——git 跟踪面，于是测量噪声变成合并
 
 ## 基线对照
 
-`eval run` 末行输出本轮 vs `state/evals/baseline.json` 的 before/after 表。
+`bench eval` 末行输出本轮 vs `state/evals/baseline.json` 的 before/after 表。
 **改善** ⟺ 通过数不减 且 均值 num_turns 不劣化，且至少一项严格变好；同分即「未改善」
 （无平局档）。`_mean_turns` 丢弃 num_turns=0 的行，防「崩溃跑」靠零轮数冒充改善。
 无基线时输出 `无基线` 并提示先 `set-baseline`。
@@ -107,10 +107,10 @@ turns=2、transcript 里 50+ 条 assistant 消息）。`dispatch._accumulate_hop
   --json` 的 `arxiv_id`），不要凭印象写 ID。
 - **预算贴线＝判决不可信**（2026-10-12 E2 验收实测）：`blocked-recheck` 案内
   `max_turns: 10`，真派发跑出 turns=10/10 的 pass——判决是被轮次上限截断出来的，
-  模型多做一次自证就会翻成 fail。`eval run` 会在行尾打 `turns=N/M` 并在 M 用满时
+  模型多做一次自证就会翻成 fail。`bench eval` 会在行尾打 `turns=N/M` 并在 M 用满时
   点名 `[!] 预算用满`，对照表同样标注；见到就放宽案内 `max_turns`（预算按任务最小可
   达成量 ×1.4 留余量），别把贴线读数写进结论。
-- **一轮只跑一次，别并发**：`eval run` 不锁 pod 也不锁 `dirs:` 产物，两轮同时跑会互踩
+- **一轮只跑一次，别并发**：`bench eval` 不锁 pod 也不锁 `dirs:` 产物，两轮同时跑会互踩
   产物并把同 label 混成多行（E2 实测：并发轮 fig-basic 14 与 16 轮两条读数，顺序轮
   9 轮）。同案同档全新会话的**两次判决可以相反**（blocked-recheck 并发轮 1 pass/1 fail
   ——断言锚在交付正文，minimum 档是否复述边界有运气成分），故单次测量不是结论，
