@@ -80,8 +80,8 @@ def test_every_module_detail_has_real_readings_and_no_placeholder():
             await pilot.pause()
             lv = app.query_one("#menu", ListView)
             for i, mod in enumerate(app._mods):
-                if mod.key == "taskbooks":
-                    continue  # Enter 走专用面板（上面 ① 已覆盖）
+                if mod.key in ("taskbooks", "plans"):
+                    continue  # 二者各走专用面板（任务书 ① 已覆盖；计划 s6 面板见其测试）
                 lv.index = i
                 await pilot.pause()
                 await pilot.press("enter")
@@ -131,7 +131,7 @@ def test_detail_view_n_key_is_not_advertised_and_has_no_effect():
         async with app.run_test() as pilot:
             await pilot.pause()
             lv = app.query_one("#menu", ListView)
-            lv.index = 1  # 计划与派发（非任务书）
+            lv.index = 2  # 队列与运行（非任务书/计划——plans 已走专用面板，s6）
             await pilot.pause()
             await pilot.press("enter")
             assert app.view == "detail"
@@ -163,7 +163,7 @@ def test_footer_advertisement_follows_view():
             assert "n" not in app.screen.active_bindings, "菜单不得广告 `n`"
             assert "t" in app.screen.active_bindings
             lv = app.query_one("#menu", ListView)
-            lv.index = 1
+            lv.index = 2  # 队列与运行（plans 已走专用面板，s6）
             await pilot.pause()
             await pilot.press("enter")
             assert app.view == "detail"

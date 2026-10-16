@@ -50,15 +50,21 @@ def test_pilot_arrow_navigation_updates_selection():
 
 
 def test_pilot_enter_opens_detail_and_escape_returns():
-    """Enter 进详情（全屏该模块）、Esc 返回主菜单。"""
+    """Enter 进各模块面板、Esc 返回主菜单（s6：plans 走专用计划面板，其余走通用详情）。"""
 
     async def _go():
         app = tui.PysciTUI()
         async with app.run_test() as pilot:
             await pilot.press("down")  # → 计划与派发
             await pilot.press("enter")
+            assert app.view == "plans"  # s6：plans 模块 → 计划列表视图
+            assert len(app.plan_rows) >= 0
+            await pilot.press("escape")
+            assert app.view == "menu"
+            await pilot.press("down")  # → 队列与运行（仍走通用详情）
+            await pilot.press("enter")
             assert app.view == "detail"
-            assert "计划与派发" in app.detail_text
+            assert "队列与运行" in app.detail_text
             await pilot.press("escape")
             assert app.view == "menu" and app.detail_text == ""
 
