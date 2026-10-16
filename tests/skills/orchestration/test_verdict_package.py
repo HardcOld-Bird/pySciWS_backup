@@ -398,11 +398,11 @@ def test_consult_twin_refused_when_disabled(iso_state, iso_registry, capsys, tmp
         "## 问题\n要不要改\n\n## 选项 A\n改\n\n## 选项 B\n不改\n", encoding="utf-8"
     )
 
-    rc = orch.main(["consult-twin", str(case)])
+    rc = orch.main(["twin", "consult", str(case)])
 
     assert rc == 2
     out = capsys.readouterr().out
-    assert "twin 偏好面未启用" in out and "orch consult" in out
+    assert "twin 偏好面未启用" in out and "orch deputy consult" in out
 
 
 def test_consult_twin_dispatches_when_enabled(iso_state, monkeypatch, tmp_path):
@@ -422,7 +422,7 @@ def test_consult_twin_dispatches_when_enabled(iso_state, monkeypatch, tmp_path):
         ),
     )
 
-    assert orch.main(["consult-twin", str(case)]) == 0
+    assert orch.main(["twin", "consult", str(case)]) == 0
     assert seen[0][0] == "twin" and "案卷正文" in seen[0][1]["text"]
 
 

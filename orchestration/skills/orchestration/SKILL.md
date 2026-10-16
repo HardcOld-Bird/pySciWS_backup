@@ -28,13 +28,13 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
 ## 命令面（速查）
 
 ```
-pysci-orch status | plan {new,run,advance,rework,amend,adhoc,list,drop} | taskbooks ...
+pysci-orch status | plan {new,advance,rework,amend,adhoc,list,drop} | taskbooks ...
 pysci-orch taskbooks report <id> | next [--limit N]     # 全流程报告 | 跨任务路由+任务卡片
 pysci-orch queues {list,enqueue} | events {drain,list} | suggestions | approve | reject
-pysci-orch watch | consult | consult-twin | review <产物> | jury <案卷> | eval run | stats
-pysci-orch bench-add|bench-up|bench-queue|bench-seen|bench-stop    # 压测入队/生命周期
-pysci-orch inspector-up|inspector-status|inspector-patrol|inspector-assign|inspector-on|off
-pysci-orch taste <案卷> | dispatch | sessions | ledger | sync      # 判断通道 + 底层面
+pysci-orch deputy consult | twin {consult,taste,review} | watch | review | jury | stats
+pysci-orch bench {add,start,queue,seen,stop,eval,baseline}  # 压测队列 + 组长抽检（§5.5/§8）
+pysci-orch inspector {start,status,patrol,assign,enable,disable}  # 巡检引擎（§7）
+pysci-orch devops stop | dispatch | sessions | ledger | sync  # 队列停止 + 底层面
 ```
 
 成员 id：sim figure writing theory lit drawing model3d（专职）；deputy reviewer devops
@@ -50,7 +50,7 @@ harness-eval.md；唤醒未达排障 wake-troubleshoot.md；巡检引擎 referen
 `data/pysci_settings.toml [night] enabled`——改一行**下一轮即生效**（Stop 钩子按会话差分
 注入，无变化零输出）。ON 时经 SessionStart/PostCompact 注入政策全文＝**限时预授权**
 （决策权等同用户、事后追溯、留痕）；`AskUserQuestion` 被机械拦截 → 该问的转
-`pysci-orch consult-twin <案卷.md>`（twin 终裁）或 `pysci-orch consult "<问题>"`（副组长）；
+`pysci-orch twin consult <案卷.md>`（twin 终裁）或 `pysci-orch deputy consult "<问题>"`（副组长）；
 **不得因等用户停滞观望**。终态两态：全部完成／严重阻碍——**收尾写总结即结束推进；开关只归
 用户手动，LLM 永不改写**。
 

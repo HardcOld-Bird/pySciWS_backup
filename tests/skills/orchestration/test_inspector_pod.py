@@ -194,13 +194,7 @@ def test_leader_skill_declares_inspector_lifecycle_faces():
     text = (
         PROJECT_ROOT / "orchestration" / "skills" / "orchestration" / "SKILL.md"
     ).read_text(encoding="utf-8")
-    for face in (
-        "inspector-up",
-        "inspector-status",
-        "inspector-patrol",
-        "inspector-assign",
-        "inspector-on|off",
-    ):
+    for face in ("inspector {start,status,patrol,assign,enable,disable}",):
         assert face in text, f"组长技能缺 CLI 面：{face}"
     assert "references/inspector-engine.md" in text, "口径文档必须给出一行索引"
 

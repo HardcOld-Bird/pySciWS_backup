@@ -1,4 +1,4 @@
-"""E2 harness 压测套件（minimum 档 + 案卷判据 + orch eval run + 基线对照）。
+"""E2 harness 压测套件（minimum 档 + 案卷判据 + orch bench eval + 基线对照）。
 
 README §5.5/§3.5，backlog 20261011-233002-leader。这里测的是**测量仪本身**：
 判据写错必须当场失败（不许静默少测一项）、二元判决不许平局、压测行不进成员台账、
@@ -846,7 +846,7 @@ def test_baseline_roundtrip_and_label(iso_eval):
 def test_write_baseline_without_rows_raises(iso_eval):
     with pytest.raises(ValueError) as exc:
         ev.write_baseline()
-    assert "eval run" in str(exc.value)
+    assert "bench eval" in str(exc.value)
 
 
 def test_read_rows_skips_corrupt_line(iso_eval):
@@ -880,7 +880,7 @@ def test_cli_run_all_pass_rc0(iso_eval, monkeypatch, capsys):
     rc = ev.cmd_eval_run(ns(**ARGS))
     assert rc == 0
     o = capsys.readouterr().out
-    assert "[√] a" in o and "无基线" in o and "set-baseline" in o
+    assert "[√] a" in o and "无基线" in o and "bench baseline" in o
 
 
 def test_cli_run_fail_rc1_with_reasons(iso_eval, monkeypatch, capsys):
@@ -980,10 +980,13 @@ def test_cli_set_baseline_rc2_then_rc0(iso_eval, capsys):
 
 
 def test_cli_eval_parser_shape(capsys):
-    """``orch eval`` 的两子命令与必填互斥组：漏写 required 组会让 --all 变成哑参数。"""
+    """``orch bench eval`` 的两子命令与必填互斥组：漏写 required 组会让 --all 变成哑参数。"""
     from pysci.skills.orchestration.tools import orch
 
-    for argv in (["eval"], ["eval", "run"], ["eval", "run", "--case", "a", "--all"]):
+    for argv in (
+        ["bench", "eval"],
+        ["bench", "eval", "--case", "a", "--all"],
+    ):
         with pytest.raises(SystemExit) as exc:
             orch.main(argv)
         assert exc.value.code == 2, argv
@@ -998,7 +1001,7 @@ def test_cli_eval_parser_shape(capsys):
     mp = pytest.MonkeyPatch()
     mp.setattr(ev, "cmd_eval_run", fake_run)
     rc = orch.main(
-        ["eval", "run", "--all", "--model-tier", "minimum", "--label", "before"]
+        ["bench", "eval", "--all", "--model-tier", "minimum", "--label", "before"]
     )
     assert rc == 0
     a = seen["args"]
@@ -1006,5 +1009,5 @@ def test_cli_eval_parser_shape(capsys):
 
     mp.setattr(ev, "cmd_eval_set_baseline", lambda args: seen.get("b") or 0)
     seen["b"] = 1
-    assert orch.main(["eval", "set-baseline", "--label", "after"]) == 1
+    assert orch.main(["bench", "baseline", "--label", "after"]) == 1
     mp.undo()

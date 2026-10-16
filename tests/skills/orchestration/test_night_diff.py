@@ -265,17 +265,17 @@ def test_policy_has_no_dangling_section_ref_and_lists_consult_commands():
     assert "PSEP_2 §3.6" in t, (
         "查实出处：写全为 PSEP_2 §3.6（权限弹窗人工 checklist、不写钩子）"
     )
-    assert "pysci-orch consult-twin <案卷.md>" in t
-    assert 'pysci-orch consult "<问题>"' in t
+    assert "pysci-orch twin consult <案卷.md>" in t
+    assert 'pysci-orch deputy consult "<问题>"' in t
     # ⑤ 去行话：直白说明禁什么、等待走什么
     assert "空转打回" not in t
     assert "禁止把 LLM 当定时器" in t and "事件机制" in t
 
 
 def test_gate_deny_text_unchanged_semantics():
-    """既有判据面零回退：deny 文案仍指 consult-twin 与降级路径。"""
+    """既有判据面零回退：deny 文案仍指 twin consult 与降级路径。"""
     deny = night.gate_deny_message({"night": {"enabled": True}})
-    assert deny and "consult-twin" in deny and "副组长" in deny
+    assert deny and "twin", "consult" in deny and "副组长" in deny
     assert night.gate_deny_message({"night": {"enabled": False}}) is None
 
 

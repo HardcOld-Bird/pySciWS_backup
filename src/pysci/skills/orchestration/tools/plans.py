@@ -1299,7 +1299,7 @@ def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
         print(
             f'  1) 补充信息续作本环节：uv run --no-sync pysci-orch plan advance {plan_id} --text "<补充>"'
         )
-    print('  2) 咨询副组长：uv run --no-sync pysci-orch consult "<问题>"')
+    print('  2) 咨询副组长：uv run --no-sync pysci-orch deputy consult "<问题>"')
     print(
         f"  3) 修改计划（编辑 {_plan_path(plan_id).name} 后重新 advance；或跳过本环节：--skip）"
     )

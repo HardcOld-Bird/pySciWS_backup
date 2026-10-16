@@ -1,6 +1,6 @@
 """续跑/换档跳的 envelope 读数累计（E2 验收实测缺陷，backlog 20261012-075200-leader）。
 
-实测：`orch eval run` 的 fig-basic 行记 turns=2，而该会话 transcript 里躺着 50+ 条
+实测：`orch bench eval` 的 fig-basic 行记 turns=2，而该会话 transcript 里躺着 50+ 条
 assistant 消息——首跳崩了（rc=1），``do_dispatch`` 用 ``resume=True`` 自动重试，而
 ``-o json`` 的 envelope 只报**本次进程调用**的读数。拿末跳 envelope 记账/判决会把
 轮数、耗时、credits 与 pod-guard 拒绝次数一起做低。本组测试钉住整任务读数。

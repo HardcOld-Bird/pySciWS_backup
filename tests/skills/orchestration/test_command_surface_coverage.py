@@ -1,6 +1,6 @@
 """`command-surface.md` 的**顶层命令覆盖**与建议单口径（backlog 20261015-205905）。
 
-现场：`requeue`/`resolve`/`watchdog`/`drain-stop`/`refresh-models`/`twin-review` 六个**真实存在**
+现场：`requeue`/`resolve`/`watchdog`/`devops`/`refresh-models`/`twin` 六个**真实存在**
 的顶层命令在任何文档面都零命中——只能靠别的报错偶然看到 argparse 的 usage 行。本文件把
 「顶层命令全部有档」钉成机械判据（同类缺口此后再现即红），并钉建议单的两条口径。
 """
@@ -27,9 +27,9 @@ NAMED = (
     "requeue",
     "resolve",
     "watchdog",
-    "drain-stop",
+    "devops",
     "refresh-models",
-    "twin-review",
+    "twin",
 )
 
 _USAGE_CHOICES = re.compile(r"\{(.*?)\}", re.S)
@@ -53,7 +53,7 @@ def _top_level_commands(capsys) -> list[str]:
 
 
 def _documented(doc: str, cmd: str) -> bool:
-    """命令在文档里出现——**含 `a|b` 合并写法**（如 `inspector-on|off` 即覆盖 `inspector-off`）。"""
+    """命令在文档里出现——**含 `a|b` 合并写法**（如 `inspector enable|disable` 即覆盖 `inspector disable`）。"""
     return cmd in doc or f"|{cmd}" in doc or f"{cmd}|" in doc
 
 
@@ -75,9 +75,9 @@ def test_named_commands_have_semantics_not_just_the_word():
     assert "needs_leader → pending" in doc  # requeue
     assert "确认已达标的 needs_leader 条目 → done" in doc  # resolve
     assert "广播纪元停全部" in doc  # watchdog
-    assert "协作式停止" in doc  # drain-stop
+    assert "协作式停止" in doc  # devops stop
     assert "模型映射" in doc  # refresh-models
-    assert "复核 twin" in doc  # twin-review
+    assert "复核 twin" in doc  # twin review
 
 
 def test_requeue_resolve_scope_is_documented():
@@ -154,3 +154,159 @@ def test_watched_docs_within_budget():
     """本册与 SKILL 都在 8KB 真本预算内（落盘字节口径）。"""
     for p in (CMDSURF, SKILL):
         assert p.stat().st_size <= 8192, f"{p.name} 超预算：{p.stat().st_size}B"
+
+
+# ---------------------------------------------------------------------------
+# 命令面集中整备（backlog 20261016-221800）：子树化 / 内部命令隐藏 / 旧名拒收
+# ---------------------------------------------------------------------------
+#: 旧顶层名（**运行期拼接**：防常量折叠把字面量折进 .pyc 使含二进制的 grep 误命中）。
+_OLD_NAMES = tuple(
+    a + "-" + b
+    for a, b in (
+        ("consult", "twin"),
+        ("twin", "review"),
+        ("bench", "add"),
+        ("bench", "up"),
+        ("bench", "queue"),
+        ("bench", "seen"),
+        ("bench", "stop"),
+        ("inspector", "up"),
+        ("inspector", "status"),
+        ("inspector", "patrol"),
+        ("inspector", "assign"),
+        ("inspector", "on"),
+        ("inspector", "off"),
+        ("drain", "stop"),
+    )
+)
+
+#: 旧「命令 x 前缀」措辞（说话人对称化前）——运行期拼接同理。
+_OLD_PHRASES = ("orch " + "consult", "orch " + "taste", "orch " + "eval")
+
+#: 新子树与其子命令（映射表〔默认〕行的机械面）。
+_SUBGROUPS = {
+    "deputy": ["consult"],
+    "twin": ["consult", "taste", "review"],
+    "bench": ["add", "start", "queue", "seen", "stop", "eval", "baseline"],
+    "inspector": ["start", "status", "patrol", "assign", "enable", "disable"],
+    "devops": ["stop"],
+}
+
+_INTERNAL_CMDS = (
+    "_watchdog-loop",
+    "_queue-worker",
+    "_drain-devops",
+    "_bench-worker",
+    "_inspect-worker",
+)
+
+
+def _sub_choices(capsys, argv: list[str]) -> list[str]:
+    from pysci.skills.orchestration.tools import orch as _orch
+
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as ei:
+        _orch.main(argv)
+    assert ei.value.code == 0
+    out = capsys.readouterr().out
+    m = re.search(r"\{([^}]*)\}", out, re.S)
+    assert m, out
+    return [c.strip() for c in m.group(1).replace("\n", " ").split(",")]
+
+
+@pytest.mark.parametrize("old", _OLD_NAMES)
+def test_old_top_level_names_rejected(capsys, old):
+    """旧名**彻底移除**（用户明示无需向后兼容）：argparse 直接拒收。"""
+    from pysci.skills.orchestration.tools import orch as _orch
+
+    with pytest.raises(SystemExit) as ei:
+        _orch.main([old])
+    assert ei.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("group", sorted(_SUBGROUPS))
+def test_subtree_subcommands_available(capsys, group):
+    """映射表〔默认〕行：新命令可用（子面 `-h` 列出全部子命令，不多不少）。"""
+    assert _sub_choices(capsys, [group, "-h"]) == _SUBGROUPS[group]
+
+
+def test_internal_commands_hidden_from_usage(capsys):
+    """5 个 `_` 内部命令不进 `orch -h`（功能保留，钩子/派生照常调用）。
+
+    注意：argparse 对子命令不认 ``help=SUPPRESS``（会打出字面量 ``==SUPPRESS==``）——
+    故这里同时钉「字面量不漏」与「名字不出现」两面。
+    """
+    from pysci.skills.orchestration.tools import orch as _orch
+
+    capsys.readouterr()
+    with pytest.raises(SystemExit):
+        _orch.main(["-h"])
+    out = capsys.readouterr().out
+    assert "==SUPPRESS==" not in out, "argparse 的 SUPPRESS 字面量漏进帮助"
+    for name in _INTERNAL_CMDS:
+        assert name not in out, f"内部命令漏进 usage：{name}"
+
+
+def test_internal_commands_still_invokable(capsys):
+    """隐藏 ≠ 移除：内部命令仍可被钩子/派生进程调用（此处只验 argparse 认它）。"""
+    from pysci.skills.orchestration.tools import orch as _orch
+
+    with pytest.raises(SystemExit) as ei:
+        _orch.main(["_queue-worker", "-h"])
+    assert ei.value.code == 0
+    assert "worker" in capsys.readouterr().out
+
+
+def test_inspector_start_and_enable_are_distinguishable(capsys):
+    """`start`（拉起 worker）与 `enable`（全局开关）help 一眼可辨（用户点名 up/on 两字母之差）。"""
+    from pysci.skills.orchestration.tools import orch as _orch
+
+    capsys.readouterr()
+    with pytest.raises(SystemExit):
+        _orch.main(["inspector", "-h"])
+    out = capsys.readouterr().out
+    rows = {
+        parts[0]: ln
+        for ln in out.splitlines()
+        if (parts := ln.strip().split()) and parts[0] in ("start", "enable", "disable")
+    }
+    assert "拉起" in rows["start"] and "worker" in rows["start"], rows
+    assert "开关" in rows["enable"], rows
+    assert "开关" in rows["disable"], rows
+
+
+def test_twin_family_is_symmetric(capsys):
+    """`deputy consult` / `twin consult` 同为咨询动词，参数形态对称（各自 case/question）。"""
+    from pysci.skills.orchestration.tools import orch as _orch
+
+    capsys.readouterr()
+    with pytest.raises(SystemExit):
+        _orch.main(["deputy", "consult", "-h"])
+    d = capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        _orch.main(["twin", "consult", "-h"])
+    t = capsys.readouterr().out
+    assert "question" in d and "consult" in d, d
+    assert "case_file" in t and "案卷" in t, t
+
+
+def test_live_docs_have_no_old_command_names():
+    """活文档面（真本技能全文 + README + 现行设计引用）零旧名/旧措辞残留。
+
+    历史留档（`references/legacy-readme-v2.2.md`／`decisions.md`／`history-and-risks.md`）
+    如实记录当时状态，**不在**扫描面内（其更名不回溯）。
+    """
+    faces = sorted((ORCHESTRATION_ROOT / "skills").rglob("*.md")) + [
+        ORCHESTRATION_ROOT / "README.md",
+        ORCHESTRATION_ROOT / "references" / "plan-and-routing.md",
+        ORCHESTRATION_ROOT / "references" / "wake-and-events.md",
+        ORCHESTRATION_ROOT / "references" / "quality-and-improvement.md",
+    ]
+    bad: dict[str, list[str]] = {}
+    for p in faces:
+        txt = p.read_text(encoding="utf-8")
+        hit = [t for t in (*_OLD_NAMES, *_OLD_PHRASES) if t in txt]
+        if hit:
+            bad[p.relative_to(ORCHESTRATION_ROOT).as_posix()] = hit
+    assert not bad, f"活文档面旧名残留：{bad}"

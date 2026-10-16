@@ -1,6 +1,6 @@
 """基线捕获与副本 A/B（README §5.5「基线与副本 A/B」；E4）。
 
-**要解决的问题**：E2 的 ``orch eval run`` 只能测「现在这棵树的 harness」。要判「这次改动
+**要解决的问题**：E2 的 ``orch bench eval`` 只能测「现在这棵树的 harness」。要判「这次改动
 有没有让 harness 变好」，必须让**同一个案卷**在改动前/改动后各跑一次——而 main 只有一个
 HEAD，工作区还在被别的单推着走。§3 的解法是 git worktree 副本：两个 ref 各materialize
 一份树，各跑各的案，最后 :func:`eval.compare` 出二元判决。

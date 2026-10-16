@@ -1131,9 +1131,9 @@ def do_dispatch(
 
     ``attach_replies=False``：不把组长的审批回复附进提示词、也不归档 ``sent/``
     （README §5.5：harness 压测跳必须与「生产跳」隔离，否则回复里的上下文会让
-    压测结果不可比——``orch eval run`` 走这一支）。
+    压测结果不可比——``orch bench eval`` 走这一支）。
 
-    ``eval_hop=True``（``orch eval run`` 的压测跳）：不写成员生产台账
+    ``eval_hop=True``（``orch bench eval`` 的压测跳）：不写成员生产台账
     （``state/ledger/deliveries.jsonl``）、不把 <infra_suggestion> 落进建议队列——
     压测的成本/轮数/ctx 只进 ``state/ledger/evals.jsonl``，否则合成案卷的读数会
     被 ``orch stats`` 计到组员头上、每轮跑还会往队列塞假建议。
@@ -1955,7 +1955,7 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
             [
                 "组员被阻塞。可选：",
                 f'  1) 补充信息重派：uv run --no-sync pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "<补充>"',
-                '  2) 咨询副组长：uv run --no-sync pysci-orch consult "<问题>"',
+                '  2) 咨询副组长：uv run --no-sync pysci-orch deputy consult "<问题>"',
                 "  3) 上报用户（附交付正文）",
             ]
         )

@@ -370,7 +370,7 @@ def file_correction_suggestion(
             f"- 未改善案卷须复测出改善：{compared or '（A/B 未记案卷）'}",
             "原判据（审批时定死，不得改口）：",
             criteria,
-            f"- 复跑本核验：orch bench-add --kind ab --ref-a {ab_doc.get('ref_a', '')} "
+            f"- 复跑本核验：orch bench add --kind ab --ref-a {ab_doc.get('ref_a', '')} "
             f"--ref-b HEAD --label {ab_doc.get('label', '')}-rerun",
         )
     )
@@ -505,7 +505,7 @@ def taste_enabled() -> bool:
 
 
 def cmd_consult_twin(args) -> int:
-    """``orch consult-twin <案卷>``——咨询 twin 组员（高风险裁决的第二意见）。
+    """``orch twin consult <案卷>``——咨询 twin 组员（高风险裁决的第二意见）。
 
     ``taste_enabled=false`` 时明确拒绝并提示待上线，不静默降级成 deputy 咨询：把「问
     了个不存在的声音」当成答案是更坏的失败。
@@ -513,7 +513,7 @@ def cmd_consult_twin(args) -> int:
     **追溯留痕**（task-20261014-psep2-n3）：本通道是夜航政策的「转 twin 终裁」落点，
     故裁示经**硬格式**（{choice, reason, confidence}）读出后落两处——记录
     ``evals/taste/<case_id>.json``（record_kind=consult，含夜航预授权标记）+ 单一账目源
-    ``preference-journal``（channel=twin）；用户复核走 ``orch twin-review``。
+    ``preference-journal``（channel=twin）；用户复核走 ``orch twin review``。
     """
     from . import taste as _taste
     from .dispatch import do_dispatch  # 延迟导入：与 consult 同面
@@ -524,7 +524,7 @@ def cmd_consult_twin(args) -> int:
             "拒绝咨询。\n"
             "    该通道待 E6 上线：用户确认 PREFERENCE.md 草案后由用户本人置 true，"
             "组长无权代按（§5.5/§10）。\n"
-            '    眼下要第二意见：orch consult "<问题>"（副组长，平级协作条款）。'
+            '    眼下要第二意见：orch deputy consult "<问题>"（副组长，平级协作条款）。'
         )
         return 2
     case = Path(str(args.case_file))
@@ -547,7 +547,7 @@ def cmd_consult_twin(args) -> int:
     outcome = do_dispatch(
         "twin",
         text=text,
-        slug=f"consult-twin-{datetime.now().strftime('%H%M%S')}",
+        slug=f"twin consult-{datetime.now().strftime('%H%M%S')}",
         session=args.session or "latest",
     )
     if outcome.error == "pod 不存在":
@@ -596,7 +596,7 @@ def cmd_consult_twin(args) -> int:
         tag = f"〔{_taste.NIGHT_AUTHORITY}〕" if marker["night"] else ""
         print(
             f"  裁示：{ruling['choice']}（置信度 {conf}）{tag}\n"
-            f"  理由：{ruling['reason']}\n  留痕：{_taste._rel(path)}；复核：orch twin-review {case_id}"
+            f"  理由：{ruling['reason']}\n  留痕：{_taste._rel(path)}；复核：orch twin review {case_id}"
         )
         return 0
     print(

@@ -5,7 +5,7 @@
 1. **冷启动强制**：成员 ``cold_start`` 使 ``do_dispatch`` 在任何外呼之前拒绝非 new 会话；
 2. **readonly_extra 拦截 PREFERENCE.md 写**：registry → ``build_env`` → ``PYSCI_READONLY``
    → **真 pod-guard（node 直跑）** exit 2，同 pod 内普通文件放行（对照组）；
-3. **``taste_enabled=false`` 拒绝派发**：开关未置真时 ``orch taste`` 不调 do_dispatch；
+3. **``taste_enabled=false`` 拒绝派发**：开关未置真时 ``orch twin taste`` 不调 do_dispatch；
    置真后走通且**每跳新 sid、session 恒为 new**（无记忆的可测面）；
 4. **mirror journal 分流落点对**：①只写决策日志、②只写强制队列、复选两边都写，
    且队列读数进 ``orch status``（组长可见）。
@@ -521,7 +521,7 @@ def test_taste_on_without_approval_is_caught(monkeypatch, tmp_path):
 def test_twin_intentionally_has_no_manifest_target():
     """原单规格第 2 条要求「manifest 追加 twin 部署目标」——本用例把**不适用**的裁定钉住。
 
-    twin 无领域技能真本：判断输入只有「宪章 + 案卷」，由 ``orch taste`` 直接注入；给它挂
+    twin 无领域技能真本：判断输入只有「宪章 + 案卷」，由 ``orch twin taste`` 直接注入；给它挂
     任何领域技能都会把绘图/写作方法论混进审美判断。而 manifest 的每个 target 必须指向存在
     的 ``source`` 目录，凭空造一个 ``orchestration/skills/twin/`` 就是未被要求的文件。
     ``reviewer`` 是同形先例（同样不在 targets 里）。若将来真要给 twin 挂技能，改这条测试

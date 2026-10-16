@@ -3,7 +3,7 @@
 四条命令面（**全部复用**共享库，本文件只做参数装配与读数呈现）：
 
 - ``run`` —— 跑套件案（一案/全部），台账行带 ``runner=bencher``；二元判决 0/1，
-  案卷不可用 2（与 ``orch eval run`` 同一口径，两条通道的差别只在**发起方**）。
+  案卷不可用 2（与 ``orch bench eval`` 同一口径，两条通道的差别只在**发起方**）。
 - ``capture`` —— 基线捕获：记录 ref 的 commit + 归档案内 pod 的 gitignored harness 面
   （:func:`replica.capture_baseline`）。§13 待决 2 在 E4 的定案：**不建常驻 worktree**，
   理由见 :mod:`replica` 模块文档串。

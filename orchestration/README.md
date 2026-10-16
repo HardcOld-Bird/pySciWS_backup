@@ -51,9 +51,11 @@
 ## 4. orch CLI（pysci-orch）——组长唯一工作通道
 
 **4.1 命令面（plan-first 分层，用户裁决）**：日常面 = `status`／`plan`／`next`／`taskbooks`／`queues`／
-`events`／`approve`／`reject`／`watch`／`wake-claim`／`consult[-twin]`／`review`／`jury`／`stats`／
-`bench-*`／`inspector-*`／`taste`；底层（降级/调试）= `dispatch`/`sessions`/`ledger`/`sync`。**全表与
-旗标见技能 `references/command-surface.md`。**
+`events`／`approve`／`reject`／`watch`／`wake-claim`／`deputy`／`twin`／`review`／`jury`／`stats`／
+`bench`／`inspector`／`devops`；底层（降级/调试）= `dispatch`/`sessions`/`ledger`/`sync`。**全表与
+旗标见技能 `references/command-surface.md`。**（按域收进子树：`deputy consult`／`twin consult|taste|review`／
+`bench add|start|queue|seen|stop|eval|baseline`／`inspector start|status|patrol|assign|enable|disable`／
+`devops stop`；5 个 `_` 内部命令不进 usage——backlog 20261016-221800。）
 
 **4.2 计划驱动（plan-first）**：一切工作走 plan；`steps[]` 元素二型**递归**（普通 step ｜ **superstep**
 `{id, mode: serial|parallel, children}`），叶子在 state.json 扁平化为**点路径 id**、按 id 对账。

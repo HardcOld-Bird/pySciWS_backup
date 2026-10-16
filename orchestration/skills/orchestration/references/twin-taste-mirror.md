@@ -11,15 +11,15 @@
 pysci status        # 用户侧全景：待盲审/宪章状态/taste_enabled/队列水位/待决事项
 ```
 
-输出里 `taste_enabled = False` 就是「twin 还没被授权对外说话」；`orch taste` 在此状态下
+输出里 `taste_enabled = False` 就是「twin 还没被授权对外说话」；`orch twin taste` 在此状态下
 **拒绝派发**并打印原因，这是设计而不是故障。
 
-## 2. `orch taste <案卷.md>`——审美孪生的单跳判断
+## 2. `orch twin taste <案卷.md>`——审美孪生的单跳判断
 
 ```
-uv run --no-sync pysci-orch taste state/evals/cases/xxx.md --dry     # 只看注入内容，零成本
-uv run --no-sync pysci-orch taste state/evals/cases/xxx.md           # 真派发（须 taste_enabled=true）
-uv run --no-sync pysci-orch taste <案卷.md> --member twin --model-tier flash
+uv run --no-sync pysci-orch twin taste state/evals/cases/xxx.md --dry     # 只看注入内容，零成本
+uv run --no-sync pysci-orch twin taste state/evals/cases/xxx.md           # 真派发（须 taste_enabled=true）
+uv run --no-sync pysci-orch twin taste <案卷.md> --member twin --model-tier flash
 ```
 
 - **案卷格式与 `orch jury` 同源**（`## 问题` / `## 选项 A` / `## 选项 B` [ `/ ## 证据` ]，
@@ -37,7 +37,7 @@ uv run --no-sync pysci-orch taste <案卷.md> --member twin --model-tier flash
 | 局面 | 现在 | E6 生效后 |
 |---|---|---|
 | 客观通道（实测/jury）读数模棱两可 | 组长自己裁或上报用户 | 回退 twin 终裁，结果必为 A/B 之一 |
-| 「好不好看/好不好用」类审美面 | 组长凭与用户的既有共识裁，或直接向用户提请二选一 | `orch taste` 代用户表态，留痕可查 |
+| 「好不好看/好不好用」类审美面 | 组长凭与用户的既有共识裁，或直接向用户提请二选一 | `orch twin taste` 代用户表态，留痕可查 |
 | 最终交付验收 | **永不**由 twin 代理（§9） | 同左，代理范围不含验收 |
 
 `PREFERENCE.md` 生效之前，**不要**为了「先跑起来」把 `taste_enabled` 置 true——误开的代价
@@ -45,7 +45,7 @@ uv run --no-sync pysci-orch taste <案卷.md> --member twin --model-tier flash
 
 ## 3. 无记忆纪律的三道闸（为什么 twin 不会「记得」上次判断）
 
-1. `orch taste` 只以 `session="new"` 调 `do_dispatch`；
+1. `orch twin taste` 只以 `session="new"` 调 `do_dispatch`；
 2. registry 成员字段 `cold_start` 使 `do_dispatch` 在**任何外呼之前**拒绝非 new 会话
    （`code=2`，`error` 含 `cold_start`）——写在 charter 里劝一句迟早会被忘，纪律落成 exit；
 3. twin 的 `AGENTS.md` 固定为最小占位且列入 `readonly_extra`，自维护层无法积累「以往判断
@@ -56,7 +56,7 @@ twin pod 的写权限面：`PREFERENCE.md` 与 charter/settings/mcp/inbox 同属
 链是 **用户盲审纠正 → 偏差报告绿色通道 → devops 实施**，不由 twin 自己动笔。
 
 **twin 是刻意的零技能 pod**（不进 `manifest.toml` targets，同 `reviewer` 先例）：它无领域技能
-真本可部署，判断输入只有「宪章 + 案卷」，由 `orch taste` 直接注入。给它挂任何领域技能都会把
+真本可部署，判断输入只有「宪章 + 案卷」，由 `orch twin taste` 直接注入。给它挂任何领域技能都会把
 绘图/写作的方法论混进审美判断，且 manifest 的 target 必须指向存在的真本目录，凭空造一个
 `twin/` 技能册违反「不创建未被要求的文件」。此判断由
 `test_twin_intentionally_has_no_manifest_target` 钉住，后续会话不必再猜。

@@ -243,7 +243,7 @@ def taste_cases() -> int:
 def twin_ruling_lines(limit: int = 8) -> list[str]:
     """twin 判断/裁决**逐条明细**（审计面：夜航代裁须事后可复核；数据层纯函数）。
 
-    ``pysci`` TUI「盲审与审查」详情与 `orch twin-review --list` 共用（同一能力不留两份
+    ``pysci`` TUI「盲审与审查」详情与 `orch twin review --list` 共用（同一能力不留两份
     实现：拼装在 :func:`taste.ruling_lines`，本函数只做数据层转发）。
     """
     from . import taste
@@ -263,7 +263,7 @@ def _line_review() -> str:
         return "twin 判断/裁决 = 0（留痕尚未产生）"
     pending = taste.pending_review_count()
     return (
-        f"twin 判断/裁决 = {n}（待用户复核 {pending}；明细 `orch twin-review --list`）"
+        f"twin 判断/裁决 = {n}（待用户复核 {pending}；明细 `orch twin review --list`）"
     )
 
 
@@ -290,12 +290,12 @@ def _line_switches() -> str:
     insp = inspector_enabled()
     return (
         f"twin 判断通道 taste_enabled = {on}"
-        f"{'（已生效）' if on else '（未生效：orch taste 拒绝派发）'}  "
+        f"{'（已生效）' if on else '（未生效：orch twin taste 拒绝派发）'}  "
         f"inspector 开关 = {insp}"
         + (
             "（默认态：orch 命令自动拉起巡检）"
             if insp
-            else "（已关闭：拉起逻辑 no-op，orch inspector-on 恢复）"
+            else "（已关闭：拉起逻辑 no-op，orch inspector enable 恢复）"
         )
     )
 

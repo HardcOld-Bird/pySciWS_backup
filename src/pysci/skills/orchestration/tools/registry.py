@@ -303,7 +303,7 @@ def normalize_seat(raw: Any) -> dict[str, Any] | None:
     return out
 
 
-#: twin 判断通道（``orch taste``）的生效开关默认值。**False 是设计而不是缺省占位**：
+#: twin 判断通道（``orch twin taste``）的生效开关默认值。**False 是设计而不是缺省占位**：
 #: PREFERENCE.md v1 是草案，生效确认权归用户（README §1 代理裁决「上线留用户」），故代码
 #: 不替用户按下这个开关；用户确认草案后把 registry.json 顶层 ``taste_enabled`` 置 true。
 #: 值非布尔（笔误/字符串）→ 回落 False：这条通道宁可不开，不可误开。
@@ -1036,7 +1036,7 @@ class Registry:
 
     @property
     def taste_enabled(self) -> bool:
-        """twin 宪章是否生效（``orch taste`` 能否派发，见 :data:`DEFAULT_TASTE_ENABLED`）。
+        """twin 宪章是否生效（``orch twin taste`` 能否派发，见 :data:`DEFAULT_TASTE_ENABLED`）。
 
         只认布尔真值：缺失、非布尔、字符串 ``"false"`` 一律判 False——这条通道一旦开启
         就以「用户的声音」对外服务，读错方向必须是关闭而非猜测。

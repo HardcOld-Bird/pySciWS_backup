@@ -8,11 +8,11 @@ SKILL.md 放决策与命令面；本文放**为什么这样设计**与**坏了�
 
 | 命令 | 作用 |
 |---|---|
-| `orch bench-add <run\|capture\|ab\|check> [--cases …] [--start]` | 入队一个测量任务 |
-| `orch bench-up [--dry]` | 拉起后台 worker（非空即消化，空即自毁） |
-| `orch bench-queue [--all]` | 列队列（默认只看在途与待查看） |
-| `orch bench-seen <id>` | 提请人确认已查看，从待查看面摘掉 |
-| `orch bench-stop` | 协作停止（条目间隙干净退出，不 kill） |
+| `orch bench add <run\|capture\|ab\|check> [--cases …] [--start]` | 入队一个测量任务 |
+| `orch bench start [--dry]` | 拉起后台 worker（非空即消化，空即自毁） |
+| `orch bench queue [--all]` | 列队列（默认只看在途与待查看） |
+| `orch bench seen <id>` | 提请人确认已查看，从待查看面摘掉 |
+| `orch bench stop` | 协作停止（条目间隙干净退出，不 kill） |
 | `orch status` | `== bencher worker ==` 段：锁态/计数/待查看结果 |
 
 - 队列文件 `state/bencher/queue.json`，锁 `state/bencher.lock`，run 日志与 `.done`
@@ -76,7 +76,7 @@ PYTHONPATH=<replica>/src  →  import pysci 命中副本源码  →  __file__ �
 
 - devops：`tests/` 与 src 正确性（代码跑不跑得对）。
 - bencher：harness 案卷与基线（成员在真实任务上表现可不可测、比上轮好没好）。
-- `orch eval run` 保留为**组长抽检面**（`runner=leader`）；套件所有权在 E4 之后属 bencher：
+- `orch bench eval` 保留为**组长抽检面**（`runner=leader`）；套件所有权在 E4 之后属 bencher：
   案卷增删、基线重取、判决口径都由你负责，组长只读与抽检。
 
 ## 7. 常见故障

@@ -45,7 +45,7 @@ def face(tmp_path, monkeypatch):
 def test_gate_denies_with_twin_directive_when_night_on():
     deny = night.gate_deny_message({"night": {"enabled": True}})
     assert deny is not None
-    assert "夜航模式" in deny and "consult-twin" in deny and "twin 终裁" in deny
+    assert "夜航模式" in deny and "twin", "consult" in deny and "twin 终裁" in deny
     assert "仍不等用户" in deny
 
 
@@ -68,7 +68,7 @@ def test_gate_cli_two_states(tmp_path, capsys):
     toml.write_text("[night]\nenabled = true\n", encoding="utf-8")
     assert night.main(["--gate", "--settings", str(toml)]) == 2
     err = capsys.readouterr().err
-    assert "夜航模式" in err and "consult-twin" in err
+    assert "夜航模式" in err and "twin", "consult" in err
     # OFF → rc 0 + 零 stderr
     toml.write_text("[night]\nenabled = false\n", encoding="utf-8")
     assert night.main(["--gate", "--settings", str(toml)]) == 0

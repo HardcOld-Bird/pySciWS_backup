@@ -154,6 +154,8 @@ def test_command_surface_lists_improvement_institutions():
     """映射 5：§4.1 改进机构面含 bench/jury/taste/eval/inspector 子命令 + mirror 摘要。"""
     readme = _read("orchestration/README.md")
     sec = readme[readme.index("### 4.1") : readme.index("### 4.2")]
+    # 注意：语料把 legacy-readme-v2.2.md 排在 README 之前，故本切片落在 **v2.2 留档**的 §4.1
+    # （历史原文，命令名保持当时形态——backlog 20261016-221800 更名不回溯改动留档）。
     for marker in (
         "orch jury",
         "orch taste",

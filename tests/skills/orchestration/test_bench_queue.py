@@ -5,7 +5,7 @@
 
 - 入队校验：非法 kind / ab 少一端 / capture 无案，一律当场拒绝（不入库就是证据）；
 - FIFO 与孤儿回收：单 worker 互斥由锁保证，故获锁一刻仍在 ``in_progress`` 必是死 worker 遗物；
-- 「择机查看」通知面（§5.1-B）：完成项进 status 待查看面直到 ``bench-seen``，且
+- 「择机查看」通知面（§5.1-B）：完成项进 status 待查看面直到 ``bench seen``，且
   **唤醒器不挂 watch**——这是它与 devops drain 的唯一行为差别（§8 明写不即时打断）；
 - 干跑全链：注入 → 拉起 → 消化 → 自毁 → 结果待查看（判据 3 的机械面）。
 
@@ -362,27 +362,27 @@ def test_wake_respects_dry_env_and_force(iso_bench, monkeypatch):
 def test_bench_add_and_up_via_orch_main(iso_bench, monkeypatch, capsys):
     calls = _spawns(monkeypatch)
     rc = orch.main(
-        ["bench-add", "run", "--cases", "fig-basic,lit-arxiv", "--label", "e4"]
+        ["bench", "add", "run", "--cases", "fig-basic,lit-arxiv", "--label", "e4"]
     )
     assert rc == 0
     assert "[NEXT]" in capsys.readouterr().out and calls == []
-    rc = orch.main(["bench-up", "--dry"])
+    rc = orch.main(["bench", "start", "--dry"])
     assert rc == 0 and len(calls) == 1 and "--dry" in calls[0]
 
 
 def test_bench_add_rejects_bad_kind_with_rc2(iso_bench, capsys):
     """ab 少一端：parser 放行（kind 合法），**入队闸**拦住并回 rc=2（不入库）。"""
-    assert orch.main(["bench-add", "ab", "--ref-a", "X"]) == 2
+    assert orch.main(["bench", "add", "ab", "--ref-a", "X"]) == 2
     assert "入队被拒" in capsys.readouterr().out
     assert benchd.queue_load() == [], "被拒的项不落队列"
-    assert orch.main(["bench-add", "run", "--cases", "fig-basic"]) == 0
+    assert orch.main(["bench", "add", "run", "--cases", "fig-basic"]) == 0
     assert len(benchd.queue_load()) == 1
 
 
 def test_bench_add_unknown_kind_is_parser_error(iso_bench):
     """kind 词表在 parser 面即执法（choices），非法值到不了业务层。"""
     with pytest.raises(SystemExit) as exc:
-        orch.main(["bench-add", "bench"])
+        orch.main(["bench", "add", "bench"])
     assert exc.value.code == 2
     assert benchd.queue_load() == []
 
@@ -391,14 +391,14 @@ def test_bench_queue_seen_and_stop(iso_bench, monkeypatch, capsys):
     monkeypatch.setattr(ev, "load_cases", lambda case_id="": [fake_case("fig-basic")])
     it = benchd.enqueue("run", cases=["fig-basic"], stamp="T1")
     benchd.bench_drain(_run_log(iso_bench), dry=True)
-    assert orch.main(["bench-queue"]) == 0
+    assert orch.main(["bench", "queue"]) == 0
     out = capsys.readouterr().out
     assert it["id"] in out and "run: fig-basic" in out
-    assert orch.main(["bench-seen", it["id"]]) == 0
-    assert orch.main(["bench-seen", "不存在id"]) == 2
-    assert orch.main(["bench-queue", "--all"]) == 0
+    assert orch.main(["bench", "seen", it["id"]]) == 0
+    assert orch.main(["bench", "seen", "不存在id"]) == 2
+    assert orch.main(["bench", "queue", "--all"]) == 0
     assert "已查看" in capsys.readouterr().out
-    assert orch.main(["bench-stop"]) == 1, "锁空闲时无处可停（残留信号会危及下一任）"
+    assert orch.main(["bench", "stop"]) == 1, "锁空闲时无处可停（残留信号会危及下一任）"
 
 
 def test_status_shows_pending_review(iso_bench, iso_registry, monkeypatch, capsys):

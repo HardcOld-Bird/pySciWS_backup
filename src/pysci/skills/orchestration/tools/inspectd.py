@@ -8,7 +8,7 @@
 四类闸门（都在 :func:`activation_gate` 一处收口，任何入口都绕不过）：
 
 1. **全局开关** 真源 ``data/pysci_settings.toml [inspector] enabled``（:func:`enabled`，legacy ``state/inspector.enabled`` 只在 toml 缺席时回落）：**缺席=开启**（§7
-   「默认开启」），``orch inspector-off`` 写 ``false`` 后所有拉起逻辑 no-op——关比开容易
+   「默认开启」），``orch inspector disable`` 写 ``false`` 后所有拉起逻辑 no-op——关比开容易
    生效是刻意的（成本失控时用户要一键止住，而不是去猜默认值）。
 2. **激活预算**（registry ``inspector.max_hops`` / ``wallclock_s``）：单次激活派给
    inspector 本人的跳数与墙钟到顶即自停（``.done`` 记 ``stopped=budget_*``）。
@@ -209,7 +209,7 @@ PATROL_MENU: tuple[dict[str, Any], ...] = (
         "id": "bench-probe",
         "label": "抽跑 pysci-bench 队列提案",
         "brief": (
-            "读 `orch bench-queue` 面与 evals 台账，挑一个值得复测/重取基线的读数缺口，"
+            "读 `orch bench queue` 面与 evals 台账，挑一个值得复测/重取基线的读数缺口，"
             "经 bench 队列提案（inspector 不自己跑压测）。"
         ),
         "self_cover": False,
@@ -242,7 +242,7 @@ def enabled() -> bool:
     """巡检引擎是否允许被拉起（§7 全局开关：缺席=开启）。
 
     真源 = ``data/pysci_settings.toml`` 的 ``[inspector] enabled``（用户裁决 2026-10-12
-    22:4x：原 ``state/inspector.enabled`` 迁至该文件，`orch inspector-on/off` 改写它）。
+    22:4x：原 ``state/inspector.enabled`` 迁至该文件，`orch inspector enable/disable` 改写它）。
     toml 缺席 / 键缺席才回落 legacy 文件——迁移期两处并存时 toml 恒优先（真源唯一）。
     """
     flag = _settings.inspector_flag()
@@ -260,7 +260,7 @@ def enabled() -> bool:
 
 
 def set_enabled(on: bool) -> str:
-    """写开关（``orch inspector-on/off``），返回**实际落盘**的字面值。
+    """写开关（``orch inspector enable/disable``），返回**实际落盘**的字面值。
 
     优先外科式改写真源 toml（只动 ``enabled =`` 一行、注释逐字保留）；toml 不可写
     （文件缺席/只读）才回落 legacy 文件——便利入口保留，真源仍只有一处被更新。
@@ -709,7 +709,7 @@ def _shape_warn(rec: dict[str, Any], channel: str) -> str:
         return ""
     return (
         "修复形状未登记或为 change 且无判决记录 → 派发后 devops 只能交付 blocked 等判决"
-        "（`pysci-orch jury` 或 consult-twin 补上判决/形状后再派，避免白烧一跳）"
+        "（`pysci-orch jury` 或 twin consult 补上判决/形状后再派，避免白烧一跳）"
     )
 
 
@@ -1145,11 +1145,11 @@ def check_throttle_config() -> list[dict[str, Any]]:
             "kind": "defect",
             "title": "registry.inspector 迟滞阈值配置非法，已回落出厂值",
             "symptom": "resume_* 未严格低于 pause_*，闸会变成每轮翻转的开关",
-            "repro": "orch inspector-status",
+            "repro": "orch inspector status",
             "evidence": f"生效值：{par}",
             "expect": "hysteresis_valid=true 且生效阈值等于所配阈值",
             "tag": "",
-            "criteria": "- `orch inspector-status` 不再报「配置被忽略」",
+            "criteria": "- `orch inspector status` 不再报「配置被忽略」",
             "source": "inspectd",
         }
     ]
@@ -1498,7 +1498,7 @@ def notify_stale_queue(
                 f"inspector 队列项（{it.get('kind')}）入队 {age}s 未处理"
                 f"（> {int(timeout_s or QUEUE_TIMEOUT_S)}s）"
             ),
-            action="orch inspector-status 排查让路/节流；orch inspector-up 手动拉起",
+            action="orch inspector status 排查让路/节流；orch inspector start 手动拉起",
         )
         out.append(it)
     return out
@@ -1579,7 +1579,7 @@ def status_lines() -> list[str]:
     s = inspector_status()
     if not s["enabled"]:
         return [
-            "    [o] inspector 全局开关=关闭（orch inspector-on 开启；拉起逻辑 no-op）"
+            "    [o] inspector 全局开关=关闭（orch inspector enable 开启；拉起逻辑 no-op）"
         ]
     lock = s["lock"]
     state = lock["state"]
@@ -1633,10 +1633,10 @@ def status_lines() -> list[str]:
 # CLI 面（orch inspector-*）
 # ---------------------------------------------------------------------------
 def cmd_inspector_up(args: argparse.Namespace) -> int:
-    """``orch inspector-up``：幂等拉起（``--dry`` 演练，``--force`` 越冷却窗）。
+    """``orch inspector start``：幂等拉起（``--dry`` 演练，``--force`` 越冷却窗）。
 
     ``--force`` 只越**冷却**，不越**开关**，也不越**锁**：开关是用户的成本控制裁决
-    （要开就明确 ``orch inspector-on``），锁是幂等性的定义本身。临时翻开关再改回来还会
+    （要开就明确 ``orch inspector enable``），锁是幂等性的定义本身。临时翻开关再改回来还会
     和刚派生的 worker 抢同一个文件（它一读见 false 就 self-stop），不是「强制」是竞态。
     """
     spawned, msg = wake_inspector(
@@ -1663,13 +1663,13 @@ def _cmd_switch(on: bool) -> int:
 
 
 def cmd_inspector_on(args: argparse.Namespace) -> int:
-    """``orch inspector-on``：打开全局开关（默认即开启，本命令用于关掉后再开）。"""
+    """``orch inspector enable``：打开全局开关（默认即开启，本命令用于关掉后再开）。"""
     del args
     return _cmd_switch(True)
 
 
 def cmd_inspector_off(args: argparse.Namespace) -> int:
-    """``orch inspector-off``：关闭全局开关（成本控制，§7 用户裁决）。"""
+    """``orch inspector disable``：关闭全局开关（成本控制，§7 用户裁决）。"""
     del args
     rc = _cmd_switch(False)
     # 开关只管「不再激活」；已在跑的 worker 靠协作停止信号在条目间隙干净退出，
@@ -1684,7 +1684,7 @@ def cmd_inspector_off(args: argparse.Namespace) -> int:
 
 
 def cmd_inspector_status(args: argparse.Namespace) -> int:
-    """``orch inspector-status``：引擎面细读（闸门/阈值/队列/发现）。"""
+    """``orch inspector status``：引擎面细读（闸门/阈值/队列/发现）。"""
     del args
     for line in status_lines():
         print(line)
@@ -1709,12 +1709,14 @@ def _enqueue_and_wake(kind: str, **kw: Any) -> int:
         spawned, msg = wake_inspector()
         print(f"[{'▶' if spawned else 'i'}] {msg}")
     else:
-        print("    [NEXT] `orch inspector-up` 拉起 worker（或 --start 入队即拉起）。")
+        print(
+            "    [NEXT] `orch inspector start` 拉起 worker（或 --start 入队即拉起）。"
+        )
     return 0
 
 
 def cmd_inspector_patrol(args: argparse.Namespace) -> int:
-    """``orch inspector-patrol``：手动排一项巡检（不给 ``--target`` 就随机抽一项）。"""
+    """``orch inspector patrol``：手动排一项巡检（不给 ``--target`` 就随机抽一项）。"""
     target = str(args.target or "")
     if target and target not in PATROL_BY_ID:
         print(f"[✗] 菜单项 {target!r} 不存在；可用：{', '.join(sorted(PATROL_BY_ID))}")
@@ -1728,7 +1730,7 @@ def cmd_inspector_patrol(args: argparse.Namespace) -> int:
 
 
 def cmd_inspector_assign(args: argparse.Namespace) -> int:
-    """``orch inspector-assign``：组长指派一项核查（kind=assignment，带任务书正文）。"""
+    """``orch inspector assign``：组长指派一项核查（kind=assignment，带任务书正文）。"""
     brief = str(args.brief or "").strip()
     if not brief:
         print("[✗] 指派项需要 --brief（核查任务书正文；空指派等于让组员猜）")

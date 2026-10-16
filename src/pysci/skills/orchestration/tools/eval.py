@@ -6,7 +6,7 @@
 机械判据出 **通过/失败**，指标行入 ``state/ledger/evals.jsonl``；与
 ``state/evals/baseline.json`` 对照出 **改善/未改善**。§0.5 硬要求无平局。
 
-设计纪律（§0.9）：**不建独立 CLI**，``orch eval run`` / ``orch eval set-baseline``
+设计纪律（§0.9）：**不建独立 CLI**，``orch bench eval`` / ``orch bench baseline``
 是本库的封装面；执行一跳**复用** :func:`dispatch.do_dispatch`，不在这里重复派发链。
 
 案卷位置 ``state/evals/harness/<case-id>.md``（所有权归 bencher，§3；E4 前由 devops
@@ -37,7 +37,7 @@ from .registry import Registry, dirty_tracked_state
 HARNESS_DIR: Path = ORCH_STATE_ROOT / "evals" / "harness"
 #: 压测台账（与生产台账 ``deliveries.jsonl`` 分文件：指标口径不同，且不许污染成员排名）。
 EVAL_LEDGER_PATH: Path = ORCH_STATE_ROOT / "ledger" / "evals.jsonl"
-#: 基线快照（``orch eval set-baseline`` 写入，``orch eval run`` 读取对照）。
+#: 基线快照（``orch bench baseline`` 写入，``orch bench eval`` 读取对照）。
 BASELINE_PATH: Path = ORCH_STATE_ROOT / "evals" / "baseline.json"
 
 #: 压测默认档（§1.1：harness 压测走成本最低档；案卷可用 ``tier:`` 行覆盖）。
@@ -121,7 +121,7 @@ class Row:
     #: 本跳污染了组员跟踪面（如自己的 ``AGENTS.md``）并被还原的路径——非空即说明该轮的
     #: 「组员自维护层」被压测跳过，噪声已隔离但要在台账可见。
     reverted: list[str] = field(default_factory=list)
-    #: 谁发起的这次测量（E4 所有权移交的审计面）：``leader``=组长抽检 ``orch eval run``，
+    #: 谁发起的这次测量（E4 所有权移交的审计面）：``leader``=组长抽检 ``orch bench eval``，
     #: ``bencher``=bencher 经 ``pysci-bench``。旧行无该字段读作 ``leader``（缺席即移交前
     #: 的历史数据，不必回填——回填等于伪造当时的发起方）。
     runner: str = "leader"
@@ -376,7 +376,7 @@ def run_case(
         label: 本轮标签（如 ``before``/``after-<commit>``），入台账供分组对照。
         quiet: 抑制 do_dispatch 的面向组长报告（压测要的是行，不是 [NEXT] 提示）。
         runner: 发起方（``leader``/``bencher``），入台账作审计面——E4 后套件运行职责
-            归 bencher，组长的 ``orch eval run`` 只是抽检通道；两条通道的读数必须能
+            归 bencher，组长的 ``orch bench eval`` 只是抽检通道；两条通道的读数必须能
             在台账里分开（否则「谁测的」这一事实随移交一起消失）。
 
     Returns:
@@ -479,7 +479,7 @@ def write_baseline(label: str = "", runner: str = "") -> dict[str, Any]:
     rows = latest_rows(label, runner)
     if not rows:
         raise ValueError(
-            "evals.jsonl 无可回填的压测行——先跑 `orch eval run --all`（或 --case）"
+            "evals.jsonl 无可回填的压测行——先跑 `orch bench eval --all`（或 --case）"
         )
     doc = {
         "version": 1,
@@ -581,7 +581,7 @@ def _mean_turns(rows: list[dict[str, Any]]) -> float:
 
 
 # ---------------------------------------------------------------------------
-# CLI 面（orch eval …）
+# CLI 面（orch bench eval …）
 # ---------------------------------------------------------------------------
 def _print_row(row: Row) -> None:
     mark = "√" if row.verdict == "pass" else "✗"
@@ -614,7 +614,7 @@ def _print_row(row: Row) -> None:
 
 
 def cmd_eval_run(args: argparse.Namespace) -> int:
-    """``orch eval run``：跑案（一案或全部）→ 二元判决 + 指标表 + 基线对照。
+    """``orch bench eval``：跑案（一案或全部）→ 二元判决 + 指标表 + 基线对照。
 
     Returns:
         0=全部通过；1=有案失败（判决是测量结果，不是崩溃）；2=用法/案卷错误。
@@ -655,7 +655,7 @@ def cmd_eval_run(args: argparse.Namespace) -> int:
         print(f"  [i] 本轮新增案（基线无记录）：{cmp['only_now']}")
     if cmp["verdict"] == "无基线":
         print(
-            "    [NEXT] 首轮无对照：跑完满意的一轮后 `orch eval set-baseline` 固化基线。"
+            "    [NEXT] 首轮无对照：跑完满意的一轮后 `orch bench baseline` 固化基线。"
         )
     else:
         print(
@@ -667,7 +667,7 @@ def cmd_eval_run(args: argparse.Namespace) -> int:
 
 
 def cmd_eval_set_baseline(args: argparse.Namespace) -> int:
-    """``orch eval set-baseline``：把最近一轮（可按 ``--label``/``--runner`` 选）回填为基线快照。"""
+    """``orch bench baseline``：把最近一轮（可按 ``--label``/``--runner`` 选）回填为基线快照。"""
     try:
         doc = write_baseline(args.label or "", getattr(args, "runner", "") or "")
     except ValueError as exc:
@@ -679,5 +679,5 @@ def cmd_eval_set_baseline(args: argparse.Namespace) -> int:
             f"  - {cid:<18} {c['verdict']:<4} turns={c['num_turns']} "
             f"est_tokens={c['est_tokens']} ctx={c['ctx_ratio']:.4f}"
         )
-    print("    [NEXT] 改动后 `orch eval run --all` 即出 before/after 对照表。")
+    print("    [NEXT] 改动后 `orch bench eval --all` 即出 before/after 对照表。")
     return 0

@@ -109,8 +109,8 @@ pysci-dev venv-sync | probe | skilltax
 - 台账：末跳 `ctx_ratio` >60% 已机械化立案（`inspectd.check_context_pressure`）→ 组长
   `orch sessions --archive <sid> --distill` 归档轮换；
 - **压测面已移交 bencher**（E4）：案卷与基线区归他，你只维护 checks 注册表与
-  `orch eval run` 抽检面；动了 harness 面后不自跑压测，交付里写明「需复测/重取基线」，
-  由组长 `orch bench-add` 入队（分界全文见 charter）。
+  `orch bench eval` 抽检面；动了 harness 面后不自跑压测，交付里写明「需复测/重取基线」，
+  由组长 `orch bench add` 入队（分界全文见 charter）。
 - transcript 抽查（诚实条款审计端）：`~/.qoder-cn/projects/<pod键>/*.jsonl` 里检索
   pod-guard 拦截记录，核对其后有无 Bash 绕行迹象；
 - AGENTS.md 体量：>8KB 的成员提请其自行精简（蒸馏纪律）。

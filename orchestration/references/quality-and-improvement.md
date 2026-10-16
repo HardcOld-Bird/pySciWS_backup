@@ -94,7 +94,7 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
 - **基线与副本 A/B**：判决包选 M 时捕获基线 → devops 合并后 bencher 以合并 commit 另建
   副本 → 双副本各跑关联案、对比台账、二元判决，用后即弃、无损回退；窗口期混入他人
   harness 提交 → 判 `inconclusive` 附 git log 证据 → 回退 twin（不假装可信）；
-- **生命周期**：FIFO 队列（`orch bench-add`），非空拉起、消化完销毁（**非常驻**）；
+- **生命周期**：FIFO 队列（`orch bench add`），非空拉起、消化完销毁（**非常驻**）；
   完成项经 `orch status` **择机查看**，不即时唤醒组长；外部代码树零写权（设施缺陷提
   `<infra_suggestion>` 交 devops）。
 
@@ -109,7 +109,7 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
 ```
 组员交付含 <infra_suggestion>
 → orch 登记待审批项，呈组长：建议摘要 + git 历史相关改动（防往复翻转；必要时
-  orch consult 副组长评估）
+  orch deputy consult 副组长评估）
 → 组长裁决 approve（入 backlog FIFO；推理密集项可 `--effort high` 按项标注，§3.5）
   / reject（附理由）
 → 审批回复存 state/replies/，下次派发该成员时自动附送（闭环告知）
@@ -139,7 +139,7 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
     清理其残留 worktree/branch（`git worktree remove --force wt-<id>` + `branch -D` +
     `prune` 兜底）——worktree 名 = 条目 id（take_first 记录、任务书指定），只清孤儿名、
     不误删活跃/手动 worktree
-  · `orch drain-stop` 协作式停止：写**计划器** state/devops.cancel **与 devops worker**
+  · `orch devops stop` 协作式停止：写**计划器** state/devops.cancel **与 devops worker**
     state/queues/devops.cancel（指向各自锁持有者 pid），两侧在条目间隙消费→干净退出
     （释放锁、写部分 .done 含 stopped=cooperative、cancel 自删）；陈旧信号（pid≠本进程）
     清除且不误停接棒 worker；锁空闲不写信号（no-op）
@@ -203,7 +203,7 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
 长度——任一 > 积压上限（backlog 12 / bench 6）→ **暂停产出**新提案（只读巡检继续）；
 两队列均回落至**恢复阈值**（8 / 4）→ 恢复。**恢复阈值严格低于暂停阈值 = 迟滞**，防振荡。
 
-**闲时自调度巡检（autonomy-fix a2）**：此前只有 `orch inspector-up` 拉起式，2026-10-14 实测
+**闲时自调度巡检（autonomy-fix a2）**：此前只有 `orch inspector start` 拉起式，2026-10-14 实测
 02:08–07:42 **零巡检**、02:21 入队的 patrol 积压整夜（唤醒链断 + 无命令 = 永久沉睡）。
 现由 a1 看门狗 tick（60 s）顺带敲 `inspectd.self_patrol_tick`——**唯一调度耦合点，不新造第二套
 循环**：全局开关关 / worker 在跑 / 冷却窗内（`cooldown_s`=3600）任一为真都不动；队列空才自入队
