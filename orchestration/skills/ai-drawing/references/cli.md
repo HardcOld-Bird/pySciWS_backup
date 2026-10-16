@@ -19,7 +19,7 @@ keeps only the grouped command table, the output paths, and the first-line triag
 | `edit --image MARKED --prompt P […]` | Marker-driven local editing (auto-switches to 5.0-pro) | edited image + ledger |
 | `layers --image I --prompt P […]` | Layer decomposition (1 base + ≤16 alpha layers, 5.0-pro) | layers + ledger |
 | `mark --src I [--rect x,y,w,h]… [--arrow x1,y1,x2,y2]… [--point x,y]… [--text x,y,内容]… [--color --width --out]` | Annotating regions **before** `edit` (pure Pillow) | marked image + auto A/B/C labels + a prompt skeleton |
-| `adjust SRC --out O [--crop --resize --rotate --mode --pad --pad-color --format --quality]` | Simple edits (crop/resize/rotate/convert/pad) | adjusted image |
+| `adjust SRC --out O [--crop --resize --rotate --mode --pad --pad-color --format --quality --from-ledger --no-provenance]` | Simple edits (crop/resize/rotate/convert/pad) | adjusted image |
 | `sheet IMG… [--out O] [--cols --thumb --pad --bg --no-label]` | Seeing many images at once | contact-sheet PNG |
 | `palette --src I [--n 6]` | Extracting a reference's dominant colors | hex palette (for the bridge) |
 | `bridge --ref I --research R --slug S [--style --width --template --n --palette-name --no-copy-ref --overwrite]` | Turning an aesthetic ref into a real figure | scaffolded pipeline + `design_spec.md` |
@@ -48,9 +48,11 @@ Run `imagine <command> -h` for the full option list.
 | `data/research/<n>_<name>/article/artwork/` | a research line's finished artwork (cover / abstract / schematic) |
 
 Provenance is stored **twice**: in the ledger, and as PNG `tEXt` chunks inside every product written
-by `gen` / `i2i` / `edit` / `layers` / `ingest` (`pysci:prompt`, `pysci:model`, `pysci:backend`, …)
+by `gen` / `i2i` / `edit` / `layers` / `ingest` / `adjust` (`pysci:prompt`, `pysci:model`, `pysci:backend`, …)
 — so a stray image found outside the ledger can still be traced. Non-PNG products are skipped rather
-than re-compressed. `imagine ledger --render` rebuilds `LEDGER.md` from `manifest.jsonl` at any time.
+than re-compressed. `adjust` to `.png` auto-inherits these (ledger or same-stem `runs/*.json`;
+`--from-ledger` / `--no-provenance` override). `imagine ledger --render` rebuilds `LEDGER.md` from
+`manifest.jsonl` at any time.
 
 ## Troubleshooting, in full
 

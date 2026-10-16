@@ -238,3 +238,51 @@ def test_read_metadata_ignores_foreign_keys(tmp_path):
     with Image.open(p) as im:
         assert im.info.get("Software") == "ark"  # 原有文本块被保留
     assert ledger.read_metadata(p) == {"prompt": "hi"}
+
+
+# ---------------------------------------------------------------------------
+# provenance 找回（adjust 继承用；backlog 20261016-031600）
+# ---------------------------------------------------------------------------
+def test_provenance_for_matches_out_path(tmp_ledger):
+    ledger.record(prompt="p", model="m", backend="ark", recipe="r", out="a.png")
+    assert ledger.provenance_for("a.png") == {
+        "prompt": "p",
+        "model": "m",
+        "backend": "ark",
+        "recipe": "r",
+    }
+
+
+def test_provenance_for_takes_latest_record(tmp_ledger):
+    """同一产物路径多条记录 → 取最后写入的（账本追加顺序即时间序）。"""
+    ledger.record(prompt="old", model="m", backend="ark", out="a.png")
+    ledger.record(prompt="new", model="m", backend="ark", out="a.png")
+    assert ledger.provenance_for("a.png")["prompt"] == "new"
+
+
+def test_provenance_for_missing_is_empty(tmp_ledger):
+    """查不到返回 {}（兜底手段不该让调用方失败）；空值字段不写进结果。"""
+    ledger.record(prompt="p", out="a.png")  # model/backend 空
+    assert ledger.provenance_for("a.png") == {"prompt": "p"}
+    assert ledger.provenance_for("nope.png") == {}
+
+
+def test_provenance_from_snapshot_reads_request(tmp_path):
+    snap = tmp_path / "x.json"
+    snap.write_text('{"request": {"prompt": "pp", "model": "mm"}}', encoding="utf-8")
+    meta = ledger.provenance_from_snapshot(snap)
+    assert meta["prompt"] == "pp"
+    assert meta["model"] == "mm"
+    assert meta["backend"] == "ark"  # 快照只由云端出图写
+    assert meta["snapshot"].endswith("x.json")
+
+
+def test_provenance_from_snapshot_degrades(tmp_path):
+    """坏 JSON / 缺文件 / 无 request 段 → 一律空 dict，不抛。"""
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json}", encoding="utf-8")
+    assert ledger.provenance_from_snapshot(bad) == {}
+    assert ledger.provenance_from_snapshot(tmp_path / "nope.json") == {}
+    flat = tmp_path / "flat.json"
+    flat.write_text('{"usage": {}}', encoding="utf-8")
+    assert ledger.provenance_from_snapshot(flat) == {}

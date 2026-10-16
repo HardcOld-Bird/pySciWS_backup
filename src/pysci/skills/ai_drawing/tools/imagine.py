@@ -328,6 +328,21 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # adjust：Pillow 单图后处理（crop/resize/rotate/convert/pad/format）
 # ---------------------------------------------------------------------------
+def _resolve_adjust_provenance(src: Path, from_ledger: str | None) -> dict[str, str]:
+    """给 adjust 的 PNG 产物找 provenance：显式快照 > manifest 记账 > 同名 runs/*.json。
+
+    只看原图（``--src``）——它的记账/快照带着生成参数，转换为新格式不改变这些参数。
+    5.0 档位只出 jpeg，故这条路径是其拿到 ``pysci:*`` 内嵌溯源的唯一方式。
+    """
+    if from_ledger:
+        return _ledger.provenance_from_snapshot(from_ledger)
+    meta = _ledger.provenance_for(src)
+    if meta:
+        return meta
+    snap = settings.runs_dir / f"{src.stem}.json"
+    return _ledger.provenance_from_snapshot(snap) if snap.is_file() else {}
+
+
 def cmd_adjust(args: argparse.Namespace) -> int:
     try:
         src = _check_image(Path(args.src).expanduser())
@@ -359,8 +374,30 @@ def cmd_adjust(args: argparse.Namespace) -> int:
     for orig, bak in backups:
         print(f"  ↺ 原件已入回收区（可完整找回）：{bak}")
     print(f"后处理完成：{written}")
+    _embed_adjust_provenance(src, written, args)
     print(f"  ✓ 视觉校验：Read '{written}'")
     return 0
+
+
+def _embed_adjust_provenance(
+    src: Path, written: Path, args: argparse.Namespace
+) -> None:
+    """把原图的生成溯源内嵌进 **PNG** 产物（非 PNG 自动跳过；查不到时静默，除非是显式 --from-ledger）。"""
+    if written.suffix.lower() != ".png" or getattr(args, "no_provenance", False):
+        return
+    from_ledger = getattr(args, "from_ledger", None)
+    meta = _resolve_adjust_provenance(src, from_ledger)
+    if not meta:
+        if from_ledger:
+            print(
+                f"  ! --from-ledger {from_ledger} 未取到 provenance，PNG 未内嵌 pysci:*",
+                file=sys.stderr,
+            )
+        return
+    if _ledger.embed_metadata(written, meta):
+        print("  已内嵌溯源：" + ", ".join(f"pysci:{k}" for k in meta))
+    else:
+        print("  ! PNG 溯源内嵌失败（图像仍已写出）", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -1502,6 +1539,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--format", default=None, help="显式输出格式（覆盖后缀推断）")
     s.add_argument("--quality", type=int, default=95, help="JPEG/WEBP 质量（1-100）")
+    s.add_argument(
+        "--from-ledger",
+        default=None,
+        metavar="RUNS_JSON",
+        help="provenance 来源：runs/<slug>.json 请求快照（默认自动查找；仅 --out *.png 生效）",
+    )
+    s.add_argument(
+        "--no-provenance",
+        action="store_true",
+        help="不内嵌 pysci:* 溯源（默认 PNG 输出自动从账本/快照继承）",
+    )
     s.add_argument(
         "--confirm",
         action="store_true",

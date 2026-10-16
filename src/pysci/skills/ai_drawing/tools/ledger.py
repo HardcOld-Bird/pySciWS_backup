@@ -20,6 +20,9 @@
 
 另有一条**脱离账本的溯源兜底**：:func:`embed_metadata` 把 prompt/model 等写进产物 PNG 的
 tEXt 块（ComfyUI / A1111 的通行做法）。图片被拷走、账本丢了，它仍自带出处。
+``adjust`` 把 jpeg 转成 PNG 时会用 :func:`provenance_for`（manifest）或
+:func:`provenance_from_snapshot`（``runs/*.json``）自动继承这些字段——5.0 档位只出 jpeg，
+这条路径是它拿到 ``pysci:*`` 内嵌溯源的唯一方式。
 
 字段（``Entry``）：``ts / prompt / seed / model / backend / recipe / ref / out / notes``。
 其中 ``out`` 是产物图路径，``ref`` 是图生图的源图（可空），``recipe`` 是所属流水线配方名。
@@ -240,6 +243,56 @@ def load_all() -> list[Entry]:
             except (json.JSONDecodeError, TypeError):
                 continue
     return entries
+
+
+def provenance_for(path: str | Path) -> dict[str, str]:
+    """按**产物路径**从 manifest 找回 provenance（供 :func:`..imagine.cmd_adjust` 继承）。
+
+    与 :func:`record` 同样把路径规范化为相对项目根的 POSIX 串后匹配 ``out``；命中多条取
+    **最后**一条（账本按写入顺序追加，后写更新）。返回非空的 ``prompt/model/backend/recipe``，
+    查不到返回 ``{}``——兜底手段不该因缺项让调用方失败。
+    """
+    rel = _rel(path)
+    if not rel:
+        return {}
+    hit: Entry | None = None
+    for e in load_all():
+        if e.out == rel:
+            hit = e
+    if hit is None:
+        return {}
+    meta = {
+        "prompt": hit.prompt,
+        "model": hit.model,
+        "backend": hit.backend,
+        "recipe": hit.recipe,
+    }
+    return {k: v for k, v in meta.items() if v}
+
+
+def provenance_from_snapshot(path: str | Path) -> dict[str, str]:
+    """从 ``runs/<slug>.json`` 请求快照里取 provenance（manifest 之外的第二来源）。
+
+    快照的 ``request`` 段留住了 ``prompt``/``model``（``b64_json`` 已剥离，图像字节不可回放，
+    但参数齐）；``backend`` 恒为 ``ark``（快照只由云端出图写）。读不到返回 ``{}``。
+    """
+    p = Path(path).expanduser()
+    if not p.is_file():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    req = data.get("request") if isinstance(data, dict) else None
+    if not isinstance(req, dict):
+        return {}
+    meta = {
+        "prompt": str(req.get("prompt") or ""),
+        "model": str(req.get("model") or ""),
+        "backend": "ark",
+        "snapshot": _rel(p),
+    }
+    return {k: v for k, v in meta.items() if v}
 
 
 def query(
