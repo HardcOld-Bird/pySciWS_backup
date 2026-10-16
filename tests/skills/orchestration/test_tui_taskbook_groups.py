@@ -7,7 +7,8 @@
 3. 双击组行 → 直接进**最新项**详情；`o` 键同效；次级行 Enter → 进该项详情；
 4. `a`/`r` 目标解析：组行→最新项、次级行→该项；
 5. tb-detail ＝ 头卡 ＋ **Markdown 正文**（delivered 态含「★ 批复参考」）；VSCode 按钮
-   成功/失败两分支（mock ``shutil.which`` / ``subprocess.Popen``）。
+   成功/失败两分支（polish-b 后：mock ``resolve_vscode_launcher`` / ``subprocess.Popen``，
+   解析链单测见 ``test_tui_polish_b.py``）。
 
 行选择一律走 :attr:`PysciTUI.tb_rows` **行模型**（禁裸下标语义猜测）。
 """
@@ -323,10 +324,17 @@ def test_tb_detail_renders_markdown_widget(face):
     assert isinstance(_run(_go()), Markdown), "tb-detail 正文容器须是 Markdown 组件"
 
 
-def _vscode_msg(monkeypatch, *, popen) -> tuple[str, str]:
-    """建家族 → 打开**最新项**详情 → 点 VSCode 按钮 → 返回 ``(最新项 id, 消息行)``。"""
+def _vscode_msg(monkeypatch, *, popen, launcher: str, tried=None) -> tuple[str, str]:
+    """建家族 → 打开**最新项**详情 → 点 VSCode 按钮 → 返回 ``(最新项 id, 消息行)``。
+
+    polish-b：启动器解析已抽成 :func:`tui.resolve_vscode_launcher`（其单测见
+    ``test_tui_polish_b.py``），此处注入其读数 ``(launcher, tried)``，只验按钮→消息行接线。
+    """
     root, r1, r2 = _family()
     monkeypatch.setattr(tui.subprocess, "Popen", popen)
+    monkeypatch.setattr(
+        tui, "resolve_vscode_launcher", lambda **k: (launcher, list(tried or []))
+    )
 
     async def _go():
         app = tui.PysciTUI()
@@ -343,30 +351,38 @@ def _vscode_msg(monkeypatch, *, popen) -> tuple[str, str]:
 
 
 def test_vscode_button_missing_cli(face, monkeypatch):
-    monkeypatch.setattr(tui.shutil, "which", lambda name: None)
-    _tid, msg = _vscode_msg(monkeypatch, popen=lambda *a, **k: None)
+    tried = ["code（PATH/PATHEXT）", r"C:\nope（常见安装位）"]
+    _tid, msg = _vscode_msg(
+        monkeypatch, popen=lambda *a, **k: None, launcher="", tried=tried
+    )
     assert msg.startswith("[!] 打开失败"), msg
+    assert "已尝试" in msg and r"C:\nope（常见安装位）" in msg, msg
 
 
-def test_vscode_button_success_passes_md_path(face, monkeypatch):
+def test_vscode_button_success_uses_cmd_c_for_cmd_launcher(face, monkeypatch):
     calls: list[list[str]] = []
-    monkeypatch.setattr(tui.shutil, "which", lambda name: "C:/fake/code.cmd")
     tid, msg = _vscode_msg(
-        monkeypatch, popen=lambda cmd, *a, **k: calls.append(list(cmd))
+        monkeypatch,
+        popen=lambda cmd, *a, **k: calls.append(list(cmd)),
+        launcher="C:/fake/code.cmd",
+        tried=["code（PATH/PATHEXT）"],
     )
     assert msg.startswith("[√] 已在 VSCode 打开"), msg
-    assert calls and calls[0][0] == "code", calls
-    assert str(taskbooks.md_path(tid)) in calls[0][1], "须打开详情项原文路径"
+    assert "C:/fake/code.cmd" in msg, "成功消息须显实际启动器路径"
+    # .cmd 必须经 cmd /c（直呼 .cmd → WinError 2）
+    assert calls and calls[0][:3] == ["cmd", "/c", "C:/fake/code.cmd"], calls
+    assert str(taskbooks.md_path(tid)) in calls[0][3], "须打开详情项原文路径"
 
 
 def test_vscode_button_popen_error(face, monkeypatch):
-    monkeypatch.setattr(tui.shutil, "which", lambda name: "C:/fake/code.cmd")
-
     def boom(*a, **k):
         raise OSError("no vscode")
 
-    _tid, msg = _vscode_msg(monkeypatch, popen=boom)
+    _tid, msg = _vscode_msg(
+        monkeypatch, popen=boom, launcher="C:/fake/code.exe", tried=["code"]
+    )
     assert msg.startswith("[!] 打开失败"), msg
+    assert "C:/fake/code.exe" in msg, "失败消息须带启动器路径"
 
 
 def test_state_face_matches_rendered_list(face):

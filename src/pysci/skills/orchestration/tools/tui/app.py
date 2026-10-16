@@ -14,10 +14,12 @@ Esc 返回上级；**进入详情即写该模块水位**（真源 ``state/mirror
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from rich.text import Text
 from textual.app import App, ComposeResult
@@ -68,6 +70,99 @@ from .widgets import (
     make_row,
     section_title,
 )
+
+#: VS Code 启动器候选名：Windows 上 `code` 实为 **`code.cmd`**——`subprocess.Popen` 直呼
+#: `.cmd` 会 WinError 2（CreateProcess 不经 cmd 解释器），故解析到 `.cmd`/`.bat` 须经 `cmd /c`。
+_VSCODE_NAMES: tuple[str, ...] = ("code", "code.cmd", "code.exe", "code.bat")
+
+#: VS Code 常见安装位（`which` 与 PATH 目录扫描都落空时的**兜底**）。`{VAR}` 按环境展开；
+#: 最后一条是**非标准安装位**（用户 2026-10-16 实测环境：VSCode 在 D 盘自定目录）——
+#: 它命中过才说明「只有它可得」，删不得。
+_VSCODE_FALLBACK_DIRS: tuple[str, ...] = (
+    r"{LOCALAPPDATA}\Programs\Microsoft VS Code\bin",
+    r"{ProgramFiles}\Microsoft VS Code\bin",
+    r"{ProgramFiles(x86)}\Microsoft VS Code\bin",
+    r"D:\XiGPrograms\vsCode\base\bin",
+)
+
+
+def _expand_env(template: str, env: dict[str, str]) -> str:
+    """`{VAR}` 占位按环境展开；缺少该变量则回空串（跳过该候选）。"""
+    out = template
+    while "{" in out and "}" in out:
+        head, _, rest = out.partition("{")
+        name, _, tail = rest.partition("}")
+        value = str(env.get(name) or "")
+        if not value:
+            return ""
+        out = f"{head}{value}{tail}"
+    return out
+
+
+def resolve_vscode_launcher(
+    *,
+    which=None,
+    env: dict[str, str] | None = None,
+    is_file=None,
+) -> tuple[str, list[str]]:
+    """解析 VS Code 启动器 → ``(启动器路径, 尝试过的候选清单)``；找不到回 ``("", 清单)``。
+
+    解析链（用户 2026-10-16 实测：PATH 里有 VSCode 的 `bin` 目录，但旧实现
+    `which("code")` 落空后仍裸名 Popen → WinError 2）：
+    ① ``which(<候选名>)``（PATH × PATHEXT，含 .cmd/.exe/.bat）；② 逐个 PATH 目录找候选文件；
+    ③ 常见安装位兜底。``which``/``is_file``/``env`` 可注入（测试用；缺省读真实环境）。
+    """
+    find = which if which is not None else shutil.which
+    e = env if env is not None else dict(os.environ)
+    check = is_file if is_file is not None else (lambda p: p.is_file())
+    tried: list[str] = []
+    for name in _VSCODE_NAMES:
+        try:
+            hit = find(name)
+        except Exception:  # noqa: BLE001 - which 抛异常按未命中（观察面不炸）
+            hit = None
+        if hit:
+            return str(hit), [*tried, f"{name}（PATH/PATHEXT）"]
+        tried.append(f"{name}（PATH/PATHEXT）")
+    for raw in str(e.get("PATH") or "").split(os.pathsep):
+        d = raw.strip()
+        if not d:
+            continue
+        for name in ("code.cmd", "code.exe", "code.bat"):
+            cand = Path(d) / name
+            if check(cand):
+                return str(cand), [*tried, f"{cand}（PATH 目录扫描）"]
+        tried.append(f"{d}（PATH 目录扫描）")
+    for template in _VSCODE_FALLBACK_DIRS:
+        d = _expand_env(template, e)
+        if not d:
+            continue
+        for name in ("code.cmd", "code.exe"):
+            cand = Path(d) / name
+            if check(cand):
+                return str(cand), [*tried, f"{cand}（常见安装位）"]
+        tried.append(f"{d}（常见安装位）")
+    return "", tried
+
+
+def launch_editor(launcher: str, target: Path, *, popen=None) -> tuple[bool, str]:
+    """拉起启动器打开 ``target``：``.cmd``/``.bat`` 经 **`cmd /c`**，其余直呼。
+
+    Returns:
+        ``(成功?, argv 串或错误串)``——失败串取 ``类型: 消息``（调用方转消息行）。
+    """
+    argv = (
+        ["cmd", "/c", launcher, str(target)]
+        if Path(launcher).suffix.lower() in (".cmd", ".bat")
+        else [launcher, str(target)]
+    )
+    spawn = popen if popen is not None else subprocess.Popen
+    try:
+        spawn(argv)
+    except Exception as exc:  # noqa: BLE001 - 启动失败如实报（不抛给 UI 事件循环）
+        return False, f"{type(exc).__name__}: {exc}"
+    return True, " ".join(argv)
+
 
 #: Textual widget id 只允许字母/数字/下划线/连字符——plan id 可能含点号等（如
 #: `rework-xxx.plan` 派生的 id），故列表条目 id 一律过它（非法字符折 `-`）。
@@ -368,6 +463,11 @@ class PysciTUI(App):
         self.ruling_detail_md = ""
         self.ruling_detail_scroll = 0
         self.ruling_detail_scroll_mark = ""
+        # Esc 路由（polish-b）：子面板（tb-reject/tb-new）的来源视图——Esc 回「进入前视图」
+        self._panel_return = ""
+        # VSCode 启动器读数（polish-b）：实际启动器路径 / 尝试过的候选清单
+        self.tb_launcher_path = ""
+        self.tb_launcher_tried: list[str] = []
         self._plan_default_node = (
             None  # 首帧后要落到的树节点（见 _apply_plan_default_selection）
         )
@@ -822,8 +922,9 @@ class PysciTUI(App):
         self._reset_scroll()
 
     def _open_in_vscode(self) -> None:
-        """用 VSCode 打开任务书原文（``code`` 不在 PATH / Popen 异常 → 消息行如实报错）。
+        """用 VSCode 打开任务书原文：**多级启动器解析链** ＋ `.cmd` 经 `cmd /c`（2026-10-16 修）。
 
+        失败消息列出**尝试过的候选清单**（一眼看出卡在哪）；成功消息显示**实际启动器路径**。
         ``Popen`` 不等待（不阻塞 UI 事件循环）。
         """
         from .. import taskbooks as _tb
@@ -832,18 +933,36 @@ class PysciTUI(App):
         if not tid:
             return
         path = _tb.md_path(tid)
-        if shutil.which("code") is None:
-            self._set_tb_detail_msg("[!] 打开失败：PATH 中找不到 `code`（VSCode CLI）")
+        launcher, tried = resolve_vscode_launcher()
+        self.tb_launcher_tried = list(tried)
+        if not launcher:
+            shown = "、".join(tried[:6]) + (
+                f"…（共 {len(tried)} 项）" if len(tried) > 6 else ""
+            )
+            self._set_tb_detail_msg(
+                f"[!] 打开失败：未找到 VS Code 启动器（code/code.cmd/code.exe）"
+                f"——已尝试：{shown}"
+            )
             return
-        try:
-            subprocess.Popen(["code", str(path)])
-        except Exception as exc:  # noqa: BLE001 - 启动失败如实报
-            self._set_tb_detail_msg(f"[!] 打开失败：{type(exc).__name__}: {exc}")
+        self.tb_launcher_path = launcher
+        ok, info = launch_editor(launcher, path)
+        if not ok:
+            self._set_tb_detail_msg(f"[!] 打开失败（启动器 {launcher}）：{info}")
             return
-        self._set_tb_detail_msg(f"[√] 已在 VSCode 打开 {path}")
+        self._set_tb_detail_msg(f"[√] 已在 VSCode 打开 {path}（启动器 {launcher}）")
 
     async def action_back(self) -> None:
-        """Esc/←：任务书详情页 → 任务书列表；其余子视图 → 主菜单；主菜单 → 退出。"""
+        """Esc/←：子面板 → **进入前视图**（polish-b：驳回面板→详情页/列表；新增面板→列表）；
+        任务书详情页 → 任务书列表；其余子视图 → 主菜单；主菜单 → 退出。"""
+        if self.view == "tb-new":
+            await self._open_taskbooks()
+            return
+        if self.view == "tb-reject":
+            if self._panel_return == "tb-detail" and self.tb_detail_id:
+                self._open_tb_detail_by_id(self.tb_detail_id)
+            else:
+                await self._open_taskbooks()
+            return
         if self.view == "tb-detail":
             await self._open_taskbooks()
         elif self.view == "plan-detail":
@@ -1319,6 +1438,7 @@ class PysciTUI(App):
         if self.view != "taskbooks":
             return
         self.view = "tb-new"
+        self._panel_return = "taskbooks"  # Esc 回任务书列表（进入前视图）
         self._hide_all_views()
         self.query_one("#tb-new", Vertical).display = True
         self._set_radio("#tb-new-priority", 1)  # 默认「中」
@@ -1339,6 +1459,10 @@ class PysciTUI(App):
             self._open_reject_panel(tid)
 
     def _open_reject_panel(self, tb_id: str) -> None:
+        # 来源视图（详情页进的面板 Esc 回详情页；列表进的回列表）——须在切视图**前**读
+        self._panel_return = (
+            self.view if self.view in ("taskbooks", "tb-detail") else ""
+        )
         self.view = "tb-reject"
         self.reject_target = tb_id
         self._hide_all_views()
