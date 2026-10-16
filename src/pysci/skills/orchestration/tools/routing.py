@@ -385,6 +385,38 @@ def next_peak_start(moment: datetime, face_value: Face) -> datetime | None:
     return None
 
 
+def humanize_duration(seconds: int | float) -> str:
+    """秒数 → 人性化时长（``天/小时/分/秒``；按量级省略**前导整零段**，**秒段恒显**）。
+
+    **单点实现**（tui-polish-c 反馈 #6）：倒计时行、距峰读数、距边界读数三处原先各写各的
+    （``3550 分``／``59.3 小时``／``3550 分``混排，量级根本读不出）——统一走这一个函数，
+    于是「三处同格式、同精确到秒」由构造保证，不靠三处各自小心。
+
+    >>> humanize_duration(3550 * 60 + 27)
+    '2 天 11 小时 50 分 27 秒'
+    >>> humanize_duration(600)
+    '10 分 0 秒'
+    >>> humanize_duration(27)
+    '27 秒'
+
+    负数带前导 ``-``（调用方通常自带「已过」措辞，此时传 ``abs``）。
+    """
+    total = int(seconds)
+    sign = "-" if total < 0 else ""
+    d, rem = divmod(abs(total), 86400)
+    h, rem = divmod(rem, 3600)
+    m, sec = divmod(rem, 60)
+    parts: list[str] = []
+    if d:
+        parts.append(f"{d} 天")
+    if d or h:
+        parts.append(f"{h} 小时")
+    if d or h or m:
+        parts.append(f"{m} 分")
+    parts.append(f"{sec} 秒")  # 秒段恒显（"X 分" 与 "X 分 0 秒" 不许两可）
+    return sign + " ".join(parts)
+
+
 def countdown_s(next_at: str) -> int | None:
     """``next_at`` 距**现在**的秒数（负数=已过点；``None`` = 判不出）。
 
@@ -561,7 +593,10 @@ def state(
                 )
             else:
                 hidden = True
-                basis = f"{day_basis} 谷段（距峰 {nxt_peak:%m-%d %H:%M} 还有 {gap / 3600:.1f} 小时）"
+                basis = (
+                    f"{day_basis} 谷段（距峰 {nxt_peak:%m-%d %H:%M} 还有 "
+                    f"{humanize_duration(gap)}）"
+                )
     when, mode, switch_warn = next_switch(at, face_value)
     warn.extend(w for w in switch_warn if w not in warn)
     if hidden and act.name == face_value.valley_preset:
@@ -777,6 +812,7 @@ __all__ = [
     "holiday_off",
     "jury_panel",
     "last_switch_line",
+    "humanize_duration",
     "next_peak_start",
     "next_switch",
     "note_switch",

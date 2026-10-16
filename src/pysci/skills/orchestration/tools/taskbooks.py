@@ -334,8 +334,9 @@ def families() -> list[dict[str, Any]]:
     规则：``rework_of`` 为空、或指向不存在 id 的项 = 家族根（**孤儿自成一家**）；每家
     成员 = 沿 ``rework_of`` 的传递闭包（按 parent map 收集，防多子分叉/病态环）；家内
     排序 ``rework_round`` 降序、同轮 ``ts`` 降序 → ``members`` = [最新…本体]（元素为
-    state 记录 dict，:func:`family_label` 直接可用）。返回 ``[{root, latest, members,
-    size}]``（``root``/``latest`` 为 id），家族列表按 ``latest`` 的 ts 降序（最新在上）。
+    state 记录 dict，:func:`family_label` 直接可用）。返回 ``[{root, no, latest, members,
+    size}]``（``root``/``latest`` 为 id；``no`` = 家族编号，按 **root 创建序**升序 1..N，
+    与展示序解耦故稳定——tui-polish-c 反馈 #9），家族列表按 ``latest`` 的 ts 降序（最新在上）。
     """
     items = list_all()
     by_id = {str(d.get("id")): d for d in items}
@@ -347,6 +348,13 @@ def families() -> list[dict[str, Any]]:
             children.setdefault(parent, []).append(d)
         else:
             roots.append(d)
+    # 家族编号（tui-polish-c 反馈 #9）：按**家族 root 创建时间**升序 1..N——稳定编号，
+    # 与展示序（latest ts 降序）**解耦**：新家族只会递增新号，既有编号不因列表排序/新家族
+    # 加入而漂移。本体与返工共享同一号（号属于家族，不属于单件）。
+    no_of = {
+        str(r.get("id") or ""): i + 1
+        for i, r in enumerate(sorted(roots, key=lambda d: str(d.get("ts") or "")))
+    }
     out: list[dict[str, Any]] = []
     for root_rec in roots:
         members: list[dict[str, Any]] = []
@@ -365,6 +373,7 @@ def families() -> list[dict[str, Any]]:
         out.append(
             {
                 "root": str(root_rec.get("id") or ""),
+                "no": no_of.get(str(root_rec.get("id") or ""), 0),
                 "latest": str(latest.get("id") or ""),
                 "members": members,
                 "size": len(members),

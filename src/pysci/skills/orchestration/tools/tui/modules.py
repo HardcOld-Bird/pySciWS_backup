@@ -387,7 +387,7 @@ def _countdown_line(next_at: str, next_mode: str) -> str:
         return "  倒计时：下次切换判不出（保守维持当前模式）"
     sign, left = ("", left) if left >= 0 else ("已过 ", -left)
     return (
-        f"  倒计时：距下次切换还有{sign}{left // 60} 分 {left % 60} 秒"
+        f"  倒计时：距下次切换还有{sign}{_rt.humanize_duration(left)}"
         f"（{next_at} → {next_mode}）"
     )
 
@@ -408,9 +408,12 @@ def _hold_line(fv: Any) -> str:
     if 0 <= left < hold:
         return (
             f"  边界避让：窗口 {hold}s〔临近边界将延迟派发〕"
-            f"倒计时：距边界 {left // 60} 分 {left % 60} 秒（{reading.next_mode}）"
+            f"倒计时：距边界 {_rt.humanize_duration(left)}（{reading.next_mode}）"
         )
-    return f"  边界避让：窗口 {hold}s（距边界 {max(left, 0) // 60} 分，窗口外不延迟）"
+    return (
+        f"  边界避让：窗口 {hold}s"
+        f"（距边界 {_rt.humanize_duration(max(left, 0))}，窗口外不延迟）"
+    )
 
 
 def _system_detail() -> list[str]:
