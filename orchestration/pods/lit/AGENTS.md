@@ -16,6 +16,26 @@
   retry_after≈60s），等待约 2-3 分钟后即恢复且响应很快。遇到 429/超时不要连续快速重试
   （会加深限流），按 server 提示的 retry_after 等待后再试一次即可。
 
+## 网页截图（playwright，2026-10-16 实测）
+
+- **本机 ms-playwright 浏览器未装**（`C:\Users\antar\AppData\Local\ms-playwright` 不存在），
+  直接 `p.chromium.launch()` 报 harness shell 缺失、`executable_path` 指向的文件也不存在。
+  对策：**用系统 Chrome 通道** `p.chromium.launch(channel="chrome")`（系统亦装 Edge，
+  可 fallback `channel="msedge"`），无需下载浏览器。
+- 运行范式：脚本放 `bench/`，用 `uv run --no-sync python <script>`。
+- 全页截图遇**粘性/固定元素**会首尾重复渲染；对 GitHub 这类页改用**视口截图**（不传
+  `full_page`）更干净。
+- 本机对 `cn.comsol.com`、`github.com`、`api.github.com` **均可直连**（无需代理）：
+  WebFetch 对 `www.cn.comsol.com` 报 TLS altname 错误时，改 `curl -L` 或 playwright 均正常。
+
+## 领域事实（PPT 页2 调研沉淀）
+
+- COMSOL 官方 **2026-09-16** 宣布 Multiphysics **2027** 版本含 **COMSOL MCP Server**
+  （AI 智能体标准化接口），计划 2026 秋发布；官方一手页：
+  `cn.comsol.com/press-release/system-level-modeling-and-agentic-ai-take-the-spotlight-in-comsol-multiphysics-version-2027-14722`。
+- 社区 COMSOL MCP：旗舰 `wjc9011/COMSOL_Multiphysics_MCP`（论文 DOI
+  10.1016/j.neucom.2026.134481）；Python 底座 `MPh-py/MPh`（封装 Java API）。
+
 ## 文档提取工具链（2026-10-15 实测可用）
 
 - `.docx` → `python-docx`；`.pdf` → `PyMuPDF (fitz)`（比 pypdf 好，能判每页文本长度以

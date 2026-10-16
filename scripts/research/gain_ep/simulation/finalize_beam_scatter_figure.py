@@ -1,28 +1,34 @@
-"""beam-scatter 定稿大图：3 组对照 × 左右入射 = 6 case × (半圆场图 + 极坐标散射图) = 12 子图。
+"""beam-scatter 综合图（返工版）：3 情形列 × (行1 二合一雷达 / 行2 L 场图 / 行3 R 场图)。
 
-产物组织（全部集中在 figures/beam_scatter/ 一个子文件夹）：
-  raw/      COMSOL 原生渲染（极坐标 far_*.png，按行 rmax）+ 数值场 field_*.csv
-  panels/   逐 case 半圆合成图（含实验占位框），由 compose_beam_scatter_proto.py 生成
-  beam_scatter_combined.png   本脚本输出的 12 子图定稿大图
+排版（任务书第 10 项）：
+  3 列 = 3 组对照情形（①groove+gain ②groove,no gain ③gain,no groove），列内自上而下
+  行1 半极坐标雷达（L/R 双曲线，同一坐标系 + 小图例）、行2 L 入射半圆场图、行3 R 入射
+  半圆场图；每列**右缘一条色标**，高度 = 行2+行3，三列各自独立标度。
 
-版式（对齐参考图 4ref3 右上，并按"分组标度"需求）：
-  1. **分组标度（场）**：每行（对照组）独立色标，vmax = 该行 |Re p_t| 的 99 分位（稳健，
-     避免管槽谐振尖峰抬高上界使条纹发白）；场图用 scientific-plotting 的 field 原语
-     （tripcolor）以该行 cmap+norm 渲染 → 面板颜色与该行 colorbar 严格一致。
-  2. **分组标度（极坐标）**：每行独立极径上界 POLAR_RMAX_ROW（由统一 rmax=60 的旧渲染
-     估得各行远场最大值后取整）；COMSOL 以该行 rmax 重导 far_*.png → 弱组不被强组压没。
-  3. **菱形通道版式**：每个半圆内两个**尖角向上的正方形（菱形）**通道框（= 仿真 Sim.），
-     各以**两条虚线（自左右两顶点）**连到半圆外顶部角落的**菱形**实验插图（Exp.，
-     实验位暂以仿真数据放大代填）；标注置于菱形**侧边**而非中心，避免遮挡内部细节；
-     外菱形置于半圆竖直中心轴更外侧（INSET_ANG/INSET_R），不遮挡半圆本体。
-  4. **超表面轮廓**：每幅场图叠加黑色管槽截面折线（直径边 y=0 下凹各管槽），使管槽
-     形状在饱和色块下仍清晰可辨；对照③仅画管槽 2（管槽 1/3 已在几何中整根移除）。
-  5. **colorbar 置最右**：每行一条 colorbar，放在整图最右列（与该行对齐）。
+数据源与落实点：
+  - 远场：``raw/far_<cfg>_<inc>.csv``（1° 网格 181 点，角度列 + |pext| 列），**不降采样**；
+    禁用旧 ``raw/far_*.png`` 栅格（COMSOL 原生渲染，带品牌 logo，且主瓣方向不可靠）；
+  - 场图：``raw/field_<cfg>_<inc>.csv``（x, y, real(acpr.p_t)）；
+  - 标题/色标/数据列三方一致：**Re p_t**（场图小标题、色标标签、CSV 列头同一量）；
+  - 场图配色：COMSOL Rainbow 式发散映射（蓝→青→黄绿→黄→红），零值落**黄绿**（非白）；
+  - 色标：刻度 5 条（±vmax、半值、0），上界 = 该情形**可见区** max|Re p_t|（不 clamp、
+    不饱和），无 ± 浮动端标；色标与子图/轴标签之间留足边距；
+  - 直径边：隐去管槽截面轮廓，以一条平直直线遮盖 y<0 内容；
+  - 扫描场区菱形（内框，**实线**）：物理边长 31 cm、近边距超表面中心 30 cm，按模型尺度
+    （R=0.4 m）换算，尖角向上，中心落在对应通道方向（135°/45°）射线，标 ``Sim.``；
+    其远侧两顶点以细虚线连至外框（``Exp.†`` 插图）近侧两顶点——换算记录见
+    ``返工交付说明.md``；
+  - 零遮挡：雷达幅值刻度移至直径边下方、量名+单位置于直径边下方左侧，场图标注均落在
+    无数据、无图线的空白区，一律不使用底色遮罩；
+  - Exp. 插图：以仿真数据代填（用户既定做法），标 ``Exp.†``，脚注注明「实验数据暂缺」；
+  - 设计用色：限于 Rainbow 同族（雷达双曲线取彩虹两端深蓝/深红）与中性灰阶；
+  - 风格：APS 契约层 + scienceplots（science + no-latex）审美基底，契约层优先。
 
-用法：
-  python finalize_beam_scatter_figure.py                 # 仅离线重排
-  python finalize_beam_scatter_figure.py --export        # 全 6 case COMSOL 导出
-  python finalize_beam_scatter_figure.py --export --only=nostruct   # 仅重导某对照
+用法（一条命令复现主图，数据集已在 raw/ 内）::
+
+    uv run --no-sync python scripts/research/gain_ep/simulation/finalize_beam_scatter_figure.py
+
+可选 ``--export``：从 COMSOL 模型重新导出场 CSV（需活体 COMSOL，属 sim 环节产物）。
 """
 
 from __future__ import annotations
@@ -34,357 +40,528 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.cm import ScalarMappable  # noqa: E402
-from matplotlib.colors import Normalize  # noqa: E402
-from matplotlib.patches import Rectangle  # noqa: E402
-from matplotlib.tri import Triangulation  # noqa: E402
+from matplotlib.colors import LinearSegmentedColormap, Normalize  # noqa: E402
+from matplotlib.patches import Polygon, Rectangle  # noqa: E402
 
 from pysci.skills.scientific_plotting.tools import field as _field  # noqa: E402
-from pysci.skills.scientific_plotting.tools import raster  # noqa: E402
+from pysci.skills.scientific_plotting.tools.style import (  # noqa: E402
+    mm_to_inch,
+    style_context,
+)
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-from build_beam_scatter_mph import OUT_MPH  # noqa: E402
-
+ROOT = HERE.parents[3]
 FIG_BASE = (
-    HERE.parents[3]
-    / "data"
-    / "research"
-    / "1_gain_ep"
-    / "article"
-    / "figures"
-    / "beam_scatter"
+    ROOT / "data" / "research" / "1_gain_ep" / "article" / "figures" / "beam_scatter"
 )
 RAW_DIR = FIG_BASE / "raw"
+OUT_PNG = FIG_BASE / "beam_scatter_combined.png"
 
-# --- 几何常量（与 build 一致，单位 m）---
+# --- 模型几何（与 build_beam_scatter_mph.PARAMS 一致，单位 m）---
 LAMBDA = 343.0 / 3430.0
 D = LAMBDA / math.sqrt(2.0)
-X0 = 8 * D / 2.0
-R = 4 * LAMBDA
-NPER = 8
-# 单周期管槽（宽/深/周期内偏移），与 build PARAMS 同
-W1, H1 = 0.227 * D, 0.569 * LAMBDA
-W2, H2, O2 = 0.115 * D, 0.195 * LAMBDA, 0.503 * D
-W3, H3, O3 = 0.153 * D, 0.232 * LAMBDA, 0.688 * D
+X0 = 4.0 * D  # 超表面几何中心 x（半圆域圆心）
+R = 4.0 * LAMBDA  # 域半径 0.4 m
 
-POLAR_RMAX_ROW = {
-    "full": 50.0,
-    "nogain": 5.0,
-    "nostruct": 10.0,
-}  # 各行远场极径上界（Pa，实测取整）
-CMAP = "bwr"  # 发散色标（signed Re p_t）
-
-CI_EP = "-0.0730324"
-SLIVER = "lambda/200"  # 管槽 1/3 薄片深度 = 等效整根移除（对照③）
-# (对照名, 参数覆盖)；h1e/h3e 缺省 = h1/h3（结构存在）
-CASES: list[tuple[str, dict[str, str]]] = [
-    ("full", {"ci": CI_EP}),
-    ("nogain", {"ci": "0"}),
-    ("nostruct", {"ci": CI_EP, "h1e": SLIVER, "h3e": SLIVER}),
+CASES = [
+    ("full", "(i) groove + gain"),
+    ("nogain", "(ii) groove, no gain"),
+    ("nostruct", "(iii) gain, no groove"),
 ]
-INCS = [("L", "1", "0"), ("R", "0", "1")]
-GROUP_LABEL = {
-    "full": "(i) groove + gain",
-    "nogain": "(ii) groove, no gain",
-    "nostruct": "(iii) gain, no groove",
-}
+INCS = (
+    ("L", "L-incidence"),
+    ("R", "R-incidence"),
+)
 
-# --- 菱形通道版式（数据坐标，米）---
-CH_ANG = (135.0, 45.0)  # 左/右输出通道方位角（内菱形中心）
-CH_R = 0.26  # 内菱形中心半径
-S_IN = 0.12  # 内菱形（尖角向上正方形）边长
-INSET_ANG = (125.0, 55.0)  # 左/右实验插图方位角（外菱形中心，偏外侧以免遮挡半圆）
-INSET_R = 0.55  # 外菱形中心半径（半圆外顶部角落）
-S_OUT = 0.17  # 外菱形边长（> S_IN → 放大插图）
-_LBL = dict(fontsize=7, va="center", bbox=dict(fc="w", alpha=0.6, ec="none", pad=0.5))
+# --- 菱形扫描框（内框，任务书第 5 项）：物理边长 31 cm、近边距中心 30 cm ---
+SCAN_SIDE = 0.31
+SCAN_NEAR_EDGE = 0.30
+SCAN_HALF = SCAN_SIDE / 2.0  # 内切半径（中心 → 近边）= 15.5 cm
+SCAN_CENTER_R = SCAN_NEAR_EDGE + SCAN_HALF  # 菱形中心径向距离 = 45.5 cm
+CH_ANG = (135.0, 45.0)  # 左/右输出通道方位角
+
+# 面板半宽（m）：容纳菱形远顶点（SCAN_CENTER_R/√2 + SCAN_HALF = 54.1 cm）与 Exp 插图
+PANEL_HALF = 0.565
+
+# Exp. 插图（外框）：同一扫描场区的对照图（实验数据暂缺，以仿真代填），置于半圆外顶角
+SRC_HALF = 0.035  # 插图源窗半边长（边长 7 cm），中心径向 = SCAN_NEAR_EDGE + SRC_HALF（整窗入框）
+INSET_HALF = 0.044  # 插图半边长（边长 8.8 cm，放大 1.26×）
+INSET_DIST = 0.680  # 插图中心径向距离（在扫描框远边之外）
+
+# --- 配色：设计用色限于 Rainbow 同族 + 中性灰阶 ---
+CMAP_NAME = "comsol_rainbow"
+_CMAP_STOPS = [
+    (0.00, "#1b3f9e"),  # 深蓝 −vmax
+    (0.25, "#35c6d9"),  # 青
+    (0.50, "#b5e02a"),  # 黄绿（零）
+    (0.75, "#ffd21e"),  # 黄
+    (1.00, "#d81e2a"),  # 红 +vmax
+]
+CMAP = LinearSegmentedColormap.from_list(CMAP_NAME, _CMAP_STOPS)
+C_L, C_R = "#1b3f9e", "#d81e2a"  # 雷达双曲线：彩虹两端
+GRID, INK, GRAY, FAINT = "#b9b9b9", "#222222", "#666666", "#9a9a9a"
+
+_MANTISSA_CEIL = (1.0, 1.2, 1.6, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0)
+_MANTISSA_FLOOR = (1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0)
+# 雷达径向上界更贴近数据 max（任务书第 4 项），额外允许 1.25 档
+_MANTISSA_RADAR = (1.0, 1.2, 1.25, 1.6, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0)
 
 
-def polar(phi_deg: float, r: float) -> tuple[float, float]:
-    a = math.radians(phi_deg)
-    return (X0 + r * math.cos(a), r * math.sin(a))
-
-
-def _rect_anchor(
-    cx: float, cy: float, w: float, h: float, angle: float
-) -> tuple[float, float]:
-    """Rectangle 绕未旋转左下角旋转；反解锚点使 (cx,cy) 为旋转后真中心（同 raster.apply_overlays）。"""
-    a = math.radians(angle)
-    return (
-        cx - (w / 2 * math.cos(a) - h / 2 * math.sin(a)),
-        cy - (w / 2 * math.sin(a) + h / 2 * math.cos(a)),
-    )
-
-
-def _nice_ceil(x: float) -> float:
-    """把上界规整到 1/2/5×10^n，色标刻度更整洁。"""
+def _nice_ceil(x: float, mantissas: tuple[float, ...] = _MANTISSA_CEIL) -> float:
+    """取 ≥ x 的最小「整洁」值（mantissa ×10ⁿ）。"""
     if x <= 0:
         return 1.0
     e = 10.0 ** math.floor(math.log10(x))
-    for m in (1, 2, 5, 10):
-        if m * e >= x:
-            return m * e
-    return 10 * e
+    cands = sorted(
+        m * ee for ee in (e / 100, e / 10, e, e * 10, e * 100) for m in mantissas
+    )
+    for v in cands:
+        if v >= x * (1.0 - 1e-12):
+            return v
+    return cands[-1]
+
+
+def _nice_floor(x: float, mantissas: tuple[float, ...] = _MANTISSA_FLOOR) -> float:
+    """取 ≤ x 的最大「整洁」值。"""
+    if x <= 0:
+        return 0.0
+    e = 10.0 ** math.floor(math.log10(x))
+    cands = sorted(m * ee for ee in (e / 100, e / 10, e, e * 10) for m in mantissas)
+    ok = [v for v in cands if v <= x * (1.0 + 1e-12)]
+    return ok[-1] if ok else 0.0
+
+
+def _fmt(v: float) -> str:
+    return f"{v:g}"
 
 
 # ---------------------------------------------------------------------------
-# COMSOL 导出：逐 case 数值场 CSV（signed real p_t）+ 按行 rmax 的远场 PNG
-# （COMSOL Data 导出的 VTK exporttype 不生效，落盘为文本；文本含 x,y,real(p_t) 三列，
-#   field 原语的 CSV 读取器可直接解析，故统一用 .csv）
+# 数据装载
 # ---------------------------------------------------------------------------
-def export_cases(cases: list[tuple[str, dict[str, str]]]) -> None:
-    import mph  # noqa: PLC0415 - 仅导出需要活体 COMSOL
+def load_far(cfg: str, inc: str) -> tuple[np.ndarray, np.ndarray]:
+    """读远场 CSV → (方位角 deg 数组, |pext| Pa 数组)。1° 网格，不降采样。"""
+    arr = np.loadtxt(RAW_DIR / f"far_{cfg}_{inc}.csv", delimiter=",", comments="%")
+    return arr[:, 2], arr[:, 3]
+
+
+def load_field(cfg: str, inc: str) -> tuple[np.ndarray, np.ndarray]:
+    """读场图 CSV → (xy Nx2, Re p_t N)。"""
+    return _field.load_field_points(RAW_DIR / f"field_{cfg}_{inc}.csv")
+
+
+# ---------------------------------------------------------------------------
+# 菱形扫描框 / Exp 插图版式（数据坐标，米）
+# ---------------------------------------------------------------------------
+def _frame(ang_deg: float) -> tuple[np.ndarray, np.ndarray]:
+    """通道方向单位矢量 u（射线）与 v（横向），构成菱形的局部正交系。"""
+    a = math.radians(ang_deg)
+    return np.array([math.cos(a), math.sin(a)]), np.array([-math.sin(a), math.cos(a)])
+
+
+def _square_uv(dist: float, half: float, ang_deg: float) -> np.ndarray:
+    """局部系 (u,v) 内以超表面中心 + dist·u 为中心、半边长 half 的正方形 4 顶点（逆时针）。"""
+    u, v = _frame(ang_deg)
+    c = np.array([X0, 0.0]) + dist * u
+    order = [(1, 1), (1, -1), (-1, -1), (-1, 1)]
+    return np.array([c + su * half * u + sv * half * v for su, sv in order])
+
+
+def _at(dist: float, ang_deg: float) -> tuple[float, float]:
+    """通道射线上距超表面中心 dist 的点（直角坐标）。"""
+    u, _ = _frame(ang_deg)
+    return X0 + dist * u[0], dist * u[1]
+
+
+def _uv_point(uu: float, vv: float, ang_deg: float) -> tuple[float, float]:
+    """局部系 (u,v) 中的点 → 直角坐标（原点 = 超表面中心）。"""
+    u, v = _frame(ang_deg)
+    return X0 + uu * u[0] + vv * v[0], uu * u[1] + vv * v[1]
+
+
+def draw_exp_insets(ax, xy: np.ndarray, vals: np.ndarray, vmax: float) -> None:
+    """每通道：内框（扫描场区菱形，实线，Sim.）+ 两角细虚线 + 半圆外顶角 Exp.† 插图。
+
+    内框 = 扫描场区在场图中的位置标记（物理边长 31 cm、近边距中心 30 cm，尖角向上，中心落在
+    该通道射线上），取代旧版误画的独立大虚线框；外框 = **同一场区**的对照插图（实验数据
+    暂缺，以仿真代填），源窗取该场区近端、整窗落在扫描框内且落在模拟域内。
+    """
+    norm = Normalize(-vmax, vmax)
+    off = np.array([X0, 0.0])
+    src_r = SCAN_NEAR_EDGE + SRC_HALF  # 源窗中心径向：整体位于内框近侧之内
+    for ang in CH_ANG:
+        u, v = _frame(ang)
+        frame = _square_uv(SCAN_CENTER_R, SCAN_HALF, ang)
+        ins = _square_uv(INSET_DIST, INSET_HALF, ang)
+        # 两角细虚线：内框远侧两顶点 → 外框近侧两顶点
+        for a, b in ((frame[0], ins[3]), (frame[1], ins[2])):
+            ax.plot(
+                [a[0], b[0]],
+                [a[1], b[1]],
+                ls=(0, (2.2, 1.8)),
+                lw=0.5,
+                color=FAINT,
+                zorder=4,
+            )
+        # 插图内容 = 同一扫描场区（近端源窗）的场，放大到插图
+        d_uv = np.stack([(xy - off) @ u, (xy - off) @ v], axis=1)
+        m = (np.abs(d_uv[:, 0] - src_r) <= SRC_HALF) & (np.abs(d_uv[:, 1]) <= SRC_HALF)
+        if m.sum() >= 3:
+            w = (
+                (d_uv[m] - np.array([src_r, 0.0])) * (INSET_HALF / SRC_HALF)
+            ) @ np.stack([u, v])
+            w = w + off + INSET_DIST * u
+            tri = _field.add_field_panel(ax, w, vals[m], cmap=CMAP, norm=norm)
+            tri.set_clip_path(Polygon(ins, closed=True, transform=ax.transData))
+        ax.add_patch(Polygon(ins, closed=True, fill=False, ec=GRAY, lw=0.7, zorder=7))
+        # 标签落位（逐块量过与框线/细虚线/弧/彼此的距离）：
+        #   Exp.† 内框自由带上沿（u≈0.50，该处内框横截面 ±0.11 m，字形整块不入框线）；
+        #   Sim.  其下方 0.115 m 再沿 +u 外移 0.045 m（远离半圆弧；与 Exp.† 间隙 1.17 mm）。
+        ax.add_patch(Polygon(frame, closed=True, fill=False, ec=GRAY, lw=0.8, zorder=6))
+        ex, ey = _uv_point(SCAN_CENTER_R + 0.045, 0.020, ang)
+        ax.text(
+            ex,
+            ey,
+            "Exp.$\\dagger$",
+            color=GRAY,
+            fontsize=6,
+            ha="center",
+            va="center",
+            zorder=8,
+        )
+        ux, uy = _frame(ang)[0]
+        ax.text(
+            ex + 0.045 * ux,
+            ey - 0.115 + 0.045 * uy,
+            "Sim.",
+            color=GRAY,
+            fontsize=6,
+            ha="center",
+            va="center",
+            zorder=8,
+        )
+
+
+def _in_half_disc(cxy: np.ndarray) -> np.ndarray:
+    """可见区判据：半圆流体域（y≥0 且 r≤R）。管槽（y<0）按任务书第 8 项隐去。"""
+    return (cxy[:, 1] >= 0.0) & ((cxy[:, 0] - X0) ** 2 + cxy[:, 1] ** 2 <= R**2)
+
+
+# ---------------------------------------------------------------------------
+# 场图面板
+# ---------------------------------------------------------------------------
+def draw_field_panel(
+    ax,
+    cfg: str,
+    inc: str,
+    label: str,
+    vmax: float,
+    data: tuple[np.ndarray, np.ndarray],
+) -> None:
+    xy, vals = data
+    _field.add_field_panel(
+        ax, xy, vals, cmap=CMAP, vmin=-vmax, vmax=vmax, keep_triangle=_in_half_disc
+    )
+    # 半圆外弧 + 平直直径边（隐去管槽轮廓，遮盖 y<0 内容）
+    th = np.linspace(0.0, math.pi, 361)
+    ax.plot(X0 + R * np.cos(th), R * np.sin(th), color=INK, lw=0.7, zorder=6)
+    ax.plot(
+        [X0 - R, X0 + R], [0.0, 0.0], color=INK, lw=1.0, zorder=6, solid_capstyle="butt"
+    )
+    draw_exp_insets(ax, xy, vals, vmax)
+    ax.set_xlim(X0 - PANEL_HALF, X0 + PANEL_HALF)
+    ax.set_ylim(0.0, PANEL_HALF)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_axis_off()
+    ax.add_patch(
+        Rectangle(
+            (X0 - PANEL_HALF, 0.0),
+            2 * PANEL_HALF,
+            PANEL_HALF,
+            fill=False,
+            ec="#dddddd",
+            lw=0.4,
+            zorder=1,
+        )
+    )
+    ax.set_title(label, color=INK, pad=6.0)
+
+
+# ---------------------------------------------------------------------------
+# 半极坐标雷达（行 1）：L/R 双曲线同坐标系 + 小图例；径向上界 = 该图数据 max
+# ---------------------------------------------------------------------------
+def draw_radar(ax, cfg: str, header: str) -> None:
+    far = {inc: load_far(cfg, inc) for inc, _ in INCS}
+    rmax = _nice_ceil(
+        max(float(amp.max()) for _alpha, amp in far.values()), _MANTISSA_RADAR
+    )
+    rings = [_nice_floor(rmax / 3.0), _nice_floor(2.0 * rmax / 3.0), rmax]
+    rings = sorted({r for r in rings if 0 < r <= rmax * (1.0 + 1e-9)})
+
+    th = np.linspace(0.0, math.pi, 241)
+    for rc in rings:
+        ax.plot(rc * np.cos(th), rc * np.sin(th), color=GRID, lw=0.4, zorder=1)
+    for ang in (0, 45, 90, 135, 180):
+        a = math.radians(ang)
+        ax.plot(
+            [0.0, rmax * math.cos(a)],
+            [0.0, rmax * math.sin(a)],
+            color=GRID,
+            lw=0.4,
+            zorder=1,
+        )
+    for inc, inc_label in INCS:
+        alpha, amp = far[inc]
+        a = np.radians(alpha)
+        ax.plot(
+            amp * np.cos(a),
+            amp * np.sin(a),
+            color=C_L if inc == "L" else C_R,
+            lw=1.1,
+            zorder=3,
+            label=f"{inc_label} (peak {alpha[int(np.argmax(amp))]:.0f}$^\\circ$)",
+        )
+
+    ax.set_xlim(-rmax * 1.14, rmax * 1.14)
+    ax.set_ylim(-0.16 * rmax, rmax * 1.22)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_axis_off()
+    for ang in (0, 45, 90, 135, 180):
+        a = math.radians(ang)
+        ax.text(
+            rmax * 1.05 * math.cos(a),
+            rmax * 1.05 * math.sin(a),
+            f"{ang}$^\\circ$",
+            color=GRAY,
+            fontsize=6,
+            ha="left" if ang == 0 else ("right" if ang in (135, 180) else "center"),
+            va="center"
+            if ang in (0, 180)
+            else ("bottom" if ang in (45, 90) else "top"),
+            zorder=4,
+        )
+    # 幅值刻度移至直径边下方（该处无图线，满足零遮挡）
+    for rc in rings:
+        ax.text(
+            rc,
+            -0.045 * rmax,
+            _fmt(rc),
+            color=GRAY,
+            fontsize=6,
+            ha="center",
+            va="top",
+            zorder=4,
+        )
+    # 量名+单位：置于直径边下方左侧（该处无图线，且与右侧幅值刻度错开 → 零遮挡）
+    ax.text(
+        -rmax * 1.12,
+        -0.055 * rmax,
+        "$|p_\\mathrm{ext}|$ (Pa)",
+        color=GRAY,
+        fontsize=6,
+        ha="left",
+        va="top",
+        zorder=4,
+    )
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.005),
+        ncol=1,
+        fontsize=6,
+        frameon=False,
+        handlelength=1.3,
+        handletextpad=0.5,
+        borderpad=0.1,
+        labelspacing=0.25,
+    )
+    ax.set_title(header, color=INK, pad=26.0, fontweight="bold")
+
+
+# ---------------------------------------------------------------------------
+# 组装
+# ---------------------------------------------------------------------------
+_FIG_W_MM = 178.0
+_LEFT, _RIGHT = 0.045, 0.985
+_G_PANEL_CBAR, _G_CBAR_COL, _CB_W = 0.012, 0.066, 0.013
+_TITLE_MM, _G_ROW_MM = 13.0, 7.5
+_MARGIN_TOP_MM, _MARGIN_BOT_MM = 8.0, 9.0
+_RADAR_ASPECT = 1.38 / 2.28  # ylim 跨度 / xlim 跨度（半极坐标雷达）
+
+
+def _layout() -> dict[str, float]:
+    """由列宽反解各行的图面比例（保证场图面板 2:1、雷达充满列宽）。"""
+    panel_w = (_RIGHT - _LEFT - 3 * _G_PANEL_CBAR - 3 * _CB_W - 2 * _G_CBAR_COL) / 3.0
+    panel_mm = panel_w * _FIG_W_MM
+    radar_h_mm = panel_mm * _RADAR_ASPECT
+    field_h_mm = panel_mm / 2.0
+    fig_h_mm = (
+        _MARGIN_TOP_MM
+        + _TITLE_MM
+        + radar_h_mm
+        + _G_ROW_MM
+        + field_h_mm
+        + _G_ROW_MM
+        + field_h_mm
+        + _MARGIN_BOT_MM
+    )
+    top = 1.0 - _MARGIN_TOP_MM / fig_h_mm
+    row0 = (_TITLE_MM + radar_h_mm) / fig_h_mm
+    gap = _G_ROW_MM / fig_h_mm
+    field = field_h_mm / fig_h_mm
+    return {
+        "panel_w": panel_w,
+        "fig_h_mm": fig_h_mm,
+        "top": top,
+        "row0": row0,
+        "gap": gap,
+        "field": field,
+        "radar": radar_h_mm / fig_h_mm,
+        "y_radar": top - row0,
+        "y_f1": top - row0 - gap - field,
+        "y_f2": top - row0 - 2 * (gap + field),
+    }
+
+
+def compose_combined() -> Path:
+    L = _layout()
+    fig_h_in = mm_to_inch(L["fig_h_mm"])
+    fig_w_in = mm_to_inch(_FIG_W_MM)
+    panel_w, y_f1, y_f2 = L["panel_w"], L["y_f1"], L["y_f2"]
+    fields = {(cfg, inc): load_field(cfg, inc) for cfg, _ in CASES for inc, _ in INCS}
+    vmax = {
+        cfg: _nice_ceil(
+            max(
+                float(np.abs(vals[_in_half_disc(xy)]).max())
+                for (c, _), (xy, vals) in fields.items()
+                if c == cfg
+            )
+        )
+        for cfg, _ in CASES
+    }
+
+    with style_context("aps", width=str(int(_FIG_W_MM)), scienceplots=True):
+        fig = plt.figure(figsize=(fig_w_in, fig_h_in))
+        letters = iter("abcdefghi")
+        for j, (cfg, header) in enumerate(CASES):
+            x = _LEFT + j * (panel_w + _G_PANEL_CBAR + _CB_W + _G_CBAR_COL)
+            ax_r = fig.add_axes([x, L["y_radar"], panel_w, L["radar"]])
+            draw_radar(ax_r, cfg, header)
+            ax_r.text(
+                -0.05,
+                1.0,
+                next(letters),
+                transform=ax_r.transAxes,
+                va="top",
+                ha="left",
+                color=INK,
+                fontweight="bold",
+            )
+            for k, (inc, inc_label) in enumerate(INCS):
+                ax_f = fig.add_axes([x, (y_f1, y_f2)[k], panel_w, L["field"]])
+                draw_field_panel(
+                    ax_f,
+                    cfg,
+                    inc,
+                    f"{inc_label} $\\mathrm{{Re}}\\,p_t$",
+                    vmax[cfg],
+                    fields[(cfg, inc)],
+                )
+                ax_f.text(
+                    0.0,
+                    1.015,
+                    next(letters),
+                    transform=ax_f.transAxes,
+                    va="bottom",
+                    ha="left",
+                    color=INK,
+                    fontweight="bold",
+                )
+            cax = fig.add_axes(
+                [x + panel_w + _G_PANEL_CBAR, y_f2, _CB_W, y_f1 + L["field"] - y_f2]
+            )
+            cbar = fig.colorbar(
+                ScalarMappable(norm=Normalize(-vmax[cfg], vmax[cfg]), cmap=CMAP),
+                cax=cax,
+            )
+            ticks = [-vmax[cfg], -vmax[cfg] / 2.0, 0.0, vmax[cfg] / 2.0, vmax[cfg]]
+            cbar.set_ticks(ticks)
+            cbar.set_ticklabels([_fmt(t) for t in ticks])
+            cbar.set_label("$\\mathrm{Re}\\,p_t$ (Pa)", rotation=270, labelpad=7.0)
+            cbar.outline.set_linewidth(0.5)
+            # 刻度只留右侧主刻度（3~5 条裁决）；关掉 scienceplots 带入的次要刻度与双侧刻度
+            cax.minorticks_off()
+            cax.tick_params(
+                which="both",
+                left=False,
+                right=True,
+                top=False,
+                bottom=False,
+                length=2.0,
+                width=0.5,
+                pad=1.5,
+            )
+
+        fig.text(
+            _LEFT,
+            0.020,
+            "$\\dagger$ Exp. insets show simulated data (experimental data unavailable).\n"
+            "Diamond = scan field region Sim. (side 31 cm; near edge 30 cm from the metasurface "
+            "centre; model scale $R$ = 40 cm); outer diamond = same region, Exp.$\\dagger$.",
+            color=GRAY,
+            fontsize=6,
+            ha="left",
+            va="bottom",
+            linespacing=1.6,
+        )
+        OUT_PNG.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(OUT_PNG, dpi=600, facecolor="white")
+        plt.close(fig)
+    return OUT_PNG
+
+
+# ---------------------------------------------------------------------------
+# 可选：COMSOL 重导场 CSV（属 sim 环节，需活体 COMSOL）
+# ---------------------------------------------------------------------------
+def export_cases(cases: list[str]) -> None:
+    import mph  # noqa: PLC0415
 
     from pysci.skills.comsol_simulation.tools import export as _export  # noqa: PLC0415
 
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    mph_path = ROOT / "data/research/1_gain_ep/simulation/6 半圆波束散射对照.mph"
     client = mph.start(cores=4)
-    model = client.load(str(OUT_MPH))
+    model = client.load(str(mph_path))
     jm = model.java
-    for cfg, ov in cases:
-        for inc, pl, pr in INCS:
-            tag = f"{cfg}_{inc}"
+    overrides = {
+        "full": {"ci": "-0.0730324"},
+        "nogain": {"ci": "0"},
+        "nostruct": {"ci": "-0.0730324", "h1e": "lambda/200", "h3e": "lambda/200"},
+    }
+    for cfg in cases:
+        for inc, pl, pr in (("L", "1", "0"), ("R", "0", "1")):
             jm.param().set("pampL", pl)
             jm.param().set("pampR", pr)
-            for key, val in ov.items():
+            for key, val in overrides[cfg].items():
                 jm.param().set(key, val)
             jm.component("comp1").geom("geom1").run()
             jm.component("comp1").mesh("mesh1").run()
             jm.study("std1").run()
             dsets = [str(t) for t in (jm.result().dataset().tags() or [])]
-            ds = dsets[0] if dsets else None
-            if ds:
-                for pg in ("pg_field", "pg_far"):
-                    jm.result(pg).set("data", ds)
-            print(f"== export field csv {tag} ==")
+            ds = dsets[0] if dsets else "dset1"
             print(
                 _export.export_data(
-                    model,
-                    ds or "dset1",
-                    RAW_DIR / f"field_{tag}.csv",
-                    expr="real(acpr.p_t)",
-                ).report()
-            )
-            # 远场以该行独立极径重导（弱组不被强组压没）
-            print(f"== export far png {tag} (rmax={POLAR_RMAX_ROW[cfg]}) ==")
-            print(
-                _export.export_image(
-                    model,
-                    "pg_far",
-                    RAW_DIR / f"far_{tag}.png",
-                    polar_rmax=(0.0, POLAR_RMAX_ROW[cfg]),
-                    clean=True,
-                    sidecar=False,
+                    model, ds, RAW_DIR / f"field_{cfg}_{inc}.csv", expr="real(acpr.p_t)"
                 ).report()
             )
     client.disconnect()
 
 
-# ---------------------------------------------------------------------------
-# 超表面截面轮廓：直径边 y=0 下凹各管槽的黑色折线（对照③仅管槽 2）
-# ---------------------------------------------------------------------------
-def _grooves(cfg: str) -> list[tuple[float, float, float]]:
-    """该对照下实际存在的管槽 (x, 宽, 深) 列表（对照③仅管槽 2）。"""
-    out: list[tuple[float, float, float]] = []
-    for p in range(NPER):
-        b = p * D
-        if cfg != "nostruct":
-            out.append((b, W1, H1))
-            out.append((b + O3, W3, H3))
-        out.append((b + O2, W2, H2))
-    out.sort()
-    return out
-
-
-def _in_fluid(xy2d: np.ndarray, cfg: str) -> np.ndarray:
-    """物理流体域判据（半圆 y>=0 ∪ 各管槽矩形）；用于遮罩 Delaunay 在固体壁内的架桥伪影。"""
-    x, y = xy2d[:, 0], xy2d[:, 1]
-    inside = (y >= 0) & ((x - X0) ** 2 + y**2 <= R**2)
-    for gx, gw, gd in _grooves(cfg):
-        inside |= (x >= gx) & (x <= gx + gw) & (y >= -gd) & (y < 0)
-    return inside
-
-
-def draw_metasurface(ax, cfg: str) -> None:
-    xs: list[float] = [X0 - R]
-    ys: list[float] = [0.0]
-    for gx, gw, gd in _grooves(cfg):
-        xs += [gx, gx, gx + gw, gx + gw]
-        ys += [0.0, -gd, -gd, 0.0]
-    xs.append(X0 + R)
-    ys.append(0.0)
-    ax.plot(xs, ys, color="k", lw=0.9, zorder=6, solid_joinstyle="miter")
-
-
-# ---------------------------------------------------------------------------
-# 菱形通道版式：内菱形(Sim.) + 两顶点虚线 + 外菱形实验插图(Exp., 仿真代填)
-# ---------------------------------------------------------------------------
-def add_channel_insets(ax, xy: np.ndarray, vals: np.ndarray, vmax: float) -> None:
-    norm = Normalize(-vmax, vmax)
-    a = math.radians(45.0)
-    rot45 = np.array([[math.cos(a), -math.sin(a)], [math.sin(a), math.cos(a)]])
-    rotm45 = rot45.T
-    h_in = S_IN * math.sqrt(2) / 2
-    h_out = S_OUT * math.sqrt(2) / 2
-    for k in range(2):
-        icx, icy = polar(CH_ANG[k], CH_R)
-        ox, oy = polar(INSET_ANG[k], INSET_R)
-        side = -1 if k == 0 else 1  # 左通道标注放左侧，右通道放右侧
-        ha = "right" if side < 0 else "left"
-        # 内菱形（尖角向上正方形）= 仿真通道框
-        ax.add_patch(
-            Rectangle(
-                _rect_anchor(icx, icy, S_IN, S_IN, 45.0),
-                S_IN,
-                S_IN,
-                angle=45.0,
-                fill=False,
-                ec="k",
-                lw=1.2,
-            )
-        )
-        # 裁剪内菱形自身方域（45° 坐标系下的正方形）→ 放大 → 平移到外菱形
-        local = (xy - np.array([icx, icy])) @ rotm45.T
-        m = (np.abs(local[:, 0]) <= S_IN / 2) & (np.abs(local[:, 1]) <= S_IN / 2)
-        if m.sum() >= 3:
-            zoom = S_OUT / S_IN
-            w = (local[m] * zoom) @ rot45.T + np.array([ox, oy])
-            diamond = Rectangle(
-                _rect_anchor(ox, oy, S_OUT, S_OUT, 45.0),
-                S_OUT,
-                S_OUT,
-                angle=45.0,
-                fill=False,
-                ec="k",
-                lw=1.2,
-            )
-            ax.add_patch(diamond)
-            coll = ax.tripcolor(
-                Triangulation(w[:, 0], w[:, 1]),
-                vals[m],
-                cmap=CMAP,
-                norm=norm,
-                shading="gouraud",
-            )
-            coll.set_clip_path(diamond)
-        # 两条虚线：自内菱形左/右两顶点 → 外菱形左/右两顶点
-        ax.plot([icx - h_in, ox - h_out], [icy, oy], ls="--", lw=0.8, color="k")
-        ax.plot([icx + h_in, ox + h_out], [icy, oy], ls="--", lw=0.8, color="k")
-        # 标注置于侧边：内=Sim.，外=Exp.
-        ax.text(icx + side * (h_in + 0.012), icy, "Sim.", ha=ha, color="k", **_LBL)
-        ax.text(ox + side * (h_out + 0.012), oy, "Exp.", ha=ha, color="k", **_LBL)
-
-
-# ---------------------------------------------------------------------------
-# 定稿大图组装
-# ---------------------------------------------------------------------------
-def compose_combined() -> Path:
-    data: dict[str, tuple[np.ndarray, np.ndarray]] = {}
-    for cfg, _ov in CASES:
-        for inc, _, _ in INCS:
-            tag = f"{cfg}_{inc}"
-            data[tag] = _field.load_field_points(RAW_DIR / f"field_{tag}.csv")
-
-    # 每行独立场色标上界（99 分位，稳健）
-    vmax_row = {
-        cfg: _nice_ceil(
-            np.percentile(
-                np.concatenate([np.abs(data[f"{cfg}_{i}"][1]) for i in ("L", "R")]), 99
-            )
-        )
-        for cfg, _ov in CASES
-    }
-
-    fig = plt.figure(figsize=(17, 11.5))
-    gs = fig.add_gridspec(
-        3, 5, width_ratios=[1, 1, 1, 1, 0.055], wspace=0.10, hspace=0.22
-    )
-
-    letter = ord("a")
-    for ri, (cfg, _ov) in enumerate(CASES):
-        vmax = vmax_row[cfg]
-        row_first_ax = None
-        for ci, inc in enumerate(("L", "R")):
-            tag = f"{cfg}_{inc}"
-            xy, vals = data[tag]
-            # 场图子图（数据驱动，行内统一 norm → 与该行 colorbar 严格一致）
-            ax_f = fig.add_subplot(gs[ri, 2 * ci])
-            if row_first_ax is None:
-                row_first_ax = ax_f
-            _field.add_field_panel(
-                ax_f,
-                xy,
-                vals,
-                cmap=CMAP,
-                vmin=-vmax,
-                vmax=vmax,
-                keep_triangle=lambda c: _in_fluid(c, cfg),
-            )
-            ax_f.set_aspect("equal")
-            ax_f.set_axis_off()
-            draw_metasurface(ax_f, cfg)
-            add_channel_insets(ax_f, xy, vals, vmax)
-            # 极坐标子图（COMSOL 以该行 rmax 重导的远场 PNG）
-            ax_p = fig.add_subplot(gs[ri, 2 * ci + 1])
-            ax_p.imshow(raster.read_raster(RAW_DIR / f"far_{tag}.png"), aspect="equal")
-            ax_p.set_axis_off()
-            for ax in (ax_f, ax_p):
-                ax.text(
-                    0.02,
-                    0.98,
-                    f"({chr(letter)})",
-                    transform=ax.transAxes,
-                    va="top",
-                    ha="left",
-                    fontsize=11,
-                    fontweight="bold",
-                )
-                letter += 1
-            if ri == 0:
-                ax_f.set_title(f"{inc}-incidence  field  $|p_t|$", fontsize=11)
-                ax_p.set_title(
-                    f"{inc}-incidence  far-field  $|p_{{ext}}|$", fontsize=11
-                )
-        # 该行 colorbar（最右列，与行对齐）
-        cax = fig.add_subplot(gs[ri, 4])
-        cbar = fig.colorbar(
-            ScalarMappable(norm=Normalize(-vmax, vmax), cmap=CMAP), cax=cax
-        )
-        cbar.set_label(r"Re $p_t$ (Pa)", fontsize=9)
-        cax.set_title(f"±{vmax:.0f}", fontsize=8)
-        # 行标签置于该行第一个场图左侧
-        row_first_ax.text(
-            -0.06,
-            0.5,
-            GROUP_LABEL[cfg],
-            transform=row_first_ax.transAxes,
-            rotation=90,
-            va="center",
-            ha="center",
-            fontsize=11,
-        )
-
-    fig.suptitle(
-        "Beam scattering at the gain EP: 3 controls × L/R incidence\n"
-        "(per-control field scale & polar radius)",
-        fontsize=13,
-    )
-    out = FIG_BASE / "beam_scatter_combined.png"
-    fig.savefig(out, dpi=150, bbox_inches="tight", pad_inches=0.15)
-    plt.close(fig)
-    return out
-
-
 def main() -> None:
     if "--export" in sys.argv:
-        cases = CASES
-        for arg in sys.argv:
-            if arg.startswith("--only="):
-                want = arg.split("=", 1)[1]
-                cases = [c for c in CASES if c[0] == want]
-        export_cases(cases)
+        only = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--only=")]
+        export_cases(only or [c for c, _ in CASES])
     print("combined ->", compose_combined())
 
 

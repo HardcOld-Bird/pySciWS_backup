@@ -30,7 +30,7 @@
 #   组长默认模型 = 本预设主力模型（与大部分组员同源；现场 /model 管理优先）。
 #   注意：qwen 预设 pro 席仅 twin（Qwen pro 贵，刻意不规模化）；mimo 预设
 #   pro 席四人组——两预设不对称为有意设计（用户 2026-10-12 确认）。
-preset = "deepseek"
+preset = "mimo"
 
 # ── 谷时隐性 DeepSeek（路由 v3，用户设计 2026-10-13）────────────────
 # 路由键原住 [routing] 节；用户 2026-10-13「模型类设置集中一处」→ 并入本节
@@ -81,7 +81,7 @@ enabled = false
 # 改这一行即热切换，无需重启会话；读取失败 / 键缺席 / 非法值一律回落 false 并出声。
 # 本单只做政策注入层（SessionStart/PostCompact 钩子注入政策全文）；判据层（
 # AskUserQuestion 拦截 / queue_pressure 夜航判据）是 n2。
-enabled = false          # 夜航总开关（手动）：true = 政策注入 + 判据拦截生效
+enabled = true         # 夜航总开关 —— true / false（真源；只归用户手动拨动）：改这一行即下一轮生效（Stop 钩子差分注入）；true=政策注入+判据拦截生效
 # periodic_wake_s = 3600 # 保险丝打回间隔（预留；未实施前勿设——见 §3.4）
 # ── 保险丝层缓行（PSEP_2 §3.4）：仅当「有未竟事项（计划/队列/任务书）且组长无活动」的
 #    停滞才打回；**全部完成 / 严重阻碍两个终态一律静默**。鉴于 PENDING-WORK 已覆盖大部分

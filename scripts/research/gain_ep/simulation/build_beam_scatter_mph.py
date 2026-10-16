@@ -10,8 +10,11 @@
   - 半圆空气域（半径 R，直径边 = 超表面平面 y=0），8 周期 × 3 管槽凹入 y<0；
     半圆用 整圆 c1 减去下半矩形 rbot（Difference）得到，避免扇形角度朝向歧义；
   - Array：selection("input") + type=rectangular + fullsize=[Nper,1] + displ=[D,0]；
-  - 弧边：Plane Wave Radiation（散射场吸收）+ Exterior Field Calculation（远场，
-    y=0 无限硬墙对称面）；其余边界默认硬墙（= 刚性板 + 管槽壁）；
+  - 弧边：Plane Wave Radiation（散射场吸收）+ Exterior Field Calculation（远场）；其余边界
+    默认硬墙（= 刚性板 + 管槽壁）。**远场评估圆**：`efc1` 只定义外场变量（ExtName=pext），
+    本身无「评估半径」属性；评估圆由导出侧显式给出——半径 `r_eval=10*lambda`（远大于域半径
+    R=4λ，落在远场区，排除弧边界处的近场奇异性）、圆心 `(x0, 0)`（超表面几何中心），角度
+    0→180 步 1°。见 runner_beam_scatter.py 与 validation/远场修正核验.md；
   - 管槽 2 域材料 mat2：复声速 c*(cr+ci*i)（ci 符号约定与 CMT 相同：ci<0 增益）；
     域选择用 CumulativeSelection（arr2 contributeto）→ 跨 g13 配置稳定；
   - 结果：pg_field（总场 Surface 图）/ pg_far（极坐标 RadiationPattern 远场图）。
@@ -63,6 +66,10 @@ PARAMS = {
     "cr": "1.0037965",
     "ci": "-0.0730324",
     "R": "4*lambda",
+    # 远场评估圆（export polar 的采样圆）半径：须 ≫ 域半径 R=4λ，置于远场区，
+    # 使 acpr.efc1.pext 在网格外求值且远离弧边界的近场奇异区（r=R 处发散）。
+    # 圆心固定为超表面几何中心 (x0, 0)。此参数即「显式配置的评估圆」，不再依赖默认值。
+    "r_eval": "10*lambda",
     "pampL": "1",
     "pampR": "0",
 }
@@ -283,6 +290,13 @@ def build(*, solve: bool = True, export: bool = True) -> None:
     efc = _create(ph, "efc1", "ExteriorFieldCalculation")
     if efc is not None:
         _safe(efc.selection().named, "sel_arc")
+        # 显式钉死外场计算的关键属性（不再随默认值漂移）：
+        #   ExtName=pext      外场变量名（下游 expr 为 acpr.efc1.pext）
+        #   IntType=FullIntegral  完整 Kirchhoff-Helmholtz 积分（含相位，有限距离有效）
+        #   UsePPR=1          内部边界法向梯度多项式保形恢复（精度）
+        # 注意：该特征**无评估半径/距离属性**（属性表见下 dump，19 项中无 r/距离项），
+        # 故「评估圆」不在物理特征里，而在导出侧显式给出（见 runner 与本文件 PARAMS['r_eval']）。
+        _set(efc, {"ExtName": "pext", "IntType": "FullIntegral", "UsePPR": "1"})
         print(
             f"  efc1 sel bnds = {len(_safe(lambda: list(efc.selection().entities(1)), default=[]) or [])}"
         )

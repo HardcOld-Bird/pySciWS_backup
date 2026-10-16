@@ -1,0 +1,339 @@
+{
+  "case_id": "tb-20261017-041124-2-1-jury",
+  "case_file": "data\\taskbooks\\tb-20261017-041124-2-1-jury.md",
+  "ts": "2026-10-17T04:17:36+08:00",
+  "question": "实验平台简介撰写交付被用户驳回（7 条批语），其中可推广的缺陷定式有四：冷门品牌／\n型号入文（MT-22E 等）、口语化表达（「槽内放一支」）、琐碎规格与过程流水账入文\n（功放瓦数／机箱型号／辐射面积）、修订替换类任务整段重写（未保留属实内容）。组长已\n产出机制性改进方案（见证据）。请裁定：**哪种状态对项目更好**——改进方案实施后的\n状态，还是目前项目真实现状？",
+  "options": {
+    "A": "**改进方案实施后的状态**：writing 与 reviewer harnessing 新增 4 条判据——①LLM 默认\n静态知识库不熟的品牌／型号一律不写，仪器只写功能与关键规格层级；②无特别强调时一切\n写作为学术写作，专业严谨禁口语化；③琐碎工程参数与过程性流水叙述默认省略，提取核心\n概括；④修订替换类任务先逐句判定原内容属实／不实，属实保留仅替换不实部分，禁整段\n重写。代价：写作／审查面多 4 条判据，任务书设计时需顾及。同类缺陷以后可被 reviewer\n机械拦截，不再依赖用户逐次驳回。",
+    "B": "**目前项目真实现状**：writing/reviewer harnessing 无上述判据，细节取舍与文体口径全凭\n组员临场自觉；冷门型号、琐碎规格、口语化表达、过激替换可预见地继续出现；用户每次\n查阅需逐条驳回；同类缺陷只能靠用户逐次发现。无新增流程负担。"
+  },
+  "targets": [
+    "data/taskbooks/tb-20261017-041124-2-1.a2-解决方案.md",
+    "orchestration/skills/writing",
+    "orchestration/skills/reviewer"
+  ],
+  "dossier_hash": "f13e629904fe46e8",
+  "dossier_chars": 7237,
+  "dossier": "# 案卷 tb-20261017-041124-2-1-jury\n\n## 问题\n实验平台简介撰写交付被用户驳回（7 条批语），其中可推广的缺陷定式有四：冷门品牌／\n型号入文（MT-22E 等）、口语化表达（「槽内放一支」）、琐碎规格与过程流水账入文\n（功放瓦数／机箱型号／辐射面积）、修订替换类任务整段重写（未保留属实内容）。组长已\n产出机制性改进方案（见证据）。请裁定：**哪种状态对项目更好**——改进方案实施后的\n状态，还是目前项目真实现状？\n\n## 选项 A\n**改进方案实施后的状态**：writing 与 reviewer harnessing 新增 4 条判据——①LLM 默认\n静态知识库不熟的品牌／型号一律不写，仪器只写功能与关键规格层级；②无特别强调时一切\n写作为学术写作，专业严谨禁口语化；③琐碎工程参数与过程性流水叙述默认省略，提取核心\n概括；④修订替换类任务先逐句判定原内容属实／不实，属实保留仅替换不实部分，禁整段\n重写。代价：写作／审查面多 4 条判据，任务书设计时需顾及。同类缺陷以后可被 reviewer\n机械拦截，不再依赖用户逐次驳回。\n\n## 选项 B\n**目前项目真实现状**：writing/reviewer harnessing 无上述判据，细节取舍与文体口径全凭\n组员临场自觉；冷门型号、琐碎规格、口语化表达、过激替换可预见地继续出现；用户每次\n查阅需逐条驳回；同类缺陷只能靠用户逐次发现。无新增流程负担。\n\n## 证据\n- 成因分析报告：data/taskbooks/tb-20261017-041124-2-1.a1-成因分析.md（四类成因，\n  其中两类为用户明令「务必加入 writing 和 reviewer 的 harnessing」）\n- 解决方案报告：data/taskbooks/tb-20261017-041124-2-1.a2-解决方案.md（A 路 4 项\n  harnessing 判据 + B 路 6 条返工硬性条款）\n- 用户驳回批语原文：见任务书 tb-20261017-041124-2-1（批语 2／5／6 明令持久化；\n  「这是普适规则，务必加入写作和reviewer的harnessing使其了解」）\n\n## 自动附着材料（CLI 确定性抓取，非撰写者所写）\n\n### git diff --stat\ndata/pysci_settings.toml                           |   4 +-\n .../figures/beam_scatter/beam_scatter_combined.png | Bin 844021 -> 2013619 bytes\n data/skills/ai_drawing/LEDGER.md                   |  27 +-\n data/skills/ai_drawing/manifest.jsonl              |  17 +\n orchestration/pods/drawing/AGENTS.md               |  81 +-\n orchestration/pods/figure/AGENTS.md                |  28 +\n orchestration/pods/lit/AGENTS.md                   |  20 +\n orchestration/pods/sim/AGENTS.md                   |  16 +-\n orchestration/state/backlog.json                   |  38 +-\n .../state/replies/devops/20261017-001500-devops.md |   5 -\n .../state/replies/devops/20261017-005200-devops.md |   5 -\n .../gain_ep/simulation/build_beam_scatter_mph.py   |  18 +-\n .../simulation/finalize_beam_scatter_figure.py     | 819 +++++++++++++--------\n .../gain_ep/simulation/runner_beam_scatter.py      | 138 ++--\n 14 files changed, 811 insertions(+), 405 deletions(-)\n\n### git diff\ndiff --git a/data/pysci_settings.toml b/data/pysci_settings.toml\nindex 971fda4..81c0481 100644\n--- a/data/pysci_settings.toml\n+++ b/data/pysci_settings.toml\n@@ -30,7 +30,7 @@\n #   组长默认模型 = 本预设主力模型（与大部分组员同源；现场 /model 管理优先）。\n #   注意：qwen 预设 pro 席仅 twin（Qwen pro 贵，刻意不规模化）；mimo 预设\n #   pro 席四人组——两预设不对称为有意设计（用户 2026-10-12 确认）。\n-preset = \"deepseek\"\n+preset = \"mimo\"\n \n # ── 谷时隐性 DeepSeek（路由 v3，用户设计 2026-10-13）────────────────\n # 路由键原住 [routing] 节；用户 2026-10-13「模型类设置集中一处」→ 并入本节\n@@ -81,7 +81,7 @@ enabled = false\n # 改这一行即热切换，无需重启会话；读取失败 / 键缺席 / 非法值一律回落 false 并出声。\n # 本单只做政策注入层（SessionStart/PostCompact 钩子注入政策全文）；判据层（\n # AskUserQuestion 拦截 / queue_pressure 夜航判据）是 n2。\n-enabled = false          # 夜航总开关（手动）：true = 政策注入 + 判据拦截生效\n+enabled = true         # 夜航总开关 —— true / false（真源；只归用户手动拨动）：改这一行即下一轮生效（Stop 钩子差分注入）；true=政策注入+判据拦截生效\n # periodic_wake_s = 3600 # 保险丝打回间隔（预留；未实施前勿设——见 §3.4）\n # ── 保险丝层缓行（PSEP_2 §3.4）：仅当「有未竟事项（计划/队列/任务书）且组长无活动」的\n #    停滞才打回；**全部完成 / 严重阻碍两个终态一律静默**。鉴于 PENDING-WORK 已覆盖大部分\ndiff --git a/data/research/1_gain_ep/article/figures/beam_scatter/beam_scatter_combined.png b/data/research/1_gain_ep/article/figures/beam_scatter/beam_scatter_combined.png\nindex 42b45db..e3266b9 100644\nBinary files a/data/research/1_gain_ep/article/figures/beam_scatter/beam_scatter_combined.png and b/data/research/1_gain_ep/article/figures/beam_scatter/beam_scatter_combined.png differ\ndiff --git a/data/skills/ai_drawing/LEDGER.md b/data/skills/ai_drawing/LEDGER.md\nindex fce3fee..66f27f8 100644\n--- a/data/skills/ai_drawing/LEDGER.md\n+++ b/data/skills/ai_drawing/LEDGER.md\n@@ -1,13 +1,30 @@\n # AI 绘图生成账本（LEDGER）\n \n-> 共 2 条记录；由 `manifest.jsonl` 自动渲染，请勿手改本文件。\n+> 共 19 条记录；由 `manifest.jsonl` 自动渲染，请勿手改本文件。\n > 追加记录由 `gen`/`i2i`/`edit`/`layers`/`ingest` 自动写入；查看用 `pysci-imagine ledger`。\n > **本表不是复现手段**：方舟不保证同 prompt/seed 出同图；满意的结果请用 `gallery --add` 归档。\n \n-- **按后端**：ark=2\n-- **按模型**：doubao-seedream-5-0-flash-260915=1, doubao-seedream-5-0-pro-260628=1\n+- **按后端**：ark=19\n+- **按模型**：doubao-seedream-5-0-flash-260915=7, doubao-seedream-5-0-pro-260628=12\n \n | # | 时间 | 后端 | 模型 | seed | 产物 | prompt / 备注 |\n |---|------|------|------|------|------|----------------|\n-| 1 | 2026-10-01T22:31:15 | ark | doubao-seedream-5-0-pro-260628 |  | `data/skills/ai_drawing/assets/probe_pro.jpg` | a blue square on a plain white background |\n-| 2 | 2026-10-01T22:30:48 | ark | doubao-seedream-5-0-flash-260915 |  | `data/skills/ai_drawing/assets/probe_flash.jpg` | a red circle on a plain white background |\n+| 1 | 2026-10-16T03:21:34 | ark | doubao-seedream-5-0-pro-260628 |  | `data/skills/ai_drawing/assets/ppt_p7_c.jpg` | 一张 16:9 横版整页信息图，用于 PPT 末页单屏展示，主题是一个视觉隐喻：本项目现状——科研产出只是火箭顶部很小的有效载荷，自我维护基础设施是庞大的箭体与推进系统。浅灰白底（接近 #F7F8FA）；全图只用深蓝 #1F4E79 与橙 #D55E00 两个色系加中性灰，色觉安全。风格：规整抽象的几何图块风格——只由干净的矩形、梯形、三角形等基本几何块拼合，平涂色块 + 极细线条，干净克制、大留白，不是写实火箭插画。禁止 3D 渲染，禁止重渐变与辉光，禁止纹理噪点，禁止堆砌细节，禁止出现任何数字、英文字母、水印、签名、logo。  画面主体：一支水平居中、垂直构图的抽象几何火箭；火箭整体宽大饱满，总高约占画面高度的百分之八十五。  ① 顶部有效载荷（必须明显很小，只占火箭总高约八分之一）：一个深蓝色梯形鼻锥 + 其下一段浅橙填充的矮矩形舱体；舱体内用深蓝中文小字分两行居中书写「科研生产」「基础设施」；载荷与下方箭体之间用一条极细的浅灰水平线分隔。  ② 主体箭体（占比最大，约占火箭总高四分之三）：一个又高又宽的深蓝色圆角长矩形箭体，宽度约为载荷宽度的两倍；箭体内用白色中文大字分两行居中书写「自我维护」「基础设施」，字号为全图最大级、投影可读；箭体表面只有两条极细的浅灰水平刻度线作装饰，不要其它花纹。  ③ 两侧助推器：箭体左右各一个细长的浅橙填充、橙色细描边的圆角长矩形，圆头朝上，高度略高于箭体高度的一半，紧贴箭体两侧，助推器内不写任何文字，表面不加任何额外线条。  ④ 底部引擎：箭体下缘横向并列三个橙色梯形喷管，每个喷管下方各接一个简单的扁平橙色三角形火焰；火焰高度不要超过箭体高度的一小段，三个火焰的总宽度不要超出箭体加助推器的总宽度，火焰干净利落、边缘平直、不要辉光、不要分层叠加的复合火焰形状。  把载荷与箭体的分界线，用一条极细的浅灰水平虚线向左右两侧延伸出火箭之外一小段，强调\"上面小、下面大\"的比例。  画面左上角：大号深蓝中文标题「现状反思」。 画面左下角：一行浅灰中文小注「科研产出是小载荷，自我维护是巨大的推进系统」，字号最小，不抢主体。  画面中只允许出现以下文字，不得出现任何其它文字、英文字母、数字或伪代码字形：「现状反思」「科研生产基础设施」（在舱体内分两行排为「科研生产」「基础设施」）「自我维护基础设施」（在箭体内分两行排为「自我维护」「基础设施」）「科研产出是小载荷，自我维护是巨大的推进系统」。所有中文必须书写完全正确、笔画清晰、横平竖直，绝不出现错字、异体字或伪字形。 |\n+| 2 | 2026-10-16T03:20:22 | ark | doubao-seedream-5-0-pro-260628 |  | `data/skills/ai_drawing/assets/ppt_p7_b.jpg` | 一张 16:9 横版整页信息图，用于 PPT 末页单屏展示，主题是一个视觉隐喻：本项目现状——科研产出只是火箭顶部很小的有效载荷，自我维护基础设施是庞大的箭体与推进系统。浅灰白底（接近 #F7F8FA）；全图只用深蓝 #1F4E79 与橙 #D55E00 两个色系加中性灰，色觉安全。风格：规整抽象的几何图块风格——只由干净的矩形、梯形、三角形等基本几何块拼合，平涂色块 + 极细线条，干净克制、大留白，不是写实火箭插画。禁止 \n…（截断：git diff 全文 108931 B）\n\n### git log --oneline -5\ne648e7a chore(state): 任务书入库（新建即提交）\n9eeab6d chore(state): 任务书入库（新建即提交）\n722e3a0 chore(state): 任务书入库（新建即提交）\n5f578ff chore(state): 任务书全流程报告入库（新报告即提交）\nb4b75b0 chore(state): 任务书入库（新建即提交）\n\n### 涉事文件字节读数\n- data/taskbooks/tb-20261017-041124-2-1.a2-解决方案.md: 3411 B / 46 行 / sha256=1806672b61ff5016\n- orchestration/skills/writing: 缺席\n- orchestration/skills/reviewer: 缺席\n\n### 相关台账行\n- 2026-10-16T01:37:23+08:00 reviewer kind=result plan=rework-tb-20261015-225652-3-1 turns=47 tags=-\n- 2026-10-16T02:35:58+08:00 devops kind=result plan=tb-4-ppt-20261016 turns=7 tags=-\n- 2026-10-16T02:44:13+08:00 reviewer kind=result plan=tb-4-ppt-20261016 turns=59 tags=-\n- 2026-10-16T03:02:00+08:00 devops kind=result plan=- turns=55 tags=-\n- 2026-10-16T03:34:19+08:00 writing kind=result plan=tb-4-ppt-20261016 turns=94 tags=-\n- 2026-10-16T03:43:40+08:00 reviewer kind=run_failed plan=tb-4-ppt-20261016 turns=80 tags=-\n- 2026-10-16T03:52:16+08:00 reviewer kind=run_failed plan=tb-4-ppt-20261016 turns=80 tags=-\n- 2026-10-16T03:58:36+08:00 reviewer kind=result plan=tb-4-ppt-20261016 turns=20 tags=-\n- 2026-10-16T04:04:51+08:00 writing kind=result plan=tb-4-ppt-20261016 turns=52 tags=-\n- 2026-10-16T07:46:54+08:00 devops kind=result plan=- turns=63 tags=-\n",
+  "brief": {
+    "path": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\orchestration\\state\\evals\\jury-brief.md",
+    "approved": false,
+    "hash": "4e026d2b65bb85e1"
+  },
+  "seats": [
+    {
+      "name": "glm",
+      "model": "glm-5.3",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "key_env": "GLM_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "kimi",
+      "model": "kimi-k2.6",
+      "base_url": "https://api.moonshot.cn/v1",
+      "key_env": "KIMI_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "mimo",
+      "model": "mimo-v2.6-pro",
+      "base_url": "https://api.xiaomimimo.com/v1",
+      "key_env": "MIMO_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "siliconflow",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "key_env": "SILICONFLOW_API_KEY",
+      "role": "fallback",
+      "defect": "",
+      "reason": "被评模型 deepseek 同族，依 §4 不得入庭",
+      "usable": true
+    }
+  ],
+  "routing": {
+    "preset": "mimo",
+    "hidden": true,
+    "producer": "deepseek",
+    "panel": [
+      "glm",
+      "kimi",
+      "mimo"
+    ]
+  },
+  "fallback": {
+    "enabled": true,
+    "used": false,
+    "notice": "",
+    "missing_primary": []
+  },
+  "panel": [
+    "glm-5.3",
+    "kimi-k2.6",
+    "mimo-v2.6-pro"
+  ],
+  "attempts": 1,
+  "jurors": [
+    {
+      "seat": "glm",
+      "model": "glm-5.3",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户批语明令「务必加入writing和reviewer的harnessing」；4判据使同类缺陷可被机械拦截，注入面仅限写作/审查角色，收益明确成本有界",
+          "confidence": 0.9,
+          "usage": {
+            "completion_tokens": 1650,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1586
+            },
+            "prompt_tokens": 4676,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 6326
+          },
+          "error": ""
+        },
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "案卷载用户批语明令将四判据持久化入 harnessing；四类缺陷已实际发生，reviewer 可机械拦截，收益明确，代价仅 4 条判据",
+          "confidence": 0.85,
+          "usage": {
+            "completion_tokens": 2467,
+            "completion_tokens_details": {
+              "reasoning_tokens": 2403
+            },
+            "prompt_tokens": 4676,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 7143
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 9352,
+        "completion_tokens": 4117,
+        "total_tokens": 13469
+      }
+    },
+    {
+      "seat": "kimi",
+      "model": "kimi-k2.6",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户批语明令持久化，A提供可机械验证的四条判据，使缺陷可被拦截，可靠性优于B",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 4441,
+            "completion_tokens": 3274,
+            "total_tokens": 7715,
+            "completion_tokens_details": {
+              "reasoning_tokens": 3227
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户批语明令「务必加入harnessing」（证据段），四判据使reviewer可机械拦截缺陷，收益大于常驻成本",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 4441,
+            "completion_tokens": 1465,
+            "total_tokens": 5906,
+            "cached_tokens": 1024,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1414
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 8882,
+        "completion_tokens": 4739,
+        "total_tokens": 13621
+      }
+    },
+    {
+      "seat": "mimo",
+      "model": "mimo-v2.6-pro",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户批语2/5/6明令持久化，4条判据可被reviewer机械拦截，案卷未示明确危害，代价为常驻注入面小幅增加",
+          "confidence": 0.82,
+          "usage": {
+            "completion_tokens": 192,
+            "prompt_tokens": 5186,
+            "total_tokens": 5378,
+            "completion_tokens_details": {
+              "reasoning_tokens": 130
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1280
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "案卷B为实施4条判据：用户批语明令持久化，reviewer可机械拦截同类缺陷，收益大于常驻注入成本。",
+          "confidence": 0.72,
+          "usage": {
+            "completion_tokens": 1710,
+            "prompt_tokens": 5186,
+            "total_tokens": 6896,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1654
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 10372,
+        "completion_tokens": 1902,
+        "total_tokens": 12274
+      }
+    }
+  ],
+  "votes": {
+    "glm": "A",
+    "kimi": "A",
+    "mimo": "A"
+  },
+  "tally": {
+    "A": 3,
+    "B": 0
+  },
+  "inconclusive": [],
+  "verdict": "A",
+  "escalate": "",
+  "final_verdict": "",
+  "decided_by": "",
+  "twin": null,
+  "usage": {
+    "prompt_tokens": 28606,
+    "completion_tokens": 10758,
+    "total_tokens": 39364
+  },
+  "usage_by_model": {
+    "glm-5.3": {
+      "prompt_tokens": 9352,
+      "completion_tokens": 4117,
+      "total_tokens": 13469
+    },
+    "kimi-k2.6": {
+      "prompt_tokens": 8882,
+      "completion_tokens": 4739,
+      "total_tokens": 13621
+    },
+    "mimo-v2.6-pro": {
+      "prompt_tokens": 10372,
+      "completion_tokens": 1902,
+      "total_tokens": 12274
+    }
+  },
+  "cost": {
+    "amount": null,
+    "unit": "",
+    "note": "无价目表：registry.jury.pricing 未覆盖任何 panel 型号（成本不猜）",
+    "priced": [],
+    "unpriced": [
+      "glm-5.3",
+      "kimi-k2.6",
+      "mimo-v2.6-pro"
+    ]
+  },
+  "verdict_summary": {
+    "winner": "A",
+    "decided_by": "jury",
+    "tally": {
+      "A": 3,
+      "B": 0
+    },
+    "inconclusive": [],
+    "seats": [
+      {
+        "seat": "glm",
+        "model": "glm-5.3",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "kimi",
+        "model": "kimi-k2.6",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "mimo",
+        "model": "mimo-v2.6-pro",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.82
+      }
+    ],
+    "majority_reasons": [
+      "glm：用户批语明令「务必加入writing和reviewer的harnessing」；4判据使同类缺陷可被机械拦截，注入面仅限写作/审查角色，收益明确成本有界",
+      "kimi：用户批语明令持久化，A提供可机械验证的四条判据，使缺陷可被拦截，可靠性优于B",
+      "mimo：用户批语2/5/6明令持久化，4条判据可被reviewer机械拦截，案卷未示明确危害，代价为常驻注入面小幅增加"
+    ],
+    "twin": null,
+    "text": "裁决=A（jury 定案；计票 A:3 B:0）｜各席：glm=A/0.90 kimi=A/0.90 mimo=A/0.82｜多数理由：glm：用户批语明令「务必加入writing和reviewer的harnessing」；4判据使同类缺陷可被机械拦截，注入面仅限写作/审查角色，收益明确成本有界；kimi：用户批语明令持久化，A提供可机械验证的四条判据，使缺陷可被拦截，可靠性优于B；mimo：用户批语2/5/6明令持久化，4条判据可被reviewer机械拦截，案卷未示明确危害，代价为常驻注入面小幅增加"
+  }
+}
