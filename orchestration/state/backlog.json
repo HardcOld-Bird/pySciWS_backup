@@ -3018,6 +3018,18 @@
       "source": "leader",
       "started_at": "2026-10-17T00:13:05+08:00",
       "worktree": "20261017-001500-devops"
+    },
+    {
+      "id": "20261017-005200-devops",
+      "member": "devops",
+      "summary": "fingerprint: argparse-internal-names-in-error-20261017",
+      "kind": "usability",
+      "success_criteria": "- 任何错误输入/旧命令名的报错串 **不含 `_` 前缀内部命令名**（测试以运行期拼接禁词断言报错文本零命中）；\n- 5 个内部命令**照常可调用**（`orch _queue-worker -h`/`orch _watchdog-loop` 等解析正常；钩子调用面回归测试绿）；\n- usage/帮助维持 221800 现状（内部命令继续隐藏）；建议实现路径按其交付注记：`main()` 前置分流到独立内部 parser（公开 parser 的 choices 不含内部名），或等价方案，实施自由；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-005200-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-17T01:02:07+08:00",
+      "note": "",
+      "source": "leader"
     }
   ]
 }
