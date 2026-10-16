@@ -2935,13 +2935,13 @@
       "evidence_file": "orchestration/state/suggestions/approved/20261016-215946-devops.md",
       "status": "done",
       "proposed": "2026-10-16T22:01:36+08:00",
-      "note": "drain 批量销账（commit 8133fdd）",
+      "note": "drain 批量销账（commit 882c3fe）",
       "source": "leader",
       "started_at": "2026-10-16T22:17:04+08:00",
       "worktree": "20261016-215946-devops",
-      "done_at": "2026-10-16T22:33:56+08:00",
-      "batch_size": 3,
-      "batch_seed": "20261016-215944-devops"
+      "done_at": "2026-10-16T23:34:56+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261016-215946-devops"
     },
     {
       "id": "20261016-220500-devops",
@@ -2950,12 +2950,15 @@
       "kind": "usability",
       "success_criteria": "- `plan run` 从 `pysci-orch` 命令面移除（二选一定案并留痕：直接不可用；或保留为打印「已废弃，请用 plan advance / plan adhoc」的指路 stub）；`plan advance` 承接其独有旗标 `--name`/`--max-turns`（或论证并记录为何不需要）；\n- 阻塞原语**保留在内部**供 `plan adhoc` 及全部内部调用点使用：审计 `src/` 内所有调用面（含 adhoc、夜航/自动化路径），`plan adhoc` 阻塞语义回归测试不变；\n- `[NEXT]` 引导与 `command-surface.md`/SKILL 文档只讲 `plan advance`（事件驱动）＋ `plan adhoc`（计划外同步），无 `plan run` 残留——**本条吸收 20261016-215946 判据①（其「并列 run/advance」表述以本单为准作废；该单判据② plan new 源文件命名提示仍有效）**；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261016-220500-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-16T22:08:21+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 4b8cf92）",
       "source": "leader",
       "started_at": "2026-10-16T22:33:56+08:00",
-      "worktree": "20261016-220500-devops"
+      "worktree": "20261016-220500-devops",
+      "done_at": "2026-10-17T00:04:19+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261016-220500-devops"
     },
     {
       "id": "20261016-221800-devops",
