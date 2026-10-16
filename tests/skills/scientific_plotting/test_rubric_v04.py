@@ -33,10 +33,32 @@ def _lines_with(md: str, token: str) -> list[str]:
 # ---------------------------------------------------------------------------
 def test_version_bumped_and_changelog():
     md = _rubric()
-    assert "scientific-plotting）v0.4.1" in md
-    assert "v0.4.1（2026-10-16）" in md, "缺 v0.4.1 修订说明"
+    assert "scientific-plotting）v0.4.2" in md
+    assert "v0.4.2（2026-10-17）" in md, "缺 v0.4.2 修订说明（判法可复跑 + 几何自标定）"
+    assert "v0.4.1（2026-10-16）" in md, "v0.4.1 修订史应保留"
     assert "v0.4（2026-10-15）" in md, "v0.4 修订史应保留"
     assert "v0.3（2026-10-15）" in md, "v0.3 修订史应保留"
+
+
+# ---------------------------------------------------------------------------
+# v0.4.2（backlog 20261016-005506-reviewer）：判法升级为**可机械复跑**——审查者照做即可，
+# 不必自建差分渲染脚本；几何声明可由图面反算，不依赖生产者 notes。
+# ---------------------------------------------------------------------------
+def test_item_v042_occlusion_method_is_executable_spec():
+    """工具与命令节给出**实现范式＋阈值**（照做即可，不必自建脚本）。"""
+    md = _rubric()
+    assert "ink = |A" in md and "A_text→white| > 30" in md, "缺墨迹蒙版实现范式"
+    assert "重叠 > 0 px" in md and "10 px @600 dpi" in md, (
+        "缺重叠/间距阈值（硬项/告警分级）"
+    )
+    assert "差分白字渲染" in md and "求交" in md, "缺指定判法两步"
+
+
+def test_item_v042_geometry_self_calibration_paradigm():
+    """自标定范式：标注几何**可由图面反算**（G2/D3 独立复核，不依赖 notes）。"""
+    md = _rubric()
+    assert "自标定" in md and "反算" in md, "缺几何自标定范式"
+    assert "像素→物理尺寸" in md, "缺换算方向（像素坐标 → 物理尺寸）"
 
 
 # ---------------------------------------------------------------------------
