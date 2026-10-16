@@ -44,15 +44,19 @@
     },
     {
       "id": "B.b2",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
-      "job_id": "writing-20261017-052000-rework-tb-20261017-041124-2-1-B.b2"
+      "job_id": "writing-20261017-052000-rework-tb-20261017-041124-2-1-B.b2",
+      "task_file": null,
+      "session_id": "2a41e46b-cff8-4aef-8752-f6074da65e6b",
+      "kind": "result"
     },
     {
       "id": "B.b_last",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-041124-2-1.blast-报告组装.md"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-17T05:45:38+08:00"
 }
