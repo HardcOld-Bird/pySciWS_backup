@@ -2872,6 +2872,20 @@
       "done_at": "2026-10-16T07:46:58+08:00",
       "batch_size": 2,
       "batch_seed": "20261016-042500-devops"
+    },
+    {
+      "id": "20261016-203600-devops",
+      "member": "devops",
+      "summary": "fingerprint: wake-chain-seq-rollback-20261016",
+      "kind": "defect",
+      "success_criteria": "1) merge 运行态同步排除 events.jsonl/events-seen.json/watch.json/mirror-seen.json 或双向合并保 seq 单调，含回归测试；2) 流事件身份改内容身份或持久单调 seq，水位同理；3) e2e 测试：merge 覆盖后新 JOB-DONE 必触发 watch 唤醒（现必静默）；4) events.unacked() 遇流回卷不假绿；5) uv run --no-sync pytest tests 全绿",
+      "evidence_file": "orchestration/state/suggestions/approved/20261016-203600-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-16T20:35:03+08:00",
+      "note": "",
+      "source": "leader",
+      "started_at": "2026-10-16T20:35:06+08:00",
+      "worktree": "20261016-203600-devops"
     }
   ]
 }
