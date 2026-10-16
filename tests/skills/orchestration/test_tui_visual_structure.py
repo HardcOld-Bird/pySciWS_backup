@@ -159,7 +159,8 @@ async def _each_view(pilot, app):
         yield "taskbooks"
     await pilot.press("n")
     yield "tb-new"
-    await pilot.press("escape")
+    await pilot.press("escape")  # polish-b：tb-new → 任务书列表
+    await pilot.press("escape")  # 任务书列表 → 菜单
     await pilot.press("j")
     yield "journal"
     await pilot.press("escape")
@@ -280,9 +281,10 @@ def test_walk_every_surface_without_crash():
                     assert app.view == "taskbooks"
                     await pilot.press("n")
                     assert app.view == "tb-new"
-                    await pilot.press(
-                        "escape"
-                    )  # tb-new → 菜单（一次即回，再按就退出了）
+                    # polish-b：tb-new → **回任务书列表**（进入前视图，非主菜单）
+                    await pilot.press("escape")
+                    assert app.view == "taskbooks"
+                    await pilot.press("escape")  # 任务书列表 → 菜单
                 elif mod.key == "plans":
                     assert app.view == "plans"  # s6：计划面板
                     await pilot.press("escape")
