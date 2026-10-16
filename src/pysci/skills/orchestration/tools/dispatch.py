@@ -28,7 +28,13 @@ from .checks import run_checks
 from .delivery import parse_delivery
 from .failure_tags import load_infra_kinds
 from .ledger import LedgerEntry, append
-from .registry import Member, Registry, note_hop_pid, orchestration_rel
+from .registry import (
+    Member,
+    Registry,
+    dirty_tracked_state,
+    note_hop_pid,
+    orchestration_rel,
+)
 from .runner import (
     PROTOCOL_REMINDER,
     Envelope,
@@ -440,6 +446,71 @@ def taskbook_whitelist_dirs(taskbook: Path | None) -> list[str]:
         return []
     entries, _used = _whitelist_entries(lines)
     return entries
+
+
+#: 任务书里「本单由组长先清面」的认账标记（写了即不再重复告警）——backlog 20261016-022657。
+DIRTY_FACE_ACK_MARK = "本单由组长先清面"
+
+
+def dirty_face_clash(dirs: list[str] | None) -> list[str]:
+    """任务**声明面**（``--dirs`` / 任务书白名单）∩ main **未提交跟踪面**。
+
+    backlog 20261016-022657：`orchestration/state/registry.json` 是高频脏面（成员注册/档位/
+    check 调整都改），需改它的基建单几乎必与它相交 → `pysci-dev worktree merge` 稳定 rc=2、
+    组员白烧一跳。派发前把同一事实搬到组长眼前（merge 工具另会把交集清单摊开，清面后重跑即可）。
+    fail-open：读不到脏面即回空（哨兵失灵不该挡派发）。
+    """
+    out: list[str] = []
+    for d in dirs or []:
+        clean = str(d).strip().strip("/\\")
+        if not clean:
+            continue
+        try:
+            hits = dirty_tracked_state(path=clean)
+        except Exception:  # noqa: BLE001 - 脏面读数 fail-open
+            hits = []
+        for hit in hits:
+            if hit not in out:
+                out.append(hit)
+    return sorted(out)
+
+
+def taskbook_acks_dirty_face(taskbook: Path | None) -> bool:
+    """任务书是否显式认账「本单由组长先清面」（写了就不再重复告警）。"""
+    if taskbook is None:
+        return False
+    path = taskbook if taskbook.is_absolute() else PROJECT_ROOT / taskbook
+    try:
+        return DIRTY_FACE_ACK_MARK in path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def warn_dirty_face_clash(
+    dirs: list[str] | None, taskbook: Path | None = None, *, where: str = "派发"
+) -> list[str]:
+    """派发前告警（打印 + 回清单）：声明面与 main 未提交面相交时点名并给两条出路。
+
+    为什么必须在**派发前**到达组长：组员侧无法自救——merge 交集闸在他们那里同样 rc=2，
+    只能把整单抢救成 `blocked`。故这条与 `merge` 的交集检查同源不同时点（前哨）。
+    """
+    if taskbook_acks_dirty_face(taskbook):
+        return []
+    clash = dirty_face_clash(dirs)
+    if not clash:
+        return []
+    print(
+        f"[!] {where}前提醒：声明面与 main 未提交跟踪面相交——本单 merge 会被交集闸挡成 rc=2："
+    )
+    for path in clash[:8]:
+        print(f"      - {path}")
+    if len(clash) > 8:
+        print(f"      …（共 {len(clash)} 项）")
+    print(
+        "    出路：① 先提交/还原这些面再派发；② 确需在脏面上作业时，"
+        f"任务书写一行「{DIRTY_FACE_ACK_MARK}」认账。"
+    )
+    return clash
 
 
 def dirs_with_taskbook_whitelist(dirs: list[str], taskbook: Path | None) -> list[str]:
@@ -1372,6 +1443,8 @@ def do_dispatch(
     extra_dirs = list(m.raw.get("extra_dirs", []))
     # 任务书「白名单（写权限）」段声明即注入 pod-guard（backlog 20261015-132939-fix3）
     all_dirs = dirs_with_taskbook_whitelist(list(dirs or []) + extra_dirs, taskbook)
+    if not quiet:  # 组长面告警：组员侧无法自救（merge 交集闸同样 rc=2）
+        warn_dirty_face_clash(all_dirs, taskbook)
     cmd = build_command(
         m,
         prompt,

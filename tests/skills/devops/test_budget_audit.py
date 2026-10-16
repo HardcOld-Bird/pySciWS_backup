@@ -95,6 +95,8 @@ def test_headroom_readout_names_tightest_file(tree):
     )
     assert "tight.md" in readout
     assert f"余 {budget_mod.LIMIT - (budget_mod.WARN_AT + 1)}B" in readout
+    # 余量吃紧的计数行点名 512B 阈值（backlog 20261016-030200：可用余量 ≥512B）
+    assert f"{budget_mod.WARN_HEADROOM}B 预警" in readout
 
 
 def test_description_total_over_budget_flagged(tree):

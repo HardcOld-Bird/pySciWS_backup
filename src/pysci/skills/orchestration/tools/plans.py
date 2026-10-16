@@ -866,6 +866,7 @@ def cmd_plan_run(args) -> int:
         )
         return 2
 
+    _warn_dirty_face_before_enqueue(args, sy, plan_id, cur)
     item = queues.enqueue(
         member,
         text=str(args.text or ""),
@@ -1097,6 +1098,29 @@ def _routing_card() -> list[str]:
         return []
 
 
+def _warn_dirty_face_before_enqueue(
+    args: Any, step_yaml: dict[str, Any], plan_id: str, cur: dict[str, Any]
+) -> None:
+    """派发前哨（backlog 20261016-022657）：声明面 ∩ main 未提交面 非空即告警（**不阻断**）。
+
+    组员侧无法自救（merge 交集闸在他们那里同样 rc=2、整单被抢救成 blocked），故这条必须在
+    **组长看得见的地方**先说——`plan advance`/`plan run` 的主 stdout 就是这个面。
+    """
+    from .dispatch import warn_dirty_face_clash
+
+    dirs = (
+        _split_dirs(args.dirs.split(","))
+        if getattr(args, "dirs", None)
+        else _split_dirs(step_yaml.get("dirs"))
+    )
+    task = str(getattr(args, "task", "") or cur.get("task_file") or "")
+    warn_dirty_face_clash(
+        dirs,
+        Path(task) if task else None,
+        where=f"派发计划 {plan_id} 环节 {cur.get('id')}",
+    )
+
+
 def cmd_plan_advance(args) -> int:
     """**事件驱动推进**（§3.5，M5）：把下一环节入队 m4 成员队列**即返回**。
 
@@ -1221,6 +1245,7 @@ def cmd_plan_advance(args) -> int:
     # 续作语义（承接原同步推进子命令，backlog 20261016-220500）：环节曾有会话
     # （blocked/failed 续作）→ 复用其 sid；否则按组长指定或默认 latest。
     sel = cur["session_id"][:8] if cur.get("session_id") else (args.session or "latest")
+    _warn_dirty_face_before_enqueue(args, sy, plan_id, cur)
     item = queues.enqueue(
         member,
         text=str(args.text or ""),

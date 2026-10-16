@@ -18,12 +18,16 @@ from pysci.paths import ORCHESTRATION_ROOT, PODS_ROOT, PROJECT_ROOT
 #: 预算上限（字节，落盘面）。basic.md §1 三档同为 8KB。
 LIMIT = 8192
 
-#: 余量预警比例：占用超过上限的此比例即提示（「加一句/删一段」的余量已耗尽）。
-WARN_RATIO = 0.95
+#: 余量预警阈值（字节）：文档族须留出 **≥512B 可用余量**（backlog 20261016-030200——
+#: orchestration 真本多文件已贴顶：dispatch-playbook 曾只剩 64B，任何新规则都只能挤压
+#: 他人正文）。占用 > ``LIMIT − WARN_HEADROOM`` 即提示「按 basic.md §1 拆分/重设计」。
+WARN_HEADROOM = 512
 
 #: 预警起点（落盘字节）：**大于**它且未超限即提示余量吃紧。全员真源，pre-commit 钩子
 #: ``guards/budget_check.py`` 复制同一常量（钩子 stdlib-only），一致性由测试钉住。
-WARN_AT = int(LIMIT * WARN_RATIO)
+WARN_AT = LIMIT - WARN_HEADROOM
+#: 兼容读数（= WARN_AT / LIMIT，仅用于百分比展示）。
+WARN_RATIO = WARN_AT / LIMIT
 
 #: 审计根（模块级常量，便于测试 monkeypatch 到 tmp_path）。
 SKILLS_ROOT = ORCHESTRATION_ROOT / "skills"
@@ -155,7 +159,7 @@ def _headroom_readout(findings: list[Finding], near: list[Finding]) -> str:
     if not within:
         return "  余量读数：无可计量文件"
     tight = min(within, key=lambda f: f.headroom)
-    warn = f"，{len(near)} 个 >{int(WARN_RATIO * 100)}% 预警" if near else ""
+    warn = f"，{len(near)} 个余量 <{WARN_HEADROOM}B 预警" if near else ""
     return (
         f"  余量读数：最紧 {_rel(tight)} 余 {tight.headroom}B"
         f"（已用 {tight.pct}%）{warn}"
