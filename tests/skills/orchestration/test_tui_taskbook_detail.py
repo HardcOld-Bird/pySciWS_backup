@@ -468,5 +468,7 @@ def test_detail_view_footer_matches_guard(face):
     app, keys = _run(_go())
     assert app.check_action("tb_new", ()) is False, "详情页不广告/不响应 `n`"
     assert "n" not in keys
-    for k in ("t", "a", "r"):
+    for k in ("a", "r"):
         assert k in keys, f"详情页应广告 `{k}`"
+    for k in ("t", "j"):
+        assert k not in keys, f"s4 键位收敛：详情页不再广告 `{k}`（t/j 只在主菜单）"

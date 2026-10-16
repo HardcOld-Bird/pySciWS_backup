@@ -169,17 +169,15 @@ def test_detail_scroll_keys_home_end_and_single_line(seen):
 
 
 def test_detail_scroll_keys_are_gated_to_detail_views():
-    """滚动键只在详情视图生效：菜单/任务书面板里按 ↑↓ 是**列表光标**语义，不被抢。"""
+    """滚动键只在 ``_SCROLL_PANES`` 所列视图生效（s4 收编 taskbooks）；菜单里按 ↑↓
+    是**列表光标**语义，不被抢。"""
     app = tui.PysciTUI(mods=[_long_module()])
     for action in sorted(tui._SCROLL_ACTIONS):
         app.view = "menu"
         assert app.check_action(action, ()) is False, action
-        app.view = "taskbooks"
-        assert app.check_action(action, ()) is False, action
-        app.view = "detail"
-        assert app.check_action(action, ()) is True, action
-        app.view = "tb-detail"
-        assert app.check_action(action, ()) is True, action
+        for view in ("detail", "tb-detail", "taskbooks"):
+            app.view = view
+            assert app.check_action(action, ()) is True, (view, action)
 
 
 def test_menu_updown_still_moves_list_cursor(seen):
