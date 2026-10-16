@@ -82,3 +82,36 @@ def test_ts_less_event_keeps_deafness_wording():
         _state(armed="2026-10-16T20:11:00+08:00", prior_hb="2026-10-16T20:05:00+08:00"),
     )
     assert ev["late"] is True and "聋期" in ev["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 排障清单可发现性（判据①：清单存在且从 drain-watch / SKILL 指得到）
+# ---------------------------------------------------------------------------
+def test_wake_troubleshoot_checklist_discoverable():
+    """`drain-watch.md` §5 给出**定序骨架**并指向 `wake-troubleshoot.md`（完整命令）；
+    `SKILL.md` 索引登记。清单本体在独立按需档＝因 `drain-watch.md` 已近 8192B 预算上限。"""
+    from pysci.paths import ORCHESTRATION_ROOT
+
+    refs = ORCHESTRATION_ROOT / "skills" / "orchestration" / "references"
+    dw = (refs / "drain-watch.md").read_text(encoding="utf-8")
+    wt = (refs / "wake-troubleshoot.md").read_text(encoding="utf-8")
+    skill = (ORCHESTRATION_ROOT / "skills" / "orchestration" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+
+    for token in (
+        "唤醒未达排障清单",
+        "listener",
+        "消费账",
+        "水位倒挂",
+        "被覆盖",
+        "活死",
+    ):
+        assert token in dw, f"drain-watch §5 骨架缺：{token}"
+    assert "wake-troubleshoot.md" in dw, "骨架须指向完整清单"
+
+    for token in ("watch-arm.log", "consumed", "已排空至", "bak-", "watchdog-runs"):
+        assert token in wt, f"完整清单缺读命令面：{token}"
+    assert "聋期" in wt, "清单须含归因纪律（迟到补报 ≠ 聋期）"
+
+    assert "wake-troubleshoot.md" in skill, "SKILL 索引未登记"

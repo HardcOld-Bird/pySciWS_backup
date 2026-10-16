@@ -84,6 +84,10 @@ uv run --no-sync pysci-orch bench-stop           # 协作停止：条目间隙�
 用后即弃，读数经 `ROWS_BEGIN/ROWS_END` 由父进程代写主树台账（`runner=bencher`）。反复出现
 `reverted`＝案内任务书该收紧，别加重事后还原。
 
-## 5. 唤醒未达排障
+## 5. 唤醒未达排障清单（定序，别跳步）
 
-「队列空了却没唤醒」的**定序**排查见 `wake-troubleshoot.md`（5 步读命令 + 归因纪律）。
+「队列空了却没唤醒」按序证伪：**① listener 有没听见**（`watch-arm.log` 有无「命中事件」）→
+**② 消费账撞车**（`watch.json` 的 `consumed` 与当前流身份是否同型）→ **③ 水位倒挂**
+（「已排空至 X」> 流 max seq＝被回卷）→ **④ 流被覆盖**（`events.jsonl.bak-*` 对照条数/序号）→
+**⑤ listener 活死**（`watchdog-runs` 末条心跳 age / status watch 段）。完整读命令与「迟到补报
+≠ 聋期」分档见 `wake-troubleshoot.md`；水位倒挂由 `events.status_lines()` 在 `orch status` 点名。
