@@ -1,0 +1,340 @@
+{
+  "case_id": "tb-20261017-044633-4-1016ppt-1-jury",
+  "case_file": "data\\taskbooks\\tb-20261017-044633-4-1016ppt-1-jury.md",
+  "ts": "2026-10-17T05:38:04+08:00",
+  "question": "1016PPT 第 2/6 页标题在 WPS 中竖排不可读（用户验收实测），而 LibreOffice 渲染图完全\n正常、视觉终检 7/7 逐页判读也未见异常。查实根因：pptx 两个标题框 XML 缺 `<a:ext>`\n（显式尺寸未定义），python-pptx 读继承值显示正常尺寸，机械校验与渲染图双双看不见\n真相——唯一暴露场域是用户用 WPS 打开。当前 WPS 安装（个人版）无命令行渲染能力，\n无法用「换渲染器」兜底。请裁定：**哪种状态对项目更好**——改进方案实施后的状态，\n还是目前项目真实现状？",
+  "options": {
+    "A": "**改进方案实施后的状态**：四项机制——①「形状缺 ext」机械闸（pptx 校验一票否决，\n判据读 XML 真值不信继承值；写入端显式尺寸必写）；②标题格式单一真源＋跨页一致性\n校验（尺寸/位置/字号/字体逐项比对基准页）；③「演示文稿默认加感谢结尾页」入\nwriting/reviewer harnessing（用户明示可推广）；④渲染校验对无 ext/继承尺寸形状输出\n「渲染图正常≠WPS 正常」风险提示。同类「渲染图看不见的缺陷」以后机械拦截。代价：\n校验面多三判据、写作/审查面各增一条惯例。",
+    "B": "**目前项目真实现状**：机械校验对「缺 ext」零覆盖，渲染图兜不住（引擎兜底行为不同），\nreviewer 看图无从发现；标题格式无真源可比对；结尾页无惯例约束。可预见地：下一张\n模板复制/占位符处理产生的缺 ext 框继续流到用户 WPS 才暴露（本轮即实证），标题格式\n继续漂移，结尾页继续靠用户提醒。无新增流程负担。"
+  },
+  "targets": [
+    "data/taskbooks/tb-20261017-044633-4-1016ppt-1.a2-解决方案.md",
+    "src/pysci/skills/document_writing/tools/compose.py",
+    "orchestration/pods/writing",
+    "orchestration/pods/reviewer"
+  ],
+  "dossier_hash": "32deb2c441e13ff0",
+  "dossier_chars": 7115,
+  "dossier": "# 案卷 tb-20261017-044633-4-1016ppt-1-jury\n\n## 问题\n1016PPT 第 2/6 页标题在 WPS 中竖排不可读（用户验收实测），而 LibreOffice 渲染图完全\n正常、视觉终检 7/7 逐页判读也未见异常。查实根因：pptx 两个标题框 XML 缺 `<a:ext>`\n（显式尺寸未定义），python-pptx 读继承值显示正常尺寸，机械校验与渲染图双双看不见\n真相——唯一暴露场域是用户用 WPS 打开。当前 WPS 安装（个人版）无命令行渲染能力，\n无法用「换渲染器」兜底。请裁定：**哪种状态对项目更好**——改进方案实施后的状态，\n还是目前项目真实现状？\n\n## 选项 A\n**改进方案实施后的状态**：四项机制——①「形状缺 ext」机械闸（pptx 校验一票否决，\n判据读 XML 真值不信继承值；写入端显式尺寸必写）；②标题格式单一真源＋跨页一致性\n校验（尺寸/位置/字号/字体逐项比对基准页）；③「演示文稿默认加感谢结尾页」入\nwriting/reviewer harnessing（用户明示可推广）；④渲染校验对无 ext/继承尺寸形状输出\n「渲染图正常≠WPS 正常」风险提示。同类「渲染图看不见的缺陷」以后机械拦截。代价：\n校验面多三判据、写作/审查面各增一条惯例。\n\n## 选项 B\n**目前项目真实现状**：机械校验对「缺 ext」零覆盖，渲染图兜不住（引擎兜底行为不同），\nreviewer 看图无从发现；标题格式无真源可比对；结尾页无惯例约束。可预见地：下一张\n模板复制/占位符处理产生的缺 ext 框继续流到用户 WPS 才暴露（本轮即实证），标题格式\n继续漂移，结尾页继续靠用户提醒。无新增流程负担。\n\n## 证据\n- 成因分析报告：data/taskbooks/tb-20261017-044633-4-1016ppt-1.a1-成因分析.md\n  （调查链实测：终检无失职/渲染图正常/缺 ext 全库清点/WPS 渲染可行性如实上报）\n- 解决方案报告：data/taskbooks/tb-20261017-044633-4-1016ppt-1.a2-解决方案.md\n  （A 路 4 项＋B 路 4 组硬性条款）\n- 用户驳回批语原文：见任务书 tb-20261017-044633-4-1016ppt-1（「反思为何视觉终检不\n  认为这是一个问题，并且应如何通过基础设施改进机制性保证该类问题的发现」「建议加入\n  文档写作组员和reviewer的harnessing——这是可推广的普适需求」）\n\n## 自动附着材料（CLI 确定性抓取，非撰写者所写）\n\n### git diff --stat\ndata/taskbooks/tb-20261017-044604-3-2-jury.md           |  7 ++++++-\n .../state/plans/rework-tb-20261017-041124-2-1.plan.yaml |  2 +-\n .../plans/rework-tb-20261017-041124-2-1.state.json      | 17 +++++++++++------\n orchestration/state/preference-journal.jsonl            |  1 +\n .../state/replies/writing/20261016-033419-writing.md    |  5 -----\n .../state/replies/writing/20261016-040451-writing.md    |  5 -----\n 6 files changed, 19 insertions(+), 18 deletions(-)\n\n### git diff\ndiff --git a/data/taskbooks/tb-20261017-044604-3-2-jury.md b/data/taskbooks/tb-20261017-044604-3-2-jury.md\nindex 6a81eb7..22b1084 100644\n--- a/data/taskbooks/tb-20261017-044604-3-2-jury.md\n+++ b/data/taskbooks/tb-20261017-044604-3-2-jury.md\n@@ -38,4 +38,9 @@ targets: data/taskbooks/tb-20261017-044604-3-2.a2-解决方案.md, orchestration\n \n ## 送审结论\n \n-（待 jury 开庭后填写）\n+裁决=**A（改进方案实施后的状态胜出）**，计票 A:3 B:0（glm 0.85 / kimi 0.90 /\n+mimo 0.82，双序一致，jury 定案无需 twin 终裁）。多数理由：同类缺陷第 2 次返工实证\n+元素级机制不足；预期预登记与设置留痕可机械拦截、可追责，正合用户「基建重于产物」\n+批语；五项机制将关系语义漏读与仿真错设变为可机械拦截，代价仅为交付内表格。留痕\n+`orchestration/state/evals/jury/tb-20261017-044604-3-2-jury.json`（材料哈希\n+8459620ebe2da22b）。**方案批准，进入实施拆解（A.a4/A.a5）。**\ndiff --git a/orchestration/state/plans/rework-tb-20261017-041124-2-1.plan.yaml b/orchestration/state/plans/rework-tb-20261017-041124-2-1.plan.yaml\nindex a636015..cd3a41b 100644\n--- a/orchestration/state/plans/rework-tb-20261017-041124-2-1.plan.yaml\n+++ b/orchestration/state/plans/rework-tb-20261017-041124-2-1.plan.yaml\n@@ -46,7 +46,7 @@ steps:\n     brief: 重拆解返工\n     role: rework_plan\n   - id: b2\n-    member: devops\n+    member: writing\n     brief: 返工生产环节\n     member_placeholder: true\n   - id: b_last\ndiff --git a/orchestration/state/plans/rework-tb-20261017-041124-2-1.state.json b/orchestration/state/plans/rework-tb-20261017-041124-2-1.state.json\nindex 8d089ea..4cdc473 100644\n--- a/orchestration/state/plans/rework-tb-20261017-041124-2-1.state.json\n+++ b/orchestration/state/plans/rework-tb-20261017-041124-2-1.state.json\n@@ -29,19 +29,24 @@\n     },\n     {\n       \"id\": \"A.a5\",\n-      \"status\": \"queued\",\n+      \"status\": \"done\",\n       \"review\": \"pending\",\n-      \"job_id\": \"devops-20261017-042808-rework-tb-20261017-041124-2-1-A.a5\"\n+      \"job_id\": \"devops-20261017-042808-rework-tb-20261017-041124-2-1-A.a5\",\n+      \"task_file\": null,\n+      \"session_id\": \"73d2478d-8fd1-4bb5-978f-65b55b82aeef\",\n+      \"kind\": \"result\"\n     },\n     {\n       \"id\": \"B.b1\",\n-      \"status\": \"pending\",\n-      \"review\": \"pending\"\n+      \"status\": \"done\",\n+      \"review\": \"pending\",\n+      \"evidence\": \"data/taskbooks/tb-20261017-041124-2-1.b1-重拆解.md\"\n     },\n     {\n       \"id\": \"B.b2\",\n-      \"status\": \"pending\",\n-      \"review\": \"pending\"\n+      \"status\": \"queued\",\n+      \"review\": \"pending\",\n+      \"job_id\": \"writing-20261017-052000-rework-tb-20261017-041124-2-1-B.b2\"\n     },\n     {\n       \"id\": \"B.b_last\",\ndiff --git a/orchestration/state/preference-journal.jsonl b/orchestration/state/preference-journal.jsonl\nindex 7dc4e21..da78dad 100644\n--- a/orchestration/state/preference-journal.jsonl\n+++ b/orchestration/state/preference-journal.jsonl\n@@ -558,3 +558,4 @@\n {\"ts\": \"2026-10-17T05:13:33+08:00\", \"situation\": \"场景：任务书给「右缘 2000→≈1900」「2190→≈2100」这类**固定像素提示值**。\", \"options\": \"\", \"choice\": \"approve\", \"reason\": \"\", \"source\": \"override\", \"kind\": \"ruling\", \"channel\": \"override\", \"suggestion_id\": \"20261016-040451-writing\", \"member\": \"writing\"}\n {\"ts\": \"2026-10-17T05:16:03+08:00\", \"situation\": \"**devops 的 `merge_dirty_face` 类失败在 14 天 / 20 跳滑窗内累计 5 次**（阈值 3，README §5.4 自动立案）\", \"options\": \"\", \"choice\": \"approve\", \"reason\": \"\", \"source\": \"override\", \"kind\": \"ruling\", \"channel\": \"override\", \"suggestion_id\": \"20261017-051318-tier-a\", \"member\": \"tier-a\"}\n {\"ts\": \"2026-10-17T05:17:19+08:00\", \"situation\": \"fingerprint: tier-a-dedup-gap-20261017\", \"options\": \"\", \"choice\": \"approve\", \"reason\": \"\", \"source\": \"override\", \"kind\": \"ruling\", \"channel\": \"override\", \"suggestion_id\": \"20261017-052200-devops\", \"member\": \"devops\"}\n+{\"ts\": \"2026-10-17T05:23:48+08:00\", \"situation\": \"jury 裁决 tb-20261017-044604-3-2-jury（综合仿真实验绘图第 2 轮返工暴露发现盲区：参考图中「外侧方框比内侧大」「内框完整\\n位于半圆内且留边距」「标签在框外遮次要区」等**元素间关系语义**被组员与 ）\", \"options\": \"A=采纳 B=维持现状\", \"choice\": \"A\", \"reason\": \"裁决=A（jury 定案；计票 A:3 B:0）｜各席：glm=A/0.85 kimi=A/0.90 mimo=A/0.82｜多数理由：glm：同类缺陷第2次返工实证元素级机制不足；预期预登记与设置留痕可机械拦截、可追责，正合用户「基建重于产物」批语，代价仅小幅常驻面。；kimi：用户批示基建重于产物，已两次返工同类盲区；五项机制将关系语义漏读与仿真错设变为可机械拦截，常驻面仅小幅增加；mimo：案卷实证同类盲区二次返工，A 将关系核对/依据留痕变为可机检硬义务，成本仅为交付内表格，符合可靠性与可审计目标，无明确危害\", \"source\": \"ju\n…（截断：git diff 全文 4958 B）\n\n### git log --oneline -5\ne164ec7 chore(state): 交付全文留档入库（新留档即提交）\n48cd82f Merge branch 'wt-20261016-003250-figure'\n7cb4c29 fix(orchestration): 注入的交付提醒补 kind 必填口径（＋guard 格式提示与 twin charter 同步）\nbfd3309 chore(state): 任务书入库（新建即提交）\nf20f773 chore(state): 任务书入库（新建即提交）\n\n### 涉事文件字节读数\n- data/taskbooks/tb-20261017-044633-4-1016ppt-1.a2-解决方案.md: 2984 B / 44 行 / sha256=ecb334da63d06010\n- src/pysci/skills/document_writing/tools/compose.py: 39899 B / 1037 行 / sha256=9cc006f8f8b39382\n- orchestration/pods/writing: 目录，99 文件 / 25438142 B\n- orchestration/pods/reviewer: 目录，297 文件 / 117112047 B\n\n### 相关台账行\n- 2026-10-16T02:44:13+08:00 reviewer kind=result plan=tb-4-ppt-20261016 turns=59 tags=-\n- 2026-10-16T03:02:00+08:00 devops kind=result plan=- turns=55 tags=-\n- 2026-10-16T03:34:19+08:00 writing kind=result plan=tb-4-ppt-20261016 turns=94 tags=-\n- 2026-10-16T03:43:40+08:00 reviewer kind=run_failed plan=tb-4-ppt-20261016 turns=80 tags=-\n- 2026-10-16T03:52:16+08:00 reviewer kind=run_failed plan=tb-4-ppt-20261016 turns=80 tags=-\n- 2026-10-16T03:58:36+08:00 reviewer kind=result plan=tb-4-ppt-20261016 turns=20 tags=-\n- 2026-10-16T04:04:51+08:00 writing kind=result plan=tb-4-ppt-20261016 turns=52 tags=-\n- 2026-10-16T07:46:54+08:00 devops kind=result plan=- turns=63 tags=-\n- 2026-10-17T04:40:07+08:00 devops kind=result plan=rework-tb-20261017-041124-2-1 turns=19 tags=-\n- 2026-10-17T05:26:25+08:00 writing kind=result plan=rework-tb-20261017-041124-2-1 turns=41 tags=-\n",
+  "brief": {
+    "path": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\orchestration\\state\\evals\\jury-brief.md",
+    "approved": false,
+    "hash": "4e026d2b65bb85e1"
+  },
+  "seats": [
+    {
+      "name": "glm",
+      "model": "glm-5.3",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "key_env": "GLM_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "kimi",
+      "model": "kimi-k2.6",
+      "base_url": "https://api.moonshot.cn/v1",
+      "key_env": "KIMI_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "mimo",
+      "model": "mimo-v2.6-pro",
+      "base_url": "https://api.xiaomimimo.com/v1",
+      "key_env": "MIMO_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "siliconflow",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "key_env": "SILICONFLOW_API_KEY",
+      "role": "fallback",
+      "defect": "",
+      "reason": "被评模型 deepseek 同族，依 §4 不得入庭",
+      "usable": true
+    }
+  ],
+  "routing": {
+    "preset": "mimo",
+    "hidden": true,
+    "producer": "deepseek",
+    "panel": [
+      "glm",
+      "kimi",
+      "mimo"
+    ]
+  },
+  "fallback": {
+    "enabled": true,
+    "used": false,
+    "notice": "",
+    "missing_primary": []
+  },
+  "panel": [
+    "glm-5.3",
+    "kimi-k2.6",
+    "mimo-v2.6-pro"
+  ],
+  "attempts": 1,
+  "jurors": [
+    {
+      "seat": "glm",
+      "model": "glm-5.3",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "缺ext缺陷本轮实证仅用户WPS可暴露，A以XML真值机械闸拦截、正合用户基建批语，代价仅三判据一惯例",
+          "confidence": 0.9,
+          "usage": {
+            "completion_tokens": 1759,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1703
+            },
+            "prompt_tokens": 4457,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 6216
+          },
+          "error": ""
+        },
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "缺ext仅用户WPS暴露，校验渲染双盲；用户批语明示要机制保证，B以XML真值闸可机械拦截，代价仅三判据两惯例。",
+          "confidence": 0.9,
+          "usage": {
+            "completion_tokens": 3496,
+            "completion_tokens_details": {
+              "reasoning_tokens": 3433
+            },
+            "prompt_tokens": 4457,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 7953
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 8914,
+        "completion_tokens": 5255,
+        "total_tokens": 14169
+      }
+    },
+    {
+      "seat": "kimi",
+      "model": "kimi-k2.6",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户明示基建改进需求，缺ext缺陷机械校验与渲染图均失效，A方案建立硬拦截机制使同类问题可机检可追责，代价为合理常驻增面。",
+          "confidence": 0.85,
+          "usage": {
+            "prompt_tokens": 4236,
+            "completion_tokens": 1150,
+            "total_tokens": 5386,
+            "cached_tokens": 1024,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1091
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户明示基建改进与harnessing；机械闸将渲染差异缺陷变为可机检，代价仅三判据与惯例，显著改善可靠性。",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 4236,
+            "completion_tokens": 1570,
+            "total_tokens": 5806,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1518
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 8472,
+        "completion_tokens": 2720,
+        "total_tokens": 11192
+      }
+    },
+    {
+      "seat": "mimo",
+      "model": "mimo-v2.6-pro",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "缺 ext 致 WPS 竖排不可读属渲染图与机检双盲区，机械闸可拦截同类缺陷；用户批语明示基建改进，代价仅三条判据＋一条惯例，无明确危害。",
+          "confidence": 0.88,
+          "usage": {
+            "completion_tokens": 351,
+            "prompt_tokens": 5097,
+            "total_tokens": 5448,
+            "completion_tokens_details": {
+              "reasoning_tokens": 278
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户批语明示需机制性保证并可推广；缺 ext 属渲染图盲区，机械闸可拦截，代价仅校验三判据加两条惯例，无明确危害。",
+          "confidence": 0.82,
+          "usage": {
+            "completion_tokens": 119,
+            "prompt_tokens": 5097,
+            "total_tokens": 5216,
+            "completion_tokens_details": {
+              "reasoning_tokens": 53
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 10194,
+        "completion_tokens": 470,
+        "total_tokens": 10664
+      }
+    }
+  ],
+  "votes": {
+    "glm": "A",
+    "kimi": "A",
+    "mimo": "A"
+  },
+  "tally": {
+    "A": 3,
+    "B": 0
+  },
+  "inconclusive": [],
+  "verdict": "A",
+  "escalate": "",
+  "final_verdict": "",
+  "decided_by": "",
+  "twin": null,
+  "usage": {
+    "prompt_tokens": 27580,
+    "completion_tokens": 8445,
+    "total_tokens": 36025
+  },
+  "usage_by_model": {
+    "glm-5.3": {
+      "prompt_tokens": 8914,
+      "completion_tokens": 5255,
+      "total_tokens": 14169
+    },
+    "kimi-k2.6": {
+      "prompt_tokens": 8472,
+      "completion_tokens": 2720,
+      "total_tokens": 11192
+    },
+    "mimo-v2.6-pro": {
+      "prompt_tokens": 10194,
+      "completion_tokens": 470,
+      "total_tokens": 10664
+    }
+  },
+  "cost": {
+    "amount": null,
+    "unit": "",
+    "note": "无价目表：registry.jury.pricing 未覆盖任何 panel 型号（成本不猜）",
+    "priced": [],
+    "unpriced": [
+      "glm-5.3",
+      "kimi-k2.6",
+      "mimo-v2.6-pro"
+    ]
+  },
+  "verdict_summary": {
+    "winner": "A",
+    "decided_by": "jury",
+    "tally": {
+      "A": 3,
+      "B": 0
+    },
+    "inconclusive": [],
+    "seats": [
+      {
+        "seat": "glm",
+        "model": "glm-5.3",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "kimi",
+        "model": "kimi-k2.6",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "mimo",
+        "model": "mimo-v2.6-pro",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.88
+      }
+    ],
+    "majority_reasons": [
+      "glm：缺ext缺陷本轮实证仅用户WPS可暴露，A以XML真值机械闸拦截、正合用户基建批语，代价仅三判据一惯例",
+      "kimi：用户明示基建改进需求，缺ext缺陷机械校验与渲染图均失效，A方案建立硬拦截机制使同类问题可机检可追责，代价为合理常驻增面。",
+      "mimo：缺 ext 致 WPS 竖排不可读属渲染图与机检双盲区，机械闸可拦截同类缺陷；用户批语明示基建改进，代价仅三条判据＋一条惯例，无明确危害。"
+    ],
+    "twin": null,
+    "text": "裁决=A（jury 定案；计票 A:3 B:0）｜各席：glm=A/0.90 kimi=A/0.90 mimo=A/0.88｜多数理由：glm：缺ext缺陷本轮实证仅用户WPS可暴露，A以XML真值机械闸拦截、正合用户基建批语，代价仅三判据一惯例；kimi：用户明示基建改进需求，缺ext缺陷机械校验与渲染图均失效，A方案建立硬拦截机制使同类问题可机检可追责，代价为合理常驻增面。；mimo：缺 ext 致 WPS 竖排不可读属渲染图与机检双盲区，机械闸可拦截同类缺陷；用户批语明示基建改进，代价仅三条判据＋一条惯例，无明确危害。"
+  }
+}

@@ -17,18 +17,21 @@
     },
     {
       "id": "A.a3",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-044633-4-1016ppt-1-jury.md"
     },
     {
       "id": "A.a4",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-044633-4-1016ppt-1.a4-拆解.md"
     },
     {
       "id": "A.a5",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261017-054128-rework-tb-20261017-044633-4-1016ppt-1-A.a5"
     },
     {
       "id": "B.b1",

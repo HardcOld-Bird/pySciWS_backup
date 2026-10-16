@@ -3081,11 +3081,14 @@
       "kind": "usability",
       "success_criteria": "每轮任务注入的提醒模板中 infra_suggestion 标注样例改为带 kind 属性形态（与 charter 正式规格一致）：注入文本含 infra_suggestion kind= 示例串，组员照抄不再被 delivery-gate 以缺 kind 退回",
       "evidence_file": "orchestration/state/suggestions/approved/20261016-003250-figure.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T04:43:12+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 48cd82f）",
       "started_at": "2026-10-17T04:43:14+08:00",
-      "worktree": "20261016-003250-figure"
+      "worktree": "20261016-003250-figure",
+      "done_at": "2026-10-17T05:38:23+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261016-003250-figure"
     },
     {
       "id": "20261017-050500-devops",
@@ -3212,6 +3215,19 @@
       "proposed": "2026-10-17T05:17:19+08:00",
       "note": "",
       "source": "leader"
+    },
+    {
+      "id": "20261017-052625-writing",
+      "member": "writing",
+      "summary": "障碍现象：docx 提取**静默丢失 OMML 内联公式文本**，正文数字变空白，易致误判（本轮差点据「4 cm/36 个/0.65 m」缺失而误判该段无规格）。",
+      "kind": "defect",
+      "success_criteria": "pysci-compose docx read 对含 OMML 内联公式的 docx 提取结果包含公式文本（对草稿.docx 复跑：4 cm/0.65 m/3 kHz 等数字在提取 md 中可见）；回归测试含 oMath 样例断言不丢文本；uv run --no-sync pytest tests 全绿",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-052625-writing.md",
+      "status": "in_progress",
+      "proposed": "2026-10-17T05:38:19+08:00",
+      "note": "",
+      "started_at": "2026-10-17T05:38:23+08:00",
+      "worktree": "20261017-052625-writing"
     }
   ]
 }
