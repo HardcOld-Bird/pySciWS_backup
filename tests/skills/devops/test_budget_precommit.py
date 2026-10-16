@@ -165,6 +165,31 @@ def test_warn_threshold_has_one_source():
     assert _GUARD.WARN_RATIO == budget.WARN_RATIO
 
 
+def test_headroom_threshold_is_512_and_shared():
+    """文档族余量闸 = 每文件 ≥512B 可用余量（backlog 20261016-030200）。
+
+    阈值同一真源：钩子与 doctor 都是 ``WARN_HEADROOM = 512``，起点 ``LIMIT - 512``。
+    钉死 512 而非只钉相等——留出的是**可用余量**，改小即等于变相挤压存量。
+    """
+    assert _GUARD.WARN_HEADROOM == budget.WARN_HEADROOM == 512
+    assert _GUARD.WARN_AT == budget.LIMIT - 512
+    assert budget.WARN_AT == budget.LIMIT - 512
+
+
+def test_headroom_warning_names_512_and_split_hint(tmp_path: Path):
+    """余量预警正文必须点名 512B 并指向 basic.md §1 的「拆分/重设计」出路。"""
+    rel = "orchestration/skills/lit/references/tight.md"
+    f = tmp_path / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("x" * (_GUARD.WARN_AT + 1), encoding="utf-8", newline="\n")
+
+    out = run_script(tmp_path, rel).stdout
+
+    assert "< 512B" in out  # 警告行点名余量阈值
+    assert "拆分或重设计" in out  # 出路指向 §1，而非放宽预算
+    assert "references 分册" in out
+
+
 def test_mixed_batch_reports_only_offenders(tmp_path: Path):
     ok = "orchestration/skills/lit/SKILL.md"
     bad = "orchestration/skills/lit/references/big.md"

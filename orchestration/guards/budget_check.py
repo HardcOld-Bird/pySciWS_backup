@@ -22,10 +22,12 @@ from pathlib import Path, PurePosixPath
 
 LIMIT = 8192
 
-#: 余量预警比例与起点：>WARN_AT 且未超限即提示（**不拦截**，rc 仍 0）。与
+#: 余量预警阈值与起点：文档族须留出 **≥512B 可用余量**（backlog 20261016-030200）；
+#: >WARN_AT 且未超限即提示（**不拦截**，rc 仍 0）。与
 #: ``pysci.skills.devops.tools.budget`` 同源（该模块是 doctor 侧真源）。
-WARN_RATIO = 0.95
-WARN_AT = int(LIMIT * WARN_RATIO)
+WARN_HEADROOM = 512
+WARN_AT = LIMIT - WARN_HEADROOM
+WARN_RATIO = WARN_AT / LIMIT
 
 # (档位标签, 路径判定, 整改动作)——顺序即优先级，先命中者定性。
 TIERS: tuple[tuple[str, re.Pattern[str], str], ...] = (
@@ -79,8 +81,8 @@ def main(argv: list[str]) -> int:
         elif size > WARN_AT:
             # 余量预警：不拦截，只提示「加一句即超限」——到顶即拒之外补上余量读数。
             near.append(
-                f"  ⚠ {rel}  已用 {size}B / {LIMIT}B（{size * 100 // LIMIT}%），"
-                f"余 {LIMIT - size}B（{hit[0]}）"
+                f"  ⚠ {rel}  已用 {size}B / {LIMIT}B，余 {LIMIT - size}B"
+                f" < {WARN_HEADROOM}B（{hit[0]}）"
             )
     if not offenders:
         print(f"harness 预算：{checked} 个在范围内的文件全部 ≤{LIMIT}B ✓")
@@ -88,8 +90,8 @@ def main(argv: list[str]) -> int:
             print(ln)
         if near:
             print(
-                f"  （{len(near)} 个文件余量 >{int(WARN_RATIO * 100)}% 已耗尽，"
-                "提示不拦截：加一句前先精简或移分册）"
+                f"  （{len(near)} 个文件余量 < {WARN_HEADROOM}B：basic.md §1——"
+                "加新条款前先**拆分或重设计**（移 references 分册），别挤压存量）"
             )
         return 0
     print(
