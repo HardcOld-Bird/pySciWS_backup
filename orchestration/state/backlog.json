@@ -2911,10 +2911,12 @@
       "kind": "usability",
       "success_criteria": "- `references/drain-watch.md` 新增「唤醒未达排障清单」一节（按需档 ≤8KB）：固定排查顺序（watch-arm.log 命中与否 → watch.json fired/heartbeat/consumed 与当前流身份撞车 → events-seen 水位 vs 流 max seq 倒挂 → merge `.bak-<ts>` 对照是否流被覆盖 → watchdog-runs listener 心跳），每步给一条可执行读命令；\n- `_mark_late` 标注细分：事件发生时刻有新鲜 listener 心跳则**不得**标「聋期」，改标「去重/水位吞后补报」（或中性「迟报」并附成因档位）；测试构造「listener 活着＋事件被吞→补报」断言文案不含「聋期」；\n- （酌情）`orch status` watch 段增一行唤醒链健康读数（水位倒挂/毒身份），异常才显示；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261016-215945-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-16T22:01:36+08:00",
       "note": "",
-      "source": "leader"
+      "source": "leader",
+      "started_at": "2026-10-16T22:08:24+08:00",
+      "worktree": "20261016-215945-devops"
     },
     {
       "id": "20261016-215946-devops",

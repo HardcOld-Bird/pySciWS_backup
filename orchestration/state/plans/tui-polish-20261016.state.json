@@ -5,15 +5,19 @@
   "steps": [
     {
       "id": "polish-a",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261016-215359-tui-polish-20261016-polish-a",
-      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-a.task.md"
+      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-a.task.md",
+      "session_id": "73d2478d-8fd1-4bb5-978f-65b55b82aeef",
+      "kind": "result"
     },
     {
       "id": "polish-b",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261016-221037-tui-polish-20261016-polish-b",
+      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-b.task.md"
     },
     {
       "id": "polish-c",
