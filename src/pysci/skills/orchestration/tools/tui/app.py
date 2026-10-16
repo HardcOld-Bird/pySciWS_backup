@@ -48,8 +48,10 @@ from .theme import (
     _T_BODY,
     _T_BORDER,
     _T_BORDER_SOFT,
+    _T_HEADING,
     _T_HINT,
     _T_HL,
+    _T_HL_FG,
     _T_INSET,
     _T_SUBTLE,
     _T_TITLE,
@@ -201,6 +203,16 @@ class PysciTUI(App):
     CSS = f"""
     #menu {{ {_T_BORDER} height: 1fr; {_T_BG} }}
     #menu > ListItem.-highlight {{ {_T_HL} }}
+    /* 选中态可读性（用户 2026-10-16 实机反馈）：橙底上白字/橙徽标不可辨 → 一律压深色。
+       覆盖面＝**全部列表**（主菜单/任务书/计划/决策/已裁决；行内三格与旧 class 名都管）。 */
+    ListItem.-highlight .row-lead-cell,
+    ListItem.-highlight .row-title,
+    ListItem.-highlight .row-badge,
+    ListItem.-highlight .row-title-cell,
+    ListItem.-highlight .row-badge-cell,
+    ListItem.-highlight .row-meta-cell {{ {_T_HL_FG} }}
+    /* Markdown 各级标题：Textual 默认 h1–h3 是 $primary 蓝（#0178D4），深底不可辨 → 亮黄 */
+    MarkdownH1, MarkdownH2, MarkdownH3, MarkdownH4, MarkdownH5, MarkdownH6 {{ {_T_HEADING} }}
     .row {{ width: 100%; height: 1; }}
     .row-title {{ width: 1fr; }}
     .row-badge {{ width: auto; color: $warning; text-style: bold; }}
@@ -1140,7 +1152,7 @@ class PysciTUI(App):
             )
             if not self.tb_expanded.get(root):
                 continue
-            for m in members:
+            for i, m in enumerate(members):
                 rows.append(
                     {
                         "kind": "sub",
@@ -1148,6 +1160,8 @@ class PysciTUI(App):
                         "root": root,
                         "label": _tb.family_label(m),
                         "indent": 1,
+                        # 末子项用 `└`、其余用 `├`（树状连线；展示序即 members 序）
+                        "lead": "└" if i == len(members) - 1 else "├",
                         "title": str(m.get("title") or ""),
                         "badge": _tb.status_badge(str(m.get("status") or "")),
                     }
@@ -1165,8 +1179,9 @@ class PysciTUI(App):
         return ChainListItem(
             make_row(
                 row["badge"],
-                f"└ {row['label']}　{row['title']}",
-                indent=int(row.get("indent") or 0) + 1,
+                f"{row['label']}\u3000{row['title']}",
+                lead=str(row.get("lead") or ""),
+                markup=False,
             ),
             id=f"tbrow-{_widget_id(row['tb_id'])}-{row['kind']}",
         )

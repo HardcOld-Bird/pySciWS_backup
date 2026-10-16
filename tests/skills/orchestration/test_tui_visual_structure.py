@@ -91,7 +91,7 @@ def test_visual_constants_defined_once_in_source():
     for name, fragment in (
         ("面板边框", "border" + ": round $accent"),
         ("提示边框", "border" + ": round $warning"),
-        ("标题条", "text-style: bold; color" + ": $accent; background: $panel"),
+        ("标题条", "text-style: bold; color" + ": $warning; background: $panel"),
         ("弱文案", "color" + ": $text-muted"),
     ):
         assert src.count(fragment) == 1, (
@@ -115,7 +115,7 @@ def _css_rules(css: str) -> dict[str, str]:
 def test_every_panel_references_shared_constants():
     """视觉结构：主菜单/详情/口述/任务书与四个标题条都来自共享常量（同一段字面）。"""
     border = "border" + ": round $accent;"
-    title = "text-style: bold; color" + ": $accent; background: $panel;"
+    title = "text-style: bold; color" + ": $warning; background: $panel;"
     rules = _css_rules(tui.PysciTUI.CSS)
     for selector in ("#menu", "#detail", "#journal", "#taskbook"):
         assert selector in rules, f"缺面板样式：{selector}"
