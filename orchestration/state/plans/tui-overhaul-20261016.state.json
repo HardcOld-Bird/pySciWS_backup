@@ -50,15 +50,19 @@
     },
     {
       "id": "s6-plans-ui",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261016-193042-tui-overhaul-20261016-s6-plans-ui",
-      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s6-plans-ui.task.md"
+      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s6-plans-ui.task.md",
+      "session_id": "73d2478d-8fd1-4bb5-978f-65b55b82aeef",
+      "kind": "result"
     },
     {
       "id": "s7-boards-ui",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261016-201417-tui-overhaul-20261016-s7-boards-ui",
+      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s7-boards-ui.task.md"
     },
     {
       "id": "s8-review-blind",
