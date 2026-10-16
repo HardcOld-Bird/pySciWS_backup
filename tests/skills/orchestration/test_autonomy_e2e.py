@@ -218,7 +218,9 @@ def test_queue_timeout_chain_event_to_tui(tmp_path, monkeypatch):
     q = next(m for m in modules() if m.key == "queues")
     assert any("队列超时" in ln for ln in q.detail()), "TUI 队列与运行须点名超时项"
     r = next(m for m in modules() if m.key == "review")
-    assert any("超时项" in ln for ln in r.detail()), "TUI 盲审与审查须点名超时项"
+    assert not any("超时项" in ln for ln in r.detail()), (
+        "s3：inspector 超时明细归队列模块（用户点名从盲审与审查面删除）"
+    )
     monkeypatch.setattr(
         inspectd, "enabled", lambda: True
     )  # status 段：开关关会提前 return

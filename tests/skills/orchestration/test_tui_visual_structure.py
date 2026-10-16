@@ -299,14 +299,14 @@ def test_walk_every_surface_without_crash():
 
 
 def test_detail_partitioning_three_zones():
-    """详情页分区：标题区 / 读数区 / 操作提示区——不再是一坨纯文本。"""
+    """详情页分区：标题区 / 读数区 / 操作提示区；s3 起旧「提示字样」行已从数据面清除。"""
 
     async def _go():
         app = tui.PysciTUI()
         async with app.run_test() as pilot:
             await pilot.pause()
             lv = app.query_one("#menu", tui.ListView)
-            lv.index = 6  # 待决与验收（该模块详情恒带操作提示尾行）
+            lv.index = 6  # 待决与验收
             await pilot.pause()
             await pilot.press("enter")
             assert app.view == "detail"
@@ -315,10 +315,11 @@ def test_detail_partitioning_three_zones():
             hint = app.detail_hint
             assert "详情" in title
             assert "待决" in body  # 读数在读数区
+            assert "偏差报告" in body  # s3：待决模块新增偏差报告（强制处理队列）区块
             assert "Esc/← 返回主菜单" in hint
-            # 提示行已从读数区挪进提示区（分区生效）
-            assert "口述动作" in hint and "口述动作" not in body
-            assert "批复入口" in hint and "批复入口" not in body
+            # s3 用户点名清理：旧提示行不再出现在读数区或提示区
+            for gone in ("口述动作", "批复入口"):
+                assert gone not in body and gone not in hint
 
     _run(_go())
 
