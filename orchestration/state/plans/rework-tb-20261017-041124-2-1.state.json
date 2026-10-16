@@ -23,13 +23,15 @@
     },
     {
       "id": "A.a4",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-041124-2-1.a4-拆解.md"
     },
     {
       "id": "A.a5",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261017-042808-rework-tb-20261017-041124-2-1-A.a5"
     },
     {
       "id": "B.b1",

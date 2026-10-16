@@ -77,11 +77,13 @@
     },
     {
       "id": "s9-tests",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261016-210617-tui-overhaul-20261016-s9-tests",
-      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s9-tests.task.md"
+      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s9-tests.task.md",
+      "session_id": "73d2478d-8fd1-4bb5-978f-65b55b82aeef",
+      "kind": "result"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-17T04:39:05+08:00"
 }

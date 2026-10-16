@@ -23,11 +23,13 @@
     },
     {
       "id": "polish-c",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261016-231411-tui-polish-20261016-polish-c",
-      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-c.task.md"
+      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-c.task.md",
+      "session_id": "73d2478d-8fd1-4bb5-978f-65b55b82aeef",
+      "kind": "result"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-17T04:38:58+08:00"
 }
