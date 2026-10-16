@@ -23,15 +23,19 @@
     },
     {
       "id": "s3-modules",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261016-180847-tui-overhaul-20261016-s3-modules",
-      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s3-modules.task.md"
+      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s3-modules.task.md",
+      "session_id": "73d2478d-8fd1-4bb5-978f-65b55b82aeef",
+      "kind": "result"
     },
     {
       "id": "s4-app-frame",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261016-182406-tui-overhaul-20261016-s4-app-frame",
+      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s4-app-frame.task.md"
     },
     {
       "id": "s5-taskbooks-ui",
