@@ -151,8 +151,8 @@ async def _each_view(pilot, app):
     await pilot.press("escape")
     await pilot.press("t")
     yield "taskbooks"
-    if app.tb_items:  # 空列表按 Enter 无处可去（无任务书时跳过详情页）
-        await pilot.press("enter")
+    if app.tb_rows:  # 空列表按 `o` 无处可去（无任务书时跳过详情页）
+        await pilot.press("o")  # s5：Enter 是展开/收起，`o` 才是进详情
         await pilot.pause()
         yield "tb-detail"
         await pilot.press("escape")

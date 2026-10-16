@@ -215,7 +215,7 @@ def test_read_faces_have_no_prompt_words(tbdir, seen):
             await pilot.pause()
             await pilot.press("t")
             await pilot.pause()
-            await pilot.press("enter")
+            await pilot.press("o")  # s5：Enter 是展开/收起，`o` 才是进详情
             await pilot.pause()
             assert app.view == "tb-detail"
             assert app.tb_detail_hint == "a 接受　r 驳回"
