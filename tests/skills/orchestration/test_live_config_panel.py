@@ -119,13 +119,14 @@ def test_countdown_line_ticks_with_fake_clock(monkeypatch):
     )
     line = modules._countdown_line("2026-10-14 14:00", "入谷")
     assert "距下次切换还有" in line
-    assert "90 分 0 秒" in line
+    # polish-c：时长走人性化格式（天/小时/分/秒）——90 分钟读作「1 小时 30 分 0 秒」
+    assert "1 小时 30 分 0 秒" in line
     assert "2026-10-14 14:00" in line and "入谷" in line
     # 跳动：往前 1 秒 → 少 1 秒（每秒重算的语义）
     monkeypatch.setattr(
         routing, "as_cn", lambda *a, **k: datetime(2026, 10, 14, 12, 30, 1)
     )
-    assert "89 分 59 秒" in modules._countdown_line("2026-10-14 14:00", "入谷")
+    assert "1 小时 29 分 59 秒" in modules._countdown_line("2026-10-14 14:00", "入谷")
 
 
 def test_countdown_line_handles_unfindable_switch():

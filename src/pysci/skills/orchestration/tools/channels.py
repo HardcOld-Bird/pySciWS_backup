@@ -228,11 +228,11 @@ def forced_line(info: SeatPlan) -> str:
     )
 
 
-def summary_line(*, tail: int | None = None, path: Path | None = None) -> str:
-    """一行总览（mirror 概览项与 ``orch status`` 判决包健康段共用同一句话）。
+def summary_head(*, tail: int | None = None, path: Path | None = None) -> str:
+    """回退**统计行**（近 N 日 M 起｜累计 K 起）；无事件给「（尚无渠道回退事件）」。
 
-    无事件时给一行「（尚无渠道回退）」而不是空串——缺席与零事件在观测面上必须可辨，
-    否则读的人分不清「没坏」和「没人记账」。
+    与 :func:`summary_line` 同源（tui-polish-c 反馈 #7：TUI 回退段要**列表式**渲染，
+    故把头行与逐条项拆成两个取数口，而不是让 UI 去切一行长串）。
     """
     all_events = read_events(path=path)
     if not all_events:
@@ -241,19 +241,41 @@ def summary_line(*, tail: int | None = None, path: Path | None = None) -> str:
     head = f"渠道回退：近 {COUNT_WINDOW_DAYS} 日 {len(recent)} 起｜累计 {len(all_events)} 起"
     if not recent:
         return head + "｜窗口内无新增"
+    return head
+
+
+def recent_event_lines(
+    *, tail: int | None = None, path: Path | None = None
+) -> list[str]:
+    """最近几起回退事件的**逐条一行**（供列表式渲染；窗口内无新增 → 空表）。"""
+    recent = read_events(limit=tail, since_days=COUNT_WINDOW_DAYS, path=path)
+    if not recent:
+        return []
     n = int(
         tail
         if tail is not None
         else Registry.load().fallback_policy.get("event_tail", 5)
     )
     shown = recent[-max(1, n) :]
-    items = "；".join(
+    return [
         f"{str(e.get('ts', ''))[5:10]} {str(e.get('ts', ''))[11:16]} "
         f"{e.get('tier', '?')} {e.get('from_label', '?')}→{e.get('to_label', '?')}"
         f"（{e.get('reason', '?')}）"
         for e in shown
-    )
-    return f"{head}\n      最近：{items}"
+    ]
+
+
+def summary_line(*, tail: int | None = None, path: Path | None = None) -> str:
+    """一行总览（mirror 概览项与 ``orch status`` 判决包健康段共用同一句话）。
+
+    无事件时给一行「（尚无渠道回退）」而不是空串——缺席与零事件在观测面上必须可辨，
+    否则读的人分不清「没坏」和「没人记账」。
+    """
+    head = summary_head(tail=tail, path=path)
+    items = recent_event_lines(tail=tail, path=path)
+    if not items:
+        return head
+    return f"{head}\n      最近：{'；'.join(items)}"
 
 
 __all__ = [
@@ -268,5 +290,7 @@ __all__ = [
     "plan_seats",
     "read_events",
     "skip_line",
+    "recent_event_lines",
+    "summary_head",
     "summary_line",
 ]

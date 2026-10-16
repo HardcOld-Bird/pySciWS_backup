@@ -444,8 +444,10 @@ class PysciTUI(App):
         self.decision_detail_md = ""
         self.decision_detail_scroll = 0
         self.decision_detail_scroll_mark = ""
-        # 系统倒计时卡文本（每秒 tick 只刷这一张卡；首帧由卡片栈写入）
+        # 系统看板三处动态读数文本（每秒 tick 只 update 文本；首帧由卡片栈写入）
         self.detail_countdown_text = ""
+        self.detail_switches_text = ""
+        self.detail_config_text = ""
         # 盲审与审查（s8）：逐案状态机 + 已裁决列表/详情
         self.blind_case_id = ""
         self.blind_count = 0
@@ -1149,14 +1151,22 @@ class PysciTUI(App):
         self.detail_hint = ""
         self.detail_text = "\n".join([self.detail_title, "", *text_lines])
         self.query_one("#detail-title", Static).update(self.detail_title)
-        # 倒计时卡文本进可断言状态面（每秒 tick 只刷它）
+        # 动态卡文本进可断言状态面（每秒 tick 只 update 文本）
         for b in blocks:
+            lines = [str(ln) for ln in (b.get("lines") or [])]
             if b.get("id") == "detail-countdown":
-                self.detail_countdown_text = str((b.get("lines") or [""])[0]).strip()
+                self.detail_countdown_text = (lines or [""])[0].strip()
+            elif b.get("id") == "card-switches":
+                self.detail_switches_text = "\n".join(lines).strip()
+            elif b.get("id") == "card-config":
+                self.detail_config_text = "\n".join(lines).strip()
 
     def _tick_detail(self) -> None:
-        """逐秒刷新：**只更新系统看板的倒计时卡文本**（其余卡不重建，防闪烁）。
+        """逐秒刷新：**系统看板三处时长读数**（倒计时／距峰／距边界）——只 update 文本。
 
+        tui-polish-c 反馈 #6：旧实现只刷倒计时卡，同页「距峰 … 还有 59.3 小时」「距边界
+        3550 分」原地不动，同一屏三处倒计时不同步。现三处各由卡片文本单点重算（卡控件
+        对象不动，防闪烁），并同步进可断言状态面。
         徽标指纹仍走 `_system_stable`/`_COUNTDOWN_MARK` 排除语义（倒计时跳动不常亮）。
         """
         if self.view != "detail":
@@ -1165,7 +1175,27 @@ class PysciTUI(App):
         if mod.key != "system":
             return
         self._refresh_countdown_card()
+        self._refresh_system_dynamic_cards()
         self._mark_seen(mod)  # 用户正看着：把最新读数记为已见，徽标不自亮（同值不写盘）
+
+    def _refresh_system_dynamic_cards(self) -> None:
+        """刷「开关/路由」与「配置生效值」两卡（各含一处每秒变化的时长读数）。"""
+        from . import cards as _cards
+
+        for card_id, provider, attr in (
+            ("card-switches", _cards.switches_lines, "detail_switches_text"),
+            ("card-config", _cards.routing_config_lines, "detail_config_text"),
+        ):
+            try:
+                lines = list(provider())
+            except Exception:  # noqa: BLE001 - 刷新失败保持上一帧，不塌详情
+                continue
+            setattr(self, attr, "\n".join(lines).strip())
+            try:
+                self.query_one(f"#{card_id}", Static).update("\n".join(lines))
+            except Exception:  # noqa: BLE001 - 组合面容忍缺件
+                continue
+        self._refresh_scroll_mark()
 
     def _refresh_countdown_card(self) -> None:
         """只刷倒计时卡（其余卡与其控件对象保持不动）。"""
@@ -1263,6 +1293,7 @@ class PysciTUI(App):
                     "kind": "group",
                     "tb_id": str(latest.get("id") or ""),
                     "root": root,
+                    "no": int(fam.get("no") or 0),  # 家族编号（按 root 创建序，稳定）
                     "title": str(latest.get("title") or ""),
                     "badge": _tb.status_badge(str(latest.get("status") or "")),
                     "size": int(fam["size"]),
@@ -1291,8 +1322,12 @@ class PysciTUI(App):
         """行 → 列表条目（``make_row`` 统一形态：徽标 | 标题 | 右对齐 meta）。"""
         if row["kind"] == "group":
             meta = f"共 {row['size']} 件" if int(row["size"]) > 1 else "本体"
+            no = int(row.get("no") or 0)
+            # 家族编号只挂**主项**（子项不重复；tui-polish-c 反馈 #9）——前缀进标题格，
+            # 不碰 lead/徽标列，故 polish-a 的列宽纪律（定宽连线列）不受影响。
+            title = f"#{no} {row['title']}" if no else row["title"]
             return ChainListItem(
-                make_row(row["badge"], row["title"], meta=meta),
+                make_row(row["badge"], title, meta=meta),
                 id=f"tbrow-{_widget_id(row['tb_id'])}-{row['kind']}",
             )
         return ChainListItem(

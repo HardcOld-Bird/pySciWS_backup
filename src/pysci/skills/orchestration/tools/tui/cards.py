@@ -137,6 +137,50 @@ def queues_blocks() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # 系统与路由（首卡＝倒计时，每秒只刷它）
 # ---------------------------------------------------------------------------
+def switches_lines() -> list[str]:
+    """开关/路由卡（**动态**：路由行含「距峰 … 还有 …」，随 tick 每秒重算）。"""
+    return [
+        f"开关：{_safe_line(mirror._line_switches)}",
+        f"路由：{_safe_line(mirror._line_routing)}",
+    ]
+
+
+def routing_config_lines() -> list[str]:
+    """配置生效值卡（**动态**：末行边界避让含倒计时，随 tick 每秒重算）。"""
+    from .. import routing as _rt
+
+    fv = _rt.face()
+    return [
+        "路由配置生效值",
+        f"  入峰提前量 leadtime_s = {fv.leadtime_s}s（{fv.leadtime_s // 60} 分钟）"
+        f"  〔真源：{fv.source('leadtime_s')}〕",
+        f"  峰段 peak = {fv.windows_text()}  〔真源：{fv.source('peak')}〕",
+        f"  谷时预设 valley_preset = {fv.valley_preset}"
+        f"  〔真源：{fv.source('valley_preset')}〕",
+        _hold_line(fv),
+    ]
+
+
+def _fallback_lines() -> list[str]:
+    """回退段（tui-polish-c 反馈 #7）：统计行 → 「最近：」小标 → **逐条一行**缩进对齐。
+
+    旧形态把「最近：…；…；…」塞进一行长串（自动换行后无缩进、层级混乱）；现在拆成
+    独立行，缩进层级固定（统计行不缩进，小标 2 格，条目 4 格 + `·`）。
+    """
+    from .. import channels as _ch
+
+    try:
+        head = _ch.summary_head()
+        items = _ch.recent_event_lines()
+    except Exception as exc:  # noqa: BLE001 - 读数失败不塌卡
+        return [f"回退：[!] 读数失败：{type(exc).__name__}: {exc}"]
+    lines = [f"回退：{head}"]
+    if items:
+        lines.append("  最近：")
+        lines.extend(f"    · {it}" for it in items)
+    return lines
+
+
 def system_blocks() -> list[dict[str, Any]]:
     """① 倒计时卡（置顶、高亮）→ ② 开关/路由 → ③ 配置生效值 → ④ 仲裁/回退 → ⑤ 告警（有才出）。"""
     from .. import channels as _ch
@@ -152,30 +196,19 @@ def system_blocks() -> list[dict[str, Any]]:
         },
         {
             "kind": "card",
-            "lines": [
-                f"开关：{_safe_line(mirror._line_switches)}",
-                f"路由：{_safe_line(mirror._line_routing)}",
-            ],
+            "lines": switches_lines(),
             "id": "card-switches",
         },
         {
             "kind": "card",
-            "lines": [
-                "路由配置生效值",
-                f"  入峰提前量 leadtime_s = {fv.leadtime_s}s（{fv.leadtime_s // 60} 分钟）"
-                f"  〔真源：{fv.source('leadtime_s')}〕",
-                f"  峰段 peak = {fv.windows_text()}  〔真源：{fv.source('peak')}〕",
-                f"  谷时预设 valley_preset = {fv.valley_preset}"
-                f"  〔真源：{fv.source('valley_preset')}〕",
-                _hold_line(fv),
-            ],
+            "lines": routing_config_lines(),
             "id": "card-config",
         },
         {
             "kind": "card",
             "lines": [
                 f"仲裁：{_safe_line(mirror._line_jury)}",
-                f"回退：{_safe_line(mirror._line_fallback)}",
+                *_fallback_lines(),
                 f"回退事件累计 = {len(_ch.read_events())} 起（state/channel-events.jsonl）",
             ],
             "id": "card-arbitration",
