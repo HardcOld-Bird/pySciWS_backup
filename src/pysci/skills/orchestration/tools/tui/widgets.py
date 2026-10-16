@@ -31,6 +31,7 @@ from .theme import (
     _T_BORDER,
     _T_HINT,
     _T_HL,
+    _T_HL_FG,
     _T_INSET,
     _T_SUBTLE,
     _T_TITLE,
@@ -221,26 +222,38 @@ class Row(Horizontal):
 
     DEFAULT_CSS = f"""
     Row {{ height: 1; }}
-    Row .row-badge-cell {{ width: auto; {_T_HINT} }}
+    Row .row-lead-cell {{ width: 2; }}
+    Row .row-badge-cell {{ width: auto; {_T_HINT} padding-right: 1; }}
     Row .row-title-cell {{ width: 1fr; }}
     Row .row-meta-cell {{ width: auto; {_T_SUBTLE} text-align: right; }}
     """
 
 
 def make_row(
-    badge: str, title: str, meta: str = "", indent: int = 0, markup: bool = True
+    badge: str,
+    title: str,
+    meta: str = "",
+    indent: int = 0,
+    markup: bool = True,
+    lead: str = "",
 ) -> Horizontal:
-    """统一列表行：徽标（auto 宽）+ 标题（1fr）+ 右对齐 meta（auto 宽）。
+    """统一列表行：〔连线格〕＋ 徽标（auto 宽）＋ 标题（1fr）＋ 右对齐 meta（auto 宽）。
 
+    ``lead``：行首**树状连线格**（``├``/``└``），格宽由 CSS 固定（``.row-lead-cell``）——
+    同族各行连线落在**同一显示列**（徽标串长度不一也不会把连线顶歪；用户 2026-10-16 实机反馈）。
     ``indent`` 控标题左侧留白（家族缩进等场景）；``markup=False`` 关闭 Rich markup 解析
     ——徽标形如 ``[i]`` 时会被当**斜体标签**吃掉（s7 实测），纯文本旗标须显式关。
     """
     prefix = " " * max(0, int(indent))
-    return Row(
+    cells = []
+    if lead:
+        cells.append(Static(str(lead), classes="row-lead-cell", markup=markup))
+    cells += [
         Static(str(badge), classes="row-badge-cell", markup=markup),
         Static(f"{prefix}{title}", classes="row-title-cell", markup=markup),
         Static(str(meta), classes="row-meta-cell", markup=markup),
-    )
+    ]
+    return Row(*cells)
 
 
 class ChoiceCard(Static):
@@ -252,7 +265,7 @@ class ChoiceCard(Static):
 
     DEFAULT_CSS = f"""
     ChoiceCard {{ {_T_BORDER} {_T_BG} {_T_INSET} height: auto; }}
-    ChoiceCard.-selected {{ {_T_HL} }}
+    ChoiceCard.-selected {{ {_T_HL} {_T_HL_FG} }}
     """
 
     class Chosen(Message):

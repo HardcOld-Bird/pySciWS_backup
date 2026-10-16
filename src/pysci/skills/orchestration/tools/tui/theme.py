@@ -11,9 +11,19 @@ from __future__ import annotations
 _T_BORDER = "border: round $accent;"
 _T_BORDER_SOFT = "border: round $warning;"
 _T_INSET = "padding: 0 1;"
-_T_TITLE = "text-style: bold; color: $accent; background: $panel;"
+#: 标题条用色：**亮黄**（高对比）。原用 `$accent`（橙）——实测标题面最刺眼的是
+#: Markdown 各级标题（Textual 默认 `$primary` 蓝，深底几乎不可辨，见 _T_HEADING）。
+_T_TITLE = "text-style: bold; color: $warning; background: $panel;"
 _T_SUBTLE = "color: $text-muted;"
 _T_BODY = "color: $text;"
 _T_HINT = "color: $warning; text-style: italic;"
 _T_HL = "background: $accent; text-style: bold;"
 _T_BG = "background: $panel;"
+
+#: 高亮底（`_T_HL` 橙）上的**前景色**：橙底上白字与橙色徽标都不可辨（用户 2026-10-16
+#: 实机反馈：「选中后标题白色难辨、状态徽标直接不可见」）——选中态一律压深色。
+_T_HL_FG = "color: black;"
+
+#: Markdown 各级标题（h1–h6）覆写用色：Textual 默认 h1–h3 是 `$primary`（#0178D4 蓝），
+#: 深灰蓝底上几乎不可辨（用户点名「全流程报告：…」「任务概述」等标题）——统一亮黄。
+_T_HEADING = "color: $warning; text-style: bold;"

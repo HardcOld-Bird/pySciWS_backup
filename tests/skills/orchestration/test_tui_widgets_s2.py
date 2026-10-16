@@ -33,7 +33,7 @@ def test_theme_constants_migrated_intact():
         ("_T_BORDER", "border" + ": round $accent;"),
         ("_T_BORDER_SOFT", "border" + ": round $warning;"),
         ("_T_INSET", "padding: 0 1;"),
-        ("_T_TITLE", "text-style: bold; color" + ": $accent; background: $panel;"),
+        ("_T_TITLE", "text-style: bold; color" + ": $warning; background: $panel;"),
         ("_T_SUBTLE", "color" + ": $text-muted;"),
         ("_T_BODY", "color" + ": $text;"),
         ("_T_HINT", "color" + ": $warning; text-style: italic;"),
