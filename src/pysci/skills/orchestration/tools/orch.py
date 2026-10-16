@@ -959,22 +959,74 @@ _INTERNAL_CMDS: tuple[str, ...] = (
 )
 
 
-def _hide_internal_commands(sub: argparse.Action) -> None:
-    """把 :data:`_INTERNAL_CMDS` 从 usage 与帮助列表隐藏（功能保留、照常可调用）。
+def _build_internal_parser() -> argparse.ArgumentParser:
+    """内部命令的**独立 parser**（backlog 20261017-005200）：不进公开 parser 的 ``choices``。
 
-    argparse 的 ``help=SUPPRESS`` **对子命令无效**（``add_parser`` 判 ``help is not None``
-    就造 ``_ChoicesPseudoAction``，于是打出字面量 ``==SUPPRESS==``）——真源是
-    ``_choices_actions``（帮助列表）与 ``metavar``（usage 里的花括号组），两处都要收。
+    为什么另起一个 parser 而不是「注册后隐藏」（221800 的做法）：argparse 的
+    ``_check_value`` 用的就是 ``_name_parser_map``（与 ``choices`` 同一对象），把内部名从
+    choices 摘掉＝**同时废掉内部命令的调用**；而只收 usage/帮助两面版面时，**报错串**仍会
+    把 5 个内部名列进 ``choose from …``（纯观感问题，实测见 backlog 20261017-005200）。
+
+    故改为 :func:`main` **前置分流**：首参命中 :data:`_INTERNAL_CMDS` 即交给本 parser，
+    公开 parser 从头到尾不含内部名——报错串自然也干净。
     """
-    sub._choices_actions = [  # noqa: SLF001 - argparse 无公开隐藏通道
-        a for a in sub._choices_actions if a.dest not in _INTERNAL_CMDS
-    ]
-    public = [c for c in sub.choices if c not in _INTERNAL_CMDS]
-    sub.metavar = "{" + ",".join(public) + "}"
+    parser = argparse.ArgumentParser(
+        prog="pysci-orch <内部命令>",
+        description="内部命令（由钩子/派生进程调用，勿手调）：不进公开命令面。",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser(
+        "_watchdog-loop",
+        help="watch 看门狗监督循环（`orch watchdog start` 派生）",
+    )
+    p.add_argument("--run-log", default="", help="run 日志路径（默认自动生成）")
+    p.add_argument("--interval", type=int, default=None, help="自查周期秒（默认 60）")
+    p.add_argument("--stale", type=int, default=None, help="心跳判死阈值秒（默认 300）")
+    p.set_defaults(func=_watchdog.cmd_watchdog_loop)
+
+    p = sub.add_parser("_queue-worker", help="成员队列 FIFO worker（入队时自动派生）")
+    p.add_argument("member")
+    p.add_argument(
+        "--run-log", default="", help="run 日志路径（唤醒时传入；默认自动生成）"
+    )
+    p.add_argument("--dry", action="store_true", help="干跑：不真派发，仅模拟销账")
+    p.set_defaults(func=_queueworker.cmd_queue_worker)
+
+    p = sub.add_parser("_drain-devops", help="backlog 计划器（approve 自动唤醒派生）")
+    p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
+    p.add_argument(
+        "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
+    )
+    p.set_defaults(func=_drain.cmd_drain_devops)
+
+    p = sub.add_parser("_bench-worker", help="bencher 队列 drain 循环")
+    p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
+    p.add_argument(
+        "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
+    )
+    p.set_defaults(func=_benchd.cmd_bench_worker)
+
+    p = sub.add_parser("_inspect-worker", help="inspector 巡检激活循环")
+    p.add_argument("--run-log", help="run 日志路径（拉起时传入；默认自动生成）")
+    p.add_argument(
+        "--dry", action="store_true", help="干跑：派跳只演练，不真派发组员会话"
+    )
+    p.set_defaults(func=_inspectd.cmd_inspect_worker)
+    return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI 入口。"""
+    """CLI 入口。
+
+    **内部命令前置分流**（backlog 20261017-005200）：首参命中 :data:`_INTERNAL_CMDS` 即走
+    独立 parser——公开面（usage/帮助/**报错串**）从头到尾不含 ``_`` 内部名，而钩子
+    （``watch-arm.sh``）与 watchdog 派生的调用面照常可用。
+    """
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0] in _INTERNAL_CMDS:
+        internal = _build_internal_parser().parse_args(raw)
+        return int(internal.func(internal))
     parser = argparse.ArgumentParser(
         prog="pysci-orch",
         description="pySci 多 Agent 编排 CLI（组长专属；设计见 orchestration/README.md）",
@@ -1383,27 +1435,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=cmd_wake_claim)
 
-    p = sub.add_parser(
-        "_watchdog-loop",
-        # 内部命令：help=SUPPRESS 从 usage/帮助隐藏（功能保留，`orch watchdog start` 照常派生）
-        help=argparse.SUPPRESS,
-    )
-    p.add_argument("--run-log", default="", help="run 日志路径（默认自动生成）")
-    p.add_argument("--interval", type=int, default=None, help="自查周期秒（默认 60）")
-    p.add_argument("--stale", type=int, default=None, help="心跳判死阈值秒（默认 300）")
-    p.set_defaults(func=_watchdog.cmd_watchdog_loop)
-
-    p = sub.add_parser(
-        "_queue-worker",
-        help=argparse.SUPPRESS,  # 内部：不进 usage（成员队列 worker，入队自动派生）
-    )
-    p.add_argument("member")
-    p.add_argument(
-        "--run-log", default="", help="run 日志路径（唤醒时传入；默认自动生成）"
-    )
-    p.add_argument("--dry", action="store_true", help="干跑：不真派发，仅模拟销账")
-    p.set_defaults(func=_queueworker.cmd_queue_worker)
-
     # ---- devops：devops 队列面（与 `bench stop` 对称；`drain` 本就指 devops 队列）----
     p = sub.add_parser("devops", help="devops 队列面（backlog FIFO 计划器 + worker）")
     vsub = p.add_subparsers(dest="devops_action", required=True)
@@ -1616,39 +1647,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     q.set_defaults(func=_inspectd.cmd_inspector_off)
 
-    # ---- 内部命令（approve 自动唤醒派生；下划线前缀=内部，勿手调）----
-    p = sub.add_parser(
-        "_drain-devops",
-        help=argparse.SUPPRESS,  # 内部：不进 usage（approve 自动唤醒派生）
-    )
-    p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
-    p.add_argument(
-        "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
-    )
-    p.set_defaults(func=_drain.cmd_drain_devops)
-
-    p = sub.add_parser(
-        "_bench-worker",
-        help=argparse.SUPPRESS,  # 内部：不进 usage
-    )
-    p.add_argument("--run-log", help="run 日志路径（唤醒时传入；默认自动生成）")
-    p.add_argument(
-        "--dry", action="store_true", help="干跑：不真派发，仅模拟销账（演练/测试）"
-    )
-    p.set_defaults(func=_benchd.cmd_bench_worker)
-
-    p = sub.add_parser(
-        "_inspect-worker",
-        help=argparse.SUPPRESS,  # 内部：不进 usage
-    )
-    p.add_argument("--run-log", help="run 日志路径（拉起时传入；默认自动生成）")
-    p.add_argument(
-        "--dry", action="store_true", help="干跑：派跳只演练，不真派发组员会话"
-    )
-    p.set_defaults(func=_inspectd.cmd_inspect_worker)
-
-    _hide_internal_commands(sub)
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw)
     return int(args.func(args))
 
 

@@ -249,13 +249,68 @@ def test_internal_commands_hidden_from_usage(capsys):
 
 
 def test_internal_commands_still_invokable(capsys):
-    """隐藏 ≠ 移除：内部命令仍可被钩子/派生进程调用（此处只验 argparse 认它）。"""
+    """隐藏 ≠ 移除：5 个内部命令仍可被钩子/派生进程调用（argparse 认得它们）。"""
+    from pysci.skills.orchestration.tools import orch as _orch
+
+    for name in _INTERNAL_CMDS:
+        with pytest.raises(SystemExit) as ei:
+            _orch.main([name, "-h"])
+        assert ei.value.code == 0, name
+        assert name in capsys.readouterr().out, name
+
+
+def test_internal_argv_routes_to_the_internal_parser(monkeypatch, tmp_path):
+    """前置分流真接线：内部 argv 走到该内部命令的 handler（参数面照旧）。"""
+    from pysci.skills.orchestration.tools import orch as _orch
+    from pysci.skills.orchestration.tools import queueworker
+
+    seen: dict = {}
+
+    def fake(args):
+        seen.update(member=args.member, dry=args.dry, run_log=args.run_log)
+        return 0
+
+    monkeypatch.setattr(queueworker, "cmd_queue_worker", fake)
+    rc = _orch.main(
+        ["_queue-worker", "figure", "--dry", "--run-log", str(tmp_path / "x.log")]
+    )
+
+    assert rc == 0
+    assert seen == {
+        "member": "figure",
+        "dry": True,
+        "run_log": str(tmp_path / "x.log"),
+    }, seen
+
+
+def _error_choices(err: str) -> list[str]:
+    """从 argparse 报错串里取 ``choose from 'a', 'b'…`` 的候选名单。"""
+    m = re.search(r"choose from\s+(.+?)\)\s*$", err.strip(), re.S)
+    assert m, err
+    return [t.strip().strip("'").strip('"') for t in m.group(1).split(",")]
+
+
+@pytest.mark.parametrize(
+    "argv", [["nope"], ["bench-up"], ["inspector-on"], ["consult-twin"]]
+)
+def test_error_choices_never_leak_internal_names(capsys, argv):
+    """报错串的候选名单**零内部命令**（backlog 20261017-005200）。
+
+    判据按**属性**写（「名单里没有 ``_`` 前缀项」），不把内部名当字面量再列一遍——
+    这正是旧实现两面作战的根源：``help=SUPPRESS`` 管不了 ``_check_value`` 的报错串。
+    """
     from pysci.skills.orchestration.tools import orch as _orch
 
     with pytest.raises(SystemExit) as ei:
-        _orch.main(["_queue-worker", "-h"])
-    assert ei.value.code == 0
-    assert "worker" in capsys.readouterr().out
+        _orch.main(argv)
+    err = capsys.readouterr().err
+    assert ei.value.code == 2
+    names = _error_choices(err)
+    leaked = [n for n in names if n.startswith("_")]
+    assert leaked == [], f"报错串漏出内部命令名：{leaked}"
+    assert "bench" in names and "inspector" in names, (
+        names
+    )  # 名单本身要正常（不是空名单）
 
 
 def test_inspector_start_and_enable_are_distinguishable(capsys):
