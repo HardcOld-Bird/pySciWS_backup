@@ -43,12 +43,78 @@ from .runner import normalize_effort
 SUGGESTIONS_DIR = ORCH_STATE_ROOT / "suggestions"
 BACKLOG_PATH = ORCH_STATE_ROOT / "backlog.json"
 
+#: 建议**销账**归档（第三态；backlog 20261017-050501）：既非采纳（入 backlog）亦非否决。
+CLOSED_DIR_NAME = "closed"
+
+#: 销账两态：`superseded`＝已被他单覆盖（`--by` 指向承接单）；`decision`＝决策型留档。
+ACK_CHOICES: tuple[str, ...] = ("superseded", "decision")
+
 #: 建议文件头部的机器标记行（dispatch 落盘）：读「人读的第一行」时必须整类跳过。
 _HEAD_MARKER_RE = re.compile(r"^(kind|delivery|source)\s*[:：]", re.IGNORECASE)
 
 
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+#: 建议队列**超龄**阈值（秒）——pending 超过它（或**跨日**）即进 PENDING-WORK 巡更报警面
+#: （backlog 20261017-050500：19 条 pending 超 24h 却零报警，组长被「待审批建议=N」虚高
+#: 误导、差点逐条重判已办结项；成员也因原单不闭环而重报）。
+SUGGESTION_STALE_S: int = 24 * 3600
+
+
+def _suggestion_ts(stem: str) -> datetime | None:
+    """建议 id 前缀 ``YYYYMMDD-HHMMSS`` → 落盘时刻（本地钟，与 :func:`_now` 同口径）。"""
+    m = re.match(r"^(\d{8})-(\d{6})", stem)
+    if m is None:
+        return None
+    try:
+        return datetime.strptime(f"{m.group(1)}{m.group(2)}", "%Y%m%d%H%M%S")
+    except ValueError:
+        return None
+
+
+def suggestion_backlog(*, now: datetime | None = None) -> dict[str, Any]:
+    """待审批建议的**积压读数**（judge：`suggestions` 列龄期 + PENDING-WORK 巡更共用单点）。
+
+    某条算 **超龄**（``aged``）＝龄期 > :data:`SUGGESTION_STALE_S` **或**落在更早的日历日
+    （「跨日」：隔日即该处置，不必等满 24h——用户口径）。
+
+    Returns:
+        ``{"total", "aged", "oldest_hours", "oldest_id"}``：``oldest_hours`` 取最老一条的
+        整小时数（无超龄 → 0），供巡更文案「最老 Xh」直接用。
+    """
+    moment = now or datetime.now()
+    total = 0
+    aged = 0
+    oldest: tuple[float, str] | None = None
+    for p in pending_suggestions():
+        total += 1
+        ts = _suggestion_ts(p.stem)
+        if ts is None:
+            continue  # id 不规范：计入总数但不判龄（不猜）
+        age_s = (moment - ts).total_seconds()
+        if age_s > SUGGESTION_STALE_S or ts.date() < moment.date():
+            aged += 1
+            if oldest is None or age_s > oldest[0]:
+                oldest = (age_s, p.stem)
+    return {
+        "total": total,
+        "aged": aged,
+        "oldest_hours": round(oldest[0] / 3600) if oldest else 0,
+        "oldest_id": oldest[1] if oldest else "",
+    }
+
+
+def _age_text(seconds: float | None) -> str:
+    """龄期列文本（``31h`` / ``2d`` / ``45m``）；判不出回 ``?``。"""
+    if seconds is None:
+        return "?"
+    if seconds < 3600:
+        return f"{max(0, int(seconds // 60))}m"
+    if seconds < 48 * 3600:
+        return f"{int(seconds // 3600)}h"
+    return f"{int(seconds // 86400)}d"
 
 
 def pending_suggestions() -> list[Path]:
@@ -1123,12 +1189,14 @@ def suggestion_marks(body: str) -> list[str]:
 
 
 def cmd_suggestions(args) -> int:
-    """列出待审批改进建议，并对空壳/非法分类给出机械标注。"""
+    """列出待审批改进建议：**龄期列**（超 24h/跨日醒目标注）＋ 空壳/非法分类机械标注。"""
     del args
     items = pending_suggestions()
     if not items:
         print("（无待审批建议）")
         return 0
+    moment = datetime.now()
+    back = suggestion_backlog(now=moment)
     flagged = 0
     for p in items:
         body = p.read_text(encoding="utf-8")
@@ -1136,7 +1204,20 @@ def cmd_suggestions(args) -> int:
         marks = suggestion_marks(body)
         flagged += 1 if marks else 0
         suffix = f"  {' '.join(marks)}" if marks else ""
-        print(f"  {p.stem}  [{_member_of(p)}]  {first[:70]}{suffix}")
+        ts = _suggestion_ts(p.stem)
+        age_s = (moment - ts).total_seconds() if ts else None
+        stale = age_s is not None and (
+            age_s > SUGGESTION_STALE_S or ts.date() < moment.date()
+        )
+        age_col = _age_text(age_s) + ("  ⚠ 超 24h 未判决" if stale else "")
+        print(f"  {p.stem}  [{_member_of(p)}]  龄期={age_col}  {first[:70]}{suffix}")
+    if back["aged"]:
+        print(
+            f"[!] 建议队列 {back['aged']} 条超 24h 未判决（最老 {back['oldest_hours']}h）"
+            "——决策型/已被他单覆盖型不必 approve/reject，走 "
+            '`suggestions ack <id> --as decision|superseded --by <ref> --why "<理由>"`'
+            "（销账留痕，不进 backlog、不占 devops 跳）。"
+        )
     if flagged:
         print(
             f"[!] {flagged} 条待审批建议存在空壳/分类非法标注：空壳=正文不足 "
@@ -1360,9 +1441,15 @@ def cmd_approve(args) -> int:
     # 回复永远不会被附送），而基建修复的承接方按角色边界就是 devops——归它，回执才落地。
     reply_member = "devops" if entry.get("source") == "tier-a" else member
     REPLIES_DIR.joinpath(reply_member).mkdir(parents=True, exist_ok=True)
+    # 转立单**联动销账**（backlog 20261017-050501）：立单面写 `supersedes: <id>[,…]` 时，
+    # 被覆盖的旧单随本单落地自动 ack（否则它们既不该 approve 派空单、也不该 reject 误标
+    # 否决，只能永远 pending——正是积压的制造者）。销账动作在归档后执行（见下）。
+    covered = _supersedes_ids(body)
     tail = ""
+    if covered:
+        tail += f"\n联动销账：{'、'.join(covered)}（已被本单承接，移入 closed/，非否决）。\n"
     if verify:
-        tail = (
+        tail += (
             f"\n判决通道={channel}（README §5.3）：基线 commit "
             f"{verify['baseline_commit']}，已排基线捕获 {verify['baseline_item']}；"
             "本条合并销账时自动入 A/B 核验队列，判决直接落地（改善→销账、"
@@ -1380,6 +1467,17 @@ def cmd_approve(args) -> int:
         f"审批回复将在下次派发 {reply_member} 时附送。"
         + (f"归档重名，另存为 {target.name}。" if target.stem != sugg.stem else "")
     )
+    for old_id in covered:
+        old = _find_suggestion(old_id)
+        if old is None:
+            continue  # 已不在 pending（先前已处置或 id 写错）：不打扰
+        _finalize_ack(
+            old,
+            as_="superseded",
+            by=sugg.stem,
+            why=f"已被 {sugg.stem} 承接（立单面 supersedes 联动销账）",
+        )
+        print(f"    （联动销账 {old.stem} → closed/，非否决）")
     # 自动唤醒 devops 后台 FIFO 消化 backlog（README §6）；--no-wake 跳过。
     if not getattr(args, "no_wake", False):
         from .drain import (
@@ -1444,6 +1542,126 @@ def _finalize_rejection(
     REPLIES_DIR.joinpath(member).mkdir(parents=True, exist_ok=True)
     (REPLIES_DIR / member / f"{sugg.stem}.md").write_text(reply, encoding="utf-8")
     _archive(sugg, SUGGESTIONS_DIR / "rejected")
+
+
+#: 立单面的 ``supersedes: <id>[,<id>]`` 标记行（前缀形态同 §6 判据标记：行首/列表项/粗体皆认）。
+#: 列表标记须跟**空白**——否则 `**bold**` 的头一个 `*` 会被当项目符号吃掉（本单实测踩过）。
+_SUPERSEDES_RE = re.compile(
+    r"^\s*(?:[-*+•]\s+)?(?:\*\*|__)?\s*supersedes\s*(?:\*\*|__)?\s*[:：]\s*(?P<ids>.+?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def suggestion_summary(sugg: Path) -> str:
+    """建议的**人读首行**（跳过 dispatch 写的头部机器标记行；无正文回 id）。"""
+    try:
+        body = sugg.read_text(encoding="utf-8")
+    except OSError:
+        return sugg.stem
+    return next(
+        (
+            ln.strip()
+            for ln in body.splitlines()
+            if ln.strip() and not _HEAD_MARKER_RE.match(ln.strip())
+        ),
+        sugg.stem,
+    )
+
+
+def _supersedes_ids(body: str) -> list[str]:
+    """读立单面的 ``supersedes: <id>[,<id>]`` 标记行（前缀形态同 §6：行首/列表项/粗体皆认）。
+
+    用途（backlog 20261017-050501）：转立单时把被覆盖的旧单**联动销账**——旧单此前只能
+    永远 pending（既不该 approve 派空单、也不该 reject 误标否决），正是积压的制造者。
+    """
+    for ln in body.splitlines():
+        m = _SUPERSEDES_RE.match(ln)
+        if m is not None:
+            return [x.strip() for x in re.split(r"[,，]", m.group("ids")) if x.strip()]
+    return []
+
+
+def _finalize_ack(
+    sugg: Path,
+    *,
+    as_: str,
+    by: str,
+    why: str,
+    member: str = "",
+    situation: str = "",
+) -> Path:
+    """**销账**落盘三件套：决策日志（先）→ 回复来源成员 → 移入 ``closed/``。
+
+    与 approve/reject 并列的第三态（backlog 20261017-050501）：**不进 backlog、不派单、
+    不占 devops 跳**，也**不是否决**。顺序与 :func:`_finalize_rejection` 同理由：journal
+    写失败即中止，不留下「已销账却无留痕」。
+
+    Args:
+        sugg: 待销账建议（销账后移入 ``suggestions/closed/``）。
+        as_: ``superseded``（已被他单覆盖）或 ``decision``（决策型留档）。
+        by: 承接引用——``superseded`` 时指新单 id/计划名；``decision`` 时指裁定来源。
+        why: 销账理由（进决策日志 ``reason`` 与回复正文）。
+        member: 回复收件人（缺省按文件名解析）。
+        situation: 建议摘要（进决策日志；缺省取 :func:`suggestion_summary`）。
+    """
+    if as_ not in ACK_CHOICES:
+        raise ValueError(f"销账类型非法：{as_!r}（合法：{'|'.join(ACK_CHOICES)}）")
+    member = member or _member_of(sugg)
+    journal.append(
+        {
+            "ts": _now(),
+            "situation": (situation or suggestion_summary(sugg))[:200],
+            "options": "",
+            "choice": "ack",
+            "reason": why,
+            "source": "leader",
+            "kind": "ack",
+            "channel": "",
+            "suggestion_id": sugg.stem,
+            "member": member,
+            "ack_as": as_,
+            "acked_by": by,
+        }
+    )
+    what = (
+        f"已被 {by} 覆盖（superseded）"
+        if as_ == "superseded"
+        else "决策型留档（decision）"
+    )
+    REPLIES_DIR.joinpath(member).mkdir(parents=True, exist_ok=True)
+    (REPLIES_DIR / member / f"{sugg.stem}.md").write_text(
+        f"# 组长审批：销账（**非否决**）（{_now()}）\n\n"
+        f"销账类型：{what}\n理由：{why}\n\n"
+        "本单**未进 backlog、也未否决**——只是闭环归档（`state/suggestions/closed/`）。"
+        "若你认为该结论有误，请在下一条交付里说明。\n",
+        encoding="utf-8",
+    )
+    return _archive(sugg, SUGGESTIONS_DIR / CLOSED_DIR_NAME)
+
+
+def cmd_suggestions_ack(args) -> int:
+    """``orch suggestions ack <id> --as superseded|decision --by <ref> --why "<理由>"``。
+
+    建议的**第三态销账**（backlog 20261017-050501）：决策型（本单不做改动、仅留档）与
+    已被他单覆盖型此前无家可归——approve 会派空单烧跳、reject 语义变成误标否决，于是
+    只能永远 pending 滚雪球。本命令把「销账」收成一条可测动作（留痕 + 回复 + 归档）。
+    """
+    sugg = _find_suggestion(args.suggestion_id)
+    if sugg is None:
+        print(f"[!] 未找到待审批建议 '{args.suggestion_id}'（orch suggestions 查看）")
+        return 2
+    member = _member_of(sugg)
+    target = _finalize_ack(sugg, as_=args.as_, by=args.by, why=args.why, member=member)
+    print(
+        f"[√] {sugg.stem} 已销账（as={args.as_}，by={args.by}）→ "
+        f"{target.relative_to(SUGGESTIONS_DIR.parent).as_posix()}；"
+        f"销账回复将在下次派发 {member} 时附送（**非否决**、未入 backlog）。"
+    )
+    print(
+        "[NEXT] 看余量：orch suggestions（龄期列）；若这条其实该实施，仍可 "
+        "approve <id>（销账不封路，但请优先复核理由是否成立）。"
+    )
+    return 0
 
 
 def cmd_reject(args) -> int:
