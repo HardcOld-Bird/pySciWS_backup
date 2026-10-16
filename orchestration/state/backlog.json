@@ -2925,10 +2925,12 @@
       "kind": "usability",
       "success_criteria": "- `plan new` / `plan advance` / `plan run` 的 `[NEXT]` 引导**并列**给出 `plan advance`（标注「入队即返回，长任务首选」）与 `plan run`（标注「同步阻塞到交接」）两种推进方式；\n- `command-surface.md` plan new 行补一句：源文件任意位置、登记后可删、**勿与 `state/plans/<id>.plan.yaml` 目标名同名**（或说明同名时的行为）；\n- 相关文案测试（若有钉 [NEXT] 字样的用例）同步；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261016-215946-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-16T22:01:36+08:00",
       "note": "",
-      "source": "leader"
+      "source": "leader",
+      "started_at": "2026-10-16T22:17:04+08:00",
+      "worktree": "20261016-215946-devops"
     },
     {
       "id": "20261016-220500-devops",
