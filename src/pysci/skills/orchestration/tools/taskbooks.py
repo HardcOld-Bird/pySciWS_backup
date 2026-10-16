@@ -133,6 +133,11 @@ def _state_path(tb_id: str) -> Path:
     return TASKBOOKS_DIR / f"{tb_id}.state.json"
 
 
+def md_path(tb_id: str) -> Path:
+    """公开 ``<id>.taskbook.md`` 路径（TUI「用 VSCode 打开」的目标）。"""
+    return _md_path(tb_id)
+
+
 def _write(path: Path, text: str) -> None:
     """写 ``data/`` 下的文件——先过散落护栏（basic.md §5）。"""
     assert_within_data(path, what="任务书")
@@ -307,6 +312,69 @@ def sections() -> dict[str, list[dict[str, Any]]]:
             if d.get("status") in HISTORY_STATUSES or d.get("rejections")
         ],
     }
+
+
+def _round_of(state: dict[str, Any]) -> int:
+    """返工轮次（坏值按 0——观察面不因一条脏数据塌）。"""
+    try:
+        return int(state.get("rework_round") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def family_label(state: dict[str, Any]) -> str:
+    """返工家族成员标签：``rework_round >= 1`` → 「返工第 n 轮」；否则「本体」。"""
+    rnd = _round_of(state)
+    return f"返工第 {rnd} 轮" if rnd >= 1 else "本体"
+
+
+def families() -> list[dict[str, Any]]:
+    """返工家族归组读数（TUI 任务书列表按家族分组；沿 ``rework_of`` 链）。
+
+    规则：``rework_of`` 为空、或指向不存在 id 的项 = 家族根（**孤儿自成一家**）；每家
+    成员 = 沿 ``rework_of`` 的传递闭包（按 parent map 收集，防多子分叉/病态环）；家内
+    排序 ``rework_round`` 降序、同轮 ``ts`` 降序 → ``members`` = [最新…本体]（元素为
+    state 记录 dict，:func:`family_label` 直接可用）。返回 ``[{root, latest, members,
+    size}]``（``root``/``latest`` 为 id），家族列表按 ``latest`` 的 ts 降序（最新在上）。
+    """
+    items = list_all()
+    by_id = {str(d.get("id")): d for d in items}
+    children: dict[str, list[dict[str, Any]]] = {}
+    roots: list[dict[str, Any]] = []
+    for d in items:
+        parent = str(d.get("rework_of") or "")
+        if parent and parent in by_id:
+            children.setdefault(parent, []).append(d)
+        else:
+            roots.append(d)
+    out: list[dict[str, Any]] = []
+    for root_rec in roots:
+        members: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        stack = [root_rec]
+        while stack:
+            rec = stack.pop()
+            rid = str(rec.get("id") or "")
+            if rid in seen:
+                continue
+            seen.add(rid)
+            members.append(rec)
+            stack.extend(children.get(rid, []))
+        members.sort(key=lambda d: (_round_of(d), str(d.get("ts") or "")), reverse=True)
+        latest = members[0]
+        out.append(
+            {
+                "root": str(root_rec.get("id") or ""),
+                "latest": str(latest.get("id") or ""),
+                "members": members,
+                "size": len(members),
+            }
+        )
+    out.sort(
+        key=lambda fam: str((by_id.get(fam["latest"]) or {}).get("ts") or ""),
+        reverse=True,
+    )
+    return out
 
 
 def transition(
@@ -740,46 +808,116 @@ def build_report(tb_id: str) -> str:
     return text
 
 
-def detail_lines(tb_id: str) -> list[str]:
-    """任务书**详情页**内容（TUI Enter；纯读数、无副作用）。
+def _detail_blocks(tb_id: str) -> list[dict[str, Any]]:
+    """详情页段落组装**私件**（:func:`detail_lines` 与 :func:`detail_markdown` 共享，
+    改一处两面生效——不留两份实现）。纯读数、无副作用。
 
-    段：标题/状态徽标 → （delivered 态）**批复参考＝流程报告置顶** → 任务书正文 →
-    批语历史 → 流程报告 → 返工卡片。流程报告走 :func:`report_sections`（**不落盘**——
-    详情页只读，不因看一眼就写出 ``.report.md``）。
+    段序（保持原 ``detail_lines`` 语义）：标题/状态徽标 → （delivered 态）**批复参考＝
+    流程报告置顶** → 任务书正文 → 批语历史 → 流程报告（非 delivered）→ 返工卡片。
+    流程报告走 :func:`report_sections`（**不落盘**——详情页只读，不因看一眼就写出
+    ``.report.md``）。每块 ``{"role", ...}``；``header`` 块带结构化字段，其余带 ``lines``。
     """
     st = load_state(tb_id) or {}
     status = str(st.get("status") or "")
     pid = str(st.get("plan_id") or "")
     delivered = status == STATUS_DELIVERED
-    out: list[str] = [
-        f"任务书 {tb_id}　[{status_badge(status)}]",
-        f"标题：{st.get('title') or ''}",
-    ]
+    header: dict[str, Any] = {
+        "role": "header",
+        "tb_id": tb_id,
+        "status": status,
+        "title": str(st.get("title") or ""),
+        "plan": "",
+    }
     if pid:
         steps = flow_steps(pid)
         done = sum(1 for s in steps if s["status"] in ("done", "skipped"))
-        out.append(f"计划：{pid}（{done}/{len(steps)} 环节完成）")
+        header["plan"] = f"计划：{pid}（{done}/{len(steps)} 环节完成）"
+    blocks: list[dict[str, Any]] = [header]
     try:
         report = report_sections(tb_id)
     except Exception as exc:  # noqa: BLE001 - 报告坏一段不塌详情（观察面 fail-soft）
         report = [f"（流程报告读数失败：{type(exc).__name__}: {exc}）"]
     if delivered:
-        out += [
-            "",
-            "★ 批复参考 —— 流程报告（本大任务的流程交付；看毕再批复）",
-            *report,
-        ]
-    out += ["", "—— 任务书正文 ——", read_body(tb_id) or "（空）"]
+        blocks.append({"role": "star", "lines": report})
+    blocks.append({"role": "body", "lines": [read_body(tb_id) or "（空）"]})
     rej = st.get("rejections") or []
-    out += ["", f"—— 批语历史（{len(rej)} 条）——"]
-    out += [f"  · {r.get('ts')}：{r.get('note')}" for r in rej] or ["  （无）"]
+    blocks.append(
+        {
+            "role": "rejections",
+            "count": len(rej),
+            "lines": [f"  · {r.get('ts')}：{r.get('note')}" for r in rej]
+            or ["  （无）"],
+        }
+    )
     if not delivered:
-        out += ["", "—— 流程报告（所链计划的环节完成清单）——", *report]
+        blocks.append({"role": "report", "lines": report})
     card = rework_card(tb_id)
     if card:
-        out += ["", "—— 返工卡片 ——", *card]
-    out.append("批复入口：`a` 接受选中 / `r` 驳回选中（三段式）")
+        blocks.append({"role": "rework", "lines": card})
+    return blocks
+
+
+#: 各段在**文本通道**（:func:`detail_lines`）的标题行；Markdown 通道有自己的呈现。
+_DETAIL_HEADS: dict[str, str] = {
+    "star": "★ 批复参考 —— 流程报告（本大任务的流程交付；看毕再批复）",
+    "body": "—— 任务书正文 ——",
+    "report": "—— 流程报告（所链计划的环节完成清单）——",
+    "rework": "—— 返工卡片 ——",
+}
+
+
+def detail_lines(tb_id: str) -> list[str]:
+    """任务书**详情页**内容（TUI Enter；纯读数、无副作用；静态通道/测试用）。
+
+    段落组装走 :func:`_detail_blocks`（与 :func:`detail_markdown` 共享单一实现）。
+    「批复入口」提示行已按用户明令从此数据面清除（操作提示属界面层，不进读数）。
+    """
+    out: list[str] = []
+    for b in _detail_blocks(tb_id):
+        role = b["role"]
+        if role == "header":
+            out = [
+                f"任务书 {b['tb_id']}　[{status_badge(b['status'])}]",
+                f"标题：{b['title']}",
+            ]
+            if b["plan"]:
+                out.append(b["plan"])
+            continue
+        out.append("")
+        if role == "rejections":
+            out.append(f"—— 批语历史（{b['count']} 条）——")
+        else:
+            out.append(_DETAIL_HEADS[role])
+        out += b["lines"]
     return out
+
+
+def detail_markdown(tb_id: str) -> str:
+    """任务书详情页的 **Markdown 文档**（详情页 Markdown 渲染的单一实现）。
+
+    段落与顺序同 :func:`detail_lines`（共用 :func:`_detail_blocks`）；delivered 态
+    「★ 批复参考」置顶。流程报告内嵌为原文（其自带 ``#``/``##`` 标题，渲染器容忍
+    嵌套层级）。
+    """
+    out: list[str] = []
+    for b in _detail_blocks(tb_id):
+        role = b["role"]
+        if role == "header":
+            out.append(f"# 任务书 {b['tb_id']}")
+            out += ["", f"- 状态：{status_badge(b['status'])}", f"- 标题：{b['title']}"]
+            if b["plan"]:
+                out.append(f"- {b['plan']}")
+        elif role == "star":
+            out += ["", "---", "", f"**{_DETAIL_HEADS['star']}**", "", *b["lines"]]
+        elif role == "body":
+            out += ["", "---", "", "## 任务书正文", "", *b["lines"]]
+        elif role == "rejections":
+            out += ["", "## 批语历史", "", *b["lines"]]
+        elif role == "report":
+            out += ["", "---", "", "## 流程报告", "", *b["lines"]]
+        elif role == "rework":
+            out += ["", "---", "", "## 返工卡片", "", *b["lines"]]
+    return "\n".join(out).strip() + "\n"
 
 
 def rework_card(tb_id: str) -> list[str]:

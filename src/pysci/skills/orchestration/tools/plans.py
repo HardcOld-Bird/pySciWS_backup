@@ -8,8 +8,11 @@ run 时按环节 id 对账）；执行状态 = ``state/plans/<id>.state.json``�
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -343,8 +346,52 @@ def parse_plan_yaml(src: Path | str) -> dict:
         raise PlanYamlError(p, exc) from exc
 
 
+#: 解析缓存：``解析后路径 → (st_mtime_ns, st_size, payload)``。stat 比对未变即命中、
+#: **不解析**（TUI 徽标指纹/概览轮询的性能钉——此前每次全量解析 46 个 plan YAML）。
+#: key 含解析后路径 ⇒ 测试 monkeypatch ``PLANS_DIR`` 后自然隔离。
+_YAML_CACHE: dict[Path, tuple[int, int, dict]] = {}
+_STATE_CACHE: dict[Path, tuple[int, int, dict]] = {}
+
+
+def _cached_payload(
+    cache: dict[Path, tuple[int, int, dict]], path: Path, parse: Callable[[Path], dict]
+) -> dict:
+    """stat（mtime+size）比对命中即返回缓存**拷贝**；否则现解析并回填。
+
+    返回拷贝是必须的：调用方普遍就地改写 state（``_reconcile`` 的中间态、``_save_state``
+    前的推进），回同一对象会让未落盘的改写污染缓存。``_save_state`` 落盘即变 mtime，
+    下次 stat 自然未命中。
+    """
+    key = path.resolve()
+    try:
+        st = path.stat()
+    except OSError:
+        cache.pop(key, None)
+        payload = parse(
+            path
+        )  # 缺档走既有语义（state 回 {}；YAML 抛 FileNotFoundError）
+        return copy.deepcopy(payload)
+    stamp = (st.st_mtime_ns, st.st_size)
+    hit = cache.get(key)
+    if hit is not None and (hit[0], hit[1]) == stamp:
+        return copy.deepcopy(hit[2])
+    payload = parse(path)
+    cache[key] = (stamp[0], stamp[1], payload)
+    return copy.deepcopy(payload)
+
+
+def _read_state_json(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return {"steps": []}
+    data.setdefault("steps", [])
+    return data
+
+
 def _load_yaml(plan_id: str) -> dict:
-    return parse_plan_yaml(_plan_path(plan_id))
+    return _cached_payload(_YAML_CACHE, _plan_path(plan_id), parse_plan_yaml)
 
 
 def _load_state(plan_id: str) -> dict:
@@ -356,14 +403,7 @@ def _load_state(plan_id: str) -> dict:
     改成 truthy 会改掉这些调用点的行为。崩溃点本身按空处理，见
     :func:`_inflight` / :func:`_worklist_panes`（backlog 20261015-154311）。
     """
-    p = _state_path(plan_id)
-    if not p.exists():
-        return {}
-    data = json.loads(p.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        return {"steps": []}
-    data.setdefault("steps", [])
-    return data
+    return _cached_payload(_STATE_CACHE, _state_path(plan_id), _read_state_json)
 
 
 #: 公开别名（门面 status 命令读取计划状态用）。
@@ -450,6 +490,114 @@ def list_plans() -> list[tuple[str, str, int, int]]:
         done = len([s for s in steps if s["status"] in _DONE])
         out.append((pid, str(plan.get("goal", ""))[:50], done, len(steps)))
     return out
+
+
+# ---------------------------------------------------------------------------
+# 概览/指纹读数（TUI 改版 s1-data）：**只读 state.json**，徽标指纹不再解析 46 个 YAML
+# ---------------------------------------------------------------------------
+def _overview_plan_ids() -> list[str]:
+    """YAML ∪ state 两侧的计划 id 清单（缺一侧也能入列表）。"""
+    if not PLANS_DIR.exists():
+        return []
+    ids = {p.name[: -len(".plan.yaml")] for p in PLANS_DIR.glob("*.plan.yaml")}
+    ids |= {p.name[: -len(".state.json")] for p in PLANS_DIR.glob("*.state.json")}
+    return sorted(ids)
+
+
+def _plan_overview_state(pid: str) -> dict:
+    """state-only 读数（缺档/坏文件按空态；**不碰 YAML**——性能钉的边界）。"""
+    if not _state_path(pid).exists():
+        return {}
+    try:
+        return _load_state(pid)
+    except (OSError, ValueError):
+        return {}
+
+
+def _plan_mark(state: dict) -> str:
+    """概览标记（语义同 ``cmd_plan_list``/TUI ``_plan_mark``：completed→✔、abandoned→⊘）。"""
+    if state.get("completed_at"):
+        return "✔完成"
+    if state.get("abandoned_at"):
+        return "⊘中止"
+    return "▶进行中"
+
+
+def _done_total(state: dict) -> tuple[int, int]:
+    steps = state.get("steps") or []
+    return len([s for s in steps if str(s.get("status")) in _DONE]), len(steps)
+
+
+def overview_rows() -> list[dict]:
+    """计划概览行（TUI 计划列表/徽标指纹用；**只读 state.json**，缺 state 回落
+    缓存 ``_load_yaml`` 取 goal——回落 fail-soft，YAML 面坏不塌概览）。
+
+    每行 ``{id, goal, mark, done, total, created, completed_at, abandoned_at, current}``；
+    ``mark`` ∈ {``▶进行中``, ``✔完成``, ``⊘中止``}；``current`` = 首个非 done/skipped 步
+    ``{id, status, session_id, task_file}``（全完成 → ``None``）。
+    按 ``created`` 降序（缺 created 者按 id 降序、自然殿后）。
+    """
+    rows: list[dict] = []
+    for pid in _overview_plan_ids():
+        state_exists = _state_path(pid).exists()
+        state = _plan_overview_state(pid)
+        goal = str(state.get("goal") or "")
+        if not state_exists:
+            try:
+                goal = str(_load_yaml(pid).get("goal") or "")
+            except Exception:  # noqa: BLE001 - 概览读数 fail-soft（缺 state + YAML 坏）
+                goal = ""
+        done, total = _done_total(state)
+        cur = next(
+            (
+                s
+                for s in (state.get("steps") or [])
+                if str(s.get("status")) not in ("done", "skipped")
+            ),
+            None,
+        )
+        rows.append(
+            {
+                "id": pid,
+                "goal": goal,
+                "mark": _plan_mark(state),
+                "done": done,
+                "total": total,
+                "created": str(state.get("created") or ""),
+                "completed_at": str(state.get("completed_at") or ""),
+                "abandoned_at": str(state.get("abandoned_at") or ""),
+                "current": (
+                    {
+                        "id": str(cur.get("id") or ""),
+                        "status": str(cur.get("status") or "pending"),
+                        "session_id": str(cur.get("session_id") or ""),
+                        "task_file": str(cur.get("task_file") or ""),
+                    }
+                    if cur is not None
+                    else None
+                ),
+            }
+        )
+    rows.sort(key=lambda r: (r["created"], r["id"]), reverse=True)
+    return rows
+
+
+def plan_digest() -> str:
+    """廉价计划指纹（TUI 徽标刷新判据）：sha1 前 12 hex。
+
+    输入＝按 id 序的 ``id:mark:done:total:状态向量`` 用 ``|`` 连接。**只含概览可见
+    字段**：不读 YAML、不构建 detail——性能钉由 tests 断言（``_load_yaml`` 抛异常
+    时本函数与 :func:`overview_rows` 仍正常）。
+    """
+    parts: list[str] = []
+    for pid in sorted(_overview_plan_ids()):
+        state = _plan_overview_state(pid)
+        done, total = _done_total(state)
+        vec = ",".join(
+            str(s.get("status") or "pending") for s in (state.get("steps") or [])
+        )
+        parts.append(f"{pid}:{_plan_mark(state)}:{done}:{total}:{vec}")
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:12]
 
 
 def cmd_plan_new(args) -> int:
@@ -1493,6 +1641,64 @@ def plan_tree_lines(plan_id: str) -> list[str]:
 
     walk(plan.get("steps") or [], "", 0)
     return out
+
+
+def plan_tree_nodes(pid: str) -> list[dict]:
+    """superstep 树的**结构化**节点（plan YAML 树 × state 对账一次；TUI 计划详情页用）。
+
+    每节点 ``{id, path, kind, mode, status, member, brief, children}``：
+    ``kind`` ∈ {``super``, ``leaf``}；组 ``mode`` ∈ {``serial``, ``parallel``}（叶子空串）；
+    叶子 ``status`` = state 原值（缺省 pending）；组 ``status`` = 由叶子推导的聚合
+    （``done``=全完成 / ``started``=任一起跑 / ``pending``=全未动，不落盘）。
+    ``plan_tree_lines``（文本树，返工卡片仍用）保留不动；plan 缺席 → 空表。
+    """
+    if not _plan_path(pid).exists():
+        return []
+    plan = _load_yaml(pid)
+    status_of = _status_of(_load_state(pid))
+    tree = _tree(plan)
+
+    def walk(items: list, prefix: str) -> list[dict]:
+        out: list[dict] = []
+        for i, raw in enumerate(items):
+            if not isinstance(raw, dict):
+                continue
+            name = str(raw.get("id") or f"s{i + 1}")
+            path = f"{prefix}.{name}" if prefix else name
+            kids = raw.get("children")
+            is_group = isinstance(kids, list) and bool(kids)
+            if is_group:
+                agg = tree.aggregate(path, status_of)
+                status = (
+                    "done"
+                    if agg["done"]
+                    else ("started" if agg["started"] else "pending")
+                )
+                mode = (
+                    "parallel"
+                    if str(raw.get("mode") or "serial") == "parallel"
+                    else "serial"
+                )
+                children = walk(kids, path)
+            else:
+                status = status_of(path)
+                mode = ""
+                children = []
+            out.append(
+                {
+                    "id": name,
+                    "path": path,
+                    "kind": "super" if is_group else "leaf",
+                    "mode": mode,
+                    "status": status,
+                    "member": str(raw.get("member") or ""),
+                    "brief": str(raw.get("brief") or ""),
+                    "children": children,
+                }
+            )
+        return out
+
+    return walk(plan.get("steps") or [], "")
 
 
 def _jury_case_ruling(case_id: str) -> tuple[str, str]:

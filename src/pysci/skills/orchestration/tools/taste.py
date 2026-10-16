@@ -427,6 +427,82 @@ def pending_review_count() -> int:
     return sum(1 for r in _load_records() if not r.get("review"))
 
 
+# ---------------------------------------------------------------------------
+# 盲审反转流程（2_REFACTOR §10：隐去 twin 答案逐案盲审 → 偏差报告入强制处理队列）
+# ---------------------------------------------------------------------------
+def blind_queue() -> list[dict[str, Any]]:
+    """待盲审队列：无 ``review`` 字段的记录，按 ``ts`` 升序（TUI 盲审逐案呈现用）。
+
+    每项 ``{case_id, ts, case_file, question, option_a, option_b, evidence, case_head}``：
+    案情复用 :func:`jury.parse_case`；案卷文件缺失/不可解析（含 consult 自由形式案卷）
+    时回落 ``case_head`` + 「案卷缺失」提示——**可审不崩**。
+    **绝不含** twin 答案（``choice``/``reason``/``body``/``confidence``/``parsed``）：
+    先隐去答案让用户自选，提交时的一致性比对走 :func:`blind_case`。
+    """
+    rows = [r for r in _load_records() if not r.get("review")]
+    rows.sort(key=lambda r: str(r.get("ts") or ""))
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        case_file = str(r.get("case_file") or "")
+        question = option_a = option_b = evidence = ""
+        try:
+            case = parse_case(case_file)
+            question = case.question.strip()
+            option_a = case.option_a.strip()
+            option_b = case.option_b.strip()
+            evidence = case.evidence.strip()
+        except (OSError, ValueError):
+            question = str(r.get("case_head") or "").strip() or "（无案情摘要）"
+            evidence = f"（案卷缺失或不可解析：{case_file or '未记录路径'}）"
+        out.append(
+            {
+                "case_id": str(r.get("case_id") or ""),
+                "ts": str(r.get("ts") or ""),
+                "case_file": case_file,
+                "question": question,
+                "option_a": option_a,
+                "option_b": option_b,
+                "evidence": evidence,
+                "case_head": str(r.get("case_head") or ""),
+            }
+        )
+    return out
+
+
+def blind_case(case_id: str) -> dict[str, Any] | None:
+    """完整留痕记录（**含 twin 答案**）——盲审提交时的一致性比对面；无此 id → ``None``。"""
+    for r in _load_records():
+        if str(r.get("case_id")) == str(case_id):
+            return r
+    return None
+
+
+def ruling_rows(limit: int = 0) -> list[dict[str, Any]]:
+    """已复核（记录含 ``review``）的裁决行，新→旧；``limit<=0`` 全量。
+
+    每行 ``{case_id, ts, choice, confidence, reason, review, night, authority,
+    case_head}``——待决/验收页与审计视图的结构化读数。
+    """
+    rows = [r for r in _load_records() if r.get("review")]
+    rows.sort(key=lambda r: str(r.get("ts") or ""), reverse=True)
+    out: list[dict[str, Any]] = []
+    for r in rows if limit <= 0 else rows[:limit]:
+        out.append(
+            {
+                "case_id": str(r.get("case_id") or ""),
+                "ts": str(r.get("ts") or ""),
+                "choice": str(r.get("choice") or ""),
+                "confidence": r.get("confidence"),
+                "reason": str(r.get("reason") or ""),
+                "review": r.get("review"),
+                "night": bool(r.get("night")),
+                "authority": str(r.get("authority") or ""),
+                "case_head": str(r.get("case_head") or ""),
+            }
+        )
+    return out
+
+
 def ruling_lines(limit: int = 8) -> list[str]:
     """审计面逐条呈现（要素：时间/类型/案卷 id/选择/置信度/理由/夜航预授权标记/复核态）。"""
     rows = twin_rulings(limit)
@@ -459,8 +535,19 @@ def ruling_lines(limit: int = 8) -> list[str]:
     return out
 
 
-def apply_review(case_id: str, *, verdict: str, note: str = "") -> tuple[int, str]:
+def apply_review(
+    case_id: str,
+    *,
+    verdict: str,
+    note: str = "",
+    blind: dict[str, Any] | None = None,
+) -> tuple[int, str]:
     """用户复核一次 twin 判断/裁决（``confirmed``/``rejected``）→ 记录留痕 + 单一账目记账。
+
+    ``blind``（盲审反转流程 §10 的批复载荷，可选——旧调用不传照常工作）：
+    ``{user_choice, agree: bool, remedy: "restore"|"none"|"other"|None, requirements: str}``
+    ——原样并入 ``review`` 落盘；不一致时的偏差报告由调用方（TUI）另经
+    :func:`mirror.append_deviation` 入强制处理队列，本函数只管留痕。
 
     否决另入 journal（``kind="override"``、reason=批语）——后续改进（twin 语料/宪章修订）
     循此追溯；确认入 ``kind="verdict"``。账目写失败 fail-soft（review 已落进记录文件）。
@@ -474,7 +561,12 @@ def apply_review(case_id: str, *, verdict: str, note: str = "") -> tuple[int, st
         return 2, f"[!] 留痕不可读：{exc}"
     if not isinstance(record, dict):
         return 2, "[!] 留痕格式异常（非对象）"
-    record["review"] = {"ts": _now(), "verdict": verdict, "note": note}
+    record["review"] = {
+        "ts": _now(),
+        "verdict": verdict,
+        "note": note,
+        "blind": blind,
+    }
     _atomic_write_json(path, record)
     try:
         from . import journal
