@@ -439,18 +439,31 @@ def test_line_queues_reports_real_deviation_count(mface):
 # ⑤ taskbooks：家族归组 + Markdown 详情
 # ---------------------------------------------------------------------------
 def test_families_on_real_taskbook_data():
-    """真实 ``data/taskbooks/`` 实测：返工家族 tb-20261015-194834-3 一族最新=轮次最大者。"""
+    """真实 ``data/taskbooks/`` 实测：既有返工家族 tb-20261015-194834-3 在册且归组自洽。
+
+    **不钉死「latest 是哪个具体 id」**：该家族随返工轮次增长——实测 2026-10-17 组长新开
+    返工第 2 轮（`tb-20261017-044604-3-2`），旧断言 `latest == tb-20261015-225652-3-1`
+    随之失效变红（把「此刻的真实数据」当出厂判据的经典坑）。改为**数据自证**：latest 必须是
+    族内 ``(rework_round, ts)`` 序最大者——判据仍咬「排序对不对」，但不随真实数据漂。
+    """
     fams = taskbooks.families()
     assert fams
     by_root = {f["root"]: f for f in fams}
     fam = by_root.get("tb-20261015-194834-3")
     assert fam is not None, "既有返工家族 tb-20261015-194834-3 必须在册"
-    assert fam["latest"] == "tb-20261015-225652-3-1"
-    assert fam["members"][0]["id"] == fam["latest"]
-    assert taskbooks.family_label(fam["members"][0]) == "返工第 1 轮"
-    assert fam["members"][-1]["id"] == fam["root"]
+
+    newest = max(
+        fam["members"],
+        key=lambda m: (int(m.get("rework_round") or 0), str(m.get("ts") or "")),
+    )
+    assert fam["latest"] == str(newest["id"]), "latest 须＝族内轮次/时刻最大者"
+    assert fam["members"][0]["id"] == fam["latest"], "展示序首项＝最新"
+    assert fam["members"][-1]["id"] == fam["root"], "展示序末项＝本体"
     assert taskbooks.family_label(fam["members"][-1]) == "本体"
-    assert fam["size"] == len(fam["members"]) == 2
+    assert fam["size"] == len(fam["members"]) >= 2
+    assert all(
+        taskbooks.family_label(m).startswith("返工第") for m in fam["members"][:-1]
+    ), "非本体成员都该是返工轮次标签"
     # 每件任务书恰好属于一家；家族列表按 latest 的 ts 降序
     assert sum(f["size"] for f in fams) == len(taskbooks.list_all())
     tss = [
