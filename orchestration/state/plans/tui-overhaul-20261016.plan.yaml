@@ -18,9 +18,9 @@ steps:
   effort: medium
 - id: s3-modules
   member: devops
-  brief: modules.py 重构——_fingerprint_module 加 digest 参数（徽标不再构建全详情）+2 秒 TTL memo；_plans_* 走 overview_rows 并删「推进：/多 plan 并行」尾行；_review_detail 删 reviewer 附属队列/审查面超时/审查入口三段；_pending_detail 删「批复入口/口述动作」并增偏差报告区块；_system_detail 倒计时置顶
+  brief: modules.py 重构——_fingerprint_module 加 digest 参数（徽标不再构建全详情）+2 秒 TTL memo；_plans_* 走 overview_rows 并删「推进：/多 plan 并行」尾行；_review_detail 删 reviewer 附属队列/审查面超时/审查入口三段；_pending_detail 删「批复入口/口述动作」并增偏差报告区块；_system_detail 倒计时置顶；｜用户追加：全 TUI 状态图标后一律加空格再跟文字（✔ 完成/⊘ 中止；plans.mark 取值、taskbooks.status_badge、app 徽标 ● NEW、queues 在途行等凡图标贴字处），防终端歧义宽重叠
   dirs:
-  - src/pysci/skills/orchestration/tools/tui
+  - src/pysci/skills/orchestration/tools
   - tests/skills/orchestration
   effort: medium
 - id: s4-app-frame
@@ -39,21 +39,21 @@ steps:
   effort: high
 - id: s6-plans-ui
   member: devops
-  brief: 计划与派发——plans 列表视图（新→旧，徽标+id+进度+goal）+plan-detail 页（头卡+Textual Tree 渲染 plan_tree_nodes 环节树）
+  brief: 计划与派发——plans 列表视图（新→旧，图标＋空格＋id＋进度＋goal）+plan-detail 页：头卡＋可折叠 Tree 环节树（保留，数据 plans.plan_tree_nodes）＋树下 Markdown 文本面板（选中环节联动渲染 brief/evidence/成段文本；一切成段文本框一律 Textual Markdown 渲染）；用户修订：Tree 与 Markdown 兼得，极端冲突时优先保可折叠树
   dirs:
   - src/pysci/skills/orchestration/tools/tui
   - tests/skills/orchestration
   effort: medium
 - id: s7-boards-ui
   member: devops
-  brief: 决策审计列表+详情页（inspectd.decision_rows，attention 置顶）；队列与运行卡片化（每成员一卡含空队、在途带成员名）；系统与路由卡片化（倒计时卡置顶每秒跳动）；待决与验收卡片化（含偏差报告卡）；各视图删「Esc/← 返回主菜单」
+  brief: 决策审计列表+详情页（inspectd.decision_rows，attention 置顶）；队列与运行卡片化（每成员一卡含空队、在途带成员名）；系统与路由卡片化（倒计时卡置顶每秒跳动）；待决与验收卡片化（含偏差报告卡）；各视图删「Esc/← 返回主菜单」；｜用户追加：决策审计详情页正文一律 Textual Markdown 渲染（头卡＋Markdown）；图标后加空格全 TUI 统一
   dirs:
   - src/pysci/skills/orchestration/tools/tui
   - tests/skills/orchestration
   effort: medium
 - id: s8-review-blind
   member: devops
-  brief: 盲审交互流程——入口分派（有待盲审直进盲审面）；逐案大选项卡（隐 twin 答案）+提交自动下一项；不一致展开「原因批复」多行框+「是否需恢复更改」三选一（其他→具体要求框）；偏差报告入 mirror-queue（kind=deviation）、「需恢复」自动建偏差纠正任务书；无待审/处理完进已裁决列表+裁决详情页
+  brief: 盲审交互流程——入口分派（有待盲审直进盲审面）；逐案大选项卡（隐 twin 答案）+提交自动下一项；不一致展开「原因批复」多行框+「是否需恢复更改」三选一（其他→具体要求框）；偏差报告入 mirror-queue（kind=deviation）、「需恢复」自动建偏差纠正任务书；无待审/处理完进已裁决列表+裁决详情页；｜用户追加：裁决详情页正文一律 Textual Markdown 渲染（头卡＋Markdown）；图标后加空格全 TUI 统一
   dirs:
   - src/pysci/skills/orchestration/tools/tui
   - tests/skills/orchestration
