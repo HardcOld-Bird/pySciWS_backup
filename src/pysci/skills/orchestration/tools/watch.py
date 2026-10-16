@@ -247,6 +247,52 @@ def _devops_dispatch_inflight() -> bool:
         return False
 
 
+#: 可就地查旁证的事件类型（``subject`` = **成员队列条目 id**）——backlog 20261017-001500：
+#: 这两类的「积压」多半只是**账面欠盖章**（活已干完、``ack_seq`` 未推），不该按「有活却
+#: 没人干」叫醒组长；其余类型（NEEDS-LEADER 等人工事项）无旁证可查，维持原唤醒。
+_EVIDENCE_EVENT_TYPES: frozenset[str] = frozenset(
+    {_events.JOB_DONE, _events.STEP_REVIEW_DONE}
+)
+
+
+def _suspect_acked(ev: dict[str, Any]) -> str:
+    """「疑已处理」旁证：回证据短语（**非空即疑已处理**），查不到回空串（照常唤醒）。
+
+    两路旁证（任一成立即可，都便宜且确定性）：
+
+    1. ``subject`` 对应的条目在当前队列里已落**终态**（``done``/``failed``）——活已收尾，
+       欠的只是 :func:`events.drain` 那一次盖章；
+    2. ``subject`` 的**交付全文留档** ``state/deliveries/<subject>.md`` 在盘——队列被裁剪/
+       轮转后仍可作证。
+
+    边界（决定「哪边叫醒组长」）：事件类型不在 :data:`_EVIDENCE_EVENT_TYPES`（无旁证可查）
+    → 空串；``subject`` 查不到或条目仍在队里（``pending``/``in_progress``）→ 空串；旁证面
+    读失败 → 空串（**宁可报，不静默**——兜底防漏唤是这条报警的本意）。
+    """
+    if str(ev.get("event") or "") not in _EVIDENCE_EVENT_TYPES:
+        return ""
+    subj = str(ev.get("subject") or "").strip()
+    if not subj:
+        return ""
+    try:
+        from . import queues as _queues
+        from . import queueworker as _qw
+
+        for member in _queues.all_members():
+            for it in _queues.items(member):
+                if str(it.get("id")) != subj:
+                    continue
+                status = str(it.get("status") or "")
+                if status in ("done", "failed"):
+                    return f"{member}:{subj} 队列条目已终态（{status}）"
+                return ""  # 还在队里排队/在跑 → 真积压，维持唤醒
+        if (_qw.DELIVERIES_DIR / f"{subj}.md").is_file():
+            return f"{subj} 交付留档已在盘"
+    except Exception:  # noqa: BLE001 - 旁证面读失败按「无证据」（宁可报）
+        return ""
+    return ""
+
+
 def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     """队列压力读数（PENDING-WORK / STALL 判据的**单一实现**，§纪律「同一能力不留两份」）。
 
@@ -260,7 +306,10 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
     3. **支撑席**队列有 ``pending`` 且无 worker：bencher 常驻；inspector 仅**开关开启时**计入
        （开关关闭 → 不拉起巡检，其存量只报不告警——否则每次巡更都叫醒组长去处理一个本来
        就不跑的队列，正是「唤醒→无事」的反面示例，用户 2026-10-14 点名降噪）；
-    4. 统一事件流有超一个巡更周期未排空的事件（:func:`events.unacked`）；
+    4. 统一事件流有超一个巡更周期未排空的事件（:func:`events.unacked`）——**按旁证细分**
+       （backlog 20261017-001500）：``JOB-DONE``/``STEP-REVIEW-DONE`` 且其 ``subject`` 对应
+       条目已终态／留档在盘 → 降级 ``notes``（「已处理疑未销账」，不唤醒）；其余（含
+       ``NEEDS-LEADER`` 等无旁证可查者）才是**真积压**，进 ``reasons`` 唤醒；
     5. ``data/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）；
     6. **夜航时段**（``[night] enabled=true``，PSEP_2 §3.3b）``state/mirror-pending.json``
        非空——此刻「谁在等用户」的事项应转 twin 或自行裁决，不得等用户；非夜航时段
@@ -387,10 +436,33 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
         for e in unacked
         if (_age_epoch(e.get("ts"), moment) or 0) > cfg["pending_throttle_s"]
     ]
+    # 超时项**旁证细分**（backlog 20261017-001500）：消费账是两段式——watch 唤醒（叫人）
+    # ≠ `events drain` 销账（盖章）。组长常已把事件**处理完毕**却没盖章，旧口径一律打成
+    # 「有活却没人干」＝错怪，还逼出一轮纯记账性唤醒。故先查旁证：
+    #   有旁证 → 「已处理疑未销账」**降级为 status 注记**（notes，不唤醒）；
+    #   无旁证 / 旁证不成立 / 类型无旁证可查（如 NEEDS-LEADER）→ 维持唤醒（兜底防漏唤）。
     if stale:
-        reasons.append(
-            f"统一事件流 {len(stale)} 条超 {cfg['pending_throttle_s'] // 60}min 未排空"
-        )
+        unhandled: list[dict[str, Any]] = []
+        suspected: list[str] = []
+        for ev in stale:
+            evidence = _suspect_acked(ev)
+            if evidence:
+                suspected.append(evidence)
+            else:
+                unhandled.append(ev)
+        if suspected:
+            shown = "；".join(suspected[:3]) + (
+                f"…（共 {len(suspected)} 条）" if len(suspected) > 3 else ""
+            )
+            notes.append(
+                f"统一事件流 {len(suspected)} 条**已处理疑未销账**"
+                "（请 `orch events drain` 盖章——活已收尾，不再唤醒）：" + shown
+            )
+        if unhandled:
+            reasons.append(
+                f"统一事件流 {len(unhandled)} 条超 "
+                f"{cfg['pending_throttle_s'] // 60}min 未排空"
+            )
     try:
         from . import taskbooks as _taskbooks
 
