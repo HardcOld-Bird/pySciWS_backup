@@ -1,0 +1,25 @@
+id: tui-polish-20261016
+goal: TUI 大改版实测抛光——用户实机验收 9 条反馈修复（选中态配色/树状制表符与对齐/标题配色/VSCode 启动器/Esc 路由/倒计时人性化/回退列表排版/决策行间距/任务书家族编号），一次性交付
+read: plan-decomposition.md
+steps:
+- id: polish-a
+  member: devops
+  brief: 视觉四件——①列表选中态标题与状态徽标改黑色（橙底可辨，覆盖任务书/决策/全部列表）②次级行制表符 ├/└ 连线＋徽标列定宽使 └ 对齐＋徽标与标题留距③详情页/Markdown 标题换高对比色④决策行 [!] 与标题留距＋选中可见
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests/skills/orchestration
+  effort: medium
+- id: polish-b
+  member: devops
+  brief: 行为两件——⑤「用 VSCode 打开原文」启动器稳健化（code.cmd/PATH/常见安装位解析、cmd /c 调 .cmd、报错带尝试路径）⑥Esc 路由：驳回面板返回进入前视图（tb-detail 或任务书列表）、新增面板 Esc 回列表
+  dirs:
+  - src/pysci/skills/orchestration/tools/tui
+  - tests/skills/orchestration
+  effort: medium
+- id: polish-c
+  member: devops
+  brief: 文案排版三件——⑦倒计时人性化（天/时/分/秒，三处统一且每秒实时精确到秒）⑧渠道回退列表每项一行＋缩进层级整理⑨任务书家族自动编号
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests/skills/orchestration
+  effort: medium

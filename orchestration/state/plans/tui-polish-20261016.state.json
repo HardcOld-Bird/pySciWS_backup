@@ -1,0 +1,25 @@
+{
+  "plan_id": "tui-polish-20261016",
+  "created": "2026-10-16T21:53:47+08:00",
+  "goal": "TUI 大改版实测抛光——用户实机验收 9 条反馈修复（选中态配色/树状制表符与对齐/标题配色/VSCode 启动器/Esc 路由/倒计时人性化/回退列表排版/决策行间距/任务书家族编号），一次性交付",
+  "steps": [
+    {
+      "id": "polish-a",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261016-215359-tui-polish-20261016-polish-a",
+      "task_file": "orchestration/state/plans/tui-polish-20261016-polish-a.task.md"
+    },
+    {
+      "id": "polish-b",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "polish-c",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null
+}
