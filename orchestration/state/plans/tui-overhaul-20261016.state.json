@@ -68,15 +68,19 @@
     },
     {
       "id": "s8-review-blind",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261016-203835-tui-overhaul-20261016-s8-review-blind",
-      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s8-review-blind.task.md"
+      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s8-review-blind.task.md",
+      "session_id": "73d2478d-8fd1-4bb5-978f-65b55b82aeef",
+      "kind": "result"
     },
     {
       "id": "s9-tests",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261016-210617-tui-overhaul-20261016-s9-tests",
+      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s9-tests.task.md"
     }
   ],
   "completed_at": null
