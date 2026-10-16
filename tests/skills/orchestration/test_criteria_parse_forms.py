@@ -37,6 +37,23 @@ def test_reads_bold_form():
     assert crit == CRIT
 
 
+def test_reads_markdown_heading_form():
+    """**markdown 标题形态**（``## success_criteria:``）也算——文档原话是「段」，读者自然
+    这么写；旧口径整条漏读、真实判据被当「缺判据」误拒（20261016-203600-devops 首写实锤）。"""
+    _kind, crit = delivery.parse_suggestion_fields(
+        f"kind: defect\n\n## success_criteria:\n{CRIT}\n"
+    )
+    assert crit == CRIT
+
+
+def test_reads_markdown_heading_with_kind_heading():
+    """同族顺检：``## kind: usability`` 标题形态也能读出分类。"""
+    kind, _crit = delivery.parse_suggestion_fields(
+        "## kind: usability\n\nsuccess_criteria:\n- x\n"
+    )
+    assert kind == "usability"
+
+
 def test_reads_inline_value_on_the_marker_line():
     """**行内值**也算判据（原件把全文直接写在标记行上——旧口径视而不见）。"""
     _kind, crit = delivery.parse_suggestion_fields(

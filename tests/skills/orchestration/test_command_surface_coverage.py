@@ -102,6 +102,27 @@ def test_suggestion_member_column_semantics_documented():
 
 
 # ---------------------------------------------------------------------------
+# 立单样例与源文件命名（backlog 20261016-215944 / -215946 判据②）
+# ---------------------------------------------------------------------------
+def test_suggestion_minimal_example_documented():
+    """立单块给出**可整体复制的最小样例**＋判据标记的接受形态（含 markdown 标题形态）。
+
+    缺陷（20261016-203600-devops 首写实锤）：文档只说「`success_criteria:` 段」，读者自然写
+    `## success_criteria` 标题段，而旧解析器不认 → 首写必返工一轮。
+    """
+    doc = _doc()
+    assert "最小样例" in doc
+    assert "`success_criteria:`" in doc
+    assert "接受形态" in doc and "标题形态" in doc, "须写明标题形态已被支持"
+
+
+def test_plan_new_source_file_naming_documented():
+    """`plan new` 行补源文件命名提示（勿与目标同名——同名行为未定义）。"""
+    doc = _doc()
+    assert "勿与目标同名" in doc
+
+
+# ---------------------------------------------------------------------------
 # `plan adhoc` 的阻塞语义（backlog 20261015-211200）
 # ---------------------------------------------------------------------------
 SKILL = ORCHESTRATION_ROOT / "skills" / "orchestration" / "SKILL.md"
