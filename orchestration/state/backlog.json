@@ -2897,12 +2897,15 @@
       "kind": "usability",
       "success_criteria": "- `command-surface.md` 立单块补一段**可整体复制的最小合规样例**（含 `kind:` 行、`source:`/`fingerprint:` 行、`success_criteria:` 行首标记＋紧随判据行、≥40 字实质正文），并注明「`## success_criteria` 等 markdown 标题形态不被解析器认（或已被认——以实现为准写清）」；\n- 解析器二选一：兼容 `## success_criteria` 标题段形态；或保持只认行首形态但在文档与报错文案**明说不支持 markdown 标题形态**（报错已列接受形态，文档与之互相引用）；\n- 解析器单测钉住「接受形态清单」（每种可接受形态一条正例＋markdown 标题形态一条按定案断言）；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261016-215944-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-16T22:01:35+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 8133fdd）",
       "source": "leader",
       "started_at": "2026-10-16T22:01:39+08:00",
-      "worktree": "20261016-215944-devops"
+      "worktree": "20261016-215944-devops",
+      "done_at": "2026-10-16T22:33:56+08:00",
+      "batch_size": 3,
+      "batch_seed": "20261016-215944-devops"
     },
     {
       "id": "20261016-215945-devops",
@@ -2911,12 +2914,15 @@
       "kind": "usability",
       "success_criteria": "- `references/drain-watch.md` 新增「唤醒未达排障清单」一节（按需档 ≤8KB）：固定排查顺序（watch-arm.log 命中与否 → watch.json fired/heartbeat/consumed 与当前流身份撞车 → events-seen 水位 vs 流 max seq 倒挂 → merge `.bak-<ts>` 对照是否流被覆盖 → watchdog-runs listener 心跳），每步给一条可执行读命令；\n- `_mark_late` 标注细分：事件发生时刻有新鲜 listener 心跳则**不得**标「聋期」，改标「去重/水位吞后补报」（或中性「迟报」并附成因档位）；测试构造「listener 活着＋事件被吞→补报」断言文案不含「聋期」；\n- （酌情）`orch status` watch 段增一行唤醒链健康读数（水位倒挂/毒身份），异常才显示；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261016-215945-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-16T22:01:36+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 8133fdd）",
       "source": "leader",
       "started_at": "2026-10-16T22:08:24+08:00",
-      "worktree": "20261016-215945-devops"
+      "worktree": "20261016-215945-devops",
+      "done_at": "2026-10-16T22:33:56+08:00",
+      "batch_size": 3,
+      "batch_seed": "20261016-215944-devops"
     },
     {
       "id": "20261016-215946-devops",
@@ -2925,12 +2931,15 @@
       "kind": "usability",
       "success_criteria": "- `plan new` / `plan advance` / `plan run` 的 `[NEXT]` 引导**并列**给出 `plan advance`（标注「入队即返回，长任务首选」）与 `plan run`（标注「同步阻塞到交接」）两种推进方式；\n- `command-surface.md` plan new 行补一句：源文件任意位置、登记后可删、**勿与 `state/plans/<id>.plan.yaml` 目标名同名**（或说明同名时的行为）；\n- 相关文案测试（若有钉 [NEXT] 字样的用例）同步；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261016-215946-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-16T22:01:36+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 8133fdd）",
       "source": "leader",
       "started_at": "2026-10-16T22:17:04+08:00",
-      "worktree": "20261016-215946-devops"
+      "worktree": "20261016-215946-devops",
+      "done_at": "2026-10-16T22:33:56+08:00",
+      "batch_size": 3,
+      "batch_seed": "20261016-215944-devops"
     },
     {
       "id": "20261016-220500-devops",
@@ -2939,10 +2948,12 @@
       "kind": "usability",
       "success_criteria": "- `plan run` 从 `pysci-orch` 命令面移除（二选一定案并留痕：直接不可用；或保留为打印「已废弃，请用 plan advance / plan adhoc」的指路 stub）；`plan advance` 承接其独有旗标 `--name`/`--max-turns`（或论证并记录为何不需要）；\n- 阻塞原语**保留在内部**供 `plan adhoc` 及全部内部调用点使用：审计 `src/` 内所有调用面（含 adhoc、夜航/自动化路径），`plan adhoc` 阻塞语义回归测试不变；\n- `[NEXT]` 引导与 `command-surface.md`/SKILL 文档只讲 `plan advance`（事件驱动）＋ `plan adhoc`（计划外同步），无 `plan run` 残留——**本条吸收 20261016-215946 判据①（其「并列 run/advance」表述以本单为准作废；该单判据② plan new 源文件命名提示仍有效）**；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261016-220500-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-16T22:08:21+08:00",
       "note": "",
-      "source": "leader"
+      "source": "leader",
+      "started_at": "2026-10-16T22:33:56+08:00",
+      "worktree": "20261016-220500-devops"
     },
     {
       "id": "20261016-221800-devops",
