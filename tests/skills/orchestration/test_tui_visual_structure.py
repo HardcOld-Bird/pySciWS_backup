@@ -289,6 +289,10 @@ def test_walk_every_surface_without_crash():
                 elif mod.key == "decisions":
                     assert app.view == "decisions"  # s7：决策审计面板
                     await pilot.press("escape")
+                elif mod.key == "review":
+                    # s8：盲审/已裁决面板（有待审进盲审，否则已裁决列表）
+                    assert app.view in ("review-blind", "review-rulings")
+                    await pilot.press("escape")
                 else:
                     assert app.view == "detail"
                     await pilot.press("escape")

@@ -80,8 +80,8 @@ def test_every_module_detail_has_real_readings_and_no_placeholder():
             await pilot.pause()
             lv = app.query_one("#menu", ListView)
             for i, mod in enumerate(app._mods):
-                if mod.key in ("taskbooks", "plans", "decisions"):
-                    continue  # 三者各走专用面板（任务书①／计划 s6／决策 s7，见各自测试）
+                if mod.key in ("taskbooks", "plans", "decisions", "review"):
+                    continue  # 四者各走专用面板（任务书①／计划 s6／决策 s7／盲审 s8，见各自测试）
                 lv.index = i
                 await pilot.pause()
                 await pilot.press("enter")

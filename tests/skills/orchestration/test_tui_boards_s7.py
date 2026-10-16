@@ -202,18 +202,34 @@ def test_board_faces_clean_and_detail_body_keeps_support_seat(tmp_path, monkeypa
 
 
 def test_non_board_modules_still_render_text_face():
-    """无卡片规格的模块（盲审与审查）仍走文本面——卡片栈隐藏、文本 Static 在场。"""
+    """无卡片规格的模块仍走**文本面**（卡片栈隐藏、文本 Static 在场）。
+
+    s8 起七个模块各有看板或专用面板，故用**替身模块**（key 无卡片规格）钉这条兜底路径。
+    """
+    from pysci.skills.orchestration.tools.tui.modules import Module
+
+    def _stub() -> Module:
+        return Module(
+            key="fake",
+            title="替身模块",
+            summary=lambda: ["读数一"],
+            detail=lambda: ["读数行一", "读数行二"],
+            cursor=lambda: "0",
+            updates_since=lambda old: 0,
+        )
 
     async def _go():
-        app = tui.PysciTUI()
+        app = tui.PysciTUI(mods=[_stub()])
         async with app.run_test(size=(120, 60)) as pilot:
             await pilot.pause()
-            await _open_module(app, pilot, 3)  # 盲审与审查
+            await _open_module(app, pilot, 0)  # 唯一模块
             return (
                 app.view,
                 app.query_one("#detail-body-text", Static).display,
                 app.query_one("#detail-cards").display,
+                app.detail_body,
             )
 
-    view, text_shown, cards_shown = _run(_go())
+    view, text_shown, cards_shown, body = _run(_go())
     assert view == "detail" and text_shown is True and cards_shown is False
+    assert "读数行一" in body

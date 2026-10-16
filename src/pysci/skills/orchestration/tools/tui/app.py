@@ -56,6 +56,7 @@ from .theme import (
 )
 from .widgets import (
     ChainListItem,
+    ChoiceCard,
     MarkedTree,
     MarkedVerticalScroll,
     RowActivated,
@@ -128,6 +129,9 @@ _SCROLL_PANES: dict[str, tuple[str, str]] = {
     "plan-detail": ("#plan-detail-body", "#plan-detail-scroll"),
     "decisions": ("#decisions-list", "#decisions-scroll"),
     "decision-detail": ("#decision-detail-body", "#decision-detail-scroll"),
+    "review-blind": ("#blind-body", "#blind-scroll"),
+    "review-rulings": ("#rulings-list", "#rulings-scroll"),
+    "ruling-detail": ("#ruling-detail-body", "#ruling-detail-scroll"),
 }
 
 #: 位置指示前缀（测试与用户读同一串）。
@@ -178,6 +182,9 @@ class PysciTUI(App):
         ("a", "tb_accept", "接受选中"),
         ("r", "tb_reject", "驳回选中"),
         ("o", "tb_open_latest", "打开最新"),
+        # 盲审选项键盘可达（只在 review-blind 视图内生效；输入框聚焦时按键归文本输入）
+        Binding("1", "blind_pick_a", "选项 A", show=False),
+        Binding("2", "blind_pick_b", "选项 B", show=False),
         ("j", "journal", "口述"),
         ("q", "quit", "退出"),
         # 详情页滚动（只在 detail/tb-detail 生效，见 check_action；不占 footer 广告面）
@@ -257,6 +264,31 @@ class PysciTUI(App):
     #decision-detail-head {{ {_T_BODY} height: auto; }}
     #decision-detail-md {{ {_T_BODY} height: auto; margin-top: 1; }}
     #decision-detail-scroll {{ {_T_SUBTLE} height: 1; }}
+    #review-blind {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #blind-count {{ {_T_TITLE} }}
+    #blind-body {{ {_T_BODY} height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }}
+    #blind-question {{ {_T_BODY} height: auto; }}
+    #blind-evidence {{ {_T_SUBTLE} height: auto; margin-top: 1; }}
+    #blind-options {{ height: auto; margin-top: 1; }}
+    #blind-a {{ width: 1fr; margin-right: 1; }}
+    #blind-b {{ width: 1fr; }}
+    #blind-ask {{ height: auto; {_T_INSET} {_T_BORDER_SOFT} margin-top: 1; }}
+    #blind-reason-label, #blind-remedy-label {{ {_T_SUBTLE} height: 1; }}
+    #blind-reason {{ height: 4; }}
+    #blind-requirements {{ height: 3; }}
+    #blind-msg {{ color: $success; }}
+    #blind-scroll {{ {_T_SUBTLE} height: 1; }}
+    #review-rulings {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #rulings-title {{ {_T_TITLE} }}
+    #rulings-list {{ height: 1fr; }}
+    #rulings-list > ListItem.-highlight {{ {_T_HL} }}
+    #rulings-scroll {{ {_T_SUBTLE} height: 1; }}
+    #ruling-detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #ruling-detail-title {{ {_T_TITLE} {_T_BORDER} {_T_INSET} }}
+    #ruling-detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }}
+    #ruling-detail-head {{ {_T_BODY} height: auto; }}
+    #ruling-detail-md {{ {_T_BODY} height: auto; margin-top: 1; }}
+    #ruling-detail-scroll {{ {_T_SUBTLE} height: 1; }}
     """
 
     def __init__(self, *, mods: list[Module] | None = None, seen_path=None) -> None:
@@ -307,6 +339,23 @@ class PysciTUI(App):
         self.decision_detail_scroll_mark = ""
         # 系统倒计时卡文本（每秒 tick 只刷这一张卡；首帧由卡片栈写入）
         self.detail_countdown_text = ""
+        # 盲审与审查（s8）：逐案状态机 + 已裁决列表/详情
+        self.blind_case_id = ""
+        self.blind_count = 0
+        self.blind_selected = ""
+        self.blind_ask_visible = False
+        self.blind_remedy = ""
+        self.blind_reason = ""
+        self.blind_requirements = ""
+        self.blind_msg = ""
+        self.blind_last_deviation: dict = {}
+        self.ruling_rows: list[dict] = []
+        self.ruling_detail_id = ""
+        self.ruling_detail_title = ""
+        self.ruling_detail_head = ""
+        self.ruling_detail_md = ""
+        self.ruling_detail_scroll = 0
+        self.ruling_detail_scroll_mark = ""
         self._plan_default_node = (
             None  # 首帧后要落到的树节点（见 _apply_plan_default_selection）
         )
@@ -458,6 +507,51 @@ class PysciTUI(App):
                     can_focus=False,
                 )
                 yield Static("", id="decision-detail-scroll")
+            with Vertical(id="review-blind"):
+                yield Static("", id="blind-count", markup=False)
+                yield MarkedVerticalScroll(
+                    Static("", id="blind-question", markup=False),
+                    Static("", id="blind-evidence", markup=False),
+                    Horizontal(
+                        ChoiceCard("A", "", id="blind-a", markup=False),
+                        ChoiceCard("B", "", id="blind-b", markup=False),
+                        id="blind-options",
+                    ),
+                    id="blind-body",
+                    can_focus=False,
+                )
+                yield Button("提交", id="blind-submit")
+                with Vertical(id="blind-ask"):
+                    yield Static(
+                        "① 原因批复（与 twin 不一致时必填）", id="blind-reason-label"
+                    )
+                    yield TextArea(id="blind-reason")
+                    yield Static("② 是否需恢复更改", id="blind-remedy-label")
+                    yield RadioSet(
+                        RadioButton("需恢复", value=True),
+                        RadioButton("不需恢复"),
+                        RadioButton("其他"),
+                        id="blind-remedy",
+                    )
+                    yield TextArea(id="blind-requirements")
+                    yield Button("确认", id="blind-confirm")
+                yield Static("", id="blind-msg", markup=False)
+                yield Static("", id="blind-scroll")
+            with Vertical(id="review-rulings"):
+                yield Static(
+                    "已裁决事项：↑↓ 选｜Enter 看详情｜Esc 返回", id="rulings-title"
+                )
+                yield _RowMarkedList(id="rulings-list")
+                yield Static("", id="rulings-scroll")
+            with Vertical(id="ruling-detail"):
+                yield Static("", id="ruling-detail-title")
+                yield MarkedVerticalScroll(
+                    card("", id="ruling-detail-head"),
+                    Markdown(id="ruling-detail-md"),
+                    id="ruling-detail-body",
+                    can_focus=False,
+                )
+                yield Static("", id="ruling-detail-scroll")
         yield Footer()
 
     def _rows(self) -> list[ListItem]:
@@ -548,6 +642,8 @@ class PysciTUI(App):
                 await self._open_plans()
             elif key == "decisions":
                 await self._open_decisions()
+            elif key == "review":
+                await self._open_review()
             else:
                 await self._open_detail(idx)
 
@@ -615,6 +711,8 @@ class PysciTUI(App):
             self.plan_detail_scroll, self.plan_detail_scroll_mark = y, text
         elif self.view == "decision-detail":
             self.decision_detail_scroll, self.decision_detail_scroll_mark = y, text
+        elif self.view == "ruling-detail":
+            self.ruling_detail_scroll, self.ruling_detail_scroll_mark = y, text
         else:
             self.detail_scroll, self.detail_scroll_mark = y, text
 
@@ -740,6 +838,10 @@ class PysciTUI(App):
             await self._open_plans()
         elif self.view == "decision-detail":
             await self._open_decisions()
+        elif self.view == "ruling-detail":
+            await self._open_rulings()
+        elif self.view in ("review-blind", "review-rulings"):
+            self._show_menu()
         elif self.view != "menu":
             self._show_menu()
         else:
@@ -779,6 +881,9 @@ class PysciTUI(App):
             "#plan-detail",
             "#decisions",
             "#decision-detail",
+            "#review-blind",
+            "#review-rulings",
+            "#ruling-detail",
         ):
             try:
                 self.query_one(sel).display = False
@@ -1129,6 +1234,13 @@ class PysciTUI(App):
             if 0 <= index < len(self.plan_rows):
                 self._open_plan_detail(str(self.plan_rows[index].get("id") or ""))
             return
+        if event.list_view.id == "rulings-list":
+            if self.view != "review-rulings":
+                return
+            index = int(event.index)
+            if 0 <= index < len(self.ruling_rows):
+                self._open_ruling_detail(self.ruling_rows[index])
+            return
         if event.list_view.id == "decisions-list":
             if self.view != "decisions":
                 return
@@ -1255,6 +1367,12 @@ class PysciTUI(App):
         if event.button.id == "tb-open-vscode" and self.view == "tb-detail":
             self._open_in_vscode()
             return
+        if event.button.id == "blind-submit" and self.view == "review-blind":
+            await self._submit_blind()
+            return
+        if event.button.id == "blind-confirm" and self.view == "review-blind":
+            await self._confirm_blind_ask()
+            return
         if event.button.id == "tb-reject-submit" and self.view == "tb-reject":
             await self._submit_reject()
 
@@ -1340,6 +1458,368 @@ class PysciTUI(App):
     def _set_tb_detail_msg(self, text: str) -> None:
         self.tb_detail_msg = text
         self.query_one("#tb-detail-msg", Static).update(text)
+
+    # ---- 盲审与审查（s8：盲审反转 §10 ＋ 偏差报告 §5.4）----------------------
+    async def _open_review(self) -> None:
+        """入口分派：**有待盲审 → 直接进盲审界面**；否则 → 已裁决事项列表。"""
+        from .. import taste as _taste
+
+        try:
+            pending = int(_taste.pending_review_count())
+        except Exception:  # noqa: BLE001 - 读数坏按「无待审」处置（不塌入口）
+            pending = 0
+        if pending > 0:
+            await self._open_blind()
+        else:
+            await self._open_rulings()
+
+    # -- 盲审界面（逐案状态机；提交前**绝不出现 twin 答案**）--
+    @staticmethod
+    def _blind_queue() -> list[dict]:
+        """待盲审队列（`taste.blind_queue()` 天然不含 choice/reason/body）。"""
+        from .. import taste as _taste
+
+        try:
+            return [dict(r) for r in _taste.blind_queue()]
+        except Exception:  # noqa: BLE001 - 读数坏不塌入口
+            return []
+
+    async def _open_blind(self) -> None:
+        self.view = "review-blind"
+        self._hide_all_views()
+        self.query_one("#review-blind", Vertical).display = True
+        await self._render_blind_case()
+
+    async def _render_blind_case(self) -> None:
+        """呈现队首一案：顶部计数 ＋ 案情（问题/证据）＋ 选项大卡 A/B；无待审 → 已裁决列表。"""
+        queue = self._blind_queue()
+        self.blind_count = len(queue)
+        self.blind_selected = ""
+        self.blind_ask_visible = False
+        self.blind_remedy = ""
+        self.blind_reason = ""
+        self.blind_requirements = ""
+        self.query_one("#blind-ask", Vertical).display = False
+        self.query_one("#blind-requirements", TextArea).display = False
+        self.query_one("#blind-reason", TextArea).text = ""
+        self.query_one("#blind-requirements", TextArea).text = ""
+        self._set_blind_msg("")
+        if not queue:
+            self.blind_case_id = ""
+            await self._open_rulings()  # 处理完 → 已裁决事项列表
+            return
+        item = queue[0]
+        self.blind_case_id = str(item.get("case_id") or "")
+        self.query_one("#blind-count", Static).update(f"尚待盲审 {self.blind_count} 项")
+        self.query_one("#blind-question", Static).update(
+            f"问题：{str(item.get('question') or '（无）')}"
+        )
+        evidence = str(item.get("evidence") or "")
+        self.query_one("#blind-evidence", Static).update(
+            f"证据：{evidence}" if evidence else ""
+        )
+        for value, sel in (("A", "a"), ("B", "b")):
+            option = str(item.get(f"option_{'a' if value == 'A' else 'b'}") or "（无）")
+            card_w = self.query_one(f"#blind-{sel}", ChoiceCard)
+            card_w.update(f"选项 {value}\n{option}")
+            card_w.set_selected(False)
+        self.query_one("#blind-submit", Button).disabled = False
+
+    def _pick_blind_option(self, value: str) -> None:
+        """选中选项大卡（点击 / 键盘 1、2 共用；提交前画面只有选项本身）。"""
+        if self.view != "review-blind" or self.blind_ask_visible:
+            return
+        self.blind_selected = str(value)
+        for val, sel in (("A", "a"), ("B", "b")):
+            try:
+                self.query_one(f"#blind-{sel}", ChoiceCard).set_selected(val == value)
+            except Exception:  # noqa: BLE001 - 组合面容忍缺件
+                continue
+
+    def action_blind_pick_a(self) -> None:
+        self._pick_blind_option("A")
+
+    def action_blind_pick_b(self) -> None:
+        self._pick_blind_option("B")
+
+    def on_choice_card_chosen(self, event: ChoiceCard.Chosen) -> None:
+        self._pick_blind_option(str(event.value))
+
+    def _blind_remedy_value(self) -> str:
+        """三选一读数：``需恢复``→restore｜``不需恢复``→none｜``其他``→other。"""
+        idx = self._radio_index("#blind-remedy", 0)
+        self.blind_remedy = ("restore", "none", "other")[min(idx, 2)]
+        return self.blind_remedy
+
+    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
+        """「其他」才显示 `#blind-requirements`（具体要求多行框）。"""
+        if getattr(event.radio_set, "id", "") != "blind-remedy":
+            return
+        self._blind_remedy_value()
+        self.query_one("#blind-requirements", TextArea).display = (
+            self.blind_remedy == "other"
+        )
+
+    async def _submit_blind(self) -> None:
+        """「提交」：与 twin 裁决比对——一致直接确认；不一致展开追问区（不预显答案）。"""
+        from .. import taste as _taste
+
+        cid = self.blind_case_id
+        user = self.blind_selected
+        if not cid or user not in ("A", "B"):
+            self._set_blind_msg("请先选中 选项 A / 选项 B（点击卡片或按 1 / 2）再提交")
+            return
+        rec = _taste.blind_case(cid) or {}
+        twin = str(rec.get("choice") or "")
+        if twin and user == twin:
+            rc, msg = _taste.apply_review(
+                cid,
+                verdict="confirmed",
+                note="盲审与 twin 一致",
+                blind={
+                    "user_choice": user,
+                    "agree": True,
+                    "remedy": None,
+                    "requirements": "",
+                },
+            )
+            self._set_blind_msg(msg if rc == 0 else f"[!] {msg}")
+            await self._render_blind_case()  # 自动呈现下一项
+            return
+        self.blind_ask_visible = True
+        self.query_one("#blind-ask", Vertical).display = True
+        self.query_one("#blind-reason", TextArea).focus()
+        self._set_blind_msg("与 twin 不一致：填 ① 原因批复、② 是否需恢复更改后「确认」")
+
+    async def _confirm_blind_ask(self) -> None:
+        """追问确认：复核留痕 ＋ 偏差报告入强制队列；**需恢复**额外建「偏差纠正」任务书。"""
+        from .. import mirror as _mirror
+        from .. import taste as _taste
+
+        cid = self.blind_case_id
+        if not cid:
+            return
+        user = self.blind_selected
+        reason = self.query_one("#blind-reason", TextArea).text.strip()
+        remedy = self._blind_remedy_value()
+        requirements = ""
+        if remedy == "other":
+            requirements = self.query_one("#blind-requirements", TextArea).text.strip()
+        self.blind_reason, self.blind_requirements = reason, requirements
+        rec = _taste.blind_case(cid) or {}
+        twin = str(rec.get("choice") or "")
+        rc, msg = _taste.apply_review(
+            cid,
+            verdict="rejected",
+            note=reason,
+            blind={
+                "user_choice": user,
+                "agree": False,
+                "remedy": remedy,
+                "requirements": requirements,
+            },
+        )
+        if rc != 0:
+            self._set_blind_msg(f"[!] {msg}")
+            return
+        tb_id = ""
+        if remedy == "restore":
+            tb_id = self._create_deviation_taskbook(
+                cid, user, twin, reason, requirements
+            )
+        deviation = {
+            "case_id": cid,
+            "user_choice": user,
+            "twin_choice": twin,
+            "reason": reason,
+            "remedy": remedy,
+            "requirements": requirements,
+        }
+        if tb_id:
+            deviation["taskbook_id"] = tb_id
+        try:
+            line = _mirror.append_deviation(deviation)
+            self.blind_last_deviation = dict(line)
+        except Exception as exc:  # noqa: BLE001 - 入队失败如实报（复核留痕已落）
+            self._set_blind_msg(f"[!] 偏差报告入队失败：{type(exc).__name__}: {exc}")
+            return
+        tail = f"；已建偏差纠正任务书 {tb_id}" if tb_id else ""
+        self._set_blind_msg(f"[√] 已记录偏差报告（{cid}）{tail}")
+        await self._render_blind_case()  # 自动呈现下一项
+
+    def _create_deviation_taskbook(
+        self, cid: str, user: str, twin: str, reason: str, requirements: str
+    ) -> str:
+        """「需恢复」→ TUI 直接建「偏差纠正」任务书（priority=high；落盘即 TASKBOOK-NEW）。
+
+        Returns:
+            新任务书 id（建失败回空串——偏差报告照旧入队，只是没有回填）。
+        """
+        from .. import taskbooks as _tb
+
+        body = (
+            f"## 偏差来源\n盲审 case {cid}：用户盲审与 twin 裁决不一致，用户判定需恢复更改。\n\n"
+            f"## 选择对照\n- 用户盲审选择：{user}\n- twin 裁决：{twin or '（未读出）'}\n\n"
+            f"## 原因批复\n{reason or '（无）'}\n\n"
+            f"## 实施要求\n{requirements or '按用户选择恢复原行为（无额外要求）'}\n"
+        )
+        try:
+            st = _tb.create(
+                f"偏差纠正：{cid}", body, source="mirror-tui", priority="high"
+            )
+        except ValueError as exc:  # noqa: BLE001 - 建件失败不塌流程（仍入队留痕）
+            self._set_blind_msg(f"[!] 建偏差纠正任务书失败：{exc}")
+            return ""
+        return str(st.get("id") or "")
+
+    def _set_blind_msg(self, text: str) -> None:
+        self.blind_msg = text
+        try:
+            self.query_one("#blind-msg", Static).update(text)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+
+    # -- 已裁决事项列表 ＋ 详情 --
+    async def _open_rulings(self) -> None:
+        self.view = "review-rulings"
+        await self._rebuild_rulings_list()
+        self._hide_all_views()
+        self.query_one("#review-rulings", Vertical).display = True
+        self.query_one("#rulings-list", _RowMarkedList).focus()
+
+    async def _rebuild_rulings_list(self) -> None:
+        from .. import taste as _taste
+
+        try:
+            self.ruling_rows = [dict(r) for r in _taste.ruling_rows()]
+        except Exception:  # noqa: BLE001 - 读数失败不该塌面板
+            self.ruling_rows = []
+        try:
+            lv = self.query_one("#rulings-list", _RowMarkedList)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+        await lv.clear()
+        if not self.ruling_rows:
+            lv.append(ChainListItem(Static("（暂无裁决记录）"), id="rulings-empty"))
+        else:
+            for r in self.ruling_rows:
+                rev = r.get("review") or {}
+                flag = (
+                    "confirmed"
+                    if str(rev.get("verdict")) == "confirmed"
+                    else "rejected"
+                )
+                lv.append(
+                    ChainListItem(
+                        make_row(
+                            flag,
+                            str(r.get("ts") or "")[:19],
+                            meta=str(r.get("case_head") or "")[:40],
+                            markup=False,
+                        ),
+                        id=f"rulrow-{_widget_id(r.get('case_id'))}",
+                    )
+                )
+        lv.index = 0 if self.ruling_rows else None
+        self._reset_scroll()
+
+    def _open_ruling_detail(self, row: dict) -> None:
+        """裁决详情：头卡（case_id/ts/结论/night/authority）＋ Markdown（含 twin 答案：盲审已过）。"""
+        if not isinstance(row, dict) or not row.get("case_id"):
+            return
+        cid = str(row.get("case_id"))
+        self.ruling_detail_id = cid
+        self.ruling_detail_title = f"裁决 {cid}"
+        self.ruling_detail_head = self._ruling_head_text(row)
+        self.view = "ruling-detail"
+        self._hide_all_views()
+        self.query_one("#ruling-detail", Vertical).display = True
+        self.query_one("#ruling-detail-title", Static).update(self.ruling_detail_title)
+        self.query_one("#ruling-detail-head", Static).update(self.ruling_detail_head)
+        self._set_ruling_detail_md(self._ruling_markdown(row))
+        self._reset_scroll()
+
+    def _ruling_head_text(self, row: dict) -> str:
+        rev = row.get("review") or {}
+        lines = [
+            f"裁决 {row.get('case_id')}",
+            f"时间：{row.get('ts') or '（无）'}"
+            f"\u3000复核结论：{rev.get('verdict') or '（无）'}",
+        ]
+        if row.get("night"):
+            lines.append(f"夜航：{row.get('authority') or '夜航预授权'}")
+        if rev.get("ts"):
+            lines.append(f"复核时刻：{rev.get('ts')}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _ruling_case_info(row: dict) -> dict:
+        """案情（问题/两选项）：读案卷解析；缺失回落 ``case_head``（不崩）。"""
+        from .. import jury as _jury
+        from .. import taste as _taste
+
+        record = _taste.blind_case(str(row.get("case_id"))) or {}
+        case_file = str(record.get("case_file") or "")
+        try:
+            case = _jury.parse_case(case_file)
+            return {
+                "question": case.question,
+                "option_a": case.option_a,
+                "option_b": case.option_b,
+            }
+        except (OSError, ValueError):
+            return {
+                "question": str(row.get("case_head") or ""),
+                "option_a": "",
+                "option_b": "",
+            }
+
+    def _ruling_markdown(self, row: dict) -> str:
+        rev = row.get("review") or {}
+        blind = rev.get("blind") if isinstance(rev.get("blind"), dict) else {}
+        info = self._ruling_case_info(row)
+        out = [f"# 裁决 {row.get('case_id')}", "", "## 案情", ""]
+        out.append(str(info.get("question") or row.get("case_head") or "（无）"))
+        if info.get("option_a") or info.get("option_b"):
+            out += [
+                "",
+                f"- 选项 A：{info.get('option_a') or '（无）'}",
+                f"- 选项 B：{info.get('option_b') or '（无）'}",
+            ]
+        conf = row.get("confidence")
+        out += [
+            "",
+            "## twin 裁决（盲审已过，此处可显）",
+            "",
+            f"- 选择：{row.get('choice') or '（未读出）'}",
+            f"- 置信度：{'-' if conf in (None, '') else conf}",
+            f"- 理由：{row.get('reason') or '（无）'}",
+        ]
+        if blind:
+            agree = bool(blind.get("agree"))
+            out += [
+                "",
+                "## 你的盲审",
+                "",
+                f"- 选择：{blind.get('user_choice') or '（无）'}",
+                f"- 与 twin 一致：{'是' if agree else '否'}",
+            ]
+            if not agree:
+                out += [
+                    f"- 是否需恢复更改：{mirror._remedy_label(str(blind.get('remedy') or ''))}",
+                    f"- 原因批复：{rev.get('note') or '（无）'}",
+                    f"- 具体要求：{blind.get('requirements') or '（无）'}",
+                ]
+        elif rev.get("note"):
+            out += ["", "## 复核批语", "", str(rev.get("note"))]
+        return "\n".join(out).rstrip() + "\n"
+
+    def _set_ruling_detail_md(self, text: str) -> None:
+        self.ruling_detail_md = text
+        try:
+            self.query_one("#ruling-detail-md", Markdown).update(text)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
 
     # ---- 决策审计（s7：列表 → 详情：头卡＋Markdown）--------------------------
     def _build_decision_rows(self) -> list[dict]:
