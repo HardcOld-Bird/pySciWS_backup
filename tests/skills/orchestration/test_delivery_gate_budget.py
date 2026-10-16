@@ -399,6 +399,22 @@ def test_kind_check_combines_with_format_problem_in_one_round(pod):
 
     assert rc == 2
     assert "交付格式不合规" in err and "必须带 kind 属性" in err
+    # 格式提醒本身也要点出 kind 规则（backlog 20261016-003250-figure）：否则成员只读这一行
+    # 仍会写出裸块、被同一条闸门退回一轮。
+    assert 'kind="defect|usability"' in err, err
+
+
+# ---------------------------------------------------------------------------
+#  ⑥ 注入的提醒模板 ↔ 闸门判据同口径（backlog 20261016-003250-figure）
+#    现象：**每轮注入**的提醒只写「可选 <infra_suggestion>…」，成员照写裸块 →
+#    delivery-gate 以「必须带 kind 属性」退回一次（白费一轮）。把模板文案钉住，防再漂。
+# ---------------------------------------------------------------------------
+def test_injected_protocol_reminder_states_kind_is_required():
+    from pysci.skills.orchestration.tools.runner import PROTOCOL_REMINDER
+
+    assert 'kind="defect|usability"' in PROTOCOL_REMINDER, "模板未示 kind 属性形态"
+    assert "kind 属性必填" in PROTOCOL_REMINDER, "模板未写明「非空时 kind 必填」"
+    assert "success_criteria" in PROTOCOL_REMINDER, "模板未给正文标记行口径"
 
 
 # ===========================================================================

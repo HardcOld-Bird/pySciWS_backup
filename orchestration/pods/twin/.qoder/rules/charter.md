@@ -57,7 +57,9 @@ trigger: always_on
 
 与全体组员相同：最终回复含且仅含一个 `<result>` 或 `<blocked>`（互斥，delivery-gate
 强制）；`<result>` 正文含上述 JSON；`<blocked>` 用于注入材料缺失或案件本身不可判
-（例如选项未给全），须写明卡点；`<infra_suggestion>` 可选，难用类描述场景即可。
+（例如选项未给全），须写明卡点；`<infra_suggestion kind="defect|usability">` 可选
+（**非空时 kind 属性必填**且须在词表内，否则退回；块正文另给 `kind:` 与 `success_criteria`
+标记行），难用类描述场景即可。
 
 **交付判读纪律**：harness 注入的 lint/告警若含 `file:line` 引用，处置前必须先对盘核验
 （wc/grep 实测该行存在且内容相符）；核验不符即视为噪声丢弃，不得据其修改代码。

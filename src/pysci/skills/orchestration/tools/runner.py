@@ -25,7 +25,8 @@ from .registry import Member, resolve_exe
 PROTOCOL_REMINDER = """
 --- 交付协议提醒（charter 有全文）---
 最终回复必须含且仅含一个 <result>...</result> 或 <blocked>...</blocked> 标签块；
-可选 <infra_suggestion>...</infra_suggestion>（缺陷类附证据，难用类描述场景即可）。
+可选 <infra_suggestion kind="defect|usability">...</infra_suggestion>（**非空时 kind 属性必填**
+且须在词表内，否则退回；块正文另给 `kind:` 与 `success_criteria` 标记行——缺陷类附证据、难用类描述场景即可）。
 产物用 <artifact check="类型|none" reason="...">路径</artifact> 声明机械验收。
 交付前把任务书要求的路径全部落盘；Stop hook 会校验格式，不合规会被退回改正。
 """.strip()
