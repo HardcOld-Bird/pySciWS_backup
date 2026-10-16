@@ -14,10 +14,12 @@ Esc 返回上级；**进入详情即写该模块水位**（真源 ``state/mirror
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
 
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -54,12 +56,24 @@ from .theme import (
 )
 from .widgets import (
     ChainListItem,
+    MarkedTree,
     MarkedVerticalScroll,
     RowActivated,
     RowListView,
     ScrollMarkMixin,
+    card,
     make_row,
 )
+
+#: Textual widget id 只允许字母/数字/下划线/连字符——plan id 可能含点号等（如
+#: `rework-xxx.plan` 派生的 id），故列表条目 id 一律过它（非法字符折 `-`）。
+_ID_SAFE_RE = re.compile(r"[^0-9A-Za-z_-]+")
+
+
+def _widget_id(text: object) -> str:
+    """任意标识串 → 合法 widget id 片段。"""
+    return _ID_SAFE_RE.sub("-", str(text)).strip("-") or "x"
+
 
 #: 无更新时的灰点（§2.2：`● NEW` / 数字 / 灰点）。
 _BADGE_NONE = "·"
@@ -109,6 +123,8 @@ _SCROLL_PANES: dict[str, tuple[str, str]] = {
     "detail": ("#detail-body", "#detail-scroll"),
     "tb-detail": ("#tb-detail-body", "#tb-detail-scroll"),
     "taskbooks": ("#tb-list", "#tb-scroll"),
+    "plans": ("#plans-list", "#plans-scroll"),
+    "plan-detail": ("#plan-detail-body", "#plan-detail-scroll"),
 }
 
 #: 位置指示前缀（测试与用户读同一串）。
@@ -135,11 +151,12 @@ _PRIORITY_LABELS: tuple[str, ...] = ("优先级 高", "优先级 中（默认）
 # ---------------------------------------------------------------------------
 
 
-class _TbList(ScrollMarkMixin, RowListView):
-    """任务书分组列表：s2 滚动知情（``ScrollMarkMixin``）＋ s2 行激活归一（``RowListView``）。
+class _RowMarkedList(ScrollMarkMixin, RowListView):
+    """行式列表（滚动知情＋行激活归一）：s2 ``ScrollMarkMixin`` ＋ s2 ``RowListView``。
 
-    组合点是本环节：分组列表既要报滚动位置（`#tb-scroll`）又要区分键 / 单击 / 双击
-    （``RowActivated.source/chain``）。两个 mixin 都来自 s2 共享层，此处只做组合。
+    组合理由：列表既要报滚动位置（`#tb-scroll` / `#plans-scroll`）又要区分键 / 单击 /
+    双击（``RowActivated.source/chain``）。两个 mixin 都来自 s2 共享层，此处只做组合。
+    用于：任务书分组列表（s5）、计划列表（s6）。
     """
 
 
@@ -212,6 +229,18 @@ class PysciTUI(App):
     #tb-detail-msg {{ color: $success; }}
     #tb-open-vscode {{ margin-top: 1; }}
     #tb-detail-scroll {{ {_T_SUBTLE} height: 1; }}
+    #plans {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #plans-title {{ {_T_TITLE} }}
+    #plans-list {{ height: 1fr; }}
+    #plans-list > ListItem.-highlight {{ {_T_HL} }}
+    #plans-scroll {{ {_T_SUBTLE} height: 1; }}
+    #plan-detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
+    #plan-detail-title {{ {_T_TITLE} {_T_BORDER} {_T_INSET} }}
+    #plan-detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }}
+    #plan-detail-head {{ {_T_BODY} height: auto; }}
+    #plan-detail-tree {{ height: auto; background: transparent; }}
+    #plan-detail-md {{ {_T_BODY} height: auto; margin-top: 1; }}
+    #plan-detail-scroll {{ {_T_SUBTLE} height: 1; }}
     """
 
     def __init__(self, *, mods: list[Module] | None = None, seen_path=None) -> None:
@@ -242,6 +271,17 @@ class PysciTUI(App):
         # 任务书列表滚动态（s4 收编：ListView 也报位置）
         self.tb_scroll = 0
         self.tb_scroll_mark = ""
+        # 计划与派发（s6）：列表行模型 + 详情三区（头卡/Tree/Markdown）
+        self.plan_rows: list[dict] = []
+        self.plan_detail_id = ""
+        self.plan_detail_title = ""
+        self.plan_detail_head = ""
+        self.plan_detail_md = ""
+        self.plan_detail_scroll = 0
+        self.plan_detail_scroll_mark = ""
+        self._plan_default_node = (
+            None  # 首帧后要落到的树节点（见 _apply_plan_default_selection）
+        )
         self.journal_result = ""
         # 任务书分组列表（s5 用户核心需求）：**行模型**（列表按它重建）＋ 家族展开态
         # （初始全部 False＝收起，主列表一屏只见每组最新/本体）。
@@ -301,7 +341,7 @@ class PysciTUI(App):
                     "任务书：↑↓ 选｜Enter 展开/收起｜双击或 o 进详情｜n 新增｜a 接受｜r 驳回",
                     id="tb-title",
                 )
-                yield _TbList(id="tb-list")
+                yield _RowMarkedList(id="tb-list")
                 yield Static("", id="tb-msg")
                 yield Static("", id="tb-scroll")
             with Vertical(id="tb-new"):
@@ -355,6 +395,22 @@ class PysciTUI(App):
                 yield TextArea("", id="tb-note")
                 yield Button("确认驳回并生成返工任务书", id="tb-reject-submit")
                 yield Static("", id="tb-reject-msg")
+            with Vertical(id="plans"):
+                yield Static(
+                    "计划与派发：↑↓ 选｜Enter 看详情｜Esc 返回", id="plans-title"
+                )
+                yield _RowMarkedList(id="plans-list")
+                yield Static("", id="plans-scroll")
+            with Vertical(id="plan-detail"):
+                yield Static("", id="plan-detail-title")
+                yield MarkedVerticalScroll(
+                    card("", id="plan-detail-head"),
+                    MarkedTree("计划", id="plan-detail-tree"),
+                    Markdown(id="plan-detail-md"),
+                    id="plan-detail-body",
+                    can_focus=False,
+                )
+                yield Static("", id="plan-detail-scroll")
         yield Footer()
 
     def _rows(self) -> list[ListItem]:
@@ -377,12 +433,10 @@ class PysciTUI(App):
         return rows
 
     def on_mount(self) -> None:
-        self.query_one("#detail", Vertical).display = False
-        self.query_one("#journal", Vertical).display = False
-        self.query_one("#taskbook", Vertical).display = False
-        self.query_one("#tb-new", Vertical).display = False
-        self.query_one("#tb-reject", Vertical).display = False
-        self.query_one("#tb-detail", Vertical).display = False
+        # 除主菜单外一律先藏（含 s5/s6 新视图）——否则隐藏面板照样占布局（§2.2 首帧）。
+        self._hide_all_views()
+        self.query_one("#menu", ListView).display = True
+        self.query_one("#summary", Vertical).display = True
         self._render_summary(0)
         self.query_one("#menu", ListView).focus()
         # 详情倒计时**每秒跳动**（「距下次切换还有 X 分 X 秒」，用户 2026-10-14 实测反馈）：
@@ -440,8 +494,11 @@ class PysciTUI(App):
         Enter 是展开/收起、双击/`o` 才是进详情），故此处不再处理 tb-list。"""
         if event.list_view.id == "menu":
             idx = int(event.list_view.index or 0)
-            if self._mods[idx].key == "taskbooks":
+            key = self._mods[idx].key
+            if key == "taskbooks":
                 await self._open_taskbooks()
+            elif key == "plans":
+                await self._open_plans()
             else:
                 self._open_detail(idx)
 
@@ -505,6 +562,8 @@ class PysciTUI(App):
             self.tb_detail_scroll, self.tb_detail_scroll_mark = y, text
         elif self.view == "taskbooks":
             self.tb_scroll, self.tb_scroll_mark = y, text
+        elif self.view == "plan-detail":
+            self.plan_detail_scroll, self.plan_detail_scroll_mark = y, text
         else:
             self.detail_scroll, self.detail_scroll_mark = y, text
 
@@ -626,6 +685,8 @@ class PysciTUI(App):
         """Esc/←：任务书详情页 → 任务书列表；其余子视图 → 主菜单；主菜单 → 退出。"""
         if self.view == "tb-detail":
             await self._open_taskbooks()
+        elif self.view == "plan-detail":
+            await self._open_plans()
         elif self.view != "menu":
             self._show_menu()
         else:
@@ -661,6 +722,8 @@ class PysciTUI(App):
             "#tb-new",
             "#tb-reject",
             "#tb-detail",
+            "#plans",
+            "#plan-detail",
         ):
             try:
                 self.query_one(sel).display = False
@@ -779,7 +842,7 @@ class PysciTUI(App):
         self._set_tb_msg("")
         self._hide_all_views()
         self.query_one("#taskbook", Vertical).display = True
-        self.query_one("#tb-list", _TbList).focus()
+        self.query_one("#tb-list", _RowMarkedList).focus()
         # 进面板 = 进「任务书」模块视图 → 写该模块水位（§2.2「进入详情即写水位」；f1 起
         # Enter 也走这里，故水位在这里写，不再依赖 _open_detail）。
         mod = next((m for m in self._mods if m.key == "taskbooks"), None)
@@ -839,7 +902,7 @@ class PysciTUI(App):
             meta = f"共 {row['size']} 件" if int(row["size"]) > 1 else "本体"
             return ChainListItem(
                 make_row(row["badge"], row["title"], meta=meta),
-                id=f"tbrow-{row['tb_id']}-{row['kind']}",
+                id=f"tbrow-{_widget_id(row['tb_id'])}-{row['kind']}",
             )
         return ChainListItem(
             make_row(
@@ -847,7 +910,7 @@ class PysciTUI(App):
                 f"└ {row['label']}　{row['title']}",
                 indent=int(row.get("indent") or 0) + 1,
             ),
-            id=f"tbrow-{row['tb_id']}-{row['kind']}",
+            id=f"tbrow-{_widget_id(row['tb_id'])}-{row['kind']}",
         )
 
     async def _rebuild_tb_list(self, *, keep_root: str | None = None) -> None:
@@ -858,7 +921,7 @@ class PysciTUI(App):
         """
         self.tb_rows = self._build_tb_rows()
         try:
-            lv = self.query_one("#tb-list", _TbList)
+            lv = self.query_one("#tb-list", _RowMarkedList)
         except Exception:  # noqa: BLE001 - 组合面容忍缺件
             return
         await lv.clear()
@@ -899,12 +962,20 @@ class PysciTUI(App):
         )
 
     async def on_row_activated(self, event: RowActivated) -> None:
-        """任务书列表行激活（s2 ``RowListView``：键/单击/双击**同型**消息，键鼠可辨）。
+        """行激活分派（s2 ``RowListView``：键/单击/双击**同型**消息，键鼠可辨）。
 
-        - 组行 Enter（``key``）→ **立即**展开/收起；组行单击（``click`` chain=1）→ 延迟
-          展开/收起（双击到达即取消）；组行双击（chain≥2）→ 取消延迟、直接进最新项详情；
-        - 次级行（单击/Enter）→ 立即进该项详情。
+        - **计划列表**（s6）：单击/Enter → 进该项计划详情；
+        - **任务书分组列表**（s5）：组行 Enter→立即展开/收起；组行单击→延迟展开/收起
+          （双击到达即取消）；组行双击（chain≥2）→ 取消延迟、直接进最新项详情；
+          次级行（单击/Enter）→ 立即进该项详情。
         """
+        if event.list_view.id == "plans-list":
+            if self.view != "plans":
+                return
+            index = int(event.index)
+            if 0 <= index < len(self.plan_rows):
+                self._open_plan_detail(str(self.plan_rows[index].get("id") or ""))
+            return
         if self.view != "taskbooks":
             return
         index = int(event.index)
@@ -953,7 +1024,7 @@ class PysciTUI(App):
         """当前选中行下标（``#tb-list`` 高亮行；禁止外部按它猜语义——目标解析见
         :meth:`_tb_target_id`）。"""
         try:
-            return int(self.query_one("#tb-list", _TbList).index or 0)
+            return int(self.query_one("#tb-list", _RowMarkedList).index or 0)
         except Exception:  # noqa: BLE001 - 组合面容忍缺件
             return 0
 
@@ -1109,6 +1180,212 @@ class PysciTUI(App):
     def _set_tb_detail_msg(self, text: str) -> None:
         self.tb_detail_msg = text
         self.query_one("#tb-detail-msg", Static).update(text)
+
+    # ---- 计划与派发（s6：列表 → 详情：可折叠 Tree＋Markdown 面板）--------------
+    def _build_plan_rows(self) -> list[dict]:
+        """行模型：全部 plan（``plans.overview_rows()`` 序＝新→旧；**只走 state.json 缓存**）。"""
+        from .. import plans as _plans
+
+        try:
+            return [dict(r) for r in _plans.overview_rows()]
+        except Exception:  # noqa: BLE001 - 读数失败不该塌面板
+            return []
+
+    async def _open_plans(self) -> None:
+        self.view = "plans"
+        await self._rebuild_plans_list()
+        self._hide_all_views()
+        self.query_one("#plans", Vertical).display = True
+        self.query_one("#plans-list", _RowMarkedList).focus()
+
+    async def _rebuild_plans_list(self) -> None:
+        """按行模型重建 ``#plans-list``（async：``ListView.clear()`` 异步完成，s5 注记）。"""
+        self.plan_rows = self._build_plan_rows()
+        try:
+            lv = self.query_one("#plans-list", _RowMarkedList)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+        await lv.clear()
+        if not self.plan_rows:
+            lv.append(ChainListItem(Static("（暂无计划）"), id="plans-empty"))
+        else:
+            for r in self.plan_rows:
+                lv.append(
+                    ChainListItem(
+                        make_row(
+                            str(r.get("mark") or ""),
+                            f"{r.get('id')}  {r.get('done')}/{r.get('total')}",
+                            meta=str(r.get("goal") or "")[:40],
+                        ),
+                        id=f"planrow-{_widget_id(r.get('id'))}",
+                    )
+                )
+        lv.index = 0 if self.plan_rows else None
+        self._reset_scroll()  # 重建 → 位置行复位（s4 范式）
+
+    def _open_plan_detail(self, pid: str) -> None:
+        """计划详情页：**头卡** ＋ **可折叠 Tree 环节树**（s1 ``plan_tree_nodes``）＋
+        树下 **Markdown 文本面板**（树节点选中联动；树与 md 冲突时优先保 Tree）。"""
+        if not pid:
+            return
+        row = next((r for r in self.plan_rows if str(r.get("id")) == pid), None)
+        self.plan_detail_id = pid
+        self.plan_detail_title = f"{pid}　详情"
+        self.plan_detail_head = self._plan_head_text(pid, row)
+        self.view = "plan-detail"
+        self._hide_all_views()
+        self.query_one("#plan-detail", Vertical).display = True
+        self.query_one("#plan-detail-title", Static).update(self.plan_detail_title)
+        self.query_one("#plan-detail-head", Static).update(self.plan_detail_head)
+        cur = (row or {}).get("current") or {}
+        # 焦点先给树（聚焦会把树光标归到根）：↑↓ 走树光标（选中联动 md）；翻页/首尾键
+        # 归全局滚动（Tree 不绑它们）。
+        self.query_one("#plan-detail-tree", MarkedTree).focus()
+        self._fill_plan_tree(pid, str(cur.get("id") or ""))
+        self._reset_scroll()
+
+    def _plan_head_text(self, pid: str, row: dict | None) -> str:
+        """详情头卡文本（``card()`` 形态 Static）：goal / 状态徽标 / 进度 / 时间戳。"""
+        if row is None:
+            return f"计划 {pid}：读数缺失（state.json 不在册？）"
+        lines = [
+            f"目标：{row.get('goal') or '（无）'}",
+            f"状态：{row.get('mark') or '?'}　　进度：{row.get('done')}/{row.get('total')}",
+            f"创建：{row.get('created') or '（未记）'}",
+        ]
+        if row.get("completed_at"):
+            lines.append(f"完成：{row['completed_at']}")
+        if row.get("abandoned_at"):
+            lines.append(f"中止：{row['abandoned_at']}")
+        return "\n".join(lines)
+
+    def _plan_node_label(self, n: dict) -> str:
+        """节点 label：superstep ＝ ``〔mode〕 id``；叶子 ＝ ``图标 id [status] member｜brief``。
+
+        图标后**隔一个空格**再跟文字（全局规范）；done→``✔``、failed→``✗``、其余 ``·``。
+        """
+        if n.get("kind") == "super":
+            return f"〔{n.get('mode') or 'serial'}〕 {n.get('id')}"
+        icon = {"done": "✔", "failed": "✗", "run_failed": "✗"}.get(
+            str(n.get("status") or ""), "·"
+        )
+        member = str(n.get("member") or "") or "self"
+        return f"{icon} {n.get('id')} [{n.get('status')}] {member}｜{str(n.get('brief') or '')}"
+
+    def _fill_plan_tree(self, pid: str, current_id: str = "") -> None:
+        """填充环节树（**默认全展开**；默认选中＝当前进行中环节，无则首叶/根）。
+
+        树节点携带结构化 dict 作 ``data``——选中联动直接读它，不必再回查。
+        """
+        from .. import plans as _plans
+
+        tree = self.query_one("#plan-detail-tree", MarkedTree)
+        tree.clear()  # 同步 API（重建根子树，无异步残留）
+        try:
+            nodes = _plans.plan_tree_nodes(pid)
+        except Exception as exc:  # noqa: BLE001 - 读数坏不塌详情（观察面 fail-open）
+            tree.root.add(f"[!] 环节树读数失败：{type(exc).__name__}: {exc}")
+            self._set_plan_detail_md(
+                f"# 计划 {pid}\n\n[!] 环节树读数失败：{type(exc).__name__}: {exc}\n"
+            )
+            return
+
+        picked: dict = {"target": None, "first_leaf": None}
+
+        def add_nodes(items: list, parent) -> None:
+            for n in items:
+                # Text（非 str）：label 里的 ``[status]`` 会被 Rich markup 当标签吃掉（实测）
+                child = parent.add(Text(self._plan_node_label(n)), data=n)
+                if n.get("kind") == "leaf":
+                    if picked["first_leaf"] is None:
+                        picked["first_leaf"] = child
+                    if current_id and str(n.get("path")) == current_id:
+                        picked["target"] = child
+                if n.get("children"):
+                    add_nodes(n["children"], child)
+
+        add_nodes(nodes, tree.root)
+        tree.root.expand_all()  # 默认展开全部（可折叠收起）
+        selected = picked["target"] or picked["first_leaf"] or tree.root
+        # ``select_node`` 依赖**已算出的行号**（首帧前为 None → 静默无效，实测）：延后一拍。
+        self._plan_default_node = selected
+        self.call_after_refresh(self._apply_plan_default_selection)
+        node = selected.data if selected is not tree.root else None
+        self._set_plan_detail_md(self._plan_node_markdown(pid, node))
+
+    def _apply_plan_default_selection(self) -> None:
+        """首帧后把树光标落到默认节点（当前进行中环节；无则该叶/根）。"""
+        node = self._plan_default_node
+        if node is None or self.view != "plan-detail":
+            return
+        try:
+            tree = self.query_one("#plan-detail-tree", MarkedTree)
+            tree.select_node(node)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+
+    def _set_plan_detail_md(self, text: str) -> None:
+        self.plan_detail_md = text
+        try:
+            self.query_one("#plan-detail-md", Markdown).update(text)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+
+    def _plan_node_markdown(self, pid: str, node: dict | None) -> str:
+        """节点详情 Markdown（**有啥写啥**）：id/路径、类型、状态、成员、brief 全文、
+        运行留痕（任务书/会话/job/evidence/复核）；superstep 附**子节点概览**。"""
+        from .. import plans as _plans
+
+        if node is None:
+            return f"# 计划 {pid}\n\n（未选中环节）\n"
+        out = [f"# 环节 {node.get('id')}", ""]
+        kind = "superstep（分组）" if node.get("kind") == "super" else "环节（叶子）"
+        out.append(f"- 类型：{kind}")
+        out.append(f"- 路径：`{node.get('path')}`")
+        if node.get("mode"):
+            out.append(f"- 模式：{node.get('mode')}")
+        out.append(f"- 状态：{node.get('status') or 'pending'}")
+        out.append(f"- 成员：{node.get('member') or '（组长自办/未指派）'}")
+        out += ["", "## 粗描述", "", str(node.get("brief") or "") or "（无）"]
+        if node.get("kind") == "leaf":
+            try:
+                steps = {
+                    str(s.get("id")): s
+                    for s in (_plans.load_state(pid).get("steps") or [])
+                }
+            except Exception:  # noqa: BLE001 - 读数坏不塌面板
+                steps = {}
+            st = steps.get(str(node.get("path"))) or {}
+            rows = [
+                f"- {label}：`{st[key]}`"
+                for label, key in (
+                    ("任务书", "task_file"),
+                    ("会话", "session_id"),
+                    ("job", "job_id"),
+                    ("evidence", "evidence"),
+                    ("复核", "review"),
+                )
+                if st.get(key)
+            ]
+            if rows:
+                out += ["", "## 运行留痕", "", *rows]
+        if node.get("children"):
+            out += ["", "## 子节点概览", ""]
+            out += [
+                f"- {self._plan_node_label(ch)}（{ch.get('path')}）"
+                for ch in node["children"]
+            ]
+        return "\n".join(out).rstrip() + "\n"
+
+    def on_tree_node_highlighted(self, event: MarkedTree.NodeHighlighted) -> None:
+        """树节点选中联动：把该节点详情渲染进 Markdown 面板（s6 核心交互）。"""
+        if self.view != "plan-detail":
+            return
+        data = getattr(event.node, "data", None)
+        if isinstance(data, dict):
+            self._set_plan_detail_md(
+                self._plan_node_markdown(self.plan_detail_id, data)
+            )
 
 
 def _is_tty() -> bool:

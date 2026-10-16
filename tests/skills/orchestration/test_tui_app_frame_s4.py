@@ -119,7 +119,7 @@ def test_t_and_j_not_advertised_outside_menu():
             keys = set(app.screen.active_bindings)
             assert "t" in keys and "j" in keys, "主菜单应广告 t/j"
             lv = app.query_one("#menu", ListView)
-            lv.index = 1
+            lv.index = 2  # 队列与运行（plans 已走专用面板，s6）
             await pilot.pause()
             await pilot.press("enter")
             assert app.view == "detail"
@@ -228,7 +228,7 @@ def test_read_faces_have_no_prompt_words(tbdir, seen):
             await pilot.press("escape")  # → taskbooks
             await pilot.press("escape")  # → menu
             lv = app.query_one("#menu", ListView)
-            lv.index = 1
+            lv.index = 2  # 队列与运行（plans 已走专用面板，s6）
             await pilot.pause()
             await pilot.press("enter")
             assert app.view == "detail"

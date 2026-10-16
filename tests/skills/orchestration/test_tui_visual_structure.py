@@ -209,7 +209,7 @@ def test_every_advertised_key_has_an_observable_effect():
             await pilot.press("escape")
             assert app.view == "menu"
             lv = app.query_one("#menu", tui.ListView)
-            lv.index = 1
+            lv.index = 2  # 队列与运行（plans 已走专用面板，s6）
             await pilot.pause()
             await pilot.press("enter")
             assert app.view == "detail"
@@ -234,7 +234,7 @@ def test_unadvertised_key_has_no_side_effect():
         async with app.run_test() as pilot:
             await pilot.pause()
             lv = app.query_one("#menu", tui.ListView)
-            lv.index = 1
+            lv.index = 2  # 队列与运行（plans 已走专用面板，s6）
             await pilot.pause()
             await pilot.press("enter")
             assert app.view == "detail"
@@ -283,6 +283,9 @@ def test_walk_every_surface_without_crash():
                     await pilot.press(
                         "escape"
                     )  # tb-new → 菜单（一次即回，再按就退出了）
+                elif mod.key == "plans":
+                    assert app.view == "plans"  # s6：计划面板
+                    await pilot.press("escape")
                 else:
                     assert app.view == "detail"
                     await pilot.press("escape")
