@@ -1,12 +1,25 @@
 """组长引导面修缮（backlog adhoc-guidance-fixes）：status 夜航读数 / plan 收尾 taskbook 联动 /
 blocked×capacity 的 --session new。三条各自独立可验（本条任务书「逐条自证」）。
+
+④ 追加（backlog 20261016-215946）：`plan new`/`plan advance`/`plan run` 的 `[NEXT]` 推进引导
+**并列**给出事件驱动 `plan advance`（长任务首选）与同步阻塞 `plan run` 两种姿势。
 """
 
 from __future__ import annotations
 
+from argparse import Namespace
 from pathlib import Path
 
-from pysci.skills.orchestration.tools import orch, plans, queues, settings
+import yaml
+
+from pysci.skills.orchestration.tools import (
+    orch,
+    plans,
+    queues,
+    queueworker,
+    settings,
+    workq,
+)
 
 
 def _args(**over):
@@ -125,3 +138,116 @@ def test_plain_blocked_keeps_session_reuse(iso_state, tmp_path, monkeypatch, cap
     out = capsys.readouterr().out
     assert "--session new" not in out, out
     assert "续作自动复用" in out, out
+
+
+# ---------------------------------------------------------------------------
+# ④ [NEXT] 推进引导并列 two-way（backlog 20261016-215946）
+#   现象：new/advance 的 [NEXT] 只推阻塞式 `plan run`，照抄即把长任务跑成阻塞、撞 Bash 超时。
+# ---------------------------------------------------------------------------
+def _plan_args(plan_id: str, **over) -> Namespace:
+    base = dict(
+        id=plan_id,
+        file="",
+        force=True,
+        text=None,
+        task=None,
+        name=None,
+        session=None,
+        model_tier=None,
+        effort=None,
+        max_turns=None,
+        dirs=None,
+        evidence=None,
+        dry=False,
+    )
+    base.update(over)
+    return Namespace(**base)
+
+
+def _plan_face(tmp_path: Path, monkeypatch) -> Path:
+    d = tmp_path / "plans"
+    d.mkdir(exist_ok=True)
+    monkeypatch.setattr(plans, "PLANS_DIR", d)
+    return d
+
+
+def _mk_plan(d: Path, plan_id: str, *, steps=None) -> str:
+    p = d / f"{plan_id}.plan.yaml"
+    p.write_text(
+        yaml.safe_dump(
+            {
+                "id": plan_id,
+                "goal": f"目标 {plan_id}",
+                "steps": steps or [{"id": "s1", "member": "sim", "brief": "环节一"}],
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    plans.cmd_plan_new(_plan_args(plan_id, file=str(p)))
+    return plan_id
+
+
+def _fake_worker(member: str, **kw):
+    qp = queues.queue_path(member)
+    for it in workq.load(qp):
+        if str(it.get("status")) == workq.STATUS_DONE:
+            continue
+        workq.mutate(
+            qp,
+            it["id"],
+            status=workq.STATUS_DONE,
+            result={
+                "code": 0,
+                "kind": "result",
+                "body": "done",
+                "checks": [],
+                "member": member,
+            },
+        )
+    return (True, "stub worker")
+
+
+def _both_ways(out: str, plan_id: str) -> None:
+    """两条姿势与标注都在场（判据①的机械面）。"""
+    assert f"plan advance {plan_id}" in out, out
+    assert "入队即返回" in out and "长任务首选" in out, out
+    assert f"plan run {plan_id}" in out, out
+    assert "同步阻塞到交接" in out, out
+
+
+def test_plan_new_next_lists_both_ways(iso_state, tmp_path, monkeypatch, capsys):
+    d = _plan_face(tmp_path, monkeypatch)
+    capsys.readouterr()
+    _mk_plan(d, "p-new")
+    _both_ways(capsys.readouterr().out, "p-new")
+
+
+def test_plan_advance_next_lists_both_ways(iso_state, tmp_path, monkeypatch, capsys):
+    d = _plan_face(tmp_path, monkeypatch)
+    _mk_plan(d, "p-adv")
+    capsys.readouterr()
+    # 未给任务书 → 只印引导并 rc=2（延迟书写）
+    assert plans.cmd_plan_advance(_plan_args("p-adv")) == 2
+    _both_ways(capsys.readouterr().out, "p-adv")
+
+
+def test_plan_run_handoff_next_lists_both_ways(
+    iso_state, tmp_path, monkeypatch, capsys
+):
+    """交接决策点 [NEXT]（`plan run` 收尾面）同样并列两条姿势。"""
+    d = _plan_face(tmp_path, monkeypatch)
+    _mk_plan(
+        d,
+        "p-run",
+        steps=[
+            {"id": "s1", "member": "sim", "brief": "甲"},
+            {"id": "s2", "member": "sim", "brief": "乙"},
+        ],
+    )
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: _fake_worker(m))
+    capsys.readouterr()
+    plans.cmd_plan_run(_plan_args("p-run", text="t"))
+    out = capsys.readouterr().out
+    assert "交接决策点" in out, out
+    _both_ways(out, "p-run")
