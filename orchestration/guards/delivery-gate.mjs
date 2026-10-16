@@ -94,7 +94,7 @@ function run() {
   if (msg && !TAG_RE.test(msg)) {
     problems.push(
       '交付格式不合规：最终回复必须含且仅含一个 <result>...</result>（成功）或 <blocked>...</blocked>（失败）标签块；' +
-        '可选 <infra_suggestion>...</infra_suggestion>；产物用 <artifact check="类型|none" reason="...">路径</artifact> 声明。' +
+        '可选 <infra_suggestion kind="defect|usability">...</infra_suggestion>（非空时 kind 必填且须在词表内）；产物用 <artifact check="类型|none" reason="...">路径</artifact> 声明。' +
         '请按 charter 交付协议重新组织最终回复（工作内容不必重做）。'
     );
   }
