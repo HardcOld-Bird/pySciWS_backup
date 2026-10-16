@@ -35,7 +35,7 @@ pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<�
 #     正文须含 `kind: defect|usability` 与判据标记；实质正文（去空白/标题/`kind:|source:|fingerprint:`
 #     行）≥40 字，否则标 `[!] 空壳建议`。流程：手写 → suggestions 自检 → approve 四态 → worker 销账
 #     └ 判据标记**接受形态**（任一）：行首／列表项 `- `／粗体 `**…**`／标题 `## `（标题形态
-#       2026-10-16 起支持；旧口径漏读致真判据被当「缺判据」误拒）；正文＝标记行后连续非空行。
+#       2026-10-16 起支持）；正文＝标记行后（**空行可跳过**）的连续非空行。
 #       最小样例：`kind: defect` → `source: leader` → `fingerprint: <短名>` →（现象/根因正文
 #       ≥40 字）→ `success_criteria:` → 换行后 `- <可复核判据>`（每行一条）。
 #   └ **重复建议单**：`resolve` 不收建议单 id（作用域=backlog 条目）；走
@@ -78,7 +78,7 @@ pysci-orch ledger [--member --days --stats] | sync [--check]
 成员 id：sim figure writing theory lit drawing model3d（专职）；deputy reviewer devops
 bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
 
-> 内部命令（`_watchdog-loop` 等 5 个）由钩子/派生进程调用，**不进 `orch -h`**（功能保留，勿手调）。
+> 内部命令（`_watchdog-loop` 等 5 个）由钩子/派生进程调用，**不进 `orch -h`**。
 
 **队列成员**（三条路径可直派）＝ 7 专职 + deputy + reviewer + **devops**；非队列成员三闸均拒。
 **devops 双通道并存**（直派／组包，同队列同 worker）；bencher/inspector 各有专用队列，**不经**

@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from pysci.skills.orchestration.tools import delivery
 
 CRIT = "- 主树 `pytest tests` 全绿；工作树零未跟踪项"
@@ -135,3 +137,36 @@ def test_inline_marker_does_not_absorb_following_paragraph():
         "success_criteria: 行内判据全文\n\n后文段落（不是判据）\n"
     )
     assert crit == "行内判据全文"
+
+
+# ---------------------------------------------------------------------------
+# **形态 × 空行**矩阵（backlog 20261016-224400 的抗复发面）
+#   第五例的教训：上一版只给**标题形态**堵了空行，别的形态仍是老口径「空行即止」——
+#   坑只堵了一半。故不再逐形态补例，改为**矩阵化**：任一形态 × 有无空行都必须读出判据。
+# ---------------------------------------------------------------------------
+_MARKER_FORMS = {
+    "行首": "success_criteria:",
+    "列表项": "- success_criteria:",
+    "粗体": "**success_criteria**:",
+    "标题": "## success_criteria:",
+    "标题三级": "### success_criteria：",
+}
+
+
+@pytest.mark.parametrize("name", sorted(_MARKER_FORMS))
+@pytest.mark.parametrize("gap", ["", "\n", "\n\n"])
+def test_every_marker_form_survives_any_blank_gap(name, gap):
+    """标记形态 × 空行（0/1/2 个）全过：解析器不得再「只堵一半」。"""
+    marker = _MARKER_FORMS[name]
+    body = f"kind: defect\n\n{marker}\n{gap}{CRIT}\n"
+    kind, crit = delivery.parse_suggestion_fields(body)
+    assert kind == "defect", (name, gap, kind)
+    assert crit == CRIT, (name, gap, crit)
+
+
+@pytest.mark.parametrize("name", sorted(_MARKER_FORMS))
+def test_marker_with_only_blank_lines_is_rejected(name):
+    """反例矩阵：标记后只有空行（无正文）→ 任一形态都仍判「缺判据」。"""
+    marker = _MARKER_FORMS[name]
+    _kind, crit = delivery.parse_suggestion_fields(f"kind: defect\n\n{marker}\n\n\n")
+    assert crit.strip() == "", (name, crit)
