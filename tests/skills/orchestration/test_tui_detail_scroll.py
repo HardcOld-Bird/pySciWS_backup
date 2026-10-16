@@ -208,7 +208,7 @@ def test_tb_detail_scrolls_to_bottom(tbdir, seen):
             await pilot.pause()
             await pilot.press("t")
             await pilot.pause()
-            await pilot.press("enter")
+            await pilot.press("o")  # s5：Enter 是展开/收起，`o` 才是进详情
             await pilot.pause()
             assert app.view == "tb-detail"
             pane = app.query_one("#tb-detail-body", VerticalScroll)
@@ -221,7 +221,7 @@ def test_tb_detail_scrolls_to_bottom(tbdir, seen):
             # 退出再进 → 滚动复位到顶（新内容从头部读起）
             await pilot.press("escape")
             await pilot.pause()
-            await pilot.press("enter")
+            await pilot.press("o")
             await pilot.pause()
             assert pane.scroll_y == 0 and app.tb_detail_scroll == 0
             return got_top
@@ -235,11 +235,12 @@ def test_tb_detail_short_content_says_whole_screen(tbdir, seen):
 
     async def _go():
         app = tui.PysciTUI(seen_path=seen)
-        async with app.run_test(size=(80, 50)) as pilot:  # 高窗口：内容一屏装得下
+        # 高窗口：Markdown 渲染自带块间距（比纯文本高），故留足余量使内容一屏装下
+        async with app.run_test(size=(80, 90)) as pilot:
             await pilot.pause()
             await pilot.press("t")
             await pilot.pause()
-            await pilot.press("enter")
+            await pilot.press("o")  # s5：Enter 是展开/收起，`o` 才是进详情
             await pilot.pause()
             assert app.view == "tb-detail"
             pane = app.query_one("#tb-detail-body", VerticalScroll)

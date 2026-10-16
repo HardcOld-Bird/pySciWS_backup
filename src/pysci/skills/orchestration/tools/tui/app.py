@@ -14,6 +14,8 @@ Esc 返回上级；**进入详情即写该模块水位**（真源 ``state/mirror
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
 
 from textual.app import App, ComposeResult
@@ -27,6 +29,7 @@ from textual.widgets import (
     Input,
     ListItem,
     ListView,
+    Markdown,
     RadioButton,
     RadioSet,
     SelectionList,
@@ -49,7 +52,14 @@ from .theme import (
     _T_SUBTLE,
     _T_TITLE,
 )
-from .widgets import MarkedList, MarkedVerticalScroll
+from .widgets import (
+    ChainListItem,
+    MarkedVerticalScroll,
+    RowActivated,
+    RowListView,
+    ScrollMarkMixin,
+    make_row,
+)
 
 #: 无更新时的灰点（§2.2：`● NEW` / 数字 / 灰点）。
 _BADGE_NONE = "·"
@@ -65,7 +75,7 @@ _ACTIONS_BY_VIEW: dict[str, frozenset[str]] = {
     # 跨面板跳转由 Esc 回菜单再进，footer 不广告别处无效的键。
     "detail": frozenset(),
     "journal": frozenset(),
-    "taskbooks": frozenset({"tb_new", "tb_accept", "tb_reject"}),
+    "taskbooks": frozenset({"tb_new", "tb_accept", "tb_reject", "tb_open_latest"}),
     # 任务书详情页（Enter）：**批复就在读报告处**——`a`/`r` 在此可用（`n` 新增不可用：
     # 详情页不是列表，新增无处落）。
     "tb-detail": frozenset({"tb_accept", "tb_reject"}),
@@ -75,7 +85,7 @@ _ACTIONS_BY_VIEW: dict[str, frozenset[str]] = {
 
 #: 受本类视图闸管的 action（其余——`back`/`quit` 与 widget 内部动作——一律放行，不干预导航）。
 _GATED_ACTIONS: frozenset[str] = frozenset(
-    {"taskbooks", "tb_new", "tb_accept", "tb_reject", "journal"}
+    {"taskbooks", "tb_new", "tb_accept", "tb_reject", "tb_open_latest", "journal"}
 )
 
 #: 详情页**滚动** action（用户 2026-10-15：「详情页无法滚动，最大化窗口仍看不全」）。
@@ -121,8 +131,20 @@ _PRIORITY_LABELS: tuple[str, ...] = ("优先级 高", "优先级 中（默认）
 #
 # 提示机制已退役（s4）：数据层详情不再含提示行（s1/s3 清理），逐行辨识提示行的
 # 机制（标记表 + 切分函数）已删——操作提示改由 TUI **生成**纯文本（见
-# `_render_detail`/`_open_tb_detail`），Esc 语义由 Footer 广告承担。
+# `_render_detail`/`_open_tb_detail_by_id`），Esc 语义由 Footer 广告承担。
 # ---------------------------------------------------------------------------
+
+
+class _TbList(ScrollMarkMixin, RowListView):
+    """任务书分组列表：s2 滚动知情（``ScrollMarkMixin``）＋ s2 行激活归一（``RowListView``）。
+
+    组合点是本环节：分组列表既要报滚动位置（`#tb-scroll`）又要区分键 / 单击 / 双击
+    （``RowActivated.source/chain``）。两个 mixin 都来自 s2 共享层，此处只做组合。
+    """
+
+
+#: 单击组行后等待「是否双击」的窗口（秒）——双击到达即取消单击的展开/收起。
+_TB_CLICK_TOGGLE_DELAY = 0.35
 
 
 class PysciTUI(App):
@@ -135,6 +157,7 @@ class PysciTUI(App):
         ("n", "tb_new", "新增任务书"),
         ("a", "tb_accept", "接受选中"),
         ("r", "tb_reject", "驳回选中"),
+        ("o", "tb_open_latest", "打开最新"),
         ("j", "journal", "口述"),
         ("q", "quit", "退出"),
         # 详情页滚动（只在 detail/tb-detail 生效，见 check_action；不占 footer 广告面）
@@ -182,10 +205,12 @@ class PysciTUI(App):
     #tb-note {{ height: 5; overflow-y: auto; scrollbar-gutter: stable; }}
     #tb-reject-msg {{ color: $success; }}
     #tb-detail {{ height: 1fr; {_T_INSET} {_T_BORDER} {_T_BG} }}
-    #tb-detail-title {{ {_T_TITLE} }}
+    #tb-detail-title {{ {_T_TITLE} {_T_BORDER} {_T_INSET} }}
     #tb-detail-body {{ {_T_BODY} height: 1fr; overflow-y: auto; scrollbar-gutter: stable; }}
-    #tb-detail-body-text {{ height: auto; }}
+    #tb-detail-md {{ {_T_BODY} height: auto; }}
     #tb-detail-hint {{ {_T_HINT} margin-top: 1; }}
+    #tb-detail-msg {{ color: $success; }}
+    #tb-open-vscode {{ margin-top: 1; }}
     #tb-detail-scroll {{ {_T_SUBTLE} height: 1; }}
     """
 
@@ -218,10 +243,15 @@ class PysciTUI(App):
         self.tb_scroll = 0
         self.tb_scroll_mark = ""
         self.journal_result = ""
-        self.tb_items: list[dict] = []
+        # 任务书分组列表（s5 用户核心需求）：**行模型**（列表按它重建）＋ 家族展开态
+        # （初始全部 False＝收起，主列表一屏只见每组最新/本体）。
+        self.tb_rows: list[dict] = []
+        self.tb_expanded: dict[str, bool] = {}
+        self._tb_timer = None  # 单击组行的延迟切换定时器（双击到达即取消）
         self.tb_msg = ""
         self.tb_new_msg = ""
         self.tb_reject_msg = ""
+        self.tb_detail_msg = ""
         self.last_created = ""
         self.last_rework = ""
         self.reject_target = ""
@@ -268,12 +298,10 @@ class PysciTUI(App):
                 yield Static("", id="journal-result")
             with Vertical(id="taskbook"):
                 yield Static(
-                    "任务书：↑↓ 选；Enter 看详情（正文＋流程报告，delivered 态即批复参考）；"
-                    "n 新增；a 接受选中（delivered→accepted）；"
-                    "r 驳回选中（三段式：① 模式 → ② 优先级 → ③ 批语）",
+                    "任务书：↑↓ 选｜Enter 展开/收起｜双击或 o 进详情｜n 新增｜a 接受｜r 驳回",
                     id="tb-title",
                 )
-                yield MarkedList(id="tb-list")
+                yield _TbList(id="tb-list")
                 yield Static("", id="tb-msg")
                 yield Static("", id="tb-scroll")
             with Vertical(id="tb-new"):
@@ -295,11 +323,11 @@ class PysciTUI(App):
             with Vertical(id="tb-detail"):
                 yield Static("", id="tb-detail-title")
                 yield MarkedVerticalScroll(
-                    Static("", id="tb-detail-body-text"),
-                    id="tb-detail-body",
-                    can_focus=False,
+                    Markdown(id="tb-detail-md"), id="tb-detail-body", can_focus=False
                 )
                 yield Static("", id="tb-detail-hint")
+                yield Button("用 VSCode 打开原文", id="tb-open-vscode")
+                yield Static("", id="tb-detail-msg")
                 yield Static("", id="tb-detail-scroll")
             with Vertical(id="tb-reject"):
                 yield Static(
@@ -406,18 +434,16 @@ class PysciTUI(App):
         self.selected = int(event.list_view.index or 0)
         self._render_summary(self.selected)
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
+    async def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Enter：主菜单 → 详情；「任务书」模块 → **专用面板**（＝`t`，f1 用户路径修复：
-        菜单→Enter→`n` 必须可用）；任务书列表 → **任务书详情页**（正文 + 流程报告；
-        批复就读报告处的 `a`/`r`）。"""
+        菜单→Enter→`n` 必须可用）。**任务书列表已改走 `RowActivated`**（s5 分组列表：
+        Enter 是展开/收起、双击/`o` 才是进详情），故此处不再处理 tb-list。"""
         if event.list_view.id == "menu":
             idx = int(event.list_view.index or 0)
             if self._mods[idx].key == "taskbooks":
-                self._open_taskbooks()
+                await self._open_taskbooks()
             else:
                 self._open_detail(idx)
-        elif event.list_view.id == "tb-list":
-            self._open_tb_detail(int(event.list_view.index or 0))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         """footer 键位广告与守卫一致化（f1）：受管 action 在当前视图无效果 → 返回 `False`
@@ -538,41 +564,68 @@ class PysciTUI(App):
         self._refresh_scroll_mark()
         self.call_after_refresh(self._refresh_scroll_mark)
 
-    def _open_tb_detail(self, idx: int) -> None:
-        """任务书**详情页**（任何状态可进）：正文/批语/流程报告/返工卡片（数据层 :func:`taskbooks.detail_lines`）。
+    def _open_tb_detail_by_id(self, tb_id: str) -> None:
+        """任务书**详情页**（任何状态可进）：**头卡** ＋ `Markdown` 正文（s5）。
 
-        三区渲染沿用模块详情页的分区（标题 / 读数 / 操作提示）；正文区是**可滚动**的
-        ``MarkedVerticalScroll``（交付报告可能很长），滚动位置由 :meth:`_reset_scroll` 复位到顶、
-        并在底部指示行报位置（滚轮/滚动条/键盘任一来源都实时刷新，见 :meth:`on_pane_scrolled`）。
+        正文＝ :func:`taskbooks.detail_markdown`（Markdown 文档单一实现；delivered 态
+        「★ 批复参考」置顶）。正文区是**可滚动**的 ``MarkedVerticalScroll``（交付报告可能
+        很长），滚动位置由 :meth:`_reset_scroll` 复位到顶、底部指示行报位置（滚轮/滚动条/
+        键盘任一来源都实时刷新，见 :meth:`on_pane_scrolled`）；「用 VSCode 打开原文」
+        按钮见 :meth:`_open_in_vscode`。
         """
         from .. import taskbooks as _tb
 
-        if idx >= len(self.tb_items):
+        if not tb_id:
             return
-        tid = str(self.tb_items[idx].get("id"))
+        st = _tb.load_state(tb_id) or {}
         try:
-            body = list(_tb.detail_lines(tid))
+            md_text = _tb.detail_markdown(tb_id)
         except Exception as exc:  # noqa: BLE001 - 读数坏一项不塌详情（观察面 fail-open）
-            body = [f"任务书 {tid}", f"[!] 详情读数失败：{type(exc).__name__}: {exc}"]
+            md_text = (
+                f"# 任务书 {tb_id}\n\n[!] 详情读数失败：{type(exc).__name__}: {exc}\n"
+            )
         self.view = "tb-detail"
-        self.tb_detail_id = tid
-        self.tb_detail_title = f"{tid}　详情"
-        self.tb_detail_body = "\n".join(body)
+        self.tb_detail_id = tb_id
+        self.tb_detail_title = (
+            f"{_tb.status_badge(str(st.get('status') or ''))}　{tb_id}"
+            f"　{str(st.get('title') or '')}"
+        )
+        self.tb_detail_body = md_text
         # 操作提示由 TUI 生成（数据层详情已无提示行，s4 提示机制退役）；Esc 由 Footer 承担。
         self.tb_detail_hint = "a 接受　r 驳回"
         self._hide_all_views()
         self.query_one("#tb-detail-title", Static).update(self.tb_detail_title)
-        self.query_one("#tb-detail-body-text", Static).update(
-            self.tb_detail_body or "（无内容）"
-        )
+        self.query_one("#tb-detail-md", Markdown).update(md_text)
         self.query_one("#tb-detail-hint", Static).update(self.tb_detail_hint)
+        self._set_tb_detail_msg("")
         self.query_one("#tb-detail", Vertical).display = True
         self._reset_scroll()
 
-    def action_back(self) -> None:
+    def _open_in_vscode(self) -> None:
+        """用 VSCode 打开任务书原文（``code`` 不在 PATH / Popen 异常 → 消息行如实报错）。
+
+        ``Popen`` 不等待（不阻塞 UI 事件循环）。
+        """
+        from .. import taskbooks as _tb
+
+        tid = self.tb_detail_id
+        if not tid:
+            return
+        path = _tb.md_path(tid)
+        if shutil.which("code") is None:
+            self._set_tb_detail_msg("[!] 打开失败：PATH 中找不到 `code`（VSCode CLI）")
+            return
+        try:
+            subprocess.Popen(["code", str(path)])
+        except Exception as exc:  # noqa: BLE001 - 启动失败如实报
+            self._set_tb_detail_msg(f"[!] 打开失败：{type(exc).__name__}: {exc}")
+            return
+        self._set_tb_detail_msg(f"[√] 已在 VSCode 打开 {path}")
+
+    async def action_back(self) -> None:
         """Esc/←：任务书详情页 → 任务书列表；其余子视图 → 主菜单；主菜单 → 退出。"""
         if self.view == "tb-detail":
-            self._open_taskbooks()
+            await self._open_taskbooks()
         elif self.view != "menu":
             self._show_menu()
         else:
@@ -715,39 +768,194 @@ class PysciTUI(App):
         self.query_one("#journal-result", Static).update(text)
 
     # ---- 任务书面板（§3.4 / §2.4 #1）---------------------------------------
-    def action_taskbooks(self) -> None:
-        self._open_taskbooks()
+    async def action_taskbooks(self) -> None:
+        await self._open_taskbooks()
 
-    def _open_taskbooks(self) -> None:
-        from .. import taskbooks as _tb  # 延迟导入：数据层叶子
-
+    async def _open_taskbooks(self, *, keep_root: str | None = None) -> None:
         self.view = "taskbooks"
-        try:
-            self.tb_items = _tb.list_all()
-        except Exception:  # noqa: BLE001 - 读数失败不该塌面板
-            self.tb_items = []
-        lv = self.query_one("#tb-list", ListView)
-        lv.clear()
-        for d in self.tb_items:
-            lv.append(
-                ListItem(
-                    Static(
-                        f"{_tb.status_badge(str(d.get('status')))}　{d.get('title')}"
-                    )
-                )
-            )
-        lv.index = 0  # 重建后选中态回到首项（clear/append 后 index 可能为 None）
+        await self._rebuild_tb_list(
+            keep_root=keep_root
+        )  # 行模型 + 列表（含滚动位置复位）
         self._set_tb_msg("")
         self._hide_all_views()
         self.query_one("#taskbook", Vertical).display = True
-        lv.focus()
-        # 列表重建 → 滚动回顶并刷新位置行（s4：`#tb-scroll` 与详情页同位指示同源）
-        self._reset_scroll()
+        self.query_one("#tb-list", _TbList).focus()
         # 进面板 = 进「任务书」模块视图 → 写该模块水位（§2.2「进入详情即写水位」；f1 起
         # Enter 也走这里，故水位在这里写，不再依赖 _open_detail）。
         mod = next((m for m in self._mods if m.key == "taskbooks"), None)
         if mod is not None:
             self._mark_seen(mod)
+
+    # ---- 分组列表（s5：返工家族，收起/展开 + 键鼠归一）------------------------
+    def _build_tb_rows(self) -> list[dict]:
+        """行模型：**每组一行**（最新/本体）；展开的组下逐行列出成员（新→旧、本体殿后）。
+
+        行 = ``{"kind": "group"|"sub", "tb_id", "root", …}``；``#tb-list`` **只按本函数
+        重建**（测试亦只准按行模型选行，禁裸下标）。家族来自 s1 ``taskbooks.families()``。
+        """
+        from .. import taskbooks as _tb  # 延迟导入：数据层叶子
+
+        try:
+            fams = _tb.families()
+        except Exception:  # noqa: BLE001 - 读数失败不该塌面板
+            return []
+        rows: list[dict] = []
+        for fam in fams:
+            members = fam["members"]
+            if not members:
+                continue
+            latest = members[0]
+            root = str(fam["root"])
+            rows.append(
+                {
+                    "kind": "group",
+                    "tb_id": str(latest.get("id") or ""),
+                    "root": root,
+                    "title": str(latest.get("title") or ""),
+                    "badge": _tb.status_badge(str(latest.get("status") or "")),
+                    "size": int(fam["size"]),
+                    "round": int(latest.get("rework_round") or 0),
+                }
+            )
+            if not self.tb_expanded.get(root):
+                continue
+            for m in members:
+                rows.append(
+                    {
+                        "kind": "sub",
+                        "tb_id": str(m.get("id") or ""),
+                        "root": root,
+                        "label": _tb.family_label(m),
+                        "indent": 1,
+                        "title": str(m.get("title") or ""),
+                        "badge": _tb.status_badge(str(m.get("status") or "")),
+                    }
+                )
+        return rows
+
+    def _tb_list_item(self, row: dict) -> ChainListItem:
+        """行 → 列表条目（``make_row`` 统一形态：徽标 | 标题 | 右对齐 meta）。"""
+        if row["kind"] == "group":
+            meta = f"共 {row['size']} 件" if int(row["size"]) > 1 else "本体"
+            return ChainListItem(
+                make_row(row["badge"], row["title"], meta=meta),
+                id=f"tbrow-{row['tb_id']}-{row['kind']}",
+            )
+        return ChainListItem(
+            make_row(
+                row["badge"],
+                f"└ {row['label']}　{row['title']}",
+                indent=int(row.get("indent") or 0) + 1,
+            ),
+            id=f"tbrow-{row['tb_id']}-{row['kind']}",
+        )
+
+    async def _rebuild_tb_list(self, *, keep_root: str | None = None) -> None:
+        """按行模型重建 ``#tb-list``；``keep_root`` 给出时把高亮保持在**该组行**上。
+
+        ``ListView.clear()`` 是 **AwaitComplete**（移除在事件循环里异步完成）——必须
+        ``await`` 它再挂新行，否则旧行尚未移除、新行已挂载，撞 ``DuplicateIds``（实测）。
+        """
+        self.tb_rows = self._build_tb_rows()
+        try:
+            lv = self.query_one("#tb-list", _TbList)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return
+        await lv.clear()
+        for row in self.tb_rows:
+            lv.append(self._tb_list_item(row))
+        keep = 0
+        if keep_root is not None:
+            keep = next(
+                (
+                    i
+                    for i, r in enumerate(self.tb_rows)
+                    if r["kind"] == "group" and r["root"] == keep_root
+                ),
+                0,
+            )
+        lv.index = min(keep, len(self.tb_rows) - 1) if self.tb_rows else None
+        self._reset_scroll()  # 重建 → 滚动回顶并按真实布局刷新位置行（s4 已接列表重建）
+
+    async def _toggle_tb_group(self, root: str) -> None:
+        """展开/收起一族（**统一展开**：单件组同样可展开，次级列表仅「本体」一项）。"""
+        self.tb_expanded[root] = not self.tb_expanded.get(root, False)
+        await self._rebuild_tb_list(keep_root=root)
+
+    def _cancel_tb_timer(self) -> None:
+        timer = self._tb_timer
+        self._tb_timer = None
+        if timer is not None:
+            try:
+                timer.stop()
+            except Exception:  # noqa: BLE001 - 已停/已触发都算取消成功
+                pass
+
+    def _schedule_tb_toggle(self, root: str) -> None:
+        """组行单击：延迟 ``_TB_CLICK_TOGGLE_DELAY`` 秒再展开/收起——双击到达即取消。"""
+        self._cancel_tb_timer()
+        self._tb_timer = self.set_timer(
+            _TB_CLICK_TOGGLE_DELAY, lambda: self._toggle_tb_group(root)
+        )
+
+    async def on_row_activated(self, event: RowActivated) -> None:
+        """任务书列表行激活（s2 ``RowListView``：键/单击/双击**同型**消息，键鼠可辨）。
+
+        - 组行 Enter（``key``）→ **立即**展开/收起；组行单击（``click`` chain=1）→ 延迟
+          展开/收起（双击到达即取消）；组行双击（chain≥2）→ 取消延迟、直接进最新项详情；
+        - 次级行（单击/Enter）→ 立即进该项详情。
+        """
+        if self.view != "taskbooks":
+            return
+        index = int(event.index)
+        if not (0 <= index < len(self.tb_rows)):
+            return
+        row = self.tb_rows[index]
+        if row["kind"] != "group":
+            self._open_tb_detail_by_id(str(row["tb_id"]))
+            return
+        if event.source == "key":
+            await self._toggle_tb_group(str(row["root"]))
+        elif int(event.chain) >= 2:
+            self._cancel_tb_timer()  # 双击：取消单击的延迟切换
+            self._open_tb_detail_by_id(str(row["tb_id"]))
+        else:
+            self._schedule_tb_toggle(str(row["root"]))
+
+    def action_tb_open_latest(self) -> None:
+        """`o`：进选中行目标详情（组行→最新项；次级行→该项）。"""
+        if self.view != "taskbooks":
+            return
+        tid = self._tb_target_id()
+        if tid:
+            self._open_tb_detail_by_id(tid)
+
+    def _tb_target_id(self) -> str:
+        """批复/打开目标：组行/次级行 → 该行 ``tb_id``（组行即最新项）；详情页 → 详情项。
+
+        ``a``/``r``/``o``（含详情页内）都走它——目标语义单点，别处不许再猜下标含义。
+        """
+        if self.view == "tb-detail" and self.tb_detail_id:
+            return self.tb_detail_id
+        idx = self._tb_selected_index()
+        if 0 <= idx < len(self.tb_rows):
+            return str(self.tb_rows[idx].get("tb_id") or "")
+        return ""
+
+    def _tb_root_of(self, tb_id: str) -> str:
+        """行模型里该任务书所在家族的 root（找不到回空串）。"""
+        for r in self.tb_rows:
+            if str(r.get("tb_id")) == str(tb_id):
+                return str(r.get("root") or "")
+        return ""
+
+    def _tb_selected_index(self) -> int:
+        """当前选中行下标（``#tb-list`` 高亮行；禁止外部按它猜语义——目标解析见
+        :meth:`_tb_target_id`）。"""
+        try:
+            return int(self.query_one("#tb-list", _TbList).index or 0)
+        except Exception:  # noqa: BLE001 - 组合面容忍缺件
+            return 0
 
     def action_tb_new(self) -> None:
         if self.view != "taskbooks":
@@ -761,29 +969,16 @@ class PysciTUI(App):
         self._set_tb_new_msg("")
         self.query_one("#tb-new-title-input", Input).focus()
 
-    def action_tb_accept(self) -> None:
-        self._tb_act(accept=True)
+    async def action_tb_accept(self) -> None:
+        await self._tb_act(accept=True)
 
-    def action_tb_reject(self) -> None:
-        """`r`：对**选中交付项**开三段式驳回面板（模式→优先级→批语，PSEP_3 §4.1）。"""
+    async def action_tb_reject(self) -> None:
+        """`r`：对**选中行目标**开三段式驳回面板（组行→最新项；次级行→该项；PSEP_3 §4.1）。"""
         if self.view not in ("taskbooks", "tb-detail"):
             return
-        idx = self._tb_selected_index()
-        if idx >= len(self.tb_items):
-            return
-        self._open_reject_panel(str(self.tb_items[idx].get("id")))
-
-    def _tb_selected_index(self) -> int:
-        """当前批复目标下标：详情页＝进入时那一项；列表＝``#tb-list`` 高亮行。
-
-        详情页里 ``#tb-list`` 仍持原高亮（进详情不清列表），但显式以 ``tb_detail_id``
-        为准——用户可能在详情页停留期间列表被别处重建。
-        """
-        if self.view == "tb-detail" and self.tb_detail_id:
-            for i, d in enumerate(self.tb_items):
-                if str(d.get("id")) == self.tb_detail_id:
-                    return i
-        return int(self.query_one("#tb-list", ListView).index or 0)
+        tid = self._tb_target_id()
+        if tid:
+            self._open_reject_panel(tid)
 
     def _open_reject_panel(self, tb_id: str) -> None:
         self.view = "tb-reject"
@@ -797,35 +992,40 @@ class PysciTUI(App):
         self._set_tb_reject_msg(f"驳回 {tb_id}：请依次选 ① 模式 → ② 优先级 → ③ 批语")
         self.query_one("#tb-reject-mode", RadioSet).focus()
 
-    def _tb_act(self, *, accept: bool) -> None:
-        """对**选中项**批复：accept（驳回走三段式面板，见 :meth:`action_tb_reject`）。
+    async def _tb_act(self, *, accept: bool) -> None:
+        """对**选中行目标**批复：accept（驳回走三段式面板，见 :meth:`action_tb_reject`）。
 
-        列表与**详情页**都可批复（用户 2026-10-15：读完流程报告就地处批复）。
+        列表与**详情页**都可批复（用户 2026-10-15：读完流程报告就地处批复）；批准后列表
+        重建并把高亮保持在**被操作家族**的组行上。
         """
         if self.view not in ("taskbooks", "tb-detail"):
             return
         del accept
         from .. import taskbooks as _tb
 
-        idx = self._tb_selected_index()
-        if idx >= len(self.tb_items):
+        tid = self._tb_target_id()
+        if not tid:
             return
-        tid = str(self.tb_items[idx].get("id"))
+        keep_root = self._tb_root_of(tid) or None
         try:
             _tb.accept(tid)
         except ValueError as exc:
             self._set_tb_msg(f"[!] {exc}")
             return
-        self._open_taskbooks()  # 重建列表（状态已变）——随后再落读数（重建会清空）
+        await self._open_taskbooks(keep_root=keep_root)  # 重建列表（状态已变）
         self._set_tb_msg(f"[√] {tid} → accepted")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """按钮：``#tb-new-submit`` 投递（带优先级）；``#tb-reject-submit`` 三段式驳回。"""
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        """按钮：``#tb-new-submit`` 投递；``#tb-reject-submit`` 三段式驳回；
+        ``#tb-open-vscode`` 用 VSCode 打开任务书原文。"""
         if event.button.id == "tb-new-submit" and self.view == "tb-new":
-            self._submit_new_taskbook()
+            await self._submit_new_taskbook()
+            return
+        if event.button.id == "tb-open-vscode" and self.view == "tb-detail":
+            self._open_in_vscode()
             return
         if event.button.id == "tb-reject-submit" and self.view == "tb-reject":
-            self._submit_reject()
+            await self._submit_reject()
 
     def _radio_index(self, selector: str, default: int) -> int:
         """RadioSet 选中下标（`pressed_index` 为 None 时回落默认位）。"""
@@ -846,7 +1046,7 @@ class PysciTUI(App):
         if 0 <= index < len(btns):
             btns[index].value = True
 
-    def _submit_new_taskbook(self) -> None:
+    async def _submit_new_taskbook(self) -> None:
         """「投递」：程序化组装元数据（含优先级）并落盘（TASKBOOK-NEW 由 watch 增量报出）。"""
         from .. import taskbooks as _tb
 
@@ -863,13 +1063,13 @@ class PysciTUI(App):
             return
         self.last_created = str(st["id"])
         # ③ 成功即**关表单回列表**（backlog 20261015-230248）：留在表单上可被重复点「投递」
-        # → 同一份任务书被投两遍；回列表后确认结果一眼可见。
-        self._open_taskbooks()
+        # → 同一份任务书被投两遍；回列表后确认结果一眼可见（新件最新 → 高亮首行即它）。
+        await self._open_taskbooks()
         self._set_tb_msg(
             f"[√] 已投递：{st['id']}（优先级 {priority}；TASKBOOK-NEW 唤醒组长）"
         )
 
-    def _submit_reject(self) -> None:
+    async def _submit_reject(self) -> None:
         """三段式驳回落盘（模式→优先级→批语）→ 生成返工任务书（PSEP_3 §4.1）。"""
         from .. import taskbooks as _tb
 
@@ -891,7 +1091,7 @@ class PysciTUI(App):
             f"　下一步：orch plan rework {new['id']} --mode {mode} 生成返工骨架"
         )
         self._set_tb_reject_msg(msg)
-        self._open_taskbooks()  # 回列表并重建（原项状态已变）
+        await self._open_taskbooks()  # 回列表并重建（原项状态已变）
         self._set_tb_msg(msg)
 
     def _set_tb_msg(self, text: str) -> None:
@@ -905,6 +1105,10 @@ class PysciTUI(App):
     def _set_tb_reject_msg(self, text: str) -> None:
         self.tb_reject_msg = text
         self.query_one("#tb-reject-msg", Static).update(text)
+
+    def _set_tb_detail_msg(self, text: str) -> None:
+        self.tb_detail_msg = text
+        self.query_one("#tb-detail-msg", Static).update(text)
 
 
 def _is_tty() -> bool:

@@ -227,18 +227,23 @@ def test_pilot_accept_and_reject_selected(tbdir):
         app = tui.PysciTUI()
         async with app.run_test() as pilot:
             await pilot.press("t")
-            assert len(app.tb_items) == 2
-            seen["first"] = str(app.tb_items[0]["id"])
-            seen["second"] = str(app.tb_items[1]["id"])
-            await pilot.press("a")  # 接受选中（第 0 项）
+            await pilot.pause()
+            assert len(app.tb_rows) == 2
+            seen["first"] = str(app.tb_rows[0]["tb_id"])
+            seen["second"] = str(app.tb_rows[1]["tb_id"])
+            await pilot.press("a")  # 接受选中行（s5：组行 → 该家族最新项）
+            await pilot.pause()
             assert "accepted" in app.tb_msg and seen["first"] in app.tb_msg
-            await pilot.press("down")  # 重建后第 1 项
+            await pilot.press("down")  # 重建后移到第 1 行
+            await pilot.pause()
             await pilot.press("r")  # 开三段式驳回面板
+            await pilot.pause()
             assert app.view == "tb-reject"
             app._set_radio("#tb-reject-mode", 1)  # 无监察改进
             app._set_radio("#tb-reject-priority", 2)  # 低
             app.query_one("#tb-note", TextArea).text = "拆得不对"
             await pilot.click("#tb-reject-submit")
+            await pilot.pause()
             assert app.last_rework.startswith("tb-")
             assert "rework" in app.tb_reject_msg.lower() or "返工" in app.tb_reject_msg
             seen["rework"] = app.last_rework

@@ -245,14 +245,11 @@ def test_tui_enter_shows_rework_card(cface, capsys):
             await pilot.press("t")
             await pilot.pause()
             lv = app.query_one("#tb-list", ListView)
-            idx = next(i for i, d in enumerate(app.tb_items) if d["id"] == tb2)
+            idx = next(i for i, r in enumerate(app.tb_rows) if r["tb_id"] == tb2)
             lv.index = idx
             await pilot.pause()
-            for _ in range(3):  # 键驱动有竞态：按 Enter 直到详情页落定
-                await pilot.press("enter")
-                await pilot.pause()
-                if app.view == "tb-detail":
-                    break
+            await pilot.press("o")  # s5：Enter 是展开/收起，`o` 才是进详情
+            await pilot.pause()
             assert app.view == "tb-detail"
             assert "返工卡片" in app.tb_detail_body
             assert "第 1 轮返工" in app.tb_detail_body

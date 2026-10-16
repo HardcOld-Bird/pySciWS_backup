@@ -20,7 +20,7 @@ import json
 
 import pytest
 import yaml
-from textual.widgets import ListView, Static
+from textual.widgets import ListView
 
 from pysci import paths as _paths
 from pysci.skills.orchestration.tools import ledger, plans, queueworker, taskbooks
@@ -190,22 +190,28 @@ def _mk(title: str, status: str, *, plan: str = "") -> str:
     raise AssertionError(status)
 
 
-async def _open_panel(app, pilot, idx: int = 0) -> None:
+async def _select_row(app, tb_id: str) -> int:
+    """按**行模型**选中该任务书所在行（s5：列表分组，测试禁裸下标）。"""
+    lv = app.query_one("#tb-list", ListView)
+    index = next(i for i, r in enumerate(app.tb_rows) if r["tb_id"] == tb_id)
+    lv.index = index
+    return index
+
+
+async def _open_panel(app, pilot, index: int = 0) -> None:
     await pilot.press("t")
     await pilot.pause()
     lv = app.query_one("#tb-list", ListView)
-    lv.index = idx
+    lv.index = index
     await pilot.pause()
 
 
-async def _enter_detail(app, pilot, idx: int = 0) -> None:
-    await _open_panel(app, pilot, idx)
-    for _ in range(3):  # 键驱动有竞态：按 Enter 直到详情视图落定
-        await pilot.press("enter")
-        await pilot.pause()
-        if app.view == "tb-detail":
-            break
-    assert app.view == "tb-detail"
+async def _enter_detail(app, pilot, index: int = 0) -> None:
+    """进详情（s5：Enter 是展开/收起，`o` 才是进选中行目标详情）。"""
+    await _open_panel(app, pilot, index)
+    await pilot.press("o")
+    await pilot.pause()
+    assert app.view == "tb-detail", app.view
 
 
 # ===========================================================================
@@ -229,18 +235,18 @@ def test_list_rows_show_status_badge_for_all_seven_states(face):
         app = tui.PysciTUI()
         async with app.run_test() as pilot:
             await _open_panel(app, pilot)
-            lv = app.query_one("#tb-list", ListView)
-            return [str(li.query_one(Static).content) for li in lv.children]
+            return [(r["badge"], r["title"]) for r in app.tb_rows]
 
     rows = _run(_go())
     assert len(rows) == len(states)
     glyphs = set()
     for status in states:
-        hit = [r for r in rows if f"任务书-{status}" in r]
-        assert len(hit) == 1, f"{status} 的行不唯一/缺失：{rows}"
-        row = hit[0]
         badge = taskbooks.status_badge(status)
-        assert row.startswith(badge), f"{status} 行缺徽标：{row!r}"
+        hit = [t for b, t in rows if t.startswith(f"任务书-{status}")]
+        assert len(hit) == 1, f"{status} 的行不唯一/缺失：{rows}"
+        assert any(b == badge and t.startswith(f"任务书-{status}") for b, t in rows), (
+            f"{status} 行缺徽标：{rows}"
+        )
         glyphs.add(badge.split(" ")[0])
     # 七态字形两两可辨（不是同一个符号）
     assert len(glyphs) == len(states), glyphs
@@ -333,7 +339,7 @@ def test_delivered_puts_flow_report_first_as_review_reference(face):
 
     body = _run(_go())
     assert "★ 批复参考" in body
-    assert body.index("★ 批复参考") < body.index("—— 任务书正文 ——"), "批复参考须置顶"
+    assert body.index("★ 批复参考") < body.index("## 任务书正文"), "批复参考须置顶"
     assert body.index("★ 批复参考") < body.index("环节完成清单")
 
 
@@ -350,7 +356,7 @@ def test_non_delivered_keeps_report_after_body(face):
 
     body = _run(_go())
     assert "★ 批复参考" not in body
-    assert body.index("—— 任务书正文 ——") < body.index("环节完成清单")
+    assert body.index("## 任务书正文") < body.index("环节完成清单")
 
 
 # ===========================================================================
@@ -368,9 +374,9 @@ def test_rework_card_still_shown_and_merged(face):
         async with app.run_test() as pilot:
             await _open_panel(app, pilot)
             lv = app.query_one("#tb-list", ListView)
-            lv.index = next(i for i, d in enumerate(app.tb_items) if d["id"] == tb2)
+            lv.index = next(i for i, r in enumerate(app.tb_rows) if r["tb_id"] == tb2)
             await pilot.pause()
-            await pilot.press("enter")
+            await pilot.press("o")  # s5：Enter 是展开/收起，`o` 才是进详情
             await pilot.pause()
             return app.tb_detail_body
 

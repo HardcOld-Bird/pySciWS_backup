@@ -166,7 +166,7 @@ def test_multiline_note_stored_whole_and_shown(face):
             await pilot.pause()
             app.query_one("#tb-note", TextArea).text = NOTE
             await pilot.pause()
-            app._submit_reject()
+            await app._submit_reject()
             await pilot.pause()
             return app.last_rework
 
@@ -199,7 +199,7 @@ def test_submit_new_taskbook_returns_to_list(face):
             assert app.view == "tb-new"
             app.query_one("#tb-new-title-input").value = "新任务书"
             await pilot.pause()
-            app._submit_new_taskbook()
+            await app._submit_new_taskbook()
             await pilot.pause()
             return app.view, app.last_created
 
@@ -221,7 +221,7 @@ def test_submit_reject_returns_to_list(face):
             await pilot.pause()
             app.query_one("#tb-note", TextArea).text = "批语"
             await pilot.pause()
-            app._submit_reject()
+            await app._submit_reject()
             await pilot.pause()
             return (
                 app.view,

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from textual import events
 from textual.containers import Horizontal, VerticalScroll
+from textual.geometry import Size
 from textual.message import Message
 from textual.widgets import ListItem, ListView, Static, Tree
 
@@ -40,22 +41,35 @@ from .theme import (
 # 滚动知情：scroll_y 任一来源变化 → 宿主 App（on_pane_scrolled，s4 接线）
 # ---------------------------------------------------------------------------
 class ScrollMarkMixin:
-    """滚动知情 mixin：``scroll_y`` 变化即通知宿主 App。
+    """滚动知情 mixin：``scroll_y`` / 内容尺寸变化即通知宿主 App。
 
     Textual 8.2.8 没有 ``Scroll`` 事件类（机制事实，见模块 docstring）——本 mixin
-    覆写 :meth:`~textual.widget.Widget.watch_scroll_y`（唯一可靠接线），调
-    ``getattr(self.app, "on_pane_scrolled", None)``：存在则 ``self.app.on_pane_scrolled(self)``。
+    覆写 :meth:`~textual.widget.Widget.watch_scroll_y`（滚动来源）与
+    ``watch_virtual_size``（**内容尺寸**：Markdown 异步渲染、条目增减、窗口变化），
+    调 ``getattr(self.app, "on_pane_scrolled", None)``：存在则
+    ``self.app.on_pane_scrolled(self)``。
     **fail-soft**：宿主未实现或调用抛异常一律吞掉——知情通道绝不塌滚动本体。
     """
 
-    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
-        super().watch_scroll_y(old_value, new_value)  # 基座行为（滚动条同步/重绘）保持
+    def _notify_pane_changed(self) -> None:
         try:
             notify = getattr(self.app, "on_pane_scrolled", None)
             if notify is not None:
                 notify(self)
         except Exception:  # noqa: BLE001 - 知情通道 fail-soft（缺失/异常不塌滚动）
             pass
+
+    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        super().watch_scroll_y(old_value, new_value)  # 基座行为（滚动条同步/重绘）保持
+        self._notify_pane_changed()
+
+    def watch_virtual_size(self, old_value: Size, new_value: Size) -> None:
+        """内容尺寸变了（布局落定/内容增减）→ 位置指示需重算（读的是 max_scroll_y）。"""
+        self._notify_pane_changed()
+
+    def on_resize(self, event: events.Resize) -> None:
+        """面板尺寸变化（隐藏→显示、窗口缩放）→ ``max_scroll_y`` 随之变，指示需重算。"""
+        self._notify_pane_changed()
 
 
 class MarkedVerticalScroll(ScrollMarkMixin, VerticalScroll):
