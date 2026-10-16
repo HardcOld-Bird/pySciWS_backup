@@ -1,0 +1,55 @@
+{
+  "plan_id": "tui-overhaul-20261016",
+  "created": "2026-10-16T17:00:24+08:00",
+  "goal": "TUI 全面改版一次性交付——任务书按返工家族分组＋Markdown 报告渲染、计划与派发列表+Tree 详情、盲审交互流程（2_REFACTOR §5.4 偏差报告入强制队列）、队列/系统/待决/决策看板卡片化、徽标性能修复（不再全量解析 plan YAML）、footer 与提示文字清理（用户 13 项需求）",
+  "steps": [
+    {
+      "id": "s1-data",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261016-170041-tui-overhaul-20261016-s1-data",
+      "task_file": "orchestration/state/plans/tui-overhaul-20261016-s1-data.task.md"
+    },
+    {
+      "id": "s2-widgets",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "s3-modules",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "s4-app-frame",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "s5-taskbooks-ui",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "s6-plans-ui",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "s7-boards-ui",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "s8-review-blind",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "s9-tests",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null
+}

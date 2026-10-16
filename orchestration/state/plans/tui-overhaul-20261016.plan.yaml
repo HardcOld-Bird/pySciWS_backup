@@ -1,0 +1,67 @@
+id: tui-overhaul-20261016
+goal: TUI 全面改版一次性交付——任务书按返工家族分组＋Markdown 报告渲染、计划与派发列表+Tree 详情、盲审交互流程（2_REFACTOR §5.4 偏差报告入强制队列）、队列/系统/待决/决策看板卡片化、徽标性能修复（不再全量解析 plan YAML）、footer 与提示文字清理（用户 13 项需求）
+read: plan-decomposition.md
+steps:
+- id: s1-data
+  member: devops
+  brief: 数据层读数/写入扩展——plans mtime 缓存+overview_rows+plan_digest+plan_tree_nodes；taskbooks.families/family_label/md_path/detail_markdown；queues.water_lines 成员完整性修复；taste 盲审读数（blind_queue 隐答案）+apply_review 扩展；mirror 偏差队列 append_deviation/pending_deviations/deviation_lines
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests/skills/orchestration
+  effort: high
+- id: s2-widgets
+  member: devops
+  brief: TUI 共享层新建——tui/theme.py（_T_* 主题常量唯一出处）+ tui/widgets.py（ScrollMarkMixin/MarkedVerticalScroll/MarkedList/MarkedTree、ChainListItem/RowListView 双击语义、card/section_title/make_row/ChoiceCard 视觉件）
+  dirs:
+  - src/pysci/skills/orchestration/tools/tui
+  - tests/skills/orchestration
+  effort: medium
+- id: s3-modules
+  member: devops
+  brief: modules.py 重构——_fingerprint_module 加 digest 参数（徽标不再构建全详情）+2 秒 TTL memo；_plans_* 走 overview_rows 并删「推进：/多 plan 并行」尾行；_review_detail 删 reviewer 附属队列/审查面超时/审查入口三段；_pending_detail 删「批复入口/口述动作」并增偏差报告区块；_system_detail 倒计时置顶
+  dirs:
+  - src/pysci/skills/orchestration/tools/tui
+  - tests/skills/orchestration
+  effort: medium
+- id: s4-app-frame
+  member: devops
+  brief: app.py 通用面——theme/widgets 接线；_ACTIONS_BY_VIEW 收敛（t/j 仅主菜单、新增 o=打开最新）；_SCROLL_PANES 泛化+on_pane_scrolled（滚轮/滚动条即刷位置指示）；action_back 回退链扩展；_DETAIL_HINT_MARKERS/_split_detail 退役；_mark_seen 短路；#summary 概览板美化
+  dirs:
+  - src/pysci/skills/orchestration/tools/tui
+  - tests/skills/orchestration
+  effort: high
+- id: s5-taskbooks-ui
+  member: devops
+  brief: 任务书面板——返工家族分组列表（行模型/初始收起/单击展开缩进次级列表新→旧/双击与 o 进最新详情/次级项进对应详情/a·r 目标解析）+#tb-scroll 滚动位置行；tb-detail 改 Markdown 渲染+「用 VSCode 打开原文」按钮
+  dirs:
+  - src/pysci/skills/orchestration/tools/tui
+  - tests/skills/orchestration
+  effort: high
+- id: s6-plans-ui
+  member: devops
+  brief: 计划与派发——plans 列表视图（新→旧，徽标+id+进度+goal）+plan-detail 页（头卡+Textual Tree 渲染 plan_tree_nodes 环节树）
+  dirs:
+  - src/pysci/skills/orchestration/tools/tui
+  - tests/skills/orchestration
+  effort: medium
+- id: s7-boards-ui
+  member: devops
+  brief: 决策审计列表+详情页（inspectd.decision_rows，attention 置顶）；队列与运行卡片化（每成员一卡含空队、在途带成员名）；系统与路由卡片化（倒计时卡置顶每秒跳动）；待决与验收卡片化（含偏差报告卡）；各视图删「Esc/← 返回主菜单」
+  dirs:
+  - src/pysci/skills/orchestration/tools/tui
+  - tests/skills/orchestration
+  effort: medium
+- id: s8-review-blind
+  member: devops
+  brief: 盲审交互流程——入口分派（有待盲审直进盲审面）；逐案大选项卡（隐 twin 答案）+提交自动下一项；不一致展开「原因批复」多行框+「是否需恢复更改」三选一（其他→具体要求框）；偏差报告入 mirror-queue（kind=deviation）、「需恢复」自动建偏差纠正任务书；无待审/处理完进已裁决列表+裁决详情页
+  dirs:
+  - src/pysci/skills/orchestration/tools/tui
+  - tests/skills/orchestration
+  effort: high
+- id: s9-tests
+  member: devops
+  brief: 测试收口——新增 test_tui_taskbook_groups/test_tui_plans_panel/test_tui_review_blind/test_tui_decisions_panel 与数据层用例（blind_queue 隐答案、water_lines 成员完整性、plan_digest 不读 YAML）；全量 pytest 绿
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests/skills/orchestration
+  effort: high
