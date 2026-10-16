@@ -177,9 +177,17 @@ class Card(Static):
     """
 
 
-def card(*lines: str, id: str | None = None, classes: str = "") -> Static:
-    """圆角边框卡：多行文本 ``Static``（组合面按内容定高）。"""
-    return Card("\n".join(str(ln) for ln in lines), id=id, classes=classes)
+def card(
+    *lines: str, id: str | None = None, classes: str = "", markup: bool = True
+) -> Static:
+    """圆角边框卡：多行文本 ``Static``（组合面按内容定高）。
+
+    ``markup=False`` 关 Rich markup 解析——卡内是**纯文本**：含 ``[sim]``/``[!]`` 这类
+    方括号 token 时会被当标签吃掉（s7 实测），看板卡一律显式关闭。
+    """
+    return Card(
+        "\n".join(str(ln) for ln in lines), id=id, classes=classes, markup=markup
+    )
 
 
 class SectionTitle(Static):
@@ -219,16 +227,19 @@ class Row(Horizontal):
     """
 
 
-def make_row(badge: str, title: str, meta: str = "", indent: int = 0) -> Horizontal:
+def make_row(
+    badge: str, title: str, meta: str = "", indent: int = 0, markup: bool = True
+) -> Horizontal:
     """统一列表行：徽标（auto 宽）+ 标题（1fr）+ 右对齐 meta（auto 宽）。
 
-    ``indent`` 控标题左侧留白（家族缩进等场景）。
+    ``indent`` 控标题左侧留白（家族缩进等场景）；``markup=False`` 关闭 Rich markup 解析
+    ——徽标形如 ``[i]`` 时会被当**斜体标签**吃掉（s7 实测），纯文本旗标须显式关。
     """
     prefix = " " * max(0, int(indent))
     return Row(
-        Static(str(badge), classes="row-badge-cell"),
-        Static(f"{prefix}{title}", classes="row-title-cell"),
-        Static(str(meta), classes="row-meta-cell"),
+        Static(str(badge), classes="row-badge-cell", markup=markup),
+        Static(f"{prefix}{title}", classes="row-title-cell", markup=markup),
+        Static(str(meta), classes="row-meta-cell", markup=markup),
     )
 
 
