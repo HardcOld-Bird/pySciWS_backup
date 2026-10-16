@@ -2,7 +2,7 @@
   "id": "tb-20261017-041124-2-1",
   "ts": "2026-10-17T04:11:24+08:00",
   "title": "2 实验平台简介撰写（返工第 1 轮）",
-  "status": "planning",
+  "status": "active",
   "source": "mirror-tui",
   "priority": "low",
   "mode": "no_inspector",
@@ -10,6 +10,6 @@
   "rework_round": 1,
   "plan_id": "rework-tb-20261017-041124-2-1",
   "rejections": [],
-  "updated": "2026-10-17T04:12:25+08:00",
+  "updated": "2026-10-17T04:13:32+08:00",
   "report": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\data\\taskbooks\\tb-20261017-041124-2-1.report.md"
 }
