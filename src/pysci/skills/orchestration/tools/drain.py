@@ -1720,6 +1720,7 @@ def _dry_settle_batch(
 ) -> list[dict[str, Any]]:
     """dry 支：模拟 devops 吃下整批（种子+组包），逐 id 销账（计划器演练用）。"""
     seed_id, _group_ids, batch_ids, label = _batch_faces(seed, group)
+    supersede_batch_entries(set(batch_ids))  # dry 支同走去重口径
     t0 = time.time()
     for bid in batch_ids:
         backlog_complete(
@@ -2082,6 +2083,98 @@ def _devops_worker_live() -> bool:
         return False
 
 
+def _batch_meta(item: dict[str, Any]) -> dict[str, Any]:
+    """队列条目的批次元数据（``queues.enqueue(extra={"backlog": …})`` 平铺进条目）。"""
+    meta = item.get("backlog")
+    return dict(meta) if isinstance(meta, dict) else {}
+
+
+def _covered_ids(item: dict[str, Any]) -> set[str]:
+    """该队列条目承诺覆盖的 backlog id 集（非批次条目回空集）。"""
+    return {str(x) for x in (_batch_meta(item).get("ids") or [])}
+
+
+def inflight_batch_ids(member: str = "devops") -> set[str]:
+    """**在飞批次**已覆盖的 backlog id 集（queued/in_progress 的 ``backlog-batch`` 条目）。
+
+    双记账根治（backlog 20261016-224211）：组包项按设计**保持 pending**（不连坐），于是
+    下一轮计划器会把它们当新种子再取一次——同一 id 各自生成独立条目、重复烧掉一跳容量
+    （实测：215945/215946 被 22:01 的组包消化，却又在 22:08/22:17 各生成独立条目）。
+    取批前排除本集合，重复条目**不再产生**。
+
+    **延期待重试的条目不算在飞**：``queues.defer`` 把条目复位 ``pending`` 并挂
+    ``defer_until``——它已把覆盖的 id 交还 backlog（等带宽恢复后重取），若仍计作承诺面，
+    同一队列里**后续条目会被整体挡住**（实测：``test_bandwidth_defers_and_keeps_going``
+    的 b2 不再被取，延期支停链）。
+    """
+    from . import queues as _queues
+    from . import workq as _workq
+
+    covered: set[str] = set()
+    for it in _workq.load(_queues.queue_path(member)):
+        if str(it.get("kind") or "") != BACKLOG_BATCH_KIND:
+            continue
+        if str(it.get("status") or "") not in (
+            _workq.STATUS_PENDING,
+            _workq.STATUS_IN_PROGRESS,
+        ):
+            continue
+        if str(it.get("status")) == _workq.STATUS_PENDING and _bp.item_deferred(
+            it, time.time()
+        ):
+            continue  # 延期回队＝已交还承诺面（等到期重取，不挡别人）
+        covered |= _covered_ids(it)
+    return covered
+
+
+def supersede_batch_entries(covered: set[str], *, keep: str = "") -> list[str]:
+    """把**仍在待跑**（``pending``）且与本批覆盖面相交的批次条目**就地销账**。
+
+    方向①（建议单 backlog 20261016-224211）：组包入队时撤销/标记其覆盖的 backlog id
+    对应的**独立条目**。只动 ``pending``——``in_progress`` 的条目其 worker 已在跑，杀了
+    反而制造孤儿；本批与它争同一 id 属计划器双取，由 :func:`inflight_batch_ids` 的排除面
+    在源头堵死。销账条目不派跳（不派生会话），故重复 id 只被执行一次。
+
+    Returns:
+        被销账的条目 id 列表。
+    """
+    from . import queues as _queues
+    from . import workq as _workq
+
+    if not covered:
+        return []
+    qp = _queues.queue_path("devops")
+    dropped: list[str] = []
+    for it in _workq.load(qp):
+        iid = str(it.get("id") or "")
+        if not iid or iid == keep:
+            continue
+        if str(it.get("kind") or "") != BACKLOG_BATCH_KIND:
+            continue
+        if str(it.get("status") or "") != _workq.STATUS_PENDING:
+            continue
+        common = covered & _covered_ids(it)
+        if not common:
+            continue
+        _workq.mutate(
+            qp,
+            iid,
+            status=_workq.STATUS_DONE,
+            result={
+                "code": 0,
+                "kind": "result",
+                "body": (
+                    "已被新批次覆盖，就地销账（双记账去重，未派跳）："
+                    + "、".join(sorted(common))
+                ),
+                "checks": [],
+                "deduped": sorted(common),
+            },
+        )
+        dropped.append(iid)
+    return dropped
+
+
 def _enqueue_batch(
     seed: dict[str, Any], group: list[dict[str, Any]], run_log: Path
 ) -> dict[str, Any]:
@@ -2113,6 +2206,14 @@ def _enqueue_batch(
             }
         },
     )
+    # 去重（方向①）：本批覆盖的 id 若还有**待跑**的独立条目，就地销账——否则同一 id
+    # 会被执行两次（实测 backlog 20261016-224211）。
+    dropped = supersede_batch_entries(set(batch_ids), keep=str(item.get("id", "")))
+    if dropped:
+        _log(
+            run_log,
+            f"[i] 去重：{len(dropped)} 条重复条目就地销账（不派跳）：{'、'.join(dropped)}",
+        )
     _log(run_log, f"[i] 批次 {label} 已入队 devops FIFO（item={item.get('id', '')}）")
     return {
         "id": seed_id,
@@ -2121,6 +2222,7 @@ def _enqueue_batch(
         "batch_size": len(batch_ids),
         "batch_seed": seed_id,
         "ids": batch_ids,
+        "deduped": dropped,
     }
 
 
@@ -2144,7 +2246,8 @@ def replan_from_backlog(*, dry: bool = False) -> int:
     try:
         _log(run_log, f"[▶] 续计划（worker 侧，pid={os.getpid()}，dry={dry}）")
         while True:
-            seed, group = backlog_take_batch(BATCH_MAX)
+            # 排除在飞批次已覆盖的 id（双记账根治，backlog 20261016-224211）
+            seed, group = backlog_take_batch(BATCH_MAX, exclude=inflight_batch_ids())
             if seed is None:
                 break
             if dry:
@@ -2330,7 +2433,7 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
                 summary["stopped"] = "cooperative"
                 _log(run_log, "[s] 收到协作停止信号，干净退出（批次间隙，无在途消费）")
                 break
-            seed, group = backlog_take_batch(BATCH_MAX)
+            seed, group = backlog_take_batch(BATCH_MAX, exclude=inflight_batch_ids())
             if seed is None:
                 # 空 or 仅剩带宽延期条目：计划器不睡——延期由队列条目侧 defer 承接
                 # （worker 睡到到期自动重取），旧 drain 的睡觉分支在此退役。

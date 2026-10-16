@@ -91,3 +91,47 @@ def test_replays_the_originally_rejected_suggestion_file():
 
     assert crit.strip(), "原件里判据完整——必须被读出，不得再判「缺判据」"
     assert "PYSCI_TASK_DIRS" in crit
+
+
+# ---------------------------------------------------------------------------
+# 残余缺口（backlog 20261016-224400）：标记行后隔**空行**（markdown 标题惯例）仍读空
+# ---------------------------------------------------------------------------
+def test_reads_heading_then_blank_line_then_bullets():
+    """**第五例形态**：标题形态＋markdown 惯例空行＋要点行——旧口径「标记行后直到空行」
+    把标题后那个空行读成判据结束，于是标准写法仍被判「缺判据」（本次实证的第五例）。"""
+    _kind, crit = delivery.parse_suggestion_fields(
+        f"kind: defect\n\n## success_criteria:\n\n{CRIT}\n"
+    )
+    assert crit == CRIT
+
+
+def test_reads_bare_marker_then_blank_line_then_bullets():
+    """同族的裸标记形态也跨空行（不是只有标题形态受益）。"""
+    _kind, crit = delivery.parse_suggestion_fields(
+        f"kind: defect\n\nsuccess_criteria：\n\n{CRIT}\n"
+    )
+    assert crit == CRIT
+
+
+def test_marker_with_nothing_after_is_still_rejected():
+    """**反例**：标记行后除空行外无任何正文（到 EOF）→ 仍判「缺判据」。"""
+    _kind, crit = delivery.parse_suggestion_fields(
+        "kind: defect\n\n## success_criteria:\n\n"
+    )
+    assert crit.strip() == ""
+
+
+def test_marker_followed_by_another_section_is_rejected():
+    """**反例护栏**：空行后紧跟下一节标题 → 判据段终止，不把后文当判据（防真空被冒名）。"""
+    _kind, crit = delivery.parse_suggestion_fields(
+        "kind: defect\n\n## success_criteria:\n\n## 现象\n\n这一节不是判据\n"
+    )
+    assert crit.strip() == ""
+
+
+def test_inline_marker_does_not_absorb_following_paragraph():
+    """**反例护栏**：行内值形态按旧口径「空行即止」——不越过空行把后文段落吞成判据。"""
+    _kind, crit = delivery.parse_suggestion_fields(
+        "success_criteria: 行内判据全文\n\n后文段落（不是判据）\n"
+    )
+    assert crit == "行内判据全文"
