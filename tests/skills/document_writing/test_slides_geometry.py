@@ -15,7 +15,7 @@ pptx = pytest.importorskip("pptx", reason="需要 python-pptx")
 Image = pytest.importorskip("PIL.Image", reason="需要 Pillow")
 
 from pptx import Presentation  # noqa: E402
-from pptx.enum.shapes import MSO_SHAPE  # noqa: E402
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE  # noqa: E402
 from pptx.util import Inches  # noqa: E402
 
 from pysci.skills.document_writing.tools import compose, slides_visual  # noqa: E402
@@ -144,3 +144,84 @@ def test_render_prints_ready_to_paste_verify_command(tmp_path, capsys):
         pytest.skip("未检测到 LibreOffice")
     out = capsys.readouterr().out
     assert "--render-dir" in out and "slides verify" in out
+
+
+# ---------------------------------------------------------------------------
+# 连接符越界：bbox 不可信 → 单列提示、不计违规（backlog 20261016-033419-writing ②）
+# ---------------------------------------------------------------------------
+def _connector_deck(tmp_path: Path, *, overflow: bool) -> Path:
+    prs = Presentation()  # 默认 10x7.5 in 画布
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    if overflow:
+        # 肘形连接符越出画布右下（PowerPoint 给连接符存的 bbox 常远大于实际路径）
+        slide.shapes.add_connector(
+            MSO_CONNECTOR.ELBOW, Inches(9), Inches(6), Inches(11), Inches(8)
+        )
+    else:
+        slide.shapes.add_connector(
+            MSO_CONNECTOR.STRAIGHT, Inches(1), Inches(1), Inches(3), Inches(3)
+        )
+    deck = tmp_path / "connector.pptx"
+    prs.save(str(deck))
+    return deck
+
+
+def test_connector_kind_is_detected(tmp_path):
+    rep = slides_visual.geometry_report(_connector_deck(tmp_path, overflow=False))
+    kinds = [b.kind for b in rep.slides[0].boxes]
+    assert "connector" in kinds
+
+
+def test_connector_overflow_is_hint_not_violation(tmp_path):
+    """连接符越界只作提示：不进 off_canvas、不计入 violations → 页判 PASS。"""
+    rep = slides_visual.geometry_report(_connector_deck(tmp_path, overflow=True))
+    sg = rep.slides[0]
+    assert sg.connector_hints, "连接符越界未报为提示"
+    assert sg.off_canvas == [], "连接符被误计入越界（bbox 假阳性）"
+    assert sg.violations == 0 and rep.ok, rep.summary()
+    assert "非违规" in sg.connector_hints[0]
+
+
+def test_connector_hint_does_not_mask_a_real_overflow(tmp_path):
+    """同一页里，连接符提示与真正越界并存——真越界照报、照计违规。"""
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_connector(
+        MSO_CONNECTOR.ELBOW, Inches(9), Inches(6), Inches(11), Inches(8)
+    )
+    slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(9), Inches(6), Inches(3), Inches(3)
+    )  # 真越界矩形
+    deck = tmp_path / "mixed.pptx"
+    prs.save(str(deck))
+    sg = slides_visual.geometry_report(deck).slides[0]
+    assert sg.connector_hints and sg.off_canvas, (sg.connector_hints, sg.off_canvas)
+    assert sg.violations > 0
+
+
+def test_strict_passes_on_connector_hint_only(tmp_path):
+    deck = _connector_deck(tmp_path, overflow=True)
+    assert compose.main(["slides", "geometry", str(deck), "--strict"]) == 0
+
+
+def test_geometry_json_exposes_connector_hints(tmp_path, capsys):
+    import json
+
+    deck = _connector_deck(tmp_path, overflow=True)
+    assert compose.main(["slides", "geometry", str(deck), "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["slides"][0]["connector_hints"]
+
+
+def test_visual_qa_documents_connector_hint():
+    """用法文档面写明连接符提示口径（只打真本；部署副本在 worktree 里不存在）。"""
+    from pysci.paths import ORCHESTRATION_ROOT
+
+    md = (
+        ORCHESTRATION_ROOT
+        / "skills"
+        / "document-writing"
+        / "references"
+        / "visual-qa.md"
+    ).read_text(encoding="utf-8")
+    assert "连接符" in md and "connector_hints" in md

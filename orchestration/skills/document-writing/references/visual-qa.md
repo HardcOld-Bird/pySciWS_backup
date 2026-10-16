@@ -41,6 +41,11 @@ compose slides geometry '<deck.pptx>' [--frame NAME] [--json] [--strict]
 只报告（版面硬伤需人判读），`--strict` 才据违规置非零退出码。外框默认自动识别（画布面积
 10%–95% 的最大矩形），识别不准时 `--frame <形状名>`。这即是 H4①/H2 的机械原料，**不必自建脚本**。
 
+**连接符（`bentConnector*` / `straightConnector*`）不计入越界**：PowerPoint 给连接符存的是
+「能容纳折线路径」的 bbox，路径常远小于它，用 bbox 判越界会报出渲染图上不存在的假阳性。故它
+们的越界单列为 `提示（非违规）`（JSON 的 `connector_hints`），不进 `violations`；真正越界的
+图元/图片照报。
+
 ## 网页截图（deck 里的官网 / 页面图）
 
 需要把网页截进幻灯片时用本机 `playwright`（已装，复用 literature_research 的浏览器）：
