@@ -1934,7 +1934,7 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
                 f'                 或 uv run --no-sync pysci-orch reject {o.suggestion_id} --note "..."'
             )
         nxt.append(
-            "若属多环节工作：推进计划（orch plan run <id>）或书写下一任务书再 dispatch。"
+            "若属多环节工作：推进计划（orch plan advance <id>）或书写下一任务书再 dispatch。"
         )
         _print_next(nxt)
         return

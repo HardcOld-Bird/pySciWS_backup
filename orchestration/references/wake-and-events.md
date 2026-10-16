@@ -16,7 +16,8 @@
 | Monitor 工具 | shell 侧监视进程，每行 stdout 成一条通知；persistent=会话生命周期 | 零（shell 轮询不耗 token，仅结果行触发） | persistent 无上限 | 辅助：监视状态文件/多任务 |
 | CronCreate | 定时向会话投递提示 | 每次触发一轮 LLM | 7 天自动过期 | 兜底看门狗（低频巡检） |
 
-**主路线设计**：`orch plan run` 以**后台 Bash 任务**方式启动——orch 进程内部同步
+**主路线设计**：长任务以**后台 Bash 任务**方式启动（`plan advance` 入队即返回 + `orch watch`
+事件唤醒；计划外单件走 `plan adhoc` 的同步阻塞原语）——阻塞侧 orch 进程内部同步
 等待组员 headless 子进程（进程级阻塞，非 LLM 轮询），完成后执行全部机械后处理
 （交付解析、机械验收、台账、状态落盘），将「下一步指引」写入 stdout 后退出 →
 Qoder 后台任务完成通知**自动唤醒组长会话** → 组长读取指引、做交接决策。等待期间：
@@ -25,9 +26,9 @@ Qoder 后台任务完成通知**自动唤醒组长会话** → 组长读取指�
 **状态与恢复**（等待链路的故障面）：
 - orch 在 `state/plans/<id>.status` 写入运行态（环节、组员进程 pid、启动时间）；
 - 组长 TUI 关闭/机器重启 → 后台链全部死亡，但**计划状态机与组员会话都落盘**：
-  重开会话后 `orch status` 检测 stale running（pid 已死）→ `orch plan run --recover`：
-  对组员用 `--resume <sid>` 续作（组员会话持久化与进程生命周期无关，§1.1 已证），
-  或按组长决策重派；
+  重开会话后 `orch status` 检测 stale running（pid 已死）→ 按组长决策以
+  `plan advance`（必要时 `--session new`）重派或续作（组员会话持久化与进程生命周期无关，
+  §1.1 已证）；
 - 兜底看门狗（可选，Phase 2 评估）：低频 cron（如每 30 min）提示组长运行
   `orch status`——防「通知机制自身故障」导致的永久沉睡；成本每次一小轮。
 

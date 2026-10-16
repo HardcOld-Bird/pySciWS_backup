@@ -24,7 +24,7 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
     ... orch inspector-up [--dry|--force] | inspector-status | inspector-patrol |
         inspector-assign | inspector-on | inspector-off   # 闲时巡检引擎生命周期（§7）
 
-长任务纪律：dispatch / plan run 应以 Bash 工具的 run_in_background 启动（README §4.5
+长任务纪律：dispatch / plan adhoc 应以 Bash 工具的 run_in_background 启动（README §4.5
 等待模型）；orch 自身同步阻塞等待组员进程属预期（进程级等待，零 token）。
 """
 
@@ -467,7 +467,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         )
     if live:
         print(
-            '  推进进行中计划：uv run --no-sync pysci-orch plan run <id> --text "<当前环节任务书>"'
+            '  推进进行中计划：uv run --no-sync pysci-orch plan advance <id> --text "<当前环节任务书>"'
         )
     else:
         print(
@@ -920,7 +920,6 @@ def _plan_router(action: str):
     """把 plan 子命令路由到 plans 模块对应处理器。"""
     handlers = {
         "new": _plans.cmd_plan_new,
-        "run": _plans.cmd_plan_run,
         "advance": _plans.cmd_plan_advance,
         "amend": _plans.cmd_plan_amend,
         "edit": _plans.cmd_plan_edit,
@@ -967,9 +966,12 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--force", action="store_true", help="覆盖同 id 计划")
     q.set_defaults(func=_plan_router("new"))
 
-    q = psub.add_parser("run", help="推进计划：执行当前环节（任务书延迟书写）")
+    q = psub.add_parser(
+        "advance",
+        help="[事件驱动] 下一环节入队成员队列即返回（完成事件驱动下一次 advance，§3.5）",
+    )
     q.add_argument("id")
-    q.add_argument("--text", help="当前环节任务书正文")
+    q.add_argument("--text", help="当前环节任务书正文（任务书延迟书写）")
     q.add_argument("--task", help="当前环节任务书文件")
     q.add_argument("--name", help="会话 slug 覆盖（默认 <plan>-<step>）")
     q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
@@ -981,34 +983,9 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument(
         "--effort",
         choices=EFFORT_CHOICES,
-        help="本环节推理强度（覆盖计划 YAML 的 steps[].effort；不传=跟随用户级默认=中）",
-    )
-    q.add_argument("--max-turns", type=int)
-    q.add_argument("--dirs", help="覆盖计划环节的白名单（逗号分隔）")
-    q.add_argument(
-        "--evidence",
-        help="kind:self 组长环节收尾证据文件（存在 + 标题段 lint 通过即置 done，PSEP_3 §2.1）",
-    )
-    q.set_defaults(func=_plan_router("run"))
-
-    q = psub.add_parser(
-        "advance",
-        help="[事件驱动] 下一环节入队成员队列即返回（完成事件驱动下一次 advance，§3.5）",
-    )
-    q.add_argument("id")
-    q.add_argument("--text", help="当前环节任务书正文（任务书延迟书写）")
-    q.add_argument("--task", help="当前环节任务书文件")
-    q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
-    q.add_argument(
-        "--model-tier",
-        type=_presets.normalize_role,
-        choices=list(_presets.ROLE_CHOICES),
-    )
-    q.add_argument(
-        "--effort",
-        choices=EFFORT_CHOICES,
         help="本环节推理强度（覆盖计划 YAML；不传=跟随用户级默认=中）",
     )
+    q.add_argument("--max-turns", type=int)
     q.add_argument("--dirs", help="覆盖计划环节的白名单（逗号分隔）")
     q.add_argument("--dry", action="store_true", help="只入队不起 worker（测试/演练）")
     q.add_argument(

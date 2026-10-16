@@ -32,7 +32,7 @@ SKILL.md「派发要领 / 归档与成本 / 降级」是压缩版；本文件补
 devops 是**队列成员**，两条通道**并存、非二选一**：
 
 - **plan 环节直派（首选）**：基建改进本身是计划的一部分时，步骤写 `member: devops` 走
-  `plan run`（同步推进到交接）或 `plan advance`（事件驱动、入队即返回）——job 为
+  `plan advance`（事件驱动、入队即返回）——job 为
   `kind=produce`，与其它成员同队列同 worker，上下文与交接进 plan 状态机。
 - **backlog FIFO 组包（改进建议 / 批次通道）**：`approve` 采纳的建议入 backlog，由计划器
   组包入队（`kind=backlog-batch`），走 drain 账务（销账 / needs_leader / 延期 / 系统性停止）。
@@ -49,7 +49,7 @@ devops 是**队列成员**，两条通道**并存、非二选一**：
   令手动派发的读数与真实不符）；台账手工补记，随后尽快 `plan adhoc` 派 devops 修复。
 - 手动派发同样**长任务后台运行**；不要 sleep-轮询。
 
-## 任务书（`plan run/advance --task`）格式与落点
+## 任务书（`plan advance --task`）格式与落点
 
 `--task <文件>` 是「本环节任务书」的**正文来源**（与 `--text` 二选一）。文件**只读内容**：
 编排不按文件名找它——路径原样存进 plan 状态的 `task_file`，派发时 orch 再**复制**进成员

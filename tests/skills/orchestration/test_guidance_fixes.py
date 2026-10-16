@@ -141,8 +141,9 @@ def test_plain_blocked_keeps_session_reuse(iso_state, tmp_path, monkeypatch, cap
 
 
 # ---------------------------------------------------------------------------
-# ④ [NEXT] 推进引导并列 two-way（backlog 20261016-215946）
-#   现象：new/advance 的 [NEXT] 只推阻塞式 `plan run`，照抄即把长任务跑成阻塞、撞 Bash 超时。
+# ④ [NEXT] 推进引导只走 advance（backlog 20261016-215946 → 20261016-220500）
+#   现象：new/advance 的 [NEXT] 曾只推阻塞式同步子命令，照抄即把长任务跑成阻塞、撞 Bash 超时。
+#   220500 后：推进引导只讲 `plan advance`（事件驱动）＋ `plan adhoc`（计划外同步）。
 # ---------------------------------------------------------------------------
 def _plan_args(plan_id: str, **over) -> Namespace:
     base = dict(
@@ -208,34 +209,36 @@ def _fake_worker(member: str, **kw):
     return (True, "stub worker")
 
 
-def _both_ways(out: str, plan_id: str) -> None:
-    """两条姿势与标注都在场（判据①的机械面）。"""
+#: 已废弃的同步子命令名（运行期拼接：防常量折叠让含二进制的 grep 误命中，任务书 grep 约定）。
+_DEAD_SYNC = "plan " + "run"
+
+
+def _advance_only(out: str, plan_id: str) -> None:
+    """推进引导只讲 advance（＋ adhoc 指路），无已废子命令残留。"""
     assert f"plan advance {plan_id}" in out, out
-    assert "入队即返回" in out and "长任务首选" in out, out
-    assert f"plan run {plan_id}" in out, out
-    assert "同步阻塞到交接" in out, out
+    assert "入队即返回" in out, out
+    assert "plan adhoc" in out, out
+    assert _DEAD_SYNC not in out, out
 
 
-def test_plan_new_next_lists_both_ways(iso_state, tmp_path, monkeypatch, capsys):
+def test_plan_new_next_uses_advance_only(iso_state, tmp_path, monkeypatch, capsys):
     d = _plan_face(tmp_path, monkeypatch)
     capsys.readouterr()
     _mk_plan(d, "p-new")
-    _both_ways(capsys.readouterr().out, "p-new")
+    _advance_only(capsys.readouterr().out, "p-new")
 
 
-def test_plan_advance_next_lists_both_ways(iso_state, tmp_path, monkeypatch, capsys):
+def test_plan_advance_next_uses_advance_only(iso_state, tmp_path, monkeypatch, capsys):
     d = _plan_face(tmp_path, monkeypatch)
     _mk_plan(d, "p-adv")
     capsys.readouterr()
     # 未给任务书 → 只印引导并 rc=2（延迟书写）
     assert plans.cmd_plan_advance(_plan_args("p-adv")) == 2
-    _both_ways(capsys.readouterr().out, "p-adv")
+    _advance_only(capsys.readouterr().out, "p-adv")
 
 
-def test_plan_run_handoff_next_lists_both_ways(
-    iso_state, tmp_path, monkeypatch, capsys
-):
-    """交接决策点 [NEXT]（`plan run` 收尾面）同样并列两条姿势。"""
+def test_handoff_next_uses_advance_only(iso_state, tmp_path, monkeypatch, capsys):
+    """交接决策点 [NEXT] 同样只讲 advance。"""
     d = _plan_face(tmp_path, monkeypatch)
     _mk_plan(
         d,
@@ -247,7 +250,55 @@ def test_plan_run_handoff_next_lists_both_ways(
     )
     monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: _fake_worker(m))
     capsys.readouterr()
+    # 阻塞推进原语（内部；`plan adhoc` 走它）——交接面照常打印 [NEXT]
     plans.cmd_plan_run(_plan_args("p-run", text="t"))
     out = capsys.readouterr().out
     assert "交接决策点" in out, out
-    _both_ways(out, "p-run")
+    assert "plan advance p-run" in out, out
+    assert _DEAD_SYNC not in out, out
+
+
+# ---------------------------------------------------------------------------
+# ⑤ `plan advance` 承接已废子命令的旗标与续作语义（backlog 20261016-220500）
+# ---------------------------------------------------------------------------
+def _spy_enqueue(monkeypatch) -> dict:
+    seen: dict = {}
+    real = queues.enqueue
+
+    def spy(*a, **k):
+        seen.update(k)
+        return real(*a, **k)
+
+    monkeypatch.setattr(queues, "enqueue", spy)
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: (True, "stub"))
+    return seen
+
+
+def test_plan_advance_absorbs_name_and_max_turns(
+    iso_state, tmp_path, monkeypatch, capsys
+):
+    """`--name`/`--max-turns`（原同步子命令独有）由 advance 透传到 enqueue。"""
+    d = _plan_face(tmp_path, monkeypatch)
+    _mk_plan(d, "p-abs")
+    seen = _spy_enqueue(monkeypatch)
+    capsys.readouterr()
+    rc = plans.cmd_plan_advance(
+        _plan_args("p-abs", text="t", name="custom-slug", max_turns=7)
+    )
+    assert rc == 0, rc
+    assert seen.get("slug") == "custom-slug", seen
+    assert seen.get("max_turns") == 7, seen
+
+
+def test_plan_advance_resumes_step_session(iso_state, tmp_path, monkeypatch, capsys):
+    """续作 blocked 环节复用该环节会话（承接原同步子命令的续作语义）。"""
+    d = _plan_face(tmp_path, monkeypatch)
+    _mk_plan(d, "p-res")
+    st = plans.load_state("p-res")
+    st["steps"][0]["status"] = "blocked"
+    st["steps"][0]["session_id"] = "abcd1234-dead-beef"
+    plans._save_state("p-res", st)
+    seen = _spy_enqueue(monkeypatch)
+    capsys.readouterr()
+    assert plans.cmd_plan_advance(_plan_args("p-res", text="补充")) == 0
+    assert seen.get("session") == "abcd1234", seen

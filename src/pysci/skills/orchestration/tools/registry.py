@@ -316,7 +316,7 @@ DEFAULT_TASTE_ENABLED = False
 #: - ``max_hops`` / ``wallclock_s`` —— 单次激活的硬预算：到顶自停（§7「预算硬上限」）。
 #: - ``cooldown_s`` —— 两次激活的最小间隔（读最近一次 ``.done``）。没有这一条，组长每敲
 #:   一次 ``orch status`` 都会在内嵌拉起里重新激活一轮，成本按敲击次数放大。
-#: - ``yield_window_s`` —— 「plan run 活跃」的判定窗：计划 ``.state.json`` 的 mtime 距今
+#: - ``yield_window_s`` —— 「plan 环节活跃」的判定窗：计划 ``.state.json`` 的 mtime 距今
 #:   小于此值即认定生产侧在派跳，本轮只跑只读巡检（§7 让路）。
 #: - ``pause_*`` / ``resume_*`` —— 双队列迟滞闸（§5.2 用户裁决 v0.5）：backlog pending 或
 #:   bencher 队列长度**超过** pause 值 → 暂停产出；两者**回落到 resume 值及以下** → 恢复。

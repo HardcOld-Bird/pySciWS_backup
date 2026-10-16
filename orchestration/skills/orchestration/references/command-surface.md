@@ -8,14 +8,11 @@ pysci-orch status                        # 全景：计划/成员/队列/worker/
 pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
 #   └ id 缺省取**文件名 stem**（建议显式 --id）；YAML **复制**进 `state/plans/<id>.plan.yaml`
 #     （源文件任意位置、登记后可删；**勿与目标同名**——同名行为未定义）
-pysci-orch plan run <id> --text "<当前环节任务书>" [--evidence <报告.md>]  # 推进（交接处暂停；成员含 devops）
 pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
 #   └ --evidence：收尾 kind:self 组长环节（文件存在 + 标题段 lint 通过才置 done，PSEP_3 §2.1）
-#   └ 两子命令旗标**各自独立**（照抄对方会被 argparse 拒，backlog 20261015-202557）：
-#     run 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --evidence
-#     advance 旗标：--text --task --session --model-tier --effort --dirs --dry --evidence
-#     （advance **无** --name/--max-turns；run **无** --dry。--session 默认 latest，
-#      **续作余量已尽必须 new**；--evidence 见上行）
+#   └ 旗标（backlog 20261016-220500：同步推进子命令已废弃，其独有旗标并入 advance）：
+#     advance 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --dry --evidence
+#     （--session 默认 latest，**续作余量已尽必须 new**；--evidence 见上行）
 pysci-orch plan rework <tb-id> [--mode full|no_inspector|rework_only] [--plan-id X] [--force]
         # 返工任务书 → 三档骨架（A/B/C）并登记（§4.2）；[NEXT]：link → advance（不走 plan new）
 pysci-orch next [--limit N]              # 跨任务路由：优先级→动作类别→序；置顶任务卡片 + 简表（PSEP_3 §3.2）
@@ -26,7 +23,7 @@ pysci-orch plan amend <id>               # 编辑 plan YAML 后校验对账
 pysci-orch plan edit <id> --step S (--brief|--append-brief|--dirs)  # 结构化改环节字段
 #   └ **改环节别手编 YAML**（`plan new` 重排折行，old_string 逐字对不上）：说「改什么」即可
 pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步：**同步阻塞到完成**
-#   └ 内部走 `plan run`（等本计划全部在途收尾）⇒ **与 `plan advance` 的「入队即返回」相反**；
+#   └ 内部走阻塞推进原语（等本计划全部在途收尾）⇒ **与 `plan advance` 的「入队即返回」相反**；
 #     长任务**必须后台**（run_in_background），否则撞 Bash 工具超时（backlog 20261015-211200）
 pysci-orch plan list | plan drop <id>
 pysci-orch suggestions                   # 待审批改进建议（附质检标记，合规显示 []）

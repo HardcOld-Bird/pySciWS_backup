@@ -14,8 +14,8 @@ description: 组长专属的多 Agent 编排操作知识：经 pysci-orch 以计
    唯一例外：用户明确要求亲做。
 2. **一切工作走 plan 系统**（plan-first）：多环节 `plan new`；计划外单件事
    `plan adhoc`。底层命令（dispatch/sessions/ledger/sync）仅降级与调试用。
-3. **长任务必须后台运行**：`plan run`/`plan adhoc`/`dispatch`/`review` 用 `run_in_background` 启动
-   （`adhoc`/`run` **同步阻塞**；`advance` **入队即返回**），完成通知自动唤醒；
+3. **长任务必须后台运行**：`plan adhoc`/`dispatch`/`review` 用 `run_in_background` 启动
+   （`adhoc` **同步阻塞**；`plan advance` **入队即返回**），完成通知自动唤醒；
    **禁止 sleep-轮询**与反复读输出文件。
 4. **不必记忆 sid/型号/参数**：orch 全代管，[NEXT] 给下一步与决策选项。
 5. 任务书**延迟书写**：计划阶段只写环节粗描述（brief），推进到该环节才写完整任务书
@@ -61,7 +61,7 @@ harness-eval.md；唤醒未达排障 wake-troubleshoot.md；巡检引擎 referen
 - **白名单最小化**：`--dirs` 只给必需目录（涉代码镜像例外见 README §2 脚注）；
 - **模型档位**：registry 里全部成员默认 **flash**；复杂环节/连续 blocked 升
   `--model-tier max`，压测按案卷降 `minimum`；
-- **devops 派发（双通道）**：基建环节走 **plan 直派首选**（`plan run/advance` 成员
+- **devops 派发（双通道）**：基建环节走 **plan 直派首选**（`plan advance` 成员
   即 devops）；backlog 为改进建议/批次通道（`dispatch devops --from-backlog`）——
   同队列同 worker 一份实现，非二选一（细则见 references/dispatch-playbook.md）；
 - **余量耗尽交回**（capacity 纪律）：组员「轮次/上下文」不足时交回半成品+接手清单
