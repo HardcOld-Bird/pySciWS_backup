@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -162,13 +163,20 @@ def _effort_key(item: dict) -> str:
 
 
 def backlog_take_batch(
-    max_batch: int = 4, *, now: float | None = None
+    max_batch: int = 4, *, now: float | None = None, exclude: Iterable[str] = ()
 ) -> tuple[dict | None, list[dict]]:
     """取队首 pending 为**种子**（标记 in_progress），收集同 member（提请者）的 pending
     为**组包**（批量消化，backlog 20261010-batch-digest）。
 
     启发式：同提请者 ≈ 同模块/同视角（如 figure 的多项常同落 scientific_plotting），
     合并实施省重复上下文；leader 等较杂的组由 devops 的选取权兜底（可只吃种子）。
+
+    Args:
+        max_batch: 单批上限（含种子）。
+        now: 注入口（测试定「延期窗口」）。
+        exclude: **已被在飞批次承诺**的 id 集（backlog 20261016-224211 双记账根治）——
+            组包项按设计保持 pending，若不作排除，下一轮计划器会把它们当新种子再取一次，
+            同一 id 各自生成独立条目重复烧跳。种子与组包**两侧**都跳过。
 
     Returns:
         ``(seed, group)``：无 pending 时 seed 为 None、group 空。group 为与种子同提请者
@@ -183,6 +191,7 @@ def backlog_take_batch(
     """
     if not BACKLOG_PATH.exists():
         return None, []
+    skip = {str(x) for x in exclude}
     data = json.loads(BACKLOG_PATH.read_text(encoding="utf-8"))
     items = data.get("items", [])
     # **跳过未到期的延期条目**（带宽类失败的主处置，backlog 20261013-193500-leader）：
@@ -193,7 +202,9 @@ def backlog_take_batch(
         (
             it
             for it in items
-            if it.get("status") == "pending" and not _is_deferred(it, now_s)
+            if it.get("status") == "pending"
+            and not _is_deferred(it, now_s)
+            and str(it.get("id") or "") not in skip
         ),
         None,
     )
@@ -209,6 +220,8 @@ def backlog_take_batch(
         for it in items:
             if it is seed or it.get("status") != "pending":
                 continue
+            if str(it.get("id") or "") in skip:
+                continue  # 已被在飞批次承诺：不重复组包（双记账根治）
             if it.get("salvage"):
                 # 续作单各带自己的抢救面（一跳一树），不组包：合并实施会把两份
                 # 未收尾进度塞进同一棵树，指令里的「原地续完」就自相矛盾了

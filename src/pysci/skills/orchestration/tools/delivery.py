@@ -86,6 +86,11 @@ _SC_INLINE_RE = re.compile(
     _MARKER_PREFIX + r"success_criteria" + _MARKER_SUFFIX + r"\s*[:：]?\s*",
     re.IGNORECASE,
 )
+#: 判据段**终止面**（backlog 20261016-224400）：下一节标题 或 另一条结构化标记行。
+#: 没有它，「标记后真空」的正文会把后文当判据吃掉（假阳性）。
+_SC_SECTION_BREAK_RE = re.compile(
+    r"^\s*(?:#{1,6}\s|kind[:：]|source[:：]|fingerprint[:：])"
+)
 
 
 @dataclass
@@ -271,7 +276,8 @@ def parse_suggestion_fields(body: str) -> tuple[str, str]:
 
     Returns:
         ``(kind, success_criteria)``：任一缺失即返回空串。kind 取标记行值（小写规范化），
-        success_criteria 取标记行后连续非空行的拼接（保留 ``- `` 要点前缀供人读）。
+        success_criteria 取标记行后（**先跳过前导空行**）连续非空行的拼接（保留 ``- ``
+        要点前缀供人读）；撞到下一节标题/结构化标记行即止（backlog 20261016-224400）。
     """
     kind = ""
     m = _KIND_LINE_RE.search(body)
@@ -287,9 +293,21 @@ def parse_suggestion_fields(body: str) -> tuple[str, str]:
             inline = _SC_INLINE_RE.sub("", ln).strip()
             if inline:
                 criteria.append(inline)
+            # **标记行后的前导空行跳过**（backlog 20261016-224400）：markdown 惯例里标题后
+            # 必有一空行，「## success_criteria:」＋空行＋要点行才自然——旧口径「其后直到空行」
+            # 于是把标准写法读成**空判据**，approve 照旧拒绝（第五例实证）。两条护栏防过度吸收：
+            #   ① 有行内值时按旧口径「空行即止」（不越过空行把后文当判据）；
+            #   ② 撞到下一节标题/结构化标记行即止（标记后真空 → 仍判「缺判据」）。
+            skip_leading = not inline
+            started = False
             for follow in lines[i + 1 :]:
                 if not follow.strip():
+                    if started or not skip_leading:
+                        break
+                    continue
+                if _SC_SECTION_BREAK_RE.match(follow):
                     break
+                started = True
                 criteria.append(follow.strip())
             break
     return kind, "\n".join(criteria)

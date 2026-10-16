@@ -556,6 +556,30 @@ def _notify(
         pass
 
 
+def _dedupe_reason(item: dict[str, Any]) -> str:
+    """重复批次条目判定（backlog 20261016-224211 方向③）：回销账理由，非重复回空串。
+
+    判据：条目声明的覆盖 id **全部**已在 backlog 落终态（``done``）——这份工作已由别的
+    批次交付过。覆盖集为空（手工/旧条目无元数据）或**任一** id 仍非终态 → 不是重复，
+    照常派发（种子按设计此刻应为 in_progress，绝不会被判重复）。
+    """
+    ids = {str(x) for x in (dict(item.get("backlog") or {}).get("ids") or [])}
+    if not ids:
+        return ""
+    from . import workflow as _workflow
+
+    state = {
+        str(it.get("id")): str(it.get("status") or "")
+        for it in _workflow._backlog_items()
+    }
+    left = sorted(i for i in ids if state.get(i) != "done")
+    if left:
+        return ""
+    return (
+        f"重复批次条目（覆盖 id 已全部 done：{'、'.join(sorted(ids))}），就地销账未派跳"
+    )
+
+
 def _settle_batch_item(
     q: Path,
     member: str,
@@ -913,6 +937,28 @@ def run_worker(
                 continue
             guard.arm(str(item["id"]), member)  # 本跳起跑线（无进展判据在此归零）
             trace("item_taken", item=str(item["id"]), kind=str(item.get("kind") or ""))
+            # 双记账去重（backlog 20261016-224211，方向③）：本批次覆盖的 backlog id **全部**
+            # 已是终态 → 本条目是重复条目，就地销 done、**不派生会话**（一次工作只烧一跳）。
+            # 源头由计划器的 `inflight_batch_ids()` 排除面堵死；此处兜住修复前入队的存量重复。
+            if str(item.get("kind")) == BACKLOG_BATCH_KIND:
+                dup = _dedupe_reason(item)
+                if dup:
+                    workq.mutate(
+                        q,
+                        str(item["id"]),
+                        status=workq.STATUS_DONE,
+                        result={
+                            "code": 0,
+                            "kind": "result",
+                            "member": member,
+                            "body": dup,
+                            "checks": [],
+                        },
+                        finished_at=workq._now(),
+                    )
+                    trace("item_deduped", item=str(item["id"]))
+                    _drain._log(run_log, f"[i] 重复批次条目就地销账（未派跳）：{dup}")
+                    continue
             # 单条目异常**就地结账**（2026-10-14 实测：`task=` 参数名写错 → TypeError 逃出
             # 循环 → 条目永远卡 in_progress、推进干等到超时）。失败也要 finish：发
             # JOB-DONE 让 plan advance 拿到事件而不是空等；本队列其余条目继续。
