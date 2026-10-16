@@ -525,8 +525,19 @@ def cmd_venv_sync(args: argparse.Namespace) -> int:
 #: 跨合并必搬的 gitignored 运行态清单（backlog 20261010-worktree-merge-cp）。
 #: --no-ff 只带 git 面，这些文件不随迁；registry-runtime-split 那次靠 devops 人工 cp
 #: 才保住 5 成员 6 会话。此清单是**保底**——真实搬运集 = 本清单 ∪ git 侧 ignored 发现，
-#: 再挖掉 :data:`MERGE_STATE_EXCLUDE_SUFFIXES`。
-MERGE_STATE_FILES = ("sessions-runtime.json", "registry.presplit.json", "watch.json")
+#: 再挖掉 :data:`MERGE_STATE_EXCLUDE_SUFFIXES` / :data:`MERGE_STATE_EXCLUDE_NAMES`。
+#: ``watch.json`` 曾在此列，2026-10-16 事故后移入排除面（见下）。
+MERGE_STATE_FILES = ("sessions-runtime.json", "registry.presplit.json")
+
+#: **唤醒链文件永不跨树 cp**（backlog 20261016-203600-devops 实锤事故）：这些文件是 main 的
+#: **活体观察面**，worktree 侧那份只是它出生时的旧快照——cp 过去即把 main 的事件流/水位/
+#: 消费账/模块水位**覆盖回卷**：``events.jsonl`` 45 条被 6 条覆盖（seq 重新编号）、
+#: ``watch.json`` 消费账里 ``JOB-DONE|#6`` 与回卷后的新 ``#6`` 撞车 → 真事件被静默吞掉、
+#: ``events-seen.json`` 水位 ``ack_seq=51`` 对新流无意义（「待排空 0」假绿）。后果是
+#: **组长零唤醒**（s6 收尾人工 `orch status` 才发现）。合并不搬：谁在跑谁记账。
+MERGE_STATE_EXCLUDE_NAMES: frozenset[str] = frozenset(
+    {"events.jsonl", "events-seen.json", "watch.json", "mirror-seen.json"}
+)
 
 #: **永不跨树搬**的运行态后缀。``*.lock``（devops/inspector/bencher）不是数据而是
 #: 「谁在跑」的活体读数，其归属判据 = 文件里的 pid + run_log 双锚；把 worktree 侧的锁
@@ -585,6 +596,7 @@ def _cp_ignored_state(wt: Path, main: Path, ts: str) -> list[tuple[str, str]]:
         for n in set(MERGE_STATE_FILES) | _ignored_state_names(wt)
         if not n.endswith(MERGE_STATE_EXCLUDE_SUFFIXES)
         and MERGE_STATE_EXCLUDE_INFIX not in n
+        and n not in MERGE_STATE_EXCLUDE_NAMES
     }
     sd_wt = _state_dir(wt)
     sd_main = _state_dir(main)

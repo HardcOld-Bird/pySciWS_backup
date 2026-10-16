@@ -66,11 +66,42 @@ def test_cp_ignored_state_skips_missing_source(tmp_path):
     """worktree 侧无该文件 → 不搬、不报错（fail-open）。"""
     wt = tmp_path / "wt"
     main = tmp_path / "main"
-    _mk_state(wt, "watch.json", "{}")  # 只有 watch.json
+    _mk_state(wt, "registry.presplit.json", "{}")  # 只有它
     log = dev._cp_ignored_state(wt, main, ts="T")
     names = [nm for nm, _ in log]
-    assert "watch.json" in names
+    assert "registry.presplit.json" in names
     assert "sessions-runtime.json" not in names  # 源缺 → 不出现
+
+
+def test_cp_never_moves_wake_chain_files(tmp_path, monkeypatch):
+    """**唤醒链文件永不跨树 cp**（backlog 20261016-203600-devops 实锤事故）。
+
+    这些是 main 的活体观察面，worktree 侧那份是它出生时的旧快照：cp 过去即把事件流/水位/
+    消费账/模块水位**覆盖回卷**（``events.jsonl`` 45 条被 6 条覆盖 → seq 重新编号；消费账
+    ``JOB-DONE|#6`` 与回卷后的新 ``#6`` 撞车 → 真事件被静默吞掉、组长零唤醒）。
+    本用例模拟「git 把四个唤醒链文件都判为 ignored」的真实场景：一个都不许搬。
+    """
+    wt, main = tmp_path / "wt", tmp_path / "main"
+    for name in sorted(dev.MERGE_STATE_EXCLUDE_NAMES):
+        _mk_state(wt, name, f"WT-{name}")
+        _mk_state(main, name, f"MAIN-{name}")
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(1))
+    # 模拟 git 侧 ignored 发现（真实仓库里这些文件正是 ignored）
+    monkeypatch.setattr(
+        dev, "_ignored_state_names", lambda w: set(dev.MERGE_STATE_EXCLUDE_NAMES)
+    )
+
+    log = dev._cp_ignored_state(wt, main, ts="T")
+
+    moved = {nm for nm, _ in log}
+    sd = main / "orchestration" / "state"
+    assert "sessions-runtime.json" in moved, "会话池照搬（排除面只限唤醒链）"
+    for name in sorted(dev.MERGE_STATE_EXCLUDE_NAMES):
+        assert name not in moved, f"{name} 被 cp 进 main——唤醒链会被覆盖回卷"
+        assert (sd / name).read_text(encoding="utf-8") == f"MAIN-{name}", (
+            f"{name} 的内容被 worktree 旧快照覆盖（回卷根因）"
+        )
+        assert not (sd / f"{name}.bak-T").exists(), "排除面连备份都不该产生"
 
 
 def test_cp_includes_all_merge_state_candidates(tmp_path):

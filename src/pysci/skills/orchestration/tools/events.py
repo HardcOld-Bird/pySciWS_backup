@@ -267,11 +267,33 @@ def _save_seen(data: dict[str, Any]) -> None:
 
 
 def ack_seq() -> int:
-    """已排空到的 ``seq``（水位线；缺省 0=从未排空）。"""
+    """已排空到的 ``seq``（水位线；缺省 0=从未排空）。**抗回卷自愈**（backlog 20261016-203600-devops）。
+
+    判据：记录的水位 **>** 当前流最大 seq ⇒ 事件流**回卷**（覆写/重置；实锤：worktree merge
+    把 main 活流 45 条覆盖成 6 条）。旧水位对新编号毫无意义——照旧比较会让 :func:`unacked`
+    恒空（「待排空 0」假绿、PENDING-WORK 判据失效）。故**自愈**：归零重排，并把
+    ``rollback_from/to`` 留在 seen 里供 :func:`status_lines` 显式点名（不静默）。
+    """
+    seen = _load_seen()
     try:
-        return int(_load_seen().get("ack_seq", 0) or 0)
+        ack = int(seen.get("ack_seq", 0) or 0)
     except (TypeError, ValueError):
         return 0
+    if not ack:
+        return 0
+    total = latest_seq()
+    if total < ack:
+        _save_seen(
+            {
+                "ack_seq": 0,
+                "ack_at": _now(),
+                "rollback_at": _now(),
+                "rollback_from": ack,
+                "rollback_to": total,
+            }
+        )
+        return 0
+    return ack
 
 
 def unacked() -> list[dict[str, Any]]:
@@ -311,6 +333,16 @@ def status_lines() -> list[str]:
     ack = ack_seq()
     pending = len(unacked())
     out = [f"  事件水位 seq={total}（已排空至 {ack}，待排空 {pending}）"]
+    seen = _load_seen()
+    try:
+        rb_from = int(seen.get("rollback_from", 0) or 0)
+    except (TypeError, ValueError):
+        rb_from = 0
+    if rb_from and total < rb_from:
+        out.append(
+            f"    [!] 事件流回卷已自愈：水位曾到 {rb_from}，当前流最大 seq={total}"
+            "——旧消费账/水位对新流无效（勿把「待排空 0」读成「没有事」）"
+        )
     recent = read_all(limit=5)
     if not recent:
         out.append("  （尚无事件；生产者直发 + watch 差分镜像入 state/events.jsonl）")
