@@ -284,7 +284,7 @@ def params() -> dict[str, Any]:
 def _plan_run_active(window_s: int) -> bool:
     """计划侧是否正在派跳：任一未完成计划的 ``.state.json`` mtime 距今小于窗口即算活跃。
 
-    计划本身没有「正在运行」标记（``plan run`` 是组长前台阻塞执行），故用 state 文件的
+    计划本身没有「正在运行」标记（推进环节是组长前台执行），故用 state 文件的
     新鲜度做判据——写得动它就说明组长正在推进环节。窗口取 0 表示永不判活跃（关掉让路）。
     """
     from .plans import (  # 延迟导入：plans 顶层引 workflow/registry，避免成环

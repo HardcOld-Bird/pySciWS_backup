@@ -1,8 +1,8 @@
 """plan-runner：计划驱动的任务流程状态机（README §4.2）。
 
 计划 = ``state/plans/<id>.plan.yaml``（组长可直接编辑——amend 即编辑此文件，
-run 时按环节 id 对账）；执行状态 = ``state/plans/<id>.state.json``（orch 专属）。
-核心原则：**计划即状态机，聊天记录不是**——组长会话被压缩/重开后 plan run 仍从
+advance 时按环节 id 对账）；执行状态 = ``state/plans/<id>.state.json``（orch 专属）。
+核心原则：**计划即状态机，聊天记录不是**——组长会话被压缩/重开后仍从
 断点继续；交接处暂停，精准 recall 下一环节粗描述原文。
 """
 
@@ -269,8 +269,8 @@ def _sync_taskbook_active(plan_id: str) -> None:
         pass
 
 
-#: ``plan run`` 的同步等待上限（秒）——与成员 registry ``timeout_s`` 默认（3h）同量级：
-#: 直派时代本命令就一路阻塞在 ``do_dispatch`` 里，改为「入队+等收尾」后阻塞面不变。
+#: 阻塞推进原语的同步等待上限（秒）——与成员 registry ``timeout_s`` 默认（3h）同量级：
+#: 直派时代它就一路阻塞在 ``do_dispatch`` 里，改为「入队+等收尾」后阻塞面不变。
 PLAN_RUN_TIMEOUT_S: int = 3 * 3600
 
 #: 等收尾的轮询间隔（秒）。等的是**队列条目状态**（worker 落盘），不是进程——进程死了
@@ -624,7 +624,9 @@ def cmd_plan_new(args) -> int:
         return 2
     plan_id = args.id or src.stem
     if _plan_path(plan_id).exists() and not args.force:
-        print(f"[!] 计划 {plan_id} 已存在（覆盖用 --force；续跑用 plan run {plan_id}）")
+        print(
+            f"[!] 计划 {plan_id} 已存在（覆盖用 --force；续跑用 plan advance {plan_id}）"
+        )
         return 2
     PLANS_DIR.mkdir(parents=True, exist_ok=True)
     plan["id"] = plan_id
@@ -663,30 +665,23 @@ def _print_run_guidance(plan_id: str, step_state: dict, step_yaml: dict) -> None
         f"档位：{step_yaml.get('model', '(成员默认)')}；"
         f"effort：{step_yaml.get('effort', '(默认=中)')}"
     )
-    print("  → 书写该环节任务书后推进（二选一）：")
+    print("  → 书写该环节任务书后推进：")
     print(
-        f"    ① 事件驱动【长任务首选】：uv run --no-sync pysci-orch plan advance "
-        f'{plan_id} --text "<任务书全文>"'
+        f'    uv run --no-sync pysci-orch plan advance {plan_id} --text "<任务书全文>"'
     )
     print(
-        "       ——入队即返回，完成事件驱动下一次 advance（配 `orch watch` 唤醒，README §4.5）"
+        f"    或 uv run --no-sync pysci-orch plan advance {plan_id} --task <任务书文件>"
     )
     print(
-        f"    ② 同步阻塞到交接：uv run --no-sync pysci-orch plan run "
-        f'{plan_id} --text "<任务书全文>"'
-    )
-    print(
-        f"       （或 uv run --no-sync pysci-orch plan run {plan_id} --task <任务书文件>）"
-    )
-    print(
-        "       ——阻塞到本环节交接暂停；长任务须以**后台 Bash**运行，否则撞 Bash 工具超时"
+        "  （**入队即返回**，完成事件驱动下一次 advance——长任务首选；计划外单件事用"
+        " `plan adhoc`（同步阻塞，须后台运行），见 README §4.5）"
     )
 
 
 def _outcome_from_job(member: str, item: dict) -> DispatchOutcome:
     """从成员队列条目**还原**一次派发的结构化结果（交接报告的输入面）。
 
-    直派退役后 ``plan run`` 不再经手 ``DispatchOutcome``——worker 把分类/正文/验收/
+    直派退役后阻塞推进原语不再经手 ``DispatchOutcome``——worker 把分类/正文/验收/
     建议/时长落在 ``item.result``（见 ``queueworker._execute``），这里还原成交接报告
     原本就认识的形状，避免两套交接渲染。
     """
@@ -724,7 +719,7 @@ def _wait_all_inflight(
     sleep: Any = None,
     now: Any = None,
 ) -> list[tuple[dict, DispatchOutcome]]:
-    """等本计划**全部在途 job** 收尾（``plan run`` 的阻塞语义，PSEP_3 §2.3）。
+    """等本计划**全部在途 job** 收尾（阻塞推进原语的等待语义，PSEP_3 §2.3）。
 
     逐轮把已到齐的结果落终态（**乱序即到达序**）；到点仍未收尾 → 留 ``queued`` 交
     advance（与「超时不猜结果」旧语义一致）。无在途时也先收尾一轮（把已终态条目结掉）。
@@ -760,8 +755,10 @@ def _wait_all_inflight(
 
 
 def cmd_plan_run(args) -> int:
-    """推进计划：执行**就绪环节**（任务书延迟书写），**等全部在途 job 收尾**后交接。
+    """**阻塞推进原语**（无 CLI 入口，`plan adhoc` 内部使用）：等全部在途 job 收尾后交接。
 
+    2026-10-16（backlog 20261016-220500）：原 `plan run` 命令已废弃——与 `plan advance`
+    同能力两实现；本函数作为**内部阻塞原语**保留给 `plan adhoc`（计划外单件事的同步语义）。
     语义（PSEP_3 §2.3）：① 先把已终态队列条目全部结掉（多 job 并行时乱序到达，逐项交接）；
     ② 若仍有在途 job → 阻塞等它们全部收尾；③ 目标＝blocked/失败叶子（续作优先，--text
     即补充信息）或**首个可派发叶子**（递归就绪谓词）；④ 交接处打印三栏工作清单后暂停。
@@ -776,7 +773,7 @@ def cmd_plan_run(args) -> int:
     steps_yaml = _leaf_map(plan)
 
     if tpl := template_violations(plan):
-        print("[!] plan run 被拒：rework 模板必留节点缺失/乱序（PSEP_3 §4.3 #1）——")
+        print("[!] 推进被拒：rework 模板必留节点缺失/乱序（PSEP_3 §4.3 #1）——")
         for v in tpl:
             print(f"  - {v}")
         return 2
@@ -1103,7 +1100,7 @@ def _routing_card() -> list[str]:
 def cmd_plan_advance(args) -> int:
     """**事件驱动推进**（§3.5，M5）：把下一环节入队 m4 成员队列**即返回**。
 
-    与 ``plan run``（阻塞式，兼容形态）的区别：本命令不等待组员，入队后由 job 完成
+    与阻塞推进原语（``plan adhoc`` 内部使用，见 ``cmd_plan_run``）的区别：本命令不等待组员，入队后由 job 完成
     **事件**触发组长再敲一次 advance。任务书延迟书写语义保留——advance 时给**当前环节**
     任务书。多 plan 并行：各 active plan 各自 advance 互不阻塞；同一成员队列 FIFO 串行、
     不同成员即并行（用户模型）。既有语义保留：交接暂停 / 机械验收 FAIL 回派 / blocked
@@ -1221,6 +1218,9 @@ def cmd_plan_advance(args) -> int:
             f"{'、'.join(queues.QUEUE_MEMBERS)}（devops 双通道：plan 环节直派 + backlog 组包）"
         )
         return 2
+    # 续作语义（承接原同步推进子命令，backlog 20261016-220500）：环节曾有会话
+    # （blocked/failed 续作）→ 复用其 sid；否则按组长指定或默认 latest。
+    sel = cur["session_id"][:8] if cur.get("session_id") else (args.session or "latest")
     item = queues.enqueue(
         member,
         text=str(args.text or ""),
@@ -1232,9 +1232,10 @@ def cmd_plan_advance(args) -> int:
         effort=args.effort or (str(sy["effort"]) if sy.get("effort") else ""),
         plan=plan_id,
         step=str(cur["id"]),
-        session=str(args.session or "latest"),
+        session=sel,
         review=bool(sy.get("review")),
-        slug=f"{plan_id}-{cur['id']}",
+        slug=str(getattr(args, "name", None) or f"{plan_id}-{cur['id']}"),
+        max_turns=getattr(args, "max_turns", None),
     )
     cur["status"] = "queued"
     cur["job_id"] = str(item["id"])
@@ -1288,7 +1289,7 @@ def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
     if exhausted:
         print(
             "  1) 补充信息续作本环节（**本环节会话余量已尽 → 必须换新会话**）："
-            f'uv run --no-sync pysci-orch plan run {plan_id} --session new --text "<补充>"'
+            f'uv run --no-sync pysci-orch plan advance {plan_id} --session new --text "<补充>"'
         )
         print(
             "     原因：capacity/余量交回时原会话已耗尽，续作进它＝派进死会话"
@@ -1296,11 +1297,11 @@ def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
         )
     else:
         print(
-            f'  1) 补充信息续作本环节：uv run --no-sync pysci-orch plan run {plan_id} --text "<补充>"'
+            f'  1) 补充信息续作本环节：uv run --no-sync pysci-orch plan advance {plan_id} --text "<补充>"'
         )
     print('  2) 咨询副组长：uv run --no-sync pysci-orch consult "<问题>"')
     print(
-        f"  3) 修改计划（编辑 {_plan_path(plan_id).name} 后重新 plan run；或跳过本环节：--skip）"
+        f"  3) 修改计划（编辑 {_plan_path(plan_id).name} 后重新 advance；或跳过本环节：--skip）"
     )
     print("  4) 中止计划并上报用户")
     if sid8 and not exhausted:
@@ -1369,10 +1370,6 @@ def _report_handoff(
         f"  1) 推进下一环节（书写任务书后）：uv run --no-sync pysci-orch plan advance "
         f'{plan_id} --text "..."'
         "　——入队即返回【长任务首选】"
-    )
-    print(
-        f'     或同步阻塞到交接：uv run --no-sync pysci-orch plan run {plan_id} --text "..."'
-        "（长任务须后台运行）"
     )
     print(f"  2) 修改后续计划：编辑 {_plan_path(plan_id)} 后重新推进（按环节 id 对账）")
     print(f"  3) 中止：uv run --no-sync pysci-orch plan drop {plan_id}")
@@ -1821,7 +1818,9 @@ def cmd_plan_rework(args) -> int:
         return 2
     plan_id = str(getattr(args, "plan_id", "") or f"rework-{tb_id}")
     if _plan_path(plan_id).exists() and not getattr(args, "force", False):
-        print(f"[!] 计划 {plan_id} 已存在（覆盖用 --force）；续跑用 plan run {plan_id}")
+        print(
+            f"[!] 计划 {plan_id} 已存在（覆盖用 --force）；续跑用 plan advance {plan_id}"
+        )
         return 2
     PLANS_DIR.mkdir(parents=True, exist_ok=True)
     plan["id"] = plan_id
@@ -1913,7 +1912,7 @@ def cmd_plan_edit(args) -> int:
     print(f"[√] 环节 {sid} 已更新（计划 {plan_id}）：")
     print(f"    brief = {str(leaf.get('brief') or '')[:80]}")
     print(f"    dirs  = {leaf.get('dirs') or '（未声明）'}")
-    print(f"[NEXT] 核对：pysci-orch plan list / plan run {plan_id}")
+    print(f"[NEXT] 核对：pysci-orch plan list / plan advance {plan_id}")
     return 0
 
 

@@ -420,7 +420,7 @@ def _execute(
     )
     code = int(getattr(out, "code", 2))
     env = getattr(out, "envelope", None)
-    # 结果字典要能**独立撑起 plan run 的交接报告**（直派退役后 plan run 不再拿
+    # 结果字典要能**独立撑起阻塞推进原语的交接报告**（直派退役后它不再拿
     # DispatchOutcome，而是从本条目还原）——分类/正文/验收/建议/时长/会话一并落盘。
     result: dict[str, Any] = {
         "kind": str(getattr(out, "kind", "")),
@@ -914,8 +914,8 @@ def run_worker(
             guard.arm(str(item["id"]), member)  # 本跳起跑线（无进展判据在此归零）
             trace("item_taken", item=str(item["id"]), kind=str(item.get("kind") or ""))
             # 单条目异常**就地结账**（2026-10-14 实测：`task=` 参数名写错 → TypeError 逃出
-            # 循环 → 条目永远卡 in_progress、plan run 干等到超时）。失败也要 finish：发
-            # JOB-DONE 让 plan run/advance 拿到事件而不是空等；本队列其余条目继续。
+            # 循环 → 条目永远卡 in_progress、推进干等到超时）。失败也要 finish：发
+            # JOB-DONE 让 plan advance 拿到事件而不是空等；本队列其余条目继续。
             t0 = time.time()
             try:
                 status, result, outcome = _execute(item, dry=dry, trace=trace)

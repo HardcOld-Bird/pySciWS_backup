@@ -36,7 +36,7 @@ QUEUES_DIR: Path = ORCH_STATE_ROOT / "queues"
 #:
 #: **ADR（task-20261014-devops-gap-d1，用户裁决 2026-10-14）**——推翻旧决策「基建/测量类
 #: 条目走 devops backlog、不进 plan」：
-#: - **选了什么**：devops 收编为 plan 系统可直接派发的队列成员（plan run / plan advance /
+#: - **选了什么**：devops 收编为 plan 系统可直接派发的队列成员（plan advance /
 #:   queues enqueue 三路全通），与既有 backlog FIFO 组包通道**并存**（双通道，**非二选一**：
 #:   ``kind=produce`` = plan 环节直派，worker 走通用 ``do_dispatch`` 结账；``kind=
 #:   backlog-batch`` = backlog 组包入队，worker 经 ``drain.settle_backlog_batch`` 落账务）。
@@ -94,7 +94,7 @@ def enqueue(
 
     ``review=True`` 表示该宿主 job 交付后需 reviewer 复审（worker 自动投子 job）。
     ``kind="review"`` + ``parent``/``parent_member`` 是 review 子 job 的形态。
-    ``max_turns``：单跳轮次上限（``plan run --max-turns`` 经此透传；None=成员默认）。
+    ``max_turns``：单跳轮次上限（``plan advance --max-turns`` 经此透传；None=成员默认）。
     ``extra``：附加字段并入条目（如 devops 批次的 ``backlog`` 元数据）——固定字段不覆盖。
     """
     qp = queue_path(member, root=root)
@@ -208,7 +208,7 @@ def water_lines(*, root: Path | None = None) -> list[str]:
     （形如 ``· [m] 在途 <id>（plan·step）起于 …``，归属一眼可辨）。
 
     **「皆空」的唯一合法场景 = pending 与 in_progress 双零**（用户 2026-10-14：在途条目
-    曾被一句「各成员队列皆空」盖住——`plan run` 还在直派、队列照却是空的）。非双零时
+    曾被一句「各成员队列皆空」盖住——阻塞推进原语还在直派、队列照却是空的）。非双零时
     逐队列计数，并把**在途条目显名 + 起跑时刻**点出来。
     """
     members = all_members(root=root)

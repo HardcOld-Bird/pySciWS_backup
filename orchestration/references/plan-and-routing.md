@@ -37,5 +37,5 @@
   序）**；输出置顶一张**任务卡片**（大任务 id/名称/优先级/模式轮次、一行简介、plan 内位置树
   〔如 `A 综合项目改进 > a1 成因分析报告`〕+ 叶子进度 k/n·在途·待验收、动作、命令模板），其余就绪项
   简表附后。**`priority` 仅影响引导顺序，不抢占/不中断在途**；无关联任务书的 plan 按 `normal`。
-  **机械推送点**（§3.3）：`plan advance` 尾部、`events drain` 尾部、watch 唤醒 detail、`plan run`
+  **机械推送点**（§3.3）：`plan advance` 尾部、`events drain` 尾部、watch 唤醒 detail、plan
   交接报告**一律以路由卡片收尾**；TUI 概览面板只作补充视图。

@@ -539,15 +539,16 @@ def test_cli_from_backlog_flag_wins_over_item(iso_state, monkeypatch):
     assert seen["effort"] == "medium"
 
 
-def test_cli_plan_run_flag_parses(monkeypatch):
+def test_cli_plan_advance_flag_parses(monkeypatch):
+    """backlog 20261016-220500：`plan run` 已废，其旗标面由 `plan advance` 承接。"""
     captured: dict = {}
 
-    def fake_run(args):
+    def fake_advance(args):
         captured["effort"] = args.effort
         return 0
 
-    monkeypatch.setattr(plans, "cmd_plan_run", fake_run)
-    assert orch.main(["plan", "run", "p1", "--text", "t", "--effort", "high"]) == 0
+    monkeypatch.setattr(plans, "cmd_plan_advance", fake_advance)
+    assert orch.main(["plan", "advance", "p1", "--text", "t", "--effort", "high"]) == 0
     assert captured["effort"] == "high"
 
 
