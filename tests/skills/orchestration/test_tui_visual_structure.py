@@ -2,7 +2,7 @@
 
 三条判据（**不做像素比对**）：
 1. **共享主题常量**：同一视觉参数只在共享常量里硬编码一次（判据按 20261014-075230-devops
-   约定：**运行期拼接**，字面量不进源码；判据限活面源文件）。
+   约定：**运行期拼接**，字面量不进源码；s2 起判据扫 `tui/` 目录全 .py 聚合文本）。
 2. **键位矩阵**：每个视图下，Footer 的**真实数据面**（`screen.active_bindings`，Footer 据此
    渲染）与 `check_action` 守卫**一致**；广告的键逐一按下有可观察效果；未广告的键无副作用。
 3. **视觉结构**：主题常量被各面板引用、组件 id 齐全、七模块 + 任务书面板 + 口述面全走一遍
@@ -80,8 +80,14 @@ _PANEL_IDS = (
 # ① 共享主题常量：同一视觉参数只硬编码一次
 # ---------------------------------------------------------------------------
 def test_visual_constants_defined_once_in_source():
-    """同一视觉参数在 app.py 源码里**只出现一次**（共享常量；各面板 CSS 一律插值引用）。"""
-    src = Path(tui.__file__).read_text(encoding="utf-8")
+    """同一视觉参数在 ``tui/`` 目录源码里**只出现一次**。
+
+    s2 共享层起唯一出处 = ``theme.py``：判据从「扫 app.py 单文件」升级为「扫 ``tui/``
+    目录全部 .py 聚合文本」——纪律不变（各面板 CSS 一律插值引用共享常量），覆盖面更严
+    （widgets.py 等新面同样受钉）。
+    """
+    tui_dir = Path(tui.__file__).resolve().parent
+    src = "".join(p.read_text(encoding="utf-8") for p in sorted(tui_dir.glob("*.py")))
     for name, fragment in (
         ("面板边框", "border" + ": round $accent"),
         ("提示边框", "border" + ": round $warning"),
@@ -89,7 +95,7 @@ def test_visual_constants_defined_once_in_source():
         ("弱文案", "color" + ": $text-muted"),
     ):
         assert src.count(fragment) == 1, (
-            f"{name} 被硬编码 {src.count(fragment)} 次（应仅共享常量 1 次）"
+            f"{name} 被硬编码 {src.count(fragment)} 次（应仅 theme.py 1 次）"
         )
 
 

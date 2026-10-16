@@ -37,6 +37,17 @@ from textual.widgets.selection_list import Selection
 from .. import mirror
 from . import watermark
 from .modules import Module, modules  # re-export：m1 的 `app.modules()` 仍在
+from .theme import (
+    _T_BG,
+    _T_BODY,
+    _T_BORDER,
+    _T_BORDER_SOFT,
+    _T_HINT,
+    _T_HL,
+    _T_INSET,
+    _T_SUBTLE,
+    _T_TITLE,
+)
 
 #: 无更新时的灰点（§2.2：`● NEW` / 数字 / 灰点）。
 _BADGE_NONE = "·"
@@ -100,19 +111,10 @@ _PRIORITY_BY_INDEX: tuple[str, ...] = ("high", "normal", "low")
 _PRIORITY_LABELS: tuple[str, ...] = ("优先级 高", "优先级 中（默认）", "优先级 低")
 
 # ---------------------------------------------------------------------------
-# 主题常量（f2 美学统一）：**一处定义**，全 TUI 面板的 CSS 一律插值引用。
-# 同一视觉参数在本文件里只允许出现一次（tests/test_tui_visual_structure.py 用运行期拼接
-# 的 grep 判据钉住）——各面板各写一套就是「美学不一致」的根。
+# 主题常量已迁入 :mod:`.theme`（s2 共享层：唯一出处，本文件只插值引用）——
+# 同一视觉参数在 tui/ 全目录源码只硬编码一次（tests/test_tui_visual_structure.py
+# 的运行期拼接 grep 判据钉住）。
 # ---------------------------------------------------------------------------
-_T_BORDER = "border: round $accent;"
-_T_BORDER_SOFT = "border: round $warning;"
-_T_INSET = "padding: 0 1;"
-_T_TITLE = "text-style: bold; color: $accent; background: $panel;"
-_T_SUBTLE = "color: $text-muted;"
-_T_BODY = "color: $text;"
-_T_HINT = "color: $warning; text-style: italic;"
-_T_HL = "background: $accent; text-style: bold;"
-_T_BG = "background: $panel;"
 
 #: 详情页里「操作提示行」的辨识标记（渲染分区用：这些行从读数区挪进提示区，**不改数据层**）。
 _DETAIL_HINT_MARKERS = (
