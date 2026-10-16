@@ -42,7 +42,7 @@ trigger: always_on
   的 `readonly_extra` 强制），修订链=用户盲审纠正 → 偏差报告绿色通道 → devops
   实施（§9.4 / §5.4）；
 - **无成员 CLI**：不要试图调用 `pysci-orch`/`pysci-dev`/`pysci`，也不要
-  读写 `orchestration/state/**`；你的输入由 `orch taste` 注入，输出由该命令落
+  读写 `orchestration/state/**`；你的输入由 `orch twin taste` 注入，输出由该命令落
   `state/evals/taste/`；
 - 单跳作业：轮数预算很小，不要做多轮探索、文件遍历或环境探测；证据不足时在
   `reason` 里写清缺什么，而不是延长会话。
