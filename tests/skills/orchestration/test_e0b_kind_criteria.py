@@ -72,16 +72,38 @@ def test_approve_missing_kind_rejects_enqueue(iso_state):
 # ---------------------------------------------------------------------------
 # ③ 缺 success_criteria → 拒绝；--criteria 补录后放行
 # ---------------------------------------------------------------------------
-def test_approve_missing_criteria_rejects(iso_state):
+def test_approve_missing_criteria_rejects(iso_state, capsys):
     sid = seed_raw_suggestion(
         iso_state,
         "# 改进建议（devops，待审批）\n\nkind: defect\n附复现证据。\n",
     )
 
     rc = workflow.cmd_approve(_args(sid))
+    out = capsys.readouterr().out
 
     assert rc != 0
     assert not (iso_state / "backlog.json").exists()
+    # 拒绝提示要**教对写法**（backlog 20261016-224400）：旧提示只列三形态、且写「之后的连续
+    # 非空行」——读者据此把标准 markdown 写法改写成「紧贴要点行」，坑是提示自己教出来的。
+    assert "## success_criteria:" in out and "标题" in out, out
+    assert "空行可跳过" in out, out
+
+
+def test_approve_accepts_heading_then_blank_line_then_bullets(iso_state):
+    """**第五例形态端到端**（backlog 20261016-224400）：`## success_criteria:`＋空行＋要点行
+    ——标准 markdown 写法必须直接过闸（旧口径在 approve 面读空判据并拒绝入队）。"""
+    sid = seed_raw_suggestion(
+        iso_state,
+        "# 改进建议（devops，待审批）\n\nkind: defect\n复现证据见下。\n\n"
+        "## success_criteria:\n\n"
+        "- 跑 `orch suggestions` 不再报「缺判据」\n"
+        "- 全量 pytest 绿\n",
+    )
+
+    assert workflow.cmd_approve(_args(sid)) == 0
+    item = read_backlog(iso_state)[0]
+    assert "缺判据" in item["success_criteria"]
+    assert "pytest 绿" in item["success_criteria"]
 
 
 def test_approve_criteria_supplied_via_flag_passes(iso_state):
