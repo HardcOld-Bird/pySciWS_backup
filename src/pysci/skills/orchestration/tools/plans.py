@@ -663,10 +663,24 @@ def _print_run_guidance(plan_id: str, step_state: dict, step_yaml: dict) -> None
         f"档位：{step_yaml.get('model', '(成员默认)')}；"
         f"effort：{step_yaml.get('effort', '(默认=中)')}"
     )
-    print("  → 书写该环节任务书后推进：")
-    print(f'    uv run --no-sync pysci-orch plan run {plan_id} --text "<任务书全文>"')
-    print(f"    或 uv run --no-sync pysci-orch plan run {plan_id} --task <任务书文件>")
-    print("  （长任务建议以**后台 Bash**运行本命令——完成时自动通知，见 README §4.5）")
+    print("  → 书写该环节任务书后推进（二选一）：")
+    print(
+        f"    ① 事件驱动【长任务首选】：uv run --no-sync pysci-orch plan advance "
+        f'{plan_id} --text "<任务书全文>"'
+    )
+    print(
+        "       ——入队即返回，完成事件驱动下一次 advance（配 `orch watch` 唤醒，README §4.5）"
+    )
+    print(
+        f"    ② 同步阻塞到交接：uv run --no-sync pysci-orch plan run "
+        f'{plan_id} --text "<任务书全文>"'
+    )
+    print(
+        f"       （或 uv run --no-sync pysci-orch plan run {plan_id} --task <任务书文件>）"
+    )
+    print(
+        "       ——阻塞到本环节交接暂停；长任务须以**后台 Bash**运行，否则撞 Bash 工具超时"
+    )
 
 
 def _outcome_from_job(member: str, item: dict) -> DispatchOutcome:
@@ -1352,11 +1366,15 @@ def _report_handoff(
     _print_worklist(plan_id, plan, state)
     print("[NEXT] 可选：")
     print(
-        f'  1) 一键继续（书写下一环节任务书）：uv run --no-sync pysci-orch plan run {plan_id} --text "..."'
+        f"  1) 推进下一环节（书写任务书后）：uv run --no-sync pysci-orch plan advance "
+        f'{plan_id} --text "..."'
+        "　——入队即返回【长任务首选】"
     )
     print(
-        f"  2) 修改后续计划：编辑 {_plan_path(plan_id)} 后重新 plan run（按环节 id 对账）"
+        f'     或同步阻塞到交接：uv run --no-sync pysci-orch plan run {plan_id} --text "..."'
+        "（长任务须后台运行）"
     )
+    print(f"  2) 修改后续计划：编辑 {_plan_path(plan_id)} 后重新推进（按环节 id 对账）")
     print(f"  3) 中止：uv run --no-sync pysci-orch plan drop {plan_id}")
 
 
