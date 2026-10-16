@@ -128,3 +128,70 @@ def test_real_i3_sample_reports_logo_hit():
     health, rc = imgcheck.inspect_image(REAL_BRANDED)
     assert rc == 1
     assert any(m["brand_like"] for m in health["edge_marks"])
+
+
+# ---------------------------------------------------------------------------
+# 等效物理尺寸 + tight 裁切提示（backlog 20261015-221750）
+#   审查员核验「生产者自述 mm 尺寸 vs 成品实测」时，不该被迫反解版面常量、核对样式源码。
+# ---------------------------------------------------------------------------
+def test_read_dpi_reads_png_metadata(tmp_path):
+    p = tmp_path / "600.png"
+    Image.fromarray(np.full((10, 10, 3), 255, dtype=np.uint8)).save(p, dpi=(600, 600))
+    # PNG pHYs 存整数「像素/米」→ 回读 dpi 天然近似（600 dpi = 23622 ppm）
+    assert imgcheck.read_dpi(p) == pytest.approx(600, abs=0.01)
+
+
+def test_read_dpi_absent_or_broken_is_none(tmp_path):
+    p = _save(np.full((10, 10, 3), 255, dtype=np.uint8), tmp_path / "nodpi.png")
+    assert imgcheck.read_dpi(p) is None, "无 dpi 元数据须回 None（不猜）"
+    assert imgcheck.read_dpi(tmp_path / "nope.png") is None
+
+
+def test_size_mm_math_matches_the_reported_case():
+    """实测案例：4178×2461 px @600 dpi → 176.9×104.2 mm（= 建议单里那份产物的读数）。"""
+    h = imgcheck.image_health(np.zeros((2461, 4178, 3), dtype=np.uint8), dpi=600)
+    assert h["dpi"] == 600
+    assert h["size_mm"] == [176.9, 104.2]
+
+
+def test_size_mm_absent_without_dpi():
+    h = imgcheck.image_health(np.zeros((10, 10, 3), dtype=np.uint8))
+    assert h["dpi"] is None and h["size_mm"] is None
+
+
+def test_report_says_unknown_when_dpi_missing(tmp_path):
+    p = _save(np.full((10, 10, 3), 255, dtype=np.uint8), tmp_path / "nodpi.png")
+    health, _ = imgcheck.inspect_image(p)
+    text = "\n".join(imgcheck.report_lines(health))
+    assert "等效物理尺寸" in text and "未知" in text and "dpi 元数据" in text
+
+
+def test_tight_bbox_hint_only_when_declared(tmp_path):
+    p = tmp_path / "300.png"
+    Image.fromarray(np.full((300, 400, 3), 255, dtype=np.uint8)).save(p, dpi=(300, 300))
+    health, _ = imgcheck.inspect_image(p)
+
+    with_hint = "\n".join(imgcheck.report_lines(health, tight_bbox=True))
+    without = "\n".join(imgcheck.report_lines(health))
+
+    assert "等效物理尺寸    : 33.9×25.4 mm" in with_hint
+    assert "savefig.bbox=tight 已生效" in with_hint
+    assert "裁切后包围盒" in with_hint and "figsize 名义值" in with_hint
+    assert "savefig.bbox" not in without, "未声明 tight 时不许出裁切提示（防噪声）"
+
+
+def test_style_is_the_single_source_of_the_hint():
+    """提示真源＝绘图样式契约（`style.savefig_bbox()`），不在体检面写死常量。"""
+    from pysci.skills.scientific_plotting.tools import style
+
+    assert style.savefig_bbox() == "tight"
+
+
+def test_cli_inspect_reports_mm_and_tight_hint(tmp_path, capsys):
+    p = tmp_path / "300.png"
+    Image.fromarray(np.full((300, 400, 3), 255, dtype=np.uint8)).save(p, dpi=(300, 300))
+    assert figures.main(["inspect", str(p)]) == 0
+    out = capsys.readouterr().out
+    assert "尺寸            : 400×300 px" in out
+    assert "等效物理尺寸    : 33.9×25.4 mm" in out
+    assert "savefig.bbox=tight 已生效" in out, "本仓样式声明 tight → 命令行须出裁切提示"

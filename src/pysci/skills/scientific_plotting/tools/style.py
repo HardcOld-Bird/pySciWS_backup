@@ -207,6 +207,15 @@ def scienceplots_available() -> list[str]:
     return sorted(mstyle.library)
 
 
+def savefig_bbox() -> str:
+    """本仓绘图样式的 ``savefig.bbox`` 取值（单点出处＝:data:`_BASE_RC`）。
+
+    供非管线体检面（``pysci-figures inspect``）判定「成品是否被裁到内容包围盒」——
+    审查员据此知道**成品尺寸 ≠ figsize 名义值**，不必反解版面常量（backlog 20261015-221750）。
+    """
+    return str(_BASE_RC.get("savefig.bbox") or "")
+
+
 def scienceplots_rc(styles: Sequence[str] = SCIENCEPLOTS_DEFAULT) -> dict[str, object]:
     """取 scienceplots 预设的 rcParams（作为**审美基底**，契约层随后覆盖）。
 

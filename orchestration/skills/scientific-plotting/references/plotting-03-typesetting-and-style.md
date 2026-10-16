@@ -15,7 +15,9 @@
 4. **任何元素重叠 = 硬伤，无例外**（含标题压 colorbar）。重叠不是「可接受的轻微瑕疵」。
 
 自查手段：`build`/`preview` 后 **Read `out/<stem>_preview.png`**，再逐子图放大判读（`panels/`）；
-`figures audit <figdir>` 查宽度/字号/嵌入/色盲；`figures inspect <png>` 查水印/logo。
+`figures audit <figdir>` 查宽度/字号/嵌入/色盲；`figures inspect <png>` 查水印/logo、**等效物理尺寸
+（mm，由 PNG dpi 元数据换算）**，样式声明 `savefig.bbox=tight` 时并给一行**裁切提示**（成品尺寸
+＝裁切后包围盒，与自述 `figsize` 名义值不同——核验「自述 mm vs 成品实测」无须再反解版面常量）。
 
 ## scienceplots 审美层（可选；契约层优先）
 
