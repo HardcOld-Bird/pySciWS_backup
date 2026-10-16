@@ -1145,8 +1145,29 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=_nextroute.cmd_next)
 
     # ---- 改进循环 ----
-    p = sub.add_parser("suggestions", help="列出待审批改进建议")
+    p = sub.add_parser(
+        "suggestions",
+        help="建议面：默认列出待审批（含龄期列）；`suggestions ack` 走第三态销账",
+    )
     p.set_defaults(func=_workflow.cmd_suggestions)
+    # 子动作可选：裸 `orch suggestions` 仍＝列表（向后兼容），`ack` 为第三态销账
+    # （backlog 20261017-050501：决策型/已被他单覆盖型不该 approve 派空单、也不该 reject
+    # 误标否决）。
+    ssub = p.add_subparsers(dest="suggestions_action")
+    aq = ssub.add_parser(
+        "ack", help="销账（非否决）：superseded（已被他单覆盖）/ decision（决策型留档）"
+    )
+    aq.add_argument("suggestion_id", help="建议 id（前缀即可，须唯一）")
+    aq.add_argument(
+        "--as",
+        dest="as_",
+        required=True,
+        choices=["superseded", "decision"],
+        help="销账类型：superseded=已被 --by 承接；decision=本单只为留档供决策",
+    )
+    aq.add_argument("--by", required=True, help="承接引用：新单 id / 计划名 / 裁定来源")
+    aq.add_argument("--why", required=True, help="销账理由（进决策日志与给成员的回复）")
+    aq.set_defaults(func=_workflow.cmd_suggestions_ack)
 
     p = sub.add_parser("approve", help="采纳建议 → backlog + 审批回复附送")
     p.add_argument("suggestion_id")

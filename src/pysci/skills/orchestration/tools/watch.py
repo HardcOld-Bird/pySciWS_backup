@@ -475,6 +475,17 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
         fresh = []
     if fresh:
         reasons.append(f"taskbooks {len(fresh)} 份 new 态未处理")
+    # 建议队列超龄（backlog 20261017-050500）：19 条 pending 超 24h 却零报警——「待审批建议=N」
+    # 虚高误导组长逐条重判已办结项，成员也因原单不闭环而重报。判据/文案取单一取数口
+    # `workflow.suggestion_backlog`（与 `orch suggestions` 的龄期列同源）。
+    try:
+        back = _workflow.suggestion_backlog()
+    except Exception:  # noqa: BLE001 - 读数失败不阻塞巡更
+        back = {}
+    if back.get("aged"):
+        reasons.append(
+            f"建议队列 {back['aged']} 条超 24h 未判决（最老 {back['oldest_hours']}h）"
+        )
     return {
         "pending": bool(reasons),
         "reasons": reasons,
