@@ -2941,6 +2941,18 @@
       "proposed": "2026-10-16T22:08:21+08:00",
       "note": "",
       "source": "leader"
+    },
+    {
+      "id": "20261016-221800-devops",
+      "member": "devops",
+      "summary": "fingerprint: orch-surface-consolidation-20261016",
+      "kind": "usability",
+      "success_criteria": "- `pysci-orch --help` 顶层入口数显著收敛（bench 5→1、inspector 6→1、twin/deputy 族收进子树、内部命令不再出现于 usage），且**每条映射表〔默认〕行**的新命令可用、旧命令彻底移除（无需向后兼容，用户明示）；\n- `twin consult|taste|review` 与 `deputy consult` 参数形态与 help 文案对称（同为咨询动词、各自注明入参形态）；`inspector start/enable/disable` 的 help 一眼可辨「worker vs 全局开关」；\n- 〔辨析〕两项按引用文档语义定案并在交付正文写明依据（harness-eval.md 分工结论 / drain 语义归属），实施结果与结论一致；\n- 全部文档（SKILL.md 命令速查、references/command-surface.md 及一切引用旧名的 references/tests/钩子脚本）同步更名，grep 旧名零残留（历史留档/交付正文除外）；\n- `uv run --no-sync pytest tests` 全绿（含钩子调用面回归：watch-arm.sh 对 `_watchdog-loop`/`watchdog` 的调用照常）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261016-221800-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-16T22:17:01+08:00",
+      "note": "",
+      "source": "leader"
     }
   ]
 }
