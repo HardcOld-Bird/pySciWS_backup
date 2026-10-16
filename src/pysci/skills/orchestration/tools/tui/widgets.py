@@ -268,9 +268,15 @@ class ChoiceCard(Static):
             return self.card
 
     def __init__(
-        self, value: str, label: str, *, id: str | None = None, classes: str = ""
+        self,
+        value: str,
+        label: str,
+        *,
+        id: str | None = None,
+        classes: str = "",
+        markup: bool = True,
     ) -> None:
-        super().__init__(label, id=id, classes=classes)
+        super().__init__(label, id=id, classes=classes, markup=markup)
         self.value: str = str(value)
         self._selected: bool = False
 
