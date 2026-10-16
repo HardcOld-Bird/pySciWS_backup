@@ -67,11 +67,13 @@ PROTOCOL_LAG_HINT = "解析器早于协议：交付块按宽松兜底形态解�
 # `success_criteria：` 后紧跟要点行。kind 值面**含连字符与数字**：组员自造的分类词
 # （实测 `defusability-placeholder`）必须能被读出来再交给词表判定，否则「标错分类」会被
 # 误报成「没标分类」，提示文案指错方向（backlog 20261012-120001-leader）。
-#: 结构化标记行的**前缀盲区**（backlog adhoc-criteria-parse）：建议正文里这些标记常写成
-#: **列表项**（``- success_criteria: …``）或**粗体**（``**success_criteria**:``），而旧口径
-#: 只认行首裸标记 → 整条漏读、真实判据被当「缺判据」误拒（实案 20261015-130838-writing）。
-#: 两处统一放宽：可选列表标记 + 可选粗体包裹。
-_MARKER_PREFIX = r"^\s*(?:[-*+•]\s*)?(?:\*\*|__)?"
+#: 结构化标记行的**前缀盲区**（backlog adhoc-criteria-parse / 20261016-215944-devops）：
+#: 建议正文里这些标记常写成 **列表项**（``- success_criteria: …``）、**粗体**
+#: （``**success_criteria**:``）或 **markdown 标题**（``## success_criteria:``——文档原话说
+#: 「段」，读者自然这么写，首写必踩），而旧口径只认行首裸标记 → 整条漏读、真判据被当
+#: 「缺判据」误拒（实案 20261015-130838-writing、20261016-203600-devops 各一次）。
+#: 三处统一放宽：可选标题井号 + 可选列表标记 + 可选粗体包裹（同一前缀，``kind`` 同享）。
+_MARKER_PREFIX = r"^\s*(?:#{1,6}\s*)?(?:[-*+•]\s*)?(?:\*\*|__)?"
 _MARKER_SUFFIX = r"(?:\*\*|__)?"
 _KIND_LINE_RE = re.compile(
     _MARKER_PREFIX + r"kind[:：]\s*([A-Za-z][\w-]*)\s*$", re.MULTILINE

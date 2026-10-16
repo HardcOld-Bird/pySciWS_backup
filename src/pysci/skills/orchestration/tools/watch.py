@@ -1286,6 +1286,9 @@ def arm(
         # 「owner 自己的 watch 已死」读它——空值不冒充任何 owner 的 watch。
         "armed_by": os.environ.get(WATCH_OWNER_ENV, "") or "",
         "heartbeat_at": now if heartbeat else "",
+        # 前任心跳（供 _mark_late 判「事件发生时有 listener 在岗」——20261016-215945-devops：
+        # 补报一律标「聋期」会把「被去重账吞掉后补报」误归因成「没人听」）。
+        "prior_heartbeat_at": str(prior.get("heartbeat_at") or ""),
         "timeout_s": timeout_s,
         "interval_s": interval_s,
         "polls": 0,
@@ -1395,6 +1398,24 @@ def _mirror(events_list: list[dict[str, Any]]) -> None:
             pass
 
 
+def _listener_covered_event(ts: str, state: dict[str, Any]) -> bool:
+    """事件发生时刻**是否有在岗 listener**（前任心跳覆盖该时刻）。
+
+    判据与 :func:`mounted` 同源（同一宽限窗 ``interval×3+60s``）：前任心跳
+    ``prior_heartbeat_at`` 与事件 ``ts`` 的间距落在窗内即算覆盖（心跳晚于事件＝那个
+    listener 之后仍在跑，更是覆盖）。读不到心跳/无 ts → ``False``（不冒充判断）。
+    """
+    hb = str(state.get("prior_heartbeat_at") or "")
+    if not hb or not ts:
+        return False
+    interval = int(state.get("interval_s", DEFAULT_INTERVAL_S) or DEFAULT_INTERVAL_S)
+    window = interval * HEARTBEAT_GRACE_FACTOR + HEARTBEAT_GRACE_S
+    gap = _age_s(hb) - _age_s(ts)  # = ts − hb（秒；正=心跳早于事件）
+    if gap < 0:
+        return True
+    return gap <= window
+
+
 def _mark_late(events: list[dict[str, Any]], state: dict[str, Any]) -> None:
     """把**迟到唤醒**的事件在 detail 上标注（autonomy-fix a1：聋期事件下次挂载立即命中，
     并说清来源——让组长一眼分辨「刚发生的」与「刚才没人听时积压的」）。
@@ -1404,6 +1425,10 @@ def _mark_late(events: list[dict[str, Any]], state: dict[str, Any]) -> None:
     ② 本任**继承了上一任持久水位**（``catchup``）——差分型事件（CRASH/QUEUE-COMPLETE 等）
        不自带时间，但「继承水位后才被报出来」本身就说明它们发生在挂载前。
     ``catchup`` 首轮后即清除（:func:`_touch`），故后续正常事件不会被误标。
+
+    **归因细分**（20261016-215945-devops 实测教训）：事件时刻**有在岗 listener 心跳**时
+    **不得**标「聋期」——那类补报的真成因是去重账/水位把事件吞了（如 seq 回卷撞消费账），
+    标成「没人听」会把第一轮判断引向「watcher 被杀/看门狗失效」。
     """
     armed = str(state.get("armed_at") or "")
     catchup = bool(state.get("catchup"))
@@ -1414,7 +1439,12 @@ def _mark_late(events: list[dict[str, Any]], state: dict[str, Any]) -> None:
             continue
         detail = str(ev.get("detail") or "")
         if "迟到" not in detail:
-            ev["detail"] = detail + " 〔迟到唤醒：发生于挂载前（聋期）〕"
+            note = (
+                " 〔迟到补报：发生时有 listener 在岗——去重账/水位吞后补报〕"
+                if _listener_covered_event(ts, state)
+                else " 〔迟到唤醒：发生于挂载前（聋期）〕"
+            )
+            ev["detail"] = detail + note
         ev["late"] = True
 
 
