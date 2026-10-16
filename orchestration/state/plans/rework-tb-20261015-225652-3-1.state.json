@@ -1,0 +1,107 @@
+{
+  "plan_id": "rework-tb-20261015-225652-3-1",
+  "created": "2026-10-15T23:02:56+08:00",
+  "goal": "返工：tb-20261015-225652-3-1",
+  "steps": [
+    {
+      "id": "A.a1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/大任务/3_综合仿真实验绘图任务/返工1_成因分析报告.md"
+    },
+    {
+      "id": "A.a2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/大任务/3_综合仿真实验绘图任务/返工1_解决方案报告.md"
+    },
+    {
+      "id": "A.a3",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/大任务/3_综合仿真实验绘图任务/返工1_送审结论.md"
+    },
+    {
+      "id": "A.a4",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/大任务/3_综合仿真实验绘图任务/返工1_改进派单.md"
+    },
+    {
+      "id": "A.a5",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261015-234315-rework-tb-20261015-225652-3-1-A.a5",
+      "task_file": "orchestration/state/plans/rework-tb-20261015-225652-3-1-a5.task.md",
+      "session_id": "687f0a36-6c09-4922-9702-938a9e1a3be5",
+      "kind": "result"
+    },
+    {
+      "id": "B.b1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/大任务/3_综合仿真实验绘图任务/返工1_返工拆解.md"
+    },
+    {
+      "id": "B.b2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "figure-20261016-001930-rework-tb-20261015-225652-3-1-B.b2",
+      "task_file": "orchestration/state/plans/rework-tb-20261015-225652-3-1-b2.task.md",
+      "session_id": "daa72b57-5e42-4bf4-af26-093e7e8845aa",
+      "kind": "result"
+    },
+    {
+      "id": "B.b3",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261016-003734-rework-tb-20261015-225652-3-1-B.b3",
+      "task_file": "orchestration/state/plans/rework-tb-20261015-225652-3-1-b3.task.md",
+      "session_id": "0ff73d2e-07f6-46a8-a7e0-c3438cfc7228",
+      "kind": "result"
+    },
+    {
+      "id": "B.b2r",
+      "status": "done",
+      "review": "pending",
+      "job_id": "figure-20261016-005739-rework-tb-20261015-225652-3-1-B.b2r",
+      "task_file": "orchestration/state/plans/rework-tb-20261015-225652-3-1-b2r.task.md",
+      "session_id": "daa72b57-5e42-4bf4-af26-093e7e8845aa",
+      "kind": "result"
+    },
+    {
+      "id": "B.b3r",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261016-010813-rework-tb-20261015-225652-3-1-B.b3r",
+      "task_file": "orchestration/state/plans/rework-tb-20261015-225652-3-1-b3r.task.md",
+      "session_id": "28863d90-3d7e-47a0-9ad8-1849fb3fc0b5",
+      "kind": "result"
+    },
+    {
+      "id": "B.b2r2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "figure-20261016-011915-rework-tb-20261015-225652-3-1-B.b2r2",
+      "task_file": "orchestration/state/plans/rework-tb-20261015-225652-3-1-b2r2.task.md",
+      "session_id": "daa72b57-5e42-4bf4-af26-093e7e8845aa",
+      "kind": "result"
+    },
+    {
+      "id": "B.b3r2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261016-012859-rework-tb-20261015-225652-3-1-B.b3r2",
+      "task_file": "orchestration/state/plans/rework-tb-20261015-225652-3-1-b3r2.task.md",
+      "session_id": "b2622838-35b9-4dfb-bdd0-a974d719be8b",
+      "kind": "result"
+    },
+    {
+      "id": "B.b_last",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/大任务/3_综合仿真实验绘图任务/返工1_全流程报告.md"
+    }
+  ],
+  "completed_at": "2026-10-16T01:39:39+08:00"
+}

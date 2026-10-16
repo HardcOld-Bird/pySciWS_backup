@@ -1,0 +1,29 @@
+{
+  "plan_id": "psep2-night-20261014",
+  "created": "2026-10-15T18:23:11+08:00",
+  "goal": "PSEP_2 夜航模式实施——单开关 + 机械政策注入 + 判据拦截 + 盲测追溯配套（保险丝缓行不实施）",
+  "steps": [
+    {
+      "id": "n1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "n2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "n3",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "n4",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null,
+  "abandoned_at": "2026-10-15T18:23:11+08:00"
+}

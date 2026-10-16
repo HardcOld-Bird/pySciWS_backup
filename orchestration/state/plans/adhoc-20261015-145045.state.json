@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261015-145045",
+  "created": "2026-10-15T14:50:45+08:00",
+  "goal": "adhoc：orchestration/pods/devops/inbox/task-20261015-unmerged-guard",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261015-145321-adhoc-20261015-145045-s1",
+      "task_file": "orchestration/pods/devops/inbox/task-20261015-f4a-alert.md",
+      "session_id": "478b69ac-8d7a-4e39-af6c-32e42ff449e8",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-15T14:58:55+08:00"
+}

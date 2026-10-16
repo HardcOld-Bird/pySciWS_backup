@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261016-015510",
+  "created": "2026-10-16T01:55:10+08:00",
+  "goal": "adhoc：#178 改任务书重派——零遮挡判据工具入 tracked 面（原单 blocked：bench/ 未跟踪面不可 wor",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261016-015510-adhoc-20261016-015510-s1",
+      "task_file": null,
+      "session_id": "687f0a36-6c09-4922-9702-938a9e1a3be5",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-16T02:05:03+08:00"
+}

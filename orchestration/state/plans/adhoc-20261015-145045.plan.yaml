@@ -1,0 +1,10 @@
+id: adhoc-20261015-145045
+goal: adhoc：orchestration/pods/devops/inbox/task-20261015-unmerged-guard
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  review: false

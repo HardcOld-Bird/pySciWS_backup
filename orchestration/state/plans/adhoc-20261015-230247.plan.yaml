@@ -1,0 +1,11 @@
+id: adhoc-20261015-230247
+goal: adhoc：修 pysci TUI 任务书界面 4 缺陷（用户 2026-10-15 驳回流程实测，用户指令：先修 TUI 再进返工
+steps:
+- id: s1
+  member: devops
+  brief: 修 pysci TUI 任务书界面 4 缺陷（用户 2026-10-15 驳回流程实测，用户指令：先修 TUI 再进返工基建）。①[defect]
+    reject 批语只存首行：实测 data/taskbooks/tb-20261015-19
+  dirs:
+  - src/pysci
+  - tests
+  review: false

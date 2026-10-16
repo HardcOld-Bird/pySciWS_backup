@@ -1,0 +1,13 @@
+id: adhoc-20261016-015510
+goal: adhoc：#178 改任务书重派——零遮挡判据工具入 tracked 面（原单 blocked：bench/ 未跟踪面不可 wor
+steps:
+- id: s1
+  member: devops
+  brief: '#178 改任务书重派——零遮挡判据工具入 tracked 面（原单 blocked：bench/ 未跟踪面不可 worktree/commit，成因已侦察清楚见 delivery 留档 devops-20261016-015016）。组长'
+  dirs:
+  - src/pysci/skills/scientific_plotting
+  - tests
+  - orchestration/pods/reviewer
+  - orchestration/pods/figure
+  - data/大任务/3_综合仿真实验绘图任务
+  review: false

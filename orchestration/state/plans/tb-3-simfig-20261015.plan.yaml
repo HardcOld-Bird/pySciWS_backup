@@ -1,0 +1,74 @@
+id: tb-3-simfig-20261015
+goal: tb-20261015-194834-3 3 综合仿真实验绘图任务——先基础设施改进与验证（reviewer 科研绘图通用审查标准固化、工具链补缺），再
+  beam_scatter 综合图改版（10 项改进）+ reviewer 视觉终审；若遇严重阻塞可只交基础设施改进并向用户求助
+read: plan-decomposition.md
+steps:
+- id: I
+  mode: serial
+  brief: 基础设施改进环节（用户点名：改进与验证优先于产物，先于一切生产）
+  children:
+  - id: i1
+    kind: self
+    brief: 基础设施缺口分析报告——审计 reviewer/figure/sim/drawing 四位组员对本任务的支撑面；从 old prompts.txt
+      与任务书 10 条改进要求提炼科研绘图通用审查标准草案（物理正确性、标度适配、标注几何、colorbar 规范、排版一致性、伪影剔除等共性维度，非逐条对齐本次要求）；列缺口清单与实施方案
+    evidence_sections:
+    - 缺口分析
+    - 标准草案
+    - 结论
+  - id: i2
+    member: devops
+    brief: 按 i1 缺口清单实施——①reviewer 科研绘图审查标准固化进 harnessing（rubric 升级为通用流程与标准，确保绘图检查能力=视觉判读+工具核验）②工具链缺口补齐（COMSOL
+      外场导出、科研绘图排版、审美参考流程等按实测缺口）；各带回归测试，全量绿
+    dirs:
+    - orchestration/pods/reviewer
+    - orchestration/skills
+    - src/pysci/skills
+    - tests
+    - data/大任务/3_综合仿真实验绘图任务
+    effort: high
+  - id: i3
+    member: reviewer
+    brief: 基础设施验证——用 i2 新固化的通用标准对旧图 beam_scatter_combined.png 做校准审查，出具审查报告以证明绘图检查能力就位；发现的问题只记录为改版输入，本环节不修图
+    dirs:
+    - orchestration/pods/reviewer
+    - data/大任务/3_综合仿真实验绘图任务
+    effort: medium
+- id: P
+  mode: parallel
+  brief: 数据修正与审美参考（产物无交集：仿真数据 vs 审美参考图）
+  children:
+  - id: p1
+    member: sim
+    brief: COMSOL 外场/远场计算修正与高分辨导出——①外场计算位置移离仿真区中心、排除近场污染，使散射主瓣明确指向 45°/135°（按物理对称判据核验）②远场角度分辨率达
+      1°③重导出 3 情形 × L/R 入射的极坐标散射数据；交付数据+核验记录
+    dirs:
+    - data/research/1_gain_ep/simulation
+    - scripts/research/gain_ep/simulation
+    - data/research/1_gain_ep/article/figures/beam_scatter
+    effort: high
+  - id: p2
+    member: drawing
+    brief: 审美参考生成——按新版排版（每情形一列、首行二合一极坐标雷达双色、二三行半圆场图、右侧共享 colorbar 与二三行等高）产出版式/审美参考图与配色留白建议，供
+      figure 落地（aesthetics→data bridge，真实数据由 figure 精确实现）
+    dirs:
+    - data/research/1_gain_ep/article/artwork
+    effort: medium
+- id: f1
+  member: figure
+  brief: 新版综合绘图——以 p1 修正数据 + p2 审美参考重绘 beam_scatter 综合图，落实 10 项改进（雷达双色合并、1° 分辨率、标度自适应、菱形框
+    31cm/30cm 几何、colorbar 3~5 刻度、去 ± 顶部标注、隐直径边管槽轮廓、标题「声压的实部」、每情形一列+右侧共享 colorbar 排版）；场图配色按用户新增需求：零值非白、黄绿居中（COMSOL Rainbow 式，同 绘图参考/4ref2·4ref3
+    半圆图），覆盖 p2 设计说明 §2 的 0 落白设定；设计用色取自 Rainbow 同族/协调中性色、不引入额外色系（1~2 色系原则）；色标按用户裁决（2026-10-15）：每情形一条、置于本列右缘、高=行2+行3
+  dirs:
+  - data/research/1_gain_ep/article/figures/beam_scatter
+  effort: high
+- id: r1
+  member: reviewer
+  brief: 视觉终审——以 i2 固化的通用标准（非逐条对照 10 条）审查 f1 新图，出具 VERDICT 与意见；FAIL 回派返工
+  dirs:
+  - orchestration/pods/reviewer
+  effort: medium
+- id: L1
+  kind: self
+  brief: 全流程报告组装（taskbooks report + 交付说明；遇严重阻塞如实报告并向用户求助）
+  evidence_sections:
+  - 全流程报告

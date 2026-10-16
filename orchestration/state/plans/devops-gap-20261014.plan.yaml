@@ -3,7 +3,8 @@ goal: 补齐 plan→devops 派发缺口（PSEP_2 备忘优先项）——plan �
 steps:
 - id: d1
   member: devops
-  brief: 队列成员面收编 devops（QUEUE_MEMBERS）＋plan run/advance 成员闸放行＋全链一致性（队列面板/唤醒/JOB-DONE 收账/review 子 job/STALL 判据）＋backlog-batch 不回归＋ADR 注记＋tests 回归测试
+  brief: 队列成员面收编 devops（QUEUE_MEMBERS）＋plan run/advance 成员闸放行＋全链一致性（队列面板/唤醒/JOB-DONE
+    收账/review 子 job/STALL 判据）＋backlog-batch 不回归＋ADR 注记＋tests 回归测试
   dirs:
   - src/pysci/skills/orchestration/tools
   - tests
@@ -11,7 +12,8 @@ steps:
   effort: high
 - id: d2
   member: devops
-  brief: 技能文档同步（command-surface/dispatch-playbook：devops 可经 plan 直派、backlog 仍 FIFO 双通道说明）＋端到端实测记录（plan run/advance 派 devops→JOB-DONE 收账→自动唤醒读数）
+  brief: 技能文档同步（command-surface/dispatch-playbook：devops 可经 plan 直派、backlog 仍 FIFO
+    双通道说明）＋端到端实测记录（plan run/advance 派 devops→JOB-DONE 收账→自动唤醒读数）
   dirs:
   - .qoder/skills/orchestration
   - src/pysci/skills/orchestration/tools

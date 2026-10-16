@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261015-154311",
+  "created": "2026-10-15T15:43:11+08:00",
+  "goal": "adhoc：# 任务书：修复 pysci-orch next 的 KeyError: steps（缺陷）\n\n## 复现（组长实测 2",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261015-155630-adhoc-20261015-154311-s1",
+      "task_file": "orchestration/state/plans/adhoc-20261015-154311-s1-resume.task.md",
+      "session_id": "478b69ac-8d7a-4e39-af6c-32e42ff449e8",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-15T17:28:05+08:00"
+}

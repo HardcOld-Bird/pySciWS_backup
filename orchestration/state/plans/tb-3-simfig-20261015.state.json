@@ -1,0 +1,74 @@
+{
+  "plan_id": "tb-3-simfig-20261015",
+  "created": "2026-10-15T20:08:14+08:00",
+  "goal": "tb-20261015-194834-3 3 综合仿真实验绘图任务——先基础设施改进与验证（reviewer 科研绘图通用审查标准固化、工具链补缺），再 beam_scatter 综合图改版（10 项改进）+ reviewer 视觉终审；若遇严重阻塞可只交基础设施改进并向用户求助",
+  "steps": [
+    {
+      "id": "I.i1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/大任务/3_综合仿真实验绘图任务/基础设施缺口分析报告.md"
+    },
+    {
+      "id": "I.i2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261015-201708-tb-3-simfig-20261015-I.i2",
+      "task_file": "orchestration/state/plans/tb-3-simfig-20261015-i2.task.md",
+      "session_id": "e439863b-4618-441a-9177-7c2e4d09a47f",
+      "kind": "result"
+    },
+    {
+      "id": "I.i3",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261015-203604-tb-3-simfig-20261015-I.i3",
+      "task_file": "orchestration/state/plans/tb-3-simfig-20261015-i3.task.md",
+      "session_id": "c5b53fc4-1faa-4e84-86ef-41754f2384f5",
+      "kind": "result"
+    },
+    {
+      "id": "P.p1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "sim-20261015-205218-tb-3-simfig-20261015-P.p1",
+      "task_file": "orchestration/state/plans/tb-3-simfig-20261015-p1.task.md",
+      "session_id": "2fa91313-9b25-4058-835b-53c7bb8e1b97",
+      "kind": "result"
+    },
+    {
+      "id": "P.p2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "drawing-20261015-205228-tb-3-simfig-20261015-P.p2",
+      "task_file": "orchestration/state/plans/tb-3-simfig-20261015-p2.task.md",
+      "session_id": "cc169bd2-5f75-4c98-b545-363f10c634dd",
+      "kind": "result"
+    },
+    {
+      "id": "f1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "figure-20261015-214901-tb-3-simfig-20261015-f1",
+      "task_file": "orchestration/state/plans/tb-3-simfig-20261015-f1.task.md",
+      "session_id": "daa72b57-5e42-4bf4-af26-093e7e8845aa",
+      "kind": "result"
+    },
+    {
+      "id": "r1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261015-220945-tb-3-simfig-20261015-r1",
+      "task_file": "orchestration/state/plans/tb-3-simfig-20261015-r1.task.md",
+      "session_id": "644095a4-1181-40ff-bda5-a88e2e83c44a",
+      "kind": "result"
+    },
+    {
+      "id": "L1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/大任务/3_综合仿真实验绘图任务/全流程报告.md"
+    }
+  ],
+  "completed_at": "2026-10-15T22:20:00+08:00"
+}

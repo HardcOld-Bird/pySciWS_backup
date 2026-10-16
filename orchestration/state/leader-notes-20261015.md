@@ -34,3 +34,21 @@
    或 lint 强制 plan step dirs 同步。
 3. **机械验收 orch-tests 判据被哨兵留痕行污染误杀**（A.a5 实案）：output_tail 被哨兵豁免留痕 print 占据→
    判据解析 fail。修法：判据取测试退出码/末行摘要，或哨兵留痕写 stderr/独立文件。
+   （↑ 三条均已于当日晚经 backlog #148/#149/#150-151 修复销账；orch-tests 判据面经130555/132143 并单落地。）
+
+## 旧计划账面对账裁定（2026-10-15 晚，组长；证据=交付留档/主干代码实测）
+
+对 6 个长期占路由面的旧计划逐一对账，工作均已由其他通道落地或被取代，关闭清理（state
+保留审计）。真欠账 **零**——全部工作实证落地：
+- `devops-gap-20261014`（d1 QUEUE_MEMBERS 收编 devops、d2 双通道文档）——主干实证落地，关。
+- `psep2-night-20261014`——n1–n4 全部落地（.plan 注册自账 4/4；n3=orch taste 盲测/盲审留痕链路，
+  twin-taste-mirror.md + state/evals/taste/，组长初查 grep「盲测」漏检「盲审」一度误判未做，以 4/4 为准）。
+- `psep3-20261014`（pa1/pa2/pc/pd1/pd2/pb）——superstep/自办 evidence/裁决书/返工流/路由全落地
+  （plans.py:208 pd2 亦在），关。
+- `rework-smooth-20261015`（f1/f2/f3）——交付留档 devops-20261015-132938/134510/140208 在盘，关。
+- `tb-1-docs-20261015`（s1）——lit 交付在盘，任务书经返工流 accepted，关。
+- `adhoc-20261015-093500`（tui-ux）——s1 从未派发，工作经 12:53/13:09 直派单元落地，关。
+
+另：watchdog 喊了整晚的两个「已提交未合并」面（085823-devops / 125314-salvage）经核验内容与 main
+**字节级相同**（blob 6df2df2d 三方一致，零增量），以 `pysci-dev worktree merge --no-cp-state` 合并
+摘面（会话数 52→52 不减），NEEDS_LEADER 噪声源清零。

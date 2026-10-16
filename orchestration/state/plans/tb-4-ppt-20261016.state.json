@@ -1,0 +1,119 @@
+{
+  "plan_id": "tb-4-ppt-20261016",
+  "created": "2026-10-16T02:09:25+08:00",
+  "goal": "tb-20261016-020412-4-1016ppt 4 1016PPT制作任务——先基础设施改进与验证（PPT 生产链与机制性视觉检查闸），再两份调研→素材生产→pptx 组装→视觉终审；交付 20261015.pptx + 两份调研报告 + 必要的基础设施改进",
+  "steps": [
+    {
+      "id": "I.i1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/research/1_gain_ep/汇报PPT/20261016/基建缺口分析报告.md"
+    },
+    {
+      "id": "I.i2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261016-023204-tb-4-ppt-20261016-I.i2",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-i2.task.md",
+      "session_id": "c9ab3714-6683-4ef9-a48c-22ad5ad40dd3",
+      "kind": "result"
+    },
+    {
+      "id": "I.i3",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261016-023652-tb-4-ppt-20261016-I.i3",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-i3.task.md",
+      "session_id": "342230ae-24b8-47f4-8827-82ccf251ccb5",
+      "kind": "result"
+    },
+    {
+      "id": "R.r1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "lit-20261016-024552-tb-4-ppt-20261016-R.r1",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-r1.task.md",
+      "session_id": "b66d3b7d-5dbd-447c-86bb-782076d3cfe8",
+      "kind": "result"
+    },
+    {
+      "id": "R.r2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "lit-20261016-025051-tb-4-ppt-20261016-R.r2",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-r2.task.md",
+      "session_id": "be781483-5f9b-4f54-aea6-29f0abbaec83",
+      "kind": "result"
+    },
+    {
+      "id": "P.D.d1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "drawing-20261016-030318-tb-4-ppt-20261016-P.D.d1",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-p1.task.md",
+      "session_id": "4acdb258-116b-4ebd-8f76-2db496a99e1e",
+      "kind": "result"
+    },
+    {
+      "id": "P.D.d2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "drawing-20261016-031033-tb-4-ppt-20261016-P.D.d2",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-p2.task.md",
+      "session_id": "79ff0606-21e4-4b14-a574-8ff92592c520",
+      "kind": "result"
+    },
+    {
+      "id": "P.D.d3",
+      "status": "done",
+      "review": "pending",
+      "job_id": "drawing-20261016-031735-tb-4-ppt-20261016-P.D.d3",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-p3.task.md",
+      "session_id": "efb335be-3cca-4740-8463-7569bb8ba06b",
+      "kind": "result"
+    },
+    {
+      "id": "P.f2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "figure-20261016-030319-tb-4-ppt-20261016-P.f2",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-f2.task.md",
+      "session_id": "982c6a21-2ac6-4c7a-a97b-c4bf44576896",
+      "kind": "result"
+    },
+    {
+      "id": "w1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "writing-20261016-032341-tb-4-ppt-20261016-w1",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-w1.task.md",
+      "session_id": "7a53b3d3-10a7-43e9-9fc6-12457f5920fe",
+      "kind": "result"
+    },
+    {
+      "id": "rv",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261016-035332-tb-4-ppt-20261016-rv",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-rv.task.md",
+      "session_id": "2b51ade9-5287-4aef-8cca-a4cbbc1cc48a",
+      "kind": "result"
+    },
+    {
+      "id": "w2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "writing-20261016-040018-tb-4-ppt-20261016-w2",
+      "task_file": "orchestration/state/plans/tb-4-ppt-20261016-w2.task.md",
+      "session_id": "2a41e46b-cff8-4aef-8752-f6074da65e6b",
+      "kind": "result"
+    },
+    {
+      "id": "L1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/research/1_gain_ep/汇报PPT/20261016/tb-4-ppt_全流程报告.md"
+    }
+  ],
+  "completed_at": "2026-10-16T04:06:28+08:00"
+}

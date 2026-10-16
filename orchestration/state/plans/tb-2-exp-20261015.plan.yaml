@@ -1,0 +1,16 @@
+id: tb-2-exp-20261015
+goal: 实验平台简介撰写——真实仪器+反馈实现段落落 md，并在 docx 可编辑副本中带格式标注替换（tb-20261015-153336-2）
+steps:
+- id: s1
+  member: writing
+  brief: 阅读增益管槽实验大报告（真实仪器与反馈实现为内容真源）+ PNG 形式参考（只看篇幅与行文形式），撰写实验平台简介连续段落落 md
+  dirs:
+  - data/大任务/2_实验平台简介撰写
+  effort: high
+- id: s2
+  member: writing
+  brief: 复制只读 docx 为可编辑副本，定位对应不实草稿段落，带显著格式标注替换为 s1 真实段落（旧文红底删除线留原位、新文黄底加粗），并保持 md
+    与 docx 新文一致
+  dirs:
+  - data/大任务/2_实验平台简介撰写
+  effort: high

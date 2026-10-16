@@ -13,5 +13,6 @@
       "job_id": "devops-20261015-093500-adhoc-20261015-093500-s1"
     }
   ],
-  "completed_at": null
+  "completed_at": null,
+  "abandoned_at": "2026-10-15T18:20:55+08:00"
 }

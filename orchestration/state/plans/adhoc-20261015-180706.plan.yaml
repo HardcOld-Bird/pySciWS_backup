@@ -1,0 +1,10 @@
+id: adhoc-20261015-180706
+goal: adhoc：orchestration/state/plans/adhoc-watchdog-twins.task.md
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  review: false

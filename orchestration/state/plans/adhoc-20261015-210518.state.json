@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261015-210518",
+  "created": "2026-10-15T21:05:18+08:00",
+  "goal": "adhoc：补派（tb-3-simfig P.p2 补完，前单 drawing-20261015-205228 的误删损失）：用 r",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "drawing-20261015-210518-adhoc-20261015-210518-s1",
+      "task_file": null,
+      "session_id": "cc169bd2-5f75-4c98-b545-363f10c634dd",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-15T21:07:21+08:00"
+}

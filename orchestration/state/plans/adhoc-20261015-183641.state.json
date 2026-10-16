@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261015-183641",
+  "created": "2026-10-15T18:36:41+08:00",
+  "goal": "adhoc：orchestration/state/plans/adhoc-debt-spawns.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261015-183641-adhoc-20261015-183641-s1",
+      "task_file": "orchestration/state/plans/adhoc-debt-spawns.task.md",
+      "session_id": "c3b809be-0c71-418c-b75f-a79bbb277b0c",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-15T18:59:45+08:00"
+}

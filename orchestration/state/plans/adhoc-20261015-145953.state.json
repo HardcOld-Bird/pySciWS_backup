@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261015-145953",
+  "created": "2026-10-15T14:59:53+08:00",
+  "goal": "adhoc：orchestration/pods/devops/inbox/task-20261015-f4b-anchor.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261015-150730-adhoc-20261015-145953-s1",
+      "task_file": "orchestration/pods/devops/inbox/task-20261015-f4b-resume.md",
+      "session_id": "478b69ac-8d7a-4e39-af6c-32e42ff449e8",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-15T15:15:07+08:00"
+}

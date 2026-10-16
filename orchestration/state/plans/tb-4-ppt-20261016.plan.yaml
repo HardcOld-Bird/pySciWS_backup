@@ -1,0 +1,103 @@
+id: tb-4-ppt-20261016
+goal: tb-20261016-020412-4-1016ppt 4 1016PPT制作任务——先基础设施改进与验证（PPT 生产链与机制性视觉检查闸），再两份调研→素材生产→pptx 组装→视觉终审；交付 20261015.pptx + 两份调研报告 + 必要的基础设施改进
+read: plan-decomposition.md
+steps:
+- id: I
+  mode: serial
+  brief: 基础设施改进环节（用户点名——改进与验证比产物更重要；核心是 PPT 产物的机制性视觉检查闸）
+  children:
+  - id: i1
+    kind: self
+    brief: 基础设施缺口分析报告——审计 writing/drawing/figure/reviewer 对 PPT 任务的支撑面（pptx 模板操作与组装、渲染出图视觉检查链、网页截图、AI 图内文字、PPT 审查标准、机械验收闸），重点设计「不经视觉检查不得提交 PPT」的机制方案；列缺口与实施方案
+    evidence_sections:
+    - 缺口分析
+    - 方案
+    - 结论
+  - id: i2
+    member: devops
+    brief: 按缺口清单实施——PPT 工具链补缺（模板/组装/渲染出图）、网页截图工具、reviewer PPT 审查标准、机制性视觉检查闸（机械面），各带回归测试全量绿
+    dirs:
+    - src/pysci
+    - tests
+    - orchestration
+    - .qoder/skills
+    effort: high
+  - id: i3
+    member: reviewer
+    brief: 能力验证——用新标准对旧 pptx（20260918.pptx）做校准审查，证明 PPT 视觉检查链端到端就位；问题仅作记录
+    dirs:
+    - orchestration/pods/reviewer
+    effort: medium
+- id: R
+  mode: serial
+  brief: 前置调研（两份短报告——同成员 FIFO 串行）
+  children:
+  - id: r1
+    member: lit
+    brief: 调研报告 A——Agentic 使用 COMSOL 的社区基础设施调查（重点 COMSOL 官方 MCP Server 与 COMSOL 2027 发布消息核实，官方或权威源，中英文均可），并采集官方网页截图供 PPT 页2 用图讲故事
+    dirs:
+    - data/research/1_gain_ep/汇报PPT/20261016
+    effort: high
+  - id: r2
+    member: lit
+    brief: 调研报告 B——AI 编程与计算机工作领域的多智能体范式趋势调查（OpenAI/Anthropic 新产品、Claude Code/Codex 近期演进、copilot 到 agentic 到多智能体协同的范式走向），短报告
+    dirs:
+    - data/research/1_gain_ep/汇报PPT/20261016
+    effort: high
+- id: P
+  mode: parallel
+  brief: 素材并行生产（AI 大图链与精确框图产物无交集）
+  children:
+  - id: D
+    mode: serial
+    brief: AI 大图串行链（同成员 FIFO）
+    children:
+    - id: d1
+      member: drawing
+      brief: PPT 页4 大图——AI 编程多智能体趋势的图文并茂讲解图（单主题整页大图，pro 模型，图内文字清晰），依据调研报告 B
+      dirs:
+      - data/research/1_gain_ep/article/artwork
+      effort: medium
+    - id: d2
+      member: drawing
+      brief: PPT 页5 大图——本项目现状拓扑图（组长与全组员结构、每成员 FIFO 队列、pysci TUI 管理面），图文并茂讲解图
+      dirs:
+      - data/research/1_gain_ep/article/artwork
+      effort: medium
+    - id: d3
+      member: drawing
+      brief: PPT 页7 大图——抽象几何风火箭示意图（顶部小载荷写科研生产基础设施、箭体引擎大部分写自我维护基础设施），图文并茂
+      dirs:
+      - data/research/1_gain_ep/article/artwork
+      effort: medium
+  - id: f2
+    member: figure
+    brief: PPT 页6 双流程框图（精确绘制）——上图 用户输入→pySci→生产结果 且上下各一环形自指箭头（AI 遇阻自维护/用户反馈自改进，可类比 few shot）；下图同风格 ReAct loop（Agent Loop）；对照排布暗示二者相似
+    dirs:
+    - data/research/1_gain_ep/article/figures
+    effort: medium
+- id: w1
+  member: writing
+  brief: pptx 组装——按 PPT模板.pptx 美学风格做 20261015.pptx 七页（标题页、AI COMSOL 用调研 A 截图讲故事、页3 复制 20260918.pptx 末页、页4/5/7 用 AI 大图、页6 用框图），文本框极少且定位精准；生产与使用的图像副本归档 20261015/
+  dirs:
+  - data/research/1_gain_ep/汇报PPT
+  effort: high
+- id: rv
+  member: reviewer
+  brief: PPT 视觉终审——机制性视觉检查的正式一环，按 PPT 审查标准逐页视觉核验（含文字可读性、图文一致、模板风格一致），出具 VERDICT
+  dirs:
+  - orchestration/pods/reviewer
+  - data/research/1_gain_ep/汇报PPT/20261016
+  effort: medium
+- id: w2
+  member: writing
+  brief: 终审后抛光（rv 建议①②）——页2 截图右缘裁在字中两处内移重裁、页1 日期字号 8→12pt，重跑 render/verify 闸
+  dirs:
+  - data/research/1_gain_ep/汇报PPT
+  effort: low
+- id: L1
+  kind: self
+  brief: 全流程报告组装（taskbooks report + 交付说明）
+  evidence_sections:
+  - 任务概述
+  - 环节完成清单

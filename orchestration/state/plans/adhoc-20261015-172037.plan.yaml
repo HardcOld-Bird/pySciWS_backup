@@ -1,0 +1,11 @@
+id: adhoc-20261015-172037
+goal: adhoc：orchestration/state/plans/adhoc-storm-fix.task.md
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  - orchestration/skills/orchestration/references
+  review: false

@@ -1,0 +1,24 @@
+{
+  "plan_id": "rework-smooth-20261015",
+  "created": "2026-10-15T18:23:12+08:00",
+  "goal": "返工流首跑摩擦根治——三机制缺口 + evidence role 化 lint + 账实保护 + advance 动作分离 + 双写者防护",
+  "steps": [
+    {
+      "id": "f1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "f2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "f3",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null,
+  "abandoned_at": "2026-10-15T18:23:12+08:00"
+}

@@ -1,0 +1,39 @@
+{
+  "plan_id": "psep3-20261014",
+  "created": "2026-10-15T18:23:12+08:00",
+  "goal": "PSEP_3 实施——superstep 嵌套编排 + jury 裁决书/E6 twin 终裁 + 返工驱动改进流 + 跨任务优先级路由",
+  "steps": [
+    {
+      "id": "pa1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "pa2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "pc",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "pd1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "pd2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "pb",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null,
+  "abandoned_at": "2026-10-15T18:23:12+08:00"
+}

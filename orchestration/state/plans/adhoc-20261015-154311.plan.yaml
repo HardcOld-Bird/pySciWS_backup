@@ -1,0 +1,20 @@
+id: adhoc-20261015-154311
+goal: 'adhoc：# 任务书：修复 pysci-orch next 的 KeyError: steps（缺陷）
+
+
+  ## 复现（组长实测 2'
+steps:
+- id: s1
+  member: devops
+  brief: '# 任务书：修复 pysci-orch next 的 KeyError: steps（缺陷）
+
+
+    ## 复现（组长实测 2026-10-15 15:3x）
+
+    命令：`pysci-orch next --limit 10`
+
+    实际输出：崩溃 tra'
+  dirs:
+  - src/pysci/skills/orchestration/tools
+  - tests
+  review: false

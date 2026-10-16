@@ -1,0 +1,10 @@
+id: adhoc-20261015-210518
+goal: adhoc：补派（tb-3-simfig P.p2 补完，前单 drawing-20261015-205228 的误删损失）：用 r
+steps:
+- id: s1
+  member: drawing
+  brief: '补派（tb-3-simfig P.p2 补完，前单 drawing-20261015-205228 的误删损失）：用 runs/beam_layout_ref_2.json
+    与 runs/beam_layout_ref_3.json 中的 '
+  dirs:
+  - data/research/1_gain_ep/article/artwork
+  review: false

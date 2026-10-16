@@ -1,0 +1,339 @@
+{
+  "case_id": "tb-20261015-225652-3-1-jury",
+  "case_file": "data\\大任务\\3_综合仿真实验绘图任务\\tb-20261015-225652-3-1-jury.md",
+  "ts": "2026-10-15T23:39:53+08:00",
+  "question": "返工第 1 轮应采用哪条改进路线？争点：用户的驳回批语 0 号暴露「数字对但语义错」全链\n无环可拦（组长任务书窄化参考图用途→figure 按错规格忠实执行→reviewer 按错规格核对\n一致），批语 1–4 另暴露常识排版纪律（遮挡/边距/重叠）在审查判定词表中缺位。用户明示\n「相比处理这些问题，如何抑制其再次出现（机制性促进发现）更重要，组员 harnessing 应\n补强」。路线分歧：是否在修图之外落地上游机制包。",
+  "options": {
+    "A": "（改进后状态：机制包 + 据此返工）\n落地 M1–M5 机制包后再返工绘图：M1 任务书「参考材料全集+逐要素语义解构表+疑问清单\n（拿不准先问）」义务、参数不得替代语义；M2 任务书 lint（引用参考图缺语义段→告警）；\nM3 reviewer 量表 v0.4（G2 意图对齐核对 + 零遮挡铁律四条入硬项：文字刻度不压图线、\n图体与标题间距、色标与标题/子图边距、任何元素重叠=FAIL）；M4 basic.md「动手前先查\n阅既有资料」升级为可执行义务（解构+疑问）；M5 scientific-plotting SKILL 接入\nscienceplots 预设并写入零遮挡铁律。随后 B 段按新机制重做绘图（含批语 0–5 逐条修复）。\n实施成本：devops 一跳（模板/lint/量表/公约/技能）+ 每份绘图任务书增一张解构表。",
+    "B": "（现状：仅按批语逐条修图）\n不改任何 harnessing，B 段直接按驳回批语 0–5 逐条修图（菱形框语义、遮挡、边距、\n重叠、scienceplots 配色）。成本最低；但「数字对但语义错」的机制缺口原样保留，下一幅\n图仍依赖组长任务书一次写对、reviewer 恰好想到，用户已明示该路线不符合其要求。"
+  },
+  "targets": [
+    "data/大任务/3_综合仿真实验绘图任务/返工1_成因分析报告.md",
+    "data/大任务/3_综合仿真实验绘图任务/返工1_解决方案报告.md",
+    "data/taskbooks/tb-20261015-225652-3-1.taskbook.md"
+  ],
+  "dossier_hash": "ccd584901a1c6308",
+  "dossier_chars": 7223,
+  "dossier": "# 案卷 tb-20261015-225652-3-1-jury\n\n## 问题\n返工第 1 轮应采用哪条改进路线？争点：用户的驳回批语 0 号暴露「数字对但语义错」全链\n无环可拦（组长任务书窄化参考图用途→figure 按错规格忠实执行→reviewer 按错规格核对\n一致），批语 1–4 另暴露常识排版纪律（遮挡/边距/重叠）在审查判定词表中缺位。用户明示\n「相比处理这些问题，如何抑制其再次出现（机制性促进发现）更重要，组员 harnessing 应\n补强」。路线分歧：是否在修图之外落地上游机制包。\n\n## 选项 A\n（改进后状态：机制包 + 据此返工）\n落地 M1–M5 机制包后再返工绘图：M1 任务书「参考材料全集+逐要素语义解构表+疑问清单\n（拿不准先问）」义务、参数不得替代语义；M2 任务书 lint（引用参考图缺语义段→告警）；\nM3 reviewer 量表 v0.4（G2 意图对齐核对 + 零遮挡铁律四条入硬项：文字刻度不压图线、\n图体与标题间距、色标与标题/子图边距、任何元素重叠=FAIL）；M4 basic.md「动手前先查\n阅既有资料」升级为可执行义务（解构+疑问）；M5 scientific-plotting SKILL 接入\nscienceplots 预设并写入零遮挡铁律。随后 B 段按新机制重做绘图（含批语 0–5 逐条修复）。\n实施成本：devops 一跳（模板/lint/量表/公约/技能）+ 每份绘图任务书增一张解构表。\n\n## 选项 B\n（现状：仅按批语逐条修图）\n不改任何 harnessing，B 段直接按驳回批语 0–5 逐条修图（菱形框语义、遮挡、边距、\n重叠、scienceplots 配色）。成本最低；但「数字对但语义错」的机制缺口原样保留，下一幅\n图仍依赖组长任务书一次写对、reviewer 恰好想到，用户已明示该路线不符合其要求。\n\n## 自动附着材料（CLI 确定性抓取，非撰写者所写）\n\n### git diff --stat\ndata/pysci_settings.toml                           |   2 +-\n .../figures/beam_scatter/beam_scatter_combined.png | Bin 844021 -> 2056553 bytes\n data/skills/ai_drawing/LEDGER.md                   |  17 +-\n data/skills/ai_drawing/manifest.jsonl              |   7 +\n orchestration/pods/drawing/AGENTS.md               |  30 +-\n orchestration/pods/reviewer/agents.md              |  26 +-\n orchestration/pods/sim/AGENTS.md                   |  16 +-\n orchestration/state/backlog.json                   | 425 ++++++++++-\n orchestration/state/leader-notes-20261015.md       |  18 +\n .../state/plans/adhoc-20261015-072639.state.json   |   8 +-\n .../state/plans/adhoc-20261015-093500.state.json   |   3 +-\n .../state/plans/devops-gap-20261014.plan.yaml      |   6 +-\n .../state/plans/psep2-night-20261014.plan.yaml     |   9 +-\n orchestration/state/plans/psep3-20261014.plan.yaml |  23 +-\n .../state/plans/rework-smooth-20261015.plan.yaml   |   6 +-\n .../state/plans/tb-1-docs-20261015.plan.yaml       |   3 +-\n orchestration/state/preference-journal.jsonl       |  28 +\n orchestration/state/registry.json                  |   6 +\n .../replies/reviewer/20261009-231455-reviewer.md   |   5 -\n .../state/suggestions/20261015-074529-tier-a.md    |  25 -\n .../state/suggestions/20261015-130555-devops.md    |  17 -\n .../state/suggestions/20261015-130838-writing.md   |  21 -\n .../state/suggestions/20261015-131302-devops.md    |  33 -\n .../state/suggestions/20261015-132143-devops.md    |  25 -\n .../state/suggestions/20261015-133401-devops.md    |  20 -\n .../gain_ep/simulation/build_beam_scatter_mph.py   |  18 +-\n .../simulation/finalize_beam_scatter_figure.py     | 796 +++++++++++++--------\n .../gain_ep/simulation/runner_beam_scatter.py      | 138 ++--\n 28 files changed, 1183 insertions(+), 548 deletions(-)\n\n### git diff\ndiff --git a/data/pysci_settings.toml b/data/pysci_settings.toml\nindex 971fda4..ecc5ac4 100644\n--- a/data/pysci_settings.toml\n+++ b/data/pysci_settings.toml\n@@ -81,7 +81,7 @@ enabled = false\n # 改这一行即热切换，无需重启会话；读取失败 / 键缺席 / 非法值一律回落 false 并出声。\n # 本单只做政策注入层（SessionStart/PostCompact 钩子注入政策全文）；判据层（\n # AskUserQuestion 拦截 / queue_pressure 夜航判据）是 n2。\n-enabled = false          # 夜航总开关（手动）：true = 政策注入 + 判据拦截生效\n+enabled = false         # 夜航总开关（真源；只归用户手动拨动）：改这一行即下一轮生效（Stop 钩子差分注入）；true=政策注入+判据拦截生效\n # periodic_wake_s = 3600 # 保险丝打回间隔（预留；未实施前勿设——见 §3.4）\n # ── 保险丝层缓行（PSEP_2 §3.4）：仅当「有未竟事项（计划/队列/任务书）且组长无活动」的\n #    停滞才打回；**全部完成 / 严重阻碍两个终态一律静默**。鉴于 PENDING-WORK 已覆盖大部分\ndiff --git a/data/research/1_gain_ep/article/figures/beam_scatter/beam_scatter_combined.png b/data/research/1_gain_ep/article/figures/beam_scatter/beam_scatter_combined.png\nindex 42b45db..f6be481 100644\nBinary files a/data/research/1_gain_ep/article/figures/beam_scatter/beam_scatter_combined.png and b/data/research/1_gain_ep/article/figures/beam_scatter/beam_scatter_combined.png differ\ndiff --git a/data/skills/ai_drawing/LEDGER.md b/data/skills/ai_drawing/LEDGER.md\nindex fce3fee..4bc99c5 100644\n--- a/data/skills/ai_drawing/LEDGER.md\n+++ b/data/skills/ai_drawing/LEDGER.md\n@@ -1,13 +1,20 @@\n # AI 绘图生成账本（LEDGER）\n \n-> 共 2 条记录；由 `manifest.jsonl` 自动渲染，请勿手改本文件。\n+> 共 9 条记录；由 `manifest.jsonl` 自动渲染，请勿手改本文件。\n > 追加记录由 `gen`/`i2i`/`edit`/`layers`/`ingest` 自动写入；查看用 `pysci-imagine ledger`。\n > **本表不是复现手段**：方舟不保证同 prompt/seed 出同图；满意的结果请用 `gallery --add` 归档。\n \n-- **按后端**：ark=2\n-- **按模型**：doubao-seedream-5-0-flash-260915=1, doubao-seedream-5-0-pro-260628=1\n+- **按后端**：ark=9\n+- **按模型**：doubao-seedream-5-0-flash-260915=7, doubao-seedream-5-0-pro-260628=2\n \n | # | 时间 | 后端 | 模型 | seed | 产物 | prompt / 备注 |\n |---|------|------|------|------|------|----------------|\n-| 1 | 2026-10-01T22:31:15 | ark | doubao-seedream-5-0-pro-260628 |  | `data/skills/ai_drawing/assets/probe_pro.jpg` | a blue square on a plain white background |\n-| 2 | 2026-10-01T22:30:48 | ark | doubao-seedream-5-0-flash-260915 |  | `data/skills/ai_drawing/assets/probe_flash.jpg` | a red circle on a plain white background |\n+| 1 | 2026-10-15T21:06:29 | ark | doubao-seedream-5-0-flash-260915 |  | `data/research/1_gain_ep/article/artwork/beam_layout_ref_3.jpg` | A refined, publication-grade scientific multi-panel figure layout in landscape orientation, pure white background. Three equal-width vertical columns with wide even white gutters and balanced outer margins; the three columns read as three visibly different comparison cases. Every column stacks three panel rows vertically. Top panel row of each column: a small polar radar chart with two smooth thin closed outlines overlaid in the same polar coordinate system, one outline deep blue and the other vermilion red, the two shapes clearly different in form (one a multi-lobed petal contour, the other a smoother rounded contour), pale thin gray polar grid, sparse small numeric tick marks. Second row and third row of each column: each row is a separate upper half-disk semicircular far-field map, an upper semicircle resting on a flat straight horizontal baseline, filled with smooth parallel wavefront ripples in a red-white-blue diverging colormap, the flat bottom diameter edge perfectly straight and crisp; the two half-disk panels are equal in size with a clear white gap between them. Across the three columns the ripple patterns differ noticeably (one strongly focused central lobe, one tilted asymmetric fan, one weak broad ripples) so the columns read as distinct cases. The field maps are strictly upper half-disks with a flat bottom edge, never full circles. A single shared vertical colorbar on the far right, its height exactly equal to the combined height of the second and third panel rows together, thin frame, sparse ticks. A few small diamond annotation boxes with hairline outlines and fine dashed leader lines, plus tiny square inset detail panels. APS Nature journal aesthetic: hairline strokes,\n…（截断：git diff 全文 131567 B）\n\n### git log --oneline -5\na461f4c chore(state): 交付全文留档入库（新留档即提交）\nd7dcc7e Merge branch 'wt-20261015-230248-devops'\n86b92ae fix(tui): 任务书界面 4 缺陷——多行批语 / 状态快照刷新 / 确认关页 / 单选残留\n5588e3e chore(state): 任务书入库（新建即提交）\n95cf131 chore(state): 任务书入库（新建即提交）\n\n### 涉事文件字节读数\n- data/大任务/3_综合仿真实验绘图任务/返工1_成因分析报告.md: 5354 B / 66 行 / sha256=ff7ac7649c0ef5aa\n- data/大任务/3_综合仿真实验绘图任务/返工1_解决方案报告.md: 4664 B / 62 行 / sha256=4582f75ed3ab6a3b\n- data/taskbooks/tb-20261015-225652-3-1.taskbook.md: 4727 B / 38 行 / sha256=ec8a0db91097c722\n\n### 相关台账行\n（无相关台账行）\n",
+  "brief": {
+    "path": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\orchestration\\state\\evals\\jury-brief.md",
+    "approved": false,
+    "hash": "4e026d2b65bb85e1"
+  },
+  "seats": [
+    {
+      "name": "glm",
+      "model": "glm-5.3",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "key_env": "GLM_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "kimi",
+      "model": "kimi-k2.6",
+      "base_url": "https://api.moonshot.cn/v1",
+      "key_env": "KIMI_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "mimo",
+      "model": "mimo-v2.6-pro",
+      "base_url": "https://api.xiaomimimo.com/v1",
+      "key_env": "MIMO_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "siliconflow",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "key_env": "SILICONFLOW_API_KEY",
+      "role": "fallback",
+      "defect": "",
+      "reason": "被评模型 deepseek 同族，依 §4 不得入庭",
+      "usable": true
+    }
+  ],
+  "routing": {
+    "preset": "deepseek",
+    "hidden": false,
+    "producer": "deepseek",
+    "panel": [
+      "glm",
+      "kimi",
+      "mimo"
+    ]
+  },
+  "fallback": {
+    "enabled": true,
+    "used": false,
+    "notice": "",
+    "missing_primary": []
+  },
+  "panel": [
+    "glm-5.3",
+    "kimi-k2.6",
+    "mimo-v2.6-pro"
+  ],
+  "attempts": 1,
+  "jurors": [
+    {
+      "seat": "glm",
+      "model": "glm-5.3",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户明示机制防复发优先且B不符其要求；批语0证明语义错全链无环可拦，M2 lint与M3硬项可机械验证，成本一跳可控。",
+          "confidence": 0.88,
+          "usage": {
+            "completion_tokens": 2127,
+            "completion_tokens_details": {
+              "reasoning_tokens": 2063
+            },
+            "prompt_tokens": 3895,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 6022
+          },
+          "error": ""
+        },
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户明示机制预防优先；B 的解构表、lint、量表硬项使语义与遮挡可机械核验，闭合全链无环缺口；A 原样留缺口。",
+          "confidence": 0.9,
+          "usage": {
+            "completion_tokens": 4191,
+            "completion_tokens_details": {
+              "reasoning_tokens": 4118
+            },
+            "prompt_tokens": 3895,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 8086
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 7790,
+        "completion_tokens": 6318,
+        "total_tokens": 14108
+      }
+    },
+    {
+      "seat": "kimi",
+      "model": "kimi-k2.6",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户明示机制性防复现优先且现状路线不符其要求；A以lint与硬量表形成机械验证闭环，符合可靠性目标。",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 3708,
+            "completion_tokens": 1170,
+            "total_tokens": 4878,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1119
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户已明示A不符合'机制性促进发现'要求；B以M2 lint与M3硬项量表将语义与排版纪律机械可验证化，补全系统性缺口。",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 3708,
+            "completion_tokens": 1594,
+            "total_tokens": 5302,
+            "cached_tokens": 1024,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1534
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1024
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 7416,
+        "completion_tokens": 2764,
+        "total_tokens": 10180
+      }
+    },
+    {
+      "seat": "mimo",
+      "model": "mimo-v2.6-pro",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户明示机制优先，A 补齐语义解构与零遮挡硬门禁，使全链可机械核对；附着材料未显示不可回退危害。",
+          "confidence": 0.88,
+          "usage": {
+            "completion_tokens": 124,
+            "prompt_tokens": 4243,
+            "total_tokens": 4367,
+            "completion_tokens_details": {
+              "reasoning_tokens": 60
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户明示机制抑制优先且需补强 harnessing，M1–M5 堵住语义错链路并使失败可追责，成本一次 devops 可承受",
+          "confidence": 0.78,
+          "usage": {
+            "completion_tokens": 134,
+            "prompt_tokens": 4243,
+            "total_tokens": 4377,
+            "completion_tokens_details": {
+              "reasoning_tokens": 70
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1280
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 8486,
+        "completion_tokens": 258,
+        "total_tokens": 8744
+      }
+    }
+  ],
+  "votes": {
+    "glm": "A",
+    "kimi": "A",
+    "mimo": "A"
+  },
+  "tally": {
+    "A": 3,
+    "B": 0
+  },
+  "inconclusive": [],
+  "verdict": "A",
+  "escalate": "",
+  "final_verdict": "",
+  "decided_by": "",
+  "twin": null,
+  "usage": {
+    "prompt_tokens": 23692,
+    "completion_tokens": 9340,
+    "total_tokens": 33032
+  },
+  "usage_by_model": {
+    "glm-5.3": {
+      "prompt_tokens": 7790,
+      "completion_tokens": 6318,
+      "total_tokens": 14108
+    },
+    "kimi-k2.6": {
+      "prompt_tokens": 7416,
+      "completion_tokens": 2764,
+      "total_tokens": 10180
+    },
+    "mimo-v2.6-pro": {
+      "prompt_tokens": 8486,
+      "completion_tokens": 258,
+      "total_tokens": 8744
+    }
+  },
+  "cost": {
+    "amount": null,
+    "unit": "",
+    "note": "无价目表：registry.jury.pricing 未覆盖任何 panel 型号（成本不猜）",
+    "priced": [],
+    "unpriced": [
+      "glm-5.3",
+      "kimi-k2.6",
+      "mimo-v2.6-pro"
+    ]
+  },
+  "verdict_summary": {
+    "winner": "A",
+    "decided_by": "jury",
+    "tally": {
+      "A": 3,
+      "B": 0
+    },
+    "inconclusive": [],
+    "seats": [
+      {
+        "seat": "glm",
+        "model": "glm-5.3",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "kimi",
+        "model": "kimi-k2.6",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "mimo",
+        "model": "mimo-v2.6-pro",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.88
+      }
+    ],
+    "majority_reasons": [
+      "glm：用户明示机制防复发优先且B不符其要求；批语0证明语义错全链无环可拦，M2 lint与M3硬项可机械验证，成本一跳可控。",
+      "kimi：用户明示机制性防复现优先且现状路线不符其要求；A以lint与硬量表形成机械验证闭环，符合可靠性目标。",
+      "mimo：用户明示机制优先，A 补齐语义解构与零遮挡硬门禁，使全链可机械核对；附着材料未显示不可回退危害。"
+    ],
+    "twin": null,
+    "text": "裁决=A（jury 定案；计票 A:3 B:0）｜各席：glm=A/0.90 kimi=A/0.90 mimo=A/0.88｜多数理由：glm：用户明示机制防复发优先且B不符其要求；批语0证明语义错全链无环可拦，M2 lint与M3硬项可机械验证，成本一跳可控。；kimi：用户明示机制性防复现优先且现状路线不符其要求；A以lint与硬量表形成机械验证闭环，符合可靠性目标。；mimo：用户明示机制优先，A 补齐语义解构与零遮挡硬门禁，使全链可机械核对；附着材料未显示不可回退危害。"
+  }
+}

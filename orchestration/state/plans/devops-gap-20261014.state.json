@@ -1,0 +1,19 @@
+{
+  "plan_id": "devops-gap-20261014",
+  "created": "2026-10-15T18:23:10+08:00",
+  "goal": "补齐 plan→devops 派发缺口（PSEP_2 备忘优先项）——plan 可直接派发 devops 环节，backlog-batch 通道不回归",
+  "steps": [
+    {
+      "id": "d1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "d2",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null,
+  "abandoned_at": "2026-10-15T18:23:11+08:00"
+}

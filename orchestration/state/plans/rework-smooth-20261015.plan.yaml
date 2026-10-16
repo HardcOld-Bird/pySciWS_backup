@@ -3,14 +3,16 @@ goal: 返工流首跑摩擦根治——三机制缺口 + evidence role 化 lint 
 steps:
 - id: f1
   member: devops
-  brief: 三机制缺口修复（用户点名）——①shutil.move 归档 reply 源缺失 fail-soft（dispatch.py:1596，双写者根因）②任务书白名单声明自动注入 PYSCI_TASK_DIRS（声明面与注入面合一）③机械验收 orch-tests 判据防哨兵留痕污染（取退出码/末行摘要，哨兵留痕走 stderr）；各带回归测试
+  brief: 三机制缺口修复（用户点名）——①shutil.move 归档 reply 源缺失 fail-soft（dispatch.py:1596，双写者根因）②任务书白名单声明自动注入
+    PYSCI_TASK_DIRS（声明面与注入面合一）③机械验收 orch-tests 判据防哨兵留痕污染（取退出码/末行摘要，哨兵留痕走 stderr）；各带回归测试
   dirs:
   - src/pysci/skills/orchestration/tools
   - tests
   effort: high
 - id: f2
   member: devops
-  brief: 返工流账实与证据面加固——①evidence lint 按 role 内容级校验（final_report 须含全流程报告特征段，rework_plan/cause_analysis 各有判据，不合规拒收）②_reconcile 账实保护（started 节点只对账 id 不回滚状态）③advance 动作分离（evidence 收尾与在途结算分开执行分开提示）；各带回归测试
+  brief: 返工流账实与证据面加固——①evidence lint 按 role 内容级校验（final_report 须含全流程报告特征段，rework_plan/cause_analysis
+    各有判据，不合规拒收）②_reconcile 账实保护（started 节点只对账 id 不回滚状态）③advance 动作分离（evidence 收尾与在途结算分开执行分开提示）；各带回归测试
   dirs:
   - src/pysci/skills/orchestration/tools
   - tests

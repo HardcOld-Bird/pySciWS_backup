@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261015-230247",
+  "created": "2026-10-15T23:02:47+08:00",
+  "goal": "adhoc：修 pysci TUI 任务书界面 4 缺陷（用户 2026-10-15 驳回流程实测，用户指令：先修 TUI 再进返工",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261015-230247-adhoc-20261015-230247-s1",
+      "task_file": null,
+      "session_id": "e439863b-4618-441a-9177-7c2e4d09a47f",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-15T23:16:43+08:00"
+}

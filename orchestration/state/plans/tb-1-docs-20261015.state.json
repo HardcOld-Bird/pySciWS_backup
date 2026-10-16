@@ -1,0 +1,14 @@
+{
+  "plan_id": "tb-1-docs-20261015",
+  "created": "2026-10-15T18:23:13+08:00",
+  "goal": "开题文档阅读与待关注事项整理——三份材料阅读总结，落盘同目录 md（tb-20261015-072342-1）",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null,
+  "abandoned_at": "2026-10-15T18:23:13+08:00"
+}

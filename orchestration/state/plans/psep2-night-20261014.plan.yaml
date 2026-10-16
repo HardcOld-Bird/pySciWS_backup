@@ -3,7 +3,8 @@ goal: PSEP_2 夜航模式实施——单开关 + 机械政策注入 + 判据拦�
 steps:
 - id: n1
   member: devops
-  brief: 夜航配置与政策注入层——data/pysci_settings.toml 增 [night] enabled 单开关（读侧 fail-open 热切换）+ SessionStart/PostCompact 钩子读开关注入夜航政策全文（含 twin 授权书，PSEP_2 §3.2 草案）；钩子 fail-open，复用既有钩子体系不新建平行链
+  brief: 夜航配置与政策注入层——data/pysci_settings.toml 增 [night] enabled 单开关（读侧 fail-open 热切换）+
+    SessionStart/PostCompact 钩子读开关注入夜航政策全文（含 twin 授权书，PSEP_2 §3.2 草案）；钩子 fail-open，复用既有钩子体系不新建平行链
   dirs:
   - data
   - .qoder/hooks
@@ -12,7 +13,8 @@ steps:
   effort: high
 - id: n2
   member: devops
-  brief: 判据层——PreToolUse(AskUserQuestion) 机械拦截钩子（夜航开则 deny + 注入转 twin 终裁指令）+ watch.queue_pressure 增夜航判据（mirror-pending.json 非空 → PENDING-WORK 伪事件，沿既有 30min 节流，仅夜航时段生效；单一实现扩展不动四处消费面）
+  brief: 判据层——PreToolUse(AskUserQuestion) 机械拦截钩子（夜航开则 deny + 注入转 twin 终裁指令）+ watch.queue_pressure
+    增夜航判据（mirror-pending.json 非空 → PENDING-WORK 伪事件，沿既有 30min 节流，仅夜航时段生效；单一实现扩展不动四处消费面）
   dirs:
   - .qoder/hooks
   - src/pysci/skills/orchestration/tools
@@ -28,7 +30,8 @@ steps:
   effort: high
 - id: n4
   member: devops
-  brief: 测试与文档收尾——PSEP_2 §5 验收判据逐条实测（开关热切换/注入触发点/AskUserQuestion deny 双向/mirror-pending 判据节流/政策文本含授权书关键词）+ README/patrol-watchdog.md 文段 + [night] 注释自解释 + 全仓测试全绿
+  brief: 测试与文档收尾——PSEP_2 §5 验收判据逐条实测（开关热切换/注入触发点/AskUserQuestion deny 双向/mirror-pending
+    判据节流/政策文本含授权书关键词）+ README/patrol-watchdog.md 文段 + [night] 注释自解释 + 全仓测试全绿
   dirs:
   - data
   - .qoder/hooks
