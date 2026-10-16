@@ -2,7 +2,7 @@
   "id": "tb-20261017-044604-3-2",
   "ts": "2026-10-17T04:46:04+08:00",
   "title": "3 综合仿真实验绘图任务（返工第 2 轮）",
-  "status": "planning",
+  "status": "active",
   "source": "mirror-tui",
   "priority": "normal",
   "mode": "no_inspector",
@@ -10,6 +10,6 @@
   "rework_round": 2,
   "plan_id": "rework-tb-20261017-044604-3-2",
   "rejections": [],
-  "updated": "2026-10-17T05:20:41+08:00",
+  "updated": "2026-10-17T05:21:03+08:00",
   "report": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\data\\taskbooks\\tb-20261017-044604-3-2.report.md"
 }
