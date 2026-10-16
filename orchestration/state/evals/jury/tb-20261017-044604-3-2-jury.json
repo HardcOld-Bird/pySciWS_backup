@@ -1,0 +1,335 @@
+{
+  "case_id": "tb-20261017-044604-3-2-jury",
+  "case_file": "data\\taskbooks\\tb-20261017-044604-3-2-jury.md",
+  "ts": "2026-10-17T05:23:48+08:00",
+  "question": "综合仿真实验绘图第 2 轮返工暴露发现盲区：参考图中「外侧方框比内侧大」「内框完整\n位于半圆内且留边距」「标签在框外遮次要区」等**元素间关系语义**被组员与 reviewer 双双\n漏掉（4ref2.png 有直接示例）；仿真侧外场计算误用完美匹配层（应改「完美匹配边界」），\n因设置前未查手册且无理论预期对照，画完才发现物理混乱。第 1 轮改进（元素级解构表/\n零遮挡/意图对齐）已证必要但不充分。请裁定：**哪种状态对项目更好**——改进方案实施后\n的状态，还是目前项目真实现状？",
+  "options": {
+    "A": "**改进方案实施后的状态**：五项机制——①语义解构表升「关系级」（包含/相交/相对大小/\n层次主次/标注注意力归属）；②「近而不交即缺陷」入 H4 词表（贴边=与重叠同级）；\n③几何可行性核对义务（标注放不下→扩仿真区域再整体缩小，禁裁剪贴边）；④sim 查手册\n留痕（设置依据表）＋理论预期预登记（画前写预期、画后对照）；⑤reviewer 关系级核对\n四项判据。同类「关系语义漏读」「设置凭习惯」缺陷以后可被机制拦截。代价：解构表多\n一列、sim 交付多两张表、常驻面小幅增加。",
+    "B": "**目前项目真实现状**：解构表只到元素级，关系语义全凭临场自觉；间距词表只管重叠不管\n贴边；仿真设置无依据留痕、无预期对照。可预见地：同类方框/标签问题随下一张复杂图\n再现（本轮即第 2 次返工同类发现盲区），仿真错设只能靠用户读图发现。无新增流程负担。"
+  },
+  "targets": [
+    "data/taskbooks/tb-20261017-044604-3-2.a2-解决方案.md",
+    "orchestration/skills/scientific_plotting",
+    "orchestration/pods/reviewer/rubrics"
+  ],
+  "dossier_hash": "8459620ebe2da22b",
+  "dossier_chars": 4172,
+  "dossier": "# 案卷 tb-20261017-044604-3-2-jury\n\n## 问题\n综合仿真实验绘图第 2 轮返工暴露发现盲区：参考图中「外侧方框比内侧大」「内框完整\n位于半圆内且留边距」「标签在框外遮次要区」等**元素间关系语义**被组员与 reviewer 双双\n漏掉（4ref2.png 有直接示例）；仿真侧外场计算误用完美匹配层（应改「完美匹配边界」），\n因设置前未查手册且无理论预期对照，画完才发现物理混乱。第 1 轮改进（元素级解构表/\n零遮挡/意图对齐）已证必要但不充分。请裁定：**哪种状态对项目更好**——改进方案实施后\n的状态，还是目前项目真实现状？\n\n## 选项 A\n**改进方案实施后的状态**：五项机制——①语义解构表升「关系级」（包含/相交/相对大小/\n层次主次/标注注意力归属）；②「近而不交即缺陷」入 H4 词表（贴边=与重叠同级）；\n③几何可行性核对义务（标注放不下→扩仿真区域再整体缩小，禁裁剪贴边）；④sim 查手册\n留痕（设置依据表）＋理论预期预登记（画前写预期、画后对照）；⑤reviewer 关系级核对\n四项判据。同类「关系语义漏读」「设置凭习惯」缺陷以后可被机制拦截。代价：解构表多\n一列、sim 交付多两张表、常驻面小幅增加。\n\n## 选项 B\n**目前项目真实现状**：解构表只到元素级，关系语义全凭临场自觉；间距词表只管重叠不管\n贴边；仿真设置无依据留痕、无预期对照。可预见地：同类方框/标签问题随下一张复杂图\n再现（本轮即第 2 次返工同类发现盲区），仿真错设只能靠用户读图发现。无新增流程负担。\n\n## 证据\n- 成因分析报告：data/taskbooks/tb-20261017-044604-3-2.a1-成因分析.md（含前次改进\n  复盘：上轮 M1–M5 实测必要但不充分的实证）\n- 解决方案报告：data/taskbooks/tb-20261017-044604-3-2.a2-解决方案.md（A 路 5 项＋\n  B 路 4 组硬性条款）\n- 用户驳回批语原文：见任务书 tb-20261017-044604-3-2（「希望你能够反思如何通过基础\n  设施改进来促进未来的相似推理发现，不要再刚需我的显式提醒」「基础设施改进和验证比\n  任务产物本身更重要」）\n\n## 自动附着材料（CLI 确定性抓取，非撰写者所写）\n\n### git diff --stat\n.../state/plans/rework-tb-20261017-041124-2-1.plan.yaml |  2 +-\n .../plans/rework-tb-20261017-041124-2-1.state.json      | 17 +++++++++++------\n 2 files changed, 12 insertions(+), 7 deletions(-)\n\n### git diff\ndiff --git a/orchestration/state/plans/rework-tb-20261017-041124-2-1.plan.yaml b/orchestration/state/plans/rework-tb-20261017-041124-2-1.plan.yaml\nindex a636015..cd3a41b 100644\n--- a/orchestration/state/plans/rework-tb-20261017-041124-2-1.plan.yaml\n+++ b/orchestration/state/plans/rework-tb-20261017-041124-2-1.plan.yaml\n@@ -46,7 +46,7 @@ steps:\n     brief: 重拆解返工\n     role: rework_plan\n   - id: b2\n-    member: devops\n+    member: writing\n     brief: 返工生产环节\n     member_placeholder: true\n   - id: b_last\ndiff --git a/orchestration/state/plans/rework-tb-20261017-041124-2-1.state.json b/orchestration/state/plans/rework-tb-20261017-041124-2-1.state.json\nindex 8d089ea..4cdc473 100644\n--- a/orchestration/state/plans/rework-tb-20261017-041124-2-1.state.json\n+++ b/orchestration/state/plans/rework-tb-20261017-041124-2-1.state.json\n@@ -29,19 +29,24 @@\n     },\n     {\n       \"id\": \"A.a5\",\n-      \"status\": \"queued\",\n+      \"status\": \"done\",\n       \"review\": \"pending\",\n-      \"job_id\": \"devops-20261017-042808-rework-tb-20261017-041124-2-1-A.a5\"\n+      \"job_id\": \"devops-20261017-042808-rework-tb-20261017-041124-2-1-A.a5\",\n+      \"task_file\": null,\n+      \"session_id\": \"73d2478d-8fd1-4bb5-978f-65b55b82aeef\",\n+      \"kind\": \"result\"\n     },\n     {\n       \"id\": \"B.b1\",\n-      \"status\": \"pending\",\n-      \"review\": \"pending\"\n+      \"status\": \"done\",\n+      \"review\": \"pending\",\n+      \"evidence\": \"data/taskbooks/tb-20261017-041124-2-1.b1-重拆解.md\"\n     },\n     {\n       \"id\": \"B.b2\",\n-      \"status\": \"pending\",\n-      \"review\": \"pending\"\n+      \"status\": \"queued\",\n+      \"review\": \"pending\",\n+      \"job_id\": \"writing-20261017-052000-rework-tb-20261017-041124-2-1-B.b2\"\n     },\n     {\n       \"id\": \"B.b_last\",\n\n### git log --oneline -5\nf20f773 chore(state): 任务书入库（新建即提交）\nf41d298 chore(state): 任务书入库（新建即提交）\n0e9a883 chore(state): 任务书全流程报告入库（新报告即提交）\n0f51784 chore(state): 任务书入库（新建即提交）\n204f456 chore(state): 任务书入库（新建即提交）\n\n### 涉事文件字节读数\n- data/taskbooks/tb-20261017-044604-3-2.a2-解决方案.md: 3772 B / 48 行 / sha256=9658a4182b1d4495\n- orchestration/skills/scientific_plotting: 缺席\n- orchestration/pods/reviewer/rubrics: 目录，3 文件 / 18420 B\n\n### 相关台账行\n- 2026-10-15T20:31:58+08:00 devops kind=result plan=tb-3-simfig-20261015 turns=89 tags=-\n- 2026-10-15T21:39:34+08:00 devops kind=result plan=- turns=46 tags=-\n- 2026-10-15T22:20:07+08:00 devops kind=result plan=- turns=35 tags=-\n- 2026-10-16T00:00:03+08:00 devops kind=result plan=rework-tb-20261015-225652-3-1 turns=155 tags=-\n- 2026-10-16T01:08:39+08:00 devops kind=result plan=- turns=42 tags=-\n- 2026-10-16T02:04:57+08:00 devops kind=result plan=adhoc-20261016-015510 turns=50 tags=-\n- 2026-10-16T02:35:58+08:00 devops kind=result plan=tb-4-ppt-20261016 turns=7 tags=-\n- 2026-10-16T03:02:00+08:00 devops kind=result plan=- turns=55 tags=-\n- 2026-10-17T04:40:07+08:00 devops kind=result plan=rework-tb-20261017-041124-2-1 turns=19 tags=-\n- 2026-10-17T05:11:51+08:00 devops kind=result plan=- turns=52 tags=-\n",
+  "brief": {
+    "path": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\orchestration\\state\\evals\\jury-brief.md",
+    "approved": false,
+    "hash": "4e026d2b65bb85e1"
+  },
+  "seats": [
+    {
+      "name": "glm",
+      "model": "glm-5.3",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "key_env": "GLM_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "kimi",
+      "model": "kimi-k2.6",
+      "base_url": "https://api.moonshot.cn/v1",
+      "key_env": "KIMI_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "mimo",
+      "model": "mimo-v2.6-pro",
+      "base_url": "https://api.xiaomimimo.com/v1",
+      "key_env": "MIMO_API_KEY",
+      "role": "primary",
+      "defect": "",
+      "reason": "",
+      "usable": true
+    },
+    {
+      "name": "siliconflow",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "key_env": "SILICONFLOW_API_KEY",
+      "role": "fallback",
+      "defect": "",
+      "reason": "被评模型 deepseek 同族，依 §4 不得入庭",
+      "usable": true
+    }
+  ],
+  "routing": {
+    "preset": "mimo",
+    "hidden": true,
+    "producer": "deepseek",
+    "panel": [
+      "glm",
+      "kimi",
+      "mimo"
+    ]
+  },
+  "fallback": {
+    "enabled": true,
+    "used": false,
+    "notice": "",
+    "missing_primary": []
+  },
+  "panel": [
+    "glm-5.3",
+    "kimi-k2.6",
+    "mimo-v2.6-pro"
+  ],
+  "attempts": 1,
+  "jurors": [
+    {
+      "seat": "glm",
+      "model": "glm-5.3",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "同类缺陷第2次返工实证元素级机制不足；预期预登记与设置留痕可机械拦截、可追责，正合用户「基建重于产物」批语，代价仅小幅常驻面。",
+          "confidence": 0.85,
+          "usage": {
+            "completion_tokens": 1487,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1419
+            },
+            "prompt_tokens": 3105,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 4592
+          },
+          "error": ""
+        },
+        {
+          "seat": "glm",
+          "model": "glm-5.3",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户驳回批语明示基建改进优先于产物；同类缺陷两轮复发证 A 现状不充分；B 四项判据与查手册留痕使缺陷可机械拦截，代价仅小幅。",
+          "confidence": 0.85,
+          "usage": {
+            "completion_tokens": 4641,
+            "completion_tokens_details": {
+              "reasoning_tokens": 4573
+            },
+            "prompt_tokens": 3105,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 7746
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 6210,
+        "completion_tokens": 6128,
+        "total_tokens": 12338
+      }
+    },
+    {
+      "seat": "kimi",
+      "model": "kimi-k2.6",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "用户批示基建重于产物，已两次返工同类盲区；五项机制将关系语义漏读与仿真错设变为可机械拦截，常驻面仅小幅增加",
+          "confidence": 0.85,
+          "usage": {
+            "prompt_tokens": 2946,
+            "completion_tokens": 2144,
+            "total_tokens": 5090,
+            "completion_tokens_details": {
+              "reasoning_tokens": 2089
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "kimi",
+          "model": "kimi-k2.6",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "用户批语指'基建比产物重要''勿需我提醒'；第2次返工证实现状A不可持续；B五项机制成流程硬依赖，代价明确可控。",
+          "confidence": 0.9,
+          "usage": {
+            "prompt_tokens": 2946,
+            "completion_tokens": 2113,
+            "total_tokens": 5059,
+            "completion_tokens_details": {
+              "reasoning_tokens": 2053
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 5892,
+        "completion_tokens": 4257,
+        "total_tokens": 10149
+      }
+    },
+    {
+      "seat": "mimo",
+      "model": "mimo-v2.6-pro",
+      "consistent": true,
+      "vote": "A",
+      "ballots": [
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "AB",
+          "choice": "A",
+          "real": "A",
+          "reason": "案卷实证同类盲区二次返工，A 将关系核对/依据留痕变为可机检硬义务，成本仅为交付内表格，符合可靠性与可审计目标，无明确危害",
+          "confidence": 0.82,
+          "usage": {
+            "completion_tokens": 213,
+            "prompt_tokens": 3525,
+            "total_tokens": 3738,
+            "completion_tokens_details": {
+              "reasoning_tokens": 146
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "error": ""
+        },
+        {
+          "seat": "mimo",
+          "model": "mimo-v2.6-pro",
+          "order": "BA",
+          "choice": "B",
+          "real": "A",
+          "reason": "第2轮同类返工证明现有机制确有系统性盲区；五项措施可机械核验、留痕可追责，常驻成本仅解构表一列与两张表，收益明确。",
+          "confidence": 0.82,
+          "usage": {
+            "completion_tokens": 120,
+            "prompt_tokens": 3525,
+            "total_tokens": 3645,
+            "completion_tokens_details": {
+              "reasoning_tokens": 51
+            },
+            "prompt_tokens_details": {
+              "cached_tokens": 1152
+            }
+          },
+          "error": ""
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 7050,
+        "completion_tokens": 333,
+        "total_tokens": 7383
+      }
+    }
+  ],
+  "votes": {
+    "glm": "A",
+    "kimi": "A",
+    "mimo": "A"
+  },
+  "tally": {
+    "A": 3,
+    "B": 0
+  },
+  "inconclusive": [],
+  "verdict": "A",
+  "escalate": "",
+  "final_verdict": "",
+  "decided_by": "",
+  "twin": null,
+  "usage": {
+    "prompt_tokens": 19152,
+    "completion_tokens": 10718,
+    "total_tokens": 29870
+  },
+  "usage_by_model": {
+    "glm-5.3": {
+      "prompt_tokens": 6210,
+      "completion_tokens": 6128,
+      "total_tokens": 12338
+    },
+    "kimi-k2.6": {
+      "prompt_tokens": 5892,
+      "completion_tokens": 4257,
+      "total_tokens": 10149
+    },
+    "mimo-v2.6-pro": {
+      "prompt_tokens": 7050,
+      "completion_tokens": 333,
+      "total_tokens": 7383
+    }
+  },
+  "cost": {
+    "amount": null,
+    "unit": "",
+    "note": "无价目表：registry.jury.pricing 未覆盖任何 panel 型号（成本不猜）",
+    "priced": [],
+    "unpriced": [
+      "glm-5.3",
+      "kimi-k2.6",
+      "mimo-v2.6-pro"
+    ]
+  },
+  "verdict_summary": {
+    "winner": "A",
+    "decided_by": "jury",
+    "tally": {
+      "A": 3,
+      "B": 0
+    },
+    "inconclusive": [],
+    "seats": [
+      {
+        "seat": "glm",
+        "model": "glm-5.3",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.85
+      },
+      {
+        "seat": "kimi",
+        "model": "kimi-k2.6",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.9
+      },
+      {
+        "seat": "mimo",
+        "model": "mimo-v2.6-pro",
+        "vote": "A",
+        "consistent": true,
+        "confidence": 0.82
+      }
+    ],
+    "majority_reasons": [
+      "glm：同类缺陷第2次返工实证元素级机制不足；预期预登记与设置留痕可机械拦截、可追责，正合用户「基建重于产物」批语，代价仅小幅常驻面。",
+      "kimi：用户批示基建重于产物，已两次返工同类盲区；五项机制将关系语义漏读与仿真错设变为可机械拦截，常驻面仅小幅增加",
+      "mimo：案卷实证同类盲区二次返工，A 将关系核对/依据留痕变为可机检硬义务，成本仅为交付内表格，符合可靠性与可审计目标，无明确危害"
+    ],
+    "twin": null,
+    "text": "裁决=A（jury 定案；计票 A:3 B:0）｜各席：glm=A/0.85 kimi=A/0.90 mimo=A/0.82｜多数理由：glm：同类缺陷第2次返工实证元素级机制不足；预期预登记与设置留痕可机械拦截、可追责，正合用户「基建重于产物」批语，代价仅小幅常驻面。；kimi：用户批示基建重于产物，已两次返工同类盲区；五项机制将关系语义漏读与仿真错设变为可机械拦截，常驻面仅小幅增加；mimo：案卷实证同类盲区二次返工，A 将关系核对/依据留痕变为可机检硬义务，成本仅为交付内表格，符合可靠性与可审计目标，无明确危害"
+  }
+}
