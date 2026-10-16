@@ -292,7 +292,7 @@ class ShapeBox:
 
     z: int
     name: str
-    kind: str  # "pic" | "text" | "shape"
+    kind: str  # "pic" | "text" | "shape" | "connector"
     x0: float
     y0: float
     x1: float
@@ -338,6 +338,8 @@ class SlideGeometry:
     overlaps: list[str] = field(default_factory=list)
     off_canvas: list[str] = field(default_factory=list)
     off_frame: list[str] = field(default_factory=list)
+    #: 连接符 bbox 越界**提示**（非违规）：连接符 bbox 不可信，只提示不计入 violations。
+    connector_hints: list[str] = field(default_factory=list)
 
     @property
     def violations(self) -> int:
@@ -393,6 +395,8 @@ class GeometryReport:
                 lines.append(f"      越出画布: {oc}")
             for of in s.off_frame:
                 lines.append(f"      越出外框: {of}")
+            for h in s.connector_hints:
+                lines.append(f"      提示（非违规）: {h}")
         lines.append(
             f"[slides geometry] 合计违规 {self.violations} 项"
             + ("（PASS）" if self.ok else "（需人工判读/返工）")
@@ -426,6 +430,7 @@ class GeometryReport:
                     "picture_overlaps": s.overlaps,
                     "off_canvas": s.off_canvas,
                     "off_frame": s.off_frame,
+                    "connector_hints": s.connector_hints,
                 }
                 for s in self.slides
             ],
@@ -436,6 +441,12 @@ class GeometryReport:
 
 
 def _shape_kind(shape: Any) -> str:
+    tag = getattr(getattr(shape, "_element", None), "tag", "")
+    if isinstance(tag, str) and tag.endswith("cxnSp"):
+        # 连接符（bentConnector*/straightConnector*）：PowerPoint 存的是**能容纳折线路径**的
+        # bbox，路径常远小于它 → 用 bbox 判越界会报出渲染图上不存在的假阳性（backlog
+        # 20261016-033419-writing ②）。单列 ``connector``，越界只作提示、不计入 violations。
+        return "connector"
     try:
         if int(shape.shape_type) == 13:  # MSO_SHAPE_TYPE.PICTURE
             return "pic"
@@ -597,7 +608,8 @@ def geometry_report(
     """对 .pptx 做**只读几何体检**：外框边被覆盖率 / 图元越界（画布与外框）/ 图片互叠面积。
 
     纯 bbox + z 序硬判，不渲染、不写盘——受审目录只读时也照跑（渲染闸 :func:`verify_pptx_render`
-    才需要可写目录产 PNG）。
+    才需要可写目录产 PNG）。**连接符**（``bentConnector*``/``straightConnector*``）的越界因 bbox
+    不可信而只作**提示**（:attr:`SlideGeometry.connector_hints`），不计入 ``violations``。
 
     Args:
         pptx: 源 .pptx。
@@ -637,14 +649,22 @@ def geometry_report(
             source = "auto" if fr is not None else ""
 
         pics = [b for b in boxes if b.kind == "pic"]
+        # 连接符单列：bbox 不可信，越界只作提示，不混进 violations（否则「零容忍」验收会把
+        # 渲染图上并不存在的越界当成真缺陷，逼执行端去改本不该改的源形状）。
+        judged = [b for b in boxes if b.kind != "connector"]
+        connectors = [b for b in boxes if b.kind == "connector"]
         sg = SlideGeometry(
             index=i,
             layout=layout,
             boxes=boxes,
             frame=fr,
             frame_source=source,
-            off_canvas=_off_bounds(boxes, 0.0, 0.0, cw, ch, tolerance, "画布"),
+            off_canvas=_off_bounds(judged, 0.0, 0.0, cw, ch, tolerance, "画布"),
             overlaps=_picture_overlaps(pics, cw, ch, overlap_in2),
+            connector_hints=[
+                f"{s}（连接符 bbox 提示，非违规）"
+                for s in _off_bounds(connectors, 0.0, 0.0, cw, ch, tolerance, "画布")
+            ],
         )
         if fr is not None:
             sg.edges = _edge_coverage(fr, [b for b in pics if b.z > fr.z])
