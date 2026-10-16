@@ -20,7 +20,7 @@
 - bench 读数表 `[!] 无基线捕获` = `state/evals/baselines/<case>/manifest.json` 缺失
   （`bencher/tools/bench.py` 判读面）；基线**读数**（baseline.json）与其**捕获归档**是两回事，
   有读数无捕获即 A/B 基线侧不可重建。
-- bench-probe 的提案通道是 `pysci-orch bench-add … --requested-by inspector`（任务书派发
+- bench-probe 的提案通道是 `pysci-orch bench add … --requested-by inspector`（任务书派发
   时授权，代码面本就支持 inspector 提请）；不带 `--start`，worker 拉起决策留给组长。
 - 台账 `state/ledger/evals.jsonl` 的 runner 维度分开 leader/bencher 两通道；
   runner=None 的历史行多为 leader 抽检，勿据此判 bencher 覆盖。
