@@ -36,6 +36,24 @@ class DocxBlock:
 # ---------------------------------------------------------------------------
 # 读取
 # ---------------------------------------------------------------------------
+#: OOXML 命名空间：正文 run 文本（``w:t``）与 OMML 内联公式文本（``m:t``）。
+_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+_M_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
+_TEXT_TAGS = (f"{{{_W_NS}}}t", f"{{{_M_NS}}}t")
+
+
+def _para_text(p: Any) -> str:
+    """段落全文本：按**文档序**遍历 ``w:t`` 与 ``m:t``（内联 OMML 公式文本一并取回）。
+
+    python-docx 的 ``paragraph.text`` 只拼 ``w:r/w:t``，会**静默丢掉** ``<m:oMath>`` 里的
+    内联公式文本——正文里的数值/单位常整段是公式（backlog 20261017-052625：实测「4 cm」
+    等处变空白，差点据此误判无规格）。故不依赖 ``.text``，自行按序取两类 ``t`` 节点。
+    """
+    return "".join(
+        node.text for node in p.iter() if node.tag in _TEXT_TAGS and node.text
+    )
+
+
 def _heading_level(style_name: str) -> int | None:
     """把 Word 样式名映射为标题级别；非标题返回 None。"""
     name = (style_name or "").strip()
@@ -62,11 +80,15 @@ def _bullet_level_from_style(style_name: str) -> int:
         return 0
 
 
+def _cell_text(cell: Any) -> str:
+    """单元格全文本（含内联 OMML 公式）：逐段按文档序取 ``w:t``/``m:t``，段间以换行接。"""
+    return (
+        "\n".join(_para_text(p._p) for p in cell.paragraphs).strip().replace("\n", " ")
+    )
+
+
 def _table_to_rows(table: Any) -> list[list[str]]:
-    return [
-        [(c.text or "").strip().replace("\n", " ") for c in row.cells]
-        for row in table.rows
-    ]
+    return [[_cell_text(c) for c in row.cells] for row in table.rows]
 
 
 def read_docx(path: str | Path) -> list[DocxBlock]:
@@ -95,7 +117,7 @@ def read_docx(path: str | Path) -> list[DocxBlock]:
             if rows:
                 blocks.append(DocxBlock(kind="table", rows=rows))
             continue
-        text = (item.text or "").strip()
+        text = _para_text(item._p).strip()
         if not text:
             continue
         style = getattr(item.style, "name", "") or ""
