@@ -3288,11 +3288,14 @@
       "kind": "defect",
       "success_criteria": "出图路径（gen/i2i/edit/layers）的 PNG tEXt 溯源含 pysci:backend（与 ingest/adjust 键集一致）；cli.md 键例与实现相符；回归测试断言 gen 产物键集含 backend；uv run --no-sync pytest tests 全绿",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-073416-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T08:47:21+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 7408280）",
       "started_at": "2026-10-17T08:47:24+08:00",
-      "worktree": "20261017-073416-devops"
+      "worktree": "20261017-073416-devops",
+      "done_at": "2026-10-17T10:59:20+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-073416-devops"
     },
     {
       "id": "20261017-090108-sim",
