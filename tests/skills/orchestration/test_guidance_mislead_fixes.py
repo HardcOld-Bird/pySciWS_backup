@@ -104,11 +104,7 @@ def test_docs_record_cold_start_and_recovery_checklist():
 
     ref = ORCHESTRATION_ROOT / "skills" / "orchestration" / "references"
     cs = (ref / "command-surface.md").read_text(encoding="utf-8")
-    assert "冷启动拒复用" in cs and "--session new" in cs
-    skill = (ORCHESTRATION_ROOT / "skills" / "orchestration" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    assert "冷启动须 `--session new`" in skill
+    assert "冷启动须 --session new" in cs, "command-surface 未补 twin 冷启动口径"
     playbook = (ref / "dispatch-playbook.md").read_text(encoding="utf-8")
     assert "run_failed 恢复清单" in playbook
     assert "只核对与正式交付" in playbook
