@@ -130,3 +130,6 @@ __pycache__/
 
 # 瞬时工作区（每个 worktree 是一次任务的全量检出，数万文件；用后即弃、可再生）
 /.qoder/worktrees/
+
+# WPS/Office 锁文件（临时件，绝不入库）
+~\$*
