@@ -18,7 +18,7 @@ from typing import Any
 from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT, WORKTREES_ROOT
 
 from . import backpressure as _bp
-from . import journal, verdict
+from . import journal, verdict, workq
 from .delivery import parse_suggestion_fields
 from .dispatch import REPLIES_DIR, conflict_notice, criteria_conflicts, do_dispatch
 from .failure_tags import (
@@ -1930,7 +1930,7 @@ def tier_a_sweep(
     fps = _load_fingerprints(path)
     cutoff = _recent_cutoff().isoformat(timespec="seconds")
     vocab = load_tags()
-    open_keys = _open_tier_a_keys()
+    unsold_keys = _unsold_tier_a_keys()
     filed: list[str] = []
     for tag in sorted(counts):
         for member in sorted(counts[tag]):
@@ -1943,10 +1943,11 @@ def tier_a_sweep(
             newest = max((_row_ts(r) for r in hit), default="")
             fp = f"{tag}|{member}|{newest[:10]}"
             if fps.get(fp, "") >= cutoff:
-                continue  # 同指纹 24h 内立过（§2.4 的去重窗）
-            if f"{tag}|{member}" in open_keys:
-                # 旧案仍在待审批面（既没 approve 也没 reject）→ 不重立。缺这一道，
-                # 窗口桶每天前进就会把「同一个没修好的问题」每天再立一次。
+                continue  # 同指纹 24h 内立过（§2.4 的去重窗，日期仅作参考）
+            if f"{tag}|{member}" in unsold_keys:
+                # 该 (标签, 成员) 仍有**未销账**关联（pending / 已 approve 未 done / 已 reject
+                # 声称承接而承接单未 done）→ 不重立。缺这一道，窗口桶每天前进就会把「同一个
+                # 没修好的问题」每天再立一次（approve/reject 后亦失守，backlog 20261017-052200）。
                 continue
             SUGGESTIONS_DIR.mkdir(parents=True, exist_ok=True)
             sid = f"{_filed_ts()}-tier-a"
@@ -1966,12 +1967,89 @@ def tier_a_sweep(
                 fingerprint=fp,
             )
             (SUGGESTIONS_DIR / f"{sid}.md").write_text(body, encoding="utf-8")
-            open_keys.add(f"{tag}|{member}")
+            unsold_keys.add(f"{tag}|{member}")
             fps[fp] = _now()
             filed.append(sid)
     if filed:
         _save_fingerprints(path, fps)
     return filed
+
+
+def _tier_a_key_of(path: Path) -> str | None:
+    """提案文件 → 去重键 ``"tag|member"``（非 tier-a 来源或无 ``fingerprint:`` → None）。"""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if not any(ln.strip().lower() == "source: tier-a" for ln in lines):
+        return None
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("fingerprint:"):
+            parts = s.split(":", 1)[1].strip().split("|")
+            if len(parts) >= 2:
+                return f"{parts[0]}|{parts[1]}"
+    return None
+
+
+def _dir_tier_a_keys(dirname: str) -> dict[str, Path]:
+    """某归档面（``approved``/``rejected``/``closed``）里 tier-a 提案的 ``{键: 文件}``。"""
+    base = SUGGESTIONS_DIR / dirname
+    if not base.exists():
+        return {}
+    out: dict[str, Path] = {}
+    for p in sorted(base.glob("*.md")):
+        key = _tier_a_key_of(p)
+        if key:
+            out.setdefault(key, p)
+    return out
+
+
+def _reject_reason(stem: str) -> str:
+    """该提案最近一条 reject 判决的 ``reason``（读决策日志）；无则空串。"""
+    for rec in reversed(journal.read_records()):
+        if str(rec.get("suggestion_id")) == stem and str(rec.get("choice")) == "reject":
+            return str(rec.get("reason") or "")
+    return ""
+
+
+def _unsold_tier_a_keys() -> set[str]:
+    """``(tag, member)`` 键的**未销账**关联全集——去重的真判据（backlog 20261017-052200）。
+
+    旧实现只看 pending 面，故「approve 进 backlog 在途」或「reject 销账后」同题会**每日重立**
+    （指纹含日期 → 窗口桶每天前进）。三源合并：
+
+    ① 仍 pending 的 tier-a 提案（原行为）；
+    ② 已 approved 但**承接单未 done**（承接单 = ``evidence_file`` 指向该提案的 backlog 条目）；
+    ③ 已 rejected 且理由声称「已落地 / 已承接销账」而**理由点名的承接单仍未 done**。
+
+    承接单 done（含 ``failed`` 终止态）后该键自然落出，允许再立；指纹日期仅作窗口参考。
+    """
+    keys = set(_open_tier_a_keys())  # ① pending 面
+    items = _backlog_items()
+    unsold = [
+        it for it in items if str(it.get("status")) not in workq.TERMINAL_STATUSES
+    ]
+    unsold_ids = {str(it.get("id")) for it in unsold}
+    # ② approved 面：承接单未 done（或缺席）→ 仍未销账
+    for key, p in _dir_tier_a_keys("approved").items():
+        linked = [
+            it for it in items if str(it.get("evidence_file", "")).endswith(p.name)
+        ]
+        if not linked or any(str(it.get("id")) in unsold_ids for it in linked):
+            keys.add(key)
+    # ③ rejected 面：理由声称已承接，且理由里点名的承接单仍未 done
+    for key, p in _dir_tier_a_keys("rejected").items():
+        reason = _reject_reason(p.stem)
+        if not any(m in reason for m in _LANDED_MARKERS):
+            continue
+        if any(i and i in reason for i in unsold_ids):
+            keys.add(key)
+    return keys
+
+
+#: reject 理由里声称「问题已被承接」的标记词——命中才去查承接单是否未 done。
+_LANDED_MARKERS = ("已落地", "已承接销账")
 
 
 def _open_tier_a_keys() -> set[str]:

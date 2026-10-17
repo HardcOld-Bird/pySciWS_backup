@@ -11,6 +11,7 @@ workflow/dispatch 改动须阳性覆盖（20261010-193601 教训）：真跑 cmd
 
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 from datetime import datetime, timedelta
 
@@ -151,6 +152,102 @@ def test_resolved_case_can_file_again_next_bucket(iso_state):
     filed = sweep(iso_state, old)
     (iso_state / "suggestions" / f"{filed[0]}.md").unlink()  # 已处置
     aged = old + [_e("deputy", ["model_capability"], ts=_ts(days_ago=-2))]
+    assert len(sweep(iso_state, aged)) == 1
+
+
+# ---------------------------------------------------------------------------
+# ②b 去重键扩到 (tag, member)：approve 在途 / reject 声称承接（backlog 20261017-052200）
+# ---------------------------------------------------------------------------
+
+
+def _seed_backlog_item(state, item: dict) -> None:
+    path = state / "backlog.json"
+    data = {"items": []}
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+    data.setdefault("items", []).append(item)
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def _approve(state, monkeypatch, sid: str) -> None:
+    monkeypatch.setattr(workflow, "read_all", lambda: [])
+    rc = workflow.cmd_approve(
+        Namespace(suggestion_id=sid, note="批准", no_wake=True, override="测试自裁")
+    )
+    assert rc == 0
+
+
+def test_approved_in_flight_suppresses_daily_refile(iso_state, monkeypatch):
+    """success_criteria：案 approve 在途时，窗口每日新增撞（连续 3 天）只立案 1 次。
+
+    旧缺口：approve 后案离开 pending 面，指纹含日期 → 窗口桶每天前进 → 每天重立。
+    """
+    old = _rows("dedup_gap", "devops")
+    filed = sweep(iso_state, old)
+    assert len(filed) == 1
+    _approve(iso_state, monkeypatch, filed[0])
+    assert workflow.pending_suggestions() == [], "案应已离开 pending 面"
+    # 模拟跨天：清指纹台账（窗过）+ 窗口桶每日前进
+    (iso_state / "tier-a-filed.json").unlink()
+    day = old
+    for d in (1, 2, 3):
+        day = day + [_e("devops", ["dedup_gap"], ts=_ts(days_ago=-d))]
+        assert sweep(iso_state, day) == [], f"第 {d} 天不该重立"
+    # 承接单 done 后，同题新撞方可再立
+    items = read_backlog(iso_state)
+    for it in items:
+        it["status"] = "done"
+    (iso_state / "backlog.json").write_text(
+        json.dumps({"items": items}, ensure_ascii=False), encoding="utf-8"
+    )
+    assert (
+        len(sweep(iso_state, day + [_e("devops", ["dedup_gap"], ts=_ts(days_ago=-4))]))
+        == 1
+    )
+
+
+def test_rejected_claimed_landed_with_open_takeover_suppresses_refile(
+    iso_state, monkeypatch
+):
+    """success_criteria：已 reject 且理由声称「已承接销账」、承接单在途 → 不重立。"""
+    from pysci.skills.orchestration.tools import journal
+
+    old = _rows("schema_drift", "writing")
+    filed = sweep(iso_state, old)
+    takeover = "20261017-999999-devops"
+    _seed_backlog_item(
+        iso_state, {"id": takeover, "status": "in_progress", "member": "devops"}
+    )
+    # 把案移入 rejected/ 并写一条 reject 判决（理由点名承接单）
+    sugg = iso_state / "suggestions" / f"{filed[0]}.md"
+    rej = iso_state / "suggestions" / "rejected"
+    rej.mkdir(parents=True, exist_ok=True)
+    sugg.rename(rej / sugg.name)
+    journal.append(
+        {
+            "ts": _ts(),
+            "situation": "x",
+            "options": "",
+            "choice": "reject",
+            "reason": f"已承接销账，承接单 {takeover}",
+            "source": "override",
+            "kind": "override",
+            "channel": "override",
+            "suggestion_id": sugg.stem,
+            "member": "writing",
+        }
+    )
+    (iso_state / "tier-a-filed.json").unlink()
+    aged = old + [_e("writing", ["schema_drift"], ts=_ts(days_ago=-2))]
+    assert sweep(iso_state, aged) == []
+    # 承接单 done 后 → 允许再立
+    _seed_done = read_backlog(iso_state)
+    for it in _seed_done:
+        if it.get("id") == takeover:
+            it["status"] = "done"
+    (iso_state / "backlog.json").write_text(
+        json.dumps({"items": _seed_done}, ensure_ascii=False), encoding="utf-8"
+    )
     assert len(sweep(iso_state, aged)) == 1
 
 
