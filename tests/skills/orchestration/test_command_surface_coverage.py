@@ -165,9 +165,12 @@ def test_skill_iron_rule_3_lists_plan_adhoc():
 
 
 def test_watched_docs_within_budget():
-    """本册与 SKILL 都在 8KB 真本预算内（落盘字节口径）。"""
+    """本册与 SKILL 都在 8KB 真本预算内（**CRLF 等价字节**：LF 检出也预演 main 检出）。"""
+    from pysci.skills.devops.tools.budget import LIMIT, disk_size
+
     for p in (CMDSURF, SKILL):
-        assert p.stat().st_size <= 8192, f"{p.name} 超预算：{p.stat().st_size}B"
+        n = disk_size(p)
+        assert n <= LIMIT, f"{p.name} 超预算：{n}B（CRLF 等价）"
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import tomllib
 import pytest
 
 from pysci.paths import PODS_ROOT, PROJECT_ROOT
+from pysci.skills.devops.tools import budget as budget_mod
 
 MANIFEST_PATH = PROJECT_ROOT / "orchestration" / "skills" / "manifest.toml"
 REGISTRY_PATH = PROJECT_ROOT / "orchestration" / "state" / "registry.json"
@@ -63,7 +64,7 @@ def test_bencher_pod_gitignore_covers_runtime_faces():
 
 
 def test_bencher_docs_within_harness_budget():
-    """charter / AGENTS.md / SKILL.md / references 各 ≤8192 **落盘字节**（CRLF 计税）。"""
+    """charter / AGENTS.md / SKILL.md / references 各 ≤8192 **CRLF 等价字节**（LF 检出预演）。"""
     faces = (
         PODS_ROOT / "bencher" / ".qoder" / "rules" / "charter.md",
         PODS_ROOT / "bencher" / "AGENTS.md",
@@ -83,8 +84,8 @@ def test_bencher_docs_within_harness_budget():
     )
     for f in faces:
         assert f.is_file(), f"缺文件：{f}"
-        n = len(f.read_bytes())
-        assert n <= 8192, f"{f.name} 超全量注入档预算：{n} B"
+        n = budget_mod.disk_size(f)
+        assert n <= budget_mod.LIMIT, f"{f.name} 超全量注入档预算：{n} B"
 
 
 def test_bencher_charter_declares_permission_face():

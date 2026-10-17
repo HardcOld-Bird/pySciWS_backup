@@ -18,6 +18,7 @@ import tomllib
 import pytest
 
 from pysci.paths import PODS_ROOT, PROJECT_ROOT
+from pysci.skills.devops.tools import budget as budget_mod
 
 MANIFEST_PATH = PROJECT_ROOT / "orchestration" / "skills" / "manifest.toml"
 REGISTRY_PATH = PROJECT_ROOT / "orchestration" / "state" / "registry.json"
@@ -65,7 +66,7 @@ def test_inspector_pod_gitignore_covers_runtime_faces():
 
 
 def test_inspector_docs_within_harness_budget():
-    """charter / AGENTS.md / SKILL.md / references / rubric 各 ≤8192 **落盘字节**。"""
+    """charter / AGENTS.md / SKILL.md / references / rubric 各 ≤8192 **CRLF 等价字节**。"""
     faces = (
         POD / ".qoder" / "rules" / "charter.md",
         POD / "AGENTS.md",
@@ -81,8 +82,8 @@ def test_inspector_docs_within_harness_budget():
     )
     for f in faces:
         assert f.is_file(), f"缺文件：{f}"
-        n = len(f.read_bytes())
-        assert n <= 8192, f"{f.name} 超全量注入档预算：{n} B"
+        n = budget_mod.disk_size(f)
+        assert n <= budget_mod.LIMIT, f"{f.name} 超全量注入档预算：{n} B"
 
 
 def test_inspector_charter_declares_readonly_permission_face():
