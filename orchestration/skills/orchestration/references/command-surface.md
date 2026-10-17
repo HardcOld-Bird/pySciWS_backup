@@ -46,7 +46,7 @@ pysci-orch wake-claim [status] [--force [--session-id id]]
         # 唤醒权读数与应急面；归属由钩子按载荷 session_id 自动完成（README §4.5）
 pysci-orch reject <建议id> --override "<判决依据>"   # 否决：依据必填、留痕（J/M 判决的驳回不计）
 pysci-orch deputy consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
-pysci-orch twin consult <案卷.md>  # 咨询 twin（rc=2 分型：未启用 / 冷启动拒复用——后者加 --session new）
+pysci-orch twin consult <案卷.md>  # 咨询 twin（rc=2 分型：未启用 / 冷启动须 --session new）
 pysci-orch review <产物> --origin <member> [--rubric generic]
         [--goal-from <原生产任务书> | --goal "<目标陈述>"]  # --goal* 供 G2 独立核验
         # 审查链：VERDICT → FAIL 回派返工 → 复审一次 → 二次 FAIL 升级仲裁
