@@ -237,6 +237,92 @@ def resolve_path(model: Any, path: str) -> Any:
     return obj
 
 
+@dataclass
+class FeatureTypesReport:
+    """``inspect feature-types`` 的读数：既有子特征 + 候选类型**探针**结果。"""
+
+    #: 该节点已有子特征 ``(tag, getType())``
+    existing: list[tuple[str, str]] = field(default_factory=list)
+    #: trial-create 成功的候选类型（本模型实测可建）
+    creatable: list[str] = field(default_factory=list)
+    #: trial-create 报「未知特征 ID」的候选
+    unknown: list[str] = field(default_factory=list)
+    #: 建出来后未能删除的探针数（>0 → 模型可能留痕）
+    probes_left: int = 0
+
+
+def existing_feature_types(node: Any) -> list[tuple[str, str]]:
+    """该节点**已有**子特征的 ``(tag, getType())`` 清单（无 ``feature()`` 能力 → 空）。"""
+    fl = _call_if(node, "feature", default=None)
+    if fl is None:
+        return []
+    out: list[tuple[str, str]] = []
+    for tag in _tags(fl):
+        feat = _safe(fl, tag, default=None)
+        typ = _safe(getattr(feat, "getType", None), default="?")
+        out.append((tag, str(typ)))
+    return out
+
+
+def probe_feature_types(node: Any, candidates: list[str]) -> FeatureTypesReport:
+    """逐个 **trial-create** 候选类型（建完即删），回报「可创建 / 未知」。
+
+    COMSOL **没有**枚举「接口允许的子特征类型」的 API（Programming Reference 只有
+    ``feature().create(tag, type)`` / ``tags()`` / ``getType()``；文档里也只写自然语言名）。
+    故把组员手工的「试建猜」机械化为一次批量探针——结论以**本模型实测**为准，不靠猜名。
+    """
+    rep = FeatureTypesReport(existing=existing_feature_types(node))
+    fl = _call_if(node, "feature", default=None)
+    if fl is None:
+        rep.unknown = list(candidates)
+        return rep
+    used = {t for t, _ in rep.existing}
+    for i, cand in enumerate(candidates):
+        tag = f"_ftprobe{i}"
+        while tag in used:  # 探针标签不得撞既有节点
+            tag += "_"
+        try:
+            feat = fl.create(tag, cand)
+        except Exception:  # noqa: BLE001 — COMSOL 对未知类型抛 Java 异常
+            feat = None
+        if feat is None:
+            rep.unknown.append(cand)
+            continue
+        rep.creatable.append(cand)
+        if not _remove_feature(node, fl, tag):
+            rep.probes_left += 1
+    return rep
+
+
+def _remove_feature(node: Any, fl: Any, tag: str) -> bool:
+    """尽力删除探针特征（两种常见 API 形态依次试）；全失败返回 False（调用方告警）。"""
+    for attempt in (lambda: fl.remove(tag), lambda: node.feature(tag).remove()):
+        try:
+            attempt()
+            return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
+def format_feature_types(rep: FeatureTypesReport, *, path: str = "") -> str:
+    lines = [f"[feature-types] {path}", "  既有子特征："]
+    lines += [f"    {tag} :: {typ}" for tag, typ in rep.existing] or ["    （无）"]
+    if rep.creatable or rep.unknown:
+        lines.append("  候选类型探针（trial-create，建完即删）：")
+        lines += [f"    [√] {c}" for c in rep.creatable]
+        lines += [f"    [✗] {c}（未知特征 ID）" for c in rep.unknown]
+        if rep.probes_left:
+            lines.append(
+                f"  [!] {rep.probes_left} 个探针未能删除——模型可能留痕，勿直接保存"
+            )
+    else:
+        lines.append(
+            "  提示：COMSOL 无「枚举允许子类型」API；用 `--candidates a b c` 传候选名批量试建即得实测结论"
+        )
+    return "\n".join(lines)
+
+
 def _longest_allowed(node: Any, prop: str, cap: int = 12) -> list[str] | None:
     """读枚举属性的允许值列表；非枚举/超长返回 None（避免 dump 爆炸）。"""
     allowed = _call_if(node, "getAllowedPropertyValues", prop, default=None)

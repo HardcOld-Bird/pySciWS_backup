@@ -23,6 +23,7 @@ when a solve or export misbehaves, or when you are about to change how sessions 
 | `inspect params --mph M` | Reading/editing global parameters | `name = value # descr` list |
 | `inspect inventory --mph M` | Programmatic node tags | tag lists per subsystem |
 | `inspect node --mph M --path P` | Any node's type/props/selection unknown | type, prop values, allowed enums, selection counts |
+| `inspect feature-types --mph M --path P [--candidates A B …]` | "Which child feature IDs can I create here?" (e.g. `PerfectlyMatchedBoundary`) | existing child types; with `--candidates`, each is trial-created then removed → **verified** creatable vs unknown (COMSOL has no enumerate-allowed-types API) |
 | `node set --mph M --path P --set k=v [--set …] [--save O.mph]` | Setting a node property with zero custom code | per-key ok/fail report (symmetric to `inspect node`) |
 | `inspect java F.java` | GUI-exported `.java` fallback | Structured summary (no model load) |
 | `run solve --mph M [--study S] [--set-param k=v] [--clear]` | Running / re-running | Solve report; **auto-rebinds** every plot group to the fresh dataset |
