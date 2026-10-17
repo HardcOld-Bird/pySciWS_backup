@@ -127,7 +127,7 @@ def _drive_A(cface: Path, plan_id: str, tb_id: str, *, round_no: int = 1) -> Non
 # ===========================================================================
 #  ① 历次改进强制展示 + ② 复盘段 lint
 # ===========================================================================
-def test_a1_expands_previous_reports_full_text(cface, capsys):
+def test_a1_shows_previous_reports_digest_and_path(cface, capsys):
     tb1 = taskbooks.create("大任务", "简介")["id"]
     _deliver(tb1)
     tb2 = taskbooks.create_rework(tb1, mode="no_inspector", note="第一轮")["id"]
@@ -135,13 +135,13 @@ def test_a1_expands_previous_reports_full_text(cface, capsys):
     tb3 = taskbooks.create_rework(
         tb2, mode="no_inspector", priority="high", note="第二轮"
     )["id"]
-    # 前两轮报告留痕（组装件）
+    # 前两轮报告留痕（组装件；带「任务概述」段 → 摘要可取）
     taskbooks.report_path(tb1).parent.mkdir(parents=True, exist_ok=True)
     taskbooks.report_path(tb1).write_text(
-        "# R1\n 甲轮报告 MARKER_ALPHA\n", encoding="utf-8"
+        "# R1\n\n## 任务概述\n\n甲轮报告 MARKER_ALPHA\n", encoding="utf-8"
     )
     taskbooks.report_path(tb2).write_text(
-        "# R2\n 乙轮报告 MARKER_BETA\n", encoding="utf-8"
+        "# R2\n\n## 任务概述\n\n乙轮报告 MARKER_BETA\n", encoding="utf-8"
     )
 
     plans.cmd_plan_rework(_args("x", id=tb3, mode="no_inspector"))
@@ -150,9 +150,9 @@ def test_a1_expands_previous_reports_full_text(cface, capsys):
     assert plans.cmd_plan_advance(_args(plan_id)) == 0  # 引导 a1
     out = capsys.readouterr().out
     assert "历次改进强制展示" in out
-    assert "MARKER_ALPHA" in out and "MARKER_BETA" in out, (
-        "前轮报告须**全文**展开（非仅路径）"
-    )
+    # backlog 20261017-104503：改为**摘要＋路径**（不再全文灌入）
+    assert "MARKER_ALPHA" in out and "MARKER_BETA" in out, "摘要段须含前轮要点"
+    assert "细节自查该文件" in out, "须给报告路径与自查指引"
     assert "前次改进复盘" in out, "a1 引导须点名复盘段要求"
 
 
@@ -285,11 +285,11 @@ def test_loop_reject_generate_expand_report(cface, tmp_path, capsys):
     plans.cmd_plan_rework(_args("x", id=tb3, mode="no_inspector"))
     plan3 = f"rework-{tb3}"
     capsys.readouterr()
-    # 3) 第 2 轮 a1 引导含第 1 轮报告全文 + 复盘段
+    # 3) 第 2 轮 a1 引导含第 1 轮报告**摘要＋路径**（不再全文，backlog 20261017-104503）
     assert plans.cmd_plan_advance(_args(plan3)) == 0
     out = capsys.readouterr().out
     assert "历次改进强制展示" in out and "第 1 轮" in out
-    assert "## 任务概述" in out, "展开的须是第 1 轮**全流程报告全文**"
+    assert "细节自查该文件" in out, "须给前轮报告路径（细节自查）"
     # 4) 报告组装含各段
     taskbooks.link_plan(tb3, plan3)
     _drive_A(cface, plan3, tb3, round_no=2)

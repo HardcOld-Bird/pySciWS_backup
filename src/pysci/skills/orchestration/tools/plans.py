@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -187,7 +188,8 @@ def _print_self_guidance(
 ) -> None:
     """``kind: self`` 环节的引导块（evidence 规格 + 收尾命令）——plan new / advance 共用。
 
-    ``expand_history`` 叶子（返工 a1，round≥2）在 [NEXT] 后**全文展开**历次改进报告（§4.3 #4）。
+    ``expand_history`` 叶子（返工 a1，round≥2）在 [NEXT] 后给出历次改进的**摘要＋报告路径**
+    （§4.3 #4；不再全文灌入——截断反噬，backlog 20261017-104503）。
     """
     print()
     print("[NEXT]")
@@ -213,11 +215,42 @@ def _print_self_guidance(
             print(ln)
 
 
-def _rework_history_lines(plan: dict) -> list[str]:
-    """rework_round≥2 的**历次改进强制展示**（§4.3 #4）：前轮报告**全文**（不只给路径）。
+#: 报告摘要取段的关键词（标题含其一即取该段**首段**）。
+_DIGEST_KEYS = ("任务概述", "批语", "反馈", "改进", "裁决", "结论", "总结")
 
-    数据面：任务书 ``rework_of`` 链回溯；每轮取 ``data/taskbooks/<id>.report.md``（组装器产物）
-    全文，缺则回落该轮任务书正文（简介）。
+
+def _report_digest(text: str, *, per_section: int = 220, total: int = 900) -> str:
+    """报告 → **结构化摘要**：按 ``## `` 切段，只取关键段的**首段**并截断（绝不灌全文）。"""
+    if not text:
+        return ""
+    parts = re.split(r"^##\s+", text, flags=re.M)
+    lines: list[str] = []
+    used = 0
+    for part in parts[1:]:
+        head, _, body = part.partition("\n")
+        title = head.strip()
+        if not any(k in title for k in _DIGEST_KEYS):
+            continue
+        flat = " ".join(body.strip().split())
+        if not flat:
+            continue
+        if len(flat) > per_section:
+            flat = flat[:per_section] + "…"
+        line = f"- {title}：{flat}"
+        if used + len(line) > total:
+            break
+        lines.append(line)
+        used += len(line)
+    return "\n".join(lines)
+
+
+def _rework_history_lines(plan: dict) -> list[str]:
+    """rework_round≥2 的**历次改进强制展示**（§4.3 #4）：**结构化摘要 ＋ 报告路径**。
+
+    旧实现把前轮报告**全文**灌进 advance 输出——实测 67.1 KB 被工具层截断成 2000 字符预览，
+    **既进不了上下文也读不全**，强制回顾的意图被截断反噬（backlog 20261017-104503）。
+    改为每轮：摘要（任务概述/批语/改进清单/裁决/结论 等关键段首段，限量）＋报告路径＋
+    「细节自查该文件」（需要全文时组长自读）。
     """
     from . import taskbooks as _tb
 
@@ -226,18 +259,27 @@ def _rework_history_lines(plan: dict) -> list[str]:
     rnd = int(st.get("rework_round") or plan.get("rework_round") or 1)
     if rnd < 2:
         return []
-    out = [f"  == 历次改进强制展示（第 {rnd} 轮；前轮报告全文，PSEP_3 §4.3 #4）=="]
+    out = [
+        f"  == 历次改进强制展示（第 {rnd} 轮；前轮**摘要＋路径**，PSEP_3 §4.3 #4）=="
+    ]
     prev = str(st.get("rework_of") or "")
     n = rnd - 1
     while prev:
         pst = _tb.load_state(prev) or {}
-        out.append(f"  —— 第 {n} 轮「{pst.get('title') or prev}」（{prev}）——")
         rp = _tb.report_path(prev)
         try:
             text = rp.read_text(encoding="utf-8").strip() if rp.exists() else ""
         except OSError:
             text = ""
-        out.append(text or _tb.read_body(prev).strip() or "（无报告留痕）")
+        body = text or _tb.read_body(prev).strip()
+        out.append(f"  —— 第 {n} 轮「{pst.get('title') or prev}」（{prev}）——")
+        digest = _report_digest(body)
+        if digest:
+            out.extend(f"    {ln}" for ln in digest.splitlines())
+        if rp.exists():
+            out.append(f"    细节自查该文件：{rp}")
+        else:
+            out.append("    （无报告留痕；细节查该轮任务书）")
         out.append("")
         prev = str(pst.get("rework_of") or "")
         n -= 1
