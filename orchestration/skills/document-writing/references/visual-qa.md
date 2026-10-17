@@ -53,11 +53,13 @@ compose slides geometry '<deck.pptx>' [--frame NAME] [--json] [--strict]
 兜底，故「渲染图正常」挡不住在 WPS 里按零/异常尺寸呈现的双盲缺陷；判据必须读 **XML 真值**。
 同时做**跨页标题一致性**（各页标题尺寸/位置/字号/字体比对基准页＝出现最多的格式），差异即报。
 
-### WPS 渲染可行性（调查结论，tb-20261017-044633 W4）
+### WPS 渲染：**wpscli 已可用**（tb-20261017-105200 更新）
 
-**当前不可行**：本机 WPS **12.1.0.22215 个人版**无 `wpscli`、COM 未注册、不支持 headless，
-无法把 WPS 纳入机械渲染链。**候选**：升级到带 `wpscli ppt2pdf` 的版本后，可作**第二渲染器**
-交叉核验「渲染器看不见的缺陷」。升级前，缺 ext 风险由上面的缺-`<a:ext>` 闸机械拦截。
+旧版（12.1.0.22215）无 `wpscli`、COM 未注册、不支持 headless → **当时不可行**；用户升级至
+**12.1.0.29158**（`…\12.1.0.29158\clitool\wpscli.exe`，v1.1.0 插件式）后实测
+`wpscli ppt2pdf` **3 秒出 8 页 PDF**、标题/结尾页渲染正常——即用户所见口径（WPS≈MS Office）。
+转换链（`compose convert` / `slides render`）现**默认优先 wpscli**，LibreOffice 为 fallback，
+输出行注明所用后端；缺 `<a:ext>` 闸保留（WPS 同样会暴露该缺陷，且 wpscli 不可用时靠它兜底）。
 
 ## 网页截图（deck 里的官网 / 页面图）
 

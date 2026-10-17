@@ -246,6 +246,40 @@ class Settings:
                 return p
         return None
 
+    def find_wpscli(self) -> str | None:
+        """探测 WPS 的 ``wpscli.exe``（新版插件式转换器；版本号目录取最新）。
+
+        探测链：.env ``DOCWRITING_WPSCLI`` → PATH → 新版安装目录
+        ``D:\\XiGPrograms\\wps\\base\\WPS Office\\*\\clitool\\wpscli.exe``
+        → ``%ProgramFiles%\\Kingsoft\\WPS Office\\*\\clitool\\wpscli.exe``
+        → ``%LOCALAPPDATA%\\Kingsoft\\WPS Office\\*\\clitool\\wpscli.exe``。
+        """
+        override = _get_env("DOCWRITING_WPSCLI")
+        if override:
+            p = Path(override)
+            if p.is_file():
+                return str(p)
+        p = which("wpscli")
+        if p:
+            return p
+        roots = [
+            Path(r"D:\XiGPrograms\wps\base\WPS Office"),
+            Path(os.environ.get("PROGRAMFILES", r"C:\Program Files"))
+            / "Kingsoft"
+            / "WPS Office",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Kingsoft" / "WPS Office",
+        ]
+        found: list[Path] = []
+        for root in roots:
+            try:
+                found.extend(root.glob("*/clitool/wpscli.exe"))
+            except OSError:
+                continue
+        if not found:
+            return None
+        # 版本号目录按字符串降序即可（12.1.0.29158 > 12.1.0.22215）
+        return str(max(found, key=lambda p: p.parent.parent.name))
+
     def find_pandoc(self) -> str | None:
         """探测 pandoc（Markdown↔Office 写转换后端），返回可执行文件绝对路径或 None。
 
