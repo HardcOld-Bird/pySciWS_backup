@@ -687,7 +687,11 @@ def test_gen_end_to_end_offline(tmp_env, monkeypatch, capsys):
     assert e.extra["kind"] == "gen"
     assert e.extra["generated_images"] == 1
 
-    assert _ledger.read_metadata(files[0])["prompt"] == "a red square"
+    meta = _ledger.read_metadata(files[0])
+    assert meta["prompt"] == "a red square"
+    # 键集与 ingest/adjust 对齐（backlog 20261017-073416）：云端出图也写 pysci:backend
+    assert meta["backend"] == "ark", meta
+    assert meta["kind"] == "gen", meta
     assert (tmp_env / "runs" / "unit.json").is_file()
     assert (tmp_env / "LEDGER.md").is_file()
 
