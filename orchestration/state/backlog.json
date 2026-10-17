@@ -3396,6 +3396,18 @@
       "proposed": "2026-10-17T10:43:03+08:00",
       "note": "",
       "source": "leader"
+    },
+    {
+      "id": "20261017-105200-devops",
+      "member": "devops",
+      "summary": "fingerprint: wpscli-render-backend-20261017",
+      "kind": "usability",
+      "success_criteria": "- `pysci-compose` 渲染链（pptx/docx→PDF）探测并优先使用 wpscli（新安装路径\n`D:\\XiGPrograms\\wps\\base\\WPS Office\\12.1.0.29158\\clitool\\wpscli.exe` 及常规安装位置），\n不可用时回落 LibreOffice 并在输出注明所用后端；\n- 对 20261016.pptx 实测 wpscli 后端转换成功（8 页），渲染 PNG 与 LibreOffice 版并存\n可对照；\n- document-writing 技能 references 的「WPS 渲染可行性」记录更新为「wpscli ppt2pdf\n可用（v1.1.0+，插件式），渲染验证优先 WPS 后端」；\n- 回归测试：后端选择逻辑（wpscli 可用→选 wpscli；不可用→fallback 且注明）；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-105200-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-17T10:48:04+08:00",
+      "note": "",
+      "source": "leader"
     }
   ]
 }
