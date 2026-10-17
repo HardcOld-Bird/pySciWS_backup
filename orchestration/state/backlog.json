@@ -3271,6 +3271,19 @@
       "note": "",
       "started_at": "2026-10-17T05:42:59+08:00",
       "worktree": "20261017-053820-devops"
+    },
+    {
+      "id": "20261017-073416-devops",
+      "member": "devops",
+      "summary": "success_criteria: 让 `pysci:*` 内嵌溯源在出图路径（gen/i2i/edit/layers）与 ingest/adjust 之间键集一致——都含 `pysci:backend`；或把 cli.md 的键例改成与实际相符，消除文档失实。",
+      "kind": "defect",
+      "success_criteria": "出图路径（gen/i2i/edit/layers）的 PNG tEXt 溯源含 pysci:backend（与 ingest/adjust 键集一致）；cli.md 键例与实现相符；回归测试断言 gen 产物键集含 backend；uv run --no-sync pytest tests 全绿",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-073416-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-17T08:47:21+08:00",
+      "note": "",
+      "started_at": "2026-10-17T08:47:24+08:00",
+      "worktree": "20261017-073416-devops"
     }
   ]
 }
