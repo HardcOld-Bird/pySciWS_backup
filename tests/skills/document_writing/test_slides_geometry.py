@@ -322,6 +322,31 @@ def test_w2_one_changed_title_is_reported(tmp_path):
     assert len(diffs) == 1 and "第 3 页" in diffs[0] and "字号" in diffs[0], diffs
 
 
+def test_w2_multi_run_same_format_is_consistent(tmp_path):
+    """回归（backlog 20261017-101130）：同格式被拆成**多 run** 不得误报。
+
+    字号/字体按 **set 去重**比对——「·」+「pySci·」两 run（rPr 逐字相同）视觉等价于单 run。
+    """
+    from pptx.util import Pt
+
+    def _mutate(prs, slides):
+        for s in slides:  # 全部标题显式同格式
+            for r in s.shapes.title.text_frame.paragraphs[0].runs:
+                r.font.size = Pt(20)
+                r.font.name = "Heiti SC Light"
+        para = slides[2].shapes.title.text_frame.paragraphs[0]
+        text = para.text
+        para.runs[0].text = text[:1]
+        extra = para.add_run()
+        extra.text = text[1:]
+        for r in para.runs:  # 两 run 的 rPr 逐字相同
+            r.font.size = Pt(20)
+            r.font.name = "Heiti SC Light"
+
+    deck = _titled_deck(tmp_path, slide_titles=["一", "二", "三"], mutate=_mutate)
+    assert slides_visual.geometry_report(deck).title_diffs == []
+
+
 # ---------------------------------------------------------------------------
 # W3/W4 文档面
 # ---------------------------------------------------------------------------
