@@ -342,6 +342,21 @@ def cmd_inspect_node(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_inspect_feature_types(args: argparse.Namespace) -> int:
+    """列接口已有的子特征类型；``--candidates`` 再逐个 trial-create 得**实测**可建类型。
+
+    COMSOL 未提供「枚举允许子类型」API——本命令把手工「试建猜」机械化（建完即删）。
+    """
+
+    def fn(m):
+        node = _inspect.resolve_path(m, args.path)
+        rep = _inspect.probe_feature_types(node, list(args.candidates or []))
+        return _inspect.format_feature_types(rep, path=args.path)
+
+    print(_with_model(args.mph, args.cores, fn))
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # node（通用属性 setter，与 inspect node 对称）
 # ---------------------------------------------------------------------------
@@ -698,6 +713,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--cores", type=int, default=None)
     s.set_defaults(func=cmd_inspect_node)
+    s = inssub.add_parser(
+        "feature-types",
+        help="列接口已有子特征类型；--candidates 批量 trial-create 实测可建类型",
+    )
+    s.add_argument("--mph", **p_model, required=True)
+    s.add_argument(
+        "--path",
+        required=True,
+        help="接口/节点路径，如 component(comp1).physics(acpr)",
+    )
+    s.add_argument(
+        "--candidates",
+        nargs="+",
+        default=None,
+        help="候选子特征类型 ID（如 PerfectlyMatchedBoundary）；逐个建后即删，只留读数",
+    )
+    s.add_argument("--cores", type=int, default=None)
+    s.set_defaults(func=cmd_inspect_feature_types)
 
     # --- node ---
     nd = sub.add_parser("node", help="通用节点写入（set）")
