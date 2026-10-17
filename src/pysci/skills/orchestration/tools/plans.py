@@ -207,6 +207,10 @@ def _print_self_guidance(
     else:
         print("  交付 evidence 须为 Markdown 报告（含至少一个 `# …` 标题段）")
     print(
+        "  evidence 落点惯例：data/taskbooks/<id>.<leaf>-<名>.md"
+        "（骨架＝`# 标题`＋上述标题段，如 `## 拆解`）"
+    )
+    print(
         f"  完成后提交证据收尾：uv run --no-sync pysci-orch plan advance "
         f"{plan_id} --evidence <路径>"
     )

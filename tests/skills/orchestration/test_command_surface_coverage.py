@@ -122,6 +122,20 @@ def test_plan_new_source_file_naming_documented():
     assert "勿与目标同名" in doc
 
 
+def test_evidence_and_case_skeletons_documented():
+    """自办 evidence 与 jury/twin 案卷的**落点＋最小骨架**在场（backlog 20261017-104501）。
+
+    缺口（实证）：advance 只给「须含标题段」，落点/命名靠翻旧档反推；案卷五段结构
+    只在旧案卷里可见，twin 同构前三段无文档。样例段在场即视为补齐。
+    """
+    doc = _doc()
+    assert "data/taskbooks/<id>.<leaf>-<名>.md" in doc, "缺 evidence 落点与命名惯例"
+    assert "`# <标题>`" in doc and "`## 拆解`" in doc, "缺 evidence 骨架样例"
+    for sec in ("## 问题", "## 选项 A", "## 选项 B", "## 证据", "## 送审结论"):
+        assert sec in doc, f"案卷骨架缺段：{sec}"
+    assert "twin 同构前三段" in doc, "未注明 twin 案卷与 jury 案卷的关系"
+
+
 # ---------------------------------------------------------------------------
 # `plan adhoc` 的阻塞语义（backlog 20261015-211200）
 # ---------------------------------------------------------------------------
