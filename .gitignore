@@ -133,3 +133,14 @@ __pycache__/
 
 # WPS/Office 锁文件（临时件，绝不入库）
 ~\$*
+
+# 图像类数据不入库（用户裁决 2026-10-17：避免 LFS 超限，图像一律本地保留不上传）
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+*.tif
+*.tiff
+*.svg
