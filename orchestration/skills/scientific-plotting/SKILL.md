@@ -104,7 +104,7 @@ key**; CLI wins. `audit` measures the exported `out/<stem>.eps` and WARNs (`widt
 on >30 % deviation — catches a double-width root masking a single-column figure.
 
 Discovery is **src-first**; if a same-named pipeline also sits in `<figdir>/`, `build` WARNs which
-file it rendered (no silent placeholder). Force figdir: `--pipeline-in-figdir`, or pin
+file it rendered. Force figdir: `--pipeline-in-figdir`, or pin
 `pipeline: src|figdir` in STYLE.yaml. Details: `references/plotting.md`.
 
 ## Visual closed loop
@@ -127,8 +127,9 @@ pattern as the comsol/document skills). Don't ask the user to eyeball intermedia
 ## Typesetting, zero-occlusion & style
 
 **零遮挡铁律（硬伤）**：①文字/刻度不压图线 ②图体与标题留间距
-③colorbar 标题↔色标、色标↔子图留边距 ④任何元素重叠=FAIL 无例外。**判据命令**：
-`figures overlap <img> --white <删文字版.png>`（墨迹∩彩色/图线；缓存自防护）。
+③colorbar 标题↔色标、色标↔子图留边距 ④任何元素重叠=FAIL 无例外 ⑤**近而不交**：不该相交的
+线/框贴边/临界间距=缺陷。**判据命令**：
+`figures overlap <img> --white <删文字版.png>`（墨迹∩彩色/图线）。
 **scienceplots（可选审美层，契约层优先）**：`STYLE.yaml scienceplots: true` 或
 `style_context(..., scienceplots=True)`。细则与排障 → `references/plotting-03-typesetting-and-style.md`。
 

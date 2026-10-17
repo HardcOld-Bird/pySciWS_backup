@@ -13,6 +13,8 @@
 3. **colorbar 标题 ↔ 色标、色标 ↔ 子图之间保持边距**（label 的 `pad` / `layout` 留白），
    避免三者相互顶死。
 4. **任何元素重叠 = 硬伤，无例外**（含标题压 colorbar）。重叠不是「可接受的轻微瑕疵」。
+5. **近而不交**：不该相交的线 / 框（如内框与场图边界）须保持距离——**贴边 / 临界间距
+   （<10px @600dpi）＝缺陷**（与重叠**同级**，不降为告警）。
 
 自查手段：`build`/`preview` 后 **Read `out/<stem>_preview.png`**，再逐子图放大判读（`panels/`）；
 `figures audit <figdir>` 查宽度/字号/嵌入/色盲；`figures inspect <png>` 查水印/logo、**等效物理尺寸
