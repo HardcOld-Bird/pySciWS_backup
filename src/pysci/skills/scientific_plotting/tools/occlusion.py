@@ -107,15 +107,24 @@ def min_distance_px(
 ) -> float | None:
     """``frm`` 蒙版像素到 ``to`` 蒙版像素的**最短欧氏距（px）**；任一侧为空 → ``None``。
 
-    分块计算（``chunk`` 行一批）避免全对全的 ``O(N·M)`` 内存爆炸。
+    **精确最近邻，复杂度 O((N+M)·logM)**：用 ``scipy.spatial.cKDTree`` 查询（backlog
+    20261017-120835——旧实现是分块全对全 O(N·M)，2880×1440 实测 31.2 s，占整次判据 98.7%）。
+    scipy 不可用或查询异常 → 回落**同一精确解**的分块暴力（``chunk`` 行一批，控内存）。
     """
     ys, xs = np.nonzero(_crop(frm, box))
     ys2, xs2 = np.nonzero(_crop(to, box))
     if len(xs) == 0 or len(xs2) == 0:
         return None
     q = np.column_stack([xs2, ys2]).astype(float)
-    best = float("inf")
     p = np.column_stack([xs, ys]).astype(float)
+    try:
+        from scipy.spatial import cKDTree
+
+        dist, _idx = cKDTree(q).query(p, k=1)
+        return float(np.min(dist))
+    except Exception:  # noqa: BLE001 - scipy 缺/异常 → 回落精确暴力解（同值）
+        pass
+    best = float("inf")
     for i in range(0, len(p), chunk):
         d = np.sqrt(((p[i : i + chunk, None, :] - q[None, :, :]) ** 2).sum(-1))
         best = min(best, float(d.min()))
