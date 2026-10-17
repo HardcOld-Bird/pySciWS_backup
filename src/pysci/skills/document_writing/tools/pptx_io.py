@@ -314,6 +314,10 @@ def _fill_bullets(tf: Any, bullets: list[str]) -> None:
         para.level = level
 
 
+# 显式尺寸必写：占位符若不写 ``<a:xfrm><a:ext>``，尺寸全靠继承——python-pptx 与
+# LibreOffice 按继承值兜底渲染正常，但 WPS 可能按零/异常尺寸呈现（双盲缺陷，
+# tb-20261017-044633）。写入端应给交付形状补 ``shape.width/height``；
+# `compose slides geometry` 的缺-``<a:ext>`` 闸据此机械拦截。
 def add_title_slide(prs: Any, title: str, subtitle: str = "") -> Any:
     slide = prs.slides.add_slide(prs.slide_layouts[0])
     slide.shapes.title.text = title

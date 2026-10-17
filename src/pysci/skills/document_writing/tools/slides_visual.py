@@ -340,15 +340,18 @@ class SlideGeometry:
     off_frame: list[str] = field(default_factory=list)
     #: 连接符 bbox 越界**提示**（非违规）：连接符 bbox 不可信，只提示不计入 violations。
     connector_hints: list[str] = field(default_factory=list)
+    #: 缺 ``<a:ext>``（继承尺寸）的形状标签——一票否决项（backlog W1）。
+    missing_ext: list[str] = field(default_factory=list)
 
     @property
     def violations(self) -> int:
-        """本页违规项计数（有覆盖的边 + 互叠 + 越界）。"""
+        """本页违规项计数（有覆盖的边 + 互叠 + 越界 + 缺 ext）。"""
         return (
             len([e for e in self.edges if e.frac > 0])
             + len(self.overlaps)
             + len(self.off_canvas)
             + len(self.off_frame)
+            + len(self.missing_ext)
         )
 
 
@@ -359,10 +362,17 @@ class GeometryReport:
     pptx: Path
     canvas_in: tuple[float, float]
     slides: list[SlideGeometry] = field(default_factory=list)
+    #: 跨页标题格式差异（W2，报告级；计入 violations）。
+    title_diffs: list[str] = field(default_factory=list)
+
+    @property
+    def ext_missing_total(self) -> int:
+        """全篇缺 ``<a:ext>`` 的形状总数（W1/W4 风险提示的触发量）。"""
+        return sum(len(s.missing_ext) for s in self.slides)
 
     @property
     def violations(self) -> int:
-        return sum(s.violations for s in self.slides)
+        return sum(s.violations for s in self.slides) + len(self.title_diffs)
 
     @property
     def ok(self) -> bool:
@@ -397,6 +407,16 @@ class GeometryReport:
                 lines.append(f"      越出外框: {of}")
             for h in s.connector_hints:
                 lines.append(f"      提示（非违规）: {h}")
+            for me in s.missing_ext:
+                lines.append(f"      缺 <a:ext>（继承尺寸，一票否决）: {me}")
+        for d in self.title_diffs:
+            lines.append(f"      标题不一致: {d}")
+        if self.ext_missing_total:
+            lines.append(
+                f"  [!] 风险（W4）：{self.ext_missing_total} 个形状显式尺寸缺失——"
+                "**渲染图正常 ≠ WPS 正常**：LibreOffice 会按继承值兜底渲染，WPS 可能按"
+                "零/异常尺寸呈现；请补齐 `<a:xfrm><a:ext>` 后复跑。"
+            )
         lines.append(
             f"[slides geometry] 合计违规 {self.violations} 项"
             + ("（PASS）" if self.ok else "（需人工判读/返工）")
@@ -409,6 +429,8 @@ class GeometryReport:
             "pptx": str(self.pptx),
             "canvas_in": [w, h],
             "violations": self.violations,
+            "ext_missing_total": self.ext_missing_total,
+            "title_diffs": self.title_diffs,
             "slides": [
                 {
                     "index": s.index,
@@ -431,6 +453,7 @@ class GeometryReport:
                     "off_canvas": s.off_canvas,
                     "off_frame": s.off_frame,
                     "connector_hints": s.connector_hints,
+                    "missing_ext": s.missing_ext,
                 }
                 for s in self.slides
             ],
@@ -495,6 +518,126 @@ def _collect(slide: Any) -> list[ShapeBox]:
         if b is not None:
             boxes.append(b)
     return boxes
+
+
+#: DrawingML 命名空间与「显式尺寸」元素 ``<a:xfrm><a:ext>``。
+_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+_A_XFRM = f"{{{_A_NS}}}xfrm"
+_A_EXT = f"{{{_A_NS}}}ext"
+
+
+def _has_explicit_ext(shape: Any) -> bool:
+    """形状 XML 是否**显式**写了 ``<a:xfrm><a:ext>``（尺寸真值）。
+
+    python-pptx 对占位符会返回**继承**来的 ``left/top/width/height``，读属性**看不出**
+    「缺 ext」——LibreOffice 兜底渲染正常，WPS 可能按零/异常尺寸呈现（双盲缺陷）。故判据
+    必须读 XML 真值（backlog tb-20261017-044633-4-1016ppt-1 W1）。
+    """
+    el = getattr(shape, "_element", None)
+    if el is None:
+        return True  # 非 OOXML 形状：无从检查，不误报
+    xfrm = el.find(f".//{_A_XFRM}")
+    if xfrm is None:
+        return False  # 连 xfrm 都没有 → 尺寸全靠继承（最危险）
+    return xfrm.find(_A_EXT) is not None
+
+
+def _shape_label(shape: Any) -> str:
+    """形状的可读标签（名＋文本摘要），供缺 ext 报告定位到页内具体形状。"""
+    name = getattr(shape, "name", "") or "?"
+    txt = ""
+    try:
+        if getattr(shape, "has_text_frame", False):
+            txt = (shape.text_frame.text or "").strip().replace("\n", " ")
+    except Exception:  # noqa: BLE001
+        txt = ""
+    return f"{name}（{txt[:20]}）" if txt else name
+
+
+def _missing_ext(slide: Any) -> list[str]:
+    """本页所有**缺 ``<a:ext>``** 的形状标签（W1 一票否决项的原料）。"""
+    return [_shape_label(sh) for sh in slide.shapes if not _has_explicit_ext(sh)]
+
+
+#: 标题占位符类型（python-pptx 不可用时退化为按名字识别）。
+def _title_placeholder_types() -> set:
+    try:
+        from pptx.enum.shapes import PP_PLACEHOLDER
+
+        return {PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _is_title_shape(shape: Any) -> bool:
+    """是否页标题（占位符类型为 TITLE/CENTER_TITLE，或名字含 Title/标题）。"""
+    if getattr(shape, "is_placeholder", False):
+        try:
+            if shape.placeholder_format.type in _title_placeholder_types():
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+    nm = getattr(shape, "name", "") or ""
+    return nm.startswith("Title") or "标题" in nm
+
+
+def _title_shape(slide: Any) -> Any | None:
+    for sh in slide.shapes:
+        if _is_title_shape(sh):
+            return sh
+    return None
+
+
+def _title_fmt(shape: Any) -> tuple:
+    """标题的**格式指纹**：``(cx,cy,x,y, 字号元组, 字体名元组)``（W2 跨页一致性比对的原子）。"""
+    el = getattr(shape, "_element", None)
+    w = h = x = y = None
+    if el is not None:
+        xfrm = el.find(f".//{_A_XFRM}")
+        if xfrm is not None:
+            ext = xfrm.find(_A_EXT)
+            off = xfrm.find(f"{{{_A_NS}}}off")
+            if ext is not None:
+                w, h = ext.get("cx"), ext.get("cy")
+            if off is not None:
+                x, y = off.get("x"), off.get("y")
+    sizes: list[float | None] = []
+    fonts: list[str | None] = []
+    try:
+        for para in shape.text_frame.paragraphs:
+            for run in para.runs:
+                sizes.append(run.font.size.pt if run.font.size else None)
+                fonts.append(run.font.name)
+    except Exception:  # noqa: BLE001
+        pass
+    return (w, h, x, y, tuple(sizes), tuple(fonts))
+
+
+def _fmt_diff(a: tuple, b: tuple) -> str:
+    """两个标题格式指纹的差异项（人读）。"""
+    labels = ("宽", "高", "左", "上", "字号", "字体")
+    hits = [lab for lab, av, bv in zip(labels, a, b) if av != bv]
+    return "、".join(hits) if hits else "格式"
+
+
+def _title_inconsistencies(
+    titles: list[tuple[int, tuple | None]],
+) -> list[str]:
+    """跨页标题一致性（W2）：基准＝**出现最多的标题格式**（并列取最早页），其余页差异即报。"""
+    keys = [k for _, k in titles if k is not None]
+    if not keys:
+        return []
+    tally: dict[tuple, list[int]] = {}
+    for page, k in titles:
+        if k is not None:
+            tally.setdefault(k, []).append(page)
+    base_key = max(tally, key=lambda k: (len(tally[k]), -min(tally[k])))
+    base_page = min(tally[base_key])
+    return [
+        f"第 {p} 页标题格式与基准（第 {base_page} 页）不一致：{_fmt_diff(k, base_key)}"
+        for p, k in titles
+        if k is not None and k != base_key
+    ]
 
 
 def _detect_frame(boxes: list[ShapeBox], cw: float, ch: float) -> ShapeBox | None:
@@ -633,6 +776,7 @@ def geometry_report(
     cw, ch = prs.slide_width / _EMU_IN, prs.slide_height / _EMU_IN
 
     slides: list[SlideGeometry] = []
+    titles: list[tuple[int, tuple | None]] = []
     for i, slide in enumerate(prs.slides, 1):
         boxes = _collect(slide)
         try:
@@ -665,6 +809,7 @@ def geometry_report(
                 f"{s}（连接符 bbox 提示，非违规）"
                 for s in _off_bounds(connectors, 0.0, 0.0, cw, ch, tolerance, "画布")
             ],
+            missing_ext=_missing_ext(slide),
         )
         if fr is not None:
             sg.edges = _edge_coverage(fr, [b for b in pics if b.z > fr.z])
@@ -672,5 +817,12 @@ def geometry_report(
                 pics, fr.x0, fr.y0, fr.x1, fr.y1, tolerance, "外框"
             )
         slides.append(sg)
+        t = _title_shape(slide)
+        titles.append((i, _title_fmt(t) if t is not None else None))
 
-    return GeometryReport(pptx=src, canvas_in=(cw, ch), slides=slides)
+    return GeometryReport(
+        pptx=src,
+        canvas_in=(cw, ch),
+        slides=slides,
+        title_diffs=_title_inconsistencies(titles),
+    )

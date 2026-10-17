@@ -225,3 +225,127 @@ def test_visual_qa_documents_connector_hint():
         / "visual-qa.md"
     ).read_text(encoding="utf-8")
     assert "连接符" in md and "connector_hints" in md
+
+
+# ---------------------------------------------------------------------------
+# W1 形状缺 <a:ext> 机械闸（tb-20261017-044633-4-1016ppt-1）
+# ---------------------------------------------------------------------------
+_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+
+def _titled_deck(tmp_path: Path, *, slide_titles: list[str], mutate=None) -> Path:
+    """建「仅标题」版式 deck：先装配（含可选 ``mutate(prs, slides)`` 改动）**再存盘**。
+
+    先给标题显式写 w/h——python-pptx 的占位符默认**不写** ``<a:xfrm><a:ext>``，不逼出它
+    就没有「xfrm 在、ext 缺」这一真实缺陷签名可删。
+    """
+    prs = Presentation()
+    for t in slide_titles:
+        s = prs.slides.add_slide(prs.slide_layouts[5])  # Title Only
+        title = s.shapes.title
+        title.text = t
+        title.width, title.height = Inches(8), Inches(1)
+    slides = list(prs.slides)
+    if mutate is not None:
+        mutate(prs, slides)
+    deck = tmp_path / "titled.pptx"
+    prs.save(str(deck))
+    return deck
+
+
+def _strip_ext(shape) -> None:
+    """删掉形状 ``<a:xfrm>`` 里的 ``<a:ext>``（显式尺寸缺失的形态）。"""
+    xfrm = shape._element.find(f".//{{{_A_NS}}}xfrm")
+    xfrm.remove(xfrm.find(f"{{{_A_NS}}}ext"))
+
+
+def test_w1_missing_ext_is_flagged_per_page(tmp_path):
+    """缺 <a:ext> 的形状必须被逐页列出，且计入 violations（一票否决）。"""
+    deck = _titled_deck(
+        tmp_path,
+        slide_titles=["一", "二", "三"],
+        mutate=lambda prs, slides: _strip_ext(slides[1].shapes.title),
+    )
+    rep = slides_visual.geometry_report(deck)
+    assert rep.ext_missing_total == 1
+    assert rep.slides[1].missing_ext and "二" in rep.slides[1].missing_ext[0]
+    assert rep.slides[0].missing_ext == []
+    assert rep.violations >= 1 and not rep.ok
+
+
+def test_w1_ext_present_is_clean(tmp_path):
+    """python-pptx 写入的标题带显式 ext → 不误报；clean deck 仍 PASS。"""
+    deck = _titled_deck(tmp_path, slide_titles=["一", "二"])
+    rep = slides_visual.geometry_report(deck)
+    assert rep.ext_missing_total == 0
+    assert rep.ok and rep.violations == 0, rep.summary()
+
+
+def test_w4_risk_line_names_render_vs_wps(tmp_path):
+    """W4：缺 ext 时输出风险行「渲染图正常 ≠ WPS 正常」。"""
+    deck = _titled_deck(
+        tmp_path,
+        slide_titles=["一", "二"],
+        mutate=lambda prs, slides: _strip_ext(slides[0].shapes.title),
+    )
+    out = slides_visual.geometry_report(deck).summary()
+    assert "渲染图正常" in out and "WPS 正常" in out
+
+
+def test_w1_cli_strict_fails_on_missing_ext(tmp_path):
+    deck = _titled_deck(
+        tmp_path,
+        slide_titles=["一", "二"],
+        mutate=lambda prs, slides: _strip_ext(slides[0].shapes.title),
+    )
+    assert compose.main(["slides", "geometry", str(deck), "--strict"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# W2 跨页标题一致性
+# ---------------------------------------------------------------------------
+def test_w2_consistent_titles_have_no_diff(tmp_path):
+    deck = _titled_deck(tmp_path, slide_titles=["一", "二", "三"])
+    assert slides_visual.geometry_report(deck).title_diffs == []
+
+
+def test_w2_one_changed_title_is_reported(tmp_path):
+    """人为改一页标题（字号）即报差异，并点名页码与差异项。"""
+    from pptx.util import Pt
+
+    def _change(prs, slides):
+        run = slides[2].shapes.title.text_frame.paragraphs[0].runs[0]
+        run.font.size = Pt(40)
+
+    deck = _titled_deck(tmp_path, slide_titles=["一", "二", "三"], mutate=_change)
+    diffs = slides_visual.geometry_report(deck).title_diffs
+    assert len(diffs) == 1 and "第 3 页" in diffs[0] and "字号" in diffs[0], diffs
+
+
+# ---------------------------------------------------------------------------
+# W3/W4 文档面
+# ---------------------------------------------------------------------------
+def test_w3_endpage_convention_documented_both_sides():
+    from pysci.paths import ORCHESTRATION_ROOT
+
+    wch = (
+        ORCHESTRATION_ROOT / "pods" / "writing" / ".qoder" / "rules" / "charter.md"
+    ).read_text(encoding="utf-8")
+    rubric = (
+        ORCHESTRATION_ROOT / "pods" / "reviewer" / "rubrics" / "presentation.md"
+    ).read_text(encoding="utf-8")
+    assert "结尾页" in wch and "感谢" in wch, "writing charter 缺结尾页惯例"
+    assert "结尾页" in rubric and "扣分" in rubric, "reviewer 量表缺无结尾页扣分项"
+
+
+def test_w4_wps_feasibility_recorded():
+    from pysci.paths import ORCHESTRATION_ROOT
+
+    md = (
+        ORCHESTRATION_ROOT
+        / "skills"
+        / "document-writing"
+        / "references"
+        / "visual-qa.md"
+    ).read_text(encoding="utf-8")
+    assert "WPS" in md and "不可行" in md and "wpscli" in md, "缺 WPS 渲染可行性结论"
