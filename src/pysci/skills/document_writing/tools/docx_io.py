@@ -136,6 +136,99 @@ def read_docx(path: str | Path) -> list[DocxBlock]:
 
 
 # ---------------------------------------------------------------------------
+# run 级标注抽取（写作自检 / reviewer 机械对照）
+# ---------------------------------------------------------------------------
+@dataclass
+class MarkedRun:
+    """一个带格式标注的 run（段落内 0-based 序号）。"""
+
+    para_index: int
+    run_index: int
+    marks: list[
+        str
+    ]  # 如 ["strike", "shd=FF0000"]；顺序稳定（strike/shd/highlight/bold/color）
+    text: str
+
+
+def _val_on(el: Any) -> bool:
+    """``w:strike`` / ``w:b`` 的开关语义：缺省 val 即为开，0/false/none 为关。"""
+    val = el.get(f"{{{_W_NS}}}val")
+    return str(val if val is not None else "true").lower() not in (
+        "0",
+        "false",
+        "none",
+        "off",
+    )
+
+
+def _run_marks(run: Any) -> list[str]:
+    """run 的标注清单（实测惯用面：strike / shd 底色 / bold，另含 highlight / color）。"""
+    rpr = run._element.rPr
+    if rpr is None:
+        return []
+    out: list[str] = []
+    strike = rpr.find(f"{{{_W_NS}}}strike")
+    if strike is not None and _val_on(strike):
+        out.append("strike")
+    shd = rpr.find(f"{{{_W_NS}}}shd")
+    if shd is not None:
+        fill = str(shd.get(f"{{{_W_NS}}}fill") or "").strip().upper()
+        if fill and fill != "AUTO":
+            out.append(f"shd={fill}")
+    hl = rpr.find(f"{{{_W_NS}}}highlight")
+    if hl is not None:
+        val = str(hl.get(f"{{{_W_NS}}}val") or "").strip()
+        if val and val != "none":
+            out.append(f"highlight={val}")
+    bold = rpr.find(f"{{{_W_NS}}}b")
+    if bold is not None and _val_on(bold):
+        out.append("bold")
+    color = rpr.find(f"{{{_W_NS}}}color")
+    if color is not None:
+        val = str(color.get(f"{{{_W_NS}}}val") or "").strip().upper()
+        if val and val != "AUTO":
+            out.append(f"color={val}")
+    return out
+
+
+def extract_run_marks(
+    path: str | Path, *, para: str = ""
+) -> tuple[list[tuple[int, str, list[MarkedRun]]], int]:
+    """抽取正文段落的 run 级标注（strike / shd 底色 / highlight / bold / color）。
+
+    Args:
+        path: .docx 路径。
+        para: 段落文本关键词过滤（子串匹配，空串＝不过滤）。
+
+    Returns:
+        ``(grouped, total)``：``grouped`` = ``[(段落序号, 段落全文, [MarkedRun…]), …]``，
+        只含**有标注 run** 且文本命中关键词的段落；``total`` = 标注 run 总数。
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"docx 不存在：{path}")
+    if path.suffix.lower() != ".docx":
+        raise ValueError(f"仅支持 .docx（不支持旧版 .doc）：{path.name}")
+
+    doc = Document(str(path))
+    grouped: list[tuple[int, str, list[MarkedRun]]] = []
+    total = 0
+    for i, p in enumerate(doc.paragraphs):
+        text = _para_text(p._p)
+        if para and para not in text:
+            continue
+        marked = []
+        for j, run in enumerate(p.runs):
+            marks = _run_marks(run)
+            if marks:
+                marked.append(MarkedRun(i, j, marks, run.text))
+        if marked:
+            grouped.append((i, text, marked))
+            total += len(marked)
+    return grouped, total
+
+
+# ---------------------------------------------------------------------------
 # 渲染为 Markdown
 # ---------------------------------------------------------------------------
 def _rows_to_md_table(rows: list[list[str]]) -> str:

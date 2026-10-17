@@ -1897,7 +1897,7 @@ def _report_failure(o: DispatchOutcome) -> None:
     _print_next(
         [
             "运行级失败（非交付失败）。可选：",
-            f'  1) 再试一跳：uv run --no-sync pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "继续任务书 {o.task_file}"',
+            f'  1) 再试一跳：pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "继续任务书 {o.task_file}"',
             "  2) 查会话原文定位卡点（registry/pod 键目录下 jsonl）",
             "  3) 仍失败 → 上报用户（附本输出全文）",
         ]
@@ -2001,10 +2001,10 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
         nxt = ["本环节完成。"]
         if o.suggestion_id:
             nxt.append(
-                f'改进建议待审批：uv run --no-sync pysci-orch approve {o.suggestion_id} --note "..."'
+                f'改进建议待审批：pysci-orch approve {o.suggestion_id} --note "..."'
             )
             nxt.append(
-                f'                 或 uv run --no-sync pysci-orch reject {o.suggestion_id} --note "..."'
+                f'                 或 pysci-orch reject {o.suggestion_id} --note "..."'
             )
         nxt.append(
             "若属多环节工作：推进计划（orch plan advance <id>）或书写下一任务书再 dispatch。"
@@ -2018,7 +2018,7 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
         _print_next(
             [
                 f"机械验收 FAIL（{detail}）→ 建议回派返工：",
-                f'  uv run --no-sync pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "返工：机械验收未过（{detail}）。修正后重新交付。"',
+                f'  pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "返工：机械验收未过（{detail}）。修正后重新交付。"',
                 "同指纹连败 3 次 → 停止回派，升级决策（改任务书/咨询副组长/上报用户）。",
             ]
         )
@@ -2027,8 +2027,8 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
         _print_next(
             [
                 "组员被阻塞。可选：",
-                f'  1) 补充信息重派：uv run --no-sync pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "<补充>"',
-                '  2) 咨询副组长：uv run --no-sync pysci-orch deputy consult "<问题>"',
+                f'  1) 补充信息重派：pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "<补充>"',
+                '  2) 咨询副组长：pysci-orch deputy consult "<问题>"',
                 "  3) 上报用户（附交付正文）",
             ]
         )
@@ -2036,6 +2036,6 @@ def _report_success(o: DispatchOutcome, failed_checks: list[dict]) -> None:
     _print_next(
         [
             "交付格式解析失败（parse_error）。原回复见上方正文预览。",
-            f'重派补格式：uv run --no-sync pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "上次交付缺 <result>/<blocked> 标签块，请按 charter 重新收尾（工作不必重做）。"',
+            f'重派补格式：pysci-orch dispatch {o.member} --session {o.sid[:8]} --text "上次交付缺 <result>/<blocked> 标签块，请按 charter 重新收尾（工作不必重做）。"',
         ]
     )

@@ -11,6 +11,7 @@ LLM 直接调用，无需了解底层模块实现。
     tex lint         chktex 静态检查
     tex refs         从 Zotero 导出 refs.bib（复用 literature_research）
     read <file>      统一提取（markitdown）→ Markdown（pptx/docx/pdf/xlsx/...）
+    docx marks       抽取 run 级标注（strike/底色/加粗/颜色），写作自检的机械对照面
     slides extract   结构化提取 .pptx（逐页文本/表格/图片/演讲者备注）
     slides digest    大型 pptx → 图文互证 Markdown 工作区（去重导图/邻近文字/分节分块）
     slides render    把 .pptx 渲染成逐页 PNG（pptx→pdf→page-NNN.png，供视觉判读/交付附件）
@@ -638,6 +639,45 @@ def cmd_docx_from_markdown(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_docx_marks(args: argparse.Namespace) -> int:
+    """抽取 run 级标注（strike / shd 底色 / highlight / bold / color），按段人读可 grep。"""
+    from collections import Counter
+
+    from . import docx_io
+
+    src = Path(args.docx)
+    if not src.exists():
+        print(f"[docx marks] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        grouped, total = docx_io.extract_run_marks(src, para=args.para)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[docx marks] {e}", file=sys.stderr)
+        return 2
+    except ImportError as e:
+        print(f"[docx marks] {e}", file=sys.stderr)
+        return 3
+    scope = f"，--para {args.para!r}" if args.para else ""
+    print(f"docx marks: {src.name}（{len(grouped)} 段有标注，标注 run {total}{scope}）")
+    for idx, text, runs in grouped:
+        head = " ".join(text.split())
+        if len(head) > 80:
+            head = head[:80] + "…"
+        print(f"== 段 {idx}：{head} ==")
+        for mr in runs:
+            frag = " ".join(mr.text.split())
+            print(f"  r{mr.run_index}  {' '.join(mr.marks)}  「{frag}」")
+    if not grouped:
+        print("  （无标注 run）" if not args.para else "  （无匹配段落或无标注 run）")
+        return 0
+    tally: Counter[str] = Counter()
+    for _idx, _text, runs in grouped:
+        for mr in runs:
+            tally.update(mr.marks)
+    print("汇总：" + " ".join(f"{k}={v}" for k, v in sorted(tally.items())))
+    return 0
+
+
 def cmd_docx_add(args: argparse.Namespace) -> int:
     from . import docx_io
 
@@ -968,7 +1008,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_slides_geometry)
 
     # --- docx 子命令组 ---
-    docx = sub.add_parser("docx", help="DOCX 读写（read/from-markdown/add）")
+    docx = sub.add_parser("docx", help="DOCX 读写（read/from-markdown/add/marks）")
     docxsub = docx.add_subparsers(dest="docx_cmd", required=True)
 
     sp = docxsub.add_parser("read", help="结构化读取 .docx → Markdown")
@@ -989,6 +1029,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Word 样式模板 .docx（套用样式）",
     )
     sp.set_defaults(func=cmd_docx_from_markdown)
+
+    sp = docxsub.add_parser(
+        "marks", help="抽取 run 级标注（strike/底色/高亮/加粗/颜色），按段输出"
+    )
+    sp.add_argument("docx", help=".docx 文件")
+    sp.add_argument(
+        "--para", default="", help="按段文本关键词过滤（子串匹配；缺省=全部段落）"
+    )
+    sp.set_defaults(func=cmd_docx_marks)
 
     sp = docxsub.add_parser("add", help="向已有 .docx 追加一个块")
     sp.add_argument("docx", help=".docx 文件")

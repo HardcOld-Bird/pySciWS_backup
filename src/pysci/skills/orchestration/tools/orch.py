@@ -7,8 +7,8 @@ workflow。设计红线（README §4.3）：每条命令输出自含「下一步
 
 命令面（plan-first：组长日常走 plan；dispatch/sessions 等为底层命令，降级与调试用）::
 
-    uv run --no-sync pysci-orch status
-    ... orch plan new <file> | advance <id> [--text/--task ...] | amend <id> | drop <id> | list
+    pysci-orch status [--brief]
+    ... orch plan new <file> | advance <id> [--text/--task ...] | spec <id> [--step] | amend <id> | drop <id> | list
     ... orch plan adhoc <member> --text "..."        # 计划外事项的正确姿势
     ... orch approve <sid> (--jury | --bench <案id[,案id]> | --override "<理由>") [--note ...]
     ... orch reject <suggestion-id> --override "<依据>"
@@ -93,9 +93,102 @@ _REASON_LABEL: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # status
 # ---------------------------------------------------------------------------
+#: ``--brief`` 一页摘要的版面预算（任务书 F3：≤30 行）。
+_BRIEF_MAX_LINES = 30
+_BRIEF_PLAN_CAP = 8
+_BRIEF_MEMBER_CAP = 6
+
+
+def _status_brief() -> int:
+    """一页读数：计划进度（x/y＋当前环节）/ 队列在途 / 事件水位 / 大任务队首（≤30 行）。
+
+    与全景 status 的分工：全景是**排查面**（夜航/判决包/台账/脏面…），本面是**开工前
+    五秒扫一眼**的决策面。各项读数 fail-soft：某一项坏只少一行、不塌整页。
+    """
+    lines: list[str] = ["== 计划 =="]
+    live = 0
+    try:
+        for pid, goal, done, total in _plans.list_plans():
+            st = _plans.load_state(pid)
+            if st.get("completed_at") or st.get("abandoned_at"):
+                continue
+            live += 1
+            if live > _BRIEF_PLAN_CAP:
+                continue
+            cur = next(
+                (
+                    s["id"]
+                    for s in st.get("steps", [])
+                    if s.get("status") not in ("done", "skipped")
+                ),
+                "-",
+            )
+            lines.append(f"  ▶ {pid}  {done}/{total}（当前环节 {cur}）  {goal}")
+        if live > _BRIEF_PLAN_CAP:
+            lines.append(
+                f"  …另有 {live - _BRIEF_PLAN_CAP} 个进行中计划（orch plan list）"
+            )
+    except Exception:  # noqa: BLE001 - 读数面 fail-soft
+        lines.append("  （计划读数失败）")
+    if not live:
+        lines.append("  （无进行中计划）")
+
+    lines.append("== 成员队列 ==")
+    try:
+        pend = act = 0
+        busy: list[str] = []
+        for m in _queues.all_members():
+            c = _queues.counts(m)
+            p, g = int(c.get("pending", 0)), int(c.get("in_progress", 0))
+            pend += p
+            act += g
+            if p or g:
+                busy.append(f"{m} 在途={g} 待={p}")
+        lines.append(f"  在途={act} 待={pend}" + ("（各队列空）" if not busy else ""))
+        for row in busy[:_BRIEF_MEMBER_CAP]:
+            lines.append(f"  · {row}")
+        if len(busy) > _BRIEF_MEMBER_CAP:
+            lines.append(f"  · …另 {len(busy) - _BRIEF_MEMBER_CAP} 个队列有积压")
+    except Exception:  # noqa: BLE001 - 读数面 fail-soft
+        lines.append("  （队列读数失败）")
+
+    lines.append("== 事件 ==")
+    try:
+        lines.append("  " + _events.status_lines()[0].strip())
+    except Exception:  # noqa: BLE001 - 读数面 fail-soft
+        lines.append("  （事件读数失败）")
+
+    lines.append("== 大任务 ==")
+    try:
+        from . import taskbooks as _tb
+
+        head = None
+        serial_head = getattr(_tb, "serial_head", None)
+        if callable(serial_head):
+            head = serial_head()
+        if not head:
+            open_items = _tb.sections().get("open") or []
+            head = open_items[0] if open_items else None
+        if head:
+            lines.append(f"  队首：{head.get('id')}  {str(head.get('title', ''))[:50]}")
+        else:
+            lines.append("  队首：（无待办大任务）")
+    except Exception:  # noqa: BLE001 - 读数面 fail-soft
+        lines.append("  （大任务读数失败）")
+
+    lines.append("[NEXT] 全量：pysci-orch status；推进：pysci-orch plan advance <id>")
+    if len(lines) > _BRIEF_MAX_LINES:
+        lines = lines[: _BRIEF_MAX_LINES - 1] + [
+            "…（已截断，全量见 pysci-orch status）"
+        ]
+    print("\n".join(lines))
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """全景：进行中计划、成员池摘要、待审批建议、backlog、台账近况。"""
-    del args
+    if getattr(args, "brief", False):
+        return _status_brief()
     print("== 计划 ==")
     live = 0
     for pid, goal, done, total in _plans.list_plans():
@@ -451,9 +544,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     print()
     print("[NEXT]")
     if sugg:
-        print(
-            "  有待审批建议：uv run --no-sync pysci-orch suggestions 查看 → approve/reject"
-        )
+        print("  有待审批建议：pysci-orch suggestions 查看 → approve/reject")
     if needs_leader:
         print(
             "  有 needs_leader 条目（drain 跳过）：查 state/backlog.json 后决定"
@@ -471,15 +562,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         )
     if live:
         print(
-            '  推进进行中计划：uv run --no-sync pysci-orch plan advance <id> --text "<当前环节任务书>"'
+            '  推进进行中计划：pysci-orch plan advance <id> --text "<当前环节任务书>"'
         )
     else:
-        print(
-            "  新工作：uv run --no-sync pysci-orch plan new <计划.yaml>（格式见 README §4.2）；"
-        )
-        print(
-            '  计划外单步：uv run --no-sync pysci-orch plan adhoc <member> --text "..."'
-        )
+        print("  新工作：pysci-orch plan new <计划.yaml>（格式见 README §4.2）；")
+        print('  计划外单步：pysci-orch plan adhoc <member> --text "..."')
     return 0
 
 
@@ -845,9 +932,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         return 2
     if [line for line in report if line.startswith("[!]")] and args.check:
         print()
-        print(
-            "[NEXT] 存在漂移：uv run --no-sync pysci-orch sync 重新部署（真本→副本单向）。"
-        )
+        print("[NEXT] 存在漂移：pysci-orch sync 重新部署（真本→副本单向）。")
         return 2
     return 0
 
@@ -925,6 +1010,7 @@ def _plan_router(action: str):
     handlers = {
         "new": _plans.cmd_plan_new,
         "advance": _plans.cmd_plan_advance,
+        "spec": _plans.cmd_plan_spec,
         "amend": _plans.cmd_plan_amend,
         "edit": _plans.cmd_plan_edit,
         "reassign": _plans.cmd_plan_reassign,
@@ -1036,6 +1122,11 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("status", help="全景：计划/成员/队列/台账")
+    p.add_argument(
+        "--brief",
+        action="store_true",
+        help="一页摘要：计划进度/队列在途/事件水位/大任务队首（≤30 行）",
+    )
     p.set_defaults(func=cmd_status)
 
     # ---- plan（组长日常面）----
@@ -1076,6 +1167,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     q.set_defaults(func=_plan_router("advance"))
 
+    q = psub.add_parser(
+        "spec",
+        help="回打环节规格（粗描述+evidence 标题段+收尾命令；任何状态可查）",
+    )
+    q.add_argument("id")
+    q.add_argument(
+        "--step",
+        default="",
+        help="环节 id（显示名与短 id 皆可，如 B.b2 或 b2；缺省=当前在途/待证据环节）",
+    )
+    q.set_defaults(func=_plan_router("spec"))
+
     q = psub.add_parser("amend", help="编辑计划 YAML 后校验对账（按环节 id 保留状态）")
     q.add_argument("id")
     q.set_defaults(func=_plan_router("amend"))
@@ -1101,7 +1204,11 @@ def main(argv: list[str] | None = None) -> int:
         help="改派未派发环节的成员（member_placeholder 的正规出口；自动对账）",
     )
     q.add_argument("id")
-    q.add_argument("--step", required=True, help="环节 id（叶子点路径，如 a1 或 A.a1）")
+    q.add_argument(
+        "--step",
+        required=True,
+        help="环节 id（显示名与短 id 皆可，如 A.a1 或 a1）",
+    )
     q.add_argument("--member", required=True, help="新成员 id（如 writing / figure）")
     q.set_defaults(func=_plan_router("reassign"))
 
