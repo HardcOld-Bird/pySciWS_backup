@@ -55,7 +55,10 @@
       "id": "B.b2",
       "status": "queued",
       "review": "pending",
-      "job_id": "figure-20261017-090932-rework-tb-20261017-044604-3-2-B.b2"
+      "job_id": "figure-20261017-100347-rework-tb-20261017-044604-3-2-B.b2",
+      "task_file": null,
+      "session_id": "982c6a21-2ac6-4c7a-a97b-c4bf44576896",
+      "kind": "run_failed"
     },
     {
       "id": "B.b_last",

@@ -3241,10 +3241,13 @@
       "kind": "defect",
       "success_criteria": "- 去重键扩展为「(tag, member) 级」：该键存在**未销账**关联（backlog 条目 pending/\nin_progress、或 approved 提案未 done、或 reject 理由含「已落地/已承接销账」且承接单\n未 done）即不重立；指纹日期仅作参考不作去重键；\n- 回归测试：构造「已 approve 在途 + 窗口每日新增撞」连续 3 天，断言只立案 1 次；\n构造「已 reject 销账 + 承接单在途」断言不重立；承接单 done 后新撞方可再立；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-052200-devops.md",
-      "status": "pending",
+      "status": "done",
       "proposed": "2026-10-17T05:17:19+08:00",
-      "note": "",
-      "source": "leader"
+      "note": "drain 批量销账（commit 0cc5318）",
+      "source": "leader",
+      "done_at": "2026-10-17T09:10:16+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-052200-devops"
     },
     {
       "id": "20261017-052625-writing",
@@ -3253,11 +3256,14 @@
       "kind": "defect",
       "success_criteria": "pysci-compose docx read 对含 OMML 内联公式的 docx 提取结果包含公式文本（对草稿.docx 复跑：4 cm/0.65 m/3 kHz 等数字在提取 md 中可见）；回归测试含 oMath 样例断言不丢文本；uv run --no-sync pytest tests 全绿",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-052625-writing.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T05:38:19+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit dace0ba）",
       "started_at": "2026-10-17T05:38:23+08:00",
-      "worktree": "20261017-052625-writing"
+      "worktree": "20261017-052625-writing",
+      "done_at": "2026-10-17T09:32:11+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-052625-writing"
     },
     {
       "id": "20261017-053820-devops",

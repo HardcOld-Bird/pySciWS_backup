@@ -77,20 +77,30 @@ INCS = (
     ("R", "R-incidence"),
 )
 
-# --- 菱形扫描框（内框，任务书第 5 项）：物理边长 31 cm、近边距中心 30 cm ---
+# --- 菱形扫描框（外框，任务书第 5 项）：物理边长 31 cm、近边距中心 30 cm ---
 SCAN_SIDE = 0.31
 SCAN_NEAR_EDGE = 0.30
 SCAN_HALF = SCAN_SIDE / 2.0  # 内切半径（中心 → 近边）= 15.5 cm
 SCAN_CENTER_R = SCAN_NEAR_EDGE + SCAN_HALF  # 菱形中心径向距离 = 45.5 cm
 CH_ANG = (135.0, 45.0)  # 左/右输出通道方位角
 
-# 面板半宽（m）：容纳菱形远顶点（SCAN_CENTER_R/√2 + SCAN_HALF = 54.1 cm）与 Exp 插图
-PANEL_HALF = 0.565
+# --- 仿真窗口（内框）：扫描场区中落在仿真域内的部分，取最大内接正方形（留边距）---
+# 约束：四顶点半径 ≤ R − GEO_MARGIN（GEO_MARGIN = 2.5 cm 边距，禁贴边）
+GEO_MARGIN = 0.025
+SIM_WIN_HALF = (
+    0.030  # 半边长 3 cm → 边长 6 cm（r_max = √(0.36²+0.03²) = 36.1 cm，留 3.9 cm）
+)
+SIM_WIN_R = SCAN_NEAR_EDGE + SIM_WIN_HALF  # 窗口中心径向 = 33 cm
 
-# Exp. 插图（外框）：同一扫描场区的对照图（实验数据暂缺，以仿真代填），置于半圆外顶角
-SRC_HALF = 0.035  # 插图源窗半边长（边长 7 cm），中心径向 = SCAN_NEAR_EDGE + SRC_HALF（整窗入框）
-INSET_HALF = 0.044  # 插图半边长（边长 8.8 cm，放大 1.26×）
-INSET_DIST = 0.680  # 插图中心径向距离（在扫描框远边之外）
+# 面板半宽（m）：容纳扫描框远顶点（(SCAN_CENTER_R+SCAN_HALF)/√2 = 44.5 cm）、缩略图与框外标注
+PANEL_HALF = 0.80
+
+# 缩略图（外框）：仿真窗口整区放大 2.17×（0.13 m > 窗口 0.06 m ⇒ 外框大于内框），置半圆外顶角
+INSET_HALF = 0.065  # 半边长（边长 13 cm）
+INSET_DIST = 0.76  # 中心径向距离（在扫描框远边之外，与框间留 8.5 cm）
+#: 框外标注落位（数据坐标，域外白区；仅第一组绘制）：Sim. 在上方两框之间、Exp.† 在缩略图外
+SIM_LABEL_XY = (X0, 0.50)
+EXP_LABEL_DXY = (0.50, 0.70)
 
 # --- 配色：设计用色限于 Rainbow 同族 + 中性灰阶 ---
 CMAP_NAME = "comsol_rainbow"
@@ -182,22 +192,31 @@ def _uv_point(uu: float, vv: float, ang_deg: float) -> tuple[float, float]:
     return X0 + uu * u[0] + vv * v[0], uu * u[1] + vv * v[1]
 
 
-def draw_exp_insets(ax, xy: np.ndarray, vals: np.ndarray, vmax: float) -> None:
-    """每通道：内框（扫描场区菱形，实线，Sim.）+ 两角细虚线 + 半圆外顶角 Exp.† 插图。
+def draw_exp_insets(
+    ax, xy: np.ndarray, vals: np.ndarray, vmax: float, *, labels: bool
+) -> None:
+    """每通道：扫描场区外框 + 域内仿真窗口内框 + 两角细虚线 + 半圆外顶角 Exp.† 缩略图。
 
-    内框 = 扫描场区在场图中的位置标记（物理边长 31 cm、近边距中心 30 cm，尖角向上，中心落在
-    该通道射线上），取代旧版误画的独立大虚线框；外框 = **同一场区**的对照插图（实验数据
-    暂缺，以仿真代填），源窗取该场区近端、整窗落在扫描框内且落在模拟域内。
+    - **外框**（扫描场区，实线）：实验扫描范围本身——边长 31 cm、近边距超表面中心 30 cm，
+      尖角向上、中心落在该通道射线上；其远侧顶点（r = 62.9 cm）**如实落在仿真域（R = 40 cm）
+      之外**（实验扫描区大于仿真域，这是物理事实，不是绘制错误）。
+    - **内框**（仿真窗口，实线）：扫描场区中落在仿真域内的部分，取**最大内接正方形**并以
+      `GEO_MARGIN` 留边距——即「仿真-实验可比区」；几何可行性已核对：整区放不下（31 cm 扫描框
+      远顶点 62.9 cm > R），扩域方案已实测否决（见交付说明 W3 记录），故内框取域内可比区。
+    - **缩略图**（外框放大）：内框整区放大 `INSET_HALF / SIM_WIN_HALF` ≈ 2.17×（0.13 m > 0.06 m
+      ⇒ 外 > 内），置半圆外顶角，以细虚线连回内框远侧两顶点。
+    - **标注**（`labels=False` 时省略）：``Sim.``/``Exp.`` 一律落在**框外**的域外白区，
+      满足零遮挡；二三组省略（4ref2.png 实践）。
     """
     norm = Normalize(-vmax, vmax)
     off = np.array([X0, 0.0])
-    src_r = SCAN_NEAR_EDGE + SRC_HALF  # 源窗中心径向：整体位于内框近侧之内
     for ang in CH_ANG:
         u, v = _frame(ang)
-        frame = _square_uv(SCAN_CENTER_R, SCAN_HALF, ang)
+        scan = _square_uv(SCAN_CENTER_R, SCAN_HALF, ang)
+        win = _square_uv(SIM_WIN_R, SIM_WIN_HALF, ang)
         ins = _square_uv(INSET_DIST, INSET_HALF, ang)
-        # 两角细虚线：内框远侧两顶点 → 外框近侧两顶点
-        for a, b in ((frame[0], ins[3]), (frame[1], ins[2])):
+        # 两角细虚线：内框远侧两顶点 → 缩略图近侧两顶点
+        for a, b in ((win[0], ins[3]), (win[1], ins[2])):
             ax.plot(
                 [a[0], b[0]],
                 [a[1], b[1]],
@@ -206,37 +225,39 @@ def draw_exp_insets(ax, xy: np.ndarray, vals: np.ndarray, vmax: float) -> None:
                 color=FAINT,
                 zorder=4,
             )
-        # 插图内容 = 同一扫描场区（近端源窗）的场，放大到插图
+        # 缩略图内容 = 内框（仿真窗口）整区的场，按比例放大到插图
         d_uv = np.stack([(xy - off) @ u, (xy - off) @ v], axis=1)
-        m = (np.abs(d_uv[:, 0] - src_r) <= SRC_HALF) & (np.abs(d_uv[:, 1]) <= SRC_HALF)
+        m = (np.abs(d_uv[:, 0] - SIM_WIN_R) <= SIM_WIN_HALF) & (
+            np.abs(d_uv[:, 1]) <= SIM_WIN_HALF
+        )
         if m.sum() >= 3:
             w = (
-                (d_uv[m] - np.array([src_r, 0.0])) * (INSET_HALF / SRC_HALF)
+                (d_uv[m] - np.array([SIM_WIN_R, 0.0])) * (INSET_HALF / SIM_WIN_HALF)
             ) @ np.stack([u, v])
             w = w + off + INSET_DIST * u
             tri = _field.add_field_panel(ax, w, vals[m], cmap=CMAP, norm=norm)
             tri.set_clip_path(Polygon(ins, closed=True, transform=ax.transData))
         ax.add_patch(Polygon(ins, closed=True, fill=False, ec=GRAY, lw=0.7, zorder=7))
-        # 标签落位（逐块量过与框线/细虚线/弧/彼此的距离）：
-        #   Exp.† 内框自由带上沿（u≈0.50，该处内框横截面 ±0.11 m，字形整块不入框线）；
-        #   Sim.  其下方 0.115 m 再沿 +u 外移 0.045 m（远离半圆弧；与 Exp.† 间隙 1.17 mm）。
-        ax.add_patch(Polygon(frame, closed=True, fill=False, ec=GRAY, lw=0.8, zorder=6))
-        ex, ey = _uv_point(SCAN_CENTER_R + 0.045, 0.020, ang)
+        ax.add_patch(Polygon(scan, closed=True, fill=False, ec=GRAY, lw=0.8, zorder=6))
+        ax.add_patch(Polygon(win, closed=True, fill=False, ec=GRAY, lw=0.8, zorder=6))
+    if not labels:
+        return
+    # 标注：一律在框外（域外白区）；Sim. 落上方两框之间（该处无数据、无框线），Exp.† 落缩略图外
+    ax.text(
+        SIM_LABEL_XY[0],
+        SIM_LABEL_XY[1],
+        "Sim.",
+        color=GRAY,
+        fontsize=6,
+        ha="center",
+        va="center",
+        zorder=8,
+    )
+    for sx in (-1.0, 1.0):
         ax.text(
-            ex,
-            ey,
+            X0 + sx * EXP_LABEL_DXY[0],
+            EXP_LABEL_DXY[1],
             "Exp.$\\dagger$",
-            color=GRAY,
-            fontsize=6,
-            ha="center",
-            va="center",
-            zorder=8,
-        )
-        ux, uy = _frame(ang)[0]
-        ax.text(
-            ex + 0.045 * ux,
-            ey - 0.115 + 0.045 * uy,
-            "Sim.",
             color=GRAY,
             fontsize=6,
             ha="center",
@@ -260,6 +281,8 @@ def draw_field_panel(
     label: str,
     vmax: float,
     data: tuple[np.ndarray, np.ndarray],
+    *,
+    labels: bool,
 ) -> None:
     xy, vals = data
     _field.add_field_panel(
@@ -271,7 +294,7 @@ def draw_field_panel(
     ax.plot(
         [X0 - R, X0 + R], [0.0, 0.0], color=INK, lw=1.0, zorder=6, solid_capstyle="butt"
     )
-    draw_exp_insets(ax, xy, vals, vmax)
+    draw_exp_insets(ax, xy, vals, vmax, labels=labels)
     ax.set_xlim(X0 - PANEL_HALF, X0 + PANEL_HALF)
     ax.set_ylim(0.0, PANEL_HALF)
     ax.set_aspect("equal", adjustable="box")
@@ -377,22 +400,25 @@ def draw_radar(ax, cfg: str, header: str) -> None:
         borderpad=0.1,
         labelspacing=0.25,
     )
-    ax.set_title(header, color=INK, pad=26.0, fontweight="bold")
 
 
 # ---------------------------------------------------------------------------
 # 组装
 # ---------------------------------------------------------------------------
 _FIG_W_MM = 178.0
-_LEFT, _RIGHT = 0.045, 0.985
+_LEFT, _RIGHT = 0.045, 0.945
 _G_PANEL_CBAR, _G_CBAR_COL, _CB_W = 0.012, 0.066, 0.013
-_TITLE_MM, _G_ROW_MM = 13.0, 7.5
-_MARGIN_TOP_MM, _MARGIN_BOT_MM = 8.0, 9.0
+_TITLE_MM, _G_ROW_MM = 13.0, 11.5
+_MARGIN_TOP_MM, _MARGIN_BOT_MM = 8.0, 22.0
 _RADAR_ASPECT = 1.38 / 2.28  # ylim 跨度 / xlim 跨度（半极坐标雷达）
 
 
 def _layout() -> dict[str, float]:
-    """由列宽反解各行的图面比例（保证场图面板 2:1、雷达充满列宽）。"""
+    """由列宽反解各行的图面比例（保证场图面板 2:1、雷达充满列宽）。
+
+    行序（任务书批语 3）：行 1 = L 入射场图、行 2 = R 入射场图、行 3 = 二合一雷达；
+    每列色标与行 1+2（两幅场图）等高、置列右缘。
+    """
     panel_w = (_RIGHT - _LEFT - 3 * _G_PANEL_CBAR - 3 * _CB_W - 2 * _G_CBAR_COL) / 3.0
     panel_mm = panel_w * _FIG_W_MM
     radar_h_mm = panel_mm * _RADAR_ASPECT
@@ -400,15 +426,15 @@ def _layout() -> dict[str, float]:
     fig_h_mm = (
         _MARGIN_TOP_MM
         + _TITLE_MM
+        + field_h_mm
+        + _G_ROW_MM
+        + field_h_mm
+        + _G_ROW_MM
         + radar_h_mm
-        + _G_ROW_MM
-        + field_h_mm
-        + _G_ROW_MM
-        + field_h_mm
         + _MARGIN_BOT_MM
     )
     top = 1.0 - _MARGIN_TOP_MM / fig_h_mm
-    row0 = (_TITLE_MM + radar_h_mm) / fig_h_mm
+    row0 = (field_h_mm + _TITLE_MM) / fig_h_mm
     gap = _G_ROW_MM / fig_h_mm
     field = field_h_mm / fig_h_mm
     return {
@@ -419,13 +445,21 @@ def _layout() -> dict[str, float]:
         "gap": gap,
         "field": field,
         "radar": radar_h_mm / fig_h_mm,
-        "y_radar": top - row0,
-        "y_f1": top - row0 - gap - field,
-        "y_f2": top - row0 - 2 * (gap + field),
+        "y_header": top + 0.30 * _TITLE_MM / fig_h_mm,
+        "y_f1": top - row0,
+        "y_f2": top - row0 - gap - field,
+        "y_radar": top - row0 - 2 * (gap + field) - gap,
     }
 
 
-def compose_combined() -> Path:
+def compose_combined(*, occlusion_dir: Path | None = None) -> Path:
+    """组装整图。
+
+    Args:
+        occlusion_dir: 非空时，在同一渲染进程内追加导出**删文字版**（同版式、所有
+            ``Text`` 图元整体移除）到该目录，供 ``pysci-figures overlap`` 的零遮挡
+            像素判据做真值面（先写受审件、后写删文字版，满足其 mtime 新鲜度纪律）。
+    """
     L = _layout()
     fig_h_in = mm_to_inch(L["fig_h_mm"])
     fig_w_in = mm_to_inch(_FIG_W_MM)
@@ -447,6 +481,39 @@ def compose_combined() -> Path:
         letters = iter("abcdefghi")
         for j, (cfg, header) in enumerate(CASES):
             x = _LEFT + j * (panel_w + _G_PANEL_CBAR + _CB_W + _G_CBAR_COL)
+            # 列头（放在该列最上方，行 1 之上）
+            fig.text(
+                x + panel_w / 2.0,
+                L["y_header"],
+                header,
+                color=INK,
+                fontsize=9,
+                fontweight="bold",
+                ha="center",
+                va="bottom",
+            )
+            # 行 1 / 行 2：L、R 入射场图；行 3：二合一雷达
+            for k, (inc, inc_label) in enumerate(INCS):
+                ax_f = fig.add_axes([x, (y_f1, y_f2)[k], panel_w, L["field"]])
+                draw_field_panel(
+                    ax_f,
+                    cfg,
+                    inc,
+                    f"{inc_label} $\\mathrm{{Re}}\\,p_t$",
+                    vmax[cfg],
+                    fields[(cfg, inc)],
+                    labels=(j == 0),
+                )
+                ax_f.text(
+                    -0.05,
+                    1.02,
+                    next(letters),
+                    transform=ax_f.transAxes,
+                    va="bottom",
+                    ha="left",
+                    color=INK,
+                    fontweight="bold",
+                )
             ax_r = fig.add_axes([x, L["y_radar"], panel_w, L["radar"]])
             draw_radar(ax_r, cfg, header)
             ax_r.text(
@@ -459,26 +526,6 @@ def compose_combined() -> Path:
                 color=INK,
                 fontweight="bold",
             )
-            for k, (inc, inc_label) in enumerate(INCS):
-                ax_f = fig.add_axes([x, (y_f1, y_f2)[k], panel_w, L["field"]])
-                draw_field_panel(
-                    ax_f,
-                    cfg,
-                    inc,
-                    f"{inc_label} $\\mathrm{{Re}}\\,p_t$",
-                    vmax[cfg],
-                    fields[(cfg, inc)],
-                )
-                ax_f.text(
-                    0.0,
-                    1.015,
-                    next(letters),
-                    transform=ax_f.transAxes,
-                    va="bottom",
-                    ha="left",
-                    color=INK,
-                    fontweight="bold",
-                )
             cax = fig.add_axes(
                 [x + panel_w + _G_PANEL_CBAR, y_f2, _CB_W, y_f1 + L["field"] - y_f2]
             )
@@ -506,18 +553,36 @@ def compose_combined() -> Path:
 
         fig.text(
             _LEFT,
-            0.020,
+            0.018,
             "$\\dagger$ Exp. insets show simulated data (experimental data unavailable).\n"
-            "Diamond = scan field region Sim. (side 31 cm; near edge 30 cm from the metasurface "
-            "centre; model scale $R$ = 40 cm); outer diamond = same region, Exp.$\\dagger$.",
+            "Diamond = the experiment's scan field region (side 31 cm; near edge 30 cm from the metasurface centre): its far side\n"
+            "lies outside the model domain ($R$ = 40 cm), as measured. Square ``Sim.'' = the part of that region inside the domain\n"
+            "(side 6 cm, corners within 37.5 cm $\\leq$ $R$, i.e. with a margin), shown magnified 2.2$\\times$ at each corner (Exp.$\\dagger$).",
             color=GRAY,
             fontsize=6,
             ha="left",
             va="bottom",
-            linespacing=1.6,
+            linespacing=1.55,
         )
         OUT_PNG.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(OUT_PNG, dpi=600, facecolor="white")
+        with plt.rc_context({"savefig.bbox": "standard"}):
+            fig.savefig(OUT_PNG, dpi=600, facecolor="white")
+            if occlusion_dir is not None:
+                from matplotlib.text import Text as _MplText  # noqa: PLC0415
+
+                for t in list(fig.findobj(_MplText)):
+                    try:
+                        t.remove()
+                    except (NotImplementedError, ValueError):
+                        t.set_visible(
+                            False
+                        )  # legend/colorbar 的 Text 只能隐去（不参与渲染）
+                occlusion_dir.mkdir(parents=True, exist_ok=True)
+                fig.savefig(
+                    occlusion_dir / f"{OUT_PNG.stem}_notext.png",
+                    dpi=600,
+                    facecolor="white",
+                )
         plt.close(fig)
     return OUT_PNG
 
@@ -562,7 +627,8 @@ def main() -> None:
     if "--export" in sys.argv:
         only = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--only=")]
         export_cases(only or [c for c, _ in CASES])
-    print("combined ->", compose_combined())
+    occ = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--occlusion-dir=")]
+    print("combined ->", compose_combined(occlusion_dir=Path(occ[0]) if occ else None))
 
 
 if __name__ == "__main__":
