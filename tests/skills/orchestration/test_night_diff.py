@@ -46,16 +46,18 @@ def test_first_sight_records_baseline_without_injecting(toml):
     toml(True)
     assert night.diff_message("s1") is None
     # 基线已记下 —— 此后真跳变才捕获
-    assert watch.load_state()["night_seen"]["s1"] == "on"
+    assert night.load_seen()["s1"] == "on"
 
 
 def test_no_change_is_zero_output_and_zero_write(toml):
     toml(True)
     night.diff_message("s1")
-    before = watch.WATCH_PATH.read_bytes()
+    before = night.NIGHT_SEEN_PATH.read_bytes()
     assert night.diff_message("s1") is None
     assert night.diff_message("s1") is None
-    assert watch.WATCH_PATH.read_bytes() == before, "无变化不得改写运行态（零打扰）"
+    assert night.NIGHT_SEEN_PATH.read_bytes() == before, (
+        "无变化不得改写运行态（零打扰）"
+    )
 
 
 def test_off_to_on_injects_policy_full_text(toml):
@@ -97,7 +99,7 @@ def test_session_start_records_baseline(toml, monkeypatch, capsys):
     assert (
         json.loads(out)["hookSpecificOutput"]["additionalContext"] == night.NIGHT_POLICY
     )
-    assert watch.load_state()["night_seen"]["s1"] == "on", (
+    assert night.load_seen()["s1"] == "on", (
         "SessionStart 必须落基线（旧行为：等首个 Stop 才记，期间拨动会被当基线吞掉）"
     )
 
@@ -114,7 +116,7 @@ def test_session_start_with_switch_off_records_off(toml, monkeypatch, capsys):
     """反向同理：起始 off 落基线 off → 此后拨 on 才会产出授权书全文。"""
     toml(False)
     _run_injection(settings.SETTINGS_PATH, "SessionStart", "s1", monkeypatch, capsys)
-    assert watch.load_state()["night_seen"]["s1"] == "off"
+    assert night.load_seen()["s1"] == "off"
     toml(True)
     assert night.diff_message("s1") == night.NIGHT_POLICY
 
@@ -128,7 +130,7 @@ def test_postcompact_does_not_rewrite_baseline(toml, monkeypatch, capsys):
         settings.SETTINGS_PATH, "PostCompact", "s1", monkeypatch, capsys
     )
     assert out == "", "off 时 PostCompact 零注入"
-    assert watch.load_state()["night_seen"]["s1"] == "on", (
+    assert night.load_seen()["s1"] == "on", (
         "PostCompact 不得重写基线（它一写，跳变就被盖掉）"
     )
     assert night.diff_message("s1") is None
@@ -142,7 +144,7 @@ def test_session_start_without_session_id_is_silent_noop(toml, monkeypatch, caps
     )
     assert night.main(["--settings", str(settings.SETTINGS_PATH)]) == 0
     capsys.readouterr()
-    assert not watch.load_state().get("night_seen"), "无会话身份不落基线"
+    assert not night.load_seen(), "无会话身份不落基线"
     monkeypatch.setattr(sys, "stdin", io.StringIO("{broken"))
     assert night.main(["--settings", str(settings.SETTINGS_PATH)]) == 0
     capsys.readouterr()
@@ -152,7 +154,7 @@ def test_cold_path_without_session_start_still_records_then_differs(toml):
     """冷路径不回归：没有 SessionStart 时，首个 ``--diff`` 仍只记基线不注入。"""
     toml(True)
     assert night.diff_message("cold") is None
-    assert watch.load_state()["night_seen"]["cold"] == "on"
+    assert night.load_seen()["cold"] == "on"
     toml(False)
     assert night.diff_message("cold") is None
 
@@ -181,7 +183,7 @@ def test_last_seen_is_per_session(toml):
     assert night.diff_message("s1") is None
     # s2 尚未比对过任何跳变 → 它也是关，但它的基线是 on → 同样出声（各算各的账）
     assert night.diff_message("s2") is None
-    seen = watch.load_state()["night_seen"]
+    seen = night.load_seen()
     assert seen["s1"] == "off" and seen["s2"] == "off"
 
     # 关键：一个会话的读数不得被另一会话的比对消费掉
@@ -193,23 +195,41 @@ def test_last_seen_is_per_session(toml):
 def test_missing_session_or_broken_state_never_raises(toml):
     toml(True)
     assert night.diff_message("") is None  # 无会话身份 → 不注入（绝不跨会话误报）
-    watch.WATCH_PATH.write_text("{ broken", encoding="utf-8")
+    night.NIGHT_SEEN_PATH.write_text("{ broken", encoding="utf-8")
     assert night.diff_message("s9") is None, "运行态损坏 → fail-open 零输出（当首次见）"
 
 
 # ---------------------------------------------------------------------------
-# ③ 上次读数须活过 watch.json 的整体覆写（arm 重建 dict；CARRY_KEYS 搬运）
+# ③ 上次读数独立成文件（backlog 20261017-133500）：watch rearm 整体覆写不波及
 # ---------------------------------------------------------------------------
 def test_seen_marker_survives_watch_rearm(toml, monkeypatch):
     toml(True)
     assert night.diff_message("s1") is None  # 记基线 on
     # 看门狗/下一回合的实际形态：arm() 以**新 dict** 整体覆写 watch.json
     watch.arm(timeout_s=5, heartbeat=False)
-    assert "night_seen" in watch.load_state(), "arm 覆写后读数必须仍在（CARRY_KEYS）"
+    assert night.load_seen().get("s1") == "on", "读数独立成文件，不得被 arm 覆写波及"
     toml(False)
     assert night.diff_message("s1") is None, (
         "覆写丢了账 → 会被当「首次见」而静默漏掉这次关→开/开→关"
     )
+
+
+def test_stale_watch_snapshot_writeback_cannot_rearm_injection(toml):
+    """两写者交错（backlog 20261017-133500）：持有者带旧快照整体覆写 watch.json，
+    不得把跳变记账盖回旧值——否则下一轮又判跳变、授权书重复注入。
+
+    旧形态在 watch.json 内共写，``CARRY_KEYS`` 只防「覆写丢键」；本用例让旧持有者把
+    **含旧 night_seen 的快照**写回（升级瞬间/并行旧进程的真实交错），断言不再重复触发。
+    """
+    toml(False)
+    assert night.diff_message("s1") is None  # 基线 off
+    stale = {"night_seen": {"s1": "off"}, "consumed": {}}  # 持有者手上的旧快照
+    toml(True)
+    assert night.diff_message("s1") == night.NIGHT_POLICY  # 关→开：注入并记 on
+    assert "night_seen" not in watch.load_state(), "夜航记账不得再写 watch.json"
+    watch.save_state(stale)  # 持有者整体写回旧快照（交错）
+    assert night.diff_message("s1") is None, "旧快照写回不得让跳变重复触发"
+    assert night.load_seen()["s1"] == "on"
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +245,19 @@ def test_cli_diff_prints_only_on_change(toml, capsys):
     assert capsys.readouterr().out == "", "开→关零注入（用户裁决 2026-10-17）"
     assert night.main(args) == 0
     assert capsys.readouterr().out == "", "无变化：零输出"
+
+
+def test_cli_off_to_on_injects_exactly_once(toml, capsys):
+    """criteria ②：「关→开」授权书全文恰好一次；同会话连续第二次 --diff 零输出。"""
+    args = ["--diff", "--session", "s1", "--settings", str(settings.SETTINGS_PATH)]
+    toml(False)
+    assert night.main(args) == 0
+    assert capsys.readouterr().out == "", "首次见：只记基线"
+    toml(True)
+    assert night.main(args) == 0
+    assert capsys.readouterr().out.strip() == night.NIGHT_POLICY
+    assert night.main(args) == 0
+    assert capsys.readouterr().out == "", "无变化：第二次必须零输出"
 
 
 def test_cli_diff_bad_settings_is_silent_exit0(tmp_path, capsys):

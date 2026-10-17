@@ -10,7 +10,7 @@
 **回合边界差分（热生效单 2026-10-15，用户裁决）**：仅 SessionStart/PostCompact 注入时，
 开关的**中途跳变**要等到下一次压缩才被看见——用户关掉夜航后，会话可能仍按授权书行事。
 故新增 ``--diff`` 口：watch-arm.sh（Stop 钩子）每回合边界调用本模块，与**本会话上次读数**
-（``watch.json`` 的 :data:`NIGHT_SEEN_KEY`）比对，**有跳变才**产出差分文本（关→开＝授权书
+（独立运行态 :data:`NIGHT_SEEN_PATH`）比对，**有跳变才**产出差分文本（关→开＝授权书
 全文；开→关＝**零注入**），由该钩子走既有的 rewake 通道（stderr + exit 2）在**下一轮**注入；
 无变化零输出、零打扰。开关**只归用户手动**：本模块不实现自拨回、不实现时限到期。
 
@@ -30,10 +30,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tomllib
 from pathlib import Path
 from typing import Any
+
+from pysci.paths import ORCH_STATE_ROOT
 
 from .settings import night_enabled
 
@@ -77,30 +80,51 @@ NIGHT_GATE_DENY: str = (
 #: 「关闭即失效」）、AskUserQuestion 拦截按开关每回合现读（OFF 自动放行）——行为面已随
 #: 开关恢复，无需文字告知。故该方向返回 ``None``（与「无变化」同路）。
 
-#: watch.json 里的**会话级上次读数**表（``{session_id: "on"|"off"}``）。
-#: 为什么寄存在 watch 面：① 差分由 watch-arm（Stop 钩子）触发，同一份文件当回合已被读写
-#: ——零新增 I/O 与零新增文件；② watch.json 是 gitignored 运行态，不污染跟踪面（本项目
-#: 对运行态文件的既有纪律）；③ 它跨 watch.json 的**整体覆写**由 ``watch.CARRY_KEYS`` 兜住。
-NIGHT_SEEN_KEY: str = "night_seen"
+#: **会话级上次读数**独立落点（``{session_id: "on"|"off"}``；gitignored 运行态）。
+#: 为什么不再寄存 watch.json（backlog 20261017-133500）：watch 持有者每次 ``arm()`` 都
+#: **整体覆写** watch.json——``CARRY_KEYS`` 只防「覆写丢键」，防不了「持旧快照写回」的
+#: 交错：跳变记账被旧快照盖掉 → 下一轮又判跳变 → 重复注入。独立文件把两个写者的共写面
+#: 彻底拆开（watch 侧不再读写本文件）。
+NIGHT_SEEN_PATH: Path = ORCH_STATE_ROOT / "night-seen.json"
 
 #: 上表条目上限（按插入序淘汰最旧）：防会话池长期演进后无界增长。
 NIGHT_SEEN_MAX: int = 64
 
 
-def _seen_write(session_id: str, value: str) -> None:
-    """记录该会话的上次读数（fail-open：写不动就算了，下次当「首次见」处理）。"""
+def _seen_load() -> dict[str, str]:
+    """读会话读数表；文件缺席/损坏 → ``{}``（fail-open：当作首次见）。"""
     try:
-        from . import watch as _watch  # 延迟导入：watch 链重，且避免模块级环
+        data = json.loads(NIGHT_SEEN_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items() if isinstance(v, str)}
 
-        st = _watch.load_state()
-        seen = st.get(NIGHT_SEEN_KEY)
-        seen = dict(seen) if isinstance(seen, dict) else {}
+
+def load_seen() -> dict[str, str]:
+    """会话读数表（``{session_id: "on"|"off"}``；诊断/测试读面）。"""
+    return _seen_load()
+
+
+def _seen_write(session_id: str, value: str) -> None:
+    """记录该会话的上次读数（fail-open：写不动就算了，下次当「首次见」处理）。
+
+    先读-改-写整表再 ``replace`` 原子落盘（同目录临时文件）：读者永不看到半截 JSON；
+    跨会话并发写同一文件的极端交错最多丢另一会话的基线（下次静默重记，不会误注）。
+    """
+    try:
+        seen = _seen_load()
         seen[session_id] = value
         if len(seen) > NIGHT_SEEN_MAX:
             for k in list(seen)[: len(seen) - NIGHT_SEEN_MAX]:
                 seen.pop(k, None)
-        st[NIGHT_SEEN_KEY] = seen
-        _watch.save_state(st)
+        NIGHT_SEEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = NIGHT_SEEN_PATH.with_name(f"{NIGHT_SEEN_PATH.name}.{os.getpid()}.tmp")
+        tmp.write_text(
+            json.dumps(seen, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        tmp.replace(NIGHT_SEEN_PATH)
     except Exception:  # noqa: BLE001 - 记账面绝不反噬（差分本身照常产出）
         pass
 
@@ -124,14 +148,7 @@ def diff_message(session_id: str, *, data: dict[str, Any] | None = None) -> str 
     except Exception:  # noqa: BLE001 - 读开关异常 → 零输出
         return None
     now = "on" if on else "off"
-    prior: Any = None
-    try:
-        from . import watch as _watch  # 延迟导入（同上）
-
-        seen = _watch.load_state().get(NIGHT_SEEN_KEY)
-        prior = dict(seen).get(sid) if isinstance(seen, dict) else None
-    except Exception:  # noqa: BLE001 - 读不出当首次见（不注入、不炸）
-        prior = None
+    prior = _seen_load().get(sid)
     if prior == now:
         return None
     _seen_write(sid, now)
