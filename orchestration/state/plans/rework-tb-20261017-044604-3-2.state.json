@@ -44,9 +44,12 @@
     },
     {
       "id": "B.b2_pre",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
-      "job_id": "sim-20261017-084639-rework-tb-20261017-044604-3-2-B.b2_pre"
+      "job_id": "sim-20261017-084639-rework-tb-20261017-044604-3-2-B.b2_pre",
+      "task_file": null,
+      "session_id": "2fa91313-9b25-4058-835b-53c7bb8e1b97",
+      "kind": "result"
     },
     {
       "id": "B.b2",

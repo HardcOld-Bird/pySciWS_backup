@@ -10,7 +10,8 @@
   - 半圆空气域（半径 R，直径边 = 超表面平面 y=0），8 周期 × 3 管槽凹入 y<0；
     半圆用 整圆 c1 减去下半矩形 rbot（Difference）得到，避免扇形角度朝向歧义；
   - Array：selection("input") + type=rectangular + fullsize=[Nper,1] + displ=[D,0]；
-  - 弧边：Plane Wave Radiation（散射场吸收）+ Exterior Field Calculation（远场）；其余边界
+  - 弧边：**完美匹配边界** PerfectlyMatchedBoundary（pmb1，散射场吸收，边界版 PML）
+    + Exterior Field Calculation（远场）；其余边界
     默认硬墙（= 刚性板 + 管槽壁）。**远场评估圆**：`efc1` 只定义外场变量（ExtName=pext），
     本身无「评估半径」属性；评估圆由导出侧显式给出——半径 `r_eval=10*lambda`（远大于域半径
     R=4λ，落在远场区，排除弧边界处的近场奇异性）、圆心 `(x0, 0)`（超表面几何中心），角度
@@ -277,14 +278,34 @@ def build(*, solve: bool = True, export: bool = True) -> None:
         )
         _safe(bpf2.selection().all)
 
-    pwrad = _create(ph, "pwrad1", "PlaneWaveRadiation")
-    if pwrad is not None:
-        _safe(pwrad.selection().named, "sel_arc")
-        print(
-            f"  pwrad1 sel bnds = {len(_safe(lambda: list(pwrad.selection().entities(1)), default=[]) or [])}"
+    # 弧边吸收：改用「完美匹配边界」PerfectlyMatchedBoundary（Pressure Acoustics 频域专有的
+    # 边界版 PML），取代原先的一阶吸收条件 PlaneWaveRadiation。
+    # 手册依据（Acoustics Module User's Guide，§Perfectly Matched Boundary / §PMLs）：
+    #   · "The Perfectly Matched Boundary is effectively a perfectly matched layer (PML) that is
+    #      applied to the open boundary without the need to define a domain"——以 extra dimension
+    #      机制自动施加 PML 坐标拉伸，「works with all types of waves, not only plane waves…
+    #      also efficient at very oblique angles of incidence」；
+    #   · Plane Wave Radiation 为一阶平面波吸收近似，对斜/掠入射吸收不完善，弧上残余反射会
+    #      污染外场计算（近平面情形即对照③最严重）；
+    #   · 几何：Attenuation direction=Radial（默认）+ Center coordinate r0=(x0,0)（辐射源中心，
+    #      与评估圆同心）；拉伸 Polynomial（默认）/ scaleFactor=1 / curvature γ=3 / numelem=8。
+    pmb = _create(ph, "pmb1", "PerfectlyMatchedBoundary")
+    if pmb is not None:
+        _safe(pmb.selection().named, "sel_arc")
+        _set(
+            pmb,
+            {
+                "directionType": "radial",
+                "r0": ["x0", "0", "0"],  # 3 分量矢量（2D 亦要求长度 3）
+                "stretchingType": "polynomial",
+                "scaleFactor_p": "1",
+                "gamma_p": "3",
+                "numelem_p": "8",
+                "TypicalWavelength": "Automatic",
+            },
         )
         print(
-            f"  pwrad1 props = {_safe(lambda: list(pwrad.properties()), default='?')}"
+            f"  pmb1 sel bnds = {len(_safe(lambda: list(pmb.selection().entities(1)), default=[]) or [])}"
         )
 
     efc = _create(ph, "efc1", "ExteriorFieldCalculation")

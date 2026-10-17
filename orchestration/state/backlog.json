@@ -3284,6 +3284,19 @@
       "note": "",
       "started_at": "2026-10-17T08:47:24+08:00",
       "worktree": "20261017-073416-devops"
+    },
+    {
+      "id": "20261017-090108-sim",
+      "member": "sim",
+      "summary": "success_criteria: 下列两条各自可机械核验通过。",
+      "kind": "usability",
+      "success_criteria": "下列两条各自可机械核验通过。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-090108-sim.md",
+      "status": "in_progress",
+      "proposed": "2026-10-17T09:02:49+08:00",
+      "note": "",
+      "started_at": "2026-10-17T09:02:52+08:00",
+      "worktree": "20261017-090108-sim"
     }
   ]
 }

@@ -26,3 +26,18 @@
   `h1e`/`h3e` 控制（抹平用 `lambda/200`）。改对照前先 `inspect params` 核名。
 - 近增益极点（`ci=−0.073` vs 极点 ≈−0.074）响应由谐振模主导：**主瓣方向网格/半径稳定，
   幅值对网格不收敛**（λ/15→145、λ/25→53、λ/40→36）。
+
+### 吸收边界与「误用 PML」批语的核实（2026-10-17）
+- 该模型**没有 PML**（物理特征实测：`fpam1/shb1/init1/dcont1/bpf1/bpf2/pwrad1/efc1`）；
+  弧边散射吸收原为 `PlaneWaveRadiation`。收到「误用 PML」类批语时**先 dump 特征清单再回应**。
+- **完美匹配边界** `PerfectlyMatchedBoundary`（Pressure Acoustics 频域专有，边界版 PML，
+  手册 §Perfectly Matched Boundary）实测：与 `PlaneWaveRadiation` 同解对照，**主瓣角逐项不变、
+  幅值差 ≤10%** ⇒ 本模型弧上残余反射不是远场偏差成因。属性：`directionType`(radial|normal|custom)、
+  `r0`（**2D 也要求 3 分量** `["x0","0","0"]`）、`stretchingType`、`scaleFactor_p`、`gamma_p`、
+  `numelem_p`（polynomial 默认 8）、`TypicalWavelength`。
+- **黄金自检（平刚性面判据）**：`h1e=h3e=h2=lambda/200`、`ci=0` → 纯刚性面 ⇒ 远场必为
+  镜面瓣 **L 43° / R 137°**（实测 v90 仅 0.12 = −20 dB）。任何远场异常先用它排除链路问题。
+- 对照③（仅管槽 2）主瓣随增益漂移：`ci=−0.03/−0.05` → **136°/43°**（逆反射通道）；
+  `ci=−0.06` → 75°；`ci=−0.073`（交付值）→ **97°/83°**（近阈值谐振模主导）。改工作点即改物理。
+- 「第二组镜面对称」实测：主瓣镜像成立（136↔137），但弱瓣不镜像 —— 单胞管槽位置
+  {0, .503D, .688D} 镜像后 {.773D, .382D, .159D} ≠ 原集 ⇒ 单胞非镜像对称，L/R 非镜像等价。
