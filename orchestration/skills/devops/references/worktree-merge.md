@@ -35,8 +35,8 @@ PYTHONPATH="$WT/src" uv run --no-sync pytest "$WT/tests" -x -q
 ## 2. 合并前交集检查（backlog 20261012-082932-devops）
 
 任务书里的「若 main 工作区存在**会被本次合并触碰的**未提交改动 → `<blocked>`」需要一把
-可执行的尺子。`pysci-dev worktree merge` 已内建：**先于任何写操作**求交，非空即列文件、
-rc=2，不 cp、不 merge。
+可执行的尺子。`pysci-dev worktree merge` 已内建：**先于任何写操作**求交；交集非空时**缺省
+自动搁置**（`git stash`）→ 合并 → 三路应回，`--no-shelve` 才 rc=2。细则见 `dispatch-playbook.md`。
 
 ### 判据：merge-base 起算，不是 `main..HEAD`
 
@@ -47,17 +47,17 @@ git -c core.quotepath=false status --porcelain    # main 工作区未提交面�
 ```
 
 `git diff --name-only main..HEAD` **不可用作交集**：两点 diff 是「main 尖端 vs 分支尖端」，
-分支落后 main 时把**别人新提交的文件**也算成本次改动 → 假阳性交集（实测据此交出过错误的
-`<blocked>`，白耗一轮；merge-base / 两点 / merge-tree 三点评测以可执行输出裁决）。
+分支落后 main 时把**别人新提交的文件**也算成本次改动 → 假阳性交集（实测据此交过错误的
+`<blocked>`；以可执行输出裁决）。
 
 ### 工具行为边界
 
-- **未跟踪目录**脏项（porcelain 里以 `/` 结尾）按前缀命中其下的提交文件——那种合并 git 本身
-  也会以 "untracked working tree files would be overwritten" 拒绝，工具先把清单摊开；
+- **未跟踪目录**脏项（porcelain 里以 `/` 结尾）按前缀命中其下的提交文件（那种合并 git 本身
+  也会以 "untracked working tree files would be overwritten" 拒绝，工具先把清单摊开）；
 - 重命名取**新**路径（被覆盖的是新路径上的工作）；非 `XY path` 形态的行跳过——宁可漏报也
   不把无关输出算成冲突；
 - `merge-base`/`diff` 失败（rc≠0）→ **fail-open 跳过检查**并打印告警：算不出就堵死一切合并，
-  等于把一个 usability 缺陷换成另一种误报，且 `git merge` 自身仍是最后一道拒覆盖的闸；
+  等于把 usability 缺陷换成另一种误报；
 - 检查排在 `_cp_ignored_state` 与会话数校验**之前**：被挡下时 main 一个字节都没被动过，
   所以中止是零成本的，组长清理后重跑即可。
 
@@ -69,12 +69,12 @@ git -c core.quotepath=false status --porcelain    # main 工作区未提交面�
 锁不是数据而是「谁在跑」的活体读数，把他树锁 cp 进 main，`orch status` 就误报 worker 在跑、
 真在跑的 drain 反被这把假锁挡住（实测两次合并各拖进一把 `inspector.lock`）。锁的现场性归判活面。
 
-### 被挡下之后：交集类 blocked 的交付形状（backlog 20261013-102152-devops）
+### 仍 rc=2 时：`<blocked tags="merge_dirty_face">` 的形状（backlog 20261013-102152-devops）
 
-rc=2 时**别重测重合并地「试试」**：成因在 main 的脏面，再跳改变不了它（实测三连跳树哈希相同）。
-按 `<blocked tags="merge_dirty_face">` 交付并**原样贴** `[✗] 交集 N 项` 行与其后的清单 → drain 把进度
-打成 `wip(salvage)` 提交、保住面与分支，然后**停链**（不立续作单），清单挂回原条目与 `orch status`
-等组长清面后手动合并。判定细则见 orchestration 技能 `tier-a-tags.md`。
+`--no-shelve` 或自动搁置失败时才 rc=2。**别重测重合并地「试试」**：成因在 main 的脏面，再跳
+改变不了它（实测三连跳树哈希相同）。按该 tag 交付并**原样贴** `[✗] 交集 N 项` 行与其后清单 →
+drain 打成 `wip(salvage)`、保住面与分支、**停链**（不立续作单），清单挂回原条目等组长清面后
+手动合并。细则见 orchestration 技能 `tier-a-tags.md`。
 
 ## 3. worktree 命名与孤儿回收
 
