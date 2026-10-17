@@ -690,8 +690,16 @@ def _cloud_generate(
         tokens += int(resp.usage.get("total_tokens") or 0)
         for w in got:
             # 产物内嵌 prompt/model 元数据（PNG tEXt），脱离账本也可溯源
+            # 键集与 ingest/adjust 对齐：都含 pysci:backend（cli.md 的 provenance 段据此
+            # 才对每一路产物都成立；kind 是云端出图额外的来源位）。
             _ledger.embed_metadata(
-                w, {"prompt": args.prompt, "model": resp.model, "kind": kind}
+                w,
+                {
+                    "prompt": args.prompt,
+                    "model": resp.model,
+                    "kind": kind,
+                    "backend": "ark",
+                },
             )
             _ledger.record(
                 prompt=args.prompt,
