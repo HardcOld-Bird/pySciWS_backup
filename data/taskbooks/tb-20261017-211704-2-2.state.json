@@ -2,7 +2,7 @@
   "id": "tb-20261017-211704-2-2",
   "ts": "2026-10-17T21:17:04+08:00",
   "title": "2 实验平台简介撰写（返工第 2 轮）",
-  "status": "active",
+  "status": "delivered",
   "source": "mirror-tui",
   "priority": "low",
   "improve": {
@@ -15,5 +15,5 @@
   "rework_round": 2,
   "plan_id": "rework-tb-20261017-211704-2-2",
   "rejections": [],
-  "updated": "2026-10-17T21:17:36+08:00"
+  "updated": "2026-10-17T22:37:13+08:00"
 }
