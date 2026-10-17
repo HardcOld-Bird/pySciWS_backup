@@ -3304,11 +3304,14 @@
       "kind": "usability",
       "success_criteria": "下列两条各自可机械核验通过。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-090108-sim.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T09:02:49+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 0c061b0）",
       "started_at": "2026-10-17T09:02:52+08:00",
-      "worktree": "20261017-090108-sim"
+      "worktree": "20261017-090108-sim",
+      "done_at": "2026-10-17T11:19:50+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-090108-sim"
     },
     {
       "id": "20261017-101130-writing",
@@ -3427,6 +3430,18 @@
       "source": "leader",
       "started_at": "2026-10-17T10:53:39+08:00",
       "worktree": "20261017-110200-devops"
+    },
+    {
+      "id": "20261017-111500-devops",
+      "member": "devops",
+      "summary": "fingerprint: needs-leader-stale-merge-noise-20261017",
+      "kind": "usability",
+      "success_criteria": "- NEEDS-LEADER「已提交未合并」事件在**呈现/消费时**做旁证细分：分支已并入 main（或\nworktree 已摘）→ 标「已合并陈旧报」不呈报为待办（status 可留注记）；确未合并才照旧\n唤醒；\n- 回归测试：构造「事件在途期间合并完成」断言消费时不再提示授权；构造「确未合并」\n断言照常呈报；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-111500-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-17T11:21:52+08:00",
+      "note": "",
+      "source": "leader"
     }
   ]
 }
