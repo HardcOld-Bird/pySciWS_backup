@@ -1926,7 +1926,7 @@ def cmd_plan_rework(args) -> int:
             "self（组长）" if leaf.kind == KIND_SELF else "?"
         )
         if leaf.yaml.get("member_placeholder"):  # backlog 20261015-235101-devops
-            who += "（占位，按 §5 分工于拆解环节改派）"
+            who += "（占位，按 §5 分工于拆解环节用 plan reassign 改派）"
         gate = (
             f"  [gate:{leaf.yaml['gate_jury']}]" if leaf.yaml.get("gate_jury") else ""
         )
@@ -2002,6 +2002,173 @@ def cmd_plan_edit(args) -> int:
     print(f"    brief = {str(leaf.get('brief') or '')[:80]}")
     print(f"    dirs  = {leaf.get('dirs') or '（未声明）'}")
     print(f"[NEXT] 核对：pysci-orch plan list / plan advance {plan_id}")
+    return 0
+
+
+def _children_items(plan: dict, parent_path: str) -> list | None:
+    """按点路径取父节点的子列表（``""`` → 顶层 ``steps``）；路径不可解析回 ``None``。"""
+    items: Any = plan.get("steps")
+    if not parent_path:
+        return items if isinstance(items, list) else None
+    for seg in parent_path.split("."):
+        if not isinstance(items, list):
+            return None
+        node = next(
+            (it for it in items if isinstance(it, dict) and str(it.get("id")) == seg),
+            None,
+        )
+        if node is None:
+            return None
+        items = node.get("children")
+    return items if isinstance(items, list) else None
+
+
+def _item_index(items: list, name: str) -> int:
+    for i, it in enumerate(items):
+        if isinstance(it, dict) and str(it.get("id")) == name:
+            return i
+    return -1
+
+
+def _commit_plan_edit(plan_id: str, plan: dict, old: dict, action: str) -> int:
+    """reassign/split 共用收尾：模板必留节点 lint → started 冻结 → 写 YAML → 对账落状态。"""
+    tpl = template_violations(plan)
+    if tpl:
+        print(f"[!] {action} 被拒：rework 模板必留节点不完整（PSEP_3 §4.3 #1）——")
+        for v in tpl:
+            print(f"  - {v}")
+        return 2
+    violations = freeze_violations(
+        {str(s["id"]): str(s.get("status") or "pending") for s in old.get("steps", [])},
+        _tree(plan).leaf_paths(),
+    )
+    if violations:
+        print(f"[!] {action} 被拒：已 started 的 superstep 结构冻结（PSEP_3 §2.4）——")
+        for v in violations:
+            print(f"  - {v}")
+        return 2
+    _plan_path(plan_id).write_text(_dump_plan(plan), encoding="utf-8")
+    _save_state(plan_id, _reconcile(plan, old))
+    return 0
+
+
+def _refuse_if_started(old: dict, sid: str, action: str) -> bool:
+    """已 started 叶子拒绝 reassign/split（结构冻结只拦删/挪，改派与插叶须自查）。"""
+    status = _status_of(old)(sid)
+    if status not in STARTED_STATES:
+        return False
+    print(
+        f"[!] {action} 被拒：环节 {sid} 已 {status}（已派发/已 started 冻结，"
+        "PSEP_3 §2.4）"
+    )
+    return True
+
+
+def cmd_plan_reassign(args) -> int:
+    """把**未派发**叶子改派给另一成员（``member_placeholder`` 的正规出口）。
+
+    为什么需要它（backlog 20261017-104504）：返工模板把 b2 置为
+    ``member: devops + member_placeholder: true``（语义是「按 §5 分工于拆解环节改派」），
+    但改派此前只能手编 plan YAML 再 advance——缩进/字段名写错要到 advance 才报。改派不动
+    结构，故照走 amend 的两道护栏；已 started 的叶子直接拒绝（防账实脱节）。
+    """
+    plan_id = args.id
+    if not _plan_path(plan_id).exists():
+        print(f"[!] 计划不存在：{plan_id}")
+        return 2
+    plan = _load_yaml(plan_id)
+    sid = str(args.step or "")
+    leaves = _leaf_map(plan)
+    if sid not in leaves:
+        hint = "、".join(list(leaves)[:8]) or "（无叶子）"
+        print(f"[!] 计划 {plan_id} 无环节 {sid}；可用环节：{hint}")
+        return 2
+    member = str(args.member or "").strip()
+    if not member:
+        print("[!] --member 不能为空")
+        return 2
+    leaf = leaves[sid]
+    if str(leaf.get("kind") or "") == KIND_SELF:
+        print(f"[!] 环节 {sid} 是 kind:self（组长自办），无成员可改派")
+        return 2
+    old = _load_state(plan_id)
+    if _refuse_if_started(old, sid, "reassign"):
+        return 2
+    prev = str(leaf.get("member") or "")
+    leaf["member"] = member
+    had_placeholder = bool(leaf.pop("member_placeholder", False))
+    rc = _commit_plan_edit(plan_id, plan, old, "reassign")
+    if rc:
+        return rc
+    tail = "（占位符已清）" if had_placeholder else ""
+    print(f"[√] 环节 {sid} 成员：{prev or '（未声明）'} → {member}{tail}")
+    print(f"[NEXT] 核对进度：pysci-orch plan advance {plan_id}")
+    return 0
+
+
+def cmd_plan_split(args) -> int:
+    """把**未派发**叶子拆成两叶（新叶插在目标叶之前/之后）——插叶不再手编 YAML。
+
+    backlog 20261017-104504 实案：tb-3-2 把 b2 拆成 b2_pre(sim) + b2(figure)。新 id 缺省
+    ``<leaf>_pre``／``<leaf>_post``（``--new-id`` 覆盖）；原叶保持 id/成员/描述不变，故
+    模板必留节点与 started 冻结照常执行——必留叶子删除/乱序仍被拒，已 started 原叶直接
+    拒绝（避免把新叶插进已推进的串行链中段）。
+    """
+    plan_id = args.id
+    if not _plan_path(plan_id).exists():
+        print(f"[!] 计划不存在：{plan_id}")
+        return 2
+    plan = _load_yaml(plan_id)
+    sid = str(args.step or "")
+    leaves = _leaf_map(plan)
+    if sid not in leaves:
+        hint = "、".join(list(leaves)[:8]) or "（无叶子）"
+        print(f"[!] 计划 {plan_id} 无环节 {sid}；可用环节：{hint}")
+        return 2
+    member = str(args.member or "").strip()
+    brief = str(args.brief or "").strip()
+    if not member or not brief:
+        print("[!] split 须给 --member 与 --brief（新叶的成员与描述）")
+        return 2
+    side = "before" if getattr(args, "before", False) else "after"
+    leaf_name = sid.rsplit(".", 1)[-1]
+    new_id = str(
+        getattr(args, "new_id", "")
+        or f"{leaf_name}_{'pre' if side == 'before' else 'post'}"
+    )
+    if not new_id.strip() or "." in new_id:
+        print(f"[!] 非法新叶 id：{new_id!r}（不能为空、不能含「.」）")
+        return 2
+    parent = sid.rsplit(".", 1)[0] if "." in sid else ""
+    items = _children_items(plan, parent)
+    if items is None:
+        print(f"[!] 未找到环节 {sid} 的父列表（计划结构异常）")
+        return 2
+    idx = _item_index(items, sid.rsplit(".", 1)[-1])
+    if idx < 0:
+        print(f"[!] 未找到环节 {sid}（计划结构异常）")
+        return 2
+    if _item_index(items, new_id) >= 0:
+        print(f"[!] 同组已存在环节 {new_id}（用 --new-id 换名）")
+        return 2
+    old = _load_state(plan_id)
+    if _refuse_if_started(old, sid, "split"):
+        return 2
+    items.insert(
+        idx if side == "before" else idx + 1,
+        {
+            "id": new_id,
+            "member": member,
+            "brief": brief,
+        },
+    )
+    rc = _commit_plan_edit(plan_id, plan, old, "split")
+    if rc:
+        return rc
+    pos = "之前" if side == "before" else "之后"
+    print(f"[√] 环节 {sid} 已拆叶：{new_id}（{member}）插在其{pos}")
+    print(f"    新叶描述：{brief[:80]}")
+    print(f"[NEXT] 核对进度：pysci-orch plan advance {plan_id}")
     return 0
 
 

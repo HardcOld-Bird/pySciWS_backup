@@ -927,6 +927,8 @@ def _plan_router(action: str):
         "advance": _plans.cmd_plan_advance,
         "amend": _plans.cmd_plan_amend,
         "edit": _plans.cmd_plan_edit,
+        "reassign": _plans.cmd_plan_reassign,
+        "split": _plans.cmd_plan_split,
         "rework": _plans.cmd_plan_rework,
         "drop": _plans.cmd_plan_drop,
         "list": _plans.cmd_plan_list,
@@ -1093,6 +1095,31 @@ def main(argv: list[str] | None = None) -> int:
     )
     q.add_argument("--dirs", default=None, help="替换该环节白名单（逗号分隔）")
     q.set_defaults(func=_plan_router("edit"))
+
+    q = psub.add_parser(
+        "reassign",
+        help="改派未派发环节的成员（member_placeholder 的正规出口；自动对账）",
+    )
+    q.add_argument("id")
+    q.add_argument("--step", required=True, help="环节 id（叶子点路径，如 a1 或 A.a1）")
+    q.add_argument("--member", required=True, help="新成员 id（如 writing / figure）")
+    q.set_defaults(func=_plan_router("reassign"))
+
+    q = psub.add_parser(
+        "split",
+        help="把未派发叶子拆成两叶（--before/--after 定位置；原叶不变，自动对账）",
+    )
+    q.add_argument("id")
+    q.add_argument("--step", required=True, help="环节 id（叶子点路径）")
+    g = q.add_mutually_exclusive_group(required=True)
+    g.add_argument("--before", action="store_true", help="新叶插在原叶之前")
+    g.add_argument("--after", action="store_true", help="新叶插在原叶之后")
+    q.add_argument("--member", required=True, help="新叶的成员 id")
+    q.add_argument("--brief", required=True, help="新叶任务描述")
+    q.add_argument(
+        "--new-id", default="", help="新叶 id（默认 <leaf>_pre / <leaf>_post）"
+    )
+    q.set_defaults(func=_plan_router("split"))
 
     q = psub.add_parser(
         "rework", help="由返工任务书生成三档模板骨架并登记（PSEP_3 §4.2）"
