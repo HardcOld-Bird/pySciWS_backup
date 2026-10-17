@@ -43,6 +43,7 @@ from textual.widgets import (
 from textual.widgets.selection_list import Selection
 
 from .. import mirror
+from . import log as _tlog
 from . import watermark
 from .modules import Module, modules  # re-export：m1 的 `app.modules()` 仍在
 from .theme import (
@@ -268,7 +269,31 @@ class _RowMarkedList(ScrollMarkMixin, RowListView):
 _TB_CLICK_TOGGLE_DELAY = 0.35
 
 
+def _detail_fingerprint(mod_key: str, blocks: list[dict]) -> tuple:
+    """详情卡栈的**内容指纹**：未变则跳过整栈重建（backlog 20261017-120500）。
+
+    每秒 tick / 重复进同一视图时多数无变化——旧实现每次 ``remove_children()`` → ``mount()``，
+    卸载与重挂之间 parent=None，恰逢点击即触发 textual ``_forward_event`` 的 ``container.region``
+    崩溃。指纹把重建立即从「每次」降到「变时」。
+    """
+    return (
+        mod_key,
+        tuple(
+            (
+                str(b.get("kind") or ""),
+                str(b.get("id") or ""),
+                str(b.get("text") or ""),
+                tuple(str(x) for x in (b.get("lines") or [])),
+            )
+            for b in blocks
+        ),
+    )
+
+
 class PysciTUI(App):
+    #: 详情卡栈的上次内容指纹（未变则跳过整栈重建，backlog 20261017-120500）。
+    _detail_fp: tuple = ()
+
     """`pysci` 交互式控制台（主菜单 ↔ 详情 ↔ 口述）；可无头测试（tests 的 Pilot 用例）。"""
 
     TITLE = "pysci 控制台"
@@ -687,7 +712,18 @@ class PysciTUI(App):
             )
         return rows
 
+    async def _handle_exception(self, error: Exception) -> None:
+        """异常免疫（backlog 20261017-120500）：先落日志，**不退出**。
+
+        textual 默认经 ``_fatal_error`` 直接退出——低概率×整夜长跑下的事件竞态必然命中，
+        退出即丢失整场会话。这里记录完整 traceback（``data/logs/tui-*.log``）后继续运行；
+        真缺陷仍可从日志对盘。
+        """
+        _tlog.log_exception(error, where="event")
+        return None
+
     def on_mount(self) -> None:
+        _tlog.log("TUI 启动")
         # 除主菜单外一律先藏（含 s5/s6 新视图）——否则隐藏面板照样占布局（§2.2 首帧）。
         self._hide_all_views()
         self.query_one("#menu", ListView).display = True
@@ -1127,6 +1163,11 @@ class PysciTUI(App):
 
     async def _render_detail_cards(self, mod: Module, blocks: list[dict]) -> None:
         """卡片栈渲染（卡=``card()``、分区=``section_title()``）＋同步文本面 ``detail_body``。"""
+        fp = _detail_fingerprint(mod.key, blocks)
+        if fp == self._detail_fp:
+            _tlog.log("[skip] detail rebuild unchanged")
+            return
+        self._detail_fp = fp
         box = self.query_one("#detail-cards", Vertical)
         await box.remove_children()
         widgets: list[Widget] = []
