@@ -1285,6 +1285,16 @@ def cmd_plan_advance(args) -> int:
     return 0
 
 
+def _last_result(plan_id: str, step: dict, sy: dict) -> dict:
+    """该环节上次收尾的队列结果面（``item.result``；读不到 → ``{}``，fail-open）。"""
+    try:
+        member = str(sy.get("member") or step.get("member") or "")
+        item = _queue_item_for_step(plan_id, str(step.get("id") or ""), member)
+        return dict((item or {}).get("result") or {})
+    except Exception:  # noqa: BLE001 - 读数面 fail-open
+        return {}
+
+
 def _capacity_returned(plan_id: str, step: dict, sy: dict) -> bool:
     """该环节上次交回是否属 **capacity/余量耗尽**（backlog adhoc-guidance-fixes ③）。
 
@@ -1293,32 +1303,34 @@ def _capacity_returned(plan_id: str, step: dict, sy: dict) -> bool:
     余量已尽，而 [NEXT] 原先写「续作自动复用本环节会话」——照做就派进死会话（实案
     2026-10-15 `adhoc-20261015-154311` 首跳），与 SKILL.md「续作必须 `--session new`」打架。
     """
-    try:
-        member = str(sy.get("member") or step.get("member") or "")
-        item = _queue_item_for_step(plan_id, str(step.get("id") or ""), member)
-        result = (item or {}).get("result") or {}
-        tags = {str(t).lower() for t in (result.get("tags") or [])}
-        if tags & {"capacity", "model_capability"}:
-            return True
-        body = str(result.get("body") or "") + str(result.get("error") or "")
-    except Exception:  # noqa: BLE001 - 读数面 fail-open（判不出就按普通 blocked 提示）
-        return False
+    result = _last_result(plan_id, step, sy)
+    tags = {str(t).lower() for t in (result.get("tags") or [])}
+    if tags & {"capacity", "model_capability"}:
+        return True
+    body = str(result.get("body") or "") + str(result.get("error") or "")
     return any(w in body for w in ("余量", "capacity", "配额", "quota"))
 
 
 def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
     sid8 = (step.get("session_id") or "")[:8]
-    exhausted = _capacity_returned(plan_id, step, sy)
+    result = _last_result(plan_id, step, sy)
+    run_failed = str(result.get("kind") or "") == "run_failed"
+    capacity = _capacity_returned(plan_id, step, sy)
+    exhausted = capacity or run_failed
     print()
     print("[NEXT] 可选：")
     if exhausted:
+        if run_failed and not capacity:
+            head = "**上次为 run_failed（基础设施终止）→ 建议 `--session new`**"
+        else:
+            head = "**本环节会话余量已尽 → 建议 `--session new`**"
         print(
-            "  1) 补充信息续作本环节（**本环节会话余量已尽 → 必须换新会话**）："
+            f"  1) 补充信息续作本环节（{head}）："
             f'uv run --no-sync pysci-orch plan advance {plan_id} --session new --text "<补充>"'
         )
         print(
-            "     原因：capacity/余量交回时原会话已耗尽，续作进它＝派进死会话"
-            "（SKILL.md 派发要领「续作必须 --session new」）。"
+            "     原因：run_failed/余量耗尽后原会话不可复用（自动复用大概率再撞墙），"
+            "续作进它＝派进死会话（SKILL.md 派发要领「续作必须 --session new」）。"
         )
     else:
         print(
@@ -1332,7 +1344,13 @@ def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
     if sid8 and not exhausted:
         print(f"  （本环节会话 {sid8}，续作自动复用）")
     elif exhausted:
-        print("  （本环节会话余量已尽，**不复用**——见 1) 的 `--session new`）")
+        print("  （本环节会话**不复用**——见 1) 的 `--session new`）")
+    if run_failed:
+        print(
+            "  [run_failed 恢复] 先盘点半成品再决定续作/重做：读产物目录、交付说明、管线脚本的"
+            "在盘情况——完整→续作只核对与正式交付、不重做；缺失→整单重做"
+            "（见 dispatch-playbook「run_failed 恢复清单」）。"
+        )
 
 
 def _report_handoff(
