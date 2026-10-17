@@ -670,14 +670,15 @@ def cmd_convert(args: argparse.Namespace) -> int:
         print(f"[convert] 文件不存在：{src}", file=sys.stderr)
         return 2
     try:
-        out = office_convert.convert(src, args.to, out_dir=args.out_dir)
+        out, backend = office_convert.convert_ex(src, args.to, out_dir=args.out_dir)
     except office_convert.LibreOfficeNotInstalled as e:
         print(e, file=sys.stderr)
         return 3
     except Exception as e:
         print(f"[convert] 失败：{type(e).__name__}: {e}", file=sys.stderr)
         return 1
-    print(f"[convert] {src.name} → {out}")
+    # 注明所用后端：wpscli＝用户所见（WPS/MS Office 口径）；libreoffice＝兜底（backlog 105200）
+    print(f"[convert] {src.name} → {out}（后端 {backend}）")
     if args.to == "pdf" and args.verify:
         pngs = pdf_render.render_pdf_pages(out, dpi=args.dpi)
         print(f"[convert] 已渲染 {len(pngs)} 页 PNG（用 Read 查看）：")

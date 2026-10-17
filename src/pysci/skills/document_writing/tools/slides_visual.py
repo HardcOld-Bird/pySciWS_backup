@@ -126,7 +126,8 @@ def render_pptx_pages(
     slide_count = len(pptx_io.read_pptx(src))
     out = Path(out_dir) if out_dir else default_render_dir(src)
     out.mkdir(parents=True, exist_ok=True)
-    pdf = office_convert.convert(src, "pdf", out_dir=out)
+    pdf, _backend = office_convert.convert_ex(src, "pdf", out_dir=out)
+    print(f"[slides render] PDF 后端：{_backend}")
     pngs = pdf_render.render_pdf_pages(pdf, out_dir=out, dpi=dpi, prefix=PAGE_PREFIX)
     return RenderResult(
         pptx=src, pdf=pdf, out_dir=out, pngs=pngs, slide_count=slide_count
