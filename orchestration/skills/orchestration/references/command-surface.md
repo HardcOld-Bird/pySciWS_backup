@@ -23,6 +23,8 @@ pysci-orch events drain | events list  # 统一事件流：排空（幂等）/�
 pysci-orch plan amend <id>               # 编辑 plan YAML 后校验对账
 pysci-orch plan edit <id> --step S (--brief|--append-brief|--dirs)  # 结构化改环节字段
 #   └ **改环节别手编 YAML**（`plan new` 重排折行，old_string 对不上）：说「改什么」即可
+pysci-orch plan reassign <id> --step <leaf> --member <id>  # 未派发环节改派（占位符走此路）
+pysci-orch plan split <id> --step <leaf> (--before|--after) --member <id> --brief T  # 拆叶
 pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步：**同步阻塞到完成**
 #   └ 内部走阻塞推进原语（等在途收尾）⇒ **与 `plan advance` 的「入队即返回」相反**；
 #     长任务**必须后台**（run_in_background），否则撞 Bash 超时（backlog 20261015-211200）
@@ -47,11 +49,11 @@ pysci-orch wake-claim [status] [--force [--session-id id]]
         # 唤醒权读数；归属由钩子按 session_id 自动完成（README §4.5）
 pysci-orch reject <建议id> --override "<判决依据>"   # 否决：依据必填（J/M 判决的驳回不计）
 pysci-orch deputy consult "<问题>"               # 咨询副组长（平级：异议义务已注入）
-pysci-orch twin consult <案卷.md>  # 咨询 twin（rc=2 分型：未启用 / 冷启动须 --session new）
+pysci-orch twin consult <案卷.md>  # 咨询 twin（未启用 / 冷启动须 --session new）
 pysci-orch review <产物> --origin <member> [--rubric generic]
         [--goal-from <原生产任务书> | --goal "<目标陈述>"]  # --goal* 供 G2 独立核验
         # 审查链：VERDICT → FAIL 回派返工 → 复审 → 二次 FAIL 仲裁
-pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（双序对局；不可达入队 rc=1）
+pysci-orch jury <案卷.md> [--dry|--timeout S]  # Tier C 仲裁团（双序对局）
 #   └ 案卷骨架五段：`## 问题`/`## 选项 A`/`## 选项 B`/`## 证据`/`## 送审结论`（twin 同构前三段）
 pysci-orch bench eval (--case <id>|--all) [--label L]  # Tier B **抽检面**（runner=leader）
 pysci-orch bench baseline [--label L] [--runner leader|bencher]  # 回填 baseline.json（不指定=混合，慎）
@@ -78,15 +80,14 @@ pysci-orch sessions <member> [--all|--archive <sid> [--distill]|--prune <sid>]
 pysci-orch ledger [--member --days --stats] | sync [--check]
 ```
 
-成员 id：sim figure writing theory lit drawing model3d（专职）；deputy reviewer devops
-bencher twin inspector（特殊）。就绪 pod 以 `orch status` 为准。
+成员 id：sim figure writing theory lit drawing model3d；deputy reviewer devops
+bencher twin inspector。就绪 pod 以 `orch status` 为准。
 
-> 内部命令（`_watchdog-loop` 等 5 个）由钩子/派生进程调用，**不进 `orch -h`**。
+> 内部命令（`_` 前缀）由钩子调用，**不进 `orch -h`**。
 
 **队列成员**（三路径可直派）＝ 7 专职 + deputy + reviewer + **devops**；非成员三闸均拒。
 **devops 双通道**（直派／组包同队列）；bencher/inspector 专队列，**不经** `queues enqueue`。细则 `dispatch-playbook.md`。
 
 用户控制台 `pysci`：裸跑进 TUI；`pysci status|journal|decisions`＝LLM 静态通道。
 
-**四态审批**：`approve` 必带 `--jury`/`--bench`/`--override` 之一；例外=缺陷×当跳 blocked
-（判决包结构 `verdict-package.md`）。
+**四态审批**：必带其一；例外=缺陷×当跳 blocked（`verdict-package.md`）。
