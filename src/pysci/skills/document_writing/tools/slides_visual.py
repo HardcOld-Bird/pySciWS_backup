@@ -589,7 +589,12 @@ def _title_shape(slide: Any) -> Any | None:
 
 
 def _title_fmt(shape: Any) -> tuple:
-    """标题的**格式指纹**：``(cx,cy,x,y, 字号元组, 字体名元组)``（W2 跨页一致性比对的原子）。"""
+    """标题的**格式指纹**：``(cx,cy,x,y, {(字号,字体)…})``（W2 跨页一致性比对的原子）。
+
+    字号/字体取 **set 去重**（backlog 20261017-101130）：同一格式被拆成多个 run（如
+    「·」+「pySci·」、两 run 的 rPr 逐字相同）时**不得因 run 数不同**判不一致——视觉等价
+    即一致；只有格式集合本身不同（如混排字号）才算差异。
+    """
     el = getattr(shape, "_element", None)
     w = h = x = y = None
     if el is not None:
@@ -601,21 +606,19 @@ def _title_fmt(shape: Any) -> tuple:
                 w, h = ext.get("cx"), ext.get("cy")
             if off is not None:
                 x, y = off.get("x"), off.get("y")
-    sizes: list[float | None] = []
-    fonts: list[str | None] = []
+    styles: set[tuple[float | None, str | None]] = set()
     try:
         for para in shape.text_frame.paragraphs:
             for run in para.runs:
-                sizes.append(run.font.size.pt if run.font.size else None)
-                fonts.append(run.font.name)
+                styles.add((run.font.size.pt if run.font.size else None, run.font.name))
     except Exception:  # noqa: BLE001
         pass
-    return (w, h, x, y, tuple(sizes), tuple(fonts))
+    return (w, h, x, y, frozenset(styles))
 
 
 def _fmt_diff(a: tuple, b: tuple) -> str:
     """两个标题格式指纹的差异项（人读）。"""
-    labels = ("宽", "高", "左", "上", "字号", "字体")
+    labels = ("宽", "高", "左", "上", "字号/字体")
     hits = [lab for lab, av, bv in zip(labels, a, b) if av != bv]
     return "、".join(hits) if hits else "格式"
 
