@@ -11,7 +11,7 @@
 开关的**中途跳变**要等到下一次压缩才被看见——用户关掉夜航后，会话可能仍按授权书行事。
 故新增 ``--diff`` 口：watch-arm.sh（Stop 钩子）每回合边界调用本模块，与**本会话上次读数**
 （``watch.json`` 的 :data:`NIGHT_SEEN_KEY`）比对，**有跳变才**产出差分文本（关→开＝授权书
-全文、开→关＝刹车差分），由该钩子走既有的 rewake 通道（stderr + exit 2）在**下一轮**注入；
+全文；开→关＝**零注入**），由该钩子走既有的 rewake 通道（stderr + exit 2）在**下一轮**注入；
 无变化零输出、零打扰。开关**只归用户手动**：本模块不实现自拨回、不实现时限到期。
 
 **基线落点**（2026-10-15 缺陷修补）：SessionStart 注入时**顺手落基线**（:func:`record_baseline`）
@@ -69,15 +69,11 @@ NIGHT_GATE_DENY: str = (
 
 
 #: 关→开差分 = 与 SessionStart **同一份**授权书全文（同一政策只有一份真源，不另写）。
-#: 开→关差分 = **刹车差分**。措辞禁令（用户裁决 2026-10-15）：关闭**不得**出现「立即停止
-#: 自主推进」类字样——本项目**始终鼓励自主推进**（twin 即为此设计），夜航只是为该模式加
-#: 一道强调与硬保险（附带开关）。关闭 = 收回夜航授权、恢复常规交互（可提问/可等待），
-#: **自主推进照常**。
-NIGHT_DIFF_OFF: str = (
-    "**【夜航已由用户关闭】** 夜航授权书失效（决策权回到用户），AskUserQuestion 拦截随之"
-    "放行，恢复与用户的一问一答；**自主推进照常**（项目常态，twin 机制即为此设计），"
-    "无需停摆等用户——该问用户的照常问，能自己推进的照常推进。"
-)
+#: **开→关差分 = 零注入**（用户裁决 2026-10-17）：关闭状态**不注入任何提示词**——旧的
+#: 关闭态文案（曾写「恢复交互/决策权回到用户/该问用户的照常问」等）实测反复暗示「推进前
+#: 等用户」，与「本项目始终鼓励自主推进」相悖；而授权回收已自助（NIGHT_POLICY 原文自带
+#: 「关闭即失效」）、AskUserQuestion 拦截按开关每回合现读（OFF 自动放行）——行为面已随
+#: 开关恢复，无需文字告知。故该方向返回 ``None``（与「无变化」同路）。
 
 #: watch.json 里的**会话级上次读数**表（``{session_id: "on"|"off"}``）。
 #: 为什么寄存在 watch 面：① 差分由 watch-arm（Stop 钩子）触发，同一份文件当回合已被读写
@@ -111,7 +107,7 @@ def diff_message(session_id: str, *, data: dict[str, Any] | None = None) -> str 
     """回合边界差分：开关与**本会话上次读数**不同 → 返回该注入的差分文本，否则 ``None``。
 
     - 关→开 → :data:`NIGHT_POLICY`（授权书全文，同 SessionStart 注入文本）；
-    - 开→关 → :data:`NIGHT_DIFF_OFF`（刹车差分，措辞受用户裁决禁令约束）；
+    - 开→关 → ``None``（**零注入**：用户裁决 2026-10-17，关闭状态不注入任何提示词）；
     - 无变化 → ``None``（**零输出零写入**，调用方据此零打扰）；
     - **首次见该会话** → 记基线但**不注入**：SessionStart 已按当时开关注入过一次，再注
       一遍纯属烧 token；基线记下即可捕获此后每一次真实跳变；
@@ -139,7 +135,7 @@ def diff_message(session_id: str, *, data: dict[str, Any] | None = None) -> str 
     _seen_write(sid, now)
     if prior is None:
         return None
-    return NIGHT_POLICY if on else NIGHT_DIFF_OFF
+    return NIGHT_POLICY if on else None
 
 
 def gate_deny_message(data: dict[str, Any] | None = None) -> str | None:
@@ -179,8 +175,8 @@ def record_baseline(session_id: str, *, data: dict[str, Any] | None = None) -> s
     """SessionStart 注入时**顺手落基线**（与 ``--diff`` 同一落点与键，单点）。
 
     为什么必须在这里落（2026-10-15 真机缺陷）：基线原本只由**首个 Stop 钩子**补记——开关若
-    在 SessionStart 之后、首个 Stop 之前被拨动，那次真跳变会被当作基线吞掉，刹车差分静默
-    丢失（实案：会话起始 on、中途拨 off，`night_seen` 被记成 off，本应是一条刹车差分）。
+    在 SessionStart 之后、首个 Stop 之前被拨动，那次真跳变会被当作基线吞掉（实案：会话
+    起始 on、中途拨 off，`night_seen` 被记成 off）。
     SessionStart 是「本会话此刻开关读数」的最早可信落点，落在这里，跳变就再也躲不过。
 
     **只在 SessionStart 调**：PostCompact 只补注入、不动读数——它若重写基线，就会把
@@ -284,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         data = _read_settings_file(Path(args.settings)) if args.settings else None
         if event == "SessionStart":
             # SessionStart 顺手落基线（本单缺陷修复）：否则「注入后、首个 Stop 前」的拨动
-            # 会被首个 Stop 当基线吞掉，刹车差分丢失。PostCompact 不写（见 record_baseline）。
+            # 会被首个 Stop 当基线吞掉。PostCompact 不写（见 record_baseline）。
             record_baseline(sid, data=data)
         out = policy_hook_output(event, data=data)
     except Exception:  # noqa: BLE001 - fail-open：任何异常零输出 exit 0

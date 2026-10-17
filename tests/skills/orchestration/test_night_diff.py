@@ -2,7 +2,7 @@
 
 钉五件事：
 ① 差分只在**跳变**那一轮产出（无变化零输出零写入；首次见会话只记基线不注入）；
-② 关→开 = 授权书全文（同 SessionStart 文本）、开→关 = 刹车差分；
+② 关→开 = 授权书全文（同 SessionStart 文本）、**开→关 = 零注入**（用户裁决 2026-10-17）；
 ③ 上次读数**按 session_id 各存一份**（多会话并存不互相误报），且跨 watch.json 整体覆写；
 ④ 文案修订（④ 删「改回 false」、⑤ 去行话、§3.6 不再悬空、补 consult 调用面；关闭差分
    不得出现「立即停止自主推进」类字样）；
@@ -67,18 +67,14 @@ def test_off_to_on_injects_policy_full_text(toml):
     assert night.diff_message("s1") is None, "注入后同值再比对不得重复出声"
 
 
-def test_on_to_off_injects_brake_diff_without_stop_autonomy_wording(toml):
+def test_on_to_off_injects_nothing(toml):
+    """**开→关 = 零注入**（用户裁决 2026-10-17）：关闭状态不注入任何提示词。"""
     toml(True)
     night.diff_message("s1")
     toml(False)  # 开→关
-    msg = night.diff_message("s1")
-    assert msg == night.NIGHT_DIFF_OFF
-    # 用户裁决措辞禁令：关闭**不得**写「立即停止自主推进」类字样
-    assert "自主推进照常" in msg
-    for banned in ("立即停止自主推进", "停止自主推进", "暂停自主推进", "不得自主推进"):
-        assert banned not in msg, f"关闭差分出现禁令字样：{banned}"
-    # 必含要素：授权书失效 / 拦截放行 / 恢复一问一答
-    assert "授权书失效" in msg and "AskUserQuestion" in msg and "一问一答" in msg
+    assert night.diff_message("s1") is None
+    # 读数仍记账（否则下一轮又会判一次跳变）
+    assert night.diff_message("s1") is None
 
 
 # ---------------------------------------------------------------------------
@@ -111,9 +107,7 @@ def test_toggle_after_session_start_is_not_swallowed(toml, monkeypatch, capsys):
     toml(True)
     _run_injection(settings.SETTINGS_PATH, "SessionStart", "s1", monkeypatch, capsys)
     toml(False)  # 用户拨 off（发生在首个 Stop 之前）
-    assert night.diff_message("s1") == night.NIGHT_DIFF_OFF, (
-        "真实跳变被当基线吞掉=刹车差分丢失（本单缺陷）"
-    )
+    assert night.diff_message("s1") is None, "OFF 态零注入"
 
 
 def test_session_start_with_switch_off_records_off(toml, monkeypatch, capsys):
@@ -137,7 +131,7 @@ def test_postcompact_does_not_rewrite_baseline(toml, monkeypatch, capsys):
     assert watch.load_state()["night_seen"]["s1"] == "on", (
         "PostCompact 不得重写基线（它一写，跳变就被盖掉）"
     )
-    assert night.diff_message("s1") == night.NIGHT_DIFF_OFF
+    assert night.diff_message("s1") is None
 
 
 def test_session_start_without_session_id_is_silent_noop(toml, monkeypatch, capsys):
@@ -160,7 +154,7 @@ def test_cold_path_without_session_start_still_records_then_differs(toml):
     assert night.diff_message("cold") is None
     assert watch.load_state()["night_seen"]["cold"] == "on"
     toml(False)
-    assert night.diff_message("cold") == night.NIGHT_DIFF_OFF
+    assert night.diff_message("cold") is None
 
 
 def test_policy_hook_pipes_payload_so_baseline_can_be_written():
@@ -184,9 +178,9 @@ def test_last_seen_is_per_session(toml):
     night.diff_message("s1")
     night.diff_message("s2")  # 两个会话各自记基线
     toml(False)
-    assert night.diff_message("s1") == night.NIGHT_DIFF_OFF
+    assert night.diff_message("s1") is None
     # s2 尚未比对过任何跳变 → 它也是关，但它的基线是 on → 同样出声（各算各的账）
-    assert night.diff_message("s2") == night.NIGHT_DIFF_OFF
+    assert night.diff_message("s2") is None
     seen = watch.load_state()["night_seen"]
     assert seen["s1"] == "off" and seen["s2"] == "off"
 
@@ -213,7 +207,7 @@ def test_seen_marker_survives_watch_rearm(toml, monkeypatch):
     watch.arm(timeout_s=5, heartbeat=False)
     assert "night_seen" in watch.load_state(), "arm 覆写后读数必须仍在（CARRY_KEYS）"
     toml(False)
-    assert night.diff_message("s1") == night.NIGHT_DIFF_OFF, (
+    assert night.diff_message("s1") is None, (
         "覆写丢了账 → 会被当「首次见」而静默漏掉这次关→开/开→关"
     )
 
@@ -228,7 +222,7 @@ def test_cli_diff_prints_only_on_change(toml, capsys):
     assert capsys.readouterr().out == "", "首次见：零输出"
     toml(False)
     assert night.main(args) == 0
-    assert capsys.readouterr().out.strip() == night.NIGHT_DIFF_OFF
+    assert capsys.readouterr().out == "", "开→关零注入（用户裁决 2026-10-17）"
     assert night.main(args) == 0
     assert capsys.readouterr().out == "", "无变化：零输出"
 
@@ -324,9 +318,9 @@ def _run_hook(root: Path) -> subprocess.CompletedProcess[bytes]:
 
 def test_hook_end_to_end_injects_diff_via_exit2(tmp_path):
     """真跑 Stop 钩子：差分非空 → **stderr 注出 + exit 2**（harness 的 rewake 语义）。"""
-    proc = _run_hook(_fake_root(tmp_path, canned=night.NIGHT_DIFF_OFF))
+    proc = _run_hook(_fake_root(tmp_path, canned="CANARY-DIFF"))
     assert proc.returncode == 2, (proc.returncode, proc.stderr[-300:])
-    assert night.NIGHT_DIFF_OFF.encode("utf-8") in proc.stderr
+    assert b"CANARY-DIFF" in proc.stderr
 
 
 def test_hook_end_to_end_silent_when_no_diff(tmp_path):
