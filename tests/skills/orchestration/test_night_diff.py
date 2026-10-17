@@ -256,8 +256,8 @@ def test_policy_has_no_dangling_section_ref_and_lists_consult_commands():
     assert "见 §3.6" not in t, (
         "悬空引用须删/写全（§3.6 是设计文档 PSEP_2 的节号，读者没有）"
     )
-    assert "PSEP_2 §3.6" in t, (
-        "查实出处：写全为 PSEP_2 §3.6（权限弹窗人工 checklist、不写钩子）"
+    assert "references/night-plan-gate.md" in t, (
+        "查实出处：权限弹窗与 Plan 两环节的细则见 references/night-plan-gate.md"
     )
     assert "pysci-orch twin consult <案卷.md>" in t
     assert 'pysci-orch deputy consult "<问题>"' in t
