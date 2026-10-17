@@ -47,8 +47,11 @@ steps:
     kind: self
     brief: 重拆解返工
     role: rework_plan
+  - id: b2_pre
+    member: sim
+    brief: 外场重算（PML→完美匹配边界）
   - id: b2
-    member: devops
+    member: figure
     brief: 返工生产环节
     member_placeholder: true
   - id: b_last

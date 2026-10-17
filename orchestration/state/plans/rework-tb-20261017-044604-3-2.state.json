@@ -29,14 +29,24 @@
     },
     {
       "id": "A.a5",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
-      "job_id": "devops-20261017-053646-rework-tb-20261017-044604-3-2-A.a5"
+      "job_id": "devops-20261017-053646-rework-tb-20261017-044604-3-2-A.a5",
+      "task_file": null,
+      "session_id": "73d2478d-8fd1-4bb5-978f-65b55b82aeef",
+      "kind": "result"
     },
     {
       "id": "B.b1",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-044604-3-2.b1-重拆解.md"
+    },
+    {
+      "id": "B.b2_pre",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "sim-20261017-084639-rework-tb-20261017-044604-3-2-B.b2_pre"
     },
     {
       "id": "B.b2",
