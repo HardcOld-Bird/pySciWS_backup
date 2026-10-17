@@ -53,8 +53,9 @@
     },
     {
       "id": "B.b2",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "figure-20261017-090932-rework-tb-20261017-044604-3-2-B.b2"
     },
     {
       "id": "B.b_last",
