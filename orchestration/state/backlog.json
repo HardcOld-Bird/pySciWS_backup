@@ -3272,11 +3272,14 @@
       "kind": "usability",
       "success_criteria": "- 构造「正文先出现不带属性的开口标签、其后另有带 kind 的完整标签对」的交付文本 → gate 不判退回（不再跨段配对）；\n- 反例不受影响：真正**只有**不带属性开口标签的提案（无 kind）仍 exit 2；\n- 全量 `uv run --no-sync pytest tests` 绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-053820-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T05:42:57+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 4059f6e）",
       "started_at": "2026-10-17T05:42:59+08:00",
-      "worktree": "20261017-053820-devops"
+      "worktree": "20261017-053820-devops",
+      "done_at": "2026-10-17T10:28:05+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-053820-devops"
     },
     {
       "id": "20261017-073416-devops",
@@ -3329,6 +3332,70 @@
       "note": "",
       "started_at": "2026-10-17T10:20:52+08:00",
       "worktree": "20261017-101924-figure"
+    },
+    {
+      "id": "20261017-104500-devops",
+      "member": "devops",
+      "summary": "fingerprint: orch-guidance-mislead-20261017",
+      "kind": "defect",
+      "success_criteria": "- `twin consult` 失败时报文按因分型（未启用 vs 冷启动拒复用），后者明示「加 --session\nnew 重试」；command-surface/SKILL 对应行补注「冷启动须 --session new」；\n- `plan advance` 对 failed 环节的续作提示按失败类型给会话建议：run_failed/容量耗尽类\n→ 提示「建议 --session new」，内容类补充 → 维持自动复用；\n- 回归测试：两条文案各一例断言（含 --session new 字样）；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-104500-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-17T10:42:53+08:00",
+      "note": "",
+      "source": "leader",
+      "started_at": "2026-10-17T10:42:58+08:00",
+      "worktree": "20261017-104500-devops"
+    },
+    {
+      "id": "20261017-104501-devops",
+      "member": "devops",
+      "summary": "fingerprint: evidence-case-template-gap-20261017",
+      "kind": "usability",
+      "success_criteria": "- `plan advance` 对 kind:self 环节的 evidence 规格行附一行落点与命名惯例\n（`data/taskbooks/<id>.<leaf>-<名>.md`）；\n- command-surface.md 补「evidence/案卷最小骨架」可复制样例各一段（evidence：标题段\n对应章节；jury 案卷：问题/选项 A/选项 B/证据/送审结论 五段；注明 twin 案卷同构前三段），\n预算内可与 215944 的立单样例同节编排；\n- 回归测试：command-surface 覆盖测试（test_command_surface_coverage）断言样例段在场；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-104501-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-17T10:42:53+08:00",
+      "note": "",
+      "source": "leader"
+    },
+    {
+      "id": "20261017-104502-devops",
+      "member": "devops",
+      "summary": "fingerprint: runfailed-recovery-gap-20261017",
+      "kind": "usability",
+      "success_criteria": "- dispatch-playbook 增「run_failed 恢复清单」一节（按需档不破 8KB）：①先盘点半成品\n（产物目录/交付说明/管线脚本在盘情况）②半成品完整→续作任务书明示「只核对与正式\n交付、不重做」③会话选择按 capacity 纪律 --session new ④半成品缺失才整单重做；\n- `plan advance` 对 run_failed 环节的 [NEXT] 增一行提示「先盘点半成品再决定续作/重做\n（见 dispatch-playbook run_failed 恢复清单）」；\n- 回归测试：文案在场断言一例；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-104502-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-17T10:42:54+08:00",
+      "note": "",
+      "source": "leader"
+    },
+    {
+      "id": "20261017-104503-devops",
+      "member": "devops",
+      "summary": "fingerprint: rework-fulltext-dump-20261017",
+      "kind": "usability",
+      "success_criteria": "- a1 引导输出改为结构化摘要（任务概述/各轮批语要点/改进清单结论/裁决书结论）＋前轮\nreport 文件路径（明示「细节自查该文件」），不再全文灌入；\n- 或保持全文但分段可续读（--more 旗标）且首屏即摘要；\n- 回归测试：构造 ≥2 轮返工，断言 advance 输出含摘要段与路径、不含 report 全文；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-104503-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-17T10:43:03+08:00",
+      "note": "",
+      "source": "leader",
+      "started_at": "2026-10-17T10:43:09+08:00",
+      "worktree": "20261017-104503-devops"
+    },
+    {
+      "id": "20261017-104504-devops",
+      "member": "devops",
+      "summary": "fingerprint: plan-reassign-gap-20261017",
+      "kind": "usability",
+      "success_criteria": "- 新增轻量命令（如 `pysci-orch plan reassign <plan> <leaf> --member <id>` 与\n`plan split <leaf> --before/--after --member <id> --brief \"<描述>\"`，或\n`plan advance --member <id>` 覆盖当跳）：完成占位符改派与单叶拆分，内部走既有\namend/对账逻辑（必留叶子校验/已 started 冻结护栏不变）；\n- 回归测试：占位叶改派一例（member 更新且 advance 正常）、拆叶一例（必留叶子不缺）、\n已 started 环节改派被拒一例；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-104504-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-17T10:43:03+08:00",
+      "note": "",
+      "source": "leader"
     }
   ]
 }
