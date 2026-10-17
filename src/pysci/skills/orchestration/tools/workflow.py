@@ -1228,7 +1228,7 @@ def cmd_suggestions(args) -> int:
         "[NEXT] 审批须带判决包（§5.1 四态其一）：approve <id> --jury（仲裁）/ "
         '--bench <案id>（实测）/ --jury --bench <案id>（双）/ --override "<理由>"（自裁留痕）；'
         "缺陷类且该跳交付含 blocked 走例外通道（裸 approve 即可，建议连带 --bench 复跑失败案）。"
-        '否决：uv run --no-sync pysci-orch reject <id> --override "<判决依据>"（必填，留痕入决策日志）。'
+        '否决：pysci-orch reject <id> --override "<判决依据>"（必填，留痕入决策日志）。'
     )
     return 0
 

@@ -210,10 +210,7 @@ def _print_self_guidance(
         "  evidence 落点惯例：data/taskbooks/<id>.<leaf>-<名>.md"
         "（骨架＝`# 标题`＋上述标题段，如 `## 拆解`）"
     )
-    print(
-        f"  完成后提交证据收尾：uv run --no-sync pysci-orch plan advance "
-        f"{plan_id} --evidence <路径>"
-    )
+    print(f"  完成后提交证据收尾：pysci-orch plan advance {plan_id} --evidence <路径>")
     if sy.get("expand_history") and plan is not None:
         for ln in _rework_history_lines(plan):
             print(ln)
@@ -712,12 +709,8 @@ def _print_run_guidance(plan_id: str, step_state: dict, step_yaml: dict) -> None
         f"effort：{step_yaml.get('effort', '(默认=中)')}"
     )
     print("  → 书写该环节任务书后推进：")
-    print(
-        f'    uv run --no-sync pysci-orch plan advance {plan_id} --text "<任务书全文>"'
-    )
-    print(
-        f"    或 uv run --no-sync pysci-orch plan advance {plan_id} --task <任务书文件>"
-    )
+    print(f'    pysci-orch plan advance {plan_id} --text "<任务书全文>"')
+    print(f"    或 pysci-orch plan advance {plan_id} --task <任务书文件>")
     print(
         "  （**入队即返回**，完成事件驱动下一次 advance——长任务首选；计划外单件事用"
         " `plan adhoc`（同步阻塞，须后台运行），见 README §4.5）"
@@ -1167,6 +1160,82 @@ def _warn_dirty_face_before_enqueue(
     )
 
 
+def _resolve_step(leaves: dict[str, dict], sid: str) -> tuple[str | None, str]:
+    """``--step`` 解析：显示名（``B.b2``）与短 id（``b2``）皆接受。
+
+    Returns:
+        ``(path, "")`` 唯一命中；``(None, 报错文案)`` 未命中或短 id 歧义。
+    """
+    sid = str(sid or "")
+    if sid in leaves:
+        return sid, ""
+    cands = [p for p in leaves if p.rsplit(".", 1)[-1] == sid]
+    if len(cands) == 1:
+        return cands[0], ""
+    hint = "、".join(list(leaves)[:8]) or "（无叶子）"
+    if cands:
+        return None, (
+            f"[!] --step {sid} 有歧义（多个同名叶子）：{'、'.join(cands)}"
+            f"——请用显示名（如 {cands[0]}）"
+        )
+    return None, (
+        f"[!] 计划无环节 {sid}；可用环节：{hint}"
+        "（--step 接受显示名与短 id，如 B.b2 或 b2）"
+    )
+
+
+def _spec_default_step(plan: dict, state: dict) -> str | None:
+    """``plan spec`` 缺省环节：首个在途/待证据/待裁决（按状态记录序），否则首个可派发。"""
+    leaves = _leaf_map(plan)
+    live = ("queued", SELF_AWAITING, "blocked", "failed", "run_failed")
+    for s in state.get("steps", []):
+        sid = str(s.get("id"))
+        if sid in leaves and str(s.get("status")) in live:
+            return sid
+    disp = _tree(plan).dispatchable(_status_of(state))
+    return disp[0] if disp else next(iter(leaves), None)
+
+
+def cmd_plan_spec(args) -> int:
+    """回打环节规格（粗描述 + evidence 标题段 + 收尾命令），**任何状态可查、不改状态**。
+
+    为什么需要（backlog tb-20261017-211704-2-2 F1）：环节已入队/待证据后，advance 不再
+    引导（只印工作清单），组长要重看规格只能翻 YAML。标题段与 :func:`_check_evidence`
+    同源（``ROLE_EVIDENCE_SECTIONS`` / YAML 声明），不另维护一份。
+    """
+    plan_id = args.id
+    if not _plan_path(plan_id).exists():
+        print(f"[!] 计划不存在：{plan_id}（orch plan list 查看）")
+        return 2
+    plan = _load_yaml(plan_id)
+    state = _reconcile(plan, _load_state(plan_id))
+    leaves = _leaf_map(plan)
+    sid = str(getattr(args, "step", "") or "")
+    if sid:
+        path, err = _resolve_step(leaves, sid)
+        if path is None:
+            print(err)
+            return 2
+        sid = path
+    else:
+        sid = _spec_default_step(plan, state) or ""
+    if not sid:
+        print(f"[!] 计划 {plan_id} 无环节可显示")
+        return 2
+    row = next((s for s in state.get("steps", []) if str(s.get("id")) == sid), None)
+    if row is None:
+        row = {"id": sid, "status": "pending"}
+    sy = leaves.get(sid, {})
+    kind = str(sy.get("kind") or "")
+    who = "self（组长）" if kind == KIND_SELF else str(sy.get("member") or "?")
+    print(f"== 计划 {plan_id} 环节 {sid}（{who}，status={row.get('status')}）==")
+    if kind == KIND_SELF:
+        _print_self_guidance(plan_id, row, sy, plan=plan)
+    else:
+        _print_run_guidance(plan_id, row, sy)
+    return 0
+
+
 def cmd_plan_advance(args) -> int:
     """**事件驱动推进**（§3.5，M5）：把下一环节入队 m4 成员队列**即返回**。
 
@@ -1372,7 +1441,7 @@ def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
             head = "**本环节会话余量已尽 → 建议 `--session new`**"
         print(
             f"  1) 补充信息续作本环节（{head}）："
-            f'uv run --no-sync pysci-orch plan advance {plan_id} --session new --text "<补充>"'
+            f'pysci-orch plan advance {plan_id} --session new --text "<补充>"'
         )
         print(
             "     原因：run_failed/余量耗尽后原会话不可复用（自动复用大概率再撞墙），"
@@ -1380,9 +1449,9 @@ def _print_blocked_options(plan_id: str, step: dict, sy: dict) -> None:
         )
     else:
         print(
-            f'  1) 补充信息续作本环节：uv run --no-sync pysci-orch plan advance {plan_id} --text "<补充>"'
+            f'  1) 补充信息续作本环节：pysci-orch plan advance {plan_id} --text "<补充>"'
         )
-    print('  2) 咨询副组长：uv run --no-sync pysci-orch deputy consult "<问题>"')
+    print('  2) 咨询副组长：pysci-orch deputy consult "<问题>"')
     print(
         f"  3) 修改计划（编辑 {_plan_path(plan_id).name} 后重新 advance；或跳过本环节：--skip）"
     )
@@ -1456,12 +1525,12 @@ def _report_handoff(
     _print_worklist(plan_id, plan, state)
     print("[NEXT] 可选：")
     print(
-        f"  1) 推进下一环节（书写任务书后）：uv run --no-sync pysci-orch plan advance "
+        f"  1) 推进下一环节（书写任务书后）：pysci-orch plan advance "
         f'{plan_id} --text "..."'
         "　——入队即返回【长任务首选】"
     )
     print(f"  2) 修改后续计划：编辑 {_plan_path(plan_id)} 后重新推进（按环节 id 对账）")
-    print(f"  3) 中止：uv run --no-sync pysci-orch plan drop {plan_id}")
+    print(f"  3) 中止：pysci-orch plan drop {plan_id}")
 
 
 def _report_plan_complete(plan_id: str, state: dict) -> None:
@@ -2077,11 +2146,10 @@ def cmd_plan_reassign(args) -> int:
         print(f"[!] 计划不存在：{plan_id}")
         return 2
     plan = _load_yaml(plan_id)
-    sid = str(args.step or "")
     leaves = _leaf_map(plan)
-    if sid not in leaves:
-        hint = "、".join(list(leaves)[:8]) or "（无叶子）"
-        print(f"[!] 计划 {plan_id} 无环节 {sid}；可用环节：{hint}")
+    sid, err = _resolve_step(leaves, str(args.step or ""))
+    if sid is None:
+        print(err)
         return 2
     member = str(args.member or "").strip()
     if not member:
