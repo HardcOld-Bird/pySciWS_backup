@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 from pysci.paths import ORCHESTRATION_ROOT
+from pysci.skills.devops.tools import budget as budget_mod
 
 #: 真本根（部署副本 gitignored、worktree 里不存在，故断言只打真本）。
 _REF = ORCHESTRATION_ROOT / "skills" / "orchestration" / "references"
@@ -71,7 +72,7 @@ def test_decomposition_has_pointer_without_duplicating_clause():
 
 
 def test_both_files_within_budget():
-    """③ 两文件 ≤8192B（落盘字节口径；超限按纪律拆分，不放宽预算）。"""
+    """③ 两文件 ≤8192B（CRLF 等价字节；超限按纪律拆分，不放宽预算）。"""
     for p in (DISCIPLINE, DECOMPOSITION):
-        size = len(p.read_bytes())
+        size = budget_mod.disk_size(p)
         assert size <= BUDGET_B, f"{p.name} 超预算：{size}B > {BUDGET_B}B"

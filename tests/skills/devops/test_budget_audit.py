@@ -64,9 +64,17 @@ def test_over_limit_flagged_and_sized_on_disk(tree):
     findings = budget_mod.audit()
     (bad,) = [f for f in findings if f.over]
     assert bad.size == budget_mod.LIMIT + 1
-    assert bad.size == bad.path.stat().st_size
+    assert bad.size == budget_mod.disk_size(bad.path)
     (line,) = [ln for ln in budget_mod.report(findings, []) if ln.startswith("[!]")]
     assert "超预算" in line and "big.md" in line and "按需" in line
+
+
+def test_lf_file_sized_as_crlf_equivalent(tmp_path):
+    """LF 检出按 CRLF 等价计量（backlog 20261017-125557）：每行裸 LF 预演 +1B。"""
+    f = tmp_path / "lf.md"
+    f.write_bytes(b"x\n" * 4000)  # 落盘 8000B
+    assert f.stat().st_size == 8000
+    assert budget_mod.disk_size(f) == 12000
 
 
 def test_within_limit_reports_clean(tree):

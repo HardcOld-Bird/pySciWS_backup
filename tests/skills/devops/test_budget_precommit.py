@@ -145,6 +145,43 @@ def test_file_at_the_limit_passes(tmp_path: Path):
     assert proc.returncode == 0, proc.stdout
 
 
+def test_lf_file_is_measured_as_crlf_equivalent(tmp_path: Path):
+    """LF 检出预演（backlog 20261017-125557）：worktree 里脚本写出的 LF 文件合并到 main
+    后每行 +1B；钩子须按 CRLF 等价计量，否则「worktree 绿 / main 红」。"""
+    rel = "orchestration/skills/lit/references/lf-big.md"
+    f = tmp_path / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b"x\n" * 4000)  # 落盘 8000B → CRLF 等价 12000B
+    assert _GUARD.crlf_equivalent_size(f) == 12000
+
+    proc = run_script(tmp_path, rel)
+
+    assert proc.returncode == 1
+    assert "12000" in proc.stdout
+
+
+def test_lf_file_at_crlf_limit_passes(tmp_path: Path):
+    """CRLF 等价恰 8192B 的 LF 文件通过；同等价 8193B 即拦（判据 > LIMIT）。"""
+    rel = "orchestration/skills/lit/SKILL.md"
+    f = tmp_path / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b"x\n" * 1000 + b"x" * 5192)  # 7192 落盘 + 1000 裸 LF = 8192
+    assert _GUARD.crlf_equivalent_size(f) == budget.LIMIT
+    assert run_script(tmp_path, rel).returncode == 0
+
+    f.write_bytes(b"x\n" * 1000 + b"x" * 5193)  # 等效 8193
+    proc = run_script(tmp_path, rel)
+    assert proc.returncode == 1
+    assert "8193" in proc.stdout
+
+
+def test_crlf_metric_has_one_source(tmp_path: Path):
+    """钩子与 doctor 侧的 CRLF 等价读数必须逐字节相等（LF/CRLF/混合三态）。"""
+    f = tmp_path / "mixed.md"
+    f.write_bytes(b"a\r\nb\nc")
+    assert _GUARD.crlf_equivalent_size(f) == budget.crlf_equivalent_size(f) == 7
+
+
 def test_near_limit_warns_but_still_passes(tmp_path: Path):
     """余量 >95%（未超限）：打印 ⚠ 余量读数但**不拦截**（rc 仍 0）。"""
     rel = "orchestration/skills/lit/references/tight.md"
@@ -242,7 +279,11 @@ def test_limit_has_one_source():
 
 
 def test_repo_tracked_docs_pass_the_hook():
-    """全仓现状（任务书「移除 → 通过」的机械版）：所有在范围内的 git 跟踪文件都过。"""
+    """全仓现状（任务书「移除 → 通过」的机械版）：所有在范围内的 git 跟踪文件都过。
+
+    钩子按 **CRLF 等价字节**计量（backlog 20261017-125557）——LF 检出（worktree 里脚本
+    写出的文件）与 main 检出读同一判据，本用例在两种检出下都应绿。
+    """
     tracked = subprocess.run(
         ["git", "ls-files", "-z"],
         capture_output=True,

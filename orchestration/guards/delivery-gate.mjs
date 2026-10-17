@@ -12,8 +12,9 @@
 // 活体探针 / orch runner 的告警扫描）能机械识别「本该拦但放行了」的静默退化；否则 guard
 // 有 bug 时会伪装成一切正常（backlog 20261010-193601-devops 的教训）。
 //
-// 计量口径：fs.statSync().size = 落盘字节（Windows 检出为 CRLF），与 `wc -c` /
-// `find -size +8192c` 同口径，即 harness 实际注入所付的税。
+// 计量口径：CRLF 等价字节（裸 LF 各补一个 \r）——与 `wc -c`（CRLF 文件）/
+// `find -size +8192c` 同口径，即 harness 实际注入所付的税；LF 检出（worktree 里脚本
+// 写出的文件）也预演出 main 检出后的字节，避免「本地绿、合并后红」（backlog 20261017-125557）。
 //
 // 环境变量（由 orch dispatch 的 runner.build_env 注入，与 pod-guard 同一套）：
 //   PYSCI_POD 本 pod 绝对路径；PYSCI_DEPLOYED_SKILLS 部署技能目录名清单（分号分隔）。
@@ -341,7 +342,14 @@ function over(file, label, bytes, tier, action, out) {  if (bytes <= LIMIT) retu
   );
 }
 
-const size = p => fs.statSync(p).size;
+const size = p => {
+  const raw = fs.readFileSync(p);
+  let bareLf = 0;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === 0x0a && (i === 0 || raw[i - 1] !== 0x0d)) bareLf++;
+  }
+  return raw.length + bareLf;
+};
 
 const mdIn = dir =>
   fs.existsSync(dir) && fs.statSync(dir).isDirectory()

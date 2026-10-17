@@ -18,6 +18,7 @@ from pathlib import Path
 
 from pysci.paths import ORCHESTRATION_ROOT
 from pysci.skills.ai_drawing.tools import imagine
+from pysci.skills.devops.tools import budget as budget_mod
 
 REFS = ORCHESTRATION_ROOT / "skills" / "ai-drawing" / "references"
 SKILL = ORCHESTRATION_ROOT / "skills" / "ai-drawing" / "SKILL.md"
@@ -62,5 +63,5 @@ def test_doctor_prints_the_tier0_warning(capsys):
 
 def test_docs_within_budget():
     for p in (SKILL, BACKENDS, WORKFLOWS):
-        size = p.stat().st_size
-        assert size <= 8192, f"{p.name} 超预算：{size}B"
+        size = budget_mod.disk_size(p)
+        assert size <= budget_mod.LIMIT, f"{p.name} 超预算：{size}B（CRLF 等价）"

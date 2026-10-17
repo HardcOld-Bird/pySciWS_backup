@@ -5,9 +5,11 @@
 ``references/*.md``、根 ``.qoder/rules/basic.md`` 与 ``leader-only.md`` 每文件 ≤8192B，
 超限即拦下提交并打印 文件 + 实测字节 + 上限 + 档位 + 整改动作。
 
-计量口径是**落盘字节**：pre-commit 传进来的是工作区文件（Windows 经 smudge 为 CRLF），
-``stat().st_size`` 与 ``wc -c`` / ``find -size +8192c`` / delivery-gate / ``pysci-dev
-doctor`` 的预算审计同口径——harness 注入所付的税按字节算，不按逻辑字符数。
+计量口径是 **CRLF 等价字节**：pre-commit 传进来的是工作区文件（Windows 经 smudge 为
+CRLF）；worktree 里脚本写出的 LF 文件合并到 main 后会检出为 CRLF，故裸 LF 各补 1B 预演
+——与 ``wc -c``（CRLF 文件）/ ``find -size +8192c`` / delivery-gate / ``pysci-dev doctor``
+同口径（backlog 20261017-125557：worktree 绿而 main 红的分裂）。harness 注入所付的税
+按字节算，不按逻辑字符数。
 
 范围判定只依赖路径形状（不依赖 ``pysci`` 包）：钩子跑在 pre-commit 自建的空虚拟环境里，
 那里没装本项目的包，stdlib-only 是唯一不会崩的写法。与 ``budget.py`` 的一致性由
@@ -49,6 +51,12 @@ TIERS: tuple[tuple[str, re.Pattern[str], str], ...] = (
 )
 
 
+def crlf_equivalent_size(path: Path) -> int:
+    """CRLF 等价字节：裸 LF 各补一个 ``\\r``（LF 检出预演 main 检出后的真实字节）。"""
+    raw = path.read_bytes()
+    return len(raw) + raw.count(b"\n") - raw.count(b"\r\n")
+
+
 def tier_for(path_str: str) -> tuple[str, str] | None:
     """返回 (档位标签, 整改动作)；不在执法范围内 → None。"""
     norm = path_str.replace("\\", "/")
@@ -70,7 +78,10 @@ def main(argv: list[str]) -> int:
         p = Path(arg)
         if not p.is_file():  # 暂存删除/重命名的旧路径：无内容可注入，不算违规
             continue
-        size = p.stat().st_size
+        try:
+            size = crlf_equivalent_size(p)
+        except OSError:  # 读不了按无内容处理（fail-open，与删除路径同路）
+            continue
         rel = PurePosixPath(arg.replace("\\", "/"))
         if size > LIMIT:
             label, action = hit
@@ -96,7 +107,7 @@ def main(argv: list[str]) -> int:
         return 0
     print(
         f"harness 预算硬拦：{len(offenders)} 个文件超出 basic.md §1 的每文件上限 "
-        f"{LIMIT}B（落盘字节，CRLF 计税；口径同 wc -c / find -size +8192c）：\n"
+        f"{LIMIT}B（CRLF 等价字节：LF 检出按每行 +1B 预演 main 检出）：\n"
         + "\n".join(offenders)
         + "\n超限说明该文档过于复杂——正确反应是拆分或重新设计其使用方式，不是放宽预算。"
         "改完跑 `pysci-dev doctor` 的预算审计复测。"

@@ -149,6 +149,20 @@ def test_agents_md_size_is_measured_on_disk(pod):
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
+def test_lf_file_is_measured_as_crlf_equivalent(pod):
+    """LF 检出（worktree 里脚本写出的文件）按 CRLF 等价计量（backlog 20261017-125557）：
+    落盘 8120B + 100 个裸 LF → main 检出后 8220B，须拦。"""
+    body = ("x" * 79 + "\n") * 100 + "x" * 120
+    (pod / "AGENTS.md").write_bytes(body.encode("utf-8"))
+    assert (pod / "AGENTS.md").stat().st_size == 8120
+
+    rc, err = run_gate(pod)
+
+    assert rc == 2
+    assert "8220" in err
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="需要 node 运行 guard")
 def test_missing_agents_md_is_not_a_violation(pod):
     (pod / "AGENTS.md").unlink()
     assert run_gate(pod)[0] == 0

@@ -16,6 +16,7 @@ lit 摩擦：为 PPT 截取 OpenAI / Anthropic 官方发布页时，`openai.com`
 from __future__ import annotations
 
 from pysci.paths import ORCHESTRATION_ROOT
+from pysci.skills.devops.tools import budget as budget_mod
 
 REF = ORCHESTRATION_ROOT / "skills" / "literature-research" / "references"
 SPEC = REF / "fetch-evidence.md"
@@ -79,4 +80,6 @@ def test_sources_indexes_the_spec():
 
 
 def test_spec_within_reference_budget():
-    assert SPEC.stat().st_size <= 8192, "按需档单文件 ≤8192B 预算被破"
+    assert budget_mod.disk_size(SPEC) <= budget_mod.LIMIT, (
+        "按需档单文件 ≤8192B 预算被破（CRLF 等价）"
+    )

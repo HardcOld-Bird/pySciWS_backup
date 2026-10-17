@@ -9,6 +9,7 @@ rubrics 里此前只有 generic + scientific-plotting，pptx/幻灯片类产物*
 from __future__ import annotations
 
 from pysci.paths import PODS_ROOT
+from pysci.skills.devops.tools import budget as budget_mod
 
 REVIEWER = PODS_ROOT / "reviewer"
 RUBRICS = REVIEWER / "rubrics"
@@ -19,12 +20,12 @@ TASK_SPECIFIC_TOKENS = ("gain_ep", "1_gain_ep", "20260918", "1016PPT")
 
 
 def test_reviewer_rubrics_present_and_within_budget():
-    """三张 rubric 都在位，且各 ≤8192 **落盘字节**（harness 全量注入档硬上限）。"""
+    """三张 rubric 都在位，且各 ≤8192 **CRLF 等价字节**（harness 全量注入档硬上限）。"""
     for name in ("generic.md", "scientific-plotting.md", "presentation.md"):
         f = RUBRICS / name
         assert f.is_file(), f"缺 rubric：{f}"
-        n = len(f.read_bytes())
-        assert n <= 8192, f"{name} 超 8KB 预算：{n} B"
+        n = budget_mod.disk_size(f)
+        assert n <= budget_mod.LIMIT, f"{name} 超 8KB 预算：{n} B"
 
 
 def test_presentation_rubric_is_generic():

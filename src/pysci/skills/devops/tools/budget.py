@@ -3,7 +3,8 @@
 三档口径与 basic.md §1 一致：**全量注入档**（charter / AGENTS.md 等每跳全文进上下文的
 文件）、**常驻暴露档**（技能 `description:` 行——不进正文但每跳占位，按类合计）、
 **按需档**（`references/*.md`、自建 rules/skills 等被指向时才读的单文件）。每档上限同为
-8192B，**按落盘面（CRLF）计量**——即 `wc -c` / `find -size` 的口径，超限即违规。
+8192B，**按 CRLF 等价字节计量**——`wc -c` 口径，且 LF 检出按「每行补 1B」预演 main
+检出后的字节数（backlog 20261017-125557），超限即违规。
 
 本模块只读不写；`pysci-dev doctor` 调 :func:`audit` 打印审计报告并据违规数决定退出码。
 """
@@ -39,7 +40,7 @@ DESCRIPTION_GLOB = "*/SKILL.md"
 
 @dataclass(frozen=True)
 class Finding:
-    """一条审计发现：档位、路径、落盘字节数（超限判据用 ``over`` 而非现场重算）。"""
+    """一条审计发现：档位、路径、CRLF 等价字节数（超限判据用 ``over`` 而非现场重算）。"""
 
     tier: str
     path: Path
@@ -65,9 +66,21 @@ class Finding:
         return not self.over and self.size > WARN_AT
 
 
+def crlf_equivalent_size(path: Path) -> int:
+    """按 **CRLF 等价字节**计量：裸 LF 各补一个 ``\\r``。
+
+    为什么不能只看落盘字节（backlog 20261017-125557）：worktree 里由脚本写出的 Markdown
+    可能是 LF，合并到 main 后经 ``core.autocrlf`` 检出为 CRLF——两侧预算读数分裂（实案：
+    worktree 8088B 全绿，main 8197B 超限 5 字节）。按「每个 LF 都会变成 CRLF」预演，LF
+    检出即可得到 main 检出后的真实字节数；已是 CRLF 的文件读数与 ``wc -c`` 恒等。
+    """
+    raw = path.read_bytes()
+    return len(raw) + raw.count(b"\n") - raw.count(b"\r\n")
+
+
 def disk_size(path: Path) -> int:
-    """按落盘面计量：``wc -c`` 口径（本机 core.autocrlf 下文本为 CRLF）。"""
-    return len(path.read_bytes())
+    """按 **CRLF 等价字节**计量（``wc -c`` 口径 + LF 检出预演；见 :func:`crlf_equivalent_size`）。"""
+    return crlf_equivalent_size(path)
 
 
 def _desc_line_size(skill_md: Path) -> int:

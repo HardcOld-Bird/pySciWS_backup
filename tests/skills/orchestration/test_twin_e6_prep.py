@@ -26,6 +26,7 @@ from types import SimpleNamespace
 import pytest
 
 from pysci.paths import PODS_ROOT, PROJECT_ROOT
+from pysci.skills.devops.tools import budget as budget_mod
 from pysci.skills.orchestration.tools import (
     dispatch,
     mirror,
@@ -438,15 +439,16 @@ def test_twin_pod_scaffold_present():
 def test_preference_effective_marked_and_within_budget():
     """PREFERENCE.md：v2 生效态标注（用户 2026-10-13 确认）+ 每文件 ≤8192 B。
 
-    不断言 LF：本机 `core.autocrlf=true`，checkout 出来必然是 CRLF——预算口径本来就是
-    **落盘字节（CRLF 计税）**，所以量 `len(raw)` 即正确判据，行尾形态不是。
+    预算口径 = **CRLF 等价字节**（backlog 20261017-125557）：本机 `core.autocrlf=true`
+    时落盘即 CRLF；若文件在 worktree 里以 LF 写出，按每行 +1B 预演 main 检出后的字节。
     （原草案态断言「草案 v1/待用户确认生效」随用户确认转正而退役。）
     """
     p = PODS_ROOT / "twin" / "PREFERENCE.md"
     raw = p.read_bytes()
     text = raw.decode("utf-8")
     assert "v2 生效" in text and "taste_enabled=true" in text
-    assert len(raw) <= 8192, f"宪章超预算：{len(raw)} B"
+    n = budget_mod.disk_size(p)
+    assert n <= budget_mod.LIMIT, f"宪章超预算：{n} B"
 
 
 def test_twin_charter_and_agents_discipline():
