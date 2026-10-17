@@ -27,7 +27,7 @@
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -192,27 +192,51 @@ def render_ink_verdict(
     line_lum_max: float = LINE_LUM_MAX,
     line_chroma_max: float = LINE_CHROMA_MAX,
     box: tuple[int, int, int, int] | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     """对一层删文字版算出零遮挡读数（覆盖计数 + 最短距）。
+
+    ``progress`` 在每个阶段边界被调用（``蒙版``/``交集``/``最近距``/``汇总``）——供 CLI
+    打印可观察的阶段进度（大图上``最近距``可能耗时数分钟，backlog 20261017-101924）。
 
     Returns:
         ``{ink_px, colored_px, line_px, ink_colored_px, ink_line_px, ink_line_min_px,
         pass}``——``pass`` 要求两个交叠计数均为 0。
     """
+
+    def _p(stage: str) -> None:
+        if progress is not None:
+            progress(stage)
+
+    _p("蒙版")
     ink = ink_mask(img, white, tol=ink_tol)
     colored = colored_mask(img, chroma_min=chroma_min)
     line = line_mask(white, lum_max=line_lum_max, chroma_max=line_chroma_max)
+    _p("交集")
     ic = overlap_count(ink, colored, box=box)
     il = overlap_count(ink, line, box=box)
+    _p("最近距")
+    dist = min_distance_px(ink, line, box=box)
+    _p("汇总")
     return {
         "ink_px": int(_crop(ink, box).sum()),
         "colored_px": int(_crop(colored, box).sum()),
         "line_px": int(_crop(line, box).sum()),
         "ink_colored_px": ic,
         "ink_line_px": il,
-        "ink_line_min_px": min_distance_px(ink, line, box=box),
+        "ink_line_min_px": dist,
         "pass": ic == 0 and il == 0,
     }
+
+
+def downsample_rgb(arr: np.ndarray, factor: int) -> np.ndarray:
+    """**点采样**降采样（``factor`` 整数倍；``1`` 原样返回）——粗判口径。
+
+    大图（≥4000 px 宽）全分辨率判据可达数分钟；``--downsample 2`` 先粗判可把耗时降到
+    ~1/16（计数与最近距都是双蒙版对的乘积）。**最终结论仍以全分辨率为准**。
+    """
+    k = max(1, int(factor))
+    return arr if k == 1 else np.ascontiguousarray(arr[::k, ::k])
 
 
 def load_or_raise(path: Path) -> np.ndarray:
