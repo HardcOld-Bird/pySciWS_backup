@@ -3336,11 +3336,14 @@
       "kind": "usability",
       "success_criteria": "- 对 ≥4000 px 宽成品，`overlap` 运行期间至少每 30 s 输出一行阶段进度（可由重定向日志 tail 观察到），且 CLI `-h` 中出现耗时量级提示；\n- 提供并实测 `--downsample` 参数：同一对图在 `--downsample 2` 下给出与全分辨率**同判**的结论，耗时降至 ≤1/3；\n- 报告头明确写出所用尺度（px 与 dpi），使「min 距 ≥10 px @600 dpi」判据可复算。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-101924-figure.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T10:20:49+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit a74c77d）",
       "started_at": "2026-10-17T10:20:52+08:00",
-      "worktree": "20261017-101924-figure"
+      "worktree": "20261017-101924-figure",
+      "done_at": "2026-10-17T12:08:40+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-101924-figure"
     },
     {
       "id": "20261017-104500-devops",
@@ -3461,6 +3464,20 @@
       "source": "leader",
       "started_at": "2026-10-17T11:54:29+08:00",
       "worktree": "20261017-112800-devops"
+    },
+    {
+      "id": "20261017-120500-devops",
+      "member": "devops",
+      "summary": "fingerprint: tui-rebuild-click-race-crash-20261017",
+      "kind": "defect",
+      "success_criteria": "- TUI 运行日志在盘（含一次模拟异常注入的 traceback 记录）；\n- 内容未变时重建不触发（可测：tick 前后控件实例不变/日志注明 skip）；\n- 构造「点击瞬间重建」竞态（或异常注入）：TUI 不退出、日志有记录；\n- 修复前崩溃样例（MouseDown 落行标题）复跑不再崩；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-120500-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-17T12:33:48+08:00",
+      "note": "",
+      "source": "leader",
+      "started_at": "2026-10-17T12:33:51+08:00",
+      "worktree": "20261017-120500-devops"
     }
   ]
 }
