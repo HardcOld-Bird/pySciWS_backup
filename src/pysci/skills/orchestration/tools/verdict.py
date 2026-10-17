@@ -552,6 +552,15 @@ def cmd_consult_twin(args) -> int:
     )
     if outcome.error == "pod 不存在":
         print("    （twin pod 未就位：E6 上线前该通道不可用。）")
+    # rc=2 一码两义（backlog 20261017-104500）：冷启动纪律拒绝复用会话**不是**「twin 不可达」，
+    # 按后者解读会走夜航降级、白白放弃终裁——按因分型给出可执行重试指令。
+    err = str(getattr(outcome, "error", "") or "")
+    if getattr(outcome, "kind", "") == "run_failed" and "session='new'" in err:
+        print(
+            "  [!] 冷启动纪律拒绝复用会话（twin 每次判断必须冷启动）——**twin 本身可用**：\n"
+            "      加 `--session new` 重试（把 rc=2 一律读成「twin 不可达」会白白放弃终裁；\n"
+            "      deputy 咨询是另一条通道，不是本错误的解法）。"
+        )
     ruling = _taste.parse_ruling(str(getattr(outcome, "body", "") or ""))
     env = getattr(outcome, "envelope", None)
     case_id = _taste.case_id_from_path(case)
