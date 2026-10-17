@@ -95,6 +95,10 @@ __pycache__/
 # orch watch 的基线快照/心跳（backlog 20261010-orch-watch）：纯运行态观察面，
 # 事件已随 orch status 补账清算，无审计价值
 /orchestration/state/watch.json
+# 夜航会话读数（backlog 20261017-133500）：按 session_id 记上次开关值，供 Stop 钩子做
+# 回合边界差分。迁出 watch.json 独立成文件——watch 持有者整体覆写不再盖掉跳变记账。
+# 纯运行态（丢了只静默重记基线、不误注），无审计价值。
+/orchestration/state/night-seen.json
 # 唤醒权自动归属真源（wake-owner，用户设计定稿 2026-10-14）：session_id + 认领/心跳时刻，
 # 钩子 `wake-claim --check` 每回合读写。纯运行态（「此刻唤醒权归谁」），审计价值在
 # watch-arm.log 的归属判定行与 status 即时读数，故不入库。

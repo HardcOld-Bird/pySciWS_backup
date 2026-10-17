@@ -157,10 +157,10 @@ STALL_THRESHOLD_S: int = 60 * 60
 CONSUMED_KEEP: int = 40
 
 #: watch.json 里**跨挂载继承**的运行态键。``arm()`` 整体覆写 watch.json，故这些账必须
-#: 显式搬运：``consumed``=单一消费水位（同一事件只唤醒一次的硬判据）、``throttle``=节流账、
-#: ``night_seen``=夜航开关的会话级上次读数（``night.diff_message`` 写；不搬则每回合重复
-#: 注入夜航差分——「无变化零输出」的保证）。
-CARRY_KEYS: tuple[str, ...] = ("consumed", "throttle", "night_seen")
+#: 显式搬运：``consumed``=单一消费水位（同一事件只唤醒一次的硬判据）、``throttle``=节流账。
+#: （夜航 ``night_seen`` 已迁到独立文件 ``state/night-seen.json``——持旧快照写回的交错会
+#: 盖掉它，搬键防不住；见 ``night.NIGHT_SEEN_PATH``，backlog 20261017-133500。）
+CARRY_KEYS: tuple[str, ...] = ("consumed", "throttle")
 
 
 def _now() -> str:
