@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+import threading
+import time
 from pathlib import Path
 
 # CLI 始终无头运行：在导入任何 pyplot 相关模块前锁定 Agg 后端，避免弹窗/阻塞。
@@ -246,65 +248,145 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # overlap（零遮挡像素判据；backlog 20261016-014160）
 # ---------------------------------------------------------------------------
+def _dpi_of(path: Path) -> float | None:
+    """图像的 dpi（元数据缺失 → None）——报告头据此写出判据尺度。"""
+    try:
+        from PIL import Image
+
+        with Image.open(path) as im:
+            dpi = im.info.get("dpi")
+        if isinstance(dpi, (tuple, list)) and dpi and dpi[0]:
+            return float(dpi[0])
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+class _ProgressTicker:
+    """每 ``interval`` 秒打印一行「当前阶段 + 已用秒」并 **flush**。
+
+    stdout 重定向时是**块缓冲**，不 flush 就看不到任何进度（进程像挂死，backlog
+    20261017-101924：4k 成品单次判据 8–10 分钟，成员据此起了 3 个重复后台任务）。
+    """
+
+    def __init__(self, interval: float = 15.0):
+        self.interval = interval
+        self.stage = "准备"
+        self.t0 = time.monotonic()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval):
+            print(
+                f"[overlap] … {self.stage}（已 {time.monotonic() - self.t0:.0f}s）",
+                flush=True,
+            )
+
+    def __enter__(self) -> _ProgressTicker:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=2)
+
+
 def cmd_overlap(args: argparse.Namespace) -> int:
     """零遮挡判据：文字墨迹 ∩ 彩色数据区 / 图线真身，含**缓存自防护**。
 
     每份 ``--white <png>`` 是一层**删文字版**（同版式、把标注/刻度文字置白后重渲染）。派生缓存
     早于受审图即**过期**：给 ``--rebuild`` 则先重生成再复检，否则 rc=2 退出——绝不用过期缓存
     出读数（判法方法学见 ``occlusion`` 模块 docstring）。
+
+    大图（≥4000 px 宽）全分辨率判据可能数分钟——运行期逐阶段打印进度（``flush``，重定向日志
+    可 tail 观察）；``--downsample 2|4`` 先粗判（判据尺度与 dpi 写在报告头）。
     """
     img = Path(args.image)
     layers = [(Path(p), Path(p).stem) for p in args.white]
     check = _occ.check_caches(img, [p for p, _ in layers], rebuild=args.rebuild)
-    print(f"[overlap] 受审图 {img}")
-    print(f"[overlap] {check.message}")
+    scale = max(1, int(getattr(args, "downsample", 1) or 1))
+    print(f"[overlap] 受审图 {img}", flush=True)
+    print(f"[overlap] {check.message}", flush=True)
     if not check.ok:
         return 2
     try:
-        audited = _occ.load_or_raise(img)
+        full = _occ.load_or_raise(img)
     except OSError as e:
         print(f"[overlap] {e}", file=sys.stderr)
         return 2
+    h0, w0 = full.shape[:2]
+    dpi = _dpi_of(img)
+    audited = _occ.downsample_rgb(full, scale)
+    hh, ww = audited.shape[:2]
+    dpi_note = f"@ {dpi:.0f} dpi" if dpi else "@ dpi 未知"
+    if scale == 1:
+        print(f"[overlap] 尺度：全分辨率 {w0}×{h0} px {dpi_note}", flush=True)
+    else:
+        eff = f"（≈{dpi / scale:.0f} dpi）" if dpi else ""
+        print(
+            f"[overlap] 尺度：原图 {w0}×{h0} px {dpi_note} → downsample=1/{scale}，"
+            f"判据尺度 {ww}×{hh} px{eff}（粗判；终判请用 --downsample 1）",
+            flush=True,
+        )
     box = tuple(args.box) if args.box else None
+    mm_per_px = None if args.mm_per_px is None else float(args.mm_per_px) * scale
     overall = True
-    for path, label in layers:
-        try:
-            rep = _occ.render_ink_verdict(
-                audited,
-                _occ.load_or_raise(path),
-                ink_tol=args.ink_tol,
-                chroma_min=args.chroma_min,
-                line_lum_max=args.line_lum_max,
-                line_chroma_max=args.line_chroma_max,
-                box=box,
+    with _ProgressTicker() as ticker:
+        for path, label in layers:
+
+            def _stage(stage: str, _label: str = label) -> None:
+                ticker.stage = f"{_label}：{stage}"
+                print(
+                    f"[overlap] … {_label}：{stage}"
+                    f"（已 {time.monotonic() - ticker.t0:.0f}s）",
+                    flush=True,
+                )
+
+            try:
+                white = _occ.downsample_rgb(_occ.load_or_raise(path), scale)
+                rep = _occ.render_ink_verdict(
+                    audited,
+                    white,
+                    ink_tol=args.ink_tol,
+                    chroma_min=args.chroma_min,
+                    line_lum_max=args.line_lum_max,
+                    line_chroma_max=args.line_chroma_max,
+                    box=box,
+                    progress=_stage,
+                )
+            except (OSError, ValueError) as e:
+                print(f"[overlap] 层 {label}：{e}", file=sys.stderr)
+                return 2
+            d = rep["ink_line_min_px"]
+            dmm = (
+                " n/a"
+                if (d is None or mm_per_px is None)
+                else f" = {float(d) * mm_per_px:.2f}mm"
             )
-        except (OSError, ValueError) as e:
-            print(f"[overlap] 层 {label}：{e}", file=sys.stderr)
-            return 2
-        d = rep["ink_line_min_px"]
-        dmm = (
-            " n/a"
-            if (d is None or args.mm_per_px is None)
-            else f" = {float(d) * args.mm_per_px:.2f}mm"
-        )
-        print(
-            f"[overlap] 层 {label}（{path.name}）：墨迹={rep['ink_px']}px  "
-            f"彩色数据区={rep['colored_px']}px  图线真身={rep['line_px']}px"
-        )
-        print(
-            f"    墨迹∩彩色数据区 = {rep['ink_colored_px']}px -> "
-            f"{'PASS' if rep['ink_colored_px'] == 0 else 'FAIL'}"
-        )
-        print(
-            f"    墨迹∩图线真身   = {rep['ink_line_px']}px -> "
-            f"{'PASS' if rep['ink_line_px'] == 0 else 'FAIL'}"
-        )
-        print(
-            f"    墨迹→图线真身 min = "
-            f"{'n/a' if d is None else f'{float(d):.1f}px'}{dmm}"
-        )
-        overall = overall and bool(rep["pass"])
-    print(f"[overlap] 总判：{'PASS' if overall else 'FAIL'}")
+            print(
+                f"[overlap] 层 {label}（{path.name}）：墨迹={rep['ink_px']}px  "
+                f"彩色数据区={rep['colored_px']}px  图线真身={rep['line_px']}px",
+                flush=True,
+            )
+            print(
+                f"    墨迹∩彩色数据区 = {rep['ink_colored_px']}px -> "
+                f"{'PASS' if rep['ink_colored_px'] == 0 else 'FAIL'}",
+                flush=True,
+            )
+            print(
+                f"    墨迹∩图线真身   = {rep['ink_line_px']}px -> "
+                f"{'PASS' if rep['ink_line_px'] == 0 else 'FAIL'}",
+                flush=True,
+            )
+            print(
+                f"    墨迹→图线真身 min = "
+                f"{'n/a' if d is None else f'{float(d):.1f}px'}{dmm}"
+                f"  @尺度 1/{scale}",
+                flush=True,
+            )
+            overall = overall and bool(rep["pass"])
+    print(f"[overlap] 总判：{'PASS' if overall else 'FAIL'}", flush=True)
     return 0 if overall else 1
 
 
@@ -532,7 +614,9 @@ def build_parser() -> argparse.ArgumentParser:
         "overlap",
         help="零遮挡判据：文字墨迹∩彩色数据区/图线真身（含缓存自防护）",
         epilog="例：pysci-figures overlap out/x.png --white bench/white_field.png "
-        "--rebuild 'uv run --no-sync python bench/make_white.py'",
+        "--rebuild 'uv run --no-sync python bench/make_white.py'\n"
+        "耗时：4k 级成品全分辨率判据约需数分钟（大图先用 --downsample 2 粗判）；"
+        "运行期逐阶段打印进度（已 flush，重定向日志可 tail 观察）。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     s.add_argument("image", type=Path, help="受审图（PNG/JPG）")
@@ -575,6 +659,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--rebuild",
         default=None,
         help="缓存过期/缺失时的重生成命令（shell 串）；不给则过期即 rc=2 报错",
+    )
+    s.add_argument(
+        "--downsample",
+        type=int,
+        choices=(1, 2, 4),
+        default=1,
+        help="判据尺度降采样（点采样）：大图先 2/4 粗判，报告头写明尺度与 dpi；终判用 1",
     )
     s.set_defaults(func=cmd_overlap)
 
