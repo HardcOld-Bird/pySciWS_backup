@@ -46,8 +46,13 @@ const TAG_RE = new RegExp(
 // （110101 那跳：占位块在前、正式块在后），gate 只查第一块、解析器也只取第一块，
 // 于是非法 kind 的块被落盘、合法块反而没入库（backlog 20261012-120001-leader）。
 const INFRA_KINDS_DEFAULT = ['defect', 'usability'];
+// 块体**不得越过另一个开口标签**（backlog 20261017-053820-devops）：交付正文引用/讨论标签
+// 本身时，先出现的一个**裸开口标签**（无属性）曾与后文完整块的闭标签**跨段落配对**成一个
+// 假块（属性面＝空）→ 误判「缺 kind」退回。现在块体遇到下一个 `<infra_suggestion` 即止，
+// 于是裸引用不参与配对；而**整块自身**（裸开＋同处闭）仍照常被执法（缺 kind 依旧 exit 2）。
 const INFRA_RE = new RegExp(
-  `<infra_suggestion\\b(${ATTRS})>([\\s\\S]*?)</infra_suggestion>`,
+  `<infra_suggestion\\b(${ATTRS})>` +
+    `((?:(?!<infra_suggestion\\b)[\\s\\S])*?)</infra_suggestion>`,
   'g',
 );
 // E1（README §5.4）：`<blocked tags="a,b">` 的失败标签受控词表。词表**只有一份**，
@@ -116,11 +121,18 @@ function run() {
       const kindM = (b[1] || '').match(/\bkind\s*=\s*"([^"]*)"/);
       const kind = kindM ? kindM[1] : '';
       if (!vocab.includes(kind)) {
+        // 回显被配对的那段原文：让成员一眼分辨「是正文里的引用被误配」而不是「我的提案缺属性」
+        // （backlog 20261017-053820-devops）。
+        const excerpt = (b[2] || '').replace(/\s+/g, ' ').trim().slice(0, 80);
         problems.push(
           `<infra_suggestion> 必须带 kind 属性且取值 ${vocab.join(' 或 ')}（当前` +
             (kindM ? ` kind="${kind}"` : '缺 kind') +
             '）。动作：<infra_suggestion kind="defect">（缺陷，附复现证据）' +
-            '或 kind="usability"（难用/体验类）；块正文含 kind: 与 success_criteria 标记行供 approve 解析。'
+            '或 kind="usability"（难用/体验类）；块正文含 kind: 与 success_criteria 标记行供 approve 解析。' +
+            (excerpt
+              ? `被配对的块开头：「${excerpt}${excerpt.length >= 80 ? '…' : ''}」——若这是正文里`
+                + '对标签的**引用**而非你的提案，请把它转义成 `&lt;infra_suggestion&gt;` 后重发。'
+              : '')
         );
       }
     }

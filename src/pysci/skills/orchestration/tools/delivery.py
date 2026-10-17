@@ -35,8 +35,12 @@ _ARTIFACT_RE = re.compile(
 _ATTR_RE = re.compile(r'(?P<key>\w+)\s*=\s*"(?P<val>[^"]*)"')
 # E0-B：infra_suggestion 现在可带 kind 属性，通用 _extract（`<tag>` 字面量）匹配不到
 # 属性形式，故单列一条属性感知的正则（与 delivery-gate 的 INFRA_RE 同语义）。
+# 块体**不得越过另一个开口标签**（backlog 20261017-053820-devops）：交付正文引用/讨论
+# 标签本身时，先出现的**裸开口标签**不再与后文完整块的闭标签跨段落配对成一个「缺 kind」
+# 的假块（属性面取自裸标签＝空）。
 _INFRA_RE = re.compile(
-    rf"<infra_suggestion\b(?P<attrs>{_ATTRS})>(?P<body>.*?)</infra_suggestion>",
+    rf"<infra_suggestion\b(?P<attrs>{_ATTRS})>"
+    rf"(?P<body>(?:(?!<infra_suggestion\b).)*?)</infra_suggestion>",
     re.DOTALL,
 )
 # ---- 严格面：本进程所认识的**那一版**协议形状（随协议版本演进）----
