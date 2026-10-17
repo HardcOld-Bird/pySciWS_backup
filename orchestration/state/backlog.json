@@ -3320,11 +3320,14 @@
       "kind": "defect",
       "success_criteria": "跨页标题一致性判定不再因「run 数不同」而误报——标题指纹按合并后的整体字号/字体（或 set 去重）比对，视觉等价的多 run 标题判为一致。\n障碍现象：新落地的 `slides geometry` 跨页标题一致性**误报**——页 3 标题「·pySci·」视觉与格式与页 2 完全一致（同 sz=2000、同 Heiti SC Light、同位置同尺寸），仅因页 3 把文本拆成 2 个 run（『·』+『pySci·』，两 run rPr 逐字相同）而被报「第 3 页标题格式与基准（第 2 页）不一致：字号、字体」。\n复现：对未归一 run 的 20261016.pptx 运行\n`pysci-compose slides geometry 'data/research/1_gain_ep/汇报PPT/20261016/20261016.pptx'`\n实际输出：`标题不一致: 第 3 页标题格式与基准（第 2 页）不一致：字号、字体`（即便两面字号 20pt/字体 Heiti SC Light 完全相同）。\n成因：`_title_fmt` 把「每 run 的 (字号,字体)」拼成元组比对，run 数量不同即元组不等（`slides_visual.py` 约 596–615 行）。\n期望输出：元组按合并后去重/或按段整体聚合比对，使「runs 数不同但格式等价」的标题判为一致；本次已通过把标题归一为单 run 绕过，但该误报对任一手工多 run 标题都会触发。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-101130-writing.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T10:13:50+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit c471c66）",
       "started_at": "2026-10-17T10:13:54+08:00",
-      "worktree": "20261017-101130-writing"
+      "worktree": "20261017-101130-writing",
+      "done_at": "2026-10-17T11:38:39+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-101130-writing"
     },
     {
       "id": "20261017-101924-figure",
@@ -3438,10 +3441,26 @@
       "kind": "usability",
       "success_criteria": "- NEEDS-LEADER「已提交未合并」事件在**呈现/消费时**做旁证细分：分支已并入 main（或\nworktree 已摘）→ 标「已合并陈旧报」不呈报为待办（status 可留注记）；确未合并才照旧\n唤醒；\n- 回归测试：构造「事件在途期间合并完成」断言消费时不再提示授权；构造「确未合并」\n断言照常呈报；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-111500-devops.md",
-      "status": "pending",
+      "status": "in_progress",
       "proposed": "2026-10-17T11:21:52+08:00",
       "note": "",
-      "source": "leader"
+      "source": "leader",
+      "started_at": "2026-10-17T11:21:58+08:00",
+      "worktree": "20261017-111500-devops"
+    },
+    {
+      "id": "20261017-112800-devops",
+      "member": "devops",
+      "summary": "fingerprint: night-plan-gate-autopass-20261017",
+      "kind": "usability",
+      "success_criteria": "- 实测记录在盘（Plan 两环节的层级归属结论＋钩子触发证据）；\n- 若可接管：夜航 enabled=true 时 EnterPlanMode/ExitPlanMode 自动通过（无弹窗）、\nenabled=false 时行为不变；回归测试钩子判定两态各一例；\n- 若不可接管：留档实测证据与「不可行」结论（不实施，符合用户「不可以亦可不改进」）；\n- 政策文⑥ 过时定性已修正（无「不写钩子接管」字样残留）；\n- `uv run --no-sync pytest tests` 全绿。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-112800-devops.md",
+      "status": "in_progress",
+      "proposed": "2026-10-17T11:54:25+08:00",
+      "note": "",
+      "source": "leader",
+      "started_at": "2026-10-17T11:54:29+08:00",
+      "worktree": "20261017-112800-devops"
     }
   ]
 }
