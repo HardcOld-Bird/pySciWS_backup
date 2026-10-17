@@ -89,12 +89,12 @@ def test_merge_keep_preserves_face(tmp_path, monkeypatch):
 
 
 def test_merge_blocked_path_keeps_face(tmp_path, monkeypatch):
-    """交集阻断（rc=2）时面与分支必须保留——那是待抢救/待清面的进度。"""
+    """--no-shelve 下交集阻断（rc=2）时面与分支必须保留——那是待抢救/待清面的进度。"""
     main = _main_repo(tmp_path)
     wt = _add_face(main, "foo")
     (main / "a.txt").write_text("main WIP\n", encoding="utf-8")  # 与提交面相交的脏文件
     _bind(monkeypatch, main)
-    assert dev.cmd_worktree_merge("foo", wt) == 2
+    assert dev.cmd_worktree_merge("foo", wt, shelve=False) == 2
     assert "foo" in _worktree_names(main)
     assert _git(main, "branch", "--list", "wt-foo") != ""
 

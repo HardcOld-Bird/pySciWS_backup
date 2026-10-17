@@ -423,6 +423,34 @@ def _repo_with_branch(tmp_path: Path) -> tuple[Path, Path]:
     return main, wt
 
 
+def _repo_with_multiline_registry(tmp_path: Path) -> tuple[Path, Path]:
+    """同 ``_repo_with_branch``，但 registry.json 是**多行且够长**——让分支与 main 侧改
+    相隔够远的行（git 视作不同 hunk），三路应回得以「干净合并 vs 冲突」两条路径分别可测。"""
+    main = tmp_path / "main"
+    main.mkdir()
+    _git(main, "init", "-q", "-b", "main")
+    sd = main / "orchestration" / "state"
+    sd.mkdir(parents=True)
+    (sd / "registry.json").write_text(
+        '{\n  "v": 1,\n  "k1": "a",\n  "k2": "b",\n  "k3": "c",\n'
+        '  "k4": "d",\n  "k5": "e",\n  "note": "base"\n}\n',
+        encoding="utf-8",
+    )
+    _git(main, "add", "-A")
+    _git(main, "commit", "-q", "-m", "init")
+    wt = tmp_path / "wt"
+    _git(main, "worktree", "add", "-q", "-b", "wt-foo", str(wt))
+    return main, wt
+
+
+def _reg(v: str, note: str) -> str:
+    """registry.json 同形内容（v=第 2 行、note=末行），便于两条测试各改一处。"""
+    return (
+        f'{{\n  "v": {v},\n  "k1": "a",\n  "k2": "b",\n  "k3": "c",\n'
+        f'  "k4": "d",\n  "k5": "e",\n  "note": "{note}"\n}}\n'
+    )
+
+
 def test_porcelain_paths_parsing():
     """重命名取新路径、未跟踪目录原样留尾斜杠、非 status 形态的行跳过。"""
     out = (
@@ -510,8 +538,9 @@ def test_merge_faces_none_when_project_root_absent(monkeypatch, tmp_path):
     assert dev.merge_faces("wt-foo") is None
 
 
-def test_cmd_merge_blocks_on_true_overlap(tmp_path, monkeypatch, capsys):
-    """真交集（我提交的 registry.json 在 main 侧未提交地脏着）→ rc 2，且 cp 与 merge 都没发生。"""
+def test_cmd_merge_no_shelve_blocks_on_true_overlap(tmp_path, monkeypatch, capsys):
+    """--no-shelve（旧行为）：真交集（我提交的 registry.json 在 main 侧未提交地脏着）→ rc 2，
+    且 cp 与 merge 都没发生。"""
     main, wt = _repo_with_branch(tmp_path)
     (wt / "orchestration" / "state" / "registry.json").write_text(
         '{"v":2} from-branch\n', encoding="utf-8"
@@ -526,7 +555,7 @@ def test_cmd_merge_blocks_on_true_overlap(tmp_path, monkeypatch, capsys):
     before = _git(main, "rev-parse", "HEAD")
     monkeypatch.setattr(dev, "PROJECT_ROOT", main)
 
-    rc = dev.cmd_worktree_merge("foo", wt)
+    rc = dev.cmd_worktree_merge("foo", wt, shelve=False)
 
     assert rc == 2
     out = capsys.readouterr().out
@@ -536,6 +565,61 @@ def test_cmd_merge_blocks_on_true_overlap(tmp_path, monkeypatch, capsys):
         encoding="utf-8"
     ) == '{"v":9} uncommitted\n', "工作区未提交改动必须原样保住"
     assert dev._runtime_session_total(main) == 1, "检查先于 cp——运行态不该被搬"
+
+
+def test_cmd_merge_auto_shelves_and_reapplies(tmp_path, monkeypatch, capsys):
+    """缺省（自动搁置）：真交集不再 rc=2——合并成功，且 main 侧在飞改动三路应回、内容保住。"""
+    main, wt = _repo_with_multiline_registry(tmp_path)
+    # 分支改第 2 行（"v"）；main 侧未提交改末行（"note"）——相隔够远 → 应回可干净合并
+    (wt / "orchestration" / "state" / "registry.json").write_text(
+        _reg(2, "base"), encoding="utf-8"
+    )
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", "branch bumps v")
+    (main / "orchestration" / "state" / "registry.json").write_text(
+        _reg(1, "main-uncommitted"), encoding="utf-8"
+    )
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(4))
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(1))
+    before = _git(main, "rev-parse", "HEAD")
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+
+    rc = dev.cmd_worktree_merge("foo", wt)
+
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "自动搁置" in out and "已三路应回" in out
+    assert _git(main, "rev-parse", "HEAD") != before, "应产生 merge commit（不再中止）"
+    # 合并后：分支内容（v=2）与 main 侧在飞改动（note）**都在**（不丢）
+    merged = (main / "orchestration" / "state" / "registry.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"v": 2' in merged and "main-uncommitted" in merged, merged
+
+
+def test_cmd_merge_shelve_conflict_keeps_stash(tmp_path, monkeypatch, capsys):
+    """应回冲突：不丢改动——stash 条目保留、冲突如实报（合并本身仍已完成）。"""
+    main, wt = _repo_with_multiline_registry(tmp_path)
+    # 两侧都改末行（note）且内容不同 → 合并后应回必冲突
+    (wt / "orchestration" / "state" / "registry.json").write_text(
+        _reg(1, "branch-note"), encoding="utf-8"
+    )
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", "branch edits note")
+    (main / "orchestration" / "state" / "registry.json").write_text(
+        _reg(1, "main-note"), encoding="utf-8"
+    )
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(4))
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(1))
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+
+    dev.cmd_worktree_merge("foo", wt)
+
+    out = capsys.readouterr().out
+    assert "应回冲突" in out and "未丢失" in out
+    # stash 条目仍在（改动可找回）
+    rc, listing = dev._run_git("stash", "list")
+    assert rc == 0 and "pysci-merge-shelve" in listing, listing
 
 
 def test_cmd_merge_proceeds_when_branch_behind_main(tmp_path, monkeypatch, capsys):

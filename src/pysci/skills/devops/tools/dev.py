@@ -745,6 +745,49 @@ def dirty_face() -> set[str]:
     return porcelain_paths(proc.stdout)
 
 
+def _shelve_paths(paths: list[str], ts: str) -> str | None:
+    """把 main 侧这批未提交路径（含未跟踪）收进 ``git stash``，返回 stash commit sha。
+
+    成功即这些路径在工作区变干净、``git merge`` 得以进行；任何失败返回 ``None`` **且不动
+    工作区**（调用方据此退回旧行为 rc=2）。条目带唯一 message，记录 sha 供合并后按 sha
+    精确三路应回/丢弃——避免并发 push 让 ``stash@{0}`` 漂移。
+    """
+    msg = f"pysci-merge-shelve {ts} ({len(paths)})"
+    rc, _ = _run_git("stash", "push", "-u", "-m", msg, "--", *paths)
+    if rc != 0:
+        return None
+    rc, sha = _run_git("rev-parse", "--verify", "--quiet", "stash@{0}")
+    sha = sha.strip()
+    return sha if rc == 0 and sha else None
+
+
+def _drop_stash(sha: str) -> bool:
+    """按 sha 精确丢弃先前搁置的条目（``git stash drop`` 只认 ``stash@{n}``，故先解析序号）。"""
+    rc, out = _run_git("stash", "list", "--format=%gd %H")
+    if rc != 0:
+        return False
+    for ln in out.splitlines():
+        parts = ln.split()
+        if len(parts) == 2 and parts[1] == sha:
+            rc2, _ = _run_git("stash", "drop", parts[0])
+            return rc2 == 0
+    return False
+
+
+def _reapply_shelf(sha: str) -> str:
+    """把搁置的改动三路应回工作区；成功 → 丢弃条目；冲突/失败 → **保留条目**（改动不丢），返回一行读数。"""
+    rc, out = _run_git("stash", "apply", sha)
+    if rc == 0:
+        _drop_stash(sha)
+        return f"  [√] 已三路应回搁置的 main 侧改动（stash {sha[:8]}，条目已丢弃）"
+    tail = [ln for ln in out.splitlines() if ln.strip()]
+    why = tail[-1][:120] if tail else "git 报错"
+    return (
+        f"  [!] 搁置改动应回冲突——**未丢失**：仍在 stash {sha[:8]}，且已留在工作区待解（{why}）\n"
+        f"      处置：解决冲突后 `git add` + 提交；确认不需要时 `git stash drop {sha[:8]}`"
+    )
+
+
 def merge_faces(branch: str) -> tuple[set[str], set[str]] | None:
     """``(本次提交面, main 未提交面)``；任一算不出返回 None（调用方据此跳过检查）。"""
     try:
@@ -1001,7 +1044,12 @@ def _clean_worktrees(*, apply: bool, force: bool = False) -> int:
 
 
 def cmd_worktree_merge(
-    name: str, wt: Path, *, keep: bool = False, no_cp_state: bool = False
+    name: str,
+    wt: Path,
+    *,
+    keep: bool = False,
+    no_cp_state: bool = False,
+    shelve: bool = True,
 ) -> int:
     """worktree merge 主体：交集检查 → cp gitignored 运行态 → 会话数校验 → merge --no-ff → 自检。
 
@@ -1012,14 +1060,17 @@ def cmd_worktree_merge(
             的 gitignored 运行态更薄」的形状（孤儿回收/先 `git merge main` 同步过代码面的单）：
             旧行为把 cp 与 merge 捆死，该形状下唯一被文档认可的合并面被堵死，使用者只能绕开
             工具手敲 `git merge --no-ff`——而合并顺序、判据、脏面保护恰是工具存在的理由。
+        shelve: 交集非空时**自动搁置** main 侧相交改动（``git stash``）→ 合并 → 三路应回
+            （backlog 20261017-051318-tier-a）。置 False（``--no-shelve``）退回旧行为 rc=2。
 
     Returns:
-        0 成功；2 硬阻塞（与 main 未提交面有交集 / worktree 缺失 / 会话数会倒退）；
+        0 成功；2 硬阻塞（交集且搁置失败/被 --no-shelve 拒 / worktree 缺失 / 会话数会倒退）；
         merge 自身失败则透传其 rc。
     """
     branch = f"wt-{name}"
     ts = datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
 
+    shelf_sha: str | None = None
     print("== 合并前交集检查（本次提交面 ∩ main 未提交面）==")
     faces = merge_faces(branch)
     if faces is None:
@@ -1034,81 +1085,104 @@ def cmd_worktree_merge(
             f" / main 未提交 {len(dirty)} 项"
         )
         if offenders:
-            print(
-                f"  [✗] 交集 {len(offenders)} 项——合并会覆盖 main 工作区的未提交改动，"
-                "中止（未 cp、未 merge）："
-            )
+            print(f"  [!] 交集 {len(offenders)} 项——main 未提交面与本次提交面相交：")
             for f in offenders:
                 print(f"      {f}")
+            if not shelve:
+                print(
+                    "  [✗] --no-shelve：按旧行为中止（未 cp、未 merge）——"
+                    "处置：组长先提交或还原上述文件后重跑；与本单无关的脏项不会走到这里"
+                )
+                return 2
             print(
-                "  处置：组长先提交或还原上述文件后重跑；与本单无关的脏项不会走到这里"
+                "  [⇒] 自动搁置这批 main 侧改动（backlog 20261017-051318）→ 合并 → 三路应回："
+            )
+            shelf_sha = _shelve_paths(offenders, ts)
+            if shelf_sha is None:
+                print(
+                    "  [✗] 自动搁置失败——按旧行为中止（未 cp、未 merge）——"
+                    "处置：组长先提交或还原上述文件后重跑"
+                )
+                return 2
+            print(
+                f"      已搁置 {len(offenders)} 项 → stash {shelf_sha[:8]}"
+                "（合并后三路应回，改动不丢）"
+            )
+        else:
+            print("  [√] 交集为空（无关脏项不拦）")
+
+    try:
+        base_n = _runtime_session_total(PROJECT_ROOT) or 0
+        wt_n = _runtime_session_total(wt)
+        # 仅当 worktree 确实带来一个更稀疏的运行态（会覆盖 main 的更丰富数据）才中止；
+        # worktree 无运行态（从未派发/加载）时 cp 对 sessions-runtime.json 是 no-op，不该误挡。
+        # no_cp_state 走「不搬运行态」通道：本闸只防「拿稀疏面盖掉 richer 面」，不搬即无此风险。
+        if not no_cp_state and wt_n is not None and wt_n < base_n:
+            print(
+                f"[!] worktree 侧会话数 {wt_n} < main baseline {base_n}——cp 会覆盖更丰富的 main "
+                f"运行态、丢会话，中止。**成因＝worktree 的运行态比 main 稀疏**，处置："
+                f"① 该面若来自 `pysci-dev worktree add` 之后，add 会自动播种，走到这里说明"
+                f"worktree 侧运行态后来被清空/回退过——查它在盘内容；"
+                f"② 或 main 在 add 之后新增了大量会话——以 main 为准；"
+                f"③ 分支**已含 main 全部提交**、只是运行态薄（先 `git merge main` 同步过代码面的"
+                f"孤儿回收单）→ 走**不搬运行态**通道：`--no-cp-state`；"
+                f"④ 或手动 `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 后重跑"
+            )
+            print(
+                f"[NEXT] 不搬运行态直接合并：`pysci-dev worktree merge {name} --no-cp-state`"
+                f"——保留 main 版运行态、继续 merge，不必绕开工具手敲 `git merge --no-ff`"
             )
             return 2
-        print("  [√] 交集为空（无关脏项不拦）")
 
-    base_n = _runtime_session_total(PROJECT_ROOT) or 0
-    wt_n = _runtime_session_total(wt)
-    # 仅当 worktree 确实带来一个更稀疏的运行态（会覆盖 main 的更丰富数据）才中止；
-    # worktree 无运行态（从未派发/加载）时 cp 对 sessions-runtime.json 是 no-op，不该误挡。
-    # no_cp_state 走「不搬运行态」通道：本闸只防「拿稀疏面盖掉 richer 面」，不搬即无此风险。
-    if not no_cp_state and wt_n is not None and wt_n < base_n:
-        print(
-            f"[!] worktree 侧会话数 {wt_n} < main baseline {base_n}——cp 会覆盖更丰富的 main "
-            f"运行态、丢会话，中止。**成因＝worktree 的运行态比 main 稀疏**，处置："
-            f"① 该面若来自 `pysci-dev worktree add` 之后，add 会自动播种，走到这里说明"
-            f"worktree 侧运行态后来被清空/回退过——查它在盘内容；"
-            f"② 或 main 在 add 之后新增了大量会话——以 main 为准；"
-            f"③ 分支**已含 main 全部提交**、只是运行态薄（先 `git merge main` 同步过代码面的"
-            f"孤儿回收单）→ 走**不搬运行态**通道：`--no-cp-state`；"
-            f"④ 或手动 `cp orchestration/state/sessions-runtime.json <wt>/orchestration/state/` 后重跑"
-        )
-        print(
-            f"[NEXT] 不搬运行态直接合并：`pysci-dev worktree merge {name} --no-cp-state`"
-            f"——保留 main 版运行态、继续 merge，不必绕开工具手敲 `git merge --no-ff`"
-        )
-        return 2
-
-    if no_cp_state:
-        print("== 运行态保留 main 版（--no-cp-state）：跳过 cp，main 侧运行态不动 ==")
-    else:
-        log = _cp_ignored_state(wt, PROJECT_ROOT, ts)
-        print("== cp gitignored 运行态（worktree → main）==")
-        if log:
-            for nm, tag in log:
-                print(f"  [√] orchestration/state/{nm}（{tag}）")
-        else:
-            print("  （无候选文件需搬）")
-
-    print(f"== git merge --no-ff {branch} ==")
-    rc, out = _run_git("merge", "--no-ff", branch)
-    print(out)
-    if rc != 0:
-        print(
-            f"[!] merge 失败 rc={rc}——main 侧冲突请人工处理"
-            + ("" if no_cp_state else "（cp 已落；运行态文件不受影响）")
-        )
-        return rc
-
-    after_n = _runtime_session_total(PROJECT_ROOT) or 0
-    if after_n < base_n:
-        print(
-            f"[✗] 合并后会话数倒退：base={base_n} after={after_n}——请核对 sessions-runtime.json"
-        )
-        return 2
-    print(f"[√] 会话数不减（base={base_n} → after={after_n}）")
-    # 成功收尾＝自动摘除隔离面（backlog 20261013-215911-leader）：内容已 merge 进 main，
-    # 清理是安全的；失败/blocked 路径在前面各 return 点就退出了，面与分支一律保留供抢救链。
-    # 此前每次正常完成都在 .qoder/worktrees/ 留一个冗余面（实测积压 7 个）。--keep 检视用。
-    if keep:
-        print(f"[i] --keep：保留 worktree 与分支 wt-{name}（供检视）")
-    else:
-        print("== 收尾：摘除已完成的隔离面 ==")
-        if _remove_worktree(name, wt) != 0:
+        if no_cp_state:
             print(
-                "  [i] 面盘内有未提交/未跟踪改动，未自动摘（不 --discard，免误删未提交改动）"
-                "——处置：`pysci-dev worktree clean` 查看，确认可弃后 `--apply --discard`"
+                "== 运行态保留 main 版（--no-cp-state）：跳过 cp，main 侧运行态不动 =="
             )
-    return 0
+        else:
+            log = _cp_ignored_state(wt, PROJECT_ROOT, ts)
+            print("== cp gitignored 运行态（worktree → main）==")
+            if log:
+                for nm, tag in log:
+                    print(f"  [√] orchestration/state/{nm}（{tag}）")
+            else:
+                print("  （无候选文件需搬）")
+
+        print(f"== git merge --no-ff {branch} ==")
+        rc, out = _run_git("merge", "--no-ff", branch)
+        print(out)
+        if rc != 0:
+            print(
+                f"[!] merge 失败 rc={rc}——main 侧冲突请人工处理"
+                + ("" if no_cp_state else "（cp 已落；运行态文件不受影响）")
+            )
+            return rc
+
+        after_n = _runtime_session_total(PROJECT_ROOT) or 0
+        if after_n < base_n:
+            print(
+                f"[✗] 合并后会话数倒退：base={base_n} after={after_n}——请核对 sessions-runtime.json"
+            )
+            return 2
+        print(f"[√] 会话数不减（base={base_n} → after={after_n}）")
+        # 成功收尾＝自动摘除隔离面（backlog 20261013-215911-leader）：内容已 merge 进 main，
+        # 清理是安全的；失败/blocked 路径在前面各 return 点就退出了，面与分支一律保留供抢救链。
+        # 此前每次正常完成都在 .qoder/worktrees/ 留一个冗余面（实测积压 7 个）。--keep 检视用。
+        if keep:
+            print(f"[i] --keep：保留 worktree 与分支 wt-{name}（供检视）")
+        else:
+            print("== 收尾：摘除已完成的隔离面 ==")
+            if _remove_worktree(name, wt) != 0:
+                print(
+                    "  [i] 面盘内有未提交/未跟踪改动，未自动摘（不 --discard，免误删未提交改动）"
+                    "——处置：`pysci-dev worktree clean` 查看，确认可弃后 `--apply --discard`"
+                )
+        return 0
+    finally:
+        # 搁置的 main 侧改动**必在此应回**（成功/任一 return 路径都走这里）：三路合并到合并后的
+        # 工作区；冲突则保留 stash 条目并如实报，绝不静默丢失在飞改动。
+        if shelf_sha:
+            print("== 应回搁置的 main 侧改动（三路合并，backlog 20261017-051318）==")
+            print(_reapply_shelf(shelf_sha))
 
 
 def _worktree_exists(*, name: str, wt_path: Path) -> None:
@@ -1195,6 +1269,7 @@ def cmd_worktree(args: argparse.Namespace) -> int:
             wt_path,
             keep=bool(getattr(args, "keep", False)),
             no_cp_state=bool(getattr(args, "no_cp_state", False)),
+            shelve=not bool(getattr(args, "no_shelve", False)),
         )
     if action == "remove":
         try:
@@ -1423,6 +1498,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="merge：**不搬运行态**的合并通道——跳过 cp 与会话数自检，保留 main 版运行态"
         "（用于「分支已含 main 全部提交、只是 worktree 运行态更薄」的单，免绕开工具手敲 git merge）",
+    )
+    p.add_argument(
+        "--no-shelve",
+        action="store_true",
+        help="merge：**不自动搁置**相交的 main 侧改动——交集非空时按旧行为 rc=2 中止。"
+        "缺省（不带此旗标）为自动搁置→合并→三路应回（backlog 20261017-051318）",
     )
     p.set_defaults(func=cmd_worktree)
 
