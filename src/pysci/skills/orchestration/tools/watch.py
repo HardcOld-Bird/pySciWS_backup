@@ -46,15 +46,17 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pysci.paths import ORCH_STATE_ROOT
+from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 
 from . import drain as _drain
 from . import events as _events
+from . import procs as _procs
 from . import stallwatch as _stallwatch
 from . import workflow as _workflow
 
@@ -255,6 +257,36 @@ _EVIDENCE_EVENT_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _branch_still_unmerged(branch: str) -> bool | None:
+    """分支是否**仍有未并入 main 的提交**：False=已并入（或分支已删）/ True=仍有 / None=查不出。
+
+    用于 NEEDS-LEADER「已提交未合并」的**消费时旁证**（backlog 20261017-111500）：patrol 在
+    job 在途时发的报警，等组长 drain 时 job 往往已自行合并——陈旧报不该再当待办。
+    """
+    try:
+        r = _procs.run_hidden(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if r.returncode != 0:
+            return False  # 分支已删（合并后摘面）
+        c = _procs.run_hidden(
+            ["git", "rev-list", "--count", f"main..{branch}"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if c.returncode != 0:
+            return None
+        return int(c.stdout.strip() or "0") > 0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
 def _suspect_acked(ev: dict[str, Any]) -> str:
     """「疑已处理」旁证：回证据短语（**非空即疑已处理**），查不到回空串（照常唤醒）。
 
@@ -269,10 +301,19 @@ def _suspect_acked(ev: dict[str, Any]) -> str:
     → 空串；``subject`` 查不到或条目仍在队里（``pending``/``in_progress``）→ 空串；旁证面
     读失败 → 空串（**宁可报，不静默**——兜底防漏唤是这条报警的本意）。
     """
-    if str(ev.get("event") or "") not in _EVIDENCE_EVENT_TYPES:
-        return ""
+    kind = str(ev.get("event") or "")
     subj = str(ev.get("subject") or "").strip()
     if not subj:
+        return ""
+    # ③ NEEDS-LEADER「已提交未合并」：消费时复查分支——已并入 main / 分支已删 → 陈旧报，
+    # 降级为 status 注记，不再唤醒组长（backlog 20261017-111500；与 001500 同款病灶）。
+    if kind == _events.NEEDS_LEADER and subj.startswith("wt-"):
+        return (
+            f"{subj} 已并入 main（已合并陈旧报）"
+            if _branch_still_unmerged(subj) is False
+            else ""
+        )
+    if kind not in _EVIDENCE_EVENT_TYPES:
         return ""
     try:
         from . import queues as _queues
