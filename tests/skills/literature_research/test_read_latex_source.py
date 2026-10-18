@@ -58,6 +58,9 @@ def _args(target: str, **kw: Any) -> argparse.Namespace:
         "note": False,
         "overwrite": False,
         "headed": False,
+        # 隔离外部副作用：不经真 Zotero、不真睡重试（重试/兜底另有专测）。
+        "no_zotero": True,
+        "retries": 0,
     }
     base.update(kw)
     return argparse.Namespace(**base)

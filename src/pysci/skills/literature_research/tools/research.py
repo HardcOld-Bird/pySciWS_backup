@@ -51,6 +51,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -1295,6 +1296,7 @@ def cmd_read(args: argparse.Namespace) -> int:
     bundle = None
     pdf_path: Path | None = None
     html_path: Path | None = None
+    evidence: list[str] = []
     if not md:
         if kind == "arxiv":
             try:
@@ -1308,11 +1310,17 @@ def cmd_read(args: argparse.Namespace) -> int:
                     f"[read] arXiv PDF 下载失败：{type(e).__name__}: {e}",
                     file=sys.stderr,
                 )
+            if pdf_path:
+                evidence.append(f"arXiv 直连 PDF：{pdf_path}")
             if not pdf_path:
                 url = f"https://arxiv.org/abs/{val}"
                 print(f"[read] 回退浏览器抓取：{url}")
-                bundle = _safe_fetch(url, out_dir, args)
+                bundle = _fetch_with_retries(url, out_dir, args)
                 pdf_path = bundle.pdf_path if bundle else None
+                evidence.append(
+                    f"浏览器 {url} → ok={getattr(bundle, 'ok', False)} "
+                    f"pdf={pdf_path or '无'} kind={getattr(bundle, 'failure_kind', '') or '—'}"
+                )
         else:
             # 抓取顺序（方案 H5）：**先试直链的普通 HTTP GET**（免费、不启动浏览器），
             # 失败才起 Playwright。直链候选＝OpenAlex 的 oa_url ＋**出版商 PDF 直链**
@@ -1340,6 +1348,9 @@ def cmd_read(args: argparse.Namespace) -> int:
                 )
                 print(f"[read] 先试直链（免浏览器）：{cand}")
                 pdf_path = _download_direct(cand, dest, force=force)
+                evidence.append(
+                    f"直链 {cand} → {'PDF 已取得' if pdf_path else '未取得 PDF'}"
+                )
                 if pdf_path:
                     break
             if not pdf_path:
@@ -1360,8 +1371,28 @@ def cmd_read(args: argparse.Namespace) -> int:
                         )
                         return 2
                 print(f"[read] 抓取：{url}")
-                bundle = _safe_fetch(url, out_dir, args)
+                bundle = _fetch_with_retries(url, out_dir, args)
                 pdf_path = bundle.pdf_path if bundle else None
+                evidence.append(
+                    f"浏览器 {url} → ok={getattr(bundle, 'ok', False)} "
+                    f"status={getattr(bundle, 'status', 0) or '?'} "
+                    f"cloudflare={getattr(bundle, 'cloudflare', False)} "
+                    f"kind={getattr(bundle, 'failure_kind', '') or '—'} "
+                    f"pdf={pdf_path or '无'}"
+                )
+
+            # 2.5) Zotero 兜底（a2：其内置浏览器栈/本地附件）：浏览器仍无 PDF 时查库
+            if not pdf_path and (work or {}) and not getattr(args, "no_zotero", False):
+                z_dest = settings.cache_pdfs / _oa_pdf_filename(work, url)
+                z_pdf, z_note = _zotero_find_pdf(
+                    str((work or {}).get("doi") or ""),
+                    str((work or {}).get("title") or ""),
+                    z_dest,
+                )
+                evidence.append(f"Zotero → {z_note}")
+                print(f"[read] Zotero 兜底：{z_note}", file=sys.stderr)
+                if z_pdf:
+                    pdf_path = z_pdf
 
         # 3) 抽取全文 → Markdown（write_cache=False：只留规范的 {stem}_fulltext.md，消除双副本）
         if pdf_path and Path(pdf_path).exists():
@@ -1509,6 +1540,10 @@ def cmd_read(args: argparse.Namespace) -> int:
         )
     else:
         print("[read] 警告：未获得全文（PDF 抓取与抽取均失败）。", file=sys.stderr)
+        if evidence:
+            print("[read] 渠道证据（逐渠道）：", file=sys.stderr)
+            for line in evidence:
+                print(f"  - {line}", file=sys.stderr)
         if bundle is not None:
             kind = getattr(bundle, "failure_kind", "") or "unknown"
             err = getattr(bundle, "error", "") or "未知原因"
@@ -1544,6 +1579,125 @@ def _safe_fetch(url: str, out_dir: Path, args: argparse.Namespace) -> Any:
             file=sys.stderr,
         )
         return None
+
+
+#: 可重试失败的额外重试次数与首次退避（a2：N 次指数退避）。
+READ_RETRIES = 2
+READ_RETRY_BACKOFF_S = 2.0
+
+
+def _fetch_with_retries(url: str, out_dir: Path, args: argparse.Namespace) -> Any:
+    """浏览器抓取 + 可重试失败（CF/超时/429/5xx）指数退避重试。"""
+    retries = int(
+        getattr(args, "retries", getattr(args, "fetch_retries", READ_RETRIES)) or 0
+    )
+    delay = READ_RETRY_BACKOFF_S
+    bundle = None
+    for attempt in range(max(0, retries) + 1):
+        bundle = _safe_fetch(url, out_dir, args)
+        if (
+            bundle is None
+            or getattr(bundle, "ok", False)
+            or not getattr(bundle, "retryable", False)
+        ):
+            return bundle
+        if attempt < retries:
+            kind = getattr(bundle, "failure_kind", "?")
+            print(
+                f"[read] 可重试失败（{kind}）——{delay:.0f}s 后重试 "
+                f"（{attempt + 1}/{retries}）",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+            delay *= 2
+    return bundle
+
+
+def _zotero_item_data(item: dict[str, Any]) -> dict[str, Any]:
+    data = item.get("data")
+    return data if isinstance(data, dict) else item
+
+
+def _pick_zotero_item(
+    items: list[dict[str, Any]], doi: str, title: str
+) -> dict[str, Any] | None:
+    """从 Zotero 搜索结果里挑与 DOI（优先）或标题匹配的条目。"""
+    dl = str(doi or "").lower().strip()
+    for it in items:
+        if dl and dl in json.dumps(_zotero_item_data(it), ensure_ascii=False).lower():
+            return it
+    tl = str(title or "").lower().strip()
+    for it in items:
+        if tl and tl in str(_zotero_item_data(it).get("title") or "").lower():
+            return it
+    return items[0] if len(items) == 1 else None
+
+
+def _zotero_attachment_path(data: dict[str, Any]) -> Path | None:
+    """附件子项的本地 PDF 路径（绝对 path，或 ``storage/<key>/<filename>``）。"""
+    raw = str(data.get("path") or "")
+    if raw:
+        p = Path(raw)
+        if p.is_absolute() and p.exists():
+            return p
+        if settings.zotero_data_dir:
+            cand = settings.zotero_data_dir / raw
+            if cand.exists():
+                return cand
+            cand = (
+                settings.zotero_data_dir / "storage" / str(data.get("key") or "") / raw
+            )
+            if cand.exists():
+                return cand
+    fname = str(data.get("filename") or "")
+    if fname and settings.zotero_data_dir:
+        cand = settings.zotero_data_dir / "storage" / str(data.get("key") or "") / fname
+        if cand.exists():
+            return cand
+    return None
+
+
+def _zotero_find_pdf(doi: str, title: str, dest: Path) -> tuple[Path | None, str]:
+    """Zotero 兜底：按 DOI/标题找条目 → 子附件里的本地 PDF → 复制到缓存。
+
+    Returns:
+        ``(pdf_path|None, 一行证据)``——无论成败都返回一句可写进渠道证据的说明。
+    """
+    if not zotero_cli.available():
+        return None, "zotero-cli 未安装（跳过）"
+    try:
+        zb = zotero_cli.ZoteroCli()
+        query = doi or title
+        if not query:
+            return None, "无 DOI/标题可查"
+        items = zb.search_items(query, limit=25)
+        # DOI 在 Zotero 的 items 搜索里常命不中（元数据字段形态不一）→ 再按标题一次
+        if not items and doi and title:
+            items = zb.search_items(title, limit=25)
+            query = f"{doi} → {title}"
+        item = _pick_zotero_item(items, doi, title)
+        if item is None:
+            return None, f"库里无匹配条目（query={query!r}）"
+        data = _zotero_item_data(item)
+        key = str(data.get("key") or item.get("key") or "")
+        if not key:
+            return None, "匹配条目缺 key"
+        for child in zb.get_children(key):
+            cd = _zotero_item_data(child)
+            if str(cd.get("itemType") or "") != "attachment":
+                continue
+            fname = str(cd.get("filename") or "")
+            ctype = str(cd.get("contentType") or "").lower()
+            if "pdf" not in ctype and not fname.lower().endswith(".pdf"):
+                continue
+            src = _zotero_attachment_path(cd)
+            if src is not None:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+                return dest, f"命中条目 {key} 的本地 PDF 附件：{src}"
+        return None, f"条目 {key} 无本地 PDF 附件"
+    except Exception as e:  # noqa: BLE001 - 兜底不致命
+        return None, f"查找失败：{type(e).__name__}: {e}"
 
 
 # ===========================================================================
@@ -3367,6 +3521,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument(
         "--headed", action="store_true", help="有头浏览器（应对 Cloudflare 等）"
+    )
+    sp.add_argument(
+        "--retries",
+        type=int,
+        default=READ_RETRIES,
+        help=f"可重试失败（CF/超时/5xx）的额外重试次数，指数退避（默认 {READ_RETRIES}）",
+    )
+    sp.add_argument(
+        "--no-zotero", action="store_true", help="跳过 Zotero 本地 PDF 兜底"
     )
     sp.add_argument(
         "--no-note", dest="note", action="store_false", help="只抓全文，不建笔记骨架"

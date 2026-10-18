@@ -81,6 +81,19 @@ compose slides focus-anim '<deck.pptx>' --page 3 \
 学院正式汇报预设 §5；`--fade 块序号:shape` 给该块加「进入·淡入」。注入后仍须
 `slides render/verify` + 放映模式核对单击顺序（机械闸不验观感）。
 
+## 排版机械判据（学院预设；实现 ③④）
+
+```
+compose slides layout '<deck.pptx>' --page 3 \
+  --title '9,21' --refs '30:9' --refs '31:21' [--tol 0.05] [--json] [--strict]
+```
+
+- `--title`：焦点块标题形状 ID；≥2 个时**上缘或左缘**在容差内即 PASS（逐项读 Δtop/Δleft）。
+- `--refs REF:ANCHOR`：引用框左缘与其焦点块左缘对齐；框内 `[n]` ≤3 条时要求一行一文献；
+  多框上缘、下缘一致。无 `[n]` 标记的框跳过行数判据。
+- 取舍：①焦点块轮廓饱满 / ②同级间距一致性**本期未实现**——需显式块分组与递归切分语义，
+  当前 deck 未暴露组结构，硬判误报率高；没给 ID 的判据只打印「跳过」，不臆造读数。
+
 ## 网页截图（deck 里的官网 / 页面图）
 
 需要把网页截进幻灯片时用本机 `playwright`（已装，复用 literature_research 的浏览器）：

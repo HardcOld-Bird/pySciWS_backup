@@ -84,6 +84,9 @@ CF_MARKERS = (
     "checking your browser",
     "attention required",
 )
+#: CF JS 挑战等待上限（秒）与轮询间隔（毫秒）——a2 方案定为 ~30s。
+CF_WAIT_S = 30
+CF_POLL_MS = 1000
 
 
 @dataclass(frozen=True)
@@ -107,13 +110,26 @@ APS_ADAPTER = PublisherAdapter(
     ),
     wait_selector="#fulltext-content",
 )
+SCIENCE_ADAPTER = PublisherAdapter(
+    name="science",
+    hosts=("science.org",),
+    # Science 2021+ 页面：正文在 article/.article__body；旧页回落 #fulltext。
+    fulltext_selectors=(
+        "article .article__body",
+        "div.article__body",
+        "section.article__body",
+        "article",
+        "#fulltext",
+    ),
+    wait_selector="article, .article__body, #fulltext",
+)
 GENERIC_ADAPTER = PublisherAdapter(
     name="generic",
     hosts=(),
     fulltext_selectors=("article", "main", "[role=main]", "#content", "body"),
     wait_selector=None,
 )
-ADAPTERS: tuple[PublisherAdapter, ...] = (APS_ADAPTER,)
+ADAPTERS: tuple[PublisherAdapter, ...] = (APS_ADAPTER, SCIENCE_ADAPTER)
 
 
 def detect_adapter(url: str) -> PublisherAdapter:
@@ -604,8 +620,16 @@ def _download_via_click(page: Any, href: str) -> bytes | None:
 
 
 def _derive_pdf_url(url: str) -> str | None:
-    """APS：把 /abstract/ 换成 /pdf/。"""
-    return url.replace("/abstract/", "/pdf/") if "/abstract/" in url else None
+    """出版商 PDF 直链推导：APS ``/abstract/``→``/pdf/``；Science ``/doi/…``→``/doi/pdf/…``。"""
+    if "/abstract/" in url:
+        return url.replace("/abstract/", "/pdf/")
+    u = url.split("#", 1)[0].split("?", 1)[0]
+    m = re.match(
+        r"(https?://(?:www\.)?science\.org)/doi/(?:(?:full|abs|epdf)/)?(.+)$", u
+    )
+    if m and "/doi/pdf/" not in u:
+        return f"{m.group(1)}/doi/pdf/{m.group(2)}"
+    return None
 
 
 def _filename_from_url(href: str, text: str | None = None) -> str:
@@ -715,7 +739,45 @@ def _write_bundle_cache(res: BundleResult, url: str, base_out: Path) -> None:
         pass
 
 
-def fetch_bundle(
+def _cf_blocked(page: Any) -> bool:
+    """当前页是否仍是 Cloudflare 挑战页（标题或正文标记）。"""
+    try:
+        title = (page.title() or "").lower()
+    except Exception:  # noqa: BLE001
+        title = ""
+    if "just a moment" in title:
+        return True
+    try:
+        low = (page.content() or "")[:300000].lower()
+    except Exception:  # noqa: BLE001
+        return True  # 读不到内容＝不能断言已放行
+    return any(m in low for m in CF_MARKERS)
+
+
+def _await_cloudflare(page: Any, ctx: Any, timeout_s: float = CF_WAIT_S) -> bool:
+    """等 CF JS 挑战完成（cf_clearance 出现 / 页面落定）；返回是否放行。"""
+    deadline = time.time() + max(0.0, timeout_s)
+    while True:
+        if not _cf_blocked(page):
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:  # noqa: BLE001
+                pass
+            return not _cf_blocked(page)
+        has_clearance = any(c.get("name") == "cf_clearance" for c in ctx.cookies())
+        if has_clearance:
+            try:
+                page.wait_for_timeout(CF_POLL_MS)
+            except Exception:  # noqa: BLE001
+                pass
+            if not _cf_blocked(page):
+                return True
+        if time.time() >= deadline:
+            return False
+        page.wait_for_timeout(CF_POLL_MS)
+
+
+def _fetch_bundle_once(
     url: str,
     *,
     want_html: bool = True,
@@ -726,31 +788,10 @@ def fetch_bundle(
     channel: str = "auto",
     timeout_ms: int = 60000,
     adapter: PublisherAdapter | None = None,
-    use_cache: bool = True,
-    max_age_days: int | None = None,
+    challenge_wait_s: float = CF_WAIT_S,
 ) -> BundleResult:
-    """一次浏览器会话拿全套：HTML 正文 + 正文 PDF + 补充材料（若有）。
-
-    全部产物存到 ``<out_dir>/<slug>/``：``<slug>.md``（HTML 全文，带 frontmatter）、
-    ``<slug>.pdf``（出版商正文 PDF）、补充材料按原文件名保存。
-
-    缓存（Tier A 持久层）：``use_cache=True``（默认）时先查 ``<out_dir>/.by_url/<url-hash>.json``
-    清单，若同一 URL 的 bundle 仍在且满足 want_* 要求，则**不启动浏览器**直接复用；
-    ``max_age_days=None`` 表示永不过期。``use_cache=False``（对应 research read 的 ``--force``）强制重抓。
-    """
+    """单次浏览器会话抓取（不含缓存与 headed 重试，由 :func:`fetch_bundle` 编排）。"""
     base_out = Path(out_dir) if out_dir else DEFAULT_OUT_DIR
-
-    if use_cache:
-        cached = _read_bundle_cache(
-            url,
-            base_out,
-            max_age_days=max_age_days,
-            want_html=want_html,
-            want_pdf=want_pdf,
-        )
-        if cached is not None:
-            print(f"[browser_fetch] 命中缓存 bundle：{cached.slug}（未启动浏览器）")
-            return cached
 
     try:
         from playwright.sync_api import sync_playwright
@@ -773,6 +814,23 @@ def fetch_bundle(
             page = ctx.new_page()
             response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
             res.status = int(getattr(response, "status", 0) or 0)
+            # DOI 入口会 302 到出版商站点：按**最终 URL** 重认适配器（Science 等靠此命中）
+            final_ad = detect_adapter(page.url or url)
+            if final_ad.name != "generic":
+                ad = final_ad
+                res.adapter = ad.name
+            # CF 挑战页没有适配器选择器：先判挑战并等待/早退，别把 60s 选择器超时白花掉
+            if _cf_blocked(page):
+                passed = _await_cloudflare(page, ctx, challenge_wait_s)
+                res.notes.append(
+                    f"Cloudflare JS 挑战：等待 {challenge_wait_s:.0f}s "
+                    + ("已通过（cf_clearance/页面落定）" if passed else "未通过")
+                )
+                if not passed:
+                    res.cloudflare = True
+                    res.seconds = round(time.time() - t0, 1)
+                    _classify_failure(res)
+                    return res
             if ad.wait_selector:
                 try:
                     page.wait_for_selector(ad.wait_selector, timeout=timeout_ms)
@@ -786,10 +844,7 @@ def fetch_bundle(
 
             html_low = page.content().lower()
             res.paywalled = any(m in html_low for m in PAYWALL_MARKERS)
-            res.cloudflare = (
-                any(m in html_low for m in CF_MARKERS)
-                or "just a moment" in (page.title() or "").lower()
-            )
+            res.cloudflare = _cf_blocked(page)
             res.institutional_access = (
                 "access provided by" in html_low
                 or "tongji" in html_low
@@ -797,6 +852,7 @@ def fetch_bundle(
             )
             if res.cloudflare:
                 # 归类统一由 _classify_failure 产（含 Cloudflare 备注）；早退路径也要归。
+                res.seconds = round(time.time() - t0, 1)
                 _classify_failure(res)
                 return res
 
@@ -878,6 +934,64 @@ def fetch_bundle(
             browser.close()
 
     res.seconds = round(time.time() - t0, 1)
+    return res
+
+
+def fetch_bundle(
+    url: str,
+    *,
+    want_html: bool = True,
+    want_pdf: bool = True,
+    want_supplements: bool = True,
+    out_dir: Path | str | None = None,
+    headless: bool = True,
+    channel: str = "auto",
+    timeout_ms: int = 60000,
+    adapter: PublisherAdapter | None = None,
+    use_cache: bool = True,
+    max_age_days: int | None = None,
+    challenge_wait_s: float = CF_WAIT_S,
+    retry_headed_on_challenge: bool = True,
+) -> BundleResult:
+    """一次浏览器会话拿全套；CF 挑战等待、headless 被识别自动降 headed 重试一次。
+
+    缓存（Tier A 持久层）：``use_cache=True``（默认）先查 ``<out_dir>/.by_url/<hash>.json``；
+    满足 want_* 即**不启动浏览器**直接复用；``use_cache=False``（``--force``）强制重抓。
+    """
+    base_out = Path(out_dir) if out_dir else DEFAULT_OUT_DIR
+    kw = dict(
+        want_html=want_html,
+        want_pdf=want_pdf,
+        want_supplements=want_supplements,
+        out_dir=base_out,
+        channel=channel,
+        timeout_ms=timeout_ms,
+        adapter=adapter,
+        challenge_wait_s=challenge_wait_s,
+    )
+
+    if use_cache:
+        cached = _read_bundle_cache(
+            url,
+            base_out,
+            max_age_days=max_age_days,
+            want_html=want_html,
+            want_pdf=want_pdf,
+        )
+        if cached is not None:
+            print(f"[browser_fetch] 命中缓存 bundle：{cached.slug}（未启动浏览器）")
+            return cached
+
+    res = _fetch_bundle_once(url, headless=headless, **kw)
+    if res.cloudflare and headless and retry_headed_on_challenge:
+        print("[browser_fetch] Cloudflare 未过：headless 被识别，降 --headed 重试一次…")
+        headed = _fetch_bundle_once(url, headless=False, **kw)
+        headed.notes = [
+            "headless 挑战未过，已自动降 headed 重试一次",
+            *headed.notes,
+        ]
+        headed.seconds = round(res.seconds + headed.seconds, 1)
+        res = headed
     if use_cache:
         _write_bundle_cache(res, url, base_out)
     return res

@@ -7,9 +7,15 @@
 
 `browser_fetch` drives a real browser via Playwright to get HTML full text, the article PDF, and
 supplementary files. It auto-selects a browser channel (chrome → msedge → bundled chromium) and,
-on a Cloudflare challenge, retries in headed mode. Results come back as a `BundleResult`
+on a Cloudflare challenge, **waits for the JS challenge** (cf_clearance / page settles, ≤30 s) and
+retries once in headed mode if headless was detected. Results come back as a `BundleResult`
 (`ok, title, slug, html_path, pdf_path, supp_paths, cloudflare, institutional_access, seconds,
-adapter, browser, char_count, notes`).
+adapter, browser, char_count, notes, failure_kind, retryable`).
+
+`research read` adds: exponential backoff for retryable failures (`--retries`, default 2; 2 s → 4 s),
+a Zotero fallback (search item by DOI/title → `get children` → copy a local PDF attachment), and
+**per-channel evidence** on total failure (`[read] 渠道证据（逐渠道）`, e.g. curl HTTP status,
+browser status/cloudflare/kind, Zotero note). `--no-zotero` disables the fallback.
 
 ### Publisher adapters (why it depends on page structure)
 
@@ -29,11 +35,16 @@ APS_ADAPTER = PublisherAdapter(
     fulltext_selectors=("#fulltext-content", "section.fulltext div.content", "div.article-fulltext"),
     wait_selector="#fulltext-content",
 )
+SCIENCE_ADAPTER = PublisherAdapter(
+    name="science", hosts=("science.org",),
+    fulltext_selectors=("article .article__body", "div.article__body", "article", "#fulltext"),
+    wait_selector="article, .article__body, #fulltext",
+)
 GENERIC_ADAPTER = PublisherAdapter(      # fallback for any unmatched host
     name="generic", hosts=(),
     fulltext_selectors=("article", "main", "[role=main]", "#content", "body"),
 )
-ADAPTERS: tuple[PublisherAdapter, ...] = (APS_ADAPTER,)   # ← the registry
+ADAPTERS: tuple[PublisherAdapter, ...] = (APS_ADAPTER, SCIENCE_ADAPTER)   # ← the registry
 
 def detect_adapter(url):  # hostname match, else GENERIC_ADAPTER
 ```

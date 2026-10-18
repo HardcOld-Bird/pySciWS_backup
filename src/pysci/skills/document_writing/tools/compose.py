@@ -18,6 +18,7 @@ LLM 直接调用，无需了解底层模块实现。
     slides verify    机械验收逐页渲染（渲染存在 / 页数=幻灯片数 / 非空白页）
     slides geometry  只读几何体检（遮挡/越界/互叠 + 预设三项：标题形态/框宽/图片描边）
     slides focus-anim 按学院预设注入焦点块动画 timing（首块自动、其余单击）
+    slides layout    排版机械判据（焦点块标题对齐 / 分焦点块引用框规则）
     verify <pdf>     把 PDF 渲染成 PNG，供 LLM「看图」校对版式
 
 用法（在项目根目录）::
@@ -586,6 +587,28 @@ def cmd_slides_geometry(args: argparse.Namespace) -> int:
     return 1 if (args.strict and not rep.ok) else 0
 
 
+def cmd_slides_layout(args: argparse.Namespace) -> int:
+    from . import slides_layout
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides layout] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        rep = slides_layout.layout_report(
+            src,
+            page=args.page,
+            titles=slides_layout._parse_ids(args.title),
+            refs=slides_layout.parse_ref_pairs(args.refs),
+            tol=args.tol,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"[slides layout] {exc}", file=sys.stderr)
+        return 2
+    print(rep.as_json() if args.json else rep.summary())
+    return 1 if (args.strict and not rep.ok) else 0
+
+
 def cmd_slides_focus_anim(args: argparse.Namespace) -> int:
     from . import slides_anim
 
@@ -1126,6 +1149,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--out", default=None, help="输出路径（缺省就地更新源文件）")
     sp.set_defaults(func=cmd_slides_focus_anim)
+
+    sp = slidessub.add_parser(
+        "layout",
+        help="排版机械判据（焦点块标题对齐 / 分焦点块引用框规则）",
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument("--page", type=int, required=True, help="目标页（1-based）")
+    sp.add_argument(
+        "--title",
+        default=None,
+        help="焦点块标题形状 ID，逗号分隔（≥2 个时查上缘或左缘对齐）",
+    )
+    sp.add_argument(
+        "--refs",
+        action="append",
+        default=[],
+        help="引用框:焦点块形状 ID（REF:ANCHOR，可重复）",
+    )
+    sp.add_argument("--tol", type=float, default=0.05, help="对齐容差 in（默认 0.05）")
+    sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
+    sp.add_argument(
+        "--strict", action="store_true", help="有不通过项即退出码非 0（默认只报告）"
+    )
+    sp.set_defaults(func=cmd_slides_layout)
 
     # --- docx 子命令组 ---
     docx = sub.add_parser("docx", help="DOCX 读写（read/from-markdown/add/marks）")

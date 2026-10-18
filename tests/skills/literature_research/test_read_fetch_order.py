@@ -51,6 +51,9 @@ def _args(target: str, **kw: Any) -> argparse.Namespace:
         "note": False,
         "overwrite": False,
         "headed": False,
+        # 隔离外部副作用：不经真 Zotero、不真睡重试（重试/兜底另有专测）。
+        "no_zotero": True,
+        "retries": 0,
     }
     base.update(kw)
     return argparse.Namespace(**base)
@@ -585,3 +588,20 @@ def test_a_real_extraction_still_sets_extracted_md_path(
     assert fm["extracted_md_path"].endswith("_fulltext.md")
     assert "extracted_html_path" not in fm
     assert box["extract_calls"] == [pdf]
+
+
+def test_total_failure_prints_per_channel_evidence(
+    sandbox: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """全渠道失败必须逐渠道留证（用户要求：不可能则书面解释每一条路）。"""
+    box = sandbox.box
+    box["work"] = {"id": "W1", "doi": _DOI}
+    box["fm"] = {"title": "T", "short_title": "t", "doi": _DOI}
+    _fake_http(monkeypatch, _FakeResponse(403, b""))
+    box["bundle"] = _bundle(None)
+
+    research.cmd_read(_args(_DOI))
+
+    err = capsys.readouterr().err
+    assert "渠道证据（逐渠道）" in err
+    assert "直链" in err and "浏览器" in err
