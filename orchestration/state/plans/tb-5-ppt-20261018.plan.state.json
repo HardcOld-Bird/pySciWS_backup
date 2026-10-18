@@ -68,25 +68,31 @@
     },
     {
       "id": "w3",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "writing-20261018-230555-tb-5-ppt-20261018.plan-w3",
-      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.w3.task.md"
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.w3.task.md",
+      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "kind": "result"
     },
     {
       "id": "L.l1",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261018-212705-ppt.l1-摩擦反思.md"
     },
     {
       "id": "L.l2",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261018-212705-ppt.l2-拆解改进派单.md"
     },
     {
       "id": "L.l3",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261018-231558-tb-5-ppt-20261018.plan-L.l3",
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.l3.task.md"
     }
   ],
   "completed_at": null
