@@ -1,0 +1,23 @@
+id: wake-bind-20261018
+goal: 夜航返工闪窗根治＋基础设施主会话绑定收紧（用户 2026-10-18 两项要求：空终端消失；watchdog/夜航自动唤醒始终绑定主会话、子会话与 pod 会话不被自动唤醒）
+read: plan-decomposition.md
+steps:
+- id: s1-noconsole
+  member: devops
+  brief: 空终端根治——无控制台派生链（watchdog 重臂 bash/harness 钩子执行体/pythonw tick/分离 worker）可达的一切 spawn 隐藏化：watch-arm.sh/night-gate.sh/night-policy.sh 裸 "$PY"/"$ORCH" 改 pythonw/隐藏口径，遗留裸 spawn（mdgen/turnbudget 等）清点并入，回归钉子防再漏；行为语义零变化
+  dirs:
+  - .qoder/hooks
+  - src/pysci/skills/orchestration/tools
+  - src/pysci/skills/devops/tools
+  - tests/skills/orchestration
+  effort: medium
+- id: s2-binding
+  member: devops
+  brief: 唤醒/夜航绑定主会话——夜航差分与注入/gate 加 owner 过滤（移至归属闸后）、hook_decision 加 cwd==项目根判据（pod 会话永不认领/接管）、watchdog 替身命中不记 consumed（迟到唤醒不被吞）、唤醒权转让机制按 twin 裁决调整（案卷 wake-bind-20261018-twin.md）；文档同步 README §4.5/patrol-watchdog.md
+  dirs:
+  - .qoder/hooks
+  - src/pysci/skills/orchestration/tools
+  - tests/skills/orchestration
+  - orchestration/README.md
+  - orchestration/skills/orchestration
+  effort: medium

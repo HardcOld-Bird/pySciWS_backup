@@ -51,9 +51,9 @@ alwaysApply: true
 
 - 用户习惯**双会话并行**：主组长会话（干活、收一切唤醒）＋ 次要会话（琐事，**禁止碰
   基建/编排**，防上下文污染）。
-- 唤醒权归主会话：`pysci-orch wake-claim` strict 认领（WT_SESSION 窗格身份），异会话
-  钩子不监听不抢占；**同窗格新开会话自动沿用认领**（窗格 GUID 不变），换窗格/换终端
-  才需重认。主会话迁移 = 新会话跑 `wake-claim` 接管。
+- 唤醒权归主会话：身份=钩子 stdin 载荷 `session_id`、零人工自动认领（无 owner 时首个
+  会话即主会话，判据单点 watch.py `hook_decision`），异会话钩子不监听不抢占。主会话
+  迁移 = 新会话跑 `pysci-orch wake-claim` 接管（现行 CLI：`--force`）。
 - 组长不在场时事件**不丢**（持久水位+迟到唤醒兜底）——**不存在「转投其他会话」语义**，
   次要会话被唤醒即属缺陷（机制细节：编排技能 references/patrol-watchdog.md）。
 
