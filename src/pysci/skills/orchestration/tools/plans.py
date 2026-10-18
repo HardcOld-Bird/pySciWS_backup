@@ -955,7 +955,7 @@ def cmd_plan_run(args) -> int:
             state["completed_at"] = _now()
             _save_state(plan_id, state)
         _report_plan_complete(plan_id, state)
-    for line in _routing_card():
+    for line in _routing_card(fresh=True):
         print(line)
     return 0 if all(o.code == 0 for _, o in outcomes) else 2
 
@@ -1134,11 +1134,22 @@ def _print_worklist(plan_id: str, plan: dict, state: dict) -> None:
     )
 
 
-def _routing_card() -> list[str]:
-    """机械推送点用的**全局**路由卡片（PSEP_3 §3.3）：fail-soft（推送面绝不阻塞推进）。"""
+def _routing_card(*, fresh: bool = False) -> list[str]:
+    """机械推送点用的**全局**路由卡片（PSEP_3 §3.3）：fail-soft（推送面绝不阻塞推进）。
+
+    ``fresh=True`` 供**长驻同步命令**（``plan run``/``plan adhoc``）收尾用：先重载
+    :mod:`nextroute` 再取卡。实案（2026-10-19）：adhoc 进程 23:22 启动、00:16 收尾，
+    其间 L.l3 合并了「无 state 的 plan 不进路由」——进程内仍是旧模块，尾部卡片按遗留
+    YAML 打出已派发环节的「书写本环节任务书并派发」。短命令（``advance``）进程活不过
+    一次升级窗口，无需重载。
+    """
     try:
         from . import nextroute
 
+        if fresh:
+            import importlib
+
+            nextroute = importlib.reload(nextroute)
         return nextroute.card_lines(None)
     except Exception:  # noqa: BLE001 - 路由读数坏一项不塌推进
         return []
