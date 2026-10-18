@@ -1,0 +1,57 @@
+{
+  "plan_id": "tb-5-ppt-20261018.plan",
+  "created": "2026-10-18T21:35:12+08:00",
+  "goal": "tb-20261018-212705-ppt 开题PPT制作——沉淀「学院正式汇报预设」、获取文献并提取图片、重制第7页思维导图、组装研究背景v1.pptx（仅改第3–10页，焦点块动画）、渲染视觉终检；交付预设文档 + 文献图片资产 + 研究背景v1.pptx + 必要的基础设施改进（走 infra_suggestion 循环）",
+  "steps": [
+    {
+      "id": "G1.P1.w1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261018-213642-tb-5-ppt-20261018.plan-G1.P1.w1",
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.w1.task.md"
+    },
+    {
+      "id": "G1.P1.f1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.l1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "lit-20261018-213746-tb-5-ppt-20261018.plan-G1.l1",
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.l1.task.md"
+    },
+    {
+      "id": "w2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G2.r1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G2.d1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l3",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null
+}

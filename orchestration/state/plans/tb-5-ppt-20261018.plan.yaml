@@ -1,0 +1,53 @@
+id: tb-5-ppt-20261018
+goal: tb-20261018-212705-ppt 开题PPT制作——沉淀「学院正式汇报预设」、获取文献并提取图片、重制第7页思维导图、组装研究背景v1.pptx（仅改第3–10页，焦点块动画）、渲染视觉终检；交付预设文档 + 文献图片资产 + 研究背景v1.pptx + 必要的基础设施改进（走 infra_suggestion 循环）
+read: plan-decomposition.md
+steps:
+- id: G1
+  mode: parallel
+  brief: 素材并行准备（风格/文献图片/思维导图产物无交集）
+  children:
+  - id: P1
+    mode: serial
+    brief: 风格链（完成级——思维导图须按预设的美术风格重制）
+    children:
+    - id: w1
+      member: writing
+      brief: 吸收两份PPT模板并沉淀「学院正式汇报预设」——重点吃透「个人改进PPT模板.pptx」第3/4页焦点块动画（单页分板块、单击平滑切换焦点块、深色强调/浅色陪衬，动画参数与风格逐项记录）；风格总结为「学院正式汇报预设」文档（与「组会预设」并列的独立预设，供未来复用、后续返工持续迭代）；并把「手工草稿.pptx」复制为工作目录下「研究背景v1.pptx」作为后续工作副本
+      dirs:
+      - data/大任务/5_开题PPT
+      effort: high
+    - id: f1
+      member: figure
+      brief: 重制第7页左侧思维导图——内容结构取「手工草稿.pptx」第7页左侧原文，美术风格按 w1 产出的学院正式汇报预设（配色/字体/线条与模板一致），输出高清图片入 插图/ 子目录
+      dirs:
+      - data/大任务/5_开题PPT/插图
+      effort: medium
+  - id: l1
+    member: lit
+    brief: 文献获取与图片提取——按任务书文献清单（34 条引用，含少量跨页重复）逐篇获取（先查本地 skill 缓存与本地文献库，缺者网络获取，建议同步录入本地 zotero），提取 PDF 原图到 文献图片/ 按「页码-焦点块-文章」层级组织；豁免项：第3页声学超构材料 3 篇与第7页 5 条仅获取不提取、第3页传统材料无文献；获取/提取失败逐条记录于报告（供 w2 回退占位图）
+    dirs:
+    - data/大任务/5_开题PPT/文献图片
+    effort: high
+- id: w2
+  member: writing
+  brief: 研究背景v1.pptx 组装——仅改第3–10页（其余页保持原状）：按任务书页码-焦点块-文献布局以文献图片高清版替换同 figure 占位图（失败回退占位图并在报告留档），焦点块尽量填满页面不留大块空白，纯文字极简（仅焦点块标题与必要公式），每篇入选文献以缩略引用形式入页底缩略引用文本框（样式参照个人改进模板第3/4页），字体/文本框/图片描边细节与焦点块动画（参数风格与模板一致）逐一落实
+  dirs:
+  - data/大任务/5_开题PPT
+  effort: high
+- id: G2
+  mode: parallel
+  brief: 视觉终检与预设入库并行（产物无交集）
+  children:
+  - id: r1
+    member: reviewer
+    brief: 第3–10页渲染视觉终检——wpscli 渲染逐页 Read + 机械闸（compose slides verify / geometry --strict），核对占位图对应关系、焦点块填满、缩略引用文本框齐全、模板风格一致性；动画免检（用户手工检查）；出具 VERDICT
+    dirs:
+    - data/大任务/5_开题PPT
+    effort: medium
+  - id: d1
+    member: devops
+    brief: 「学院正式汇报预设」入库——将 w1 预设文档安装为 orchestration/skills/document-writing/references/ 下与 ppt-preset.md（组会预设）并列的单源文件，挂单源指针（ppt-preset.md 指针行经任务书授权），pysci-dev sync 部署；带预算回归（单文件 ≤8KB）
+    dirs:
+    - orchestration/skills
+    - orchestration/pods/writing
+    effort: medium

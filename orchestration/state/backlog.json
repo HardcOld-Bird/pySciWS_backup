@@ -3657,6 +3657,20 @@
       "done_at": "2026-10-18T18:15:28+08:00",
       "batch_size": 1,
       "batch_seed": "20261018-114448-reviewer"
+    },
+    {
+      "id": "20261018-212801-tier-a",
+      "member": "tier-a",
+      "summary": "**devops 的 `whitelist_conflict` 类失败在 14 天 / 20 跳滑窗内累计 5 次**（阈值 3，README §5.4 自动立案）",
+      "kind": "defect",
+      "success_criteria": "- 同一 `(标签=whitelist_conflict, 成员=devops)` 在下一个 14 天 / 20 跳滑窗内的计数低于阈值 3（``orch stats`` 的 by_failure 段可复核）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261018-212801-tier-a.md",
+      "status": "in_progress",
+      "proposed": "2026-10-18T21:38:24+08:00",
+      "note": "",
+      "source": "tier-a",
+      "started_at": "2026-10-18T21:38:27+08:00",
+      "worktree": "20261018-212801-tier-a"
     }
   ]
 }
