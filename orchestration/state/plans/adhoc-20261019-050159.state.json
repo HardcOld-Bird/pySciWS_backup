@@ -1,17 +1,17 @@
 {
   "plan_id": "adhoc-20261019-050159",
   "created": "2026-10-19T05:01:59+08:00",
-  "goal": "adhoc：p10 图注行裁切小修（源自 tb-5 返工 b_rv 终检问题③）。现象：研究背景v1.pptx 第 10 页 Nat",
+  "goal": "adhoc：预设 §4A 胶囊框宽公式口径统一（源自 tb-5 返工 b_rv 终检问题①）。现象：ppt-preset-forma",
   "steps": [
     {
       "id": "s1",
       "status": "done",
       "review": "pending",
-      "job_id": "writing-20261019-050159-adhoc-20261019-050159-s1",
+      "job_id": "devops-20261019-050159-adhoc-20261019-050159-s1",
       "task_file": null,
-      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
       "kind": "result"
     }
   ],
-  "completed_at": "2026-10-19T05:04:09+08:00"
+  "completed_at": "2026-10-19T05:15:36+08:00"
 }

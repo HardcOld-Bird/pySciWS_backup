@@ -71,30 +71,37 @@
     },
     {
       "id": "B.b_rv",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "reviewer-20261019-042533-rework-tb-20261019-031020-ppt-1-B.b_rv",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-031020-ppt-1.b_rv.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-031020-ppt-1.b_rv.task.md",
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
     },
     {
       "id": "B.b_last",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-031020-ppt-1.b_last-报告组装.md"
     },
     {
       "id": "L.l1",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-031020-ppt-1.l1-摩擦反思.md"
     },
     {
       "id": "L.l2",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-031020-ppt-1.l2-拆解改进派单.md"
     },
     {
       "id": "L.l3",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261019-052048-rework-tb-20261019-031020-ppt-1-L.l3",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-031020-ppt-1.l3.task.md"
     }
   ],
   "completed_at": null
