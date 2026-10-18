@@ -310,6 +310,9 @@ TITLE_LATIN_EM = 0.58
 DEFAULT_TITLE_PT = 18.0
 #: 标题框宽适配容差（相对估算宽的 ±10%）。
 DEFAULT_TITLE_WIDTH_TOL = 0.10
+#: 文本框默认左右内边距（英寸）：``<a:bodyPr>`` 未显式 lIns/rIns 时 PowerPoint 默认 10%
+#:（文本框宽 0.1 in/边）。估算所需框宽时必须计入，否则「按字宽设框」会因可用宽度不足折行。
+DEFAULT_TITLE_INSET_IN = 0.1
 
 #: 整页满幅图豁免阈值：图片面积 ≥ 画布面积的此比例即免描边检查（16:9 满幅 AI 图）。
 FULL_PAGE_PIC_FRAC = 0.95
@@ -376,7 +379,7 @@ class SlideGeometry:
     missing_ext: list[str] = field(default_factory=list)
     #: 预设第 3 条：标题文本不是「·…·」形态。
     title_form_issues: list[str] = field(default_factory=list)
-    #: 预设第 3 条：标题框宽与文本估算宽失配（超出 ±10%）。
+    #: 预设第 3 条：标题框宽超出适配区间（字形宽下限 / 含字距与内边距的上限，±10%）。
     title_width_issues: list[str] = field(default_factory=list)
     #: 预设第 4 条：非整页图缺黑色描边（``<a:ln>`` 缺失或 noFill）。
     picture_border_issues: list[str] = field(default_factory=list)
@@ -639,21 +642,24 @@ def _title_shape(slide: Any) -> Any | None:
 
 
 def _title_fmt(shape: Any) -> tuple:
-    """标题的**格式指纹**：``(cx,cy,x,y, {(字号,字体)…})``（W2 跨页一致性比对的原子）。
+    """标题的**格式指纹**：``(cy,x,y, {(字号,字体)…})``（W2 跨页一致性比对的原子）。
+
+    **不含框宽**：预设第 3 条要求框宽随标题文本自适应，逐页宽度不同正是设计要求——
+    把 cx 放进指纹会让「合规的自适应」被判成不一致（backlog 20261018-085835-writing）。
 
     字号/字体取 **set 去重**（backlog 20261017-101130）：同一格式被拆成多个 run（如
     「·」+「pySci·」、两 run 的 rPr 逐字相同）时**不得因 run 数不同**判不一致——视觉等价
     即一致；只有格式集合本身不同（如混排字号）才算差异。
     """
     el = getattr(shape, "_element", None)
-    w = h = x = y = None
+    h = x = y = None
     if el is not None:
         xfrm = el.find(f".//{_A_XFRM}")
         if xfrm is not None:
             ext = xfrm.find(_A_EXT)
             off = xfrm.find(f"{{{_A_NS}}}off")
             if ext is not None:
-                w, h = ext.get("cx"), ext.get("cy")
+                h = ext.get("cy")
             if off is not None:
                 x, y = off.get("x"), off.get("y")
     styles: set[tuple[float | None, str | None]] = set()
@@ -663,12 +669,12 @@ def _title_fmt(shape: Any) -> tuple:
                 styles.add((run.font.size.pt if run.font.size else None, run.font.name))
     except Exception:  # noqa: BLE001
         pass
-    return (w, h, x, y, frozenset(styles))
+    return (h, x, y, frozenset(styles))
 
 
 def _fmt_diff(a: tuple, b: tuple) -> str:
     """两个标题格式指纹的差异项（人读）。"""
-    labels = ("宽", "高", "左", "上", "字号/字体")
+    labels = ("高", "左", "上", "字号/字体")
     hits = [lab for lab, av, bv in zip(labels, a, b) if av != bv]
     return "、".join(hits) if hits else "格式"
 
@@ -696,6 +702,15 @@ def _title_inconsistencies(
 # ---------------------------------------------------------------------------
 # 预设方案三项检查（标题「·…·」/ 标题框宽适配 / 非整页图描边）
 # ---------------------------------------------------------------------------
+_P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+_P_SPPR = f"{{{_P_NS}}}spPr"
+_P_TXBODY = f"{{{_P_NS}}}txBody"
+_A_BODYPR = f"{{{_A_NS}}}bodyPr"
+_A_RPR = f"{{{_A_NS}}}rPr"
+_A_LN = f"{{{_A_NS}}}ln"
+_A_NO_FILL = f"{{{_A_NS}}}noFill"
+
+
 def _preset_title_shape(slide: Any) -> Any | None:
     """定位内容页标题：占位符/命名标题优先，其次落在预设标题区的文本框。
 
@@ -749,23 +764,13 @@ def _char_em(ch: str) -> float:
     )
 
 
-def estimate_title_width_in(
-    shape: Any,
-    *,
-    default_pt: float = DEFAULT_TITLE_PT,
-) -> float:
-    """按文本与字号估算标题所需框宽（英寸，单行、不折行）。
+def _glyph_width_in(shape: Any, *, default_pt: float = DEFAULT_TITLE_PT) -> float:
+    """标题**字形宽**（英寸）：按字符宽系数逐字累加，不含字距与内边距（单行取最大段）。
 
-    字符宽系数以 `20260918.pptx` 用户原件标定（20 pt 等线 Light，``2026-10-18``）：
+    系数以 `20260918.pptx` 用户原件标定（20 pt 等线 Light，``2026-10-18``）：
     「·现状总结·」6 字实测框宽 1.78 in、「·pySci·」7 字 1.39 in，按 CJK/拉丁分别计
-    得 CJK 1.05 em/字、拉丁 0.58 em/字；四页用户标题拟合误差 ≤4%，故 ±10% 容差可靠。
-
-    Args:
-        shape: 标题形状（文本框或占位符）。
-        default_pt: run/段落均未显式写字号时的回退字号。
-
-    Returns:
-        估算宽度（英寸）；无文本或读取失败返回 0.0。
+    得 CJK 1.05 em/字、拉丁 0.58 em/字；四页用户标题拟合误差 ≤4%。合规检查的 ±10%
+    区间以此为用户认可基准（框宽下限）。
     """
     try:
         paragraphs = list(shape.text_frame.paragraphs)
@@ -791,10 +796,118 @@ def estimate_title_width_in(
     return max(widths) if widths else 0.0
 
 
+def _run_spacing_in(run: Any, text: str) -> float:
+    """一个 run 的字距总宽（英寸）：``a:rPr/@spc`` 单位为 1/100 pt，按每字符一个间隔保守估算。"""
+    r_pr = getattr(run, "_r", None)
+    r_pr = r_pr.find(_A_RPR) if r_pr is not None else None
+    raw = r_pr.get("spc") if r_pr is not None else None
+    if not raw:
+        return 0.0
+    try:
+        spc_pt = int(raw) / 100.0
+    except (TypeError, ValueError):
+        return 0.0
+    return len([c for c in text if c not in "\r\n"]) * spc_pt / 72.0
+
+
+def _title_insets_in(shape: Any) -> tuple[float, float]:
+    """标题文本框的左右内边距（英寸）：读 ``bodyPr/@lIns·rIns``（EMU），缺省各 0.1 in。"""
+    el = getattr(shape, "_element", None)
+    body = el.find(f".//{_P_TXBODY}") if el is not None else None
+    body_pr = body.find(_A_BODYPR) if body is not None else None
+
+    def _one(attr: str) -> float:
+        raw = body_pr.get(attr) if body_pr is not None else None
+        if raw is None:
+            return DEFAULT_TITLE_INSET_IN
+        try:
+            return int(raw) / _EMU_IN
+        except (TypeError, ValueError):
+            return DEFAULT_TITLE_INSET_IN
+
+    return _one("lIns"), _one("rIns")
+
+
+def title_text_width_in(
+    shape: Any,
+    *,
+    default_pt: float = DEFAULT_TITLE_PT,
+    include_spacing: bool = True,
+) -> float:
+    """标题的**文字宽**（英寸，单行）：字形宽 + 字距（可选），不含文本框内边距。
+
+    Args:
+        shape: 标题形状（文本框或占位符）。
+        default_pt: run/段落均未显式写字号时的回退字号。
+        include_spacing: 是否计入 ``a:rPr/@spc`` 字距。
+
+    Returns:
+        文字宽（英寸）；无文本或读取失败返回 0.0。
+    """
+    base = _glyph_width_in(shape, default_pt=default_pt)
+    if not include_spacing or base <= 0:
+        return base
+    try:
+        paragraphs = list(shape.text_frame.paragraphs)
+    except Exception:  # noqa: BLE001
+        return base
+    widths: list[float] = []
+    for para in paragraphs:
+        total = 0.0
+        for run in para.runs:
+            total += _run_spacing_in(run, run.text)
+        widths.append(total)
+    return base + (max(widths) if widths else 0.0)
+
+
+def estimate_title_width_in(
+    shape: Any,
+    *,
+    default_pt: float = DEFAULT_TITLE_PT,
+    include_spacing: bool = True,
+    include_insets: bool = True,
+    inset_in: float | None = None,
+) -> float:
+    """估算标题**所需框宽**（英寸，单行、不折行）：文字宽 + 左右内边距。
+
+    文字宽 = 字形宽（:func:`_glyph_width_in`）+ 字距（:func:`_run_spacing_in`）；内边距读
+    ``bodyPr/@lIns·rIns``（缺省各 0.1 in）。写框时按 ``estimate * 1.1`` 设宽即可保证在
+    3 pt 字距等场景下不折行（backlog 20261018-085835-writing：旧实现只估字形宽，按它
+    +10% 设框会被默认内边距吃掉可用宽度而折行）。
+
+    **合规检查不用本函数**：它比用户认可的字形宽基准多出内边距与字距；框宽适配区间见
+    :func:`_preset_title_issues`（下限=字形宽基准，上限=本估算 +10%）。
+
+    Args:
+        shape: 标题形状（文本框或占位符）。
+        default_pt: run/段落均未显式写字号时的回退字号。
+        include_spacing: 是否计入字距。
+        include_insets: 是否计入左右内边距。
+        inset_in: 单侧内边距（英寸）；``None`` 时读形状自身，读不到用 0.1。
+
+    Returns:
+        所需框宽（英寸）；无文本或读取失败返回 0.0。
+    """
+    width = title_text_width_in(
+        shape, default_pt=default_pt, include_spacing=include_spacing
+    )
+    if not include_insets or width <= 0:
+        return width
+    left, right = _title_insets_in(shape)
+    if inset_in is not None:
+        left = right = inset_in
+    return width + left + right
+
+
 def _preset_title_issues(
     shape: Any, *, width_tol: float
 ) -> tuple[list[str], list[str]]:
-    """一页标题的两项机械检查：返回 ``(形态问题, 框宽问题)``。"""
+    """一页标题的两项机械检查：返回 ``(形态问题, 框宽问题)``。
+
+    框宽适配是**区间**判据：下限 = 字形宽基准 ``(1 - tol)``（不得窄于用户认可的字宽框），
+    上限 = 含字距与内边距的所需框宽 ``(1 + tol)``（不得过长）——这样既不误伤随文本自适应
+    的窄标题，也不放过「全篇统一 6.01 in」的返工事故。
+    """
     text = _title_text(shape)
     if not text:
         return [], []
@@ -806,22 +919,18 @@ def _preset_title_issues(
         actual = shape.width / _EMU_IN
     except (AttributeError, TypeError):
         actual = None
-    est = estimate_title_width_in(shape)
-    if actual is not None and est > 0:
-        delta = actual - est
-        if abs(delta) > width_tol * est:
+    glyph = _glyph_width_in(shape)
+    padded = estimate_title_width_in(shape)
+    if actual is not None and glyph > 0:
+        lower = glyph * (1 - width_tol)
+        upper = max(glyph, padded) * (1 + width_tol)
+        if actual < lower or actual > upper:
             width.append(
-                f"框宽 {actual:.2f} in 与文本估算 {est:.2f} in 失配"
-                f"（偏差 {delta / est * 100:+.0f}%，容差 ±{width_tol * 100:.0f}%；"
-                f"标题 {text!r}）"
+                f"框宽 {actual:.2f} in 超出适配区间 [{lower:.2f}, {upper:.2f}] in"
+                f"（字形估算 {glyph:.2f}、含字距与内边距 {padded:.2f}，"
+                f"容差 ±{width_tol * 100:.0f}%；标题 {text!r}）"
             )
     return form, width
-
-
-_P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
-_P_SPPR = f"{{{_P_NS}}}spPr"
-_A_LN = f"{{{_A_NS}}}ln"
-_A_NO_FILL = f"{{{_A_NS}}}noFill"
 
 
 def _picture_border_issue(shape: Any) -> str | None:
@@ -959,8 +1068,9 @@ def geometry_report(
 
     - **标题「·…·」形态**：内容页标题（占位符/命名标题/预设标题区的文本框）须匹配
       ``·…·``；首页默认豁免，无标题形状的整页复制页自然跳过；
-    - **标题框宽适配**：按文本与字号估算宽（系数标定见 :func:`estimate_title_width_in`），
-      实际框宽超出 ±``title_width_tol`` 即报——不得把全篇标题框统一成同一宽度；
+    - **标题框宽适配**：区间判据——下限为字形宽基准 ``(1 - title_width_tol)``，上限为
+      含字距与内边距的所需框宽（:func:`estimate_title_width_in`）``(1 + title_width_tol)``；
+      实际框宽出区间即报——不得把全篇标题框统一成同一宽度，也不得过窄折行；
     - **非整页图黑描边**：图片缺 ``<a:ln>``（或显式 noFill）即报；面积 ≥ 画布 95% 的整页
       满幅图豁免。
 

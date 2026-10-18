@@ -32,11 +32,9 @@ _REL_1016 = "data/research/1_gain_ep/汇报PPT/20261016/20261016.pptx"
 
 
 def _project_data_root() -> Path:
-    """含 data/ 的项目根；worktree 里 data/（gitignored）缺席时经 git 公共目录回退主树。"""
+    """**主树**项目根（含 data/）；worktree 里的 data/ 是分支快照，可能落后于主树真数据。"""
     from pysci.paths import PROJECT_ROOT
 
-    if (PROJECT_ROOT / "data").is_dir():
-        return PROJECT_ROOT
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
@@ -75,6 +73,7 @@ def _titled(
     *,
     width: float | None = None,
     size: int = 20,
+    spacing_pt: float | None = None,
 ) -> tuple[object, float]:
     """在预设标题区 (0.60,0.44) 加标题文本框；width=None 时按估算宽自适应。"""
     slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -84,6 +83,8 @@ def _titled(
     box.text_frame.text = text
     for run in box.text_frame.paragraphs[0].runs:
         run.font.size = Pt(size)
+        if spacing_pt is not None:
+            run._r.get_or_add_rPr().set("spc", str(int(spacing_pt * 100)))
     est = slides_visual.estimate_title_width_in(box)
     box.width = Inches(width if width is not None else est)
     return slide, est
@@ -140,16 +141,35 @@ def test_user_original_titles_have_zero_false_positives():
     ]
 
 
-def test_1016_deck_reports_expected_preset_violations():
-    """修复前的 `20261016.pptx`：页 2/6 无「·」、页 2/3/6 框宽失配、页 2/6 图无描边。"""
+def test_1016_deck_is_clean_after_adaptive_fix():
+    """修复后的 `20261016.pptx`（页 3 固定 1.39、页 2/6 自适应）→ 0 违规。
+
+    backlog 20261018-085835-writing ①：W2 不再把「框宽随文本自适应」判成标题不一致。
+    """
     deck = _real_deck(_REL_1016)
     rep = slides_visual.geometry_report(deck)
     form = {s.index for s in rep.slides if s.title_form_issues}
     width = {s.index for s in rep.slides if s.title_width_issues}
     border = {s.index for s in rep.slides if s.picture_border_issues}
-    assert form == {2, 6}, form
-    assert width == {2, 3, 6}, width
-    assert border == {2, 6}, border  # 页 4/5/7 整页满幅图豁免
+    assert form == set(), form
+    assert width == set(), width
+    assert border == set(), border
+    assert rep.title_diffs == [], rep.title_diffs
+    assert rep.violations == 0, rep.summary()
+
+
+def test_fixed_and_adaptive_widths_comply(tmp_path):
+    """合规形状：页 3 固定 1.39 in（3 pt 字距），页 2/6 按估算自适应 → 0 违规。"""
+    prs = Presentation()
+    _blank(prs)  # 页 1（首页）
+    _titled(prs, "·AI COMSOL·", spacing_pt=1.5)  # 页 2：自适应
+    _titled(prs, "·pySci·", width=1.39, spacing_pt=3.0)  # 页 3：用户认可固定宽
+    _titled(prs, "·pySci 与 Agent Loop·", spacing_pt=1.5)  # 页 6 形态：自适应
+    deck = _save(prs, tmp_path)
+
+    rep = slides_visual.geometry_report(deck)
+    assert rep.title_diffs == [], rep.title_diffs
+    assert rep.violations == 0, rep.summary()
 
 
 # ---------------------------------------------------------------------------
@@ -164,11 +184,61 @@ def test_clean_preset_deck_has_no_issues(tmp_path):
     deck = _save(prs, tmp_path)
 
     rep = slides_visual.geometry_report(deck)
-    assert est == pytest.approx(1.75, abs=0.02), est  # 对标 20260918 的 1.78 in
+    box = next(sh for sh in slide.shapes if getattr(sh, "has_text_frame", False))
+    assert slides_visual._glyph_width_in(box) == pytest.approx(1.75, abs=0.02)
+    assert est == pytest.approx(1.95, abs=0.02), est  # 字形宽 + 左右内边距 0.2
     for s in rep.slides:
         assert not s.title_form_issues and not s.title_width_issues, s
         assert not s.picture_border_issues, s
     assert rep.ok, rep.summary()
+
+
+def test_estimate_accounts_for_spacing_and_insets(tmp_path):
+    """② 回归：估算宽含内边距与字距，「估算宽 +10%」设框在 3 pt 字距下不折行。"""
+    from pptx.util import Inches as In
+
+    prs = Presentation()
+    _blank(prs)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    box = slide.shapes.add_textbox(In(0.60), In(0.44), In(6.01), In(0.44))
+    box.text_frame.text = "·A Very Long Latin Title For Spacing Check·"
+    run = box.text_frame.paragraphs[0].runs[0]
+    run.font.size = Pt(20)
+    run._r.get_or_add_rPr().set("spc", "300")  # 3 pt 字距
+
+    glyph = slides_visual._glyph_width_in(box)
+    text_w = slides_visual.title_text_width_in(box)
+    est = slides_visual.estimate_title_width_in(box)
+    assert text_w > glyph, "字距未计入文字宽"
+    assert est == pytest.approx(text_w + 0.2, abs=0.01), "内边距未计入框宽"
+    assert glyph * 1.1 - 0.2 < text_w, "前提：旧口径（只估字形宽）会折行"
+    box.width = In(est * 1.1)
+    assert est * 1.1 - 0.2 >= text_w, "新口径 +10% 设框仍折行"
+
+    sg = slides_visual.geometry_report(_save(prs, tmp_path)).slides[1]
+    assert not sg.title_width_issues, sg.title_width_issues
+
+
+def test_w2_ignores_adaptive_title_widths(tmp_path):
+    """① 回归：同格式、不同文本的标题框宽刻意不同 → W2 不得报「不一致」。"""
+    prs = Presentation()
+    titles = ("·短·", "·中等长度标题·", "·pySci 与 Agent Loop·")
+    for text in titles:
+        s = prs.slides.add_slide(prs.slide_layouts[5])  # Title Only
+        t = s.shapes.title
+        t.text = text
+        for r in t.text_frame.paragraphs[0].runs:
+            r.font.size = Pt(20)
+            r.font.name = "Heiti SC Light"
+        t.width = Inches(slides_visual.estimate_title_width_in(t))
+        t.height = Inches(0.44)
+    deck = _save(prs, tmp_path)
+
+    prs2 = Presentation(str(deck))
+    widths = {round(s.shapes.title.width / 914400, 3) for s in prs2.slides}
+    assert len(widths) == 3, f"前提：三页框宽确实不同 {widths}"
+    rep = slides_visual.geometry_report(deck)
+    assert rep.title_diffs == [], rep.title_diffs
 
 
 def test_missing_dot_form_is_flagged(tmp_path):

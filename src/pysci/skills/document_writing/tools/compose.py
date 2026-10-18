@@ -1027,7 +1027,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.10,
         dest="title_width_tol",
-        help="标题框宽容差（相对估算宽的 ± 比例，默认 0.10）",
+        help="标题框宽容差（适配区间上下限的 ± 比例，默认 0.10）",
     )
     sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
     sp.add_argument(
