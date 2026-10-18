@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import time
@@ -595,6 +596,57 @@ def _cloud_kwargs(args: argparse.Namespace) -> dict:
     return kw
 
 
+#: ``"WxH"`` / ``"W×H"``（response.data[i].size 与自定义 --size 的像素形态）。
+_SIZE_RE = re.compile(r"^\s*(\d+)\s*[x×X]\s*(\d+)\s*$")
+
+
+def _parse_size(value: object) -> tuple[int, int] | None:
+    """解析像素尺寸串；档位名（``1K``/``2K``…）或空值返回 ``None``。"""
+    m = _SIZE_RE.match(str(value or ""))
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def _requested_size(payload: dict) -> tuple[int, int] | None:
+    """从**请求体**取可比较的目标像素：``width``+``height`` 优先，其次 ``size="WxH"``。
+
+    档位式 size（``1K``/``2K``…）没有精确像素语义，不参与改写判定——服务端按档位选
+    尺寸属预期，不是静默改写。
+    """
+    width, height = payload.get("width"), payload.get("height")
+    if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+        return (width, height)
+    return _parse_size(payload.get("size"))
+
+
+def _size_rewrite_warnings(
+    payload: dict, resp: _ark.ArkResponse, seen: set[str]
+) -> list[str]:
+    """服务端改写尺寸时的显式告警（同一实际尺寸跨多次请求只报一次）。
+
+    Seedream 会静默改写请求尺寸（实测请求 2688×1792 返回 2816×1584、请求 1536×2048
+    返回 1280×3200），只打印「已出图」会让竖画幅意外变宽幅、比例敏感的构图白花一次
+    计费。故以 ``response.data[i].size`` 逐张对照请求像素，不符即提示比例不可信。
+    """
+    requested = _requested_size(payload)
+    if requested is None:
+        return []
+    lines: list[str] = []
+    for im in resp.ok_images:
+        actual = _parse_size(im.size)
+        if actual is None or actual == requested:
+            continue
+        key = f"{actual[0]}x{actual[1]}"
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(
+            f"[imagine] 尺寸告警：请求 {requested[0]}×{requested[1]} → "
+            f"实际 {actual[0]}×{actual[1]}（服务端已改写）。"
+            "构图比例可能不可信，请核对产物。"
+        )
+    return lines
+
+
 def _cloud_generate(
     args: argparse.Namespace, *, images: list[str] | None, kind: str
 ) -> int:
@@ -657,6 +709,7 @@ def _cloud_generate(
     snaps: list[Path] = []
     billed = 0
     tokens = 0
+    size_warned: set[str] = set()
     for i in range(calls):
         tag = f"第 {i + 1}/{calls} 次" if calls > 1 else ""
         try:
@@ -667,6 +720,8 @@ def _cloud_generate(
             if not written:
                 return 1
             break  # 已有产出：保住它们，不把整批判失败
+        for line in _size_rewrite_warnings(payload, resp, size_warned):
+            print(line, file=sys.stderr)
         for im in resp.failed_images:
             print(f"  ! {tag}第 {im.index} 张失败：{im.error}", file=sys.stderr)
         if not resp.ok_images:
