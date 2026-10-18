@@ -2,7 +2,7 @@
   "id": "tb-20261018-212705-ppt",
   "ts": "2026-10-18T21:27:05+08:00",
   "title": "开题PPT制作",
-  "status": "new",
+  "status": "planning",
   "source": "mirror-tui",
   "priority": "low",
   "improve": {
@@ -13,7 +13,7 @@
   "mode": "",
   "rework_of": "",
   "rework_round": 0,
-  "plan_id": "",
+  "plan_id": "tb-5-ppt-20261018.plan",
   "rejections": [],
-  "updated": "2026-10-18T21:27:05+08:00"
+  "updated": "2026-10-18T21:35:47+08:00"
 }
