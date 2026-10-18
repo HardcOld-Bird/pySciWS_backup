@@ -1,0 +1,8 @@
+id: adhoc-20261019-050159
+goal: adhoc：p10 图注行裁切小修（源自 tb-5 返工 b_rv 终检问题③）。现象：研究背景v1.pptx 第 10 页 Nat
+steps:
+- id: s1
+  member: writing
+  brief: 'p10 图注行裁切小修（源自 tb-5 返工 b_rv 终检问题③）。现象：研究背景v1.pptx 第 10 页 NaturePhys fig2 置入图顶部带一行图注文字（提取 bbox 含图注，与初版 r1 记录的刊头同类）。要求：对第 '
+  dirs: []
+  review: false

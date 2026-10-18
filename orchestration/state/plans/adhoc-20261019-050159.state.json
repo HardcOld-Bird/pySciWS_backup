@@ -1,0 +1,14 @@
+{
+  "plan_id": "adhoc-20261019-050159",
+  "created": "2026-10-19T05:01:59+08:00",
+  "goal": "adhoc：p10 图注行裁切小修（源自 tb-5 返工 b_rv 终检问题③）。现象：研究背景v1.pptx 第 10 页 Nat",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261019-050159-adhoc-20261019-050159-s1"
+    }
+  ],
+  "completed_at": null
+}
