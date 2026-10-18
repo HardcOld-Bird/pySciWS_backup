@@ -317,6 +317,11 @@ DEFAULT_TITLE_INSET_IN = 0.1
 #: 整页满幅图豁免阈值：图片面积 ≥ 画布面积的此比例即免描边检查（16:9 满幅 AI 图）。
 FULL_PAGE_PIC_FRAC = 0.95
 
+#: 装饰性水印的透明度上限（``alphaModFix/@amt`` 刻度，100000 = 100%）：amt=8000 即 8%。
+#: 不透明度不超过此值的图片视为**装饰**（学院正式预设的左侧水印），不参与内容图的
+#: 图片互叠 / 描边 / 外框判定——否则水印天然压住内容图与白卡边缘，逐页假阳性。
+DECORATIVE_ALPHA_MAX = 10000
+
 #: 预设语义下「首页」页码（内容页标题检查的默认豁免）。
 FIRST_PAGE = 1
 
@@ -333,6 +338,9 @@ class ShapeBox:
     x1: float
     y1: float
     rect: bool = False  # 是否为矩形自选图形（外框自动识别用）
+    #: 透明装饰图（水印）：不参与内容图几何判定（互叠/描边/外框），见
+    #: :func:`_is_decorative_picture`。
+    decorative: bool = False
 
     @property
     def box(self) -> tuple[float, float, float, float]:
@@ -383,6 +391,8 @@ class SlideGeometry:
     title_width_issues: list[str] = field(default_factory=list)
     #: 预设第 4 条：非整页图缺黑色描边（``<a:ln>`` 缺失或 noFill）。
     picture_border_issues: list[str] = field(default_factory=list)
+    #: 透明装饰图（水印）名称——只作读数，不计违规。
+    decorative_pics: list[str] = field(default_factory=list)
 
     @property
     def violations(self) -> int:
@@ -459,6 +469,10 @@ class GeometryReport:
                 lines.append(f"      标题框宽失配: {issue}")
             for issue in s.picture_border_issues:
                 lines.append(f"      图片描边: {issue}")
+            if s.decorative_pics:
+                lines.append(
+                    f"      装饰水印（豁免互叠/描边/外框判定）: {'、'.join(s.decorative_pics)}"
+                )
         for d in self.title_diffs:
             lines.append(f"      标题不一致: {d}")
         if self.ext_missing_total:
@@ -507,6 +521,7 @@ class GeometryReport:
                     "title_form_issues": s.title_form_issues,
                     "title_width_issues": s.title_width_issues,
                     "picture_border_issues": s.picture_border_issues,
+                    "decorative_pics": s.decorative_pics,
                 }
                 for s in self.slides
             ],
@@ -543,6 +558,33 @@ def _is_rectangle(shape: Any) -> bool:
         return False
 
 
+def _is_decorative_picture(shape: Any) -> bool:
+    """图片是否为**透明装饰**（水印）：blip 上的 ``alphaModFix/@amt``（或 ``alpha/@val``）
+    不透明度 ≤ :data:`DECORATIVE_ALPHA_MAX`（默认 10%）。
+
+    学院正式预设的左侧水印是 8% 透明图（``amt=8000``）且带 ``srcRect`` 裁切、按设计不描边、
+    天然压住内容图与白卡边缘——它不是内容图，不能进图片互叠/描边/外框判据。判据读 XML
+    真值（不透明度只在 blip 上表达，python-pptx 无公开属性）。
+    """
+    el = getattr(shape, "_element", None)
+    if el is None:
+        return False
+    blip = el.find(f".//{_A_BLIP}")
+    if blip is None:
+        return False
+    for tag, attr in ((_A_ALPHA_MOD_FIX, "amt"), (_A_ALPHA, "val")):
+        node = blip.find(tag)
+        raw = node.get(attr) if node is not None else None
+        if raw is None:
+            continue
+        try:
+            amt = int(raw)
+        except (TypeError, ValueError):
+            return False
+        return 0 <= amt <= DECORATIVE_ALPHA_MAX
+    return False
+
+
 def _shape_box(shape: Any, z: int) -> ShapeBox | None:
     try:
         left, top, width, height = shape.left, shape.top, shape.width, shape.height
@@ -551,15 +593,17 @@ def _shape_box(shape: Any, z: int) -> ShapeBox | None:
     if None in (left, top, width, height):
         return None
     x0, y0 = left / _EMU_IN, top / _EMU_IN
+    kind = _shape_kind(shape)
     return ShapeBox(
         z=z,
         name=getattr(shape, "name", "") or f"#{z}",
-        kind=_shape_kind(shape),
+        kind=kind,
         x0=x0,
         y0=y0,
         x1=x0 + width / _EMU_IN,
         y1=y0 + height / _EMU_IN,
         rect=_is_rectangle(shape),
+        decorative=kind == "pic" and _is_decorative_picture(shape),
     )
 
 
@@ -577,6 +621,9 @@ def _collect(slide: Any) -> list[ShapeBox]:
 _A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 _A_XFRM = f"{{{_A_NS}}}xfrm"
 _A_EXT = f"{{{_A_NS}}}ext"
+_A_BLIP = f"{{{_A_NS}}}blip"
+_A_ALPHA_MOD_FIX = f"{{{_A_NS}}}alphaModFix"
+_A_ALPHA = f"{{{_A_NS}}}alpha"
 
 
 def _has_explicit_ext(shape: Any) -> bool:
@@ -1074,6 +1121,10 @@ def geometry_report(
     - **非整页图黑描边**：图片缺 ``<a:ln>``（或显式 noFill）即报；面积 ≥ 画布 95% 的整页
       满幅图豁免。
 
+    **透明装饰图**（水印，blip 不透明度 ≤ :data:`DECORATIVE_ALPHA_MAX`，如学院预设的 8%
+    左侧水印）不是内容图：不参与图片互叠、描边与外框判定，只在
+    :attr:`SlideGeometry.decorative_pics` 里作读数列出（不计违规）。
+
     Args:
         pptx: 源 .pptx。
         frame: 外框形状名（``--frame``）。缺省自动挑「面积最大的矩形」（10%–95% 画布面积）；
@@ -1115,7 +1166,8 @@ def geometry_report(
             fr = _detect_frame(boxes, cw, ch)
             source = "auto" if fr is not None else ""
 
-        pics = [b for b in boxes if b.kind == "pic"]
+        pics = [b for b in boxes if b.kind == "pic" and not b.decorative]
+        decorative_pics = [b.name for b in boxes if b.kind == "pic" and b.decorative]
         # 连接符单列：bbox 不可信，越界只作提示，不混进 violations（否则「零容忍」验收会把
         # 渲染图上并不存在的越界当成真缺陷，逼执行端去改本不该改的源形状）。
         judged = [b for b in boxes if b.kind != "connector"]
@@ -1133,7 +1185,7 @@ def geometry_report(
         border: list[str] = []
         full_page_area = FULL_PAGE_PIC_FRAC * cw * ch
         for sh in slide.shapes:
-            if _shape_kind(sh) != "pic":
+            if _shape_kind(sh) != "pic" or _is_decorative_picture(sh):
                 continue
             try:
                 area = (sh.width or 0) * (sh.height or 0) / (_EMU_IN**2)
@@ -1162,6 +1214,7 @@ def geometry_report(
             title_form_issues=title_form,
             title_width_issues=title_width,
             picture_border_issues=border,
+            decorative_pics=decorative_pics,
         )
         if fr is not None:
             sg.edges = _edge_coverage(fr, [b for b in pics if b.z > fr.z])

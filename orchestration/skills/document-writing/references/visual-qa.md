@@ -46,6 +46,11 @@ compose slides geometry '<deck.pptx>' [--frame NAME] [--json] [--strict]
 们的越界单列为 `提示（非违规）`（JSON 的 `connector_hints`），不进 `violations`；真正越界的
 图元/图片照报。
 
+**透明装饰图（水印）不计入互叠/描边/外框**：图片 blip 的不透明度 ≤10%（`alphaModFix/@amt`，
+如学院正式预设的 8% 左侧水印）即视为装饰，不是内容图——它天然压住内容图与白卡边缘、按设计
+不描边。它只在 `装饰水印（豁免互叠/描边/外框判定）` 行与 JSON 的 `decorative_pics` 中列出，
+不参与图片互叠、描边、外框覆盖率/越框判定（越出**画布**照报）。
+
 ### 缺 `<a:ext>` 闸与跨页标题一致性（tb-20261017-044633）
 
 `geometry` 另扫**全形状 XML**：`<a:xfrm>` 里**缺 `<a:ext>`**（显式尺寸未定义）即列页码＋形状
