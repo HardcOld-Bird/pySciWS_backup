@@ -14,10 +14,12 @@
     },
     {
       "id": "G1.P1.f1",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "figure-20261018-214459-tb-5-ppt-20261018.plan-G1.P1.f1",
-      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.f1.task.md"
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.f1.task.md",
+      "session_id": "b66519e4-1c3f-4deb-808f-7a12c95f440f",
+      "kind": "result"
     },
     {
       "id": "G1.l1",
