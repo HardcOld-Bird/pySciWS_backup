@@ -1,0 +1,16 @@
+id: wake-adopt-20261018
+goal: 主会话程序化识别＋自动补位（用户 2026-10-18 裁决：主会话=存活的项目根 cwd 会话中创建更早者、唯一时即它；owner 缺席/死亡自动补位、watchdog 重启按记录恢复，零人工命令——取代 wake-bind twin A 的仅人工迁移）
+read: plan-decomposition.md
+steps:
+- id: s1-adopt
+  member: devops
+  brief: 会话登记表（session_id/cwd/pid/first_seen）＋创建时序判据（进程 create_time 优先、first_seen 回退）＋PID 探活存活性（心跳过期而 PID 存活=存活，废除心跳判死）＋归属单点：owner 存活不动/缺席死亡由最早创建存活根会话自动补位/晚者恒 deny；墓碑不再阻止补位、--force 降应急；保留 s2 成果（夜航 owner 过滤、pod cwd 闸、消费权 owner 侧、事件不丢）零回退；文档同步
+  dirs:
+  - .qoder/hooks
+  - src/pysci/skills/orchestration/tools
+  - tests/skills/orchestration
+  - orchestration/README.md
+  - orchestration/skills/orchestration
+  - orchestration/references
+  - .gitignore
+  effort: medium
