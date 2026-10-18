@@ -1,0 +1,14 @@
+{
+  "plan_id": "adhoc-20261019-001805",
+  "created": "2026-10-19T00:18:05+08:00",
+  "goal": "adhoc：路由卡片残迹修复：plan advance/plan adhoc 命令尾部的 [NEXT] 路由卡片与 orch nex",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261019-001805-adhoc-20261019-001805-s1"
+    }
+  ],
+  "completed_at": null
+}

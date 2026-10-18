@@ -1,0 +1,8 @@
+id: adhoc-20261019-001805
+goal: adhoc：路由卡片残迹修复：plan advance/plan adhoc 命令尾部的 [NEXT] 路由卡片与 orch nex
+steps:
+- id: s1
+  member: devops
+  brief: 路由卡片残迹修复：plan advance/plan adhoc 命令尾部的 [NEXT] 路由卡片与 orch next 不一致。背景：L.l3 工单 1 已修 nextroute.collect_actions（无 state 的 pl
+  dirs: []
+  review: false
