@@ -3716,6 +3716,19 @@
       "note": "",
       "started_at": "2026-10-18T22:33:13+08:00",
       "worktree": "20261018-223051-writing"
+    },
+    {
+      "id": "20261018-224713-reviewer",
+      "member": "reviewer",
+      "summary": "证据：文献图区提取（`orchestration/pods/lit/bench/extract_figs.py`，600 dpi 图区合并算法）把期刊页眉横幅并入 fig 图区，随素材进入 PPT——实测 3 处：`第4页-局域超构表面-PhysRevLett.117.034301/fig1.png` 顶部含「P. REV. L. 117, 034301 … PHYSICAL REVIEW LET",
+      "kind": "defect",
+      "success_criteria": "图区检测排除期刊页眉/刊头横幅（或提供页眉裁切启发式/参数），对上述 3 个目录重提取后 figN.png 顶部不再含刊头条纹。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261018-224713-reviewer.md",
+      "status": "in_progress",
+      "proposed": "2026-10-18T22:49:30+08:00",
+      "note": "",
+      "started_at": "2026-10-18T22:49:32+08:00",
+      "worktree": "20261018-224713-reviewer"
     }
   ]
 }

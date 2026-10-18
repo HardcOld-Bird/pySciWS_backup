@@ -59,6 +59,12 @@ steps:
     - orchestration/skills
     - orchestration/pods/writing
     effort: medium
+- id: w3
+  member: writing
+  brief: r1 终检后抛光（低严重度三项）——①p4/p5/p10 文献图裁掉期刊页眉横幅（重裁已有高清图即可，无需重提取）；②胶囊补 [n] 引用号上标（preset 速查表 baseline=30000 规格，块↔文献锚点）；④p3 中列图放大填满上下留白（任务书「不要留大块空白」）。改后重跑 render/verify/geometry 与逐页自检；引用短格式保留（任务书明示「缩略引用形式」，不改）
+  dirs:
+  - data/大任务/5_开题PPT
+  effort: medium
 - id: L
   mode: serial
   brief: 组长改进
