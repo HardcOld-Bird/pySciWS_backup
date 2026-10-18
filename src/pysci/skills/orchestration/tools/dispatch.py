@@ -1453,6 +1453,7 @@ def do_dispatch(
         model=model,
         max_turns=max_turns,
         effort=level,
+        turn_warning=not eval_hop,
     )
     env = build_env(m, all_dirs, deployed_skills=deployed_skills_for(m.pod))
 
@@ -1519,6 +1520,7 @@ def do_dispatch(
             model=model,
             max_turns=max_turns,
             effort=level,
+            turn_warning=not eval_hop,
         )
         rc, out, err = run_headless(
             cmd2,
@@ -1577,6 +1579,7 @@ def do_dispatch(
                 model=model,
                 max_turns=max_turns,
                 effort=level,
+                turn_warning=not eval_hop,
             ),
             cwd=PROJECT_ROOT,
             env=env,
@@ -1620,6 +1623,7 @@ def do_dispatch(
                     model=model,
                     max_turns=max_turns,
                     effort=level,
+                    turn_warning=not eval_hop,
                 ),
                 cwd=PROJECT_ROOT,
                 env=env,
@@ -1669,6 +1673,7 @@ def do_dispatch(
                     model=model,
                     max_turns=max_turns,
                     effort=level,
+                    turn_warning=not eval_hop,
                 ),
                 cwd=PROJECT_ROOT,
                 env=env,

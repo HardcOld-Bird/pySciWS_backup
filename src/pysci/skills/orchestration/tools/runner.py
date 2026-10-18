@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -18,7 +19,7 @@ from typing import Any
 
 from pysci.paths import PROJECT_ROOT
 
-from . import procs
+from . import procs, turnbudget
 from .registry import Member, resolve_exe
 
 #: 注入到每次派发的交付协议提醒（charter 有全文，这里只防健忘）。
@@ -187,6 +188,7 @@ def build_command(
     effort: str | None = None,
     timeout_note: bool = True,
     exe: Path | None = None,
+    turn_warning: bool = True,
 ) -> list[str]:
     """组装一次 headless 派发的完整 argv。
 
@@ -201,6 +203,11 @@ def build_command(
             空/None 时不透传 ``--reasoning-effort``，跟随用户级默认（中）。
         timeout_note: 占位（保持签名稳定），未使用。
         exe: 覆盖注册表/默认 exe。
+        turn_warning: 注入会话余量告警 hook（F1，默认开）。阈值=本跳上限的 80%
+            （``turnbudget.WARN_RATIO``，经 ``PYSCI_TURN_WARN_RATIO`` 可调）：达到后
+            ``PostToolUse`` hook 以 exit 2 把「交付半成品＋接手清单」提示注入**运行中**
+            的会话，避免 60 轮耗尽直接 ``fatal_error``、零交付。压测跳（evals）关掉，
+            否则会改变被测行为并给基线读数叠加 hook 耗时。
 
     Returns:
         subprocess 可用的 argv 列表（每个元素都是字符串，见 :func:`_argv_value`）。
@@ -211,9 +218,17 @@ def build_command(
     del timeout_note  # 保留参数位，暂无用途
     exe = exe or resolve_exe()
     sid = _argv_value("--resume" if resume else "--session-id", session_id)
+    budget = int(max_turns or member.max_turns)
     cmd = [str(exe), "--cwd", str(member.pod), "-p", prompt, "-o", "json"]
     cmd += ["--resume", sid] if resume else ["--session-id", sid]
-    cmd += ["--max-turns", str(max_turns or member.max_turns)]
+    cmd += ["--max-turns", str(budget)]
+    if turn_warning and budget > 0:
+        # 内联 --settings 与 pod 级 settings **合并**（实测 1.1.73），既有 Stop/PreToolUse
+        # 钩子照常生效；since=组装时刻，只数本跳回合（resume 历史不误报）。
+        cmd += [
+            "--settings",
+            turnbudget.hook_settings(budget, since=time.time()),
+        ]
     if model:
         cmd += ["-m", _argv_value("-m", model)]
     if effort:
