@@ -210,12 +210,21 @@ def findings(health: dict[str, Any]) -> list[str]:
     return out
 
 
-def report_lines(health: dict[str, Any], *, tight_bbox: bool = False) -> list[str]:
+def report_lines(
+    health: dict[str, Any], *, tight_bbox: bool | None = None
+) -> list[str]:
     """体检报告行（人读）。
 
-    ``tight_bbox=True``（调用方按绘图样式判）时追加一行**裁切提示**——成品尺寸是
-    ``savefig.bbox=tight`` 的**裁切后包围盒**，与生产者自述的 ``figsize`` 名义值本就不同
-    （backlog 20261015-221750：审查员为判定该差异需反解版面常量 + 核样式源码）。
+    ``tight_bbox`` **只接受能确证的值**：
+
+    - ``True``：渲染时确证 ``savefig.bbox="tight"`` → 追加裁切提示（成品是裁切后包围盒，
+      与生产者自述的 ``figsize`` 名义值本就不同；backlog 20261015-221750）；
+    - ``False``：确证 ``standard`` → 说明成品即名义画布；
+    - ``None``（缺省）：**不可证** → 中性说明「bbox 模式未知，尺寸由 PNG dpi 换算」。
+
+    PNG 本身不记录 bbox 模式；**不得拿全局绘图样式当「渲染时已生效」的证据**——
+    图可在 ``rc_context(savefig.bbox="standard")`` 下渲染而样式仍声明 tight
+    （2026-10-18 backlog 20261018-114448-reviewer：固定断言 tight 与事实相反）。
     """
     lines = [
         "=== figure inspect ===",
@@ -226,10 +235,19 @@ def report_lines(health: dict[str, Any], *, tight_bbox: bool = False) -> list[st
         f"  饱和像素占比    : {health['saturated_ratio']:.1%}",
         f"  边缘标记        : {len(health['edge_marks'])} 处",
     ]
-    if tight_bbox:
+    if tight_bbox is True:
         lines.append(
-            "  [i] savefig.bbox=tight 已生效：成品尺寸为**裁切后包围盒**，"
+            "  [i] savefig.bbox=tight（已确证）：成品尺寸为**裁切后包围盒**，"
             "非 figsize 名义值（差异随内容变化）"
+        )
+    elif tight_bbox is False:
+        lines.append(
+            "  [i] savefig.bbox=standard（已确证）：成品尺寸即 figsize 名义画布"
+        )
+    else:
+        lines.append(
+            "  [i] bbox 模式未知：尺寸由 PNG dpi 元数据换算；若渲染时 "
+            "savefig.bbox=tight，成品为裁切后包围盒（与 figsize 名义值不同）"
         )
     for m in health["edge_marks"]:
         lines.append(
