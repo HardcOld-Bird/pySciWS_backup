@@ -3698,11 +3698,14 @@
       "kind": "defect",
       "success_criteria": "`pysci-research read <APS-DOI>` 在机构 IP 下能像直链 curl 一样拿到 PDF；缓存扫描工具能自动涵盖 `cache/html_fulltext/<doi>/*.pdf`，不再需要人工复制。",
       "evidence_file": "orchestration/state/suggestions/approved/20261018-221735-lit.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-18T22:20:31+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 6e34bff）",
       "started_at": "2026-10-18T22:20:36+08:00",
-      "worktree": "20261018-221735-lit"
+      "worktree": "20261018-221735-lit",
+      "done_at": "2026-10-18T22:50:44+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261018-221735-lit"
     },
     {
       "id": "20261018-223051-writing",
