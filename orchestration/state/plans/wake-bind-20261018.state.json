@@ -1,0 +1,26 @@
+{
+  "plan_id": "wake-bind-20261018",
+  "created": "2026-10-18T15:54:16+08:00",
+  "goal": "夜航返工闪窗根治＋基础设施主会话绑定收紧（用户 2026-10-18 两项要求：空终端消失；watchdog/夜航自动唤醒始终绑定主会话、子会话与 pod 会话不被自动唤醒）",
+  "steps": [
+    {
+      "id": "s1-noconsole",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261018-155546-wake-bind-20261018-s1-noconsole",
+      "task_file": "orchestration/state/plans/wake-bind-20261018-s1.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
+    },
+    {
+      "id": "s2-binding",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261018-163119-wake-bind-20261018-s2-binding",
+      "task_file": "orchestration/state/plans/wake-bind-20261018-s2.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-18T17:34:37+08:00"
+}

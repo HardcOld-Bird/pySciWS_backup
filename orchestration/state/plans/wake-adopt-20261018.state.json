@@ -1,0 +1,17 @@
+{
+  "plan_id": "wake-adopt-20261018",
+  "created": "2026-10-18T18:46:44+08:00",
+  "goal": "主会话程序化识别＋自动补位（用户 2026-10-18 裁决：主会话=存活的项目根 cwd 会话中创建更早者、唯一时即它；owner 缺席/死亡自动补位、watchdog 重启按记录恢复，零人工命令——取代 wake-bind twin A 的仅人工迁移）",
+  "steps": [
+    {
+      "id": "s1-adopt",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261018-184645-wake-adopt-20261018-s1-adopt",
+      "task_file": "orchestration/state/plans/wake-adopt-20261018-s1.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-18T19:28:07+08:00"
+}
