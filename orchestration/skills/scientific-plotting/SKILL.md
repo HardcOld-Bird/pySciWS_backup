@@ -5,139 +5,91 @@ description: Produce publication-grade scientific figures (multi-panel, nested, 
 
 # Scientific Plotting
 
-One CLI drives the whole figure workflow: **scaffold → draw → export → audit → visually verify**.
-
-The backend (`src/pysci/skills/scientific_plotting/`: style/palette/layout/export/runner/audit/
-scaffold + a `figures` facade) is a **black box** — drive it through the `figures` CLI below; open
-the code only when maintaining it.
-
-Design split: **this skill owns the publication *contract*** (widths, fonts, italics, palettes,
-export, self-check); **each figure's drawing lives as a small pipeline script** (`build_figure`)
-under the research's asset dir, so figures iterate in place.
+One CLI drives the figure workflow: **scaffold → draw → export → audit → visually verify**.
+The backend (`src/pysci/skills/scientific_plotting/`) is a **black box** — drive it through
+`figures`; open the code only when maintaining it. This skill owns the publication
+**contract** (widths, fonts, palettes, export, self-check); each figure's drawing lives in a
+small pipeline script so figures iterate in place.
 
 ## Invocation
 
-Run from the **project root**. The skill installs a console script `pysci-figures`:
-
-```
-pysci-figures <command> [options]
-```
-
-Below, `figures …` is shorthand for `pysci-figures …`. (Fallback if the entry is missing / offline:
-`uv run --no-sync python -m pysci.skills.scientific_plotting.tools.figures …`.)
-
-> **PowerShell:** Chinese output — see `.qoder/rules/basic.md` §3.
-
-## Capability boundary (read this first)
-
-**Available now:**
-- Journal style presets: `aps` (Arial 8pt, 85/170 mm) and `nature` (Helvetica 7pt, 89/183 mm;
-auto-fallback to TeX Gyre Heros / Arial when Helvetica isn't installed).
-- Colorblind-safe palettes (Okabe-Ito default, Tol bright/vibrant).
-- **Restrained design colors** (user ruling 2026-10-15)：设计用色限 **1~2 个色系**；数据
-  colormap 不计入，必选时（Rainbow 类）设计用色取其**同族或中性色**，勿另起色系。
-- Multi-panel & nested layouts with automatic `(a)(b)(c)` panel labels.
-- Export: EPS / PDF / SVG (text kept editable via fonttype=42 / svg fonttype=none) + PNG.
-- **PNG preview** for the agent's visual loop (EPS/SVG can't be Read directly).
-- Publication audit: width vs design, min fontsize, font embedding, panel labels, colorblind
-  distinguishability.
-- Per-figure pipeline scaffolding + discovery + run.
-
-**Not yet (v2):** rasterizing external SVG (Blender, hand-edited); extra journal presets.
-External **raster** media: `raster-panel` crops the axis frame via the comsol sidecar
-(`crop_box_px` + `extent`) and overlays in **data coordinates**.
+From the project root: `pysci-figures <command> [options]` (`figures …` is shorthand).
+Fallback if the entry is missing: `uv run --no-sync python -m
+pysci.skills.scientific_plotting.tools.figures …`. Git Bash: quote multi-word args.
+PowerShell: Chinese output → basic.md §3.
 
 ## Commands at a glance
 
 | Command | Use when | Key output |
 |---|---|---|
-| `doctor` | Session start, or anything seems broken | config + backends + font availability |
-| `styles` | Choosing a journal look / palette | preset + palette listing |
-| `new <research> <slug>` | Starting a figure | scaffolded pipeline dir under `article/figures/` |
-| `build <figdir>` | Producing deliverables | EPS/PDF/SVG/PNG + `_preview.png` in `out/` |
-| `preview <figdir>` | Fast visual iteration (no deliverables) | `_preview.png` only |
-| `audit <figdir>` | Checking publication compliance | PASS/FAIL report |
-| `raster-panel --image I --out O [--sidecar S --overlay spec.json]` | Overlaying annotations on an external COMSOL PNG | single-panel PNG with data-coord overlays |
-| `list <research>` | Seeing existing figure pipelines | pipeline inventory |
+| `doctor` | Session start / anything broken | config + backends + fonts |
+| `styles` | Choosing journal look / palette | presets + palettes |
+| `new <research> <slug>` | Starting a figure | scaffolded pipeline dir |
+| `build <figdir>` | Producing deliverables | EPS/PDF/SVG/PNG + `_preview.png` |
+| `preview <figdir>` | Fast visual iteration | `_preview.png` |
+| `audit <figdir>` | Publication + annotation-semantics check | PASS/FAIL report |
+| `inspect <png>` | Non-pipeline image health check | size/colour/watermark scan |
+| `overlap <img> --white <W>` | Zero-occlusion pixel verdict | ink ∩ data/line counts |
+| `raster-panel` / `compose-grid` / `field-panel` | External media / grids / field data | PNG |
+| `list <research>` | Pipeline inventory | listing |
 
-Run `figures <command> -h` for options. **`new`: `<research> <slug>`; `build`/`preview`/`audit`: one `<figdir>` path.**
+Run `figures <command> -h`. **`new`: `<research> <slug>`; `build`/`preview`/`audit`: one `<figdir>`.**
 
-## Quick start: zero → submission-grade figure
+## Quick start
 
 ```
-- [ ] 1. figures doctor                                  # confirm backends + fonts
+- [ ] 1. figures doctor
 - [ ] 2. figures new gain_ep fig1_ep_band --style aps --width double --template multi_panel
-- [ ] 3. Edit article/figures/fig1_ep_band/fig1_ep_band.py   # replace sample data with real data
-- [ ] 4. figures build 'data/research/1_gain_ep/article/figures/fig1_ep_band'
-- [ ] 5. Read the printed out/fig1_ep_band_preview.png   # VISUAL CHECK — iterate on step 3-4
-- [ ] 6. figures audit '<figdir>' --panels                # final compliance gate
+- [ ] 3. Edit src/pysci/research/<name>/article/figures/<slug>.py  (`build_figure`)
+- [ ] 4. figures build 'data/research/<n>_<name>/article/figures/<slug>'
+- [ ] 5. Read out/<slug>_preview.png   # VISUAL CHECK — iterate 3–4
+- [ ] 6. figures audit '<figdir>' --panels   # final gate
 ```
 
-**Always Read the `_preview.png` before declaring done** — a figure can export cleanly yet look
-wrong. The preview is your eyes.
+**Always Read `_preview.png` before declaring done** — a figure can export cleanly yet look wrong.
 
-## The per-figure pipeline
+## Pipeline contract
 
-Each figure has its **code** and **data** in separate locations:
+- Code: `src/pysci/research/<name>/article/figures/<slug>.py`, exposing
+  `build_figure(style=None, research_dir=None, **kw) -> Figure`.
+- Data/out: `data/research/<n>_<name>/article/figures/<slug>/` (with `notes.md` and `out/`).
+- `build_figure` runs inside `style_context`: figsize/fonts/sizes/palette inherit; declare only
+  the kwargs you need. `STYLE.yaml` (root baseline + figdir key-by-key override) sets defaults;
+  CLI wins. Details: `references/plotting.md`, `plotting-01-overview.md`.
 
-Code (Agent-managed, in src/):
-```
-src/pysci/research/<name>/article/figures/<slug>.py   # build_figure(style=None, research_dir=None, **kw) -> Figure
-```
+## Annotation semantics, layout & reference fidelity (mandatory for production figures)
 
-Data (outputs/logs, in data/):
-```
-data/research/<n>_<name>/article/figures/<slug>/
-├── notes.md         # iteration log (date / need / result)
-└── out/             # fig.eps (submit), .pdf, .svg (manual tweak), _preview.png (agent eyes)
-```
-
-`build_figure` runs **inside** the journal `style_context`: `plt.subplots()` / `layout.grid()`
-already inherit figsize, fonts, sizes and the colorblind cycle. Declare only the kwargs you need
-(`style`, `research_dir`); extras are ignored safely.
-
-Iteration playbook (`references/plotting.md`): **data only** → edit the data-loading part;
-**plot only** → edit plotting calls; **journal only** → re-run `--style nature`.
-
-A figures-root `STYLE.yaml` sets preset/width defaults; a per-figure one overrides **key by
-key**; CLI wins. `audit` measures the exported `out/<stem>.eps` and WARNs (`width-deliverable`)
-on >30 % deviation — catches a double-width root masking a single-column figure.
-
-Discovery is **src-first**; if a same-named pipeline also sits in `<figdir>/`, `build` WARNs which
-file it rendered. Force figdir: `--pipeline-in-figdir`, or pin
-`pipeline: src|figdir` in STYLE.yaml. Details: `references/plotting.md`.
-
-## Visual closed loop
-
-`build` / `preview` always emit `out/<stem>_preview.png`. **Read it**, then edit the pipeline
-script in `src/pysci/research/<name>/article/figures/<slug>.py` and re-run (same render→Read
-pattern as the comsol/document skills). Don't ask the user to eyeball intermediates.
-
-## Output locations
-
-| Path | Contents |
-|---|---|
-| `src/pysci/research/<name>/article/figures/<slug>.py` | figure pipeline code (build_figure) |
-| `data/research/<n>_<name>/article/figures/<slug>/out/` | deliverables (EPS/PDF/SVG/PNG) |
-| `data/research/<n>_<name>/article/figures/<slug>/notes.md` | iteration log |
-| `data/skills/scientific_plotting/templates/` | custom scaffold templates (user-added) |
-| `data/skills/scientific_plotting/recipes/` | reusable cross-research plotting recipes |
-| `data/skills/scientific_plotting/cache/` | transient previews (git-ignored) |
+1. **参考图对照表**：任务书给参考图时，**画前**产出逐要素表——每要素：参考图对应物 →
+   物理含义 → 产物元素 → 元素间关系 → **处置（照搬/适配/偏离+理由）**。无表＝缺理解痕迹
+   （reviewer G2 判 FAIL）。模板见 taskbook-template.md。
+2. **标注语义机械声明**：把任务书的可计数语义模型（如「每侧 2 个框、外框>内框、虚线相连」）
+   写入图目录 `ANNOTATIONS.yaml`；给每个标注原语打 `gid="annot:<id>[;role=…][;view=…]"`，
+   视图轴 `set_gid("view:<name>")`。`figures audit` 据此核验**计数/包含+边距/相对大小/连接线**。
+   schema 与示例 → `references/plotting-04-annotation-semantics.md`。
+3. **处置分支不得替换**：按任务书「处置分支声明」走指定分支；欲换处置（含以技术判断否决
+   用户显式指令）→ 以 `<blocked>`/疑问清单上报裁决，**不得静默替换**。
+4. **布局节奏/编号锚定**：
+   ①标题与上方外缘间距 > 与下方子图间距；
+   ②图例置于数据图下方、不压主体；
+   ③子图组与脚注段留清晰间距；
+   ④编号锚定**整体 bbox（含图例/colorbar/标注）左上角**。
 
 ## Typesetting, zero-occlusion & style
 
-**零遮挡铁律（硬伤）**：①文字/刻度不压图线 ②图体与标题留间距
-③colorbar 标题↔色标、色标↔子图留边距 ④任何元素重叠=FAIL 无例外 ⑤**近而不交**：不该相交的
-线/框贴边/临界间距=缺陷。**判据命令**：
-`figures overlap <img> --white <删文字版.png>`（墨迹∩彩色/图线）。
-**scienceplots（可选审美层，契约层优先）**：`STYLE.yaml scienceplots: true` 或
+**零遮挡铁律（硬伤）**：①文字/刻度不压图线/彩色数据区 ②图体与标题留间距 ③colorbar
+标题↔色标、色标↔子图留边距 ④任何元素重叠=FAIL 无例外 ⑤**近而不交**：不该相交的线/框
+贴边/临界间距=缺陷。**判据命令**：`figures overlap <img> --white <删文字版.png>`。
+**设计用色克制**：整图设计用色 **1~2 个色系**；数据 colormap **不计入**色系计数，Rainbow
+类必选时设计用色取其**同族/中性**色，**勿另起色系**。
+**scienceplots**（可选审美层，契约层优先）：`STYLE.yaml scienceplots: true` 或
 `style_context(..., scienceplots=True)`。细则与排障 → `references/plotting-03-typesetting-and-style.md`。
 
 ## Reference files
 
 （`*`=分册索引，按需读单册）
 
-- [plotting.md](references/plotting.md) * — publication conventions: mathtext, palettes, widths,
-  SVG/EPS, iteration playbook, CLI argument forms.
-- [plotting-03-typesetting-and-style.md](references/plotting-03-typesetting-and-style.md) * —
-  零遮挡铁律 + scienceplots 审美层优先级 + 排障。
+- `references/plotting.md` * — index；`plotting-01-overview.md` * — widths/fonts/typography/
+  palettes/layout/external media/discovery/iteration；`plotting-02-cli-argument-forms-…md` —
+  CLI signatures；`plotting-03-typesetting-and-style.md` * — zero-occlusion + scienceplots +
+  troubleshooting；`plotting-04-annotation-semantics.md` * — **ANNOTATIONS.yaml schema、gid
+  约定与四类判据**（画带语义标注的场图前必读）。

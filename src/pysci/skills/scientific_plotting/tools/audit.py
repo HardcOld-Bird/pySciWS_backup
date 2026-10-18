@@ -29,6 +29,7 @@ import numpy as np
 from matplotlib import text as mtext
 from matplotlib.figure import Figure
 
+from . import geometry as _geometry
 from .style import StyleInfo, preset
 
 # 级别：ERROR 必须修，WARN 建议修，INFO 仅提示。
@@ -404,11 +405,16 @@ def audit_figure_dir(
     width: str | None = None,
     expect_panel_labels: bool = False,
     min_fontsize: float | None = None,
+    annotations: Path | str | None = None,
 ) -> AuditReport:
     """在 style_context 下构建某图目录的管线并自检（不导出）。
 
     额外量取 out/ 里**已导出交付件**的实际宽度，与判定目标比对（假绿防护）——若从未
     build 过（无交付件）则跳过该项，不误报。
+
+    **标注几何语义**：自动读取图目录 ``ANNOTATIONS.yaml|yml|json``（或 ``annotations=``
+    显式路径），按声明核验计数/包含+边距/相对大小/连接线；无声明时仅在图中存在
+    ``annot:*`` 原语时 WARN 提示。
 
     **适用边界**：本审计依赖图目录内的管线 `.py`（或 src 侧同名脚本）来**重建** Figure。
     散落脚本产出的图目录（无 scaffold 管线）无法重建，返回 ``applicable=False`` 的
@@ -447,6 +453,21 @@ def audit_figure_dir(
         deliv = _find_deliverable(out_dir, stem)
         deliv_mm = _measure_deliverable_width_mm(deliv) if deliv is not None else None
 
+        sidecar = (
+            Path(annotations)
+            if annotations is not None
+            else _geometry.find_sidecar(figdir)
+        )
+        spec: dict[str, Any] | None = None
+        spec_error: str | None = None
+        if annotations is not None and not sidecar.is_file():
+            spec_error = f"指定的标注声明不存在：{sidecar}"
+        elif sidecar is not None:
+            try:
+                spec = _geometry.load_spec(sidecar)
+            except (OSError, ValueError) as e:
+                spec_error = f"读取标注声明失败（{sidecar.name}）：{e}"
+
         with _runner.built_figure(figdir, style=style, width=width) as (fig, info):
             rep = audit_figure(
                 fig,
@@ -455,6 +476,19 @@ def audit_figure_dir(
                 min_fontsize=min_fontsize,
                 deliverable_width_mm=deliv_mm,
             )
+            if spec_error is not None:
+                rep.add(ERROR, "annot-spec", spec_error)
+            else:
+                try:
+                    geo = _geometry.audit_annotations(fig, spec)
+                except Exception as e:  # noqa: BLE001 - 声明是外部输入，坏声明不许伪装成构建失败
+                    rep.add(ERROR, "annot-check", f"标注几何核验失败：{e!r}")
+                else:
+                    for issue in geo.issues:
+                        rep.add(issue.level, issue.code, issue.message)
+                    rep.metrics.update(geo.metrics)
+                    if sidecar is not None:
+                        rep.metrics["annotations_file"] = sidecar.name
         rep.figdir = figdir
         if deliv is not None:
             rep.metrics["deliverable_file"] = deliv.name

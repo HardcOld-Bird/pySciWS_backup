@@ -2,16 +2,16 @@
   "version": 1,
   "skills": {
     "scientific-plotting": {
-      "source_hash": "4844da14e73d7308693f1ffdfce46af8a2e958d639c2b53a35b5c98f863a9783",
+      "source_hash": "9e67890558d52260fec25760ed15259d40ac1ca28d9403fc72ec45c67c56777d",
       "targets": {
-        "orchestration/pods/figure/.qoder/skills/scientific-plotting": "4844da14e73d7308693f1ffdfce46af8a2e958d639c2b53a35b5c98f863a9783",
-        "orchestration/pods/deputy/.qoder/skills/scientific-plotting": "4844da14e73d7308693f1ffdfce46af8a2e958d639c2b53a35b5c98f863a9783"
+        "orchestration/pods/figure/.qoder/skills/scientific-plotting": "9e67890558d52260fec25760ed15259d40ac1ca28d9403fc72ec45c67c56777d",
+        "orchestration/pods/deputy/.qoder/skills/scientific-plotting": "9e67890558d52260fec25760ed15259d40ac1ca28d9403fc72ec45c67c56777d"
       }
     },
     "orchestration": {
-      "source_hash": "b80445a9edc73a650a0e9f73e8ea50815a04e9aa0aecd169151fdf4533836ca9",
+      "source_hash": "b87d28c751435d1da016477bb52fe384e4e7edf0a8307fce43d6640af7ee2cbf",
       "targets": {
-        ".qoder/skills/orchestration": "b80445a9edc73a650a0e9f73e8ea50815a04e9aa0aecd169151fdf4533836ca9"
+        ".qoder/skills/orchestration": "b87d28c751435d1da016477bb52fe384e4e7edf0a8307fce43d6640af7ee2cbf"
       }
     },
     "devops": {
