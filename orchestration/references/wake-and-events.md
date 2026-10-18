@@ -71,42 +71,46 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   （harness 只认**最近一任**），致 2026-10-13 20:57 的 QUEUE-COMPLETE 唤醒丢失。v2 取消守卫、
   改为每回合接管。
 
-**唤醒权绑定主会话（`wake-claim`；用户 2026-10-18 裁决，twin 终裁 A——「自动唤醒始终绑定主会话」）**：
+**唤醒权程序化绑定主会话（`wake-claim`；用户 2026-10-18 直接裁决，高于 twin A）**：
 v2 的「最新在听者胜」在**主会话 + 次要会话并用**时会被抢——次要会话一有回合即抢走唤醒权，
 drain/事件的 `exit 2` 被投到次要会话（污染其上下文，用户明确要避免；凌晨「被取代却无接任」
 的谜之日志疑为同源）。第一版**认领制**（手工 `wake-claim` 认领 + env 取证身份）被判「硬保证
-退化成软步骤」废弃；**2026-10-14 的自动归属**（零手工认领/续心跳/异会话排除）保留为地基，
-但 **2026-10-18 起取消全部自动转让**（stale 自动接管、SessionEnd 自动升主），迁移只走人工。
-钩子解析 stdin 载荷的 `session_id`＋`cwd`，真源 `state/wake-owner.json`（`session_id` +
-`claimed_at` + `last_turn_at`），判定单一实现在 `wake-claim --check`：
+退化成软步骤」废弃；**2026-10-18 用户在场裁决**：归属必须**程序化硬保证**、零人工命令——
+twin A 的「取消自动转让、迁移只走人工」被该指令覆盖（`twin review --reject` 留痕）。
+真源 `state/wake-owner.json`（当前 owner）；存活会话登记表 `state/sessions-live.json`
+（gitignored 运行态）；判定单一实现在 `wake-claim --check`：
 
-| 情形（载荷判定） | 钩子行为 |
+| 情形 | 行为 |
 |---|---|
-| **无 owner 记录 → 自动认领**（仅冷启动/人工 `--force` 释放后；首会话即主会话） | 抢 token、挂 watch，照常 `exit 2` 唤醒 |
-| **owner = 我 → 续心跳** | 照常抢 token、挂 watch |
-| **owner ≠ 我 → 永不抢占**（子会话自动排除） | **不监听、不抢 token、绝不 `exit 2`**（`exit 0`，留痕） |
-| **cwd 非项目根**（pod 组员直聊；载荷 `cwd` 优先，其次钩子入口 cwd） | 同上拒绝：不认领/不接管/不监听 |
-| **owner stale**（心跳断供 >30 min 且 watch 已死） | **不再自动接管**——deny 并提示人工迁移 |
-| **SessionEnd**（`SessionEnd` 钩子接线 `.qoder/hooks/watch-arm.sh`） | owner 写**释放墓碑**后退出；下一会话**不自动升主**，迁移只走人工 |
+| **候选集** = 存活 ∧ cwd==项目根（pod 直聊永不入候选） | 只有候选参与归属 |
+| **主会话 = 候选集中创建更早者**（OS `create_time` 优先、`first_seen` 回退；平局按 `session_id` 字典序） | 首位即 owner；候选仅一个时即它 |
+| **owner 记录指向者仍存活**（PID 活；长回合心跳停摆不算死） | 保持/恢复为 owner（watchdog/监听被杀重启后按记录恢复） |
+| **owner 缺席/死亡** | **最早创建的存活项目根会话自动补位**（零人工） |
+| **晚创建者**（早者存活期间） | **deny**：不监听、不抢 token、绝不 `exit 2` |
+| **SessionEnd** | 注销登记；owner 结束 → 立即补位最早剩余存活候选；无候选时墓碑**仅留痕**（不阻止后续补位） |
 | 空载荷（看门狗重臂）/ 解析失败 / 无 `session_id` / 判定命令本身失败 | **fail-open 走旧 token 语义**并留痕（唤醒链不塌） |
 
-- **迁移唯一通道**：`pysci-orch wake-claim --force --session-id <id>`；`--force` 不带 id =
-  人工释放（删除记录，下一钩子自动认领）。`wake-claim status` 输出人工迁移指引。
+- **存活性**：优先 PID 探测（`procs.pid_alive`，argv 直传 tasklist 免 MSYS 路径转换）；
+  **仅当 PID 缺失**才回退 `last_seen` 心跳新鲜度。**心跳过期而 PID 存活 = 存活**——旧
+  stale-30min 判死正是在长回合（Stop 钩子不触发、心跳停摆）里误伤主会话。
+- **创建时刻锚定**：钩子沿进程祖先链找会话 CLI（exe 名含 `qoderclicn`），取 `psutil
+  create_time()`（缺 psutil 时 Windows `GetProcessTimes` / POSIX `/proc`）；锚不到回退
+  `first_seen`（首个钩子时刻 ≈ 创建）。平局按 `session_id` 字典序（确定性）。
 - **只有 owner 侧挂载可消费事件**：钩子把 owner 的 `session_id` export 给 `orch watch`
-  （`watch.json` 的 `armed_by`）。看门狗重臂的**无主替身**（`armed_by` 空）或被人工迁移
+  （`watch.json` 的 `armed_by`）。看门狗重臂的**无主替身**（`armed_by` 空）或被补位
   **取代**的旧实例命中事件时**不记 `consumed`、不推进持久水位**——exit 2 到不了任何会话，
-  记了账就是吞账；事件留给 owner 下次挂载的迟到唤醒。单一消费水位仍生效，被取代实例拿不到
-  唤醒权（防双唤醒）。
+  记了账就是吞账；事件留给 owner 下次挂载的迟到唤醒。单一消费水位仍生效（防双唤醒）。
 - **不存在「转投其他会话」语义**：owner 不在场时事件**不丢**——持久水位 + 迟到唤醒由
-  owner 下次挂载补上。验收件：
+  owner/补位者下次挂载补上。验收件：
   `tests/skills/orchestration/test_wake_binding.py::test_substitute_does_not_consume_and_owner_gets_late_wake`。
-- **夜航同样绑定主会话**：`watch-arm.sh` 的夜航差分块移到归属闸**之后**（非 owner 已退出）；
-  `night.py` 的政策注入/gate 复用 `watch.session_binding`——子会话与 pod cwd 会话零注入、
-  零 gate、零 rewake（夜航只由用户在主会话手动驱动）。
-- **历史（已退役）**：2026-10-14 的 stale 自动接管与 SessionEnd 后自动认领，以及当时
-  `takeover`/`claim` 实测留痕，仅作背景；2026-10-18 起由人工迁移取代（twin 案卷
-  `data/taskbooks/wake-bind-20261018-twin.md`）。重臂替身**继承** `PYSCI_WAKE_OWNER` 的接线
-  缺陷仍由钩子 `unset` + `watchdog._rearm` 剥离双保险（回归测试钉住）。
+- **夜航同样绑定主会话**：`watch-arm.sh` 的夜航差分块在归属闸**之后**；`night.py` 的
+  政策注入/gate 复用 `watch.session_binding`——子会话与 pod cwd 会话零注入、零 gate、
+  零 rewake（夜航只由用户在主会话手动驱动）。
+- **应急通道**：`pysci-orch wake-claim --force --session-id <id>` 可强制指定 owner（目标
+  存活期间保持）；`--force` 不带 id = 清除记录（下一钩子按创建时序自动补位）。常规场景
+  **零人工命令**。
+- **历史**：2026-10-14 的 stale 自动接管/2026-10-18 s2 的人工迁移均已退役；重臂替身
+  **继承** `PYSCI_WAKE_OWNER` 的接线缺陷仍由钩子 `unset` + `watchdog._rearm` 剥离双保险。
 
 **迟到唤醒 + 看门狗（2026-10-14 自动化加固 a1；用户实测发现 02:30–07:30 五小时唤醒真空）**：
 

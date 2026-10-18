@@ -84,6 +84,10 @@ def _state_paths(monkeypatch, tmp_path):
         ),
     )
     monkeypatch.setattr(events, "EVENTS_LOG", root / "events.jsonl")
+    # 存活会话登记表同归 tmp（wake-adopt-20261018 s1）
+    from pysci.skills.orchestration.tools import live_sessions as _live
+
+    monkeypatch.setattr(_live, "SESSIONS_PATH", root / "sessions-live.json")
     return root
 
 
