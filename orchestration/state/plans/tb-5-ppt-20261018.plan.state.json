@@ -59,15 +59,19 @@
     },
     {
       "id": "G2.d1",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261018-223302-tb-5-ppt-20261018.plan-G2.d1",
-      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.d1.task.md"
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.d1.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
     },
     {
       "id": "w3",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261018-230555-tb-5-ppt-20261018.plan-w3",
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.w3.task.md"
     },
     {
       "id": "L.l1",
