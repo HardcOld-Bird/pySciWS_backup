@@ -5,15 +5,19 @@
   "steps": [
     {
       "id": "G1.P1.w1",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "writing-20261018-213642-tb-5-ppt-20261018.plan-G1.P1.w1",
-      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.w1.task.md"
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.w1.task.md",
+      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "kind": "result"
     },
     {
       "id": "G1.P1.f1",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "figure-20261018-214459-tb-5-ppt-20261018.plan-G1.P1.f1",
+      "task_file": "orchestration/state/plans/tb-5-ppt-20261018.f1.task.md"
     },
     {
       "id": "G1.l1",
