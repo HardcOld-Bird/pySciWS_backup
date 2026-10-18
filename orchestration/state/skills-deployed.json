@@ -28,17 +28,17 @@
       }
     },
     "document-writing": {
-      "source_hash": "9b7854e4e86fdd0e5f16bc1cc35d7032cbac624aa27134bc176db2ecf2c6dd7d",
+      "source_hash": "a4e4d16951fbb4a583a793ecb9bfeddea4bd487b7ba9e7a5aecf9db496c9569c",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/document-writing": "9b7854e4e86fdd0e5f16bc1cc35d7032cbac624aa27134bc176db2ecf2c6dd7d",
-        "orchestration/pods/writing/.qoder/skills/document-writing": "9b7854e4e86fdd0e5f16bc1cc35d7032cbac624aa27134bc176db2ecf2c6dd7d"
+        "orchestration/pods/deputy/.qoder/skills/document-writing": "a4e4d16951fbb4a583a793ecb9bfeddea4bd487b7ba9e7a5aecf9db496c9569c",
+        "orchestration/pods/writing/.qoder/skills/document-writing": "a4e4d16951fbb4a583a793ecb9bfeddea4bd487b7ba9e7a5aecf9db496c9569c"
       }
     },
     "literature-research": {
-      "source_hash": "5fae9605de99d978595849695d3229d1edff717f50113118ae7261e3e4eda345",
+      "source_hash": "8c4dbefe34be720680a9502a6e5a7b02c2290a3b06ffc3a971b656d2978cd5ee",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/literature-research": "5fae9605de99d978595849695d3229d1edff717f50113118ae7261e3e4eda345",
-        "orchestration/pods/lit/.qoder/skills/literature-research": "5fae9605de99d978595849695d3229d1edff717f50113118ae7261e3e4eda345"
+        "orchestration/pods/deputy/.qoder/skills/literature-research": "8c4dbefe34be720680a9502a6e5a7b02c2290a3b06ffc3a971b656d2978cd5ee",
+        "orchestration/pods/lit/.qoder/skills/literature-research": "8c4dbefe34be720680a9502a6e5a7b02c2290a3b06ffc3a971b656d2978cd5ee"
       }
     },
     "theoretical-computation": {
