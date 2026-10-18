@@ -35,10 +35,10 @@
       }
     },
     "literature-research": {
-      "source_hash": "567db62b333f69f4199cf5a899c0ded6540948bdd08ff8539b009c124c68befb",
+      "source_hash": "017b7ff4a92612021c9d40da3d3cf2fdeb69e7369bee916b1f1b53f10bc866e6",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/literature-research": "567db62b333f69f4199cf5a899c0ded6540948bdd08ff8539b009c124c68befb",
-        "orchestration/pods/lit/.qoder/skills/literature-research": "567db62b333f69f4199cf5a899c0ded6540948bdd08ff8539b009c124c68befb"
+        "orchestration/pods/deputy/.qoder/skills/literature-research": "017b7ff4a92612021c9d40da3d3cf2fdeb69e7369bee916b1f1b53f10bc866e6",
+        "orchestration/pods/lit/.qoder/skills/literature-research": "017b7ff4a92612021c9d40da3d3cf2fdeb69e7369bee916b1f1b53f10bc866e6"
       }
     },
     "theoretical-computation": {
