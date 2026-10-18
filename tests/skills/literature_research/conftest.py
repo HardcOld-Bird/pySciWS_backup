@@ -13,6 +13,20 @@ from pysci.skills.literature_research.tools import journal_metrics
 
 
 @pytest.fixture(autouse=True)
+def offline_oa_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """默认关闭 OA 回退的外部查询（S2）：测试必须离线、确定。
+
+    ``research.read`` 在抓取失败后会调用 ``oa_fallback.try_oa`` → Semantic Scholar。
+    不隔离就会在「抽取失败」类用例里真联网取回全文，把 rc=1 断言翻成 0（实测）。
+    需要验证回退链的用例自行 monkeypatch ``semantic_scholar``／``_download_pdf`` 等
+    （后设置的 monkeypatch 覆盖本夹具）。
+    """
+    from pysci.skills.literature_research.tools import oa_fallback
+
+    monkeypatch.setattr(oa_fallback, "semantic_scholar", lambda *a, **k: {})
+
+
+@pytest.fixture(autouse=True)
 def isolated_scimago_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """把 SCImago 索引指向一个必然不存在的临时路径，并返回该路径。
 

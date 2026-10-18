@@ -42,6 +42,22 @@ when nothing was, `2` when an OpenAlex id could not be resolved to a fetchable U
   (`--force` still works as a **deprecated alias** and prints a migration hint on stderr. It was
   renamed because one word, `--force`, had four unrelated meanings across four subcommands.)
 
+### 下载失败诊断与 OA 回退（2026-10-18）
+
+拿不到全文时 `read` 会逐项打印 **HTTP 状态 / 失败归类 / 可重试性**，例如
+`[read] 失败归类：cloudflare · HTTP 403 Cloudflare 拦截 · 可重试=是`。归类与处置：
+
+| 归类 | 含义 | 可重试 |
+|---|---|---|
+| `cloudflare` / `transient`（429/5xx） | 拦截或瞬时故障 | **是**：可加 `--headed`，或稍后重试 |
+| `paywall`（401/403+付费墙标记） | 无机构访问/非 OA | 否：需机构网络或 OA 副本 |
+| `not_found`（404/410） | DOI/链接失效 | 否 |
+| `pdf_blocked` / `no_fulltext` | 主页可读但 PDF 被拒/无链接 | 否：走 OA 副本 |
+
+随后自动经 **Semantic Scholar**（按 DOI）找 OA 副本并重试：**arXiv 预印本 PDF →
+Europe PMC 全文 XML → S2 `openAccessPdf` 直链**；成功则继续正常抽取。S2 限流（429）
+或无记录时只留一行说明、不阻塞退出；`--headed` 仍用于人工过 Cloudflare。
+
 ### DOI vs arXiv input
 
 - **DOI / OpenAlex id** → richest metadata (citation counts, normalized citations, JIF estimate,
