@@ -622,6 +622,70 @@ def test_cmd_merge_shelve_conflict_keeps_stash(tmp_path, monkeypatch, capsys):
     assert rc == 0 and "pysci-merge-shelve" in listing, listing
 
 
+def test_unmerged_entries_parsing(monkeypatch):
+    """porcelain 未合并条目解析：按 XY 码筛选、按路径排序、去重（脏/未跟踪行不得混入）。"""
+
+    class _Proc:
+        stdout = (
+            "UU src/pysci/skills/orchestration/tools/plans.py\n"
+            "AA docs/x.md\n"
+            " M unrelated.md\n"
+            "?? tests/decoy.py\n"
+            "UU src/pysci/skills/orchestration/tools/plans.py\n"
+            "Merge made by the 'ort' strategy.\n"
+        )
+
+    monkeypatch.setattr(dev, "_git_proc", lambda *a: _Proc())
+    assert dev.unmerged_entries() == [
+        ("AA", "docs/x.md"),
+        ("UU", "src/pysci/skills/orchestration/tools/plans.py"),
+    ]
+
+
+def test_cmd_merge_conflict_summary_names_real_unmerged_file(
+    tmp_path, monkeypatch, capsys
+):
+    """回归（backlog 20261017-223552-devops）：摘要列真正的 unmerged 文件。
+
+    复现原始事故：main 侧未跟踪文件在应回时与合并结果碰撞（git 输出末行即它）；
+    真正的三路冲突是 registry.json。摘要不得把末行未跟踪文件当成冲突成因。
+    """
+    main, wt = _repo_with_multiline_registry(tmp_path)
+    (wt / "orchestration" / "state" / "registry.json").write_text(
+        _reg(1, "branch-note"), encoding="utf-8"
+    )
+    test_rel = "tests/skills/orchestration/test_taskbook_settings.py"
+    (wt / test_rel).parent.mkdir(parents=True, exist_ok=True)
+    (wt / test_rel).write_text("branch version\n", encoding="utf-8")
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", "branch edits note + adds test")
+    (main / "orchestration" / "state" / "registry.json").write_text(
+        _reg(1, "main-note"), encoding="utf-8"
+    )
+    (main / test_rel).parent.mkdir(parents=True, exist_ok=True)
+    (main / test_rel).write_text("main untracked version\n", encoding="utf-8")
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(4))
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(1))
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+
+    dev.cmd_worktree_merge("foo", wt)
+
+    out = capsys.readouterr().out
+    assert "应回冲突" in out and "未合并文件" in out, out
+    conflict_block = out.split("未合并文件", 1)[1].split("处置：", 1)[0]
+    assert "orchestration/state/registry.json" in conflict_block, conflict_block
+    assert "test_taskbook_settings.py" not in conflict_block, (
+        "与冲突无关的未跟踪文件被误列为冲突成因：\n" + conflict_block
+    )
+    # 真实冲突仍待解（工作区状态与摘要一致）、stash 条目保留
+    conflicts = dev.unmerged_entries()
+    assert any(
+        path.endswith("orchestration/state/registry.json") for _, path in conflicts
+    ), conflicts
+    rc, listing = dev._run_git("stash", "list")
+    assert rc == 0 and "pysci-merge-shelve" in listing, listing
+
+
 def test_cmd_merge_proceeds_when_branch_behind_main(tmp_path, monkeypatch, capsys):
     """误报场景的正解：main 前进且脏在别人的文件上 → 交集空 → 照常合并（不再错误 blocked）。"""
     main, wt = _repo_with_branch(tmp_path)
