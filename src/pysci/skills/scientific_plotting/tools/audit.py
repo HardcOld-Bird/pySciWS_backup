@@ -27,6 +27,7 @@ from typing import Any
 import matplotlib
 import numpy as np
 from matplotlib import text as mtext
+from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from . import geometry as _geometry
@@ -207,6 +208,31 @@ def _iter_texts(fig: Figure) -> Iterable[mtext.Text]:
             yield t
 
 
+def _panel_axes(fig: Figure) -> list[Axes]:
+    """参与面板标号计数的轴：排除 **colorbar 轴**与不可见轴。
+
+    ``fig.colorbar(..., ax=...)`` 会注册一个 label 为 ``"<colorbar>"`` 的轴——外置
+    colorbar 同样进 ``fig.axes``，但它不是子图、不承担 (a)/(b) 角标。旧版按
+    ``len(fig.axes)`` 计数会逼作者把 colorbar 塞进 ``Axes.inset_axes`` 宿主来躲开
+    ``audit --panels``；而 inset 子轴恰会让**父轴标题的 auto 定位**错位（2026-10-18
+    figure 实案：第三列 R 面板标题跳到首行 L 标题位置，须显式 ``set_title(y=1.0)``）。
+    故从这里把 colorbar 轴（含 inset 宿主内被 colorbar 复用的轴）与不可见轴排除。
+    """
+    axes: list[Axes] = []
+    for ax in fig.get_axes():
+        label = str(ax.get_label() or "")
+        if label == "<colorbar>" or label.startswith("<colorbar>"):
+            continue
+        # 手工 ``fig.add_axes(...)`` 作 cax 时 matplotlib 不设 label，只留内部回指
+        # ``Axes._colorbar``；有它即确证是 colorbar 轴（无则不影响普通轴）。
+        if getattr(ax, "_colorbar", None) is not None:
+            continue
+        if not ax.get_visible():
+            continue
+        axes.append(ax)
+    return axes
+
+
 def _measure_deliverable_width_mm(path: Path | str) -> float | None:
     """从已导出的矢量交付件量取实际宽度（mm）。
 
@@ -268,7 +294,8 @@ def audit_figure(
         deliverable_tol_ratio: 交付件宽度相对目标的允许偏差比例（默认 0.30=±30%）。
             紧裁使交付件恒窄于设计宽度，故用比例而非绝对 mm；足以区分单/双栏（~2×）。
         min_fontsize: 最小允许字号（pt）；None 时取预设 base 字号的 0.75 倍。
-        expect_panel_labels: 是否要求多子图带 (a)(b)(c) 角标。
+        expect_panel_labels: 是否要求多子图带 (a)(b)(c) 角标（**colorbar 轴与不可见轴
+            不计入子图数**——外置 colorbar 不需要藏进 inset 宿主）。
         check_colorblind: 是否做色盲可读性检查。
     """
     rep = AuditReport(style=(style_info.preset if style_info else style_name))
@@ -376,18 +403,20 @@ def audit_figure(
     # --- 面板标号 ---
     axes = fig.get_axes()
     rep.metrics["n_axes"] = len(axes)
-    if expect_panel_labels and len(axes) > 1:
+    panel_axes = _panel_axes(fig)
+    rep.metrics["panel_axes"] = len(panel_axes)
+    if expect_panel_labels and len(panel_axes) > 1:
         labels = [
             t.get_text().strip()
             for t in _iter_texts(fig)
             if _PANEL_LABEL_RE.match(t.get_text().strip())
         ]
         rep.metrics["panel_labels_found"] = len(labels)
-        if len(labels) < len(axes):
+        if len(labels) < len(panel_axes):
             rep.add(
                 WARN,
                 "panel-labels",
-                f"检测到 {len(axes)} 个子图但仅 {len(labels)} 个 (a)/(b) 角标；"
+                f"检测到 {len(panel_axes)} 个子图但仅 {len(labels)} 个 (a)/(b) 角标；"
                 f"可用 layout.label_panels(axes) 批量补齐",
             )
 

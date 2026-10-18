@@ -44,3 +44,8 @@ scienceplots 未安装时该层自动关闭（fail-soft，不阻断绘图）；�
    matplotlib 字体缓存即恢复首选。
 3. `audit` 失败会点明违背的规范（width / fontsize / fonttype / labels / colorblind）并给修法。
    工具链不可用或依据不足 → 记 n/a，**不得据此判 FAIL**。
+4. **inset 子轴 + 父轴标题错位**：`Axes.inset_axes` 会触发 matplotlib 对**父轴标题**的
+   auto 定位——标题可能跳到别的行高度（实测第三列 R 面板标题跳到首行 L 标题位置）。
+   修法：父轴显式 `ax.set_title(..., y=1.0)` 关闭 auto 定位。另：`audit --panels` 已按
+   「面板轴」计数（**排除 colorbar 轴与不可见轴**），外置 colorbar **无需**再藏进 inset
+   宿主（2026-10-18，backlog 20261018-110827-figure）。
