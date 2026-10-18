@@ -396,3 +396,53 @@ def test_state_less_duplicate_plan_does_not_hijack_the_card(rface, monkeypatch):
     assert f"【大任务 {tb}：" in out
     assert "（无关联任务书）" not in out
     assert "旧环节" not in out and "动作：等待完成事件" in out
+
+
+# ===========================================================================
+#  ⑦ 命令尾部卡片与 orch next 同源（tb-5 路由卡片残迹）
+# ===========================================================================
+def test_routing_card_fresh_reloads_router_module(rface, monkeypatch):
+    """长驻同步命令尾部强制重载 nextroute——进程启动早于一次升级时不得打印旧判据。"""
+    sentinel = lambda *a, **k: ["STALE 旧判据卡片"]  # noqa: E731
+    monkeypatch.setattr(nextroute, "card_lines", sentinel)
+    assert plans._routing_card() == ["STALE 旧判据卡片"]
+    assert plans._routing_card(fresh=True) != ["STALE 旧判据卡片"]
+
+
+def test_plan_run_tail_card_has_no_dispatch_or_unlinked_header(
+    rface, monkeypatch, capsys
+):
+    """全部完成的计划 + 遗留无 state YAML：plan run/adhoc 尾部不得再推派发卡。"""
+    tb = _mk_taskbook("已完成的正式任务", priority="high")
+    _mk_plan(rface, "p-done", tb_id=tb)
+    taskbooks.link_plan(tb, "p-done")
+    stale = rface / "plans" / "p-done-legacy.plan.yaml"
+    stale.write_text(
+        yaml.safe_dump(
+            {
+                "id": "p-done-legacy",
+                "goal": "旧目标",
+                "steps": [{"id": "G1.P1.w1", "member": "sim", "brief": "旧环节"}],
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: _fake_worker(m))
+    capsys.readouterr()
+    assert plans.cmd_plan_run(_args("p-done", text="t")) == 0
+    out = capsys.readouterr().out
+    assert "书写本环节任务书并派发" not in out, out
+    assert "（无关联任务书）" not in out, out
+
+
+def test_advance_tail_card_waits_for_inflight(rface, monkeypatch, capsys):
+    """在途计划的 advance 尾部卡片＝「等待完成事件」，不写成可派发。"""
+    tb = _mk_taskbook("在途正式任务", priority="high")
+    _mk_plan(rface, "p-wait", tb_id=tb)
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: (True, "stub"))
+    capsys.readouterr()
+    assert plans.cmd_plan_advance(_args("p-wait", text="t")) == 0
+    out = capsys.readouterr().out
+    assert "动作：等待完成事件" in out, out
+    assert "书写本环节任务书并派发" not in out
