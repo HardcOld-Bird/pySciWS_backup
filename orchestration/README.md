@@ -74,8 +74,10 @@
 
 **4.5 等待与唤醒模型（长任务零轮询）**：`events drain` 排空积压 → 推进；`Stop` 钩子每回合自动挂
 `orch watch`（事件驱动，**禁止 sleep-轮询**）；**三级防线**（会话 listener／队列感知巡更伪事件
-PENDING-WORK·STALL／机器级 watchdog）；**唤醒权自动归属**（钩子读 stdin `session_id`：自动认领/续
-心跳/异会话永不抢占/stale 接管/SessionEnd 释放）。**全量见 `references/wake-and-events.md`**（手册见技能 `references/patrol-watchdog.md`）。
+PENDING-WORK·STALL／机器级 watchdog）；**唤醒权绑定主会话**（钩子读 stdin `session_id`＋`cwd`：
+仅**无 owner 记录**时首会话自动认领、owner 续心跳、异会话与 pod 直聊永不抢占；**自动转让已取消**
+——stale 与 SessionEnd 后均不自动升主，迁移只走人工 `wake-claim --force --session-id <id>`）。
+**全量见 `references/wake-and-events.md`**（手册见技能 `references/patrol-watchdog.md`）。
 
 ## 5. 质量保证（两层）
 

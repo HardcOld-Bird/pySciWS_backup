@@ -46,6 +46,11 @@
 #   （GUI 子系统，永不分配控制台）；`orch` 改 `-m ...tools.orch`（有 __main__ 守卫）。
 #   每处调用的 stdout/stderr 重定向与命令替换语义保持不变（pythonw 下未重定向才会丢写）。
 PAYLOAD=$(cat)
+# 入口 cwd 必须在 `cd "$ROOT"` **之前**取样（下一行就会抹掉）：归属闸的 pod 判据读它
+# （载荷带 cwd 时优先用载荷；这里是无 cwd 载荷的兜底）。pwd -W 输出 Windows 形态，
+# 避免 MSYS 的 /d/... 被 Python 误读成相对路径。
+ENTRY_CWD="$(pwd -W 2>/dev/null || pwd)"
+export PYSCI_HOOK_CWD="$ENTRY_CWD"
 ROOT="${QODER_PROJECT_DIR:-/d/XXXIIIGGG/projects/pySci/pySciWS}"
 cd "$ROOT" || exit 0
 LOG="$ROOT/.qoder/hooks/watch-arm.log"
@@ -80,25 +85,6 @@ if [ "$HEV" = "SessionEnd" ]; then
   exit 0
 fi
 
-# 夜航差分注入（v7，2026-10-15 热生效单 adhoc-night-text）：回合边界比对 `[night] enabled`
-#   与本会话上次读数（night.py `--diff`，读数寄存在 watch.json 的 night_seen）。
-#   有跳变 → **走本钩子既有 rewake 通道**（stderr + exit 2）在**下一轮**注入差分：
-#     关→开 = 授权书全文（同 SessionStart 注入文本）；开→关 = 刹车差分。
-#   无变化 → 零输出零打扰；判定与文案单点在 night.py，本脚本只做通道。
-#   fail-open：读不出/异常一律零输出继续走原有链路（watch 语义零回退——本块在 token
-#   竞争与 watch 挂载之前，未命中时对既有行为**无任何影响**）。
-if [ -n "$SID" ]; then
-  ndiff=$(printf '%s' "$PAYLOAD" | PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.night \
-    --diff --session "$SID" --settings "$ROOT/data/pysci_settings.toml" 2>>"$LOG")
-  ndrc=$?
-  if [ -n "$ndiff" ]; then
-    log "夜航差分注入（session=$SID）→ exit 2（rewake）"
-    printf '%s\n' "$ndiff" >&2
-    exit 2
-  fi
-  [ "$ndrc" -eq 0 ] || log "夜航差分 rc=$ndrc → fail-open 继续监听"
-fi
-
 # 唤醒权自动归属闸（v6）：判定单一实现在 `wake-claim --check`（README §4.5）。
 # rc 0=放行 / 3=非 owner 不抢 / 4=SessionEnd（上方已拦）；未知 rc=检查本身坏了 →
 # fail-open 按旧 token 语义监听并留痕（唤醒链不塌）。
@@ -113,6 +99,26 @@ if [ -n "$SID" ]; then
   export PYSCI_WAKE_OWNER="$SID"
 else
   log "无 session_id 可判定归属 → fail-open 按旧 token 语义监听"
+fi
+
+# 夜航差分注入（v7，2026-10-15 热生效单 adhoc-night-text）：回合边界比对 `[night] enabled`
+#   与本会话上次读数（night.py `--diff`，读数寄存在 watch.json 的 night_seen）。
+#   有跳变 → **走本钩子既有 rewake 通道**（stderr + exit 2）在**下一轮**注入差分：
+#     关→开 = 授权书全文（同 SessionStart 注入文本）；开→关 = 刹车差分。
+#   无变化 → 零输出零打扰；判定与文案单点在 night.py，本脚本只做通道。
+#   **归属闸之后**（2026-10-18 wake-bind s2）：非 owner 会话（rc 3/4）在上一段已退出，
+#   夜航差分只可能作用在 owner/认领会话上——子会话不再被夜航差分自动 wake。
+#   fail-open：读不出/异常一律零输出继续走原有链路。
+if [ -n "$SID" ]; then
+  ndiff=$(printf '%s' "$PAYLOAD" | PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.night \
+    --diff --session "$SID" --settings "$ROOT/data/pysci_settings.toml" 2>>"$LOG")
+  ndrc=$?
+  if [ -n "$ndiff" ]; then
+    log "夜航差分注入（session=$SID）→ exit 2（rewake）"
+    printf '%s\n' "$ndiff" >&2
+    exit 2
+  fi
+  [ "$ndrc" -eq 0 ] || log "夜航差分 rc=$ndrc → fail-open 继续监听"
 fi
 
 # 看门狗自启动（v4）：幂等——在场则秒返回，不在场则拉起分离监督进程（冷启动后即在位）。

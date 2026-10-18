@@ -309,7 +309,7 @@ def test_format_event_is_single_line():
 # ---------------------------------------------------------------------------
 # 轮询：命中 / 超时
 # ---------------------------------------------------------------------------
-def test_run_watch_returns_event_line_and_persists(iso_state, monkeypatch):
+def test_run_watch_returns_event_line_and_persists(iso_state, monkeypatch, owner_side):
     monkeypatch.setattr(
         watch,
         "snapshot",

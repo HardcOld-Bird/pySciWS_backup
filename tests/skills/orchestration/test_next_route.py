@@ -210,12 +210,12 @@ def test_push_drain_tail(rface, capsys):
     assert "orch next" in out and f"【大任务 {tb}：" in out
 
 
-def test_push_watch_detail(rface, monkeypatch):
+def test_push_watch_detail(rface, monkeypatch, owner_side):
     tb = _mk_taskbook("大任务", priority="high")
     _mk_plan(rface, "p-w", tb_id=tb)
     echoed: list[str] = []
     fired = watch._emit(
-        {},
+        {"armed_by": owner_side},
         [
             {
                 "event": "JOB-DONE",

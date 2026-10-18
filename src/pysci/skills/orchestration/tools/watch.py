@@ -15,7 +15,9 @@
   钩子（``.qoder/hooks/watch-arm.sh``）每回合抢「最新在听者」并挂 ``orch watch``——**无需
   组长手动挂**；:func:`autowatch_lines` 只在交办/唤醒当刻回报「已自动挂载」。自 2026-10-14
   晚起钩子先过**唤醒权自动归属闸**（:func:`hook_decision`：载荷 ``session_id`` 自动认领、
-  非 owner 永不抢占、stale 自动接管）——次要会话不再被误投唤醒。
+  非 owner 永不抢占；唤醒权迁移**只走人工** ``wake-claim --force``——2026-10-18
+  用户裁决「自动唤醒始终绑定主会话」，stale 自动接管与 SessionEnd 自动升主均已取消；
+  载荷 ``cwd`` 非项目根的会话（组员直聊）永不认领/监听）——次要会话不再被误投唤醒。
 
 手动挂载降为**兜底**（仅钩子不可用时）：组长以 Bash ``run_in_background`` 启动
 ``pysci-orch watch``（阻塞轮询，默认 60 s、硬上限 60 s），命中即原生后台通知唤醒本会话；
@@ -1078,10 +1080,9 @@ def save_state(data: dict[str, Any]) -> None:
 #: 无 owner → 首个钩子自动认领（首会话即主会话）；owner ≠ 我 → 永不抢占。
 WAKE_OWNER_PATH: Path = ORCH_STATE_ROOT / "wake-owner.json"
 
-#: owner stale 判阈（秒）：``last_turn_at`` 断供超过它**且** owner 自己的 watch 已死 →
-#: 新会话自动接管。取 30 min：高于 watch 挂载宽限（240 s）与看门狗重臂窗（300 s）
-#: （排除「刚断供、watch 还没被重臂」的瞬态）；低于 watch 4 h 超时——owner 的 watch
-#: 在挂载期间本身就挡接管（正常空闲不被夺权），30 min 只兜 watch 已死之后的接管。
+#: owner 心跳断供阈值（秒）：仅用于 **status 呈现/判读**，**不再触发自动接管**（twin 裁决 A，
+#: 2026-10-18：唤醒权迁移只走人工 ``wake-claim --force``）。取 30 min 与旧判据同值，
+#: 便于对照历史日志；高于 watch 挂载宽限（240 s）与看门狗重臂窗（300 s）。
 OWNER_STALE_S: int = 30 * 60
 
 #: 钩子挂载 watch 时携带的 owner 身份环境变量（watch-arm.sh ``export`` → ``orch watch``
@@ -1091,12 +1092,19 @@ OWNER_STALE_S: int = 30 * 60
 WATCH_OWNER_ENV: str = "PYSCI_WAKE_OWNER"
 
 
+def _owner_path() -> Path:
+    """唤醒权真源路径：``PYSCI_WAKE_OWNER_PATH`` 可覆盖（钩子子进程测试/副本隔离）。"""
+    override = os.environ.get("PYSCI_WAKE_OWNER_PATH", "").strip()
+    return Path(override) if override else WAKE_OWNER_PATH
+
+
 def load_owner() -> dict[str, Any]:
     """读唤醒权真源；缺失/损坏 → ``{}``（= 无 owner，下个钩子自动认领）。"""
-    if not WAKE_OWNER_PATH.exists():
+    path = _owner_path()
+    if not path.exists():
         return {}
     try:
-        data = json.loads(WAKE_OWNER_PATH.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
     return data if isinstance(data, dict) else {}
@@ -1105,8 +1113,9 @@ def load_owner() -> dict[str, Any]:
 def save_owner(data: dict[str, Any]) -> None:
     """写唤醒权真源（可读 JSON）。写失败不抛——观察面塌不了主链路。"""
     try:
-        WAKE_OWNER_PATH.parent.mkdir(parents=True, exist_ok=True)
-        WAKE_OWNER_PATH.write_text(
+        path = _owner_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
     except OSError:
@@ -1131,10 +1140,100 @@ def _owner_watch_live(owner_sid: str, state: dict[str, Any] | None = None) -> bo
     return str(st.get("armed_by") or "") == owner_sid
 
 
+def _consumption_authorized(state: dict[str, Any]) -> tuple[bool, str]:
+    """本 watch 实例是否有权**消费**事件（记 consumed 账并 exit 2 唤醒）。
+
+    只有 **owner 自己的挂载**（``armed_by`` 非空且等于当前 owner）可以消费：
+
+    - 看门狗重臂的**无主替身**（``armed_by`` 空）命中的 exit 2 到不了任何会话，若记
+      consumed，owner 回归后的迟到唤醒就被吞掉（2026-10-18 缺陷 3）；
+    - 被人工迁移**取代**的旧 owner watch（``armed_by`` ≠ 当前 owner）同样不得消费——
+      单一消费水位只认 owner 侧，防旧实例抢账/双唤醒。
+    """
+    armed = str(state.get("armed_by") or "")
+    cur = str(load_owner().get("session_id") or "")
+    if not armed:
+        return False, "armed_by 空（看门狗重臂的无主替身/手动挂载）"
+    if not cur or armed != cur:
+        return False, f"armed_by={armed} ≠ 当前 owner={cur or '（无）'}"
+    return True, ""
+
+
+def _owner_released(owner: dict[str, Any]) -> bool:
+    """真源是否为 **SessionEnd 释放墓碑**（无 session_id 但有 ``released_at``）。
+
+    墓碑 ≠ 无 owner 记录：冷启动/人工 ``--force`` 释放（文件不存在）才允许首个会话
+    自动认领；SessionEnd 之后**不得**由任意会话自动升主（twin 裁决 A）——迁移只走人工
+    ``wake-claim --force --session-id <id>``。
+    """
+    return not owner.get("session_id") and bool(owner.get("released_at"))
+
+
+def _session_cwd(data: dict[str, Any]) -> str:
+    """会话 cwd：载荷 ``cwd`` 优先；其次钩子脚本 ``cd`` 前导出的 ``PYSCI_HOOK_CWD``；
+    最后 ``QODER_PROJECT_DIR``（最弱兜底——它恒指项目根，只能防「无任何读数」）。"""
+    for key in ("cwd", "project_dir"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for env_key in ("PYSCI_HOOK_CWD", "QODER_PROJECT_DIR"):
+        value = os.environ.get(env_key, "")
+        if value.strip():
+            return value.strip()
+    return ""
+
+
+def cwd_is_project_root(raw: str) -> bool | None:
+    """``raw`` 是否项目根：True/False；空或不可解析 → ``None``（判不了，不拦）。
+
+    兼容 MSYS 形态 ``/d/repo``（钩子脚本里 ``pwd`` 的输出）与 Windows 形态；
+    大小写按 ``normcase`` 归一（Windows 盘符/路径不区分大小写）。
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    match = re.match(r"^/([A-Za-z])/(.*)$", text)
+    if match:
+        text = f"{match.group(1).upper()}:/{match.group(2)}"
+    try:
+        actual = os.path.normcase(str(Path(text).resolve()))
+        root = os.path.normcase(str(PROJECT_ROOT.resolve()))
+    except (OSError, ValueError):
+        return None
+    return actual == root
+
+
+def session_binding(payload: dict[str, Any] | None) -> tuple[bool, str]:
+    """night 注入/gate 的**主会话绑定**判据（单一实现，night.py 复用）。
+
+    Returns:
+        ``(eligible, reason)``：
+        - cwd 可判定且非项目根（pod 直聊会话）→ ``False``；
+        - 有 owner 记录且 ``session_id`` 不同（子会话）→ ``False``；
+        - 无 owner/释放墓碑（冷启动引导窗口）/缺 session_id/cwd 判不了 → ``True``
+          （fail-open：night 不是唤醒，不能因归属读数缺失就停掉政策注入）。
+    """
+    data = payload if isinstance(payload, dict) else {}
+    raw_cwd = _session_cwd(data)
+    root = cwd_is_project_root(raw_cwd)
+    if root is False:
+        return False, f"cwd 非项目根（{raw_cwd}）→ pod 直聊会话不受夜航约束"
+    sid = str(data.get("session_id") or "").strip()
+    owner = load_owner()
+    cur = str(owner.get("session_id") or "")
+    if sid and cur and sid != cur:
+        return False, f"非 owner（owner={cur}）→ 夜航只绑主会话"
+    return True, ""
+
+
 def _release_owner(sid: str) -> tuple[int, str]:
-    """SessionEnd 释放检查：owner==我 → 删除真源；否则无操作。返回 ``(4, 判定行)``。
+    """SessionEnd 释放检查：owner==我 → 写**释放墓碑**；否则无操作。返回 ``(4, 判定行)``。
 
     恒 ``4``（= 钩子直接退出不监听）：会话正在结束，任何情况下都不该再挂 watch。
+
+    墓碑（``session_id`` 空 + ``released_at``）而非删除文件：删除会让下一个钩子按
+    「无 owner 记录」自动认领＝任意会话自动升主，违背「自动唤醒始终绑定主会话」
+    （twin 裁决 A）。迁移只走人工 ``wake-claim --force --session-id <id>``。
     """
     owner = load_owner()
     cur = str(owner.get("session_id") or "")
@@ -1142,11 +1241,19 @@ def _release_owner(sid: str) -> tuple[int, str]:
         return 4, "release：无 owner（SessionEnd 无需释放）→ 钩子退出不监听"
     if cur != sid:
         return 4, f"release：非 owner 会话结束（owner={cur}）不释放 → 钩子退出不监听"
-    try:
-        WAKE_OWNER_PATH.unlink()
-    except OSError:
-        pass
-    return 4, f"release：owner 会话结束 → 显式释放（sid={sid}）→ 钩子退出不监听"
+    save_owner(
+        {
+            "session_id": "",
+            "released_at": _now(),
+            "released_by": "SessionEnd",
+            "released_sid": sid,
+        }
+    )
+    return (
+        4,
+        f"release：owner 会话结束 → 写释放墓碑（sid={sid}；不会自动升主，"
+        "迁移请人工 wake-claim --force --session-id <id>）→ 钩子退出不监听",
+    )
 
 
 def hook_decision(payload: str) -> tuple[int, str]:
@@ -1154,12 +1261,13 @@ def hook_decision(payload: str) -> tuple[int, str]:
 
     码表（watch-arm.sh 据此分支，未知码一律 fail-open 放行）：
 
-    - ``0`` = 放行监听：``claim``（无 owner 自动认领）/ ``owner``（续心跳）/
-      ``takeover``（owner stale 自动接管）/ ``fail-open``（空载荷=看门狗重臂、载荷
-      解析失败、无 ``session_id`` → **走旧 token 语义**并留痕，不崩唤醒链）；
-    - ``3`` = 非 owner 且未 stale：**永不抢占**——钩子留痕后 ``exit 0``，不监听、不抢
-      token、绝不 ``exit 2``。事件留持久水位，owner 下次挂载迟到唤醒补上（**不存在
-      「转投其他会话」语义**）；
+    - ``0`` = 放行监听：``claim``（**无 owner 记录**——冷启动/人工释放——时首个会话
+      自动认领）/ ``owner``（续心跳）/ ``fail-open``（空载荷=看门狗重臂、载荷解析失败、
+      无 ``session_id`` → **走旧 token 语义**并留痕，不崩唤醒链）；
+    - ``3`` = 拒绝：非 owner / pod 直聊 cwd / SessionEnd 释放墓碑——钩子留痕后 ``exit 0``，
+      不监听、不抢 token、绝不 ``exit 2``。事件留持久水位，owner 下次挂载迟到唤醒补上
+      （**不存在「转投其他会话」语义**；**自动转让已取消**，迁移只走人工
+      ``wake-claim --force --session-id <id>``）；
     - ``4`` = SessionEnd：释放检查完毕，钩子直接退出（会话正在结束，不监听）。
     """
     raw = str(payload or "")
@@ -1177,55 +1285,72 @@ def hook_decision(payload: str) -> tuple[int, str]:
     if str(data.get("hook_event_name") or "") == "SessionEnd":
         return _release_owner(sid)
 
+    # cwd 判据（2026-10-18 主会话绑定）：pod 直聊会话（cwd 在组员 pod）永不认领/
+    # 接管/监听。载荷 cwd 优先；缺失时读钩子脚本 cd 前导出的 PYSCI_HOOK_CWD。
+    raw_cwd = _session_cwd(data)
+    cwd_root = cwd_is_project_root(raw_cwd)
+    if cwd_root is False:
+        return 3, (
+            f"deny：会话 cwd 非项目根（{raw_cwd}）→ pod 直聊会话不认领/不接管/不监听"
+        )
+
     owner = load_owner()
     cur = str(owner.get("session_id") or "")
     if not cur:
+        if _owner_released(owner):
+            return 3, (
+                "deny：owner 已随 SessionEnd 释放（墓碑在案，**不自动升主**）→ 不监听不抢；"
+                "迁移请人工 `pysci-orch wake-claim --force --session-id <id>`"
+                "（事件留水位，迁移后迟到唤醒补上）"
+            )
         save_owner(_new_owner(sid))
-        return 0, f"claim：无 owner → 本会话自动认领（sid={sid}）"
+        return 0, f"claim：无 owner 记录 → 本会话自动认领（sid={sid}）"
     if cur == sid:
         owner["last_turn_at"] = _now()
         save_owner(owner)
         return 0, f"owner：续心跳（sid={sid}）"
 
     hb_age = _age_s(owner.get("last_turn_at"))
-    stale_hb = hb_age > OWNER_STALE_S
-    owner_watch_dead = not _owner_watch_live(cur)
-    if stale_hb and owner_watch_dead:
-        save_owner(_new_owner(sid))
-        return (
-            0,
-            f"takeover：owner stale（心跳 {hb_age:.0f}s > {OWNER_STALE_S}s 且其 watch 已死）"
-            f"→ 自动接管（{cur} → {sid}）",
-        )
     hb_txt = (
-        f"心跳 {hb_age:.0f}s（阈值 {OWNER_STALE_S}s）" if hb_age >= 0 else "心跳不可读"
+        f"心跳 {hb_age:.0f}s（阈值 {OWNER_STALE_S}s，仅作读数）"
+        if hb_age >= 0
+        else "心跳不可读"
     )
-    watch_txt = "owner watch 已死" if owner_watch_dead else "owner watch 在挂载"
+    watch_txt = "owner watch 在挂载" if _owner_watch_live(cur) else "owner watch 已死"
     return 3, (
-        f"deny：非 owner（owner={cur}，{hb_txt}；{watch_txt}，未同时成立 stale）"
-        f"→ 不监听不抢（事件留水位，owner 下次挂载补唤醒）"
+        f"deny：非 owner（owner={cur}，{hb_txt}；{watch_txt}）"
+        "→ 不监听不抢；**自动转让已取消**，迁移请人工 "
+        "`pysci-orch wake-claim --force --session-id <id>`（事件留水位，迟到唤醒补上）"
     )
 
 
 def wake_claim_status() -> list[str]:
-    """``pysci-orch wake-claim status``：当前 owner、stale 判定与迁移提示（零手工语义）。"""
+    """``pysci-orch wake-claim status``：当前 owner、心跳读数与**人工迁移**指引。"""
     owner = load_owner()
+    if _owner_released(owner):
+        return [
+            f"  唤醒权 = 无 owner（SessionEnd 已于 {owner.get('released_at', '?')} 释放；"
+            "**不会自动升主**）",
+            "  迁移（唯一通道）：`pysci-orch wake-claim --force --session-id <id>`",
+            f"  真源 = {_owner_path()}",
+            "  （事件不丢：owner 缺席期间留持久水位，人工迁移后首次挂载迟到唤醒补上。）",
+        ]
     if not owner.get("session_id"):
         return [
-            "  唤醒权 = 无 owner——下一钩子按载荷 session_id **自动认领**（首会话即主会话）",
-            f"  真源 = {WAKE_OWNER_PATH}",
+            "  唤醒权 = 无 owner 记录——下一钩子按载荷 session_id **自动认领**"
+            "（仅冷启动/人工 --force 释放后）",
+            f"  真源 = {_owner_path()}",
         ]
     sid = str(owner["session_id"])
     hb_age = _age_s(owner.get("last_turn_at"))
     live = _owner_watch_live(sid)
-    stale = hb_age > OWNER_STALE_S and not live
     return [
         f"  owner = {sid}（认领于 {owner.get('claimed_at', '?')}，末次心跳 {hb_age:.0f}s 前）",
-        f"  owner watch = {'在挂载' if live else '已死'}；接管条件 = 心跳 >{OWNER_STALE_S}s"
-        f" 且 watch 已死 → {'已满足（新会话下回合自动接管）' if stale else '未满足'}",
-        f"  真源 = {WAKE_OWNER_PATH}",
-        "  迁移（非常规）：`wake-claim --force` 释放当前 owner（下一钩子自动认领），"
-        "或 `--force --session-id <id>` 直接指定。",
+        f"  owner watch = {'在挂载' if live else '已死'}；"
+        f"自动转让已取消（stale 阈值 {OWNER_STALE_S}s 仅作读数，不会触发接管）",
+        f"  真源 = {_owner_path()}",
+        "  迁移（唯一通道）：`wake-claim --force --session-id <id>`；"
+        "`--force` 不带 id = 人工释放（无 owner 记录，下一钩子自动认领）。",
         "  （不存在「转投其他会话语义」：owner 缺席期间事件留持久水位，下次挂载迟到唤醒补上。）",
     ]
 
@@ -1239,8 +1364,9 @@ def wake_claim_force(session_id: str = "") -> list[str]:
             f"[√] 强制迁移：{prev} → {session_id}（--force 指定；应急通道，非常规步骤）"
         ]
     try:
-        if WAKE_OWNER_PATH.exists():
-            WAKE_OWNER_PATH.unlink()
+        path = _owner_path()
+        if path.exists():
+            path.unlink()
     except OSError:
         pass
     return [f"[√] 强制释放：{prev} → 无 owner（下一钩子按 session_id 自动认领）"]
@@ -1581,7 +1707,22 @@ def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> boo
     **单一消费水位**（adhoc-20261014-124521-s1）：先按 ``watch.json`` 的 ``consumed`` 账滤掉
     已被消费的身份——被取代的 watch 实例（其内存基线是旧的）拿不到唤醒权，返回 ``False``；
     只有真唤醒（``True``）才记消费账。返回 ``False`` 时调用方继续等（不是本实例的账）。
+
+    **只有 owner 侧挂载才能消费**（2026-10-18 主会话绑定，twin 裁决 A）：无主替身/被迁移
+    取代的旧实例命中事件时**不记 consumed、不推进持久水位**，事件原样留给 owner 下次挂载
+    的迟到唤醒（exit 2 到不了任何会话，记了账就等于吞掉）。
     """
+    authorized, why = _consumption_authorized(state)
+    if not authorized:
+        state["last_exit"] = "event-unowned"
+        state["exit_reason"] = "unowned:" + ",".join(str(e["event"]) for e in events)
+        for ev in events:
+            echo(format_event(ev))
+        echo(
+            f"[watch] 命中事件但本实例非 owner 侧（{why}）→ 不记消费账、不推进水位；"
+            "事件留待 owner 下次挂载迟到唤醒"
+        )
+        return True
     fresh = filter_consumed(events)
     if not fresh:
         return False

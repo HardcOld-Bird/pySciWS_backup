@@ -157,12 +157,39 @@ def diff_message(session_id: str, *, data: dict[str, Any] | None = None) -> str 
     return NIGHT_POLICY if on else None
 
 
-def gate_deny_message(data: dict[str, Any] | None = None) -> str | None:
+def _binding_eligible(payload: dict[str, Any] | None) -> tuple[bool, str]:
+    """夜航的**主会话绑定**判据（单点在 :func:`watch.session_binding`，本模块只消费结论）。
+
+    - pod 直聊会话（cwd 非项目根）→ 不生效；
+    - 有 owner 且载荷 session_id 不同（子会话）→ 不生效；
+    - 无 owner/释放墓碑/读数缺失 → 放行（night 不是唤醒，fail-open 不塌政策注入）。
+
+    延迟导入 watch（它拉入 drain/events，钩子路径只在夜航 ON 的 gate/policy 上再付这笔
+    导入费；归属读数异常一律放行——不能因基础设施读数坏了就废掉夜航）。
+    """
+    try:
+        from . import watch as _watch
+
+        return _watch.session_binding(payload)
+    except Exception:  # noqa: BLE001 - 归属读数异常不拦夜航（fail-open）
+        return True, ""
+
+
+def gate_deny_message(
+    data: dict[str, Any] | None = None, *, payload: dict[str, Any] | None = None
+) -> str | None:
     """PreToolUse（AskUserQuestion）拦截判定：夜航 ON → 返回 deny 指令；OFF → ``None``。
+
+    ``payload`` 非 ``None`` 时先过**主会话绑定**：子会话/pod 直聊 → ``None``（放行）——
+    夜航只绑主会话，子会话由用户手动驱动、不受夜航拦截。
 
     **fail-open 方向**：读开关异常一律返回 ``None``（放行）——不能因配置损坏就废掉提问
     工具；调用方（:func:`main` 的 ``--gate`` 支与 night-gate.sh）据此 exit 2 / exit 0。
     """
+    if payload is not None:
+        eligible, _why = _binding_eligible(payload)
+        if not eligible:
+            return None
     try:
         on, _warnings = night_enabled(data)
     except Exception:  # noqa: BLE001 - 读开关出错不拦
@@ -171,14 +198,23 @@ def gate_deny_message(data: dict[str, Any] | None = None) -> str | None:
 
 
 def policy_hook_output(
-    event_name: str = "SessionStart", *, data: dict[str, Any] | None = None
+    event_name: str = "SessionStart",
+    *,
+    data: dict[str, Any] | None = None,
+    payload: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """开关 ON → 钩子输出载荷（``hookSpecificOutput.additionalContext`` = 政策全文）；
-    OFF → ``None``（零注入）。
+    OFF/非绑定会话 → ``None``（零注入）。
+
+    ``payload`` 非 ``None`` 时先过主会话绑定：子会话不注入夜航政策。
 
     ``hookEventName`` 回填触发事件名（SessionStart / PostCompact）——同一政策两处注入，
     载荷形状一致，便于测试与后续 n2 复用。
     """
+    if payload is not None:
+        eligible, _why = _binding_eligible(payload)
+        if not eligible:
+            return None
     on, _warnings = night_enabled(data)
     if not on:
         return None
@@ -260,10 +296,24 @@ def main(argv: list[str] | None = None) -> int:
         "--session", default="", help="--diff 用：会话 id（上次读数按会话各存一份）"
     )
     args = parser.parse_args(argv)
+    # stdin 载荷在**所有模式**都读一次：gate 需要 session_id/cwd 做主会话绑定，
+    # diff 需要同判据做防御性复核，policy 用它取触发事件名。
+    try:
+        raw_payload = sys.stdin.read()
+    except Exception:  # noqa: BLE001 - stdin 不可读 = 无载荷，按缺省
+        raw_payload = ""
+    parsed: dict[str, Any] = {}
+    try:
+        maybe = json.loads(raw_payload)
+        if isinstance(maybe, dict):
+            parsed = maybe
+    except (json.JSONDecodeError, TypeError):
+        pass
+
     if args.gate:
         try:
             data = _read_settings_file(Path(args.settings)) if args.settings else None
-            deny = gate_deny_message(data)
+            deny = gate_deny_message(data, payload=parsed)
         except Exception:  # noqa: BLE001 - fail-open：gate 自身异常放行
             return 0
         if deny:
@@ -271,6 +321,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         return 0
     if args.diff:
+        # 防御性复核：watch-arm.sh 已把差分块移到归属闸之后，但手工/其他调用同样不得
+        # 让非 owner 会话拿到 rewake 文本（零输出即零 rewake）。
+        diff_payload = dict(parsed)
+        if args.session:
+            diff_payload["session_id"] = args.session
+        eligible, _why = _binding_eligible(diff_payload)
+        if not eligible:
+            return 0
         try:
             data = _read_settings_file(Path(args.settings)) if args.settings else None
             msg = diff_message(args.session, data=data)
@@ -279,29 +337,22 @@ def main(argv: list[str] | None = None) -> int:
         if msg:
             print(msg)
         return 0
-    try:
-        raw_payload = sys.stdin.read()
-    except Exception:  # noqa: BLE001 - stdin 不可读 = 无触发名，按缺省
-        raw_payload = ""
     event = "SessionStart"
-    sid = ""
-    try:
-        parsed = json.loads(raw_payload)
-        name = parsed.get("hook_event_name")
-        event = (
-            name.strip() if isinstance(name, str) and name.strip() else "SessionStart"
-        )
-        raw_sid = parsed.get("session_id")
-        sid = raw_sid.strip() if isinstance(raw_sid, str) else ""
-    except (json.JSONDecodeError, TypeError, AttributeError):
-        pass
+    name = parsed.get("hook_event_name")
+    if isinstance(name, str) and name.strip():
+        event = name.strip()
+    raw_sid = parsed.get("session_id")
+    sid = raw_sid.strip() if isinstance(raw_sid, str) else ""
+    eligible, _why = _binding_eligible(parsed)
+    if not eligible:
+        return 0
     try:
         data = _read_settings_file(Path(args.settings)) if args.settings else None
         if event == "SessionStart":
             # SessionStart 顺手落基线（本单缺陷修复）：否则「注入后、首个 Stop 前」的拨动
             # 会被首个 Stop 当基线吞掉。PostCompact 不写（见 record_baseline）。
             record_baseline(sid, data=data)
-        out = policy_hook_output(event, data=data)
+        out = policy_hook_output(event, data=data, payload=parsed)
     except Exception:  # noqa: BLE001 - fail-open：任何异常零输出 exit 0
         return 0
     if out:

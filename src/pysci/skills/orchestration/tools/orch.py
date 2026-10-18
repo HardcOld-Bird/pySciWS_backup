@@ -805,12 +805,13 @@ def cmd_queues(args: argparse.Namespace) -> int:
 def cmd_wake_claim(args: argparse.Namespace) -> int:
     """``pysci-orch wake-claim [status] [--force]``：唤醒权归属的读数与应急面。
 
-    归属本体**全自动**（钩子载荷 ``session_id`` 自动认领/续心跳/接管，无手工步骤——
-    README §4.5）。本命令降级为两件事：``status`` 读当前 owner；``--force`` 显式强制
-    迁移（**应急，非常规步骤**：缺省释放、``--session-id`` 直接指定）。``--check`` 是
-    钩子内部判定口（stdin=载荷 → ``0`` 放行 / ``3`` 非 owner / ``4`` SessionEnd）。
-    **不存在「转投其他会话」语义**——非 owner 只是不监听，事件留持久水位由 owner
-    下次挂载迟到唤醒补上。
+    归属**绑定主会话**（钩子载荷 ``session_id``＋``cwd``：仅无 owner 记录时自动认领、
+    owner 续心跳；异会话/pod 直聊永不让位。**自动转让已取消**——stale 不接管、SessionEnd
+    不升主，迁移只走人工 ``--force``——README §4.5）。本命令降级为两件事：``status`` 读
+    当前 owner 并给人工迁移指引；``--force`` 显式强制迁移（**唯一迁移通道**：缺省释放、
+    ``--session-id`` 直接指定）。``--check`` 是钩子内部判定口（stdin=载荷 → ``0`` 放行 /
+    ``3`` 非 owner / ``4`` SessionEnd）。**不存在「转投其他会话」语义**——非 owner 只是
+    不监听，事件留持久水位由 owner 下次挂载迟到唤醒补上。
     """
     if getattr(args, "check", False):
         try:

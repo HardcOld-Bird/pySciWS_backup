@@ -51,26 +51,8 @@ cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳 stale �
 
 ## 3. 新会话 / 新机器就位（开机步骤）
 
-1. **看门狗（机器级③）**：`pysci-orch watchdog status` → 不是 `running` 就
-   `pysci-orch watchdog start`（幂等，锁在手即拒绝）；**注册 OS 计划任务**（重启/重登后
-   自动点火，免记手工）：
-   ```
-   powershell -ExecutionPolicy Bypass -File orchestration\scripts\watchdog-scheduler.ps1 -Mode install
-   ```
-   卸载同命令 `-Mode uninstall`；进程另用 `orch watchdog stop`。该 PS1 **纯 ASCII 有意
-   为之**（PS 5.1 无 BOM UTF-8 按 ANSI 解 → CJK 吞行；仓内 `.ps1` 同规）。
-2. **唤醒权（自动归属，wake-owner）**：**零手工**——钩子每回合读 stdin 载荷
-   `session_id` 走 `wake-claim --check`：无 owner 自动认领（首会话即主会话）、owner 续
-   心跳、**异会话永不抢占**（不监听、不抢 token、绝不 `exit 2`）、owner stale（心跳
-   >30 min 且其 watch 已死）自动接管、`SessionEnd` 钩子显式释放（换会话即干净迁移）。
-   `pysci-orch wake-claim status` 查当前 owner 与 stale 判定；`--force [--session-id <id>]`
-   是**应急强制迁移**（非常规步骤）。载荷缺失/解析失败一律 fail-open 走旧 token 语义留痕。
-3. **listener（会话级①）**：无需手工——`Stop` 钩子下回合自动接管（`watch-arm.sh` 每回合
-   幂等自启动看门狗）；漏挂由 `orch status` 补账（`reconcile`）。
-4. **巡更（②）**：**无需动作**——队列感知自动起止。仅 §2「降级注」那种全灭态才手工挂 cron。
-5. **自检**：`pysci-orch watchdog status` 四行（看门狗态/心跳年龄/listener/逻辑实例数——口径
-   = distinct `--run-log`，非进程数）应为 `running`/`<300s`/`活着`/`1`；`orch status` 的
-   watch 段应显示已挂载或可补账。
+开机清单（看门狗 `watchdog-scheduler.ps1` 计划任务、自检四行）、唤醒权**绑定主会话**与
+owner 侧消费语义见 `patrol-watchdog-02-onboarding-and-ownership.md`（2026-10-18 按预算拆分）。
 
 ## 4. 判据（可证伪）
 
@@ -87,14 +69,17 @@ cron**）；③ 监督（不制造事件，只保证 ① 在跑：心跳 stale �
   `test_backlog_fifo.py`。
 - 看门狗重臂：令心跳 stale > 300 s → 看门狗日志出现 `[→] 重臂监听循环`。
 - 队列超时：入队 > 1800 s 未取走 → 事件层出 `QUEUE-TIMEOUT` 且 TUI 详情点名（不许静默积压）。
-- 唤醒权自动归属：不同 `session_id` 的载荷喂 `wake-claim --check`——首会话 **claim** 返回
-  0、owner 返回 0（续心跳）、异 id 返回 3（钩子退 `exit 0`：不监听、不抢 token、绝不
-  `exit 2`）、心跳 >30 min + owner watch 已死 → 返回 0 且接管、`SessionEnd` 返回 4（释放后
-  退出）、垃圾/空载荷返回 0 且 fail-open 留痕；owner 缺席期事件靠迟到唤醒补（水位单调）。
+- 唤醒权绑定主会话：不同 `session_id`/`cwd` 的载荷喂 `wake-claim --check`——无 owner 记录
+  首会话 **claim** 返回 0、owner 返回 0（续心跳）、异 id **返回 3**（不监听、不抢 token、
+  绝不 `exit 2`）、**owner stale 也返回 3**（自动转让已取消）、`SessionEnd` 返回 4 且写
+  释放墓碑（下一会话仍返回 3，**不自动升主**）、人工 `--force --session-id` 后才可迁移；
+  **pod cwd** 会话一律返回 3（即使被历史遗留记成 owner）；垃圾/空载荷返回 0 且 fail-open
+  留痕；owner 缺席期事件靠迟到唤醒补（水位单调、**替身不吞消费账**）。
 
 判据的自动化面见 `tests/skills/orchestration/test_queue_watch.py`（队列感知 + 双消费回归）、
-`test_wake_owner.py`（唤醒权五类语义）、`test_backlog_fifo.py`（approve→入队→销账 / 锁忙
-排队 / STALL 心跳双向 / 降噪）与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。
+`test_wake_owner.py`（归属五类语义）、`test_wake_binding.py`（双会话/夜航绑定/pod cwd/
+事件不丢）、`test_backlog_fifo.py`（approve→入队→销账 / 锁忙排队 / STALL 心跳双向 / 降噪）
+与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。
 
 ## 5. 夜航模式（PSEP_2；总开关 `data/pysci_settings.toml [night] enabled`）
 

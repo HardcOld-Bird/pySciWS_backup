@@ -16,6 +16,9 @@
 # （pythonw/DETACHED/harness 钩子执行体）——裸 spawn `python.exe` 会新开可见控制台。
 # 统一改 **pythonw.exe**；stdout 由 harness 捕获（additionalContext JSON），不丢写。
 PAYLOAD=$(cat)
+# 入口 cwd 在 cd 之前取样（pod 直聊会话判据；载荷带 cwd 时优先用载荷）。
+ENTRY_CWD="$(pwd -W 2>/dev/null || pwd)"
+export PYSCI_HOOK_CWD="$ENTRY_CWD"
 ROOT="${QODER_PROJECT_DIR:-/d/XXXIIIGGG/projects/pySci/pySciWS}"
 cd "$ROOT" || exit 0
 PYW="$ROOT/.venv/Scripts/pythonw.exe"

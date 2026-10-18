@@ -60,7 +60,7 @@ def _emit_into(state: dict) -> tuple[bool, list[str]]:
 # ---------------------------------------------------------------------------
 # ① 单一消费水位：同一底层事件只唤醒一次
 # ---------------------------------------------------------------------------
-def test_same_event_not_woken_twice_across_instances(face):
+def test_same_event_not_woken_twice_across_instances(face, owner_side):
     """生产回归（2026-10-14 12:44）：两个实例共享消费账 → 第二次不再唤醒。"""
     events.emit(events.JOB_DONE, "figure-1", "figure job 收尾：done", "advance")
     st_a = watch.arm()
@@ -81,7 +81,7 @@ def test_same_event_not_woken_twice_across_instances(face):
     assert len(watch.load_state()["fired"]) == 1, "同一事件只允许进 fired 一次"
 
 
-def test_late_consumption_then_immediate_remount_no_duplicate(face):
+def test_late_consumption_then_immediate_remount_no_duplicate(face, owner_side):
     """生产形态：带〔迟到唤醒〕的消费后**立即重挂载** → 零重复唤醒。"""
     watch.arm()  # 首任：种子基线
     events.emit(
@@ -321,7 +321,7 @@ def test_inspector_pending_ignored_when_switch_off(face, monkeypatch):
 # ---------------------------------------------------------------------------
 # 伪事件 × 真实事件的**消费账语义**（2026-10-14 返工钉的回归）
 # ---------------------------------------------------------------------------
-def test_pseudo_and_real_events_coexist_with_correct_consumption(face):
+def test_pseudo_and_real_events_coexist_with_correct_consumption(face, owner_side):
     """共存时三条语义一次钉住（漏任一条都会在生产上退化）：
 
     ① 同帧共存 → **一次**唤醒（主事件 + 「同时」附注），不拆成两次；
