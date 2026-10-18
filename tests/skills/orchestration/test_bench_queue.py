@@ -430,3 +430,26 @@ def test_bench_worker_command_resolves_relative_log(iso_bench, monkeypatch):
     assert not rel.is_absolute()
     assert orch.main(["_bench-worker", "--run-log", str(rel), "--dry"]) == 0
     assert benchd.queue_load()[0]["status"] == "done", "相对路径必须落在同一个日志面上"
+
+
+def test_bench_seen_accepts_multiple_ids(iso_bench, capsys):
+    """一次命令清多项积压（tb-5 摩擦 #3：6 条积压跑了 6 次）。"""
+    a = benchd.enqueue("run", stamp="T1")
+    b = benchd.enqueue("run", stamp="T2")
+    c = benchd.enqueue("run", stamp="T3")
+    capsys.readouterr()
+    assert orch.main(["bench", "seen", a["id"], b["id"], c["id"]]) == 0
+    out = capsys.readouterr().out
+    assert out.count("已标记查看") == 3
+    assert all(it.get("reviewed_at") for it in benchd.queue_load())
+
+
+def test_bench_seen_multi_reports_missing_and_usage(iso_bench, capsys):
+    it = benchd.enqueue("run", stamp="T1")
+    capsys.readouterr()
+    assert orch.main(["bench", "seen", it["id"], "不存在甲", "不存在乙"]) == 2
+    out = capsys.readouterr().out
+    assert "不存在甲、不存在乙" in out and "用法：orch bench seen" in out
+    assert benchd.queue_load()[0].get("reviewed_at"), (
+        "已命中的 id 仍应标记（不整批回滚）"
+    )

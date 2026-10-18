@@ -667,11 +667,18 @@ def cmd_bench_queue(args: argparse.Namespace) -> int:
 
 
 def cmd_bench_seen(args: argparse.Namespace) -> int:
-    """``orch bench seen <id>``：提请人确认已查看（从「待查看」面摘掉）。"""
-    if mark_seen(args.id) is None:
-        print(f"[✗] 队列里没有 {args.id}")
+    """``orch bench seen <id> [<id> ...]``：批量确认已查看（从「待查看」面摘掉）。"""
+    ids = list(dict.fromkeys(str(i) for i in args.ids))
+    missing: list[str] = []
+    for item_id in ids:
+        if mark_seen(item_id) is None:
+            missing.append(item_id)
+        else:
+            print(f"[√] {item_id} 已标记查看")
+    if missing:
+        print(f"[✗] 队列里没有：{'、'.join(missing)}")
+        print("  用法：orch bench seen <id> [<id> ...]（orch bench queue 可查）")
         return 2
-    print(f"[√] {args.id} 已标记查看")
     return 0
 
 

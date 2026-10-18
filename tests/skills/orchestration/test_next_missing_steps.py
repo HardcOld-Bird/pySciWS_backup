@@ -49,9 +49,13 @@ def test_worklist_panes_tolerates_a_state_without_steps(qface):
 
 
 def test_next_survives_a_plan_whose_state_file_is_absent(tmp_path, monkeypatch, capsys):
-    """端到端：YAML 在册、state 缺席 → `next` 照常出卡片，无 traceback。
+    """端到端：YAML 在册、state 缺席 → `next` 不崩，且**不把该件当就绪计划路由**。
 
     夹具自足（不跨模块取 ``rface``：那样导入夹具会被同名参数遮蔽、ruff F811/F401 反复打架）。
+
+    tb-5 摩擦 #1 修正：`plan new` 必写 state，缺席 state 的 YAML 是遗留重复/未初始化件；
+    旧断言「照常出卡片」会让它按全 pending 兜底、抢在已链接的在途 plan 之前推第一个环节
+    （实案卡片长期停在 w1「书写本环节任务书并派发」）。
     """
     from pysci import paths as _paths
     from pysci.skills.orchestration.tools import queueworker, taskbooks
@@ -78,4 +82,6 @@ def test_next_survives_a_plan_whose_state_file_is_absent(tmp_path, monkeypatch, 
 
     nextroute.cmd_next(Namespace(limit=10))  # 曾在此抛 KeyError: 'steps'
 
-    assert "orphan" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "orphan" not in out, "无 state 的遗留件不得进路由（会冒充首个可派发环节）"
+    assert "无就绪动作" in out

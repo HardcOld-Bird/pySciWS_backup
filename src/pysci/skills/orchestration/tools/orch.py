@@ -52,6 +52,7 @@ from . import queues as _queues
 from . import queueworker as _queueworker
 from . import routing as _routing
 from . import sessions as _sessions
+from . import statecommit as _statecommit
 from . import sync as _sync
 from . import taste as _taste
 from . import verdict as _verdict
@@ -1340,6 +1341,12 @@ def main(argv: list[str] | None = None) -> int:
     # （backlog 20261017-050501：决策型/已被他单覆盖型不该 approve 派空单、也不该 reject
     # 误标否决）。
     ssub = p.add_subparsers(dest="suggestions_action")
+    sq = ssub.add_parser(
+        "show",
+        help="看建议正文（kind/证据/success_criteria；已审批/否决/销账归档同样可查）",
+    )
+    sq.add_argument("suggestion_id", help="建议 id（前缀即可，须唯一）")
+    sq.set_defaults(func=_workflow.cmd_suggestions_show)
     aq = ssub.add_parser(
         "ack", help="销账（非否决）：superseded（已被他单覆盖）/ decision（决策型留档）"
     )
@@ -1542,6 +1549,18 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("sync", help="[底层] 技能真本 → 部署副本同步")
     p.add_argument("--check", action="store_true")
     p.set_defaults(func=cmd_sync)
+
+    p = sub.add_parser(
+        "state-commit",
+        help="[底层] 一键提交 orchestration/state 的运行态改动（chore(state)；不自动触发）",
+    )
+    p.add_argument(
+        "--message",
+        "-m",
+        default="",
+        help=f"提交信息（缺省：{_statecommit.STATE_COMMIT_MSG}）",
+    )
+    p.set_defaults(func=_statecommit.cmd_state_commit)
 
     p = sub.add_parser(
         "taskbooks",
@@ -1764,8 +1783,13 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--all", action="store_true", help="含已查看的历史条目")
     q.set_defaults(func=_benchd.cmd_bench_queue)
 
-    q = bsub.add_parser("seen", help="标记某条目已查看（从 orch status 待查看面摘掉）")
-    q.add_argument("id", help="队列条目 id（bench queue 可查）")
+    q = bsub.add_parser(
+        "seen",
+        help="标记条目已查看（从 orch status 待查看面摘掉；可一次给多个 id）",
+    )
+    q.add_argument(
+        "ids", nargs="+", metavar="id", help="队列条目 id（bench queue 可查）"
+    )
     q.set_defaults(func=_benchd.cmd_bench_seen)
 
     q = bsub.add_parser("stop", help="请求 bencher worker 协作停止（条目间隙干净退出）")

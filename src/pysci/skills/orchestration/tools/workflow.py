@@ -129,6 +129,27 @@ def _find_suggestion(id_prefix: str) -> Path | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def suggestion_hits(id_prefix: str) -> list[tuple[Path, str]]:
+    """建议 id 前缀在**全域**的命中：待审批 + approved / rejected / closed 归档。
+
+    ``show`` 要能回看已判决件的正文/证据/判据——只搜 pending 会把归档件报成不存在。
+    """
+    roots = [
+        ("待审批", SUGGESTIONS_DIR),
+        ("已采纳", SUGGESTIONS_DIR / "approved"),
+        ("已否决", SUGGESTIONS_DIR / "rejected"),
+        ("已销账", SUGGESTIONS_DIR / CLOSED_DIR_NAME),
+    ]
+    hits: list[tuple[Path, str]] = []
+    for label, d in roots:
+        if not d.is_dir():
+            continue
+        hits.extend(
+            (p, label) for p in sorted(d.glob("*.md")) if p.stem.startswith(id_prefix)
+        )
+    return hits
+
+
 def _member_of(sugg: Path) -> str:
     # 文件名约定：<ts>-<member>.md
     parts = sugg.stem.split("-", 2)
@@ -1230,6 +1251,39 @@ def cmd_suggestions(args) -> int:
         "缺陷类且该跳交付含 blocked 走例外通道（裸 approve 即可，建议连带 --bench 复跑失败案）。"
         '否决：pysci-orch reject <id> --override "<判决依据>"（必填，留痕入决策日志）。'
     )
+    return 0
+
+
+def cmd_suggestions_show(args) -> int:
+    """``orch suggestions show <id>``：输出建议正文（含 kind / 证据 / success_criteria）。
+
+    id 前缀即可；**全域查找**（待审批与 approved/rejected/closed 归档同样可查）。判决前
+    不必再 ``cat`` state 文件——审批理由要对着正文写。
+    """
+    sid = str(getattr(args, "suggestion_id", "") or "").strip()
+    if not sid:
+        print("用法：pysci-orch suggestions show <id>（id 前缀即可；全域含归档）")
+        return 2
+    hits = suggestion_hits(sid)
+    exact = [h for h in hits if h[0].stem == sid]
+    if exact:
+        hits = exact
+    if not hits:
+        print(
+            f"[!] 未找到建议 '{sid}'（已查待审批 / approved / rejected / closed）；"
+            "`orch suggestions` 看待审批清单"
+        )
+        return 2
+    if len(hits) > 1:
+        print(f"[!] 建议 id 前缀 '{sid}' 命中 {len(hits)} 条，请给更长的前缀：")
+        for p, label in hits:
+            print(f"  - {p.stem}（{label}）")
+        return 2
+    path, label = hits[0]
+    print(f"== 建议 {path.stem}（{label}）==")
+    print(f"[i] 文件：{path.relative_to(SUGGESTIONS_DIR.parent).as_posix()}")
+    print()
+    print(path.read_text(encoding="utf-8").rstrip())
     return 0
 
 

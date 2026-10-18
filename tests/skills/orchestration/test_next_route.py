@@ -340,3 +340,59 @@ def test_intro_skips_rework_metadata_prefix(rface):
     root = taskbooks.create("甲", "真正的要求内容")["id"]
     rw = taskbooks.create_rework(root, improve={}, note="不行")["id"]
     assert nextroute._intro(rw) == "真正的要求内容"
+
+
+# ===========================================================================
+#  ⑥ 卡片取工作清单真实状态（tb-5 L.l1 摩擦 #1）
+# ===========================================================================
+def test_inflight_step_card_waits_instead_of_dispatch(rface, monkeypatch):
+    """已入队在跑的环节只报「等待完成事件」，绝不再写「书写本环节任务书并派发」。"""
+    tb = _mk_taskbook("在途大任务", priority="high")
+    _mk_plan(rface, "p-inflight", tb_id=tb)
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: (True, "stub"))
+    assert plans.cmd_plan_advance(_args("p-inflight", text="t")) == 0
+
+    acts = [a for a in nextroute.collect_actions() if a["plan_id"] == "p-inflight"]
+    assert [a["category"] for a in acts] == ["inflight"], acts
+    assert "等待完成事件" in acts[0]["action"]
+
+    out = "\n".join(nextroute.next_lines())
+    assert f"【大任务 {tb}：" in out and "动作：等待完成事件" in out
+    assert "动作：书写本环节任务书并派发" not in out, "在途环节被再次引导派发"
+
+
+def test_state_less_duplicate_plan_does_not_hijack_the_card(rface, monkeypatch):
+    """遗留重复 YAML（无 state 档）不进路由；link + 在途的正式 plan 正确回显大任务。
+
+    实案（tb-5）：`<id>.plan.yaml` 与 `<id>.plan.plan.yaml` 并存，前者无 state，全部
+    叶子按 pending 兜底 → 卡片长期停在它的 w1 并显示「（无关联任务书）」。
+    """
+    tb = _mk_taskbook("正式大任务", priority="high")
+    taskbooks.link_plan(tb, "p-real")
+    _mk_plan(rface, "p-real", tb_id=tb)
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: (True, "stub"))
+    assert plans.cmd_plan_advance(_args("p-real", text="t")) == 0
+
+    stale = rface / "plans" / "p-legacy.plan.yaml"
+    stale.write_text(
+        yaml.safe_dump(
+            {
+                "id": "p-legacy",
+                "goal": "旧目标",
+                "steps": [{"id": "w1", "member": "sim", "brief": "旧环节"}],
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+
+    acts = nextroute.collect_actions()
+    assert all(a["plan_id"] != "p-legacy" for a in acts), (
+        "无 state 的遗留件被当成可派发"
+    )
+    assert any(a["plan_id"] == "p-real" and a["category"] == "inflight" for a in acts)
+
+    out = "\n".join(nextroute.next_lines())
+    assert f"【大任务 {tb}：" in out
+    assert "（无关联任务书）" not in out
+    assert "旧环节" not in out and "动作：等待完成事件" in out
