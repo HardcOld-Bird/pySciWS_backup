@@ -17,6 +17,7 @@ LLM 直接调用，无需了解底层模块实现。
     slides render    把 .pptx 渲染成逐页 PNG（pptx→pdf→page-NNN.png，供视觉判读/交付附件）
     slides verify    机械验收逐页渲染（渲染存在 / 页数=幻灯片数 / 非空白页）
     slides geometry  只读几何体检（遮挡/越界/互叠 + 预设三项：标题形态/框宽/图片描边）
+    slides focus-anim 按学院预设注入焦点块动画 timing（首块自动、其余单击）
     verify <pdf>     把 PDF 渲染成 PNG，供 LLM「看图」校对版式
 
 用法（在项目根目录）::
@@ -585,6 +586,48 @@ def cmd_slides_geometry(args: argparse.Namespace) -> int:
     return 1 if (args.strict and not rep.ok) else 0
 
 
+def cmd_slides_focus_anim(args: argparse.Namespace) -> int:
+    from . import slides_anim
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides focus-anim] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        blocks = slides_anim.parse_block_specs(args.block)
+        slides_anim.parse_fade_specs(args.fade, blocks)
+        opts = slides_anim.AnimOptions(
+            focus_color=args.focus_color,
+            blur_fill=args.blur_fill,
+            blur_line=args.blur_line,
+            focus_ms=args.focus_ms,
+            blur_ms=args.blur_ms,
+            transition_ms=args.transition_ms,
+            easing=args.easing,
+            transition=not args.no_transition,
+        )
+        res = slides_anim.apply_focus_anim(
+            src, page=args.page, blocks=blocks, opts=opts, out=args.out
+        )
+    except (OSError, ValueError) as exc:
+        print(f"[slides focus-anim] {exc}", file=sys.stderr)
+        return 2
+    switch = (
+        f"页面切换 fade {opts.transition_ms}ms" if opts.transition else "不设页面切换"
+    )
+    print(
+        f"[slides focus-anim] {res.pptx.name} 第 {res.page} 页：{res.blocks} 块 / "
+        f"{res.targets} 个打靶形状；聚焦 {opts.focus_ms}ms、失焦 {opts.blur_ms}ms、"
+        f"缓动={opts.easing}；{switch}"
+    )
+    print(f"[slides focus-anim] 已写入：{res.pptx}")
+    print(
+        "[NEXT] 视觉终检：compose slides render '<deck>' → compose slides verify '<deck>'，"
+        "并在放映模式核对「进入即首块深色、每次单击只前进一块」。"
+    )
+    return 0
+
+
 def cmd_slides_verify(args: argparse.Namespace) -> int:
     from . import slides_visual
 
@@ -1034,6 +1077,55 @@ def build_parser() -> argparse.ArgumentParser:
         "--strict", action="store_true", help="有违规即退出码非 0（默认只报告）"
     )
     sp.set_defaults(func=cmd_slides_geometry)
+
+    sp = slidessub.add_parser(
+        "focus-anim",
+        help="按学院正式汇报预设注入焦点块动画 timing（首块自动、其余单击）",
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument("--page", type=int, required=True, help="目标页（1-based）")
+    sp.add_argument(
+        "--block",
+        action="append",
+        required=True,
+        help="块-形状映射 chip:shape1,shape2（可重复；块序＝触发序）",
+    )
+    sp.add_argument(
+        "--fade",
+        action="append",
+        default=[],
+        help="进入·淡入 块序号:shape1,shape2（可重复；块被聚焦时同刻淡入）",
+    )
+    sp.add_argument(
+        "--focus-color",
+        default="8496B0",
+        help="聚焦色（胶囊填充与面板/主图描边，默认 8496B0）",
+    )
+    sp.add_argument(
+        "--blur-fill", default="ADB9CA", help="失焦胶囊填充色（默认 ADB9CA）"
+    )
+    sp.add_argument("--blur-line", default="D6DCE4", help="失焦描边色（默认 D6DCE4）")
+    sp.add_argument("--focus-ms", type=int, default=250, help="聚焦时长 ms（默认 250）")
+    sp.add_argument(
+        "--blur-ms", type=int, default=1000, help="失焦时长 ms（默认 1000）"
+    )
+    sp.add_argument(
+        "--easing",
+        choices=["ease-out", "linear"],
+        default="ease-out",
+        help="颜色效果缓动（默认 ease-out=decel 100000）",
+    )
+    sp.add_argument(
+        "--transition-ms",
+        type=int,
+        default=350,
+        help="页面切换 fade 时长 ms（默认 350）",
+    )
+    sp.add_argument(
+        "--no-transition", action="store_true", help="不写页面切换（只注入 timing）"
+    )
+    sp.add_argument("--out", default=None, help="输出路径（缺省就地更新源文件）")
+    sp.set_defaults(func=cmd_slides_focus_anim)
 
     # --- docx 子命令组 ---
     docx = sub.add_parser("docx", help="DOCX 读写（read/from-markdown/add/marks）")
