@@ -262,8 +262,12 @@ def sort_actions(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
-def render_card(a: dict[str, Any]) -> list[str]:
-    """一张**任务卡片**（PSEP_3 §3.2 格式原文）。"""
+def render_card(a: dict[str, Any], *, include_digest: bool = True) -> list[str]:
+    """一张**任务卡片**（PSEP_3 §3.2 格式原文）。
+
+    ``include_digest=False`` 供**命令尾部卡片**用：要求与历史总览由调用方按
+    「首次引导/--full」后置附送，卡片本身不再全量内嵌（tb-5 返工 L 摩擦 #1）。
+    """
     tb_id = str(a.get("tb_id") or "（无关联任务书）")
     head = (
         f"┌─【大任务 {tb_id}：{a.get('tb_title')}】"
@@ -285,9 +289,10 @@ def render_card(a: dict[str, Any]) -> list[str]:
         f"│ 动作：{a.get('action')}",
         f"└─ 命令模板：{a.get('command')}",
     ]
-    # 要求与历史总览**全量附卡**（用户 2026-10-17：决策面一次性看到所有要求与批语）。
+    # 要求与历史总览**全量附卡**（用户 2026-10-17：决策面一次性看到所有要求与批语）；
+    # 命令尾部卡片显式关掉（include_digest=False），避免每次 advance 都翻 35KB。
     raw_tb = str(a.get("tb_id") or "")
-    if raw_tb:
+    if raw_tb and include_digest:
         from . import taskbooks as _tb
 
         if _tb.digest_has_history(raw_tb):
@@ -341,17 +346,23 @@ def next_lines(limit: int = 5) -> list[str]:
     return out + queue_status_lines()
 
 
-def card_lines(plan_id: str | None = None, *, limit: int = 3) -> list[str]:
+def card_lines(
+    plan_id: str | None = None, *, limit: int = 3, include_digest: bool = True
+) -> list[str]:
     """**单个 plan** 的路由卡片（四个机械推送点用）；``plan_id=None`` 取全局首项。
 
-    返回空表＝无就绪动作（调用方自行决定是否提示）。
+    返回空表＝无就绪动作（调用方自行决定是否提示）。``include_digest=False`` 时卡片
+    不内嵌要求与历史总览（命令尾部由 ``plans._print_digest_tail`` 按需后置）。
     """
     actions = sort_actions(collect_actions())
     if plan_id is not None:
         actions = [a for a in actions if str(a.get("plan_id")) == plan_id]
     if not actions:
         return []
-    out = ["[NEXT] 路由卡片：", *render_card(actions[0])]
+    out = [
+        "[NEXT] 路由卡片：",
+        *render_card(actions[0], include_digest=include_digest),
+    ]
     if plan_id is None and len(actions) > 1:
         out.append(f"  （其余 {len(actions) - 1} 项见 orch next）")
     del limit

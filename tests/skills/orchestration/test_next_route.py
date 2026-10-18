@@ -446,3 +446,83 @@ def test_advance_tail_card_waits_for_inflight(rface, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "动作：等待完成事件" in out, out
     assert "书写本环节任务书并派发" not in out
+
+
+# ===========================================================================
+#  ⑧ plan advance 输出分层 + adhoc id 唯一性（tb-5 返工 L 摩擦）
+# ===========================================================================
+def test_advance_digest_is_tail_on_first_guide_only(rface, monkeypatch, capsys):
+    """首次引导：行动面在前、总览在后；第二次 advance 不再打总览。"""
+    root = _mk_taskbook("原始大任务")
+    rw = taskbooks.create_rework(root, improve={}, note="上轮批语")["id"]
+    _mk_plan(rface, "p-layer", tb_id=rw)
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: (True, "stub"))
+    capsys.readouterr()
+
+    assert plans.cmd_plan_advance(_args("p-layer", text="t")) == 0
+    first = capsys.readouterr().out
+    assert "要求与历史总览" in first, "首次引导仍须提供总览"
+    assert first.index("已入队") < first.index("要求与历史总览"), (
+        "入队确认/工作清单必须前置，总览在后"
+    )
+    assert first.index("[NEXT] 工作清单") < first.index("要求与历史总览")
+
+    assert plans.cmd_plan_advance(_args("p-layer")) == 0
+    second = capsys.readouterr().out
+    assert "要求与历史总览" not in second, "后续 advance 不得再淹没行动面"
+
+
+def test_advance_full_flag_reprints_digest(rface, monkeypatch, capsys):
+    root = _mk_taskbook("原始大任务")
+    rw = taskbooks.create_rework(root, improve={}, note="上轮批语")["id"]
+    _mk_plan(rface, "p-full", tb_id=rw)
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: (True, "stub"))
+    capsys.readouterr()
+
+    assert plans.cmd_plan_advance(_args("p-full", text="t")) == 0
+    capsys.readouterr()
+    assert plans.cmd_plan_advance(_args("p-full", full=True)) == 0
+    out = capsys.readouterr().out
+    assert "要求与历史总览" in out
+    assert out.index("[NEXT] 工作清单") < out.index("要求与历史总览")
+
+
+def test_adhoc_ids_are_unique_within_the_same_second(rface, monkeypatch, capsys):
+    """同一秒两单：后缀递增，各一 plan/state（实测 050159 曾吞两单）。"""
+    from datetime import datetime as _dt
+
+    class _Fixed(_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return _dt(2026, 10, 19, 12, 0, 0)
+
+    monkeypatch.setattr(plans, "datetime", _Fixed)
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: _fake_worker(m))
+
+    def args() -> Namespace:
+        return Namespace(
+            member="sim",
+            text="单步任务",
+            task=None,
+            dirs=None,
+            model_tier=None,
+            effort=None,
+            max_turns=None,
+            name=None,
+            session=None,
+            full=False,
+            dry=False,
+        )
+
+    capsys.readouterr()
+    assert plans.cmd_plan_adhoc(args()) == 0
+    assert plans.cmd_plan_adhoc(args()) == 0
+    ids = [
+        p.name[: -len(".state.json")]
+        for p in sorted((rface / "plans").glob("adhoc-*.state.json"))
+    ]
+    assert set(ids) == {"adhoc-20261019-120000", "adhoc-20261019-120000-02"}, ids
+    for pid in ids:
+        st = plans._load_state(pid)
+        assert st["plan_id"] == pid and len(st["steps"]) == 1
+        assert st["steps"][0]["status"] == "done", "每单各自完成一跳"

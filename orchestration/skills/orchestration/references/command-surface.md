@@ -7,12 +7,12 @@ pysci-orch status                        # 全景：计划/成员/队列/worker/
 # —— 日常面 ——
 pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
 #   └ id 缺省取文件名 stem（建议显式 --id）；YAML 复制进 `state/plans/<id>.plan.yaml`（源可删；勿与目标同名）
-pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>] [--skip <leaf>]  # 事件驱动：入队即返回（成员含 devops）
+pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>] [--skip <leaf>] # 事件驱动：入队即返回（成员含 devops）
 #   └ --evidence：收尾 kind:self 组长环节（文件在 + 标题段 lint 过才置 done，PSEP_3 §2.1）
 #     └ 落点 `data/taskbooks/<id>.<leaf>-<名>.md`；骨架=`# <标题>`+对应标题段（如 `## 拆解`）
 #   └ --skip：pending 环节置 skipped（空改进清单等「合法不做事」收尾，如 --skip L.l3）
 #   └ 旗标（run 已废、旗标并入）：
-#     advance 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --dry --evidence --skip
+# advance 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --dry --evidence --skip --full
 #     （--session 默认 latest，续作余量已尽必须 new）
 pysci-orch plan rework <tb-id> [--improve infra,leader,inspector] [--mode full|no_inspector|rework_only] [--plan-id X] [--force]
         # 返工任务书 → 骨架（改进项组合 A/B/C/L）并登记；改进项默认读任务书标志（--improve 显式/--mode 兼容）；[NEXT]：link → advance
