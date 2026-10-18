@@ -261,6 +261,22 @@ def iso_registry(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def owner_side(iso_state, monkeypatch):
+    """把测试进程伪装成 **owner 自己的挂载**：预置 owner 真源 + 导出 ``PYSCI_WAKE_OWNER``。
+
+    2026-10-18 起 ``_emit`` 只允许 owner 侧消费（无主替身/被取代实例不得记消费账），
+    故凡是期望「事件被消费/唤醒」的用例都要以 owner 侧身份挂载；只测基线/超时的用例
+    不必挂（无事件不涉及消费权）。
+    """
+    from pysci.skills.orchestration.tools import watch as _watch
+
+    sid = "test-owner"
+    _watch.save_owner(_watch._new_owner(sid))
+    monkeypatch.setenv(_watch.WATCH_OWNER_ENV, sid)
+    return sid
+
+
+@pytest.fixture
 def qface(iso_state, tmp_path, monkeypatch):
     """计划目录隔离（``plans.PLANS_DIR`` → ``tmp_path/plans``）。
 

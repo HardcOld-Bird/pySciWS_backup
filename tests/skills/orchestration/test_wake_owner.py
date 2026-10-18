@@ -4,11 +4,13 @@
 用户主会话工作时另开的**次要会话**一有回合就抢走唤醒权，drain/事件的 exit-2 被投到
 次要会话（污染其上下文，正是用户要避免的）；凌晨「被取代却无接任」的谜之日志疑为同源。
 
-本文件钉任务书机械验收的五类语义（全走单一实现 :func:`watch.hook_decision`——stdin
+本文件钉任务书的机械验收语义（全走单一实现 :func:`watch.hook_decision`——stdin
 载荷即钩子要喂的载荷）：
-① 首会话自动认领；② 异 id 不抢；③ owner stale 自动接管；④ SessionEnd 释放；
-⑤ 载荷解析失败 fail-open。另钉：owner 缺席事件不丢（迟到唤醒续接 a1；**不存在「转投
-其他会话」语义**）与钩子脚本的分支形状（文本级，防接线回退）。
+① 首会话自动认领（仅无 owner 记录时）；② 异 id 不抢；③ **自动转让已取消**（stale 不
+接管、SessionEnd 写墓碑不升主，迁移只走人工 --force）；④ pod cwd 会话永不认领/监听；
+⑤ 载荷解析失败 fail-open。另钉：owner 缺席事件不丢（迟到唤醒续接；**不存在「转投
+其他会话」语义**）、消费权只认 owner 侧（2026-10-18 wake-bind s2）与钩子脚本的分支
+形状（文本级，防接线回退）。
 """
 
 from __future__ import annotations
@@ -101,7 +103,8 @@ def test_hook_script_gates_by_owner_and_fails_open():
     )
     assert "unset PYSCI_WAKE_OWNER" in text, (
         "无载荷路径必须剥掉继承的 owner 身份——否则看门狗重臂的替身 watch 会盖上 owner 的 "
-        "armed_by、把 stale 接管永久挡死（实测 2026-10-14 17:53 抓到的现场）"
+        "armed_by、冒充 owner 侧消费事件（2026-10-14 17:53 实测的现场；2026-10-18 起还会吞掉"
+        "应留给 owner 的迟到唤醒）"
     )
     branch = text.split('case "$wcr" in', 1)[1].split("esac", 1)[0]
     assert "3)" in branch and "exit 0" in branch
@@ -109,66 +112,67 @@ def test_hook_script_gates_by_owner_and_fails_open():
 
 
 # ---------------------------------------------------------------------------
-# ③ owner stale 自动接管（双条件：心跳超阈 且 owner 自己的 watch 已死）
+# ③ stale 不再自动接管（twin 裁决 A，2026-10-18）：迁移只走人工 wake-claim --force
 # ---------------------------------------------------------------------------
-def test_stale_owner_auto_takeover(iso_state):
+def test_stale_owner_is_not_auto_taken_over(iso_state):
     watch.hook_decision(_payload("sess-A"))
     owner = watch.load_owner()
     owner["last_turn_at"] = _iso(watch.OWNER_STALE_S + 600)
     watch.save_owner(owner)
-    assert watch.load_owner().get("session_id") == "sess-A"
+    before = watch.load_owner()
 
     code, reason = watch.hook_decision(_payload("sess-B"))
-    assert code == 0 and reason.startswith("takeover"), (
-        f"stale 后新会话必须接管：{reason}"
+    assert code == 3 and reason.startswith("deny"), (
+        f"stale owner 也不得被自动接管（只走人工）：{reason}"
     )
-    assert watch.load_owner()["session_id"] == "sess-B"
-    assert watch.load_owner()["claimed_at"], "接管重写认领时刻（新任期可审计）"
+    assert "自动转让已取消" in reason and "wake-claim --force --session-id" in reason
+    assert watch.load_owner() == before, "拒绝分支不得改写真源"
+
+    # 人工迁移是唯一通道
+    watch.wake_claim_force("sess-B")
+    code, reason = watch.hook_decision(_payload("sess-B"))
+    assert code == 0 and reason.startswith("owner")
 
 
-def test_takeover_requires_both_conditions(iso_state):
-    """接管双条件缺一不可；看门狗重臂的无主替身（armed_by 空）不算 owner 的 watch。"""
+@pytest.mark.parametrize(
+    "hb,armed_by",
+    [
+        ("fresh", None),
+        ("stale", "sess-A"),
+        ("stale", ""),
+        ("stale", None),
+    ],
+    ids=["fresh-dead", "stale-owner-live", "stale-substitute", "stale-dead"],
+)
+def test_no_auto_takeover_under_any_staleness_combination(iso_state, hb, armed_by):
+    """任何「心跳 × watch 在挂形态」组合都不得触发接管（旧双条件判据已整体退役）。"""
     hb_fresh = datetime.now().astimezone().isoformat(timespec="seconds")
     hb_stale = _iso(watch.OWNER_STALE_S + 600)
-    cases = [
-        ("心跳新鲜 + watch 死", hb_fresh, None, False),
-        ("心跳 stale + owner watch 在挂载", hb_stale, "sess-A", False),
-        ("心跳 stale + 无主替身在挂载", hb_stale, "", True),
-        ("心跳 stale + watch 死", hb_stale, None, True),
-    ]
-    for label, hb, armed_by, expect_takeover in cases:
-        watch.save_owner(
+    watch.save_owner(
+        {
+            "session_id": "sess-A",
+            "claimed_at": _iso(7200),
+            "last_turn_at": hb_fresh if hb == "fresh" else hb_stale,
+        }
+    )
+    if armed_by is not None:
+        watch.save_state(
             {
-                "session_id": "sess-A",
-                "claimed_at": _iso(7200),
-                "last_turn_at": hb,
+                "version": 1,
+                "interval_s": 60,
+                "heartbeat_at": hb_fresh,
+                "armed_by": armed_by,
             }
         )
-        if armed_by is None:
-            pass  # 无 watch.json = watch 已死
-        else:
-            watch.save_state(
-                {
-                    "version": 1,
-                    "interval_s": 60,
-                    "heartbeat_at": hb_fresh,
-                    "armed_by": armed_by,
-                }
-            )
-        code, reason = watch.hook_decision(_payload("sess-B"))
-        got_takeover = code == 0 and reason.startswith("takeover")
-        assert got_takeover is expect_takeover, f"{label}: {reason}"
-        # 环境复位（清 watch 面，防上一例的 watch.json 泄漏到下一例）
-        try:
-            watch.WATCH_PATH.unlink()
-        except OSError:
-            pass
+    code, reason = watch.hook_decision(_payload("sess-B"))
+    assert code == 3 and reason.startswith("deny"), reason
+    assert watch.load_owner()["session_id"] == "sess-A"
 
 
 # ---------------------------------------------------------------------------
-# ④ SessionEnd 释放（owner 显式释放 → 干净迁移；非 owner 结束不误释放）
+# ④ SessionEnd 释放：写墓碑、不自动升主；迁移只走人工 --force
 # ---------------------------------------------------------------------------
-def test_session_end_releases_owner(iso_state):
+def test_session_end_writes_tombstone_and_no_auto_promotion(iso_state):
     watch.hook_decision(_payload("sess-A"))
 
     # 非 owner 会话结束：不释放
@@ -178,13 +182,81 @@ def test_session_end_releases_owner(iso_state):
         "非 owner 的 SessionEnd 不得动真源"
     )
 
-    # owner 会话结束：显式释放；下一钩子自动认领（干净迁移，零人工）
+    # owner 结束 → 墓碑（不是删除）：下一个会话不得自动升主
     code, reason = watch.hook_decision(_payload("sess-A", event="SessionEnd"))
-    assert code == 4 and "显式释放" in reason
+    assert code == 4 and "释放墓碑" in reason and "不会自动升主" in reason
+    owner = watch.load_owner()
+    assert owner.get("session_id") == "" and owner.get("released_at"), owner
+
+    code, reason = watch.hook_decision(_payload("sess-B"))
+    assert code == 3 and reason.startswith("deny"), (
+        "SessionEnd 后任意会话自动升主必须取消"
+    )
+    assert "wake-claim --force --session-id" in reason
+
+    # 人工迁移（唯一通道）后 B 成为 owner
+    watch.wake_claim_force("sess-B")
+    code, reason = watch.hook_decision(_payload("sess-B"))
+    assert code == 0 and reason.startswith("owner")
+
+
+def test_manual_force_release_allows_first_session_claim(iso_state):
+    """保留的认领语义：**无 owner 记录**（冷启动/人工 --force 释放）时首会话自动认领。"""
+    watch.wake_claim_force("sess-A")
+    assert watch.load_owner()["session_id"] == "sess-A"
+
+    watch.wake_claim_force("")  # 人工释放 = 删除记录（不是墓碑）
     assert watch.load_owner() == {}
     code, reason = watch.hook_decision(_payload("sess-B"))
     assert code == 0 and reason.startswith("claim")
-    assert watch.load_owner()["session_id"] == "sess-B"
+
+
+# ---------------------------------------------------------------------------
+# ④b cwd 判据：pod 直聊会话永不认领/接管/监听
+# ---------------------------------------------------------------------------
+def _payload_cwd(sid: str, cwd: str, event: str = "Stop") -> str:
+    return json.dumps(
+        {"session_id": sid, "hook_event_name": event, "cwd": cwd},
+        ensure_ascii=False,
+    )
+
+
+def test_pod_cwd_session_never_claims(iso_state):
+    pod = str(PROJECT_ROOT / "orchestration" / "pods" / "devops")
+    code, reason = watch.hook_decision(_payload_cwd("pod-sess", pod))
+    assert code == 3 and "cwd 非项目根" in reason and "pod 直聊" in reason
+    assert watch.load_owner() == {}, "pod 会话不得认领"
+
+
+def test_pod_cwd_session_denied_even_if_recorded_owner(iso_state):
+    """历史遗留把 pod 会话记成 owner 时，也不得监听/续心跳（一律 deny）。"""
+    watch.save_owner(watch._new_owner("pod-sess"))
+    before = watch.load_owner()
+    pod = str(PROJECT_ROOT / "orchestration" / "pods" / "devops")
+    code, reason = watch.hook_decision(_payload_cwd("pod-sess", pod))
+    assert code == 3 and "cwd 非项目根" in reason
+    assert watch.load_owner() == before
+
+
+def test_project_root_cwd_claims_and_heartbeats(iso_state):
+    root = str(PROJECT_ROOT)
+    code, reason = watch.hook_decision(_payload_cwd("main-sess", root))
+    assert code == 0 and reason.startswith("claim")
+    code, reason = watch.hook_decision(_payload_cwd("main-sess", root))
+    assert code == 0 and reason.startswith("owner")
+
+
+def test_cwd_falls_back_to_hook_entry_env(iso_state, monkeypatch):
+    """载荷无 cwd 时用钩子脚本 cd 前导出的 PYSCI_HOOK_CWD；缺省再退 QODER_PROJECT_DIR。"""
+    pod = str(PROJECT_ROOT / "orchestration" / "pods" / "devops")
+    monkeypatch.setenv("PYSCI_HOOK_CWD", pod)
+    raw = json.dumps({"session_id": "pod-sess", "hook_event_name": "Stop"})
+    code, reason = watch.hook_decision(raw)
+    assert code == 3 and "cwd 非项目根" in reason
+
+    monkeypatch.setenv("PYSCI_HOOK_CWD", str(PROJECT_ROOT))
+    code, reason = watch.hook_decision(raw)
+    assert code == 0 and reason.startswith("claim")
 
 
 # ---------------------------------------------------------------------------

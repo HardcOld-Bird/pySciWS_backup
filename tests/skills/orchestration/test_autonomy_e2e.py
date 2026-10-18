@@ -92,6 +92,10 @@ def _state_paths(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 def test_deaf_period_event_fires_on_next_mount(tmp_path, monkeypatch):
     root = _state_paths(monkeypatch, tmp_path)
+    # owner 侧挂载身份（2026-10-18：只有 owner 自己的 watch 可消费事件）
+    monkeypatch.setattr(watch, "WAKE_OWNER_PATH", root / "wake-owner.json")
+    watch.save_owner(watch._new_owner("test-owner"))
+    monkeypatch.setenv(watch.WATCH_OWNER_ENV, "test-owner")
     watch.arm()  # 首次挂载（基线=当下快照）
     # 聋期：watcher 已死，无人监听
     events.emit(

@@ -194,7 +194,7 @@ def test_transient_empty_crash_and_quota_do_not_re_open_events():
 # ---------------------------------------------------------------------------
 # 端到端：那场脱靶的复现（挂载中撞上残留锁也必须唤醒）
 # ---------------------------------------------------------------------------
-def test_run_watch_wakes_on_residue_frame(iso_state, monkeypatch):
+def test_run_watch_wakes_on_residue_frame(iso_state, monkeypatch, owner_side):
     """arm 时无摘要无锁 → 收尾时释放失败残留 + 判活为真 → 挂载中的 watch 当场报。"""
     monkeypatch.setattr(drain, "_pid_alive", lambda pid: True)
     armed = watch.snapshot()  # 此刻还没有 .done：基线干净

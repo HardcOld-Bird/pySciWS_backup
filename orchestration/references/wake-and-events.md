@@ -71,44 +71,42 @@ Stop 钩子自动完成——见下方「自动挂载」，此前登记的「残
   （harness 只认**最近一任**），致 2026-10-13 20:57 的 QUEUE-COMPLETE 唤醒丢失。v2 取消守卫、
   改为每回合接管。
 
-**唤醒权自动归属（`wake-claim`；用户设计定稿 2026-10-14 晚，钩子 v6——「机制优于纪律」）**：
+**唤醒权绑定主会话（`wake-claim`；用户 2026-10-18 裁决，twin 终裁 A——「自动唤醒始终绑定主会话」）**：
 v2 的「最新在听者胜」在**主会话 + 次要会话并用**时会被抢——次要会话一有回合即抢走唤醒权，
 drain/事件的 `exit 2` 被投到次要会话（污染其上下文，用户明确要避免；凌晨「被取代却无接任」
 的谜之日志疑为同源）。第一版**认领制**（手工 `wake-claim` 认领 + env 取证身份）被判「硬保证
-退化成软步骤」废弃；现行**零人工自动归属**：钩子不再丢弃 stdin 载荷——解析 `session_id` /
-`hook_event_name`，真源 `state/wake-owner.json`（`session_id` + `claimed_at` +
-`last_turn_at`），判定单一实现在 `wake-claim --check`：
+退化成软步骤」废弃；**2026-10-14 的自动归属**（零手工认领/续心跳/异会话排除）保留为地基，
+但 **2026-10-18 起取消全部自动转让**（stale 自动接管、SessionEnd 自动升主），迁移只走人工。
+钩子解析 stdin 载荷的 `session_id`＋`cwd`，真源 `state/wake-owner.json`（`session_id` +
+`claimed_at` + `last_turn_at`），判定单一实现在 `wake-claim --check`：
 
 | 情形（载荷判定） | 钩子行为 |
 |---|---|
-| **无 owner → 自动认领**（首会话即主会话，零人工） | 抢 token、挂 watch，照常 `exit 2` 唤醒 |
+| **无 owner 记录 → 自动认领**（仅冷启动/人工 `--force` 释放后；首会话即主会话） | 抢 token、挂 watch，照常 `exit 2` 唤醒 |
 | **owner = 我 → 续心跳** | 照常抢 token、挂 watch |
-| **owner ≠ 我 → 永不抢占**（次要会话自动排除） | **不监听、不抢 token、绝不 `exit 2`**（`exit 0`，留痕） |
-| **owner stale → 自动接管**：心跳断供 >30 min **且** owner 自己的 watch 已死 | 新会话认领为 owner，照常监听 |
-| **SessionEnd**（`SessionEnd` 钩子接线 `.qoder/hooks/watch-arm.sh`） | owner 显式释放真源后退出；非 owner 结束不误释放 |
+| **owner ≠ 我 → 永不抢占**（子会话自动排除） | **不监听、不抢 token、绝不 `exit 2`**（`exit 0`，留痕） |
+| **cwd 非项目根**（pod 组员直聊；载荷 `cwd` 优先，其次钩子入口 cwd） | 同上拒绝：不认领/不接管/不监听 |
+| **owner stale**（心跳断供 >30 min 且 watch 已死） | **不再自动接管**——deny 并提示人工迁移 |
+| **SessionEnd**（`SessionEnd` 钩子接线 `.qoder/hooks/watch-arm.sh`） | owner 写**释放墓碑**后退出；下一会话**不自动升主**，迁移只走人工 |
 | 空载荷（看门狗重臂）/ 解析失败 / 无 `session_id` / 判定命令本身失败 | **fail-open 走旧 token 语义**并留痕（唤醒链不塌） |
 
-- **接管的 watch 判据带身份**：钩子把 owner 的 `session_id` export 给 `orch watch`
-  （`watch.json` 的 `armed_by`）——只有 **owner 自己**的 watch 挡接管；看门狗重臂的
-  无主替身（`armed_by` 空）不冒充，否则接管条款在看门狗常开的环境里永远触发不了。
-- **不存在「转投其他会话」语义**（那正是本单要根治的）：owner 不在场时事件**不丢**——
-  持久水位 + 迟到唤醒由 owner 下次挂载补上。`pysci-orch wake-claim status` 读当前 owner
-  与 stale 判定；`wake-claim --force [--session-id <id>]` 是**应急强制迁移**（缺省=释放，
-  下一钩子自动认领），**非常规步骤**——常规归属全部由钩子按载荷自动完成。
-- **实测留痕**（2026-10-14 17:51–18:11，隔离 ROOT + 双 session_id 载荷喂真实钩子）：
-  ```
-  [17:51:36] 归属判定：claim：无 owner → 本会话自动认领（sid=sess-A）        ← 首会话零人工
-  [17:52:20] 归属判定：deny：非 owner（owner=sess-A，心跳 44s…）→ 不监听不抢，退出
-  [17:53:38] 空载荷（看门狗重臂/无 stdin）→ fail-open 走旧 token 语义        ← 重臂无主替身
-  [17:55:38] 被取代（现持 174918-…）→ 让位退出                              ← v2 自仲裁仍成立
-  [18:08:27] 归属判定：takeover：owner stale（心跳 11307s > 1800s 且其 watch
-             已死）→ 自动接管（sess-A → sess-B）                            ← 替身在场也不挡接管
-  [18:11:07] SessionEnd：release：owner 会话结束 → 显式释放（sid=sess-B）→ 钩子退出不监听
-  [18:11:23] 归属判定：claim：无 owner → 本会话自动认领（sid=sess-C）        ← 干净迁移
-  ```
-  实测当场抓到并修掉一个接线缺陷：看门狗重臂实例会**继承**派生方的 `PYSCI_WAKE_OWNER`
-  （替身 watch 盖上 owner 的 `armed_by` → 把接管永久挡死）——现由钩子 `unset` +
-  `watchdog._rearm` 剥离双保险（各有回归测试钉住）。
+- **迁移唯一通道**：`pysci-orch wake-claim --force --session-id <id>`；`--force` 不带 id =
+  人工释放（删除记录，下一钩子自动认领）。`wake-claim status` 输出人工迁移指引。
+- **只有 owner 侧挂载可消费事件**：钩子把 owner 的 `session_id` export 给 `orch watch`
+  （`watch.json` 的 `armed_by`）。看门狗重臂的**无主替身**（`armed_by` 空）或被人工迁移
+  **取代**的旧实例命中事件时**不记 `consumed`、不推进持久水位**——exit 2 到不了任何会话，
+  记了账就是吞账；事件留给 owner 下次挂载的迟到唤醒。单一消费水位仍生效，被取代实例拿不到
+  唤醒权（防双唤醒）。
+- **不存在「转投其他会话」语义**：owner 不在场时事件**不丢**——持久水位 + 迟到唤醒由
+  owner 下次挂载补上。验收件：
+  `tests/skills/orchestration/test_wake_binding.py::test_substitute_does_not_consume_and_owner_gets_late_wake`。
+- **夜航同样绑定主会话**：`watch-arm.sh` 的夜航差分块移到归属闸**之后**（非 owner 已退出）；
+  `night.py` 的政策注入/gate 复用 `watch.session_binding`——子会话与 pod cwd 会话零注入、
+  零 gate、零 rewake（夜航只由用户在主会话手动驱动）。
+- **历史（已退役）**：2026-10-14 的 stale 自动接管与 SessionEnd 后自动认领，以及当时
+  `takeover`/`claim` 实测留痕，仅作背景；2026-10-18 起由人工迁移取代（twin 案卷
+  `data/taskbooks/wake-bind-20261018-twin.md`）。重臂替身**继承** `PYSCI_WAKE_OWNER` 的接线
+  缺陷仍由钩子 `unset` + `watchdog._rearm` 剥离双保险（回归测试钉住）。
 
 **迟到唤醒 + 看门狗（2026-10-14 自动化加固 a1；用户实测发现 02:30–07:30 五小时唤醒真空）**：
 
@@ -194,7 +192,9 @@ drain/事件的 `exit 2` 被投到次要会话（污染其上下文，用户明�
   刷屏；watch 仍在挂载时 status 不抢账，免双份唤醒）。**单一消费水位**（2026-10-14 12:44
   双唤醒实锤后加）：命中事件的**身份**记进 `watch.json` 的 `consumed` 账（读盘为准、跨实例
   跨挂载继承），唤醒前先过它——被取代的 watch 实例即便仍持自己的旧基线，也拿不到第二次
-  唤醒权（`watch.filter_consumed`/`mark_consumed`）。同刻多事件按 CRASH > QUOTA-STOP >
+  唤醒权（`watch.filter_consumed`/`mark_consumed`）。**消费权只认 owner 侧挂载**（2026-10-18）：
+  无主替身/被迁移取代的旧实例命中时**不记账、不推进水位**（记为 `event-unowned`），事件留给
+  owner 迟到唤醒。同刻多事件按 CRASH > QUOTA-STOP >
   CHANNEL-STOP > NEEDS-LEADER > TASKBOOK-NEW > JOB-DONE > QUEUE-EMPTY > QUEUE-COMPLETE >
   **PENDING-WORK > STALL** > SALVAGE 取主事件、其余以「同时」附注——**队列感知伪事件排在
   真实事件之后、SALVAGE 之前**（与真实事件同帧时让位，独处时才是主行），否则 nudge 会把

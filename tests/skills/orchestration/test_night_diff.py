@@ -346,7 +346,13 @@ def _fake_root(tmp_path: Path, *, canned: str) -> Path:
 
 
 def _run_hook(root: Path) -> subprocess.CompletedProcess[bytes]:
-    env = {**os.environ, "QODER_PROJECT_DIR": str(root)}
+    env = {
+        **os.environ,
+        "QODER_PROJECT_DIR": str(root),
+        # 归属真源隔离：钩子子进程不继承 pytest 的 monkeypatch，显式指到假根本地
+        # （文件不存在 = 无 owner → 绑定判定放行；不读真实仓库的 wake-owner.json）。
+        "PYSCI_WAKE_OWNER_PATH": str(root / "state" / "wake-owner.json"),
+    }
     return subprocess.run(
         ["bash", str(HOOK)],
         input=json.dumps({"session_id": "s-chan", "hook_event_name": "Stop"}).encode(),
@@ -376,13 +382,15 @@ def test_hook_routes_diff_through_rewake_channel():
     assert "--diff --session" in body, "Stop 钩子须按会话调 night --diff"
     assert "夜航差分注入" in body
     at_diff = body.index("ndiff=$(printf")
-    # 位置：SessionEnd 之后（结束中的会话不注入）、归属判定/挂载之前（未命中时对 watch 语义零影响）
-    assert body.index('if [ "$HEV" = "SessionEnd" ]') < at_diff
-    assert at_diff < body.index("唤醒权自动归属闸"), (
-        "差分块须在归属判定/挂载之前（未命中时对 watch 语义零影响）"
+    at_gate = body.index("唤醒权自动归属闸")
+    # 位置（2026-10-18 wake-bind s2）：**归属闸之后**——非 owner/子会话在闸处已退出，
+    # 夜航差分只作用于 owner/认领会话；且仍在看门狗自启与 watch 挂载之前。
+    assert body.index('if [ "$HEV" = "SessionEnd" ]') < at_gate < at_diff
+    assert at_diff < body.index("看门狗自启动"), (
+        "差分块须在 watch 挂载之前（未命中时对 watch 语义零影响）"
     )
     # fail-open：异常路径不得 exit 2
-    seg = body[at_diff : body.index("唤醒权自动归属闸")]
+    seg = body[at_diff : body.index("看门狗自启动")]
     assert "fail-open 继续监听" in seg
 
 
