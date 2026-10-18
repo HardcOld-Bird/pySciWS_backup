@@ -26,17 +26,25 @@ from datetime import datetime, timedelta
 import pytest
 
 from pysci.paths import PROJECT_ROOT
-from pysci.skills.orchestration.tools import drain, events, orch, watch, watchdog
+from pysci.skills.orchestration.tools import (
+    drain,
+    events,
+    live_sessions,
+    orch,
+    watch,
+    watchdog,
+)
 
 HOOK = PROJECT_ROOT / ".qoder" / "hooks" / "watch-arm.sh"
 
 
 def _payload(sid: str, event: str = "Stop") -> str:
-    """钩子 stdin 载荷的最小真实形（hook-config 文档：自带 session_id / hook_event_name）。"""
+    """钩子 stdin 载荷的最小真实形（hook-config 文档：自带 session_id / hook_event_name/cwd）。"""
     return json.dumps(
         {
             "session_id": sid,
             "hook_event_name": event,
+            "cwd": str(PROJECT_ROOT),
             "transcript_path": "/tmp/t.jsonl",
         },
         ensure_ascii=False,
@@ -56,7 +64,7 @@ def test_first_session_auto_claims(iso_state):
     assert watch.load_owner() == {}, "起手必须无 owner"
 
     code, reason = watch.hook_decision(_payload("sess-A"))
-    assert code == 0 and reason.startswith("claim"), "无 owner → 本会话自动认领"
+    assert code == 0 and reason.startswith("adopt"), "无 owner → 最早存活会话自动补位"
     owner = watch.load_owner()
     assert owner["session_id"] == "sess-A"
     assert owner["claimed_at"] and owner["last_turn_at"], (
@@ -112,9 +120,10 @@ def test_hook_script_gates_by_owner_and_fails_open():
 
 
 # ---------------------------------------------------------------------------
-# ③ stale 不再自动接管（twin 裁决 A，2026-10-18）：迁移只走人工 wake-claim --force
+# ③ 长回合保护：心跳过期不判死（PID 存活优先）；晚者不夺主
 # ---------------------------------------------------------------------------
-def test_stale_owner_is_not_auto_taken_over(iso_state):
+def test_stale_heartbeat_does_not_trigger_takeover(iso_state):
+    """心跳读数只作观察；归属按存活/创建时序（真实 PID 场景见 test_live_sessions）。"""
     watch.hook_decision(_payload("sess-A"))
     owner = watch.load_owner()
     owner["last_turn_at"] = _iso(watch.OWNER_STALE_S + 600)
@@ -122,80 +131,30 @@ def test_stale_owner_is_not_auto_taken_over(iso_state):
     before = watch.load_owner()
 
     code, reason = watch.hook_decision(_payload("sess-B"))
-    assert code == 3 and reason.startswith("deny"), (
-        f"stale owner 也不得被自动接管（只走人工）：{reason}"
-    )
-    assert "自动转让已取消" in reason and "wake-claim --force --session-id" in reason
+    assert code == 3 and reason.startswith("deny"), reason
+    assert "owner=sess-A" in reason, "早者仍保 owner"
     assert watch.load_owner() == before, "拒绝分支不得改写真源"
 
-    # 人工迁移是唯一通道
-    watch.wake_claim_force("sess-B")
-    code, reason = watch.hook_decision(_payload("sess-B"))
-    assert code == 0 and reason.startswith("owner")
-
-
-@pytest.mark.parametrize(
-    "hb,armed_by",
-    [
-        ("fresh", None),
-        ("stale", "sess-A"),
-        ("stale", ""),
-        ("stale", None),
-    ],
-    ids=["fresh-dead", "stale-owner-live", "stale-substitute", "stale-dead"],
-)
-def test_no_auto_takeover_under_any_staleness_combination(iso_state, hb, armed_by):
-    """任何「心跳 × watch 在挂形态」组合都不得触发接管（旧双条件判据已整体退役）。"""
-    hb_fresh = datetime.now().astimezone().isoformat(timespec="seconds")
-    hb_stale = _iso(watch.OWNER_STALE_S + 600)
-    watch.save_owner(
-        {
-            "session_id": "sess-A",
-            "claimed_at": _iso(7200),
-            "last_turn_at": hb_fresh if hb == "fresh" else hb_stale,
-        }
-    )
-    if armed_by is not None:
-        watch.save_state(
-            {
-                "version": 1,
-                "interval_s": 60,
-                "heartbeat_at": hb_fresh,
-                "armed_by": armed_by,
-            }
-        )
-    code, reason = watch.hook_decision(_payload("sess-B"))
-    assert code == 3 and reason.startswith("deny"), reason
-    assert watch.load_owner()["session_id"] == "sess-A"
-
 
 # ---------------------------------------------------------------------------
-# ④ SessionEnd 释放：写墓碑、不自动升主；迁移只走人工 --force
+# ④ SessionEnd 注销后剩余存活会话自动补位（墓碑只留痕、不阻止）
 # ---------------------------------------------------------------------------
-def test_session_end_writes_tombstone_and_no_auto_promotion(iso_state):
+def test_session_end_promotes_surviving_session(iso_state):
     watch.hook_decision(_payload("sess-A"))
+    # B 的登记（真实里由 B 的 Stop 钩子写入；此用例直接登记）
+    live_sessions.register_session("sess-B", str(PROJECT_ROOT))
 
-    # 非 owner 会话结束：不释放
+    # 非 owner 结束：注销登记但不改 owner
     code, reason = watch.hook_decision(_payload("sess-B", event="SessionEnd"))
     assert code == 4 and reason.startswith("release")
-    assert watch.load_owner().get("session_id") == "sess-A", (
-        "非 owner 的 SessionEnd 不得动真源"
-    )
+    assert watch.load_owner().get("session_id") == "sess-A"
+    live_sessions.register_session("sess-B", str(PROJECT_ROOT))  # 再登记供补位
 
-    # owner 结束 → 墓碑（不是删除）：下一个会话不得自动升主
+    # owner 结束 → 立即补位最早剩余存活会话（墓碑不阻止）
     code, reason = watch.hook_decision(_payload("sess-A", event="SessionEnd"))
-    assert code == 4 and "释放墓碑" in reason and "不会自动升主" in reason
-    owner = watch.load_owner()
-    assert owner.get("session_id") == "" and owner.get("released_at"), owner
-
-    code, reason = watch.hook_decision(_payload("sess-B"))
-    assert code == 3 and reason.startswith("deny"), (
-        "SessionEnd 后任意会话自动升主必须取消"
-    )
-    assert "wake-claim --force --session-id" in reason
-
-    # 人工迁移（唯一通道）后 B 成为 owner
-    watch.wake_claim_force("sess-B")
+    assert code == 4 and "自动补位" in reason and "sess-B" in reason, reason
+    assert watch.load_owner()["session_id"] == "sess-B"
+    assert "sess-A" not in live_sessions.load_registry(), "SessionEnd 注销登记"
     code, reason = watch.hook_decision(_payload("sess-B"))
     assert code == 0 and reason.startswith("owner")
 
@@ -208,7 +167,7 @@ def test_manual_force_release_allows_first_session_claim(iso_state):
     watch.wake_claim_force("")  # 人工释放 = 删除记录（不是墓碑）
     assert watch.load_owner() == {}
     code, reason = watch.hook_decision(_payload("sess-B"))
-    assert code == 0 and reason.startswith("claim")
+    assert code == 0 and reason.startswith("adopt")
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +200,7 @@ def test_pod_cwd_session_denied_even_if_recorded_owner(iso_state):
 def test_project_root_cwd_claims_and_heartbeats(iso_state):
     root = str(PROJECT_ROOT)
     code, reason = watch.hook_decision(_payload_cwd("main-sess", root))
-    assert code == 0 and reason.startswith("claim")
+    assert code == 0 and reason.startswith("adopt")
     code, reason = watch.hook_decision(_payload_cwd("main-sess", root))
     assert code == 0 and reason.startswith("owner")
 
@@ -256,7 +215,7 @@ def test_cwd_falls_back_to_hook_entry_env(iso_state, monkeypatch):
 
     monkeypatch.setenv("PYSCI_HOOK_CWD", str(PROJECT_ROOT))
     code, reason = watch.hook_decision(raw)
-    assert code == 0 and reason.startswith("claim")
+    assert code == 0 and reason.startswith("adopt")
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +308,7 @@ def test_owner_absent_events_woken_on_owner_next_mount(iso_state):
 # ---------------------------------------------------------------------------
 def test_cli_status_and_force(iso_state, monkeypatch, capsys):
     assert orch.main(["wake-claim", "status"]) == 0
-    assert "自动认领" in capsys.readouterr().out, "无 owner → status 提示零人工语义"
+    assert "自动补位" in capsys.readouterr().out, "无 owner → status 提示零人工语义"
 
     watch.hook_decision(_payload("sess-A"))
     assert orch.main(["wake-claim"]) == 0, "缺省 action = status"
@@ -357,25 +316,43 @@ def test_cli_status_and_force(iso_state, monkeypatch, capsys):
     assert "owner = sess-A" in out and "--force" in out
 
     assert orch.main(["wake-claim", "--force"]) == 0, "缺省 force = 释放"
-    assert "强制释放" in capsys.readouterr().out
+    assert "强制清除" in capsys.readouterr().out
     assert watch.load_owner() == {}
 
     assert orch.main(["wake-claim", "--force", "--session-id", "sess-Z"]) == 0
     assert "强制迁移" in capsys.readouterr().out
     assert watch.load_owner()["session_id"] == "sess-Z"
+    # 应急指定要生效，目标须有存活登记（真实里由目标会话自己的钩子写入）
+    live_sessions.register_session("sess-Z", str(PROJECT_ROOT))
 
     # --check（钩子口）：同身份放行、异身份 rc 3
     monkeypatch.setattr(
         sys,
         "stdin",
-        io.StringIO(json.dumps({"session_id": "sess-Z", "hook_event_name": "Stop"})),
+        io.StringIO(
+            json.dumps(
+                {
+                    "session_id": "sess-Z",
+                    "hook_event_name": "Stop",
+                    "cwd": str(PROJECT_ROOT),
+                }
+            )
+        ),
     )
     assert orch.main(["wake-claim", "--check"]) == 0
     assert "owner" in capsys.readouterr().out
     monkeypatch.setattr(
         sys,
         "stdin",
-        io.StringIO(json.dumps({"session_id": "sess-Q", "hook_event_name": "Stop"})),
+        io.StringIO(
+            json.dumps(
+                {
+                    "session_id": "sess-Q",
+                    "hook_event_name": "Stop",
+                    "cwd": str(PROJECT_ROOT),
+                }
+            )
+        ),
     )
     assert orch.main(["wake-claim", "--check"]) == 3, "非 owner → rc 3（钩子据此不抢）"
 

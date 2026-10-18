@@ -69,16 +69,17 @@ owner 侧消费语义见 `patrol-watchdog-02-onboarding-and-ownership.md`（2026
   `test_backlog_fifo.py`。
 - 看门狗重臂：令心跳 stale > 300 s → 看门狗日志出现 `[→] 重臂监听循环`。
 - 队列超时：入队 > 1800 s 未取走 → 事件层出 `QUEUE-TIMEOUT` 且 TUI 详情点名（不许静默积压）。
-- 唤醒权绑定主会话：不同 `session_id`/`cwd` 的载荷喂 `wake-claim --check`——无 owner 记录
-  首会话 **claim** 返回 0、owner 返回 0（续心跳）、异 id **返回 3**（不监听、不抢 token、
-  绝不 `exit 2`）、**owner stale 也返回 3**（自动转让已取消）、`SessionEnd` 返回 4 且写
-  释放墓碑（下一会话仍返回 3，**不自动升主**）、人工 `--force --session-id` 后才可迁移；
-  **pod cwd** 会话一律返回 3（即使被历史遗留记成 owner）；垃圾/空载荷返回 0 且 fail-open
-  留痕；owner 缺席期事件靠迟到唤醒补（水位单调、**替身不吞消费账**）。
+- 唤醒权程序化绑定主会话：登记表候选中**创建更早者**为 owner（OS `create_time` 优先、
+  `first_seen` 回退、平局按 `session_id`）；owner 存活→保持/恢复（含 watchdog 重启）；
+  owner 死亡/`SessionEnd` → 最早存活候选**自动补位**；**晚创建者返回 3**（不监听、不抢、
+  绝不 `exit 2`）；**PID 存活而心跳过期仍算存活**（长回合不判死）；`SessionEnd` 返回 4 且
+  注销登记（墓碑只留痕）；**pod cwd** 一律 3；垃圾/空载荷 fail-open 留痕；`--force` 仅应急。
+  owner 缺席期事件靠迟到唤醒补（水位单调、**替身不吞消费账**）。
 
 判据的自动化面见 `tests/skills/orchestration/test_queue_watch.py`（队列感知 + 双消费回归）、
-`test_wake_owner.py`（归属五类语义）、`test_wake_binding.py`（双会话/夜航绑定/pod cwd/
-事件不丢）、`test_backlog_fifo.py`（approve→入队→销账 / 锁忙排队 / STALL 心跳双向 / 降噪）
+`test_wake_owner.py`（归属/补位语义）、`test_live_sessions.py`（登记表/创建时序/PID 存活/
+双会话实测）、`test_wake_binding.py`（夜航绑定/pod cwd/事件不丢）、
+`test_backlog_fifo.py`（approve→入队→销账 / 锁忙排队 / STALL 心跳双向 / 降噪）
 与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。
 
 ## 5. 夜航模式（PSEP_2；总开关 `data/pysci_settings.toml [night] enabled`）

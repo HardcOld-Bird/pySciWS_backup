@@ -229,6 +229,14 @@ def run_watchdog(
                 _inspectd.self_patrol_tick()
             except Exception as exc:  # noqa: BLE001 - 看门狗要活到下一轮
                 _log(f"[!] inspector tick 异常：{type(exc).__name__}: {exc}", run_log)
+            # 存活会话登记表清理（wake-adopt-20261018 s1）：死会话（PID 不在且心跳过期）
+            # 不留在候选集里；同一 tick 顺手做，不造第二套定时器。
+            try:
+                pruned = _watch.prune_live_sessions()
+                if pruned:
+                    _log(f"[→] 清理死会话登记 {len(pruned)} 个：{pruned}", run_log)
+            except Exception as exc:  # noqa: BLE001 - 看门狗要活到下一轮
+                _log(f"[!] 会话登记清理异常：{type(exc).__name__}: {exc}", run_log)
             # 队列**自愈**（task-20261015-worker-stall B2）：孤儿 in_progress 复位 + 有活无人干
             # 时唤醒 worker。为什么挂在看门狗而不是 worker 自己：worker 死了就没人再拉它
             # （队列无 pending → 无唤醒 → 鸡生蛋），而看门狗是**唯一**与队列状态无关的常驻面。
