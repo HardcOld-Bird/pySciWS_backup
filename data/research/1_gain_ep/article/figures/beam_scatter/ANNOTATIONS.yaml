@@ -1,0 +1,98 @@
+# 标注几何语义声明（任务书硬性条款 1/5）：每侧仅 2 个方框。
+# 内框 = 真实 31 cm 扫描区（与场图同一比例尺，完整位于半圆域内并留边距）；
+# 外框 = 同区放大插图（> 内框，完整位于面板边界内）；两框对应角以灰色细虚线相连。
+# 判据由 `pysci-figures audit` 从实际 Artist 几何核验（计数/包含/相对大小/连接线）。
+counts:
+  - {view: full_L, kind: box, role: left_inner, expected: 1}
+  - {view: full_L, kind: box, role: right_inner, expected: 1}
+  - {view: full_L, kind: box, role: left_outer, expected: 1}
+  - {view: full_L, kind: box, role: right_outer, expected: 1}
+  - {view: full_L, kind: box, role: panel, expected: 1}
+  - {view: full_L, kind: polygon, role: domain, expected: 1}
+  - {view: full_L, kind: line, role: connector, expected: 4}
+  - {view: full_R, kind: box, role: left_inner, expected: 1}
+  - {view: full_R, kind: box, role: right_inner, expected: 1}
+  - {view: full_R, kind: box, role: left_outer, expected: 1}
+  - {view: full_R, kind: box, role: right_outer, expected: 1}
+  - {view: full_R, kind: box, role: panel, expected: 1}
+  - {view: full_R, kind: polygon, role: domain, expected: 1}
+  - {view: full_R, kind: line, role: connector, expected: 4}
+  - {view: nogain_L, kind: box, role: left_inner, expected: 1}
+  - {view: nogain_L, kind: box, role: right_inner, expected: 1}
+  - {view: nogain_L, kind: box, role: left_outer, expected: 1}
+  - {view: nogain_L, kind: box, role: right_outer, expected: 1}
+  - {view: nogain_L, kind: box, role: panel, expected: 1}
+  - {view: nogain_L, kind: polygon, role: domain, expected: 1}
+  - {view: nogain_L, kind: line, role: connector, expected: 4}
+  - {view: nogain_R, kind: box, role: left_inner, expected: 1}
+  - {view: nogain_R, kind: box, role: right_inner, expected: 1}
+  - {view: nogain_R, kind: box, role: left_outer, expected: 1}
+  - {view: nogain_R, kind: box, role: right_outer, expected: 1}
+  - {view: nogain_R, kind: box, role: panel, expected: 1}
+  - {view: nogain_R, kind: polygon, role: domain, expected: 1}
+  - {view: nogain_R, kind: line, role: connector, expected: 4}
+  - {view: nostruct_L, kind: box, role: left_inner, expected: 1}
+  - {view: nostruct_L, kind: box, role: right_inner, expected: 1}
+  - {view: nostruct_L, kind: box, role: left_outer, expected: 1}
+  - {view: nostruct_L, kind: box, role: right_outer, expected: 1}
+  - {view: nostruct_L, kind: box, role: panel, expected: 1}
+  - {view: nostruct_L, kind: polygon, role: domain, expected: 1}
+  - {view: nostruct_L, kind: line, role: connector, expected: 4}
+  - {view: nostruct_R, kind: box, role: left_inner, expected: 1}
+  - {view: nostruct_R, kind: box, role: right_inner, expected: 1}
+  - {view: nostruct_R, kind: box, role: left_outer, expected: 1}
+  - {view: nostruct_R, kind: box, role: right_outer, expected: 1}
+  - {view: nostruct_R, kind: box, role: panel, expected: 1}
+  - {view: nostruct_R, kind: polygon, role: domain, expected: 1}
+  - {view: nostruct_R, kind: line, role: connector, expected: 4}
+contain:
+  - {inner: full_L_left_inner, outer: full_L_domain, margin_ratio: 0.02}
+  - {inner: full_L_right_inner, outer: full_L_domain, margin_ratio: 0.02}
+  - {inner: full_L_left_outer, outer: full_L_panel, margin_px: 8}
+  - {inner: full_L_right_outer, outer: full_L_panel, margin_px: 8}
+  - {inner: full_R_left_inner, outer: full_R_domain, margin_ratio: 0.02}
+  - {inner: full_R_right_inner, outer: full_R_domain, margin_ratio: 0.02}
+  - {inner: full_R_left_outer, outer: full_R_panel, margin_px: 8}
+  - {inner: full_R_right_outer, outer: full_R_panel, margin_px: 8}
+  - {inner: nogain_L_left_inner, outer: nogain_L_domain, margin_ratio: 0.02}
+  - {inner: nogain_L_right_inner, outer: nogain_L_domain, margin_ratio: 0.02}
+  - {inner: nogain_L_left_outer, outer: nogain_L_panel, margin_px: 8}
+  - {inner: nogain_L_right_outer, outer: nogain_L_panel, margin_px: 8}
+  - {inner: nogain_R_left_inner, outer: nogain_R_domain, margin_ratio: 0.02}
+  - {inner: nogain_R_right_inner, outer: nogain_R_domain, margin_ratio: 0.02}
+  - {inner: nogain_R_left_outer, outer: nogain_R_panel, margin_px: 8}
+  - {inner: nogain_R_right_outer, outer: nogain_R_panel, margin_px: 8}
+  - {inner: nostruct_L_left_inner, outer: nostruct_L_domain, margin_ratio: 0.02}
+  - {inner: nostruct_L_right_inner, outer: nostruct_L_domain, margin_ratio: 0.02}
+  - {inner: nostruct_L_left_outer, outer: nostruct_L_panel, margin_px: 8}
+  - {inner: nostruct_L_right_outer, outer: nostruct_L_panel, margin_px: 8}
+  - {inner: nostruct_R_left_inner, outer: nostruct_R_domain, margin_ratio: 0.02}
+  - {inner: nostruct_R_right_inner, outer: nostruct_R_domain, margin_ratio: 0.02}
+  - {inner: nostruct_R_left_outer, outer: nostruct_R_panel, margin_px: 8}
+  - {inner: nostruct_R_right_outer, outer: nostruct_R_panel, margin_px: 8}
+sizes:
+  - {outer: full_L_left_outer, inner: full_L_left_inner, min_ratio: 1.1}
+  - {outer: full_L_right_outer, inner: full_L_right_inner, min_ratio: 1.1}
+  - {outer: full_R_left_outer, inner: full_R_left_inner, min_ratio: 1.1}
+  - {outer: full_R_right_outer, inner: full_R_right_inner, min_ratio: 1.1}
+  - {outer: nogain_L_left_outer, inner: nogain_L_left_inner, min_ratio: 1.1}
+  - {outer: nogain_L_right_outer, inner: nogain_L_right_inner, min_ratio: 1.1}
+  - {outer: nogain_R_left_outer, inner: nogain_R_left_inner, min_ratio: 1.1}
+  - {outer: nogain_R_right_outer, inner: nogain_R_right_inner, min_ratio: 1.1}
+  - {outer: nostruct_L_left_outer, inner: nostruct_L_left_inner, min_ratio: 1.1}
+  - {outer: nostruct_L_right_outer, inner: nostruct_L_right_inner, min_ratio: 1.1}
+  - {outer: nostruct_R_left_outer, inner: nostruct_R_left_inner, min_ratio: 1.1}
+  - {outer: nostruct_R_right_outer, inner: nostruct_R_right_inner, min_ratio: 1.1}
+connectors:
+  - {source: full_L_left_inner, target: full_L_left_outer, tolerance_ratio: 0.05}
+  - {source: full_L_right_inner, target: full_L_right_outer, tolerance_ratio: 0.05}
+  - {source: full_R_left_inner, target: full_R_left_outer, tolerance_ratio: 0.05}
+  - {source: full_R_right_inner, target: full_R_right_outer, tolerance_ratio: 0.05}
+  - {source: nogain_L_left_inner, target: nogain_L_left_outer, tolerance_ratio: 0.05}
+  - {source: nogain_L_right_inner, target: nogain_L_right_outer, tolerance_ratio: 0.05}
+  - {source: nogain_R_left_inner, target: nogain_R_left_outer, tolerance_ratio: 0.05}
+  - {source: nogain_R_right_inner, target: nogain_R_right_outer, tolerance_ratio: 0.05}
+  - {source: nostruct_L_left_inner, target: nostruct_L_left_outer, tolerance_ratio: 0.05}
+  - {source: nostruct_L_right_inner, target: nostruct_L_right_outer, tolerance_ratio: 0.05}
+  - {source: nostruct_R_left_inner, target: nostruct_R_left_outer, tolerance_ratio: 0.05}
+  - {source: nostruct_R_right_inner, target: nostruct_R_right_outer, tolerance_ratio: 0.05}

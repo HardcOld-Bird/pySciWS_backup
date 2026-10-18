@@ -1,0 +1,83 @@
+{
+  "plan_id": "rework-tb-20261017-211704-2-2",
+  "created": "2026-10-17T21:17:26+08:00",
+  "goal": "返工：tb-20261017-211704-2-2",
+  "steps": [
+    {
+      "id": "A.a1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-211704-2-2.a1-成因分析.md"
+    },
+    {
+      "id": "A.a2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-211704-2-2.a2-解决方案.md"
+    },
+    {
+      "id": "A.a3",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-211704-2-2-jury.md"
+    },
+    {
+      "id": "A.a4",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-211704-2-2.a4-拆解.md"
+    },
+    {
+      "id": "A.a5",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261017-215338-rework-tb-20261017-211704-2-2-A.a5",
+      "task_file": "data/taskbooks/tb-20261017-211704-2-2.a5-改进实施.md",
+      "session_id": "28965c9d-6fdf-48f4-bcba-23757e8e4a63",
+      "kind": "result"
+    },
+    {
+      "id": "B.b1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-211704-2-2.b1-重拆解.md"
+    },
+    {
+      "id": "B.b2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "writing-20261017-220623-rework-tb-20261017-211704-2-2-B.b2",
+      "task_file": "data/taskbooks/tb-20261017-211704-2-2.b2-返工生产.md",
+      "session_id": "46cd3cd2-addb-472c-b5c1-2ea4ef3c715d",
+      "kind": "result"
+    },
+    {
+      "id": "B.b_last",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-211704-2-2.blast-报告组装.md"
+    },
+    {
+      "id": "L.l1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-211704-2-2.l1-摩擦反思.md"
+    },
+    {
+      "id": "L.l2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-211704-2-2.l2-拆解.md"
+    },
+    {
+      "id": "L.l3",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261017-221728-rework-tb-20261017-211704-2-2-L.l3",
+      "task_file": "data/taskbooks/tb-20261017-211704-2-2.l3-改进实施.md",
+      "session_id": "126603ac-bcf9-4f4a-8036-acc09211503a",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-17T22:37:04+08:00"
+}

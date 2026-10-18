@@ -40,8 +40,13 @@ def test_rework_history_is_digest_plus_path(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         {
-            "cur": {"rework_round": 2, "rework_of": "prev", "title": "本轮"},
-            "prev": {"title": "前轮", "rework_of": ""},
+            "cur": {
+                "id": "cur",
+                "rework_round": 2,
+                "rework_of": "prev",
+                "title": "本轮",
+            },
+            "prev": {"id": "prev", "title": "前轮", "rework_of": ""},
         },
         {"prev": rep},
     )
@@ -68,8 +73,8 @@ def test_missing_report_falls_back_to_path_hint(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         {
-            "cur": {"rework_round": 2, "rework_of": "prev"},
-            "prev": {"title": "前轮", "rework_of": ""},
+            "cur": {"id": "cur", "rework_round": 2, "rework_of": "prev"},
+            "prev": {"id": "prev", "title": "前轮", "rework_of": ""},
         },
         {},
         bodies={"prev": "# 前轮任务书\n\n## 任务概述\n\n- 兜底正文摘要\n"},

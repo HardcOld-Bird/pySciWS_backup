@@ -278,5 +278,65 @@ def test_card_shows_rework_mode_and_round(rface):
         ],
     )
     out = "\n".join(nextroute.next_lines())
-    assert "模式=完整／第 2 轮返工" in out
+    assert "模式=改进：基础设施+监察／第 2 轮返工" in out
     assert "位置：plan p-rw @ A 综合项目改进 > a1 成因分析报告" in out
+
+
+# ===========================================================================
+#  ⑤ serial 门闸 + 要求与历史总览附卡（用户 2026-10-17）
+# ===========================================================================
+def _serial(tmp_path, monkeypatch, mode: str = "serial"):
+    from pysci.skills.orchestration.tools import settings
+
+    path = tmp_path / "pysci_settings.toml"
+    path.write_text(f'[taskbooks]\nexecution_mode = "{mode}"\n', encoding="utf-8")
+    monkeypatch.setattr(settings, "SETTINGS_PATH", path)
+
+
+def test_serial_hides_queued_taskbook_cards(rface, tmp_path, monkeypatch):
+    """serial：非队首大任务的卡片（plan 面+待办卡）一律不推；队列状态块随卡播报。"""
+    _serial(tmp_path, monkeypatch)
+    head = _mk_taskbook("甲")
+    queued = _mk_taskbook("乙")
+    _mk_plan(rface, "p-b", tb_id=queued)
+    acts = nextroute.collect_actions()
+    assert any(a["tb_id"] == head for a in acts), "队首待办照常推"
+    assert all(a["tb_id"] != queued for a in acts), "排队件不推待办"
+    out = "\n".join(nextroute.next_lines())
+    assert "串行执行模式：队首" in out and f"排队 1 件：{queued}" in out
+    _serial(tmp_path, monkeypatch, mode="parallel")
+    assert any(a["tb_id"] == queued for a in nextroute.collect_actions()), (
+        "热切换即生效"
+    )
+
+
+def test_serial_keeps_user_review_cards(rface, tmp_path, monkeypatch):
+    """delivered「用户验收」是用户侧动作，不受 serial 门闸约束。"""
+    _serial(tmp_path, monkeypatch)
+    _mk_taskbook("甲")
+    done = _mk_taskbook("乙")
+    taskbooks.transition(done, "active")
+    taskbooks.transition(done, "delivered")
+    acts = nextroute.collect_actions()
+    assert any(a["tb_id"] == done and a["category"] == "review" for a in acts)
+
+
+def test_card_attaches_requirements_digest_only_with_history(rface):
+    root = _mk_taskbook("甲")
+    taskbooks.create_rework(root, improve={}, note="这版不行")
+    out = "\n".join(nextroute.next_lines())
+    assert "要求与历史总览（自动附送）" in out and "这版不行" in out
+
+    card = "\n".join(
+        nextroute.render_card(
+            {"tb_id": _mk_taskbook("丙"), "tb_title": "丙", "category": "dispatch"}
+        )
+    )
+    assert "要求与历史总览" not in card, "无历史任务书不附总览块（卡片保持紧凑）"
+
+
+def test_intro_skips_rework_metadata_prefix(rface):
+    """卡简介回归用户内容——旧前缀「（返工第 n 轮…）」不再占位。"""
+    root = taskbooks.create("甲", "真正的要求内容")["id"]
+    rw = taskbooks.create_rework(root, improve={}, note="不行")["id"]
+    assert nextroute._intro(rw) == "真正的要求内容"

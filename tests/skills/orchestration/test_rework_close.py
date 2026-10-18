@@ -217,7 +217,7 @@ def test_rework_card_content(cface, capsys):
 
     card = "\n".join(taskbooks.rework_card(tb2))
     assert "轮次：第 1 轮返工" in card
-    assert "模式：no_inspector" in card and "优先级：high" in card
+    assert "改进：基础设施" in card and "优先级：high" in card
     assert "各轮裁决书摘要" in card and "裁决=A" in card
     assert "改进清单" in card and "superstep 进度树" in card
     assert "A [serial]" in card and "a1 (self=done)" in card

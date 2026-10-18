@@ -21,22 +21,21 @@ CATEGORY_LABEL: dict[str, str] = {
 }
 #: 优先级权重（越小越先）。
 PRIORITY_ORDER: dict[str, int] = {"high": 0, "normal": 1, "low": 2}
-#: 返工模式 → 中文标签（卡片展示）。
-MODE_LABEL: dict[str, str] = {
-    "full": "完整",
-    "no_inspector": "无监察改进",
-    "rework_only": "仅返工",
-}
 
 
 def _intro(tb_id: str) -> str:
-    """任务书一行简介（正文首个非空非标题行，截 60 字）。"""
+    """任务书一行简介（正文首个**用户内容**行，截 60 字）。
+
+    跳过元数据前缀「（返工第 n 轮…）」与标题行——旧卡简介恰被前缀占位，用户要求反而
+    不上卡（2026-10-17 实锤的淹没源之一）。
+    """
     from . import taskbooks as _tb
 
     for line in (_tb.read_body(tb_id) or "").splitlines():
         s = line.strip()
-        if s and not s.startswith("#"):
-            return s[:60]
+        if not s or s.startswith("#") or s.startswith("（返工第"):
+            continue
+        return s[:60]
     return ""
 
 
@@ -84,18 +83,39 @@ def _plan_progress(plan: dict, state: dict) -> dict[str, int]:
 
 
 def _mode_tr(plan: dict, tb: dict) -> str:
-    """模式标签：返工 → 中文三档 + 第 N 轮；非返工 →「单任务」。"""
-    mode = str(plan.get("rework_mode") or tb.get("mode") or "")
-    rnd = int(plan.get("rework_round") or tb.get("rework_round") or 1)
-    if mode:
-        return f"{MODE_LABEL.get(mode, mode)}／第 {rnd} 轮返工"
-    return "单任务"
+    """改进项标签（2026-10-17 三标志派生）：「改进：基础设施+监察／第 N 轮返工」；
+    非返工 →「单任务」。"""
+    from . import taskbooks as _tb
+
+    rnd = int(plan.get("rework_round") or tb.get("rework_round") or 0)
+    is_rework = bool(
+        tb.get("rework_of") or plan.get("template") == "rework" or rnd >= 1
+    )
+    if not is_rework:
+        return "单任务"
+    src: dict[str, Any] = {
+        "improve": plan.get("improve"),
+        "mode": plan.get("rework_mode") or tb.get("mode") or "",
+    }
+    if src["improve"] is None and not src["mode"]:
+        src = tb
+    return f"{_tb.improve_label(src)}／第 {max(rnd, 1)} 轮返工"
 
 
 def collect_actions() -> list[dict[str, Any]]:
-    """聚合全部活动 plan 的就绪动作 + 任务书待办（§3.2）。"""
+    """聚合全部活动 plan 的就绪动作 + 任务书待办（§3.2）。
+
+    **serial 门闸**（用户 2026-10-17：组长侧零规程零决策）：``[taskbooks]
+    execution_mode="serial"`` 时，非队首大任务（未解锁任务书）的待办卡一律不推；
+    无任务书的 adhoc plan 与 delivered「用户验收」卡不受门闸约束。
+    """
     from . import plans as _plans
     from . import taskbooks as _tb
+
+    serial = _tb.execution_mode() == "serial"
+
+    def _blocked(tb_id: str) -> bool:
+        return serial and bool(tb_id) and not _tb.is_unlocked(tb_id)
 
     actions: list[dict[str, Any]] = []
     linked_tb: set[str] = set()  # 已被 plan 关联（plan.taskbook）的任务书：不重复进待办
@@ -107,6 +127,8 @@ def collect_actions() -> list[dict[str, Any]]:
         tb_id, tb = _plan_taskbook(pid, plan)
         if tb_id:
             linked_tb.add(tb_id)
+        if _blocked(tb_id):
+            continue  # serial：排队件不推待办（队列状态块另行随卡播报）
         prio = str(tb.get("priority") or "normal")
         prog = _plan_progress(plan, state)
         panes = _plans._worklist_panes(plan, state)
@@ -170,6 +192,8 @@ def collect_actions() -> list[dict[str, Any]]:
                 }
             )
         elif status == "new":
+            if _blocked(tb_id):
+                continue  # serial：排队件不推待办
             if st.get(
                 "rework_of"
             ):  # 返工件：下一步是生成返工骨架，不是 plan new（引导缺口实锤）
@@ -226,21 +250,51 @@ def render_card(a: dict[str, Any]) -> list[str]:
             f"（叶子进度 {prog.get('done')}/{prog.get('total')}，"
             f"在途 {prog.get('inflight')}，待验收 {prog.get('need_leader')}）"
         )
-    return [
+    out = [
         head,
         f"│ 简介：{a.get('tb_intro') or '（无）'}",
         f"│ 位置：{loc}",
         f"│ 动作：{a.get('action')}",
         f"└─ 命令模板：{a.get('command')}",
     ]
+    # 要求与历史总览**全量附卡**（用户 2026-10-17：决策面一次性看到所有要求与批语）。
+    raw_tb = str(a.get("tb_id") or "")
+    if raw_tb:
+        from . import taskbooks as _tb
+
+        if _tb.digest_has_history(raw_tb):
+            out += ["", *_tb.requirements_digest(raw_tb).splitlines()]
+    return out
+
+
+def queue_status_lines() -> list[str]:
+    """serial 队列状态块（随路由卡推送，四个推送点自动携带）；parallel/队列≤1 → 空表。"""
+    from . import taskbooks as _tb
+
+    if _tb.execution_mode() != "serial":
+        return []
+    rows = _tb.queue_rows()
+    if len(rows) <= 1:
+        return []
+    head = rows[0]
+    queued = "、".join(str(r.get("id")) for r in rows[1:])
+    return [
+        f"串行执行模式：队首 {head.get('id')}（{head.get('status')}）；"
+        f"排队 {len(rows) - 1} 件：{queued}"
+        "（更早任务书 delivered/failed/accepted/rejected 即解锁）"
+    ]
 
 
 def next_lines(limit: int = 5) -> list[str]:
-    """``orch next`` 全文：置顶一张任务卡片 + 其余就绪项简表（§3.2）。"""
+    """``orch next`` 全文：置顶一张任务卡片 + 其余就绪项简表（§3.2）+ serial 队列状态块。"""
     actions = sort_actions(collect_actions())
     head = f"== orch next：跨任务就绪路由（{len(actions)} 项；PSEP_3 §3.2）=="
     if not actions:
-        return [head, "（无就绪动作：全部 plan 空闲、任务书待办为空）"]
+        return [
+            head,
+            "（无就绪动作：全部 plan 空闲、任务书待办为空）",
+            *queue_status_lines(),
+        ]
     out = [head, *render_card(actions[0])]
     rest = actions[1:]
     if rest:
@@ -256,7 +310,7 @@ def next_lines(limit: int = 5) -> list[str]:
             out.append(
                 f"  …（还有 {len(rest) - len(shown)} 项；orch next --limit N 看更多）"
             )
-    return out
+    return out + queue_status_lines()
 
 
 def card_lines(plan_id: str | None = None, *, limit: int = 3) -> list[str]:
@@ -273,7 +327,7 @@ def card_lines(plan_id: str | None = None, *, limit: int = 3) -> list[str]:
     if plan_id is None and len(actions) > 1:
         out.append(f"  （其余 {len(actions) - 1} 项见 orch next）")
     del limit
-    return out
+    return out + queue_status_lines()
 
 
 def cmd_next(args: Any) -> int:

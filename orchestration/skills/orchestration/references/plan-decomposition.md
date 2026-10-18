@@ -93,7 +93,7 @@
 - [ ] 每个叶子 = 一份可自包含写成的任务书、一次可验收交付；
 - [ ] 依赖级（完成级/派发级）判对，串行/并行组选对；
 - [ ] 并行分支**产物无交集**（目录不重叠、不改同一文件、不同成员）；
-- [ ] 宽度 ≤3、深度 ≤3（否则回看是否过碎）；
+- [ ] 宽度 ≤3、深度 ≤3；
 - [ ] 含 superstep 或叶子 ≥5 时，plan YAML 补 `read: plan-decomposition.md` 标记行
       （`plan new`/`plan amend` 会 lint 提示）。
 
@@ -115,8 +115,8 @@
 | `kind` | `dispatch`（默认）\| `self` | `self`=组长自办（不入队列，须 `--evidence` 收尾） |
 | `dirs` | `[a, b]` 或 `"a,b"` | 叶子白名单；并行组互斥判据 |
 | `effort` | `auto`\|`none`\|`low`\|`medium`\|`high` | 环节推理强度；CLI `--effort` 优先于它 |
-| `role` | `cause`\|`solution`\|`review`\|`improvement_plan`\|`rework_plan`\|`final_report` | `kind: self` 的 evidence **缺省**特征段（真源 `plans.ROLE_EVIDENCE_SECTIONS`） |
+| `role` | `cause`\|`solution`\|`review`\|`improvement_plan`\|`rework_plan`\|`final_report`\|`leader_reflection`\|`leader_improvement_plan` | `kind: self` 的 evidence 缺省特征段（真源 `plans.ROLE_EVIDENCE_SECTIONS`；L：leader-improvement.md） |
 | `evidence_sections` | `[标题段, …]` | 显式声明 evidence 必含的 Markdown 标题段（优先于 `role` 缺省） |
 | `gate_jury` | 案卷 id | 送审 gate：本叶派发前须案卷 `verdict=A` |
 | `review` | `true` | 重炮审查（见 SKILL.md 派发要领） |
-| `expand_history` | `true` | 返工 `a1`（round≥2）：[NEXT] 全文展开历次改进报告 |
+| `expand_history` | `true` | 返工 a1（round≥2）：展示要求与历史总览 |

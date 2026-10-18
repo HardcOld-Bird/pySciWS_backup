@@ -295,7 +295,7 @@ def test_detail_shows_rejection_history(face):
     tid = taskbooks.create("被驳回过的大任务", "正文")["id"]
     taskbooks.transition(tid, "active")
     taskbooks.transition(tid, "delivered")
-    taskbooks.reject(tid, "拆得不对，重来")
+    taskbooks.create_rework(tid, improve={}, note="拆得不对，重来")
 
     async def _go():
         app = tui.PysciTUI()

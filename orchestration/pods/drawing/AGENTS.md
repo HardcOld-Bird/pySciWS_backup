@@ -81,14 +81,14 @@
 - 一条浅灰**水平虚线跨越分界并向两侧各伸出火箭外一小段**是强调比例的免费手法，纯几何、不引数字，
   实测稳定复现。标题左上 + 浅灰小注左下 = 与页4/页5 成套的固定版式。
 
-### 研究线 1_gain_ep / beam_scatter 综合图（任务 tb-3-simfig）
+### 研究线 1_gain_ep / beam_scatter（第 3 轮定版，2026-10-18）
 
-- 目标排版：**3 列(case) × 3 行**（行1 = 同坐标系两色雷达；行2/3 = 两个上下堆叠的
-  **半圆**声场图，平直直径边）+ 右侧**只跨行 2–3** 的共享 colorbar。旧图是 3 行×4 列，勿照抄。
-- 气质配方：APS/Nature、hairline、白底、色觉安全；场图对称 `RdBu_r`，曲线 Okabe–Ito
-  `#0072B2`/`#D55E00`。完整可落地规格见
-  `data/research/1_gain_ep/article/artwork/设计说明.md`。
-- 命中目标排版的 prompt 全文存于 `runs/beam_layout_ref_2.json`/`_3.json`（原始）与
-  `_2_1.json`/`_3_1.json`（补单，已实测可复现几何正确排版）。
-- 最终交付：`artwork/beam_layout_ref_{2,3}.png` **几何正确**（首选）；`_1.png` 有
-  「整圆场图 + colorbar 整图高」两处偏差，仅取气质。符合性表见设计说明 §0。
+- 本轮定版：**3 列(case) × 3 行** = 场图 L/R **两行在上**、雷达**第 3 行**；右侧共享
+  colorbar **只跨场图两行**（旧 `设计说明.md` 配色/线宽/字号仍有效，行序作废）。
+  规格：`artwork/beam_scatter_审美参考.设计说明.md`。
+- 交付：`artwork/beam_scatter_{整体版面,局部细节}_审美参考.png`；prompt `bench/p8_*`；
+  快照 `runs/beam_scatter_r3_*`；gallery `beam_scatter_r3_layout_a`/`_detail_c`。
+- 上一轮 `beam_layout_ref_{2,3}.png` 几何仍可参考（雷达在上版式）。
+- **半圆 prompt 铁律**：面板「宽>高、dome、底边一条直线、线以下无内容」；写「不要整圆」
+  仍可能画整圆，**横画幅比竖画幅稳**。Seedream 5.0-pro **会改写请求 width/height**
+  （2688×1792→2816×1584；2048×1536→2816×1584；1536×2048→1280×3200）→ 比例参数不可靠。

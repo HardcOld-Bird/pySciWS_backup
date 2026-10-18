@@ -8,8 +8,9 @@
 
 id 形如 ``tb-YYYYMMDD-HHMMSS-<slug>``；写 ``data/`` 前过 :func:`pysci.paths.assert_within_data`。
 
-状态机：``new → planning → active → delivered → accepted | rejected``；**rejected 带用户批语
-回 new**（返工重拆解，批语持久留存于 ``state.json`` 的 ``rejections``）。
+状态机：``new → planning → active → delivered → accepted | rejected``；``rejected``＝驳回留档
+终态（返工走 :func:`create_rework` **另起新任务书**，批语持久留存于 ``state.json`` 的
+``rejections``，带 ``round`` 轮次归属）。
 
 本模块是 TUI 与 orch 共用的**数据层**（§2.5：读数进纯函数层，界面只调用）。
 """
@@ -56,9 +57,7 @@ ALLOWED: dict[str, set[str]] = {
     STATUS_ACTIVE: {STATUS_DELIVERED, STATUS_REJECTED, STATUS_NEW, STATUS_FAILED},
     STATUS_DELIVERED: {STATUS_ACCEPTED, STATUS_REJECTED},
     STATUS_ACCEPTED: set(),
-    STATUS_REJECTED: {
-        STATUS_NEW
-    },  # 返工重拆解（旧语义）；返工流改走 create_rework 时留档终态
+    STATUS_REJECTED: set(),  # 驳回留档终态（返工另起新任务书 create_rework，不回 new）
     STATUS_FAILED: set(),  # 失败终态（待用户补充指引后另起新任务书）
 }
 
@@ -75,11 +74,75 @@ PRIORITIES: tuple[str, ...] = (PRIORITY_HIGH, PRIORITY_NORMAL, PRIORITY_LOW)
 DEFAULT_PRIORITY = PRIORITY_NORMAL
 
 #: 返工三档模式（PSEP_3 §4.1）：完整 / 无监察改进 / 仅返工。
+#: **兼容字段**——真源是 :data:`IMPROVE_KEYS` 三标志（用户 2026-10-17 三复选改造），
+#: 本串只作旧读取面的派生显示（:func:`legacy_mode_of` / :func:`improve_flags`）。
 MODE_FULL = "full"
 MODE_NO_INSPECTOR = "no_inspector"
 MODE_REWORK_ONLY = "rework_only"
 MODES: tuple[str, ...] = (MODE_FULL, MODE_NO_INSPECTOR, MODE_REWORK_ONLY)
 DEFAULT_MODE = MODE_FULL
+
+#: 改进项三标志（用户 2026-10-17 裁决：reject 三选一改三复选，8 种组合皆合法）：
+#: ``infra``＝A 综合项目改进（含基础设施改进实施）、``leader``＝L 组长改进环节、
+#: ``inspector``＝C 监察改进；返工执行 B 恒在。真源字段 ``state["improve"]``。
+IMPROVE_INFRA = "infra"
+IMPROVE_LEADER = "leader"
+IMPROVE_INSPECTOR = "inspector"
+IMPROVE_KEYS: tuple[str, ...] = (IMPROVE_INFRA, IMPROVE_LEADER, IMPROVE_INSPECTOR)
+
+
+def improve_flags(state: dict[str, Any] | None) -> dict[str, bool]:
+    """改进项三标志读数：真源 ``improve`` 优先；缺席按旧 ``mode`` 三档映射回落。
+
+    legacy 映射（三复选改造前）：``full``={infra,inspector}、``no_inspector``={infra}、
+    ``rework_only``={}（空）；``leader`` 恒 False——旧档没有组长改进。
+    """
+    out = {k: False for k in IMPROVE_KEYS}
+    if not isinstance(state, dict):
+        return out
+    raw = state.get("improve")
+    if isinstance(raw, dict):
+        for k in IMPROVE_KEYS:
+            out[k] = bool(raw.get(k))
+        return out
+    mode = str(state.get("mode") or "")
+    if mode == MODE_FULL:
+        out[IMPROVE_INFRA] = True
+        out[IMPROVE_INSPECTOR] = True
+    elif mode == MODE_NO_INSPECTOR:
+        out[IMPROVE_INFRA] = True
+    return out
+
+
+#: 改进项 → 中文标签（卡片/详情/报告共用）。
+IMPROVE_LABELS: dict[str, str] = {
+    IMPROVE_INFRA: "基础设施",
+    IMPROVE_LEADER: "组长",
+    IMPROVE_INSPECTOR: "监察",
+}
+
+
+def improve_label(state: dict[str, Any] | None) -> str:
+    """改进项中文标签：「改进：基础设施+监察」；全无 → 「改进：无」（替代旧三档名）。"""
+    flags = improve_flags(state)
+    names = [IMPROVE_LABELS[k] for k in IMPROVE_KEYS if flags[k]]
+    return "改进：" + ("+".join(names) if names else "无")
+
+
+def legacy_mode_of(flags: dict[str, bool]) -> str:
+    """三标志 → 旧三档**派生**（兼容字段 ``mode`` 的写侧）。
+
+    ``leader`` 不参与派生（旧三档没有组长改进的表达位）；仅 inspector 无 infra 的组合
+    无对应旧档，派生为 ``rework_only``——真源仍是 ``improve``，此处只保旧显示面不裂。
+    """
+    infra = bool(flags.get(IMPROVE_INFRA))
+    inspector = bool(flags.get(IMPROVE_INSPECTOR))
+    if infra and inspector:
+        return MODE_FULL
+    if infra:
+        return MODE_NO_INSPECTOR
+    return MODE_REWORK_ONLY
+
 
 #: 列表三段（§3.4 / §2.4 #1）。
 OPEN_STATUSES = (STATUS_NEW, STATUS_PLANNING, STATUS_ACTIVE, STATUS_FAILED)
@@ -163,6 +226,7 @@ def create(
     tb_id: str | None = None,
     now: datetime | None = None,
     priority: str = DEFAULT_PRIORITY,
+    improve: dict[str, bool] | None = None,
     mode: str = "",
     rework_of: str = "",
     rework_round: int = 0,
@@ -170,13 +234,35 @@ def create(
     """落盘一件任务书（``.taskbook.md`` + ``.state.json``），返回其记录。
 
     ``source``：``mirror-tui``（用户 TUI 投递）或 ``llm``（组长程序化投递）。
-    字段面（PSEP_3 §3.1/§4.1）：``priority``（默认 normal）／``mode``（返工三档；非返工留空）／
+    字段面（PSEP_3 §3.1/§4.1 + 用户 2026-10-17 三标志改造）：``priority``（默认 normal）／
+    ``improve``（改进项三标志**真源**）／``mode``（旧三档，仅兼容入参与派生显示）／
     ``rework_of``（原 tb-id）／``rework_round``（轮次）。
+
+    ``improve`` 与 ``mode`` **互斥**（都给 → ValueError）：``improve`` 是真源，``mode``
+    只为旧调用面留门（按 :func:`improve_flags` 的 legacy 映射折算）。非返工件 ``mode``
+    恒留空（「仅返工」等旧档名挂到新任务书上是误导显示）。
+
+    Raises:
+        ValueError: 优先级/模式/标志键非法，或 ``improve`` 与 ``mode`` 同时给出。
     """
     if priority not in PRIORITIES:
         raise ValueError(f"未知优先级：{priority}（合法：{'、'.join(PRIORITIES)}）")
-    if mode and mode not in MODES:
-        raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(MODES)}）")
+    if improve is not None and mode:
+        raise ValueError("improve 与 mode 互斥（improve 是真源，mode 仅为旧接口兼容）")
+    if improve is not None:
+        unknown = set(improve) - set(IMPROVE_KEYS)
+        if unknown:
+            raise ValueError(
+                f"未知改进标志：{'、'.join(sorted(unknown))}（合法：{'、'.join(IMPROVE_KEYS)}）"
+            )
+        flags = {k: bool(improve.get(k)) for k in IMPROVE_KEYS}
+    elif mode:
+        if mode not in MODES:
+            raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(MODES)}）")
+        flags = improve_flags({"mode": mode})
+    else:
+        flags = {k: False for k in IMPROVE_KEYS}
+    mode_out = legacy_mode_of(flags) if rework_of else ""
     ts = (now or datetime.now().astimezone()).isoformat(timespec="seconds")
     ident = tb_id or _unique_id(new_id(title, now=now))
     state: dict[str, Any] = {
@@ -186,7 +272,8 @@ def create(
         "status": STATUS_NEW,
         "source": source,
         "priority": priority,
-        "mode": mode,
+        "improve": flags,
+        "mode": mode_out,
         "rework_of": rework_of,
         "rework_round": int(rework_round),
         "plan_id": "",
@@ -202,8 +289,10 @@ def create(
         f"source: {source}",
         f"priority: {priority}",
     ]
-    if mode:
-        front.append(f"mode: {mode}")
+    if any(flags.values()):
+        front.append(f"improve: {','.join(k for k in IMPROVE_KEYS if flags[k])}")
+    if mode_out:
+        front.append(f"mode: {mode_out}")
     if rework_of:
         front.append(f"rework_of: {rework_of}")
         front.append(f"rework_round: {int(rework_round)}")
@@ -221,9 +310,16 @@ def create(
             f"返工任务书（第 {int(rework_round)} 轮）已生成：{title}；"
             f"原任务书 {rework_of} 已驳回留档"
         )
+        # 唤醒详情**全量附总览**（用户 2026-10-17：从最初要求到历轮批语一次性可见）。
+        try:
+            digest = requirements_digest(ident)
+        except Exception:  # noqa: BLE001 - 事件面绝不阻塞落盘（§0.6）
+            digest = ""
+        if digest:
+            detail += "\n\n" + digest
         action = (
-            f"orch plan rework {ident} --mode {mode or MODE_FULL} 生成返工骨架"
-            f"（三档模板 {'/'.join(MODES)}）→ 送审 gate 过后 plan advance 推进"
+            f"orch plan rework {ident} 生成返工骨架（改进项按任务书标志）"
+            "→ 送审 gate 过后 plan advance 推进"
         )
     else:
         detail = f"用户投递了新任务书：{title}（source={source}）"
@@ -231,6 +327,17 @@ def create(
             "orch taskbooks list 查看 → taskbooks link <id> --plan <pid> 拆解推进"
             "（用户 accept/reject 只经 TUI）"
         )
+    # serial 排队语义（用户 2026-10-17 裁决）：非队首不推待办——组长侧零规程零决策，
+    # 「是否把下一个大任务的待办推到面前」由 orch 内部编排（nextroute 过滤 + 本文案）。
+    if execution_mode() == "serial":
+        rows = queue_rows()
+        pos = next((i for i, r in enumerate(rows) if str(r.get("id")) == ident), None)
+        if pos is not None and pos > 0:
+            action = (
+                f'已排队第 {pos + 1} 位（[taskbooks] execution_mode="serial"）：'
+                f"前面还有 {pos} 件未交付；无需行动，"
+                "解锁后路由卡片会自动推送拆解待办"
+            )
     try:
         events.emit(
             events.TASKBOOK_NEW,
@@ -300,6 +407,17 @@ def list_all() -> list[dict[str, Any]]:
     return out
 
 
+def find_by_plan(plan_id: str) -> dict[str, Any] | None:
+    """plan → 归属任务书状态（``state.plan_id`` 正查）；无归属（adhoc plan）→ ``None``。"""
+    pid = str(plan_id or "")
+    if not pid:
+        return None
+    for st in list_all():
+        if str(st.get("plan_id") or "") == pid:
+            return st
+    return None
+
+
 def sections() -> dict[str, list[dict[str, Any]]]:
     """列表三段（§3.4 / §2.4 #1）：现有大任务 / 待批复 / 历史（带批语）。"""
     items = list_all()
@@ -312,6 +430,91 @@ def sections() -> dict[str, list[dict[str, Any]]]:
             if d.get("status") in HISTORY_STATUSES or d.get("rejections")
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# 串行执行模式（用户 2026-10-17 裁决）：队列谓词 + 硬闸文案
+# ---------------------------------------------------------------------------
+#: 「在途」态：任务书离开这些态即视为**整体完成并交付**（delivered/failed/accepted/
+#: rejected 均解锁下一件——用户批复与下一任务并行）。
+SERIAL_BLOCKING: frozenset[str] = frozenset(
+    {STATUS_NEW, STATUS_PLANNING, STATUS_ACTIVE}
+)
+
+
+def execution_mode() -> str:
+    """当前大任务执行模式（``parallel``/``serial``）。
+
+    每次现读 settings（无缓存）＝**热切换**：手改 toml 保存即生效于组长下一回合首个
+    命令；谓词无状态，不存在在途锁定。fail-open ``parallel``（配置写坏不锁队列）。
+    """
+    from . import settings as _settings
+
+    mode, _warnings = _settings.taskbook_execution_mode()
+    return mode
+
+
+def queue_rows() -> list[dict[str, Any]]:
+    """serial 队列读数：在途（:data:`SERIAL_BLOCKING`）任务书按**产生时序**编号。
+
+    返回 ``list_all()`` 记录的浅拷贝 + ``queue_no``（1=队首）/``queue_total``。
+    返工任务书**不继承家族位置**：``ts`` 是新生时刻，天然落队尾（用户裁决）。
+    """
+    rows = [
+        dict(d) for d in list_all() if str(d.get("status") or "") in SERIAL_BLOCKING
+    ]
+    total = len(rows)
+    for i, row in enumerate(rows):
+        row["queue_no"] = i + 1
+        row["queue_total"] = total
+    return rows
+
+
+def serial_head() -> dict[str, Any] | None:
+    """队首（产生最早的在途任务书）；队列空 → ``None``。"""
+    rows = queue_rows()
+    return rows[0] if rows else None
+
+
+def is_unlocked(tb_id: str) -> bool:
+    """serial 放行判据：**全部更早**（ts,id 升序）任务书 ∉ :data:`SERIAL_BLOCKING`。
+
+    任务书自身已交付/终态 → 恒放行（它不再占队）；不存在的 id → 放行（fail-soft，
+    「不存在」报错交给后续命令自己出）。
+    """
+    target = str(tb_id)
+    for d in list_all():
+        did = str(d.get("id") or "")
+        if did == target:
+            return True
+        if str(d.get("status") or "") in SERIAL_BLOCKING:
+            return False
+    return True
+
+
+def queue_gate(tb_id: str) -> str:
+    """serial 硬闸文案（用户裁决「才允许进行下一个大任务」的机械执行面）。
+
+    Returns:
+        空串＝放行；非空＝完整拒绝文案（调用方原样打印后 rc=2，且不执行任何变更）。
+        ``parallel`` 模式恒放行——闸只在 serial 下存在。
+    """
+    if execution_mode() != "serial":
+        return ""
+    if is_unlocked(tb_id):
+        return ""
+    rows = queue_rows()
+    head = rows[0] if rows else None
+    pos = next((r for r in rows if str(r.get("id")) == str(tb_id)), None)
+    no = pos.get("queue_no") if pos else "?"
+    head_txt = f"{head.get('id')}（status={head.get('status')}）" if head else "（无）"
+    return (
+        f'[!] 串行执行模式（[taskbooks] execution_mode="serial"）：'
+        f"任务书 {tb_id} 暂不可推进（队列第 {no} 位）\n"
+        f"    队首={head_txt}；解锁条件：全部更早任务书离开 new/planning/active\n"
+        "    （到达 delivered/failed/accepted/rejected 即解锁，用户批复与下一任务并行）\n"
+        "    （本命令未执行任何变更）"
+    )
 
 
 def _round_of(state: dict[str, Any]) -> int:
@@ -391,7 +594,8 @@ def transition(
 ) -> dict[str, Any]:
     """受控状态迁移（真源 ``state.json``）；非法目标/非法跃迁 → ``ValueError``。
 
-    ``note`` 追加进 ``rejections``（驳回批语持久留存）；``plan_id`` 非空则一并记链接。
+    ``note`` 追加进 ``rejections``（驳回批语持久留存，带 ``round``＝该批语驱动的返工
+    轮次＝被驳回件自身轮次+1——展示层据此给逐条批语标注轮次归属）；``plan_id`` 非空则一并记链接。
     """
     st = load_state(tb_id)
     if st is None:
@@ -402,7 +606,9 @@ def transition(
     if status != cur and status not in ALLOWED.get(cur, set()):
         raise ValueError(f"非法状态迁移：{cur} → {status}")
     if note:
-        st.setdefault("rejections", []).append({"ts": _now(), "note": note})
+        st.setdefault("rejections", []).append(
+            {"ts": _now(), "note": note, "round": _round_of(st) + 1}
+        )
     if plan_id is not None:
         st["plan_id"] = plan_id
     st["status"] = status
@@ -420,23 +626,25 @@ def transition(
 
 
 def link_plan(tb_id: str, plan_id: str) -> dict[str, Any]:
-    """组长链接 plan → 记 ``plan_id`` 并置 ``planning``（§3.4 最小状态推进）。"""
-    return transition(tb_id, STATUS_PLANNING, plan_id=plan_id)
+    """组长链接 plan → 记 ``plan_id`` 并置 ``planning``（§3.4 最小状态推进）。
+
+    任务书勾了「包含组长改进」（improve.leader）→ **自动追加 L 环节**（用户 2026-10-17：
+    工具组装、组长零手写；与串行无关）。追加失败不阻塞链接（引导面 fail-soft）。
+    """
+    saved = transition(tb_id, STATUS_PLANNING, plan_id=plan_id)
+    if improve_flags(saved).get(IMPROVE_LEADER):
+        try:
+            from . import plans as _plans
+
+            _plans.ensure_leader_step(plan_id)
+        except Exception:  # noqa: BLE001 - 追加面 fail-soft（链接已完成）
+            pass
+    return saved
 
 
 def accept(tb_id: str) -> dict[str, Any]:
     """用户验收（**只经 TUI**，§3.4）：``delivered → accepted``。"""
     return transition(tb_id, STATUS_ACCEPTED)
-
-
-def reject(tb_id: str, note: str) -> dict[str, Any]:
-    """用户驳回（**只经 TUI**）：记批语（持久）→ **回 ``new``** 返工重拆解（§3.4）。
-
-    一步完成「rejected 带用户批语回 new」：先把「被驳回」事实落成 ``rejected``，随即迁回
-    ``new``；批语留在 ``state.json`` 的 ``rejections`` 里（历史段可见）。
-    """
-    transition(tb_id, STATUS_REJECTED, note=note)
-    return transition(tb_id, STATUS_NEW)
 
 
 #: 返工标题后缀（:func:`rework_title` 增补）：重入时先剥旧的再补新的，防逐轮叠加成
@@ -455,44 +663,65 @@ def rework_title(base: str, rnd: int) -> str:
 def create_rework(
     orig_id: str,
     *,
-    mode: str,
+    improve: dict[str, bool] | None = None,
+    mode: str | None = None,
     priority: str = DEFAULT_PRIORITY,
     note: str = "",
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """TUI 驳回交付 → 生成**返工大任务书**（PSEP_3 §4.1）。
+    """TUI 驳回交付 → 生成**返工大任务书**（PSEP_3 §4.1 + 2026-10-17 三标志改造）。
 
     ① 原任务书置 ``rejected`` **留档**（批语入 ``rejections``，终态不再回 ``new``）；
-    ② 新建任务书继承原**名称/简介**，字段 ``rework_of/rework_round(=原轮次+1)/mode/priority``
-    齐全，入大任务待办（``new``＋TASKBOOK-NEW 唤醒）。返回**新**任务书状态。
+    ② 新建任务书继承原**名称/简介**，字段 ``improve``（真源）/``rework_of``/
+    ``rework_round(=原轮次+1)``/``priority`` 齐全，入大任务待办（``new``＋TASKBOOK-NEW
+    唤醒）。返回**新**任务书状态。
+
+    ``improve``（三复选真源）与 ``mode``（旧三档兼容入口，按 :func:`improve_flags`
+    legacy 映射折算）**互斥**；两者都缺 → ``ValueError``（调用面必须显式表态）。
 
     标题**自动增补「（返工第 n 轮）」**（用户 2026-10-15：返工件与原件同名，列表里分不清
     哪件是哪轮）——只在**数据面**改 title，列表/详情/TUI/卡片均直读该字段，不需各视图另写。
 
     Raises:
-        ValueError: 原任务书不存在 / 模式或优先级非法。
+        ValueError: 原任务书不存在 / improve 与 mode 同给或都缺 / 标志或优先级非法。
     """
     orig = load_state(orig_id)
     if orig is None:
         raise ValueError(f"任务书不存在：{orig_id}")
-    if mode not in MODES:
-        raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(MODES)}）")
+    if improve is not None and mode is not None:
+        raise ValueError("improve 与 mode 互斥（improve 是真源，mode 仅为旧接口兼容）")
+    if improve is None and mode is None:
+        raise ValueError("必须给 improve 或 mode（返工改进项须显式表态）")
     if priority not in PRIORITIES:
         raise ValueError(f"未知优先级：{priority}（合法：{'、'.join(PRIORITIES)}）")
     transition(orig_id, STATUS_REJECTED, note=note)  # 原任务书终态留档
+    # 原件已终态 → 报告缺则补建：③历轮收获以各轮报告为食，报告缺位会退化成正文回落。
+    if not report_path(orig_id).exists():
+        try:
+            build_report(orig_id)
+        except Exception:  # noqa: BLE001 - 报告面 fail-soft（驳回主流程已完成）
+            pass
     rnd = int(orig.get("rework_round") or 0) + 1
     title = rework_title(str(orig.get("title") or "返工大任务"), rnd)
-    body = (read_body(orig_id) or "").strip()
-    new_body = f"（返工第 {rnd} 轮，原任务书 {orig_id}；模式 {mode}）\n\n{body}"
-    if note:
-        new_body += f"\n\n## 本轮驳回批语\n{note}"
+    flags = (
+        {k: bool(improve.get(k)) for k in IMPROVE_KEYS}
+        if improve is not None
+        else improve_flags({"mode": mode})
+    )
+    label = "、".join(k for k in IMPROVE_KEYS if flags[k]) or "无"
+    # 正文＝**要求与历史总览**（用户 2026-10-17：从最初要求到历轮批语集中展示）。
+    # 批语不再另段堆叠——它已在总览 ②（带轮次归属）；正文前缀仅一行元数据，不逐代嵌套。
+    new_body = (
+        f"（返工第 {rnd} 轮，原任务书 {orig_id}；改进项 {label}）\n\n"
+        + requirements_digest(orig_id, include_self_harvest=True)
+    )
     return create(
         title,
         new_body,
         source="mirror-tui",
         now=now,
         priority=priority,
-        mode=mode,
+        improve=flags,
         rework_of=orig_id,
         rework_round=rnd,
     )
@@ -536,6 +765,189 @@ def _role_texts(pid: str) -> tuple[dict[str, str], list[tuple[str, str]]]:
             roles[role] = _evidence_text(str(row.get("evidence") or ""))
         leaves.append((leaf.path, str(row.get("status") or "pending")))
     return roles, leaves
+
+
+# ---------------------------------------------------------------------------
+# 要求与历史总览（用户 2026-10-17 裁决：返工上下文「集中展示、相邻、一次性可见」）
+# ---------------------------------------------------------------------------
+#: ③ 历轮收获摘要的关键词段（＝「那一轮做了什么」的留痕位置；改这里＝改摘要取数面）。
+#: 含旧摘要器全键（任务概述/批语/反馈/改进/裁决/结论/总结）+「历轮摘要」（旧键恰好
+#: 漏掉它——那正是批语/改进汇总处，2026-10-17 实锤的淹没源之一）。
+_HARVEST_SECTIONS: tuple[str, ...] = (
+    "任务概述",
+    "批语",
+    "反馈",
+    "历轮摘要",
+    "成因分析",
+    "解决方案",
+    "裁决",
+    "改进",
+    "结论",
+    "总结",
+    "返工产物",
+    "环节完成清单",
+)
+#: 「历轮摘要」段**强制整段纳入**（不按段截断，只受总预算约束）。
+_HARVEST_FULL_SECTIONS: tuple[str, ...] = ("历轮摘要",)
+#: 每段/每轮截断预算（220 字/段的旧预算会把原始要求与批语切掉——用户实锤的淹没源之一）。
+_HARVEST_PER_SECTION: int = 500
+_HARVEST_PER_ROUND: int = 2500
+
+
+def family_chain(tb_id: str) -> list[dict[str, Any]]:
+    """家族链按轮次升序 ``[本体, 返工1, …, 本件]``（沿 ``rework_of`` 回溯到根再正序）。
+
+    防御：已见 id 不再展开（防病态环）；缺件即止（fail-soft，坏链不塌观察面）。
+    """
+    st = load_state(tb_id)
+    if st is None:
+        return []
+    chain = [st]
+    seen = {str(st.get("id") or tb_id)}
+    prev = str(st.get("rework_of") or "")
+    while prev and prev not in seen:
+        pst = load_state(prev)
+        if pst is None:
+            break
+        seen.add(prev)
+        chain.append(pst)
+        prev = str(pst.get("rework_of") or "")
+    chain.reverse()
+    return chain
+
+
+def digest_has_history(tb_id: str) -> bool:
+    """总览是否含历史（家族 >1 件或任一成员带批语）——无历史时展示面可省略总览块。"""
+    chain = family_chain(tb_id)
+    return len(chain) > 1 or any(m.get("rejections") for m in chain)
+
+
+def _split_sections(text: str) -> list[tuple[str, str]]:
+    """按 ``## `` 标题切段 → ``[(标题, 正文)]``；无标题正文归入标题 ``""`` 的段。"""
+    out: list[tuple[str, str]] = []
+    title: str = ""
+    buf: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            out.append((title, "\n".join(buf).strip()))
+            title, buf = line[3:].strip(), []
+        else:
+            buf.append(line)
+    out.append((title, "\n".join(buf).strip()))
+    return out
+
+
+def _harvest_digest(text: str) -> str:
+    """一轮的「收获」摘要：关键词段各截前 N 字（无标题整段兜底），总预算截断。"""
+    if not text.strip():
+        return ""
+    picked: list[str] = []
+    total = 0
+    for title, body in _split_sections(text):
+        if not body:
+            continue
+        if title:
+            if not any(k in title for k in _HARVEST_SECTIONS):
+                continue
+        elif body.lstrip().startswith("#"):
+            continue  # 纯标题行（如报告 H1）不入摘要
+        full = any(k in title for k in _HARVEST_FULL_SECTIONS)
+        label = f"〔{title}〕" if title else ""
+        if full:
+            chunk = label + body
+        else:
+            chunk = label + body[:_HARVEST_PER_SECTION]
+            if len(body) > _HARVEST_PER_SECTION:
+                chunk += "…"
+        picked.append(chunk)
+        total += len(chunk)
+        if total >= _HARVEST_PER_ROUND:
+            break
+    digest = "\n".join(picked)
+    return digest[:_HARVEST_PER_ROUND] + (
+        "…" if len(digest) > _HARVEST_PER_ROUND else ""
+    )
+
+
+def _family_notes(
+    chain: list[dict[str, Any]],
+) -> list[tuple[int, str, str, str]]:
+    """全家族批语 ``[(round, ts, member_id, note)]``（按 (round, ts) 升序，逐条带轮次归属）。
+
+    旧数据 ``rejections[]`` 无 ``round`` 字段 → 按「被驳回件自身轮次+1」推算。
+    """
+    out: list[tuple[int, str, str, str]] = []
+    for m in chain:
+        mid = str(m.get("id") or "")
+        for r in m.get("rejections") or []:
+            try:
+                round_no = int(r.get("round"))
+            except (TypeError, ValueError):
+                round_no = _round_of(m) + 1
+            out.append(
+                (round_no, str(r.get("ts") or ""), mid, str(r.get("note") or ""))
+            )
+    out.sort(key=lambda t: (t[0], t[1]))
+    return out
+
+
+def _round_label(member: dict[str, Any]) -> str:
+    """轮次名：本体=「初版」，返工件=「第 n 轮」。"""
+    rnd = _round_of(member)
+    return "初版" if rnd <= 0 else f"第 {rnd} 轮"
+
+
+def requirements_digest(tb_id: str, *, include_self_harvest: bool = False) -> str:
+    """要求与历史总览（**单一真源**，从家族链机械重建）。
+
+    ① 用户原始要求（家族根正文全文）→ ② 历轮驳回批语（逐条带轮次归属）→
+    ③ 历轮收获（各轮报告的改进/交付摘要，防「已解决问题复发」）。
+
+    **不信任累积正文**：旧返工正文逐代堆叠（重复「## 本轮驳回批语」、前缀嵌套），
+    原始要求被淹没——故从 ``rejections[]`` 与各轮报告重建，存量脏数据同样受益。
+
+    Args:
+        tb_id: 定位家族的任务书 id（任意成员皆可）。
+        include_self_harvest: ③ 是否含**本件自己**那一轮的收获（返工件正文生成时要含
+            刚被驳回那一轮的产出摘要；常规展示面不含——流程报告另有全文段）。
+
+    Returns:
+        总览 Markdown 块；家族读不到 → 空串。
+    """
+    chain = family_chain(tb_id)
+    if not chain:
+        return ""
+    root = chain[0]
+    parts = ["## 要求与历史总览（自动附送）", "", "### ① 用户原始要求", ""]
+    body = read_body(str(root.get("id") or "")) or "（无正文）"
+    parts += [body, ""]
+    notes = _family_notes(chain)
+    if notes:
+        parts += ["### ② 历轮驳回批语", ""]
+        for round_no, ts, mid, note in notes:
+            parts += [
+                f"#### 第 {round_no} 轮返工批语（{ts}，驳回 {mid}）",
+                "",
+                note,
+                "",
+            ]
+    harvest_members = chain if include_self_harvest else chain[:-1]
+    harvest_rows: list[str] = []
+    for m in harvest_members:
+        mid = str(m.get("id") or "")
+        rp = report_path(mid)
+        try:
+            text = rp.read_text(encoding="utf-8") if rp.exists() else ""
+        except OSError:
+            text = ""
+        if not text.strip():
+            text = read_body(mid)
+        digest = _harvest_digest(text)
+        if digest:
+            harvest_rows += [f"#### {_round_label(m)}（{mid}）", "", digest, ""]
+    if harvest_rows:
+        parts += ["### ③ 历轮收获（改进与交付摘要——防复发）", "", *harvest_rows]
+    return "\n".join(parts).rstrip() + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -750,23 +1162,31 @@ def report_sections(tb_id: str) -> list[str]:
     parts.append(sec("任务概述", overview + ("\n\n" + body_txt if body_txt else "")))
     parts.append(sec("环节完成清单", _flow_body(steps)))
 
+    # 「组长改进」段（用户 2026-10-17）：通用段——非返工件含 L 时也出（放在提前 return 前）。
+    lead = "\n\n".join(
+        t
+        for t in (roles.get("leader_reflection"), roles.get("leader_improvement_plan"))
+        if t
+    )
+    if lead:
+        parts.append(sec("组长改进", lead))
+
     if not rework:
         return parts
 
     hist: list[str] = []
-    prev = str(st.get("rework_of") or "")
-    n = int(st.get("rework_round") or 1) - 1
-    while prev:
-        pst = load_state(prev) or {}
+    for m in family_chain(tb_id)[:-1]:
+        mid = str(m.get("id") or "")
         notes = "；".join(
-            str(r.get("note") or "") for r in (pst.get("rejections") or [])
+            f"第 {round_no} 轮批语：{note}"
+            for round_no, _ts, nid, note in _family_notes([m])
+            if nid == mid and note
         )
-        line = f"- 第 {n} 轮 {prev}「{pst.get('title')}」状态={pst.get('status')}" + (
-            f"；批语：{notes}" if notes else ""
+        line = (
+            f"- {_round_label(m)} {mid}「{m.get('title')}」状态={m.get('status')}"
+            + (f"；{notes}" if notes else "")
         )
         hist.append(line)
-        prev = str(pst.get("rework_of") or "")
-        n -= 1
     parts.append(sec("历轮摘要", "\n".join(hist) if hist else "（首轮，无历史）"))
 
     parts.append(sec("本轮成因分析", roles.get("cause", "")))
@@ -843,6 +1263,11 @@ def _detail_blocks(tb_id: str) -> list[dict[str, Any]]:
         done = sum(1 for s in steps if s["status"] in ("done", "skipped"))
         header["plan"] = f"计划：{pid}（{done}/{len(steps)} 环节完成）"
     blocks: list[dict[str, Any]] = [header]
+    # 要求与历史总览**置顶**（用户 2026-10-17：原始要求+历轮批语集中展示、正文之前）。
+    if digest_has_history(tb_id):
+        blocks.append(
+            {"role": "digest", "lines": requirements_digest(tb_id).splitlines()}
+        )
     try:
         report = report_sections(tb_id)
     except Exception as exc:  # noqa: BLE001 - 报告坏一段不塌详情（观察面 fail-soft）
@@ -850,12 +1275,17 @@ def _detail_blocks(tb_id: str) -> list[dict[str, Any]]:
     if delivered:
         blocks.append({"role": "star", "lines": report})
     blocks.append({"role": "body", "lines": [read_body(tb_id) or "（空）"]})
-    rej = st.get("rejections") or []
+    # 批语历史＝**全家族**逐条（带轮次归属）——只读本件会让进行中返工件显示「（无）」，
+    # 与「历史」二字名实不符（用户 2026-10-17 实锤的淹没源之一）。
+    notes = _family_notes(family_chain(tb_id))
     blocks.append(
         {
             "role": "rejections",
-            "count": len(rej),
-            "lines": [f"  · {r.get('ts')}：{r.get('note')}" for r in rej]
+            "count": len(notes),
+            "lines": [
+                f"  · 第 {round_no} 轮批语（{ts}，驳回 {mid}）：{note}"
+                for round_no, ts, mid, note in notes
+            ]
             or ["  （无）"],
         }
     )
@@ -869,6 +1299,7 @@ def _detail_blocks(tb_id: str) -> list[dict[str, Any]]:
 
 #: 各段在**文本通道**（:func:`detail_lines`）的标题行；Markdown 通道有自己的呈现。
 _DETAIL_HEADS: dict[str, str] = {
+    "digest": "—— 要求与历史总览（自动附送）——",
     "star": "★ 批复参考 —— 流程报告（本大任务的流程交付；看毕再批复）",
     "body": "—— 任务书正文 ——",
     "report": "—— 流程报告（所链计划的环节完成清单）——",
@@ -917,6 +1348,8 @@ def detail_markdown(tb_id: str) -> str:
             out += ["", f"- 状态：{status_badge(b['status'])}", f"- 标题：{b['title']}"]
             if b["plan"]:
                 out.append(f"- {b['plan']}")
+        elif role == "digest":
+            out += ["", "---", "", *b["lines"]]
         elif role == "star":
             out += ["", "---", "", f"**{_DETAIL_HEADS['star']}**", "", *b["lines"]]
         elif role == "body":
@@ -943,23 +1376,25 @@ def rework_card(tb_id: str) -> list[str]:
 
     rnd = int(st.get("rework_round") or 1)
     out = [
-        f"轮次：第 {rnd} 轮返工｜模式：{st.get('mode') or '（非返工）'}"
+        f"轮次：第 {rnd} 轮返工｜{improve_label(st)}"
         f"｜优先级：{st.get('priority') or 'normal'}"
     ]
     if st.get("rework_of"):
         out.append(f"原任务书：{st['rework_of']}")
     out.append("—— 各轮裁决书摘要 ——")
     any_ruling = False
-    for cid in (f"{tb_id}-jury", f"{tb_id}-discoverability"):
-        rp = _jury.record_path(cid)
-        try:
-            rec = json.loads(rp.read_text(encoding="utf-8")) if rp.exists() else {}
-        except (OSError, ValueError):
-            rec = {}
-        text = str((rec.get("verdict_summary") or {}).get("text") or "")
-        if text:
-            out.append(f"  · {cid}：{text}")
-            any_ruling = True
+    for m in family_chain(tb_id):
+        mid = str(m.get("id") or "")
+        for cid in (f"{mid}-jury", f"{mid}-discoverability"):
+            rp = _jury.record_path(cid)
+            try:
+                rec = json.loads(rp.read_text(encoding="utf-8")) if rp.exists() else {}
+            except (OSError, ValueError):
+                rec = {}
+            text = str((rec.get("verdict_summary") or {}).get("text") or "")
+            if text:
+                out.append(f"  · {cid}：{text}")
+                any_ruling = True
     if not any_ruling:
         out.append("  （无送审裁决留痕）")
     pid = str(st.get("plan_id") or "")
@@ -1021,4 +1456,11 @@ def sync_delivered() -> list[str]:
                 done.append(str(st["id"]))
             except ValueError:
                 continue
+            # 交付即补全流程报告（缺则建）：报告是 delivered 的**交付物**，也是下一轮
+            # 「③ 历轮收获」的取数源——留待组长手动 report 会让历史摘要退化（2026-10-17）。
+            if not report_path(str(st["id"])).exists():
+                try:
+                    build_report(str(st["id"]))
+                except Exception:  # noqa: BLE001 - 报告面 fail-soft（对账已完成）
+                    pass
     return done

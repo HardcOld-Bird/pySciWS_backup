@@ -416,6 +416,22 @@ def _hold_line(fv: Any) -> str:
     )
 
 
+def _taskbook_mode_line() -> str:
+    """大任务执行模式读数（serial 附队列顺位）——热切换，每刷新现读（用户 2026-10-17）。"""
+    from .. import taskbooks as _tb
+
+    mode = _tb.execution_mode()
+    tail = "改 toml 一行即下一回合生效"
+    if mode != "serial":
+        return f"{mode}（{tail}）"
+    head = _tb.serial_head()
+    rows = _tb.queue_rows()
+    return (
+        f"serial（队首 {head.get('id') if head else '（无）'}，"
+        f"排队 {max(len(rows) - 1, 0)} 件；{tail}）"
+    )
+
+
 def _system_detail() -> list[str]:
     """系统与路由详情：**首行=倒计时**（高亮语义）→ 开关/路由 → 路由配置生效值 → 仲裁/回退/告警。"""
     from .. import routing as _rt
@@ -426,6 +442,7 @@ def _system_detail() -> list[str]:
         _countdown_line(reading.next_at, reading.next_mode),
         f"  开关：{_safe_line(mirror._line_switches)}",
         f"  路由：{_safe_line(mirror._line_routing)}",
+        f"  大任务执行模式：{_safe_line(_taskbook_mode_line)}",
         "  路由配置生效值 ——",
         f"    入峰提前量 leadtime_s = {fv.leadtime_s}s（{fv.leadtime_s // 60} 分钟）"
         f"  〔真源：{fv.source('leadtime_s')}〕",

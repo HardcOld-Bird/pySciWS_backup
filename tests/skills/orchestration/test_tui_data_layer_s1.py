@@ -300,6 +300,7 @@ def test_blind_queue_hides_twin_answers(tface):
         "question",
         "option_a",
         "option_b",
+        "options",
         "evidence",
         "case_head",
     }
@@ -307,6 +308,7 @@ def test_blind_queue_hides_twin_answers(tface):
         assert forbidden not in item
     assert item["question"] == "选哪个方案？"
     assert item["option_a"] == "甲方案" and item["option_b"] == "乙方案"
+    assert item["options"] == [("A", "甲方案"), ("B", "乙方案")]
     assert item["evidence"] == "数据 X"
 
 

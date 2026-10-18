@@ -27,6 +27,11 @@ def tbdir(tmp_path, monkeypatch):
     d = data / "taskbooks"
     monkeypatch.setattr(taskbooks, "TASKBOOKS_DIR", d)
     monkeypatch.setattr(_paths, "DATA_ROOT", data)  # 防 stray 护栏的判据源
+    # 表单默认值隔离：不 patch 就读到用户手改的真源 toml（[taskbooks] 是手改面，
+    # 用户实测即改——2026-10-17 实案：默认值漂移把出厂断言打红）。
+    from pysci.skills.orchestration.tools import settings as _settings
+
+    monkeypatch.setattr(_settings, "SETTINGS_PATH", tmp_path / "no-settings.toml")
     return d
 
 
@@ -77,18 +82,26 @@ def test_legal_and_illegal_transitions(tbdir):
         taskbooks.transition(tid, "new")
 
 
-def test_reject_records_note_and_returns_to_new(tbdir):
-    """success_criteria：**rejected 带批语回 new**，批语持久保留于 state.json。"""
+def test_reject_spawns_rework_and_keeps_note(tbdir):
+    """驳回 → 原件 ``rejected`` **留档终态** + 另起返工任务书；批语持久且带轮次归属。"""
     tid = _make()["id"]
     taskbooks.link_plan(tid, "p1")
     taskbooks.transition(tid, "active")
     taskbooks.transition(tid, "delivered")
-    st = taskbooks.reject(tid, "拆得不对，重来")
-    assert st["status"] == "new"  # 返工重拆解
-    again = taskbooks.load_state(tid)
-    assert again["rejections"][-1]["note"] == "拆得不对，重来"  # 批语持久
-    assert again["status"] == "new"
-    assert str(again["plan_id"]) in ("p1", "")  # 链接字段不丢
+    new = taskbooks.create_rework(
+        tid,
+        improve={"infra": True, "leader": False, "inspector": True},
+        note="拆得不对，重来",
+    )
+    orig = taskbooks.load_state(tid)
+    assert orig["status"] == "rejected"
+    assert orig["rejections"][-1]["note"] == "拆得不对，重来"  # 批语持久
+    assert orig["rejections"][-1]["round"] == 1  # 驱动第 1 轮返工
+    assert new["rework_of"] == tid and new["status"] == "new"
+    assert new["improve"] == {"infra": True, "leader": False, "inspector": True}
+    assert new["mode"] == "full"  # 旧三档派生兼容显示（leader 不参与派生）
+    with pytest.raises(ValueError):  # rejected 留档终态，不再回 new
+        taskbooks.transition(tid, "new")
 
 
 def test_sync_delivered_follows_plan_completion(tbdir, monkeypatch):
@@ -132,7 +145,7 @@ def test_rejected_item_appears_in_history_with_note(tbdir):
     tid = _make()["id"]
     taskbooks.transition(tid, "active")
     taskbooks.transition(tid, "delivered")
-    taskbooks.reject(tid, "拆得不对")
+    taskbooks.create_rework(tid, improve={"leader": True}, note="拆得不对")
     assert tid in [d["id"] for d in taskbooks.sections()["history"]]  # 带批语进历史
 
 
@@ -197,26 +210,35 @@ def test_pilot_new_taskbook_lands_on_disk(tbdir):
             assert app.view == "taskbooks"
             await pilot.press("n")
             assert app.view == "tb-new"
+            # 「包含组长改进」默认值来自 [taskbooks]（出厂 false），勾选即进 improve 标志
+            from textual.widgets import Checkbox
+
+            box = app.query_one("#tb-new-leader", Checkbox)
+            assert box.value is False
+            assert "√" not in str(box.render()) and "X" not in str(box.render())
+            box.value = True
+            assert "√" in str(box.render()) and "X" not in str(box.render())
             app.query_one("#tb-new-title-input", Input).value = "TUI 投递的大任务"
             app.query_one("#tb-new-body", TextArea).text = "正文甲\n正文乙"
             await pilot.click("#tb-new-submit")
             assert app.last_created.startswith("tb-")
             # ③ 确认即关页回列表（backlog 20261015-230248）：消息落列表面
             assert app.view == "taskbooks"
-            assert "已投递" in app.tb_msg
+            assert "已投递" in app.tb_msg and "含组长改进" in app.tb_msg
 
     _run(_go())
     st = taskbooks.list_all()
     assert len(st) == 1
     assert st[0]["title"] == "TUI 投递的大任务" and st[0]["source"] == "mirror-tui"
     assert st[0]["priority"] == "normal"  # 修订⑦：默认中
+    assert st[0]["improve"] == {"infra": False, "leader": True, "inspector": False}
     assert taskbooks.read_body(st[0]["id"]) == "正文甲\n正文乙"
     assert (tbdir / f"{st[0]['id']}.taskbook.md").exists()
     assert (tbdir / f"{st[0]['id']}.state.json").exists()
 
 
 def test_pilot_accept_and_reject_selected(tbdir):
-    """批复 Pilot——accept 终态；reject 走**三段式**（模式→优先级→批语）生成返工任务书。"""
+    """批复 Pilot——accept 终态；reject 走**三段式**（改进项→优先级→批语）生成返工任务书。"""
     a = _make(title="甲")["id"]
     b = _make(title="乙")["id"]
     for tid in (a, b):
@@ -239,7 +261,11 @@ def test_pilot_accept_and_reject_selected(tbdir):
             await pilot.press("r")  # 开三段式驳回面板
             await pilot.pause()
             assert app.view == "tb-reject"
-            app._set_radio("#tb-reject-mode", 1)  # 无监察改进
+            # 只勾基础设施改进（≡旧「无监察改进」档）
+            app._set_selections(
+                "#tb-reject-improve",
+                {"infra": True, "leader": False, "inspector": False},
+            )
             app._set_radio("#tb-reject-priority", 2)  # 低
             app.query_one("#tb-note", TextArea).text = "拆得不对"
             await pilot.click("#tb-reject-submit")
@@ -256,7 +282,9 @@ def test_pilot_accept_and_reject_selected(tbdir):
     rw = by_id[seen["rework"]]
     assert rw["status"] == "new" and rw["source"] == "mirror-tui"
     assert rw["rework_of"] == seen["second"] and rw["rework_round"] == 1
-    assert rw["mode"] == "no_inspector" and rw["priority"] == "low"
+    assert rw["improve"] == {"infra": True, "leader": False, "inspector": False}
+    assert rw["mode"] == "no_inspector"  # 旧三档派生兼容
+    assert rw["priority"] == "low"
     assert rw["title"] == "乙（返工第 1 轮）"  # 继承原名 + 轮次后缀（同名返工件可辨）
 
 

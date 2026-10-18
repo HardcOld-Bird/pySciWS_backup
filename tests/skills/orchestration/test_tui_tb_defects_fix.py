@@ -16,7 +16,7 @@ import json
 
 import pytest
 import yaml
-from textual.widgets import RadioButton, RadioSet, TextArea
+from textual.widgets import RadioButton, RadioSet, SelectionList, TextArea
 
 from pysci import paths as _paths
 from pysci.skills.orchestration.tools import ledger, plans, queueworker, taskbooks
@@ -28,7 +28,7 @@ NOTE = "第一行：明显不达标问题：标题量纲与色标不符\n第二�
 
 @pytest.fixture
 def face(tmp_path, monkeypatch):
-    """隔离四面：任务书目录 / 计划目录 / 交付留档 / 台账。"""
+    """隔离四面：任务书目录 / 计划目录 / 交付留档 / 台账；＋settings（表单默认值手改面）。"""
     data = tmp_path / "data"
     monkeypatch.setattr(taskbooks, "TASKBOOKS_DIR", data / "taskbooks")
     taskbooks.TASKBOOKS_DIR.mkdir(parents=True, exist_ok=True)
@@ -38,6 +38,10 @@ def face(tmp_path, monkeypatch):
     monkeypatch.setattr(plans, "PLANS_DIR", pdir)
     monkeypatch.setattr(queueworker, "DELIVERIES_DIR", tmp_path / "deliveries")
     monkeypatch.setattr(ledger, "LEDGER_PATH", tmp_path / "ledger.jsonl")
+    # 表单默认值隔离：不 patch 就读到用户手改的真源 toml（2026-10-17 实案：默认值漂移打红断言）
+    from pysci.skills.orchestration.tools import settings as _settings
+
+    monkeypatch.setattr(_settings, "SETTINGS_PATH", tmp_path / "no-settings.toml")
     return tmp_path
 
 
@@ -236,7 +240,7 @@ def test_submit_reject_returns_to_list(face):
 # ④ ESC 再进无残留
 # ---------------------------------------------------------------------------
 def test_reopen_after_esc_has_no_stale_selection(face):
-    """criteria：ESC 再进无双选残留（此前 values=[True,False,True]）。"""
+    """criteria：ESC 再进无选中残留——改进项/优先级回 [taskbooks] 默认、批语清空。"""
     _write_plan()
     _mk("残留件", "delivered")
 
@@ -247,7 +251,11 @@ def test_reopen_after_esc_has_no_stale_selection(face):
             await pilot.pause()
             await pilot.press("r")
             await pilot.pause()
-            app._set_radio("#tb-reject-mode", 2)
+            # 留一个**非默认**勾选（只勾组长改进）证明重开被重置
+            app._set_selections(
+                "#tb-reject-improve",
+                {"infra": False, "leader": True, "inspector": False},
+            )
             app._set_radio("#tb-reject-priority", 0)
             app.query_one("#tb-note", TextArea).text = "残留批语"
             await pilot.pause()
@@ -257,16 +265,35 @@ def test_reopen_after_esc_has_no_stale_selection(face):
             await pilot.pause()
             await pilot.press("r")
             await pilot.pause()
-            mode = app.query_one("#tb-reject-mode", RadioSet)
+            sel = app.query_one("#tb-reject-improve", SelectionList)
             prio = app.query_one("#tb-reject-priority", RadioSet)
+            # 字形值感知（用户 2026-10-17「要对勾不要错叉」）：默认勾 infra/inspector
+            marks = [
+                "".join(seg.text for seg in sel.render_line(y))[:3] for y in range(3)
+            ]
             return (
-                [b.value for b in mode.query(RadioButton)],
+                set(sel.selected),
                 [b.value for b in prio.query(RadioButton)],
                 app.query_one("#tb-note", TextArea).text,
+                marks,
             )
 
-    mode_vals, prio_vals, note = _run(_go())
-    assert mode_vals == [True, False, False], f"模式残留：{mode_vals}"
+    sel_vals, prio_vals, note, marks = _run(_go())
+    assert marks[0] == "▐√▌" and marks[2] == "▐√▌", f"选中须显对勾：{marks}"
+    assert marks[1] == "▐ ▌", f"未选须空白（不是叉）：{marks}"
+    from pysci.skills.orchestration.tools import settings as _settings
+
+    form, _warns = _settings.taskbook_form_defaults()
+    expected = {
+        k
+        for k, v in (
+            ("infra", form.reject_infra),
+            ("leader", form.reject_leader),
+            ("inspector", form.reject_inspector),
+        )
+        if v
+    }
+    assert sel_vals == expected, f"改进项残留：{sel_vals}（应回默认 {expected}）"
     assert prio_vals == [False, True, False], (
         f"优先级残留（应回默认「中」）：{prio_vals}"
     )

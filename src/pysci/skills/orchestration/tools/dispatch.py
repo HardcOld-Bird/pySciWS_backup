@@ -1079,6 +1079,17 @@ def write_taskbook(
         print(f"[!] 任务书 lint：{conflict_notice(c)}")
     if conflicts:
         body = body.rstrip("\n") + "\n\n" + taskbook_conflict_block(conflicts)
+    # 要求与历史总览**自动附送**（用户 2026-10-17：组长遗忘不得传递给组员——凡大任务
+    # 派单一律附送，组员可见面不再依赖组长记得抄；计划外单件（adhoc）无归属任务书，不附）。
+    try:
+        from . import taskbooks as _tb
+
+        st = _tb.find_by_plan(_plan_from_slug(slug) or "")
+        digest = _tb.requirements_digest(str(st["id"])) if st else ""
+    except Exception:  # noqa: BLE001 - 附送面 fail-soft（派发主流程不被历史读数阻塞）
+        digest = ""
+    if digest:
+        body = body.rstrip("\n") + "\n\n---\n\n" + digest
     # 结尾恰好一个换行：裸文本会触发 pre-commit end-of-file-fixer 拦截任务书提交
     dest.write_text(header + body.rstrip("\n") + "\n", encoding="utf-8")
     return dest

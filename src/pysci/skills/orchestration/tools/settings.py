@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -188,6 +189,153 @@ def priority_rank(tier: str, data: dict[str, Any] | None = None) -> int:
         if key in group:
             return index
     return len(order)
+
+
+# ---------------------------------------------------------------------------
+# [taskbooks]：大任务执行模式 + TUI 新建/驳回表单默认值（用户 2026-10-17 裁决）
+# ---------------------------------------------------------------------------
+#: ``[taskbooks] execution_mode`` 合法值。``parallel``＝多大任务并行交替（既有行为）；
+#: ``serial``＝按任务书产生时序严格排队、一次只允许一个大任务进行（解锁点＝更早任务书
+#: 离开 new/planning/active，即 delivered/failed/accepted/rejected）。
+TASKBOOK_EXECUTION_MODES: tuple[str, ...] = ("parallel", "serial")
+DEFAULT_TASKBOOK_EXECUTION_MODE: str = "parallel"
+
+#: 大任务优先级合法值（settings 是叶子模块，不 import taskbooks；与 taskbooks.PRIORITIES 同字面）。
+TASKBOOK_PRIORITIES: tuple[str, ...] = ("high", "normal", "low")
+DEFAULT_TASKBOOK_PRIORITY: str = "normal"
+
+
+@dataclass(frozen=True)
+class TaskbookFormDefaults:
+    """TUI 新建/驳回面板的表单默认值（``[taskbooks]`` 逐键读数，非法回落出厂）。"""
+
+    new_priority: str = DEFAULT_TASKBOOK_PRIORITY
+    new_leader: bool = False
+    reject_priority: str = DEFAULT_TASKBOOK_PRIORITY
+    reject_infra: bool = True
+    reject_leader: bool = False
+    reject_inspector: bool = True
+
+
+#: 出厂默认（≡ 旧驳回默认 full 档：基础设施改进＋监察改进、无组长改进）。
+DEFAULT_TASKBOOK_FORM: TaskbookFormDefaults = TaskbookFormDefaults()
+
+
+def taskbook_execution_mode(
+    data: dict[str, Any] | None = None,
+) -> tuple[str, list[str]]:
+    """``[taskbooks] execution_mode`` 大任务执行模式。
+
+    **热切换**：本读数每次现算（无缓存），手改 toml 保存即生效于下一次派发 / 组长
+    下一回合首个命令——串行谓词无状态，不存在在途锁定。
+
+    Args:
+        data: 已读到的配置；``None`` 时自己读盘。
+
+    Returns:
+        ``(模式, 警告列表)``。键缺席 / 值非法 → 出厂 ``parallel`` + 警告（回落方向保守：
+        默认即既有并行行为，配置写坏也不会锁死队列）。
+    """
+    if data is None:
+        data = read_settings()
+    raw = None
+    try:
+        raw = data.get("taskbooks", {}).get("execution_mode")
+    except AttributeError:
+        raw = None
+    if raw is None:
+        return DEFAULT_TASKBOOK_EXECUTION_MODE, [
+            f"[taskbooks] execution_mode 未配置（或 {SETTINGS_PATH.name} 读不出）"
+            f" → 出厂 {DEFAULT_TASKBOOK_EXECUTION_MODE!r}"
+        ]
+    text = str(raw).strip()
+    if text in TASKBOOK_EXECUTION_MODES:
+        return text, []
+    return DEFAULT_TASKBOOK_EXECUTION_MODE, [
+        f"[taskbooks] execution_mode = {raw!r} 不是合法模式"
+        f"（合法：{'/'.join(TASKBOOK_EXECUTION_MODES)}）"
+        f" → 回落 {DEFAULT_TASKBOOK_EXECUTION_MODE!r}"
+    ]
+
+
+def _bool_or_none(raw: Any) -> bool | None:
+    """宽容布尔解析（与 night_enabled 同精神）：bool 原值；0/1；宽容真值表；其余 None。"""
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, int):
+        return bool(raw) if raw in (0, 1) else None
+    text = str(raw).strip().lower()
+    if text in _NIGHT_TRUE:
+        return True
+    if text in _NIGHT_FALSE:
+        return False
+    return None
+
+
+def taskbook_form_defaults(
+    data: dict[str, Any] | None = None,
+) -> tuple[TaskbookFormDefaults, list[str]]:
+    """``[taskbooks]`` 六个表单默认键（TUI 新建/驳回面板装载）。
+
+    Returns:
+        ``(默认值集, 警告列表)``——逐键回落出厂 + 逐键警告（警告指明合法值）。
+    """
+    if data is None:
+        data = read_settings()
+    try:
+        section = data.get("taskbooks", {})
+    except AttributeError:
+        section = {}
+
+    def _priority(key: str, default: str) -> tuple[str, str | None]:
+        raw = section.get(key)
+        if raw is None:
+            return default, f"[taskbooks] {key} 未配置 → 回落 {default!r}"
+        text = str(raw).strip()
+        if text in TASKBOOK_PRIORITIES:
+            return text, None
+        return (
+            default,
+            f"[taskbooks] {key} = {raw!r} 不是合法优先级"
+            f"（合法：{'/'.join(TASKBOOK_PRIORITIES)}）→ 回落 {default!r}",
+        )
+
+    def _flag(key: str, default: bool) -> tuple[bool, str | None]:
+        raw = section.get(key)
+        if raw is None:
+            return default, f"[taskbooks] {key} 未配置 → 回落 {default!r}"
+        parsed = _bool_or_none(raw)
+        if parsed is None:
+            return default, (
+                f"[taskbooks] {key} = {raw!r} 不是合法开关（合法：true/false）"
+                f" → 回落 {default!r}"
+            )
+        return parsed, None
+
+    new_priority, w1 = _priority(
+        "new_default_priority", DEFAULT_TASKBOOK_FORM.new_priority
+    )
+    new_leader, w2 = _flag("new_default_leader", DEFAULT_TASKBOOK_FORM.new_leader)
+    rej_priority, w3 = _priority(
+        "reject_default_priority", DEFAULT_TASKBOOK_FORM.reject_priority
+    )
+    rej_infra, w4 = _flag("reject_default_infra", DEFAULT_TASKBOOK_FORM.reject_infra)
+    rej_leader, w5 = _flag("reject_default_leader", DEFAULT_TASKBOOK_FORM.reject_leader)
+    rej_inspector, w6 = _flag(
+        "reject_default_inspector", DEFAULT_TASKBOOK_FORM.reject_inspector
+    )
+    warnings = [w for w in (w1, w2, w3, w4, w5, w6) if w]
+    return (
+        TaskbookFormDefaults(
+            new_priority=new_priority,
+            new_leader=new_leader,
+            reject_priority=rej_priority,
+            reject_infra=rej_infra,
+            reject_leader=rej_leader,
+            reject_inspector=rej_inspector,
+        ),
+        warnings,
+    )
 
 
 def _detect_eol(text: str) -> str:

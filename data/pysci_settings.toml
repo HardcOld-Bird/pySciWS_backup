@@ -81,12 +81,33 @@ enabled = false
 # 改这一行即热切换，无需重启会话；读取失败 / 键缺席 / 非法值一律回落 false 并出声。
 # 本单只做政策注入层（SessionStart/PostCompact 钩子注入政策全文）；判据层（
 # AskUserQuestion 拦截 / queue_pressure 夜航判据）是 n2。
-enabled = false         # 夜航总开关 —— true / false（真源；只归用户手动拨动）：改这一行即下一轮生效（Stop 钩子差分注入）；true=政策注入+判据拦截生效
+enabled = true         # 夜航总开关 —— true / false（真源；只归用户手动拨动）：改这一行即下一轮生效（Stop 钩子差分注入）；true=政策注入+判据拦截生效
 # periodic_wake_s = 3600 # 保险丝打回间隔（预留；未实施前勿设——见 §3.4）
 # ── 保险丝层缓行（PSEP_2 §3.4）：仅当「有未竟事项（计划/队列/任务书）且组长无活动」的
 #    停滞才打回；**全部完成 / 严重阻碍两个终态一律静默**。鉴于 PENDING-WORK 已覆盖大部分
 #    停滞面，本层残余价值薄——规格只预留此键、**实施前勿设**（设了会被读到却无人消费），
 #    观察一期后再决定是否加装（实施单另立）。
+
+[taskbooks]
+# ── 大任务（任务书）执行模式 + 控制台表单默认值（用户 2026-10-17 裁决）────
+#
+# 执行模式（**热切换**：读数每命令现算、无缓存，手改保存即生效于下一次派发 /
+# 组长下一回合首个命令，无需重启）：
+#   "parallel" = 多大任务并行交替推进（默认，既有行为）
+#   "serial"   = 按任务书产生时序严格排队、一次只允许一个大任务进行：
+#                前一件到达 delivered/failed/accepted/rejected（离开
+#                new/planning/active）才解锁下一件；orch 自动抑制排队件的待办
+#                推送与推进（组长侧无需任何额外规程），队列状态随路由卡片推送。
+# 非法值回落 "parallel" 并在 orch status 出声。
+execution_mode = "serial"
+
+# ── pysci 控制台表单默认值（新建/驳回面板装载；非法值逐键回落出厂并告警）──
+new_default_priority = "low"     # 新建任务书默认优先级：high | normal | low
+new_default_leader = true          # 新建「包含组长改进」复选框默认
+reject_default_priority = "low"  # 驳回生成返工任务书默认优先级
+reject_default_infra = true         # 驳回「基础设施改进（A 组）」默认（≡旧默认 full）
+reject_default_leader = true       # 驳回「组长改进（L 环节）」默认
+reject_default_inspector = false     # 驳回「监察改进（C 组）」默认
 
 # ── 预留节（暂不使用）────────────────────────────────────────
 # [bencher]

@@ -1,0 +1,80 @@
+{
+  "plan_id": "rework-tb-20261017-212027-4-1016ppt-2",
+  "created": "2026-10-18T08:21:20+08:00",
+  "goal": "返工：tb-20261017-212027-4-1016ppt-2",
+  "steps": [
+    {
+      "id": "A.a1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.a1-成因分析.md"
+    },
+    {
+      "id": "A.a2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.a2-解决方案.md"
+    },
+    {
+      "id": "A.a3",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212027-4-1016ppt-2-jury.md"
+    },
+    {
+      "id": "A.a4",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.a4-拆解.md"
+    },
+    {
+      "id": "A.a5",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261018-083101-rework-tb-20261017-212027-4-1016ppt-2-A.a5",
+      "task_file": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.a5-改进实施.md",
+      "session_id": "00e8b15d-5c54-4445-8e54-69e42479fa28",
+      "kind": "result"
+    },
+    {
+      "id": "B.b1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.b1-重拆解.md"
+    },
+    {
+      "id": "B.b2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "writing-20261018-085145-rework-tb-20261017-212027-4-1016ppt-2-B.b2",
+      "task_file": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.b2-返工生产.md",
+      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "kind": "result"
+    },
+    {
+      "id": "B.b_last",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.blast-报告组装.md"
+    },
+    {
+      "id": "L.l1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.l1-摩擦反思.md"
+    },
+    {
+      "id": "L.l2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212027-4-1016ppt-2.l2-拆解.md"
+    },
+    {
+      "id": "L.l3",
+      "status": "skipped",
+      "review": "pending",
+      "note": "skip: 组长判定无需执行（空清单/不适用）"
+    }
+  ],
+  "completed_at": "2026-10-18T09:04:03+08:00"
+}

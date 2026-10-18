@@ -116,9 +116,13 @@ hook：§3.4 格式强制 + 自维护层预算硬闸四条）／harness-budget�
 
 ## 10. 端到端工作流
 
-用户投递大任务（TUI）→ 组长 `taskbooks list` → 拆解建 plan（`plan new`/`plan rework`）→ 逐环节
-`plan advance`（任务书延迟书写；self 环节 `--evidence`）→ 交接决策（继续/amend/drop）→ 全 plan 完成 →
-组装全流程报告 → TUI 验收（accept／reject→返工流）。全程事件驱动唤醒（§4.5）+ 路由卡片收尾（§4.2）。
+用户投递大任务（TUI；可勾「包含组长改进」）→ 组长 `taskbooks list` → 拆解建 plan（`plan new`／
+`plan rework`，L 环节由工具自动追加）→ 逐环节 `plan advance`（任务书延迟书写；self 环节
+`--evidence`；空改进清单 `--skip`）→ 交接决策（继续/amend/drop）→ 全 plan 完成 → 组装全流程报告
+（sync/驳回缺报告自动补建）→ TUI 验收（accept／reject→返工流，改进项三复选）。**要求与历史总览**
+（①原始要求②历轮批语③历轮收获）在一切决策面集中展示，并随派单任务书与 jury 案卷自动附送；
+`[taskbooks] execution_mode="serial"` 时按产生时序一次一个大任务（**热切换**、对组长透明；细则
+`references/plan-and-routing.md`）。全程事件驱动唤醒（§4.5）+ 路由卡片收尾（§4.2）。
 
 ## 11. CLI 调用范式（全员统一）
 

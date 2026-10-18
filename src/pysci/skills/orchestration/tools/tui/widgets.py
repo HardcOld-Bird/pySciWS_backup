@@ -20,15 +20,21 @@
 
 from __future__ import annotations
 
+from typing import TypeVar
+
 from textual import events
 from textual.containers import Horizontal, VerticalScroll
+from textual.content import Content
 from textual.geometry import Size
 from textual.message import Message
-from textual.widgets import ListItem, ListView, Static, Tree
+from textual.style import Style
+from textual.widgets import Checkbox, ListItem, ListView, SelectionList, Static, Tree
 
 from .theme import (
     _T_BG,
     _T_BORDER,
+    _T_CHECK_OFF,
+    _T_CHECK_ON,
     _T_HINT,
     _T_HL,
     _T_HL_FG,
@@ -309,9 +315,63 @@ class ChoiceCard(Static):
         self.post_message(self.Chosen(self, self.value))
 
 
+# ---------------------------------------------------------------------------
+# 值感知复选（用户 2026-10-17「要对勾不要错叉」）
+# ---------------------------------------------------------------------------
+_SelT = TypeVar("_SelT")
+
+
+class Check(Checkbox):
+    """Checkbox：勾选标记**值感知**（选中 ``√`` / 未选空白）。
+
+    Textual 8.2.8 的 ``ToggleButton._button`` 无论值与否恒渲染 ``▐X▌``（选中只靠
+    颜色区分）——覆写为按 ``value`` 取 :data:`theme._T_CHECK_ON`/``_T_CHECK_OFF``。
+    """
+
+    @property
+    def _button(self) -> Content:
+        button_style = self.get_visual_style("toggle--button")
+        side_style = Style(
+            foreground=button_style.background,
+            background=self.background_colors[1],
+        )
+        inner = _T_CHECK_ON if self.value else _T_CHECK_OFF
+        return Content.assemble(
+            (self.BUTTON_LEFT, side_style),
+            (inner, button_style),
+            (self.BUTTON_RIGHT, side_style),
+        )
+
+
+class CheckList(SelectionList[_SelT]):
+    """SelectionList：勾选标记**值感知**（选中 ``√`` / 未选空白）。
+
+    覆写 ``render_line`` 在基类 Strip 上**只换第 2 段**（左沿/内芯/右沿三段里的内芯）
+    ——基类把它硬编为 ``ToggleButton.BUTTON_INNER``（恒 ``X``），字形与选中态无关。
+    继承须**参数化**（``SelectionList[_SelT]``）：裸继承会丢泛型性，
+    ``CheckList[int](…)`` 构造即 TypeError。
+    """
+
+    def render_line(self, y: int):
+        strip = super().render_line(y)
+        segs = list(strip)
+        if len(segs) < 3:
+            return strip
+        _, scroll_y = self.scroll_offset
+        try:
+            sel = self.get_option_at_index(scroll_y + y)
+        except Exception:  # noqa: BLE001 - 越界行照基类渲染（半行/空行）
+            return strip
+        on = sel.value in self.selected
+        segs[1] = type(segs[1])(_T_CHECK_ON if on else _T_CHECK_OFF, segs[1].style)
+        return type(strip)(segs)
+
+
 __all__ = [
     "Card",
     "ChainListItem",
+    "Check",
+    "CheckList",
     "ChoiceCard",
     "HintLine",
     "MarkedList",

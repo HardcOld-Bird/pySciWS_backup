@@ -485,3 +485,113 @@ def test_review_faces_have_no_banned_prompts(face):
         "Esc/← 返回",
     ):
         assert banned not in faces, banned
+
+
+# ===========================================================================
+#  ⑦ 现场案卷形态（2026-10-17 用户实案）：带冒号标题 / 三选项 / 自由文本裁示
+# ===========================================================================
+C_MARK = "S8_OPTION_C_MARK"
+
+
+def _titled_three_option_case(face, cid: str) -> str:
+    p = face / f"{cid}.md"
+    p.write_text(
+        f"# 案卷：选哪条？（{Q_MARK}）\n\n"
+        "## 背景\n背景正文。\n\n"
+        f"## 选项 A：甲方案描述\n甲（{A_MARK}）\n\n"
+        f"## 选项 B：乙方案描述\n乙（{B_MARK}）\n\n"
+        f"## 选项 C：丙方案描述\n丙（{C_MARK}）\n\n"
+        f"## 证据\n证据正文（{EV_MARK}）\n",
+        encoding="utf-8",
+    )
+    return str(p)
+
+
+def test_titled_three_option_case_shows_all_cards_and_agrees_by_letter(face):
+    """实案形态全量呈现＋**字母归一**比对（2026-10-17）。
+
+    两处旧缺陷：① `## 选项 A：<描述>` 解析抛「案卷缺小节」→ 整案空白（A/B（无））；
+    ② twin 自由文本裁示「C（…）：…」与用户选择**逐字**比对永不一致 → 永进追问区。
+    """
+    from pysci.skills.orchestration.tools.tui.widgets import ChoiceCard
+
+    cid = "tb-x-twin-3c"
+    rec = {
+        "ts": "2026-10-17T09:08:56+08:00",
+        "case_id": cid,
+        "case_file": _titled_three_option_case(face, cid),
+        "case_head": f"选哪条？（{Q_MARK}）",
+        "choice": "C（双工作点并列）：主图保一版、补一版对照",
+        "confidence": 0.68,
+        "reason": f"援引 P-01（{TWIN_REASON_MARK}）",
+        "parsed": True,
+        "body": f"twin 交付全文（{TWIN_BODY_MARK}）",
+        "record_kind": "consult",
+        "night": True,
+        "authority": "夜航预授权",
+    }
+    taste.write_record(rec)
+
+    async def _go():
+        app = tui.PysciTUI()
+        async with app.run_test(size=(120, 45)) as pilot:
+            await _enter_review(app, pilot)
+            text = _blind_face_text(app)
+            text += "\n" + str(app.query_one("#blind-c", ChoiceCard).render())
+            assert A_MARK in text and B_MARK in text and C_MARK in text, text
+            assert f"选哪条？（{Q_MARK}）" in text
+            await pilot.press("3")  # 键盘选 C
+            await pilot.pause()
+            await pilot.click("#blind-submit")
+            await pilot.pause()
+            return app.blind_ask_visible
+
+    assert _run(_go()) is False, "字母归一判一致（C==C）→ 不进追问区"
+    rec2 = _read_record(face, cid)
+    assert rec2["review"]["verdict"] == "confirmed"
+    assert rec2["review"]["blind"] == {
+        "user_choice": "C",
+        "agree": True,
+        "remedy": None,
+        "requirements": "",
+    }
+
+
+def test_unparseable_case_falls_back_with_raw_excerpt(face):
+    """自由形式案卷（无选项小节）：**不可解析**出声并附原文摘录（案卷内容非 twin 答案）。"""
+    cid = "tb-x-twin-free"
+    p = face / f"{cid}.md"
+    p.write_text(f"随便写的案情（{Q_MARK}），没有规范小节。\n", encoding="utf-8")
+    rec = {
+        "ts": "2026-10-17T10:00:00+08:00",
+        "case_id": cid,
+        "case_file": str(p),
+        "case_head": "随便写的案情",
+        "choice": "A",
+        "confidence": 0.5,
+        "reason": f"（{TWIN_REASON_MARK}）",
+        "parsed": False,
+        "body": "",
+        "record_kind": "consult",
+        "night": False,
+        "authority": "",
+    }
+    taste.write_record(rec)
+
+    async def _go():
+        app = tui.PysciTUI()
+        async with app.run_test(size=(120, 45)) as pilot:
+            await _enter_review(app, pilot)
+            return _blind_face_text(app)
+
+    text = _run(_go())
+    assert "案卷存在但不可解析" in text and Q_MARK in text
+    assert TWIN_REASON_MARK not in text, "回落面也不得泄 twin 答案"
+
+
+def test_choice_letter_normalizes_free_text_rulings():
+    assert taste.choice_letter("C（双工作点并列）：主图保") == "C"
+    assert taste.choice_letter("选项 B：保持原状") == "B"
+    assert taste.choice_letter("A") == "A"
+    assert taste.choice_letter("confirmed") == ""
+    assert taste.choice_letter("") == ""

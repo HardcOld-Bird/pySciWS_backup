@@ -134,7 +134,12 @@ class JuryError(RuntimeError):
 # ---------------------------------------------------------------------------
 @dataclass
 class Case:
-    """一份仲裁案卷（问题 + 两选项全文 + 证据 + 涉事路径声明）。"""
+    """一份仲裁案卷（问题 + 选项全文 + 证据 + 涉事路径声明）。
+
+    ``option_a``/``option_b`` 保留双序对局语义（jury 通道只审 A/B）；
+    ``options``＝案卷里**全部**选项小节 ``[(字母, 全文)]``（按出现序）——三选项以上
+    的 consult 案卷在盲审面按它全量呈现（2026-10-17 实案：C 选项曾整块不可见）。
+    """
 
     case_id: str
     question: str
@@ -143,6 +148,7 @@ class Case:
     evidence: str = ""
     targets: list[str] = field(default_factory=list)
     path: str = ""
+    options: list[tuple[str, str]] = field(default_factory=list)
 
 
 def _split_sections(text: str) -> dict[str, str]:
@@ -156,12 +162,45 @@ def _split_sections(text: str) -> dict[str, str]:
 
 
 def _lookup(sections: dict[str, str], *names: str) -> str:
-    """按去空格小写名在小节表里取值（``选项 A``/``Option A``/``a`` 都能命中）。"""
+    """按去空格小写名取小节值：**精确 → 前缀**两级容错。
+
+    前缀容错（用户实案 2026-10-17）：现场案卷常把小节写成 ``## 选项 A：<描述>``
+    （标题带冒号后缀）——精确匹配抛「案卷缺小节」，盲审面整案空白。命中取**首个**；
+    全名精确命中仍最优先（裸 ``a``/``b`` 兜底名不会被前缀抢跑）。
+    """
     norm = {k.replace(" ", "").lower(): v for k, v in sections.items()}
     for name in names:
-        if (val := norm.get(name.replace(" ", "").lower())) is not None:
+        key = name.replace(" ", "").lower()
+        if (val := norm.get(key)) is not None:
             return val.strip()
+    for name in names:
+        key = name.replace(" ", "").lower()
+        for title, val in norm.items():
+            if title.startswith(key):
+                return val.strip()
     return ""
+
+
+def _collect_options(sections: dict[str, str]) -> list[tuple[str, str]]:
+    """收集**全部**选项小节：标题 ``选项 X…``/``option x…``/裸单字母 → ``[(字母, 全文)]``。
+
+    同字母取**首个**（选项卡 id 按字母，重复即撞 id）。
+    """
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for title, body in sections.items():
+        t = title.replace(" ", "").lower()
+        letter = ""
+        for pre in ("选项", "option"):
+            if t.startswith(pre) and len(t) > len(pre) and t[len(pre)].isalpha():
+                letter = t[len(pre)].upper()
+                break
+        if not letter and len(t) == 1 and t.isalpha():
+            letter = t.upper()
+        if letter and letter not in seen and body.strip():
+            seen.add(letter)
+            out.append((letter, body.strip()))
+    return out
 
 
 def parse_case(path: Path | str) -> Case:
@@ -169,7 +208,8 @@ def parse_case(path: Path | str) -> Case:
 
     约定（与组员提案文件同族：标记行 + ``## `` 小节）：``## 问题``（或 H1 标题兜底）、
     ``## 选项 A``、``## 选项 B`` 必需，``## 证据`` 可选，头部 ``targets: a, b`` 声明
-    涉事路径供自动抓取材料。
+    涉事路径供自动抓取材料。小节标题**前缀容错**（``## 选项 A：<描述>`` 合法）；
+    H1 兜底的问题串剥 ``案卷：`` 前缀（与 verdict 通道同口径）。
 
     Raises:
         ValueError: 缺问题或任一选项小节（案卷不可用＝组不出案卷，不降级入队）。
@@ -183,6 +223,7 @@ def parse_case(path: Path | str) -> Case:
             if line.startswith("# ") and line[2:].strip():
                 question = line[2:].strip()
                 break
+    question = question.removeprefix("案卷：").removeprefix("案卷:").strip()
     option_a = _lookup(sections, "选项 a", "option a", "a")
     option_b = _lookup(sections, "选项 b", "option b", "b")
     missing = [
@@ -207,6 +248,7 @@ def parse_case(path: Path | str) -> Case:
         evidence=_lookup(sections, "证据", "evidence"),
         targets=targets[:MAX_TARGETS],
         path=str(p),
+        options=_collect_options(sections),
     )
 
 
@@ -274,11 +316,31 @@ def relevant_ledger_rows(case: Case, *, limit: int = 10) -> list[str]:
     return rows[-limit:]
 
 
+def _taskbook_digest(case_id: str) -> str:
+    """案卷 → 归属任务书的**要求与历史总览**（确定性材料的一员，随材料哈希冻结）。
+
+    裁判守则「案卷之外一无所知」——用户 2026-10-17 裁决：原始要求与历轮批语必须随案卷
+    附送，否则裁判无法对照「要求是否被满足」判 A/B。定位不到归属任务书 → 空串不附。
+    """
+    from . import taskbooks as _tb
+
+    for suffix in ("-jury", "-discoverability"):
+        if case_id.endswith(suffix):
+            cand = case_id[: -len(suffix)]
+            if _tb.load_state(cand):
+                try:
+                    return _tb.requirements_digest(cand)
+                except Exception:  # noqa: BLE001 - 附着面 fail-soft（案卷主流程不塌）
+                    return ""
+    return ""
+
+
 def build_material(case: Case) -> str:
     """CLI 自动附着的**确定性材料**（§4 对「jury 不自行读代码」的补偿条款）。
 
     抓取项全部可重放：``git diff --stat`` / ``git diff``（截断）/ ``git log
-    --oneline -5`` / 案卷 ``targets:`` 涉事文件的字节读数 / 相关台账行。
+    --oneline -5`` / 案卷 ``targets:`` 涉事文件的字节读数 / 相关台账行 /
+    **要求与历史总览**（归属任务书可定位时，用户 2026-10-17）。
     """
     diff = run_git("diff")
     if len(diff) > DIFF_CAP_BYTES:
@@ -289,6 +351,7 @@ def build_material(case: Case) -> str:
         else "（案卷未声明 targets: 行）"
     )
     ledger_rows = "\n".join(relevant_ledger_rows(case)) or "（无相关台账行）"
+    digest = _taskbook_digest(case.case_id)
     return (
         "## 自动附着材料（CLI 确定性抓取，非撰写者所写）\n\n"
         f"### git diff --stat\n{run_git('diff', '--stat') or '（空）'}\n\n"
@@ -296,6 +359,7 @@ def build_material(case: Case) -> str:
         f"### git log --oneline -5\n{run_git('log', '--oneline', '-5') or '（空）'}\n\n"
         f"### 涉事文件字节读数\n{targets}\n\n"
         f"### 相关台账行\n{ledger_rows}"
+        + (f"\n\n### 要求与历史总览（自动附送）\n{digest}" if digest else "")
     )
 
 

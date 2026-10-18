@@ -179,7 +179,8 @@ def test_taskbook_new_event_gives_rework_specific_guidance(face):
     assert ev["subject"] == tid
     assert "返工" in ev["detail"] and "第 1 轮" in ev["detail"]
     assert f"plan rework {tid}" in ev["action"], ev["action"]
-    assert "--mode full" in ev["action"]
+    assert "改进项按任务书标志" in ev["action"], "改进项随任务书标志，无需 --mode"
+    assert "--mode" not in ev["action"], "三选一 mode 已退役，不该再出现在引导里"
     assert "taskbooks link <id> --plan <pid>" not in ev["action"], (
         "返工件不该只给通用 link 引导"
     )
@@ -238,7 +239,8 @@ def test_tui_reject_message_shows_next_command(face):
 
     new_id, msg = _run(_go())
     assert new_id.startswith("tb-")
-    assert f"orch plan rework {new_id} --mode full" in msg, msg
+    assert f"orch plan rework {new_id} 生成返工骨架（改进项按任务书标志）" in msg, msg
+    assert "--mode" not in msg, "三选一 mode 已退役，提示语不该再出现"
     assert taskbooks.load_state(tid)["status"] == "rejected"
 
 

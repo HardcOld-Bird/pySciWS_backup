@@ -433,9 +433,11 @@ def pending_review_count() -> int:
 def blind_queue() -> list[dict[str, Any]]:
     """待盲审队列：无 ``review`` 字段的记录，按 ``ts`` 升序（TUI 盲审逐案呈现用）。
 
-    每项 ``{case_id, ts, case_file, question, option_a, option_b, evidence, case_head}``：
-    案情复用 :func:`jury.parse_case`；案卷文件缺失/不可解析（含 consult 自由形式案卷）
-    时回落 ``case_head`` + 「案卷缺失」提示——**可审不崩**。
+    每项 ``{case_id, ts, case_file, question, option_a, option_b, options, evidence,
+    case_head}``：案情复用 :func:`jury.parse_case`；``options``＝案卷**全部**选项
+    ``[(字母, 全文)]``（三选项 consult 案卷全量呈现，2026-10-17 实案 C 选项曾整块
+    不可见）。案卷缺失/不可解析（含 consult 自由形式案卷）**分别**出声：缺失给路径、
+    不可解析附原文摘录（案卷内容非 twin 答案，盲审可看）——**可审不崩**。
     **绝不含** twin 答案（``choice``/``reason``/``body``/``confidence``/``parsed``）：
     先隐去答案让用户自选，提交时的一致性比对走 :func:`blind_case`。
     """
@@ -445,15 +447,25 @@ def blind_queue() -> list[dict[str, Any]]:
     for r in rows:
         case_file = str(r.get("case_file") or "")
         question = option_a = option_b = evidence = ""
+        options: list[tuple[str, str]] = []
         try:
             case = parse_case(case_file)
             question = case.question.strip()
             option_a = case.option_a.strip()
             option_b = case.option_b.strip()
             evidence = case.evidence.strip()
-        except (OSError, ValueError):
+            options = [(lbl, txt) for lbl, txt in case.options]
+        except OSError:
             question = str(r.get("case_head") or "").strip() or "（无案情摘要）"
-            evidence = f"（案卷缺失或不可解析：{case_file or '未记录路径'}）"
+            evidence = f"（案卷缺失：{case_file or '未记录路径'}）"
+        except ValueError:
+            question = str(r.get("case_head") or "").strip() or "（无案情摘要）"
+            raw = ""
+            try:
+                raw = Path(case_file).read_text(encoding="utf-8")[:2000]
+            except OSError:
+                raw = ""
+            evidence = f"（案卷存在但不可解析：{case_file}）\n{raw}".rstrip()
         out.append(
             {
                 "case_id": str(r.get("case_id") or ""),
@@ -462,11 +474,29 @@ def blind_queue() -> list[dict[str, Any]]:
                 "question": question,
                 "option_a": option_a,
                 "option_b": option_b,
+                "options": options,
                 "evidence": evidence,
                 "case_head": str(r.get("case_head") or ""),
             }
         )
     return out
+
+
+def choice_letter(choice: str) -> str:
+    """自由文本裁示 → 选项字母（``C（双工作点并列）：…``→``C``、``选项 B``→``B``）。
+
+    盲审一致性比对用：consult 裁示常是整句，与用户 ``A``/``B``/``C`` 选择**逐字**
+    比对永不一致（实案 tb-20261017-044604-3-2：裁示以「C（…）」开头）。取不出 → 空串。
+    """
+    s = str(choice or "").strip()
+    if not s:
+        return ""
+    m = re.match(r"^选项\s*([A-Za-z])", s)
+    if m:
+        return m.group(1).upper()
+    if s[0].isalpha() and (len(s) == 1 or not s[1].isalnum()):
+        return s[0].upper()
+    return ""
 
 
 def blind_case(case_id: str) -> dict[str, Any] | None:

@@ -1,0 +1,96 @@
+goal: 返工：tb-20261017-212141-3-3
+template: rework
+improve:
+  infra: true
+  leader: false
+  inspector: false
+rework_mode: no_inspector
+rework_round: 3
+taskbook: tb-20261017-212141-3-3
+steps:
+- id: A
+  mode: serial
+  brief: 综合项目改进
+  children:
+  - id: a1
+    kind: self
+    brief: 成因分析报告
+    role: cause
+    expand_history: true
+    evidence_sections:
+    - 前次改进复盘
+    - 成因分析
+    - 结论
+  - id: a2
+    kind: self
+    brief: 解决方案报告
+    role: solution
+    evidence_sections:
+    - 解决方案
+    - 结论
+  - id: a3
+    kind: self
+    brief: 送审 jury（改进后状态 vs 现状；案卷 tb-20261017-212141-3-3-jury）
+    role: review
+    evidence_sections:
+    - 送审结论
+  - id: a4
+    kind: self
+    brief: 拆解改进派单
+    role: improvement_plan
+    gate_jury: tb-20261017-212141-3-3-jury
+  - id: a5
+    member: devops
+    brief: 改进实施
+    member_placeholder: true
+- id: B
+  mode: serial
+  brief: 返工执行
+  children:
+  - id: b1
+    kind: self
+    brief: 重拆解返工
+    role: rework_plan
+  - id: b2_sim
+    member: sim
+    brief: 仿真修正重算（背景场剔除管槽域+扩大域≥60cm+双表）
+  - id: b2_draw
+    member: drawing
+    brief: 审美参考图生成
+  - id: b2
+    member: figure
+    brief: 返工生产环节
+  - id: b2_fix
+    member: figure
+    brief: colorbar 零值色修正（黄绿居中）+重渲染
+  - id: b2_rv
+    member: reviewer
+    brief: 返工产物审核（视觉+关系级核对）
+  - id: b2_fix2
+    member: figure
+    brief: Exp.† 标记补回+重渲染（H6 修复）
+  - id: b_last
+    kind: self
+    brief: 全流程报告组装
+    role: final_report
+- id: L
+  mode: serial
+  brief: 组长改进
+  children:
+  - id: l1
+    kind: self
+    brief: harnessing 摩擦反思
+    role: leader_reflection
+    evidence_sections:
+    - 摩擦反思
+    - 改进清单
+    - 结论
+  - id: l2
+    kind: self
+    brief: 拆解改进派单（空改进清单合法）
+    role: leader_improvement_plan
+  - id: l3
+    member: devops
+    brief: 改进实施
+    member_placeholder: true
+id: rework-tb-20261017-212141-3-3

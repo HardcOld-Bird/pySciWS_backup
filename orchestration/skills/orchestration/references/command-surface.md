@@ -6,28 +6,26 @@ SKILL.md「命令面（速查）」只给骨干；本文件是逐行语义与旗
 pysci-orch status                        # 全景：计划/成员/队列/worker/台账/夜航
 # —— 日常面 ——
 pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §4.2）
-#   └ id 缺省取**文件名 stem**（建议显式 --id）；YAML **复制**进 `state/plans/<id>.plan.yaml`
-#     （源任意位置、登记后可删；**勿与目标同名**——同名未定义）
-pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>]  # 事件驱动：入队即返回（M5，不阻塞；成员含 devops）
+#   └ id 缺省取文件名 stem（建议显式 --id）；YAML 复制进 `state/plans/<id>.plan.yaml`（源可删；勿与目标同名）
+pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>] [--skip <leaf>]  # 事件驱动：入队即返回（成员含 devops）
 #   └ --evidence：收尾 kind:self 组长环节（文件在 + 标题段 lint 过才置 done，PSEP_3 §2.1）
 #     └ 落点 `data/taskbooks/<id>.<leaf>-<名>.md`；骨架=`# <标题>`+对应标题段（如 `## 拆解`）
-#   └ 旗标（原同步子命令已废，旗标并入本命令）：
-#     advance 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --dry --evidence
-#     （--session 默认 latest，**续作余量已尽必须 new**；--evidence 见上行）
-pysci-orch plan rework <tb-id> [--mode full|no_inspector|rework_only] [--plan-id X] [--force]
-        # 返工任务书 → 三档骨架（A/B/C）并登记（§4.2）；[NEXT]：link → advance（不走 plan new）
+#   └ --skip：pending 环节置 skipped（空改进清单等「合法不做事」收尾，如 --skip L.l3）
+#   └ 旗标（run 已废、旗标并入）：
+#     advance 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --dry --evidence --skip
+#     （--session 默认 latest，续作余量已尽必须 new）
+pysci-orch plan rework <tb-id> [--improve infra,leader,inspector] [--mode full|no_inspector|rework_only] [--plan-id X] [--force]
+        # 返工任务书 → 骨架（改进项组合 A/B/C/L）并登记；改进项默认读任务书标志（--improve 显式/--mode 兼容）；[NEXT]：link → advance
 pysci-orch next [--limit N]              # 跨任务路由：优先级→动作类别→序；任务卡片 + 简表（PSEP_3 §3.2）
 pysci-orch taskbooks list|show <id>|link <id> --plan <pid>|sync|report <id>  # 用户大任务书（report=全流程报告）
 pysci-orch queues list | queues enqueue <member> --text "..." [--review]  # 成员 FIFO 队列（含 devops）
 pysci-orch events drain | events list  # 统一事件流：排空（幂等）/水位
 pysci-orch plan amend <id>               # 编辑 plan YAML 后校验对账
-pysci-orch plan edit <id> --step S (--brief|--append-brief|--dirs)  # 结构化改环节字段
-#   └ **改环节别手编 YAML**（`plan new` 重排折行，old_string 对不上）：说「改什么」即可
+pysci-orch plan edit <id> --step S (--brief|--append-brief|--dirs)  # 结构化改环节字段（**别手编 YAML**：plan new 重排折行、old_string 对不上）
 pysci-orch plan reassign <id> --step <leaf> --member <id>  # 未派发环节改派（占位符走此路）
 pysci-orch plan split <id> --step <leaf> (--before|--after) --member <id> --brief T  # 拆叶
 pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步：**同步阻塞到完成**
-#   └ 内部走阻塞推进原语（等在途收尾）⇒ **与 `plan advance` 的「入队即返回」相反**；
-#     长任务**必须后台**（run_in_background），否则撞 Bash 超时（backlog 20261015-211200）
+#   └ 与 `plan advance`「入队即返回」相反（内部等在途收尾）；长任务**必须后台**（run_in_background），否则撞 Bash 超时（backlog 20261015-211200）
 pysci-orch plan list | plan drop <id>
 pysci-orch suggestions [ack <id> --as superseded|decision --by <ref> --why "<理由>"]  # 待审批（超 24h 醒目）
 #     └ ack＝**第三态销账**（非否决、不进 backlog，移入 `closed/`）；立单面 `supersedes: <id>[,…]` 随 approve 联动销账

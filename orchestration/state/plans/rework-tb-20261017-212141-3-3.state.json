@@ -1,0 +1,128 @@
+{
+  "plan_id": "rework-tb-20261017-212141-3-3",
+  "created": "2026-10-18T09:16:52+08:00",
+  "goal": "返工：tb-20261017-212141-3-3",
+  "steps": [
+    {
+      "id": "A.a1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212141-3-3.a1-成因分析.md"
+    },
+    {
+      "id": "A.a2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212141-3-3.a2-解决方案.md"
+    },
+    {
+      "id": "A.a3",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212141-3-3-jury.md"
+    },
+    {
+      "id": "A.a4",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212141-3-3.a4-拆解.md"
+    },
+    {
+      "id": "A.a5",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261018-092557-rework-tb-20261017-212141-3-3-A.a5",
+      "task_file": "data/taskbooks/tb-20261017-212141-3-3.a5-改进实施.md",
+      "session_id": "18433e31-dabe-45fd-adb7-e1559d493144",
+      "kind": "result"
+    },
+    {
+      "id": "B.b1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212141-3-3.b1-重拆解.md"
+    },
+    {
+      "id": "B.b2_sim",
+      "status": "done",
+      "review": "pending",
+      "job_id": "sim-20261018-100900-rework-tb-20261017-212141-3-3-B.b2_sim",
+      "task_file": "data/taskbooks/tb-20261017-212141-3-3.b2_sim-仿真修正.md",
+      "session_id": "461e48cc-50bf-4bc5-9bd0-4bfeeeb4e45d",
+      "kind": "result"
+    },
+    {
+      "id": "B.b2_draw",
+      "status": "done",
+      "review": "pending",
+      "job_id": "drawing-20261018-102728-rework-tb-20261017-212141-3-3-B.b2_draw",
+      "task_file": "data/taskbooks/tb-20261017-212141-3-3.b2_draw-审美参考.md",
+      "session_id": "c2d806ff-32e9-4bda-8ce2-602df8da31df",
+      "kind": "result"
+    },
+    {
+      "id": "B.b2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "figure-20261018-110512-rework-tb-20261017-212141-3-3-B.b2",
+      "task_file": "data/taskbooks/tb-20261017-212141-3-3.b2-续作.md",
+      "session_id": "f2d6a7d5-1e32-4a7d-89df-f86c80cdf5e0",
+      "kind": "result"
+    },
+    {
+      "id": "B.b2_fix",
+      "status": "done",
+      "review": "pending",
+      "job_id": "figure-20261018-111123-rework-tb-20261017-212141-3-3-B.b2_fix",
+      "task_file": "data/taskbooks/tb-20261017-212141-3-3.b2_fix-零值色.md",
+      "session_id": "1d514961-cfbe-473b-8f48-ef4dcb61cf94",
+      "kind": "result"
+    },
+    {
+      "id": "B.b2_rv",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261018-111655-rework-tb-20261017-212141-3-3-B.b2_rv",
+      "task_file": "data/taskbooks/tb-20261017-212141-3-3.b2_rv-审核.md",
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
+    },
+    {
+      "id": "B.b2_fix2",
+      "status": "done",
+      "review": "pending",
+      "job_id": "figure-20261018-114645-rework-tb-20261017-212141-3-3-B.b2_fix2",
+      "task_file": "data/taskbooks/tb-20261017-212141-3-3.b2_fix2-ExpDagger.md",
+      "session_id": "b66519e4-1c3f-4deb-808f-7a12c95f440f",
+      "kind": "result"
+    },
+    {
+      "id": "B.b_last",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212141-3-3.blast-报告组装.md"
+    },
+    {
+      "id": "L.l1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212141-3-3.l1-摩擦反思.md"
+    },
+    {
+      "id": "L.l2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261017-212141-3-3.l2-拆解.md"
+    },
+    {
+      "id": "L.l3",
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261018-115441-rework-tb-20261017-212141-3-3-L.l3",
+      "task_file": "data/taskbooks/tb-20261017-212141-3-3.l3-改进实施.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-18T12:53:11+08:00"
+}

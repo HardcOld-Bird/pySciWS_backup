@@ -1,0 +1,9 @@
+# beam_scatter 综合图（返工第 3 轮）风格绑定。
+# 双栏 170 mm（aps），高/宽 ≈ 0.81（三行复合图）；palette 只作用于非数据图元。
+style: aps
+width: double
+aspect: 0.83
+palette: okabe-ito
+scienceplots: true
+stem: beam_scatter_combined
+out_subdir: out

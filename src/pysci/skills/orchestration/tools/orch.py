@@ -236,6 +236,25 @@ def cmd_status(args: argparse.Namespace) -> int:
     except Exception:  # noqa: BLE001 - 读数面 fail-open（settings 缺失/损坏不塌 status）
         print("== 夜航 ==\n  夜航：未知（settings 读不出）")
 
+    # 大任务执行模式（用户 2026-10-17）：serial/parallel＋队列顺位——热切换，本行即生效值。
+    print("== 大任务 ==")
+    try:
+        from . import taskbooks as _tb
+        from .settings import taskbook_execution_mode
+
+        mode, _warns = taskbook_execution_mode(None)
+        line = f"  大任务执行模式：{mode}（改 toml 一行即下一回合生效）"
+        if mode == "serial":
+            head = _tb.serial_head()
+            rows = _tb.queue_rows()
+            line += (
+                f"；队首 {head.get('id') if head else '（无）'}，"
+                f"排队 {max(len(rows) - 1, 0)} 件"
+            )
+        print(line)
+    except Exception:  # noqa: BLE001 - 读数面 fail-open
+        print("  大任务执行模式：未知（settings 读不出）")
+
     print("== 成员 ==")
     reg = Registry.load()
     members = reg.data.get("members", {})
@@ -861,6 +880,13 @@ def cmd_taskbooks(args: argparse.Namespace) -> int:
     action = getattr(args, "tb_action", "") or "list"
     if action == "list":
         secs = _tb.sections()
+        if _tb.execution_mode() == "serial":
+            head = _tb.serial_head()
+            print(
+                "== 执行模式：serial（一次一个大任务；队首="
+                f"{head.get('id') if head else '（无）'}）=="
+            )
+        qrow = {str(r.get("id")): r for r in _tb.queue_rows()}
         for name, items in (
             ("现有大任务（new/planning/active）", secs["open"]),
             ("已完成待批复（delivered）", secs["review"]),
@@ -872,6 +898,14 @@ def cmd_taskbooks(args: argparse.Namespace) -> int:
                 continue
             for d in items:
                 extra = f"  plan={d.get('plan_id')}" if d.get("plan_id") else ""
+                q = qrow.get(str(d.get("id")))
+                if q:
+                    tag = (
+                        "  [队首]"
+                        if q.get("queue_no") == 1
+                        else f"  [队列 #{q.get('queue_no')}/{q.get('queue_total')}]"
+                    )
+                    extra = tag + extra
                 print(
                     f"  [{d.get('status')}] {d.get('id')}  "
                     f"{str(d.get('title', ''))[:50]}{extra}"
@@ -892,12 +926,18 @@ def cmd_taskbooks(args: argparse.Namespace) -> int:
         print(f"标题：{st.get('title')}")
         if st.get("plan_id"):
             print(f"plan：{st['plan_id']}")
-        for r in st.get("rejections") or []:
-            print(f"[历史批语 {r.get('ts')}] {r.get('note')}")
+        # 要求与历史总览**置顶**（用户 2026-10-17：原始要求+历轮批语集中、一次性可见；
+        # 批语历史已并入总览 ② 逐条带轮次归属，不再另列无归属的散条）。
+        if _tb.digest_has_history(args.id):
+            print(_tb.requirements_digest(args.id))
         print("---- 正文 ----")
         print(_tb.read_body(args.id))
         return 0
     if action == "link":
+        gate = _tb.queue_gate(args.id)
+        if gate:
+            print(gate)
+            return 2
         try:
             st = _tb.link_plan(args.id, args.plan)
         except ValueError as exc:
@@ -1165,6 +1205,11 @@ def main(argv: list[str] | None = None) -> int:
         "--evidence",
         help="kind:self 组长环节收尾证据文件（存在 + 标题段 lint 通过即置 done，PSEP_3 §2.1）",
     )
+    q.add_argument(
+        "--skip",
+        default="",
+        help="把 pending 环节置 skipped（空改进清单等「合法不做事」收尾；如 --skip L.l3）",
+    )
     q.set_defaults(func=_plan_router("advance"))
 
     q = psub.add_parser(
@@ -1229,14 +1274,20 @@ def main(argv: list[str] | None = None) -> int:
     q.set_defaults(func=_plan_router("split"))
 
     q = psub.add_parser(
-        "rework", help="由返工任务书生成三档模板骨架并登记（PSEP_3 §4.2）"
+        "rework",
+        help="由返工任务书生成骨架并登记（改进项默认随任务书标志；PSEP_3 §4.2）",
     )
     q.add_argument("id", help="返工任务书 id（tb-…）")
     q.add_argument(
+        "--improve",
+        default="",
+        help="改进项显式覆盖（逗号串，如 infra,leader；空串=全不含）——默认读任务书标志",
+    )
+    q.add_argument(
         "--mode",
         choices=["full", "no_inspector", "rework_only"],
-        default="full",
-        help="返工三档：完整 / 无监察改进 / 仅返工（默认 full）",
+        default=None,
+        help="（兼容）旧三档：映射 infra/inspector 标志；默认不传=读任务书标志",
     )
     q.add_argument("--goal", help="计划目标（默认「返工：<tb-id>」）")
     q.add_argument("--plan-id", help="计划 id（默认 rework-<tb-id>）")

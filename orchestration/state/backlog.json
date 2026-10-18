@@ -3369,12 +3369,15 @@
       "kind": "usability",
       "success_criteria": "- `plan advance` 对 kind:self 环节的 evidence 规格行附一行落点与命名惯例\n（`data/taskbooks/<id>.<leaf>-<名>.md`）；\n- command-surface.md 补「evidence/案卷最小骨架」可复制样例各一段（evidence：标题段\n对应章节；jury 案卷：问题/选项 A/选项 B/证据/送审结论 五段；注明 twin 案卷同构前三段），\n预算内可与 215944 的立单样例同节编排；\n- 回归测试：command-surface 覆盖测试（test_command_surface_coverage）断言样例段在场；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-104501-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T10:42:53+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit b763fdb）",
       "source": "leader",
       "started_at": "2026-10-17T12:56:01+08:00",
-      "worktree": "20261017-104501-devops"
+      "worktree": "20261017-104501-devops",
+      "done_at": "2026-10-17T15:34:45+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-104501-devops"
     },
     {
       "id": "20261017-104502-devops",
@@ -3415,12 +3418,15 @@
       "kind": "usability",
       "success_criteria": "- 新增轻量命令（如 `pysci-orch plan reassign <plan> <leaf> --member <id>` 与\n`plan split <leaf> --before/--after --member <id> --brief \"<描述>\"`，或\n`plan advance --member <id>` 覆盖当跳）：完成占位符改派与单叶拆分，内部走既有\namend/对账逻辑（必留叶子校验/已 started 冻结护栏不变）；\n- 回归测试：占位叶改派一例（member 更新且 advance 正常）、拆叶一例（必留叶子不缺）、\n已 started 环节改派被拒一例；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-104504-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T10:43:03+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit ce19a70）",
       "source": "leader",
       "started_at": "2026-10-17T13:12:15+08:00",
-      "worktree": "20261017-104504-devops"
+      "worktree": "20261017-104504-devops",
+      "done_at": "2026-10-17T16:04:51+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-104504-devops"
     },
     {
       "id": "20261017-105200-devops",
@@ -3463,12 +3469,15 @@
       "kind": "usability",
       "success_criteria": "- NEEDS-LEADER「已提交未合并」事件在**呈现/消费时**做旁证细分：分支已并入 main（或\nworktree 已摘）→ 标「已合并陈旧报」不呈报为待办（status 可留注记）；确未合并才照旧\n唤醒；\n- 回归测试：构造「事件在途期间合并完成」断言消费时不再提示授权；构造「确未合并」\n断言照常呈报；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-111500-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T11:21:52+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit ff5401d）",
       "source": "leader",
       "started_at": "2026-10-17T11:21:58+08:00",
-      "worktree": "20261017-111500-devops"
+      "worktree": "20261017-111500-devops",
+      "done_at": "2026-10-17T14:22:28+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-111500-devops"
     },
     {
       "id": "20261017-112800-devops",
@@ -3477,12 +3486,15 @@
       "kind": "usability",
       "success_criteria": "- 实测记录在盘（Plan 两环节的层级归属结论＋钩子触发证据）；\n- 若可接管：夜航 enabled=true 时 EnterPlanMode/ExitPlanMode 自动通过（无弹窗）、\nenabled=false 时行为不变；回归测试钩子判定两态各一例；\n- 若不可接管：留档实测证据与「不可行」结论（不实施，符合用户「不可以亦可不改进」）；\n- 政策文⑥ 过时定性已修正（无「不写钩子接管」字样残留）；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-112800-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T11:54:25+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 407ce8f）",
       "source": "leader",
       "started_at": "2026-10-17T11:54:29+08:00",
-      "worktree": "20261017-112800-devops"
+      "worktree": "20261017-112800-devops",
+      "done_at": "2026-10-17T14:39:20+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-112800-devops"
     },
     {
       "id": "20261017-120500-devops",
@@ -3491,12 +3503,15 @@
       "kind": "defect",
       "success_criteria": "- TUI 运行日志在盘（含一次模拟异常注入的 traceback 记录）；\n- 内容未变时重建不触发（可测：tick 前后控件实例不变/日志注明 skip）；\n- 构造「点击瞬间重建」竞态（或异常注入）：TUI 不退出、日志有记录；\n- 修复前崩溃样例（MouseDown 落行标题）复跑不再崩；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-120500-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T12:33:48+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 4078008）",
       "source": "leader",
       "started_at": "2026-10-17T12:33:51+08:00",
-      "worktree": "20261017-120500-devops"
+      "worktree": "20261017-120500-devops",
+      "done_at": "2026-10-17T14:57:09+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-120500-devops"
     },
     {
       "id": "20261017-120835-devops",
@@ -3505,11 +3520,14 @@
       "kind": "defect",
       "success_criteria": "`occlusion.min_distance_px` 改用精确最近邻（`scipy.spatial.cKDTree`）或等价算法，同一图对的 `ink_line_min_px` 数值与现实现**完全一致**（或差 <1e-6），且全分辨率耗时降到 ≤1/10；`uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-120835-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T12:34:39+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 3bccbc7）",
       "started_at": "2026-10-17T12:34:43+08:00",
-      "worktree": "20261017-120835-devops"
+      "worktree": "20261017-120835-devops",
+      "done_at": "2026-10-17T15:13:07+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-120835-devops"
     },
     {
       "id": "20261017-133500-devops",
@@ -3518,12 +3536,15 @@
       "kind": "defect",
       "success_criteria": "- 两写者并发交错（模拟持有者带旧快照写回）后，跳变判定不重复触发；\n- 「关→开」注入授权书全文恰好一次（同会话连续两次 `--diff` 第二次零输出）；\n- `uv run --no-sync pytest tests` 全绿。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-133500-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T14:00:01+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 2beef65）",
       "source": "leader",
       "started_at": "2026-10-17T14:00:03+08:00",
-      "worktree": "20261017-133500-devops"
+      "worktree": "20261017-133500-devops",
+      "done_at": "2026-10-17T16:45:27+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-133500-devops"
     },
     {
       "id": "20261017-125557-devops",
@@ -3532,11 +3553,62 @@
       "kind": "usability",
       "success_criteria": "worktree 内的 harness 预算类判据按 **CRLF 等价字节**度量（或测试/钩子在 worktree 也强制 CRLF），使「worktree 全量绿」与「merge 后 main 全量绿」在预算面上不再分裂；至少，`test_command_surface_coverage::test_watched_docs_within_budget` 与 `test_budget_precommit::test_repo_tracked_docs_pass_the_hook` 在 LF 检出下也能预演 CRLF 口径。",
       "evidence_file": "orchestration/state/suggestions/approved/20261017-125557-devops.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-17T14:02:15+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 7a6f299）",
       "started_at": "2026-10-17T14:02:19+08:00",
-      "worktree": "20261017-125557-devops"
+      "worktree": "20261017-125557-devops",
+      "done_at": "2026-10-17T17:02:18+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-125557-devops"
+    },
+    {
+      "id": "20261017-223552-devops",
+      "member": "devops",
+      "summary": "success_criteria: `pysci-dev worktree merge` 的「应回冲突」摘要列出**真正的 unmerged 文件**（取 `git status --porcelain --unmerged`），不再把 git 输出末行当作冲突成因。",
+      "kind": "usability",
+      "success_criteria": "`pysci-dev worktree merge` 的「应回冲突」摘要列出**真正的 unmerged 文件**（取 `git status --porcelain --unmerged`），不再把 git 输出末行当作冲突成因。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261017-223552-devops.md",
+      "status": "done",
+      "proposed": "2026-10-18T08:56:34+08:00",
+      "note": "drain 批量销账（commit db50c95）",
+      "started_at": "2026-10-18T08:56:36+08:00",
+      "worktree": "20261017-223552-devops",
+      "done_at": "2026-10-18T09:05:29+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261017-223552-devops"
+    },
+    {
+      "id": "20261018-085835-writing",
+      "member": "writing",
+      "summary": "success_criteria: 对「页 3 固定 1.39 in、页 2/6 各自 ±10% 自适应」的合规 deck，`pysci-compose slides geometry` 输出 0 违规；且长拉丁标题在 3 pt 字距下按估算宽 +10% 设框不折行。",
+      "kind": "defect",
+      "success_criteria": "对「页 3 固定 1.39 in、页 2/6 各自 ±10% 自适应」的合规 deck，`pysci-compose slides geometry` 输出 0 违规；且长拉丁标题在 3 pt 字距下按估算宽 +10% 设框不折行。\n① 旧 W2 跨页一致性闸与自适应框宽互斥：`slides_visual._title_fmt` 的指纹含框宽 cx，要求三页同宽。复现：`pysci-compose slides geometry 'data/research/1_gain_ep/汇报PPT/20261016/20261016.pptx'` → 实际 2 项「标题不一致…：宽」；期望 0。建议指纹去除 cx（保留 cy/x/y/字号字体），或把「风格一致性」与「框宽适配」拆成互不冲突的两项。\n② 框宽估算器未计内边距与字距：`estimate_title_width_in` 只估字形宽。复现：页 2 标题 20 pt、3 pt 字距，PDF 实测文字宽 2.188 in；按估算 2.033 in +10% 设框 2.236 in，扣 0.2 in 内边距后可用 2.036 in → 折行。期望按「字形宽 + 2×默认内边距 + 字距」估框，或提供 insets/spc 参数；本轮以字距 3→1.5 pt 折中。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261018-085835-writing.md",
+      "status": "done",
+      "proposed": "2026-10-18T09:00:48+08:00",
+      "note": "drain 批量销账（commit dafaba3）",
+      "started_at": "2026-10-18T09:00:51+08:00",
+      "worktree": "20261018-085835-writing",
+      "done_at": "2026-10-18T09:15:42+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261018-085835-writing"
+    },
+    {
+      "id": "20261018-092248-lit",
+      "member": "lit",
+      "summary": "success_criteria: 在基本库调用说明中给出「PubMed eutils / Semantic Scholar 在本机偶发失败的已知对策」，使后续会话不必重复踩坑。",
+      "kind": "usability",
+      "success_criteria": "在 literature-research 技能的 references/ 新增「第三方学术 API 本机已知对策」小节（或并入既有 sources/maintenance 内容）：PubMed eutils 须加 --ssl-no-revoke；Semantic Scholar 429 限流时退避或改用 OpenAlex/Crossref；并注明 OpenAlex 无 key 共享额度限制。SKILL.md 仅留一行索引，不膨胀正文。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261018-092248-lit.md",
+      "status": "done",
+      "proposed": "2026-10-18T09:24:05+08:00",
+      "note": "drain 批量销账（commit 4a5c108）",
+      "started_at": "2026-10-18T09:24:07+08:00",
+      "worktree": "20261018-092248-lit",
+      "done_at": "2026-10-18T09:32:33+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261018-092248-lit"
     }
   ]
 }

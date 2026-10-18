@@ -11,7 +11,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import re
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -98,7 +97,25 @@ ROLE_EVIDENCE_SECTIONS: dict[str, tuple[str, ...]] = {
     "rework_plan": ("拆解", "结论"),
     # 「全流程报告」= `taskbooks.report_sections` 组装的通用两段（任何任务书都有）
     "final_report": ("任务概述", "环节完成清单"),
+    # L 组长改进（用户 2026-10-17）：l2 必须用**新 role**——复用 improvement_plan 会与
+    # a4 在 taskbooks._role_texts（按 role 为键）互相覆盖。
+    "leader_reflection": ("摩擦反思", "改进清单", "结论"),
+    "leader_improvement_plan": ("拆解",),
 }
+
+
+#: L 环节（组长改进）正式要求文本（基于用户 2026-10-17 裁决草稿扩写）：l1 引导时全文打印。
+LEADER_IMPROVE_PROMPT: str = """\
+※ 组长改进环节（harnessing 摩擦反思）——正式要求：
+请回顾这段时间对本系统的使用，积极立单修复你感受到的摩擦：
+1. harnessing 指导是否充分？——你的工作执行情形（各环节该做什么、判据是什么）在
+   harnessing（rules/charter/技能/orch 引导）里有没有足够指导？相关功能有没有被合理介绍？
+2. 信息获取是否方便？——工作过程中拿到所需信息要几步？若 orch 在触发点直接附送这些
+   信息（如要求与历史总览、引导块），会不会更好？哪些信息是你靠 grep/翻文件才找到的？
+3. 是否存在误导？——harnessing 的表述与实际行为不符、或引导指向了错误命令/路径的，逐条点名。
+对每个真实摩擦**立单改进**（下一环节 l2 拆解改进派单，随后 l3 派 devops 实施）；
+若确无摩擦，在 l2 写明「本轮无需改进，空清单」，并以
+`pysci-orch plan advance <pid> --skip L.l3` 收尾（空改进清单合法）。"""
 
 
 def _check_evidence(path: str, sy: dict) -> tuple[bool, str]:
@@ -211,79 +228,39 @@ def _print_self_guidance(
         "（骨架＝`# 标题`＋上述标题段，如 `## 拆解`）"
     )
     print(f"  完成后提交证据收尾：pysci-orch plan advance {plan_id} --evidence <路径>")
+    if str(sy.get("role") or "") == "leader_reflection":
+        print()
+        for ln in LEADER_IMPROVE_PROMPT.splitlines():
+            print(f"  {ln}")
     if sy.get("expand_history") and plan is not None:
         for ln in _rework_history_lines(plan):
             print(ln)
 
 
-#: 报告摘要取段的关键词（标题含其一即取该段**首段**）。
-_DIGEST_KEYS = ("任务概述", "批语", "反馈", "改进", "裁决", "结论", "总结")
-
-
-def _report_digest(text: str, *, per_section: int = 220, total: int = 900) -> str:
-    """报告 → **结构化摘要**：按 ``## `` 切段，只取关键段的**首段**并截断（绝不灌全文）。"""
-    if not text:
-        return ""
-    parts = re.split(r"^##\s+", text, flags=re.M)
-    lines: list[str] = []
-    used = 0
-    for part in parts[1:]:
-        head, _, body = part.partition("\n")
-        title = head.strip()
-        if not any(k in title for k in _DIGEST_KEYS):
-            continue
-        flat = " ".join(body.strip().split())
-        if not flat:
-            continue
-        if len(flat) > per_section:
-            flat = flat[:per_section] + "…"
-        line = f"- {title}：{flat}"
-        if used + len(line) > total:
-            break
-        lines.append(line)
-        used += len(line)
-    return "\n".join(lines)
-
-
 def _rework_history_lines(plan: dict) -> list[str]:
-    """rework_round≥2 的**历次改进强制展示**（§4.3 #4）：**结构化摘要 ＋ 报告路径**。
+    """rework_round≥2 的**历次改进强制展示**（§4.3 #4）：**要求与历史总览 ＋ 报告路径**。
 
-    旧实现把前轮报告**全文**灌进 advance 输出——实测 67.1 KB 被工具层截断成 2000 字符预览，
-    **既进不了上下文也读不全**，强制回顾的意图被截断反噬（backlog 20261017-104503）。
-    改为每轮：摘要（任务概述/批语/改进清单/裁决/结论 等关键段首段，限量）＋报告路径＋
-    「细节自查该文件」（需要全文时组长自读）。
+    数据源＝:func:`taskbooks.requirements_digest`（用户 2026-10-17：原始要求＋历轮批语
+    ＋历轮收获集中展示）。旧关键词摘要有三重漏（跳过「历轮摘要」段、220 字/段切掉原始
+    要求、无标题正文不进摘要）——已被总览单源取代；报告路径提示保留（要全文组长自读）。
     """
     from . import taskbooks as _tb
 
     tb_id = str(plan.get("taskbook") or "")
     st = (_tb.load_state(tb_id) or {}) if tb_id else {}
     rnd = int(st.get("rework_round") or plan.get("rework_round") or 1)
-    if rnd < 2:
+    if rnd < 2 or not tb_id:
         return []
-    out = [
-        f"  == 历次改进强制展示（第 {rnd} 轮；前轮**摘要＋路径**，PSEP_3 §4.3 #4）=="
-    ]
-    prev = str(st.get("rework_of") or "")
-    n = rnd - 1
-    while prev:
-        pst = _tb.load_state(prev) or {}
-        rp = _tb.report_path(prev)
-        try:
-            text = rp.read_text(encoding="utf-8").strip() if rp.exists() else ""
-        except OSError:
-            text = ""
-        body = text or _tb.read_body(prev).strip()
-        out.append(f"  —— 第 {n} 轮「{pst.get('title') or prev}」（{prev}）——")
-        digest = _report_digest(body)
-        if digest:
-            out.extend(f"    {ln}" for ln in digest.splitlines())
+    out = [f"  == 历次改进强制展示（第 {rnd} 轮；PSEP_3 §4.3 #4）=="]
+    for ln in _tb.requirements_digest(tb_id).splitlines():
+        out.append(f"  {ln}" if ln else "")
+    for member in _tb.family_chain(tb_id)[:-1]:
+        mid = str(member.get("id") or "")
+        rp = _tb.report_path(mid)
         if rp.exists():
-            out.append(f"    细节自查该文件：{rp}")
+            out.append(f"  细节自查该文件：{rp}")
         else:
-            out.append("    （无报告留痕；细节查该轮任务书）")
-        out.append("")
-        prev = str(pst.get("rework_of") or "")
-        n -= 1
+            out.append(f"  （{mid} 无报告留痕；细节查该轮任务书）")
     return out
 
 
@@ -520,6 +497,31 @@ def _reconcile(plan: dict, state: dict) -> dict:
     return state
 
 
+def ensure_leader_step(plan_id: str) -> bool:
+    """任务书勾了「包含组长改进」→ 在 plan 顶层末尾**自动追加 L 环节**（用户 2026-10-17）。
+
+    组长零手写（与返工骨架同风格的「工具组装」）；幂等：任一叶子
+    ``role == "leader_reflection"`` 即视为已有。只**追加**（不动任何既有行），已 started
+    环节不受影响；对账走 :func:`_reconcile`（amend 同款）。
+
+    Returns:
+        True=本次追加；False=已有 L / plan 不存在。
+    """
+    if not _plan_path(plan_id).exists():
+        return False
+    plan = _load_yaml(plan_id)
+    if any(
+        str(leaf.yaml.get("role") or "") == "leader_reflection"
+        for leaf in _tree(plan).leaves
+    ):
+        return False
+    plan.setdefault("steps", []).append(_rework_L())
+    _plan_path(plan_id).write_text(_dump_plan(plan), encoding="utf-8")
+    _save_state(plan_id, _reconcile(plan, _load_state(plan_id)))
+    print(f"[√] 已自动追加 L 组长改进环节（任务书勾选「包含组长改进」）：{plan_id}")
+    return True
+
+
 def list_plans() -> list[tuple[str, str, int, int]]:
     """列出全部计划：(id, goal, 完成环节数, 总环节数)。"""
     out = []
@@ -665,6 +667,8 @@ def cmd_plan_new(args) -> int:
     if not plan.get("steps"):
         print("[!] 计划缺少 steps（格式见 README §4.2）")
         return 2
+    if (gate := _serial_gate(str(plan.get("taskbook") or ""))) is not None:
+        return gate
     plan_id = args.id or src.stem
     if _plan_path(plan_id).exists() and not args.force:
         print(
@@ -810,6 +814,9 @@ def cmd_plan_run(args) -> int:
     state = _reconcile(plan, _load_state(plan_id))
     tree = _tree(plan)
     steps_yaml = _leaf_map(plan)
+    if (gate := _serial_gate(_plan_taskbook_id(plan_id, plan))) is not None:
+        return gate
+    _print_digest_head(plan_id, plan)
 
     if tpl := template_violations(plan):
         print("[!] 推进被拒：rework 模板必留节点缺失/乱序（PSEP_3 §4.3 #1）——")
@@ -1236,6 +1243,86 @@ def cmd_plan_spec(args) -> int:
     return 0
 
 
+def _plan_taskbook_id(plan_id: str, plan: dict) -> str:
+    """plan → 归属任务书 id（``plan.taskbook`` 优先，回落 state 反查；adhoc → 空串）。"""
+    from . import taskbooks as _tb
+
+    tb_id = str(plan.get("taskbook") or "")
+    if not tb_id:
+        tb_id = str((_tb.find_by_plan(plan_id) or {}).get("id") or "")
+    return tb_id
+
+
+def _serial_gate(tb_id: str) -> int | None:
+    """serial 硬闸（用户 2026-10-17「才允许进行下一个大任务」的机械执行面）。
+
+    Returns:
+        2=已打印拒绝文案（调用方直接 return）；``None``=放行（parallel / 队首 / 无归属）。
+    """
+    if not tb_id:
+        return None
+    from . import taskbooks as _tb
+
+    gate = _tb.queue_gate(tb_id)
+    if not gate:
+        return None
+    print(gate)
+    return 2
+
+
+def _print_digest_head(plan_id: str, plan: dict) -> None:
+    """plan 面输出**头部置顶**要求与历史总览（用户 2026-10-17：决策面全量、一次性可见）。
+
+    仅当 plan 有归属任务书**且**总览含历史时打印（无历史任务书正文即原始要求，不重复）。
+    附送面 fail-soft：历史读数坏不阻塞推进。
+    """
+    try:
+        from . import taskbooks as _tb
+
+        tb_id = _plan_taskbook_id(plan_id, plan)
+        if tb_id and _tb.digest_has_history(tb_id):
+            print(_tb.requirements_digest(tb_id).rstrip())
+            print()
+    except Exception:  # noqa: BLE001 - 附送面 fail-soft（推进主流程不被历史读数阻塞）
+        pass
+
+
+def _apply_skip(plan_id: str, plan: dict, state: dict, leaf_path: str) -> int:
+    """``--skip <leaf>``：把 **pending** 叶子置 ``skipped``（空改进清单等「合法不做事」收尾）。
+
+    ``skipped`` 的语义是「从未需要做」（DONE_STATES 一员），不是撤销——已 started
+    一律拒绝。收尾同普通 advance：全完成则报完成，否则刷工作清单。
+    """
+    lm = _leaf_map(plan)
+    if leaf_path not in lm:
+        hint = "、".join(list(lm)[:8]) or "（无叶子）"
+        print(f"[!] 计划 {plan_id} 无环节 {leaf_path}；可用环节：{hint}")
+        return 2
+    row = next((s for s in state["steps"] if str(s["id"]) == leaf_path), None)
+    if row is None:
+        state = _reconcile(plan, state)
+        row = next((s for s in state["steps"] if str(s["id"]) == leaf_path), None)
+    status = str((row or {}).get("status") or "pending")
+    if status != "pending":
+        print(
+            f"[!] 环节 {leaf_path} 状态为 {status}——--skip 只对 pending 环节"
+            "（skipped=从未需要做，不是撤销）"
+        )
+        return 2
+    row["status"] = "skipped"
+    row["note"] = "skip: 组长判定无需执行（空清单/不适用）"
+    _save_state(plan_id, state)
+    print(f"[√] 环节 {leaf_path} 置 skipped（无需执行收尾）")
+    if _plan_settled(plan, state):
+        if not state.get("completed_at"):
+            state["completed_at"] = _now()
+            _save_state(plan_id, state)
+        _report_plan_complete(plan_id, state)
+    else:
+        _print_worklist(plan_id, plan, state)
+    return 0
+
+
 def cmd_plan_advance(args) -> int:
     """**事件驱动推进**（§3.5，M5）：把下一环节入队 m4 成员队列**即返回**。
 
@@ -1264,12 +1351,20 @@ def cmd_plan_advance(args) -> int:
     state = _reconcile(plan, _load_state(plan_id))
     tree = _tree(plan)
     steps_yaml = _leaf_map(plan)
+    if (gate := _serial_gate(_plan_taskbook_id(plan_id, plan))) is not None:
+        return gate
+    _print_digest_head(plan_id, plan)
 
     if tpl := template_violations(plan):
         print("[!] advance 被拒：rework 模板必留节点缺失/乱序（PSEP_3 §4.3 #1）——")
         for v in tpl:
             print(f"  - {v}")
         return 2
+
+    # --skip：pending 叶子的「合法不做事」收尾（空改进清单路径；一次命令一个动作）
+    skip = str(getattr(args, "skip", "") or "")
+    if skip:
+        return _apply_skip(plan_id, plan, state, skip)
 
     # ① 收尾**全部**已终态队列条目（多 job 乱序到达：一次结清，逐项交接决策点）
     #    **但带了 --evidence 时不做**（backlog 20261015-135000-f2-ledger）：一次命令一个
@@ -1581,61 +1676,6 @@ MODE_NO_INSPECTOR = "no_inspector"
 MODE_REWORK_ONLY = "rework_only"
 REWORK_MODES: tuple[str, ...] = (MODE_FULL, MODE_NO_INSPECTOR, MODE_REWORK_ONLY)
 
-#: 各档**必留叶子**（DFS 序＝骨架顺序；缺失/乱序 → advance 拒绝，§4.3 #1）。
-REWORK_REQUIRED: dict[str, tuple[str, ...]] = {
-    MODE_FULL: (
-        "A.a1",
-        "A.a2",
-        "A.a3",
-        "A.a4",
-        "A.a5",
-        "BC.B.b1",
-        "BC.B.b2",
-        "BC.B.b_last",
-        "BC.C.c1",
-        "BC.C.c2",
-        "BC.C.c3",
-        "BC.C.c4",
-    ),
-    MODE_NO_INSPECTOR: (
-        "A.a1",
-        "A.a2",
-        "A.a3",
-        "A.a4",
-        "A.a5",
-        "B.b1",
-        "B.b2",
-        "B.b_last",
-    ),
-    MODE_REWORK_ONLY: ("B.b1", "B.b2", "B.b_last"),
-}
-
-
-def rework_required_leaves(mode: str) -> tuple[str, ...]:
-    return REWORK_REQUIRED.get(mode or MODE_FULL, REWORK_REQUIRED[MODE_FULL])
-
-
-def template_violations(plan: dict) -> list[str]:
-    """template=rework 计划的**必留节点 lint**（缺失/乱序即违规）；非模板计划恒空。"""
-    if str(plan.get("template") or "") != "rework":
-        return []
-    required = list(rework_required_leaves(str(plan.get("rework_mode") or MODE_FULL)))
-    actual = _tree(plan).leaf_paths()
-    out: list[str] = []
-    missing = [p for p in required if p not in actual]
-    if missing:
-        out.append("必留节点缺失：" + "、".join(missing))
-    present = [p for p in actual if p in required]
-    if present != required:
-        out.append(
-            "必留节点乱序（应 "
-            + " → ".join(required)
-            + "；实 "
-            + " → ".join(present)
-            + "）"
-        )
-    return out
-
 
 def _rework_A(tb_id: str, rnd: int) -> dict:
     """A 综合项目改进（serial superstep）：a1 成因分析 → … → a5 改进实施。
@@ -1741,39 +1781,165 @@ def _rework_C(tb_id: str) -> dict:
     }
 
 
-def build_rework_plan(
-    tb_id: str, *, mode: str = MODE_FULL, goal: str = "", rework_round: int = 1
-) -> dict:
-    """生成返工 plan **骨架**（PSEP_3 §4.2 三档）。
+def _rework_L() -> dict:
+    """L 组长改进（serial superstep，**恒居顶层末尾**；用户 2026-10-17 裁决）。
 
-    结构：A、BC 顶层 serial（A 全 done → B 起）；BC 并行组内 B id 靠前、C 靠后（B 派发后
-    C 即可推进＝派发级）；B 是串行链（重拆解→返工生产→全流程报告）。``rework_round>=2``
-    时 a1 触发历次改进强制展示 + 复盘段 lint（§4.3 #4）。
-
-    Raises:
-        ValueError: 未知模式。
+    l1 反思 → l2 拆解改进派单 → l3 改进实施（devops 占位，仿 A 组 a4→a5）。l2 用**新
+    role** ``leader_improvement_plan``：复用 ``improvement_plan`` 会与 a4 在
+    ``taskbooks._role_texts``（按 role 为键）互相覆盖。空改进清单合法——l2 写明后
+    ``plan advance <pid> --skip L.l3`` 收尾。
     """
-    if mode not in REWORK_MODES:
-        raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(REWORK_MODES)}）")
-    rnd = int(rework_round or 1)
-    if mode == MODE_FULL:
-        steps = [
-            _rework_A(tb_id, rnd),
+    return {
+        "id": "L",
+        "mode": "serial",
+        "brief": "组长改进",
+        "children": [
+            {
+                "id": "l1",
+                "kind": "self",
+                "brief": "harnessing 摩擦反思",
+                "role": "leader_reflection",
+                "evidence_sections": ["摩擦反思", "改进清单", "结论"],
+            },
+            {
+                "id": "l2",
+                "kind": "self",
+                "brief": "拆解改进派单（空改进清单合法）",
+                "role": "leader_improvement_plan",
+            },
+            {
+                "id": "l3",
+                "member": "devops",
+                "brief": "改进实施",
+                "member_placeholder": True,
+            },
+        ],
+    }
+
+
+def _improve_of(src: dict) -> dict[str, bool]:
+    """plan/任务书记录 → 改进三标志（真源 ``improve`` 优先，回退 legacy 档名）。"""
+    from . import taskbooks as _tb
+
+    return _tb.improve_flags(
+        {
+            "improve": src.get("improve"),
+            "mode": src.get("rework_mode") or src.get("mode") or "",
+        }
+    )
+
+
+def _rework_layout(
+    tb_id: str, rnd: int, improve: dict[str, bool]
+) -> tuple[list[dict], tuple[str, ...]]:
+    """返工骨架**单源**（2026-10-17 三标志泛化）：``(顶层 steps[], 必留叶子 DFS 序)``。
+
+    infra → A 综合项目改进；inspector → BC 并行组（B 在前＝派发级跟随），否则 B 单独；
+    leader → L 追加**顶层末尾**——顶层 steps[] 是隐式 serial 组
+    （:meth:`planflow.PlanTree.prefix_siblings`），「任务主体全部完成后才进组长改进」
+    由就绪谓词机械保证，不靠自觉。
+    """
+    steps: list[dict] = []
+    required: list[str] = []
+    if improve.get("infra"):
+        steps.append(_rework_A(tb_id, rnd))
+        required += [f"A.a{i}" for i in range(1, 6)]
+    b = _rework_B("B", tb_id)
+    if improve.get("inspector"):
+        steps.append(
             {
                 "id": "BC",
                 "mode": "parallel",
                 "brief": "返工与监察（并行）",
-                "children": [_rework_B("B", tb_id), _rework_C(tb_id)],
-            },
-        ]
-    elif mode == MODE_NO_INSPECTOR:
-        steps = [_rework_A(tb_id, rnd), _rework_B("B", tb_id)]
-    else:  # rework_only
-        steps = [_rework_B("B", tb_id)]
+                "children": [b, _rework_C(tb_id)],
+            }
+        )
+        required += ["BC.B.b1", "BC.B.b2", "BC.B.b_last"]
+        required += [f"BC.C.c{i}" for i in range(1, 5)]
+    else:
+        steps.append(b)
+        required += ["B.b1", "B.b2", "B.b_last"]
+    if improve.get("leader"):
+        steps.append(_rework_L())
+        required += ["L.l1", "L.l2", "L.l3"]
+    return steps, tuple(required)
+
+
+#: 旧三档 → 必留叶子**派生**兼容表（单源 :func:`_rework_layout`；旧读取面/测试用）。
+REWORK_REQUIRED: dict[str, tuple[str, ...]] = {
+    MODE_FULL: _rework_layout("", 1, {"infra": True, "inspector": True})[1],
+    MODE_NO_INSPECTOR: _rework_layout("", 1, {"infra": True})[1],
+    MODE_REWORK_ONLY: _rework_layout("", 1, {})[1],
+}
+
+
+def rework_required_leaves(improve: dict[str, bool]) -> tuple[str, ...]:
+    """给定改进标志组合的**必留叶子**（DFS 序＝骨架顺序）——单源 :func:`_rework_layout`。"""
+    return _rework_layout("", 1, improve)[1]
+
+
+def template_violations(plan: dict) -> list[str]:
+    """template=rework 计划的**必留节点 lint**（缺失/乱序即违规）；非模板计划恒空。"""
+    if str(plan.get("template") or "") != "rework":
+        return []
+    required = list(rework_required_leaves(_improve_of(plan)))
+    actual = _tree(plan).leaf_paths()
+    out: list[str] = []
+    missing = [p for p in required if p not in actual]
+    if missing:
+        out.append("必留节点缺失：" + "、".join(missing))
+    present = [p for p in actual if p in required]
+    if present != required:
+        out.append(
+            "必留节点乱序（应 "
+            + " → ".join(required)
+            + "；实 "
+            + " → ".join(present)
+            + "）"
+        )
+    return out
+
+
+def build_rework_plan(
+    tb_id: str,
+    *,
+    improve: dict[str, bool] | None = None,
+    mode: str | None = None,
+    goal: str = "",
+    rework_round: int = 1,
+) -> dict:
+    """生成返工 plan **骨架**（2026-10-17 三标志泛化；:func:`_rework_layout` 单源组装）。
+
+    结构：A、BC 顶层 serial（A 全 done → B 起）；BC 并行组内 B id 靠前、C 靠后（B 派发后
+    C 即可推进＝派发级）；B 是串行链（重拆解→返工生产→全流程报告）；**L 恒居顶层末尾**
+    （前序全 done 才就绪）。``rework_round>=2`` 时 a1 触发历次改进强制展示 + 复盘段
+    lint（§4.3 #4）。
+
+    Args:
+        improve: 改进三标志（真源）。
+        mode: 旧三档兼容入口（与 ``improve`` 互斥；两者皆缺按 ``full``＝旧签名缺省）。
+
+    Raises:
+        ValueError: ``improve`` 与 ``mode`` 同给 / 未知模式。
+    """
+    from . import taskbooks as _tb
+
+    if improve is not None and mode is not None:
+        raise ValueError("improve 与 mode 互斥（improve 是真源，mode 仅为旧接口兼容）")
+    if mode is not None and mode not in REWORK_MODES:
+        raise ValueError(f"未知返工模式：{mode}（合法：{'、'.join(REWORK_MODES)}）")
+    flags = (
+        {k: bool(improve.get(k)) for k in _tb.IMPROVE_KEYS}
+        if improve is not None
+        else _tb.improve_flags({"mode": mode or MODE_FULL})
+    )
+    rnd = int(rework_round or 1)
+    steps, _required = _rework_layout(tb_id, rnd, flags)
     return {
         "goal": goal or f"返工：{tb_id}",
         "template": "rework",
-        "rework_mode": mode,
+        "improve": flags,
+        "rework_mode": _tb.legacy_mode_of(flags),
         "rework_round": rnd,
         "taskbook": tb_id,
         "steps": steps,
@@ -1955,12 +2121,45 @@ def _gate_blocks(
 
 
 def cmd_plan_rework(args) -> int:
-    """``orch plan rework <tb-id> [--mode …]``：由返工任务书生成三档骨架并登记（§4.2）。"""
+    """``orch plan rework <tb-id>``：由返工任务书生成骨架并登记（§4.2，三标志泛化）。
+
+    改进项来源优先级：``--improve``（显式，逗号串，空串=全不含）＞ ``--mode``（旧三档
+    兼容映射）＞ **任务书标志**（默认——reject 时的复选即真源，无需再报一遍）。
+    """
     tb_id = args.id
-    mode = str(getattr(args, "mode", None) or MODE_FULL)
-    if mode not in REWORK_MODES:
-        print(f"[!] 未知返工模式：{mode}（合法：{'、'.join(REWORK_MODES)}）")
-        return 2
+    if (gate := _serial_gate(tb_id)) is not None:
+        return gate
+    raw_improve = str(getattr(args, "improve", "") or "")
+    mode = getattr(args, "mode", None)
+    improve: dict[str, bool] | None = None
+    if raw_improve:
+        from . import taskbooks as _tb
+
+        keys = [k.strip() for k in raw_improve.split(",") if k.strip()]
+        unknown = set(keys) - set(_tb.IMPROVE_KEYS)
+        if unknown:
+            print(
+                f"[!] 未知改进标志：{'、'.join(sorted(unknown))}"
+                f"（合法：{'、'.join(_tb.IMPROVE_KEYS)}）"
+            )
+            return 2
+        improve = {k: k in keys for k in _tb.IMPROVE_KEYS}
+        source = "显式 --improve"
+    elif mode:
+        if mode not in REWORK_MODES:
+            print(f"[!] 未知返工模式：{mode}（合法：{'、'.join(REWORK_MODES)}）")
+            return 2
+        source = "兼容 --mode 映射"
+    else:
+        from . import taskbooks as _tb
+
+        st = _tb.load_state(tb_id)
+        if st is not None:
+            improve = _tb.improve_flags(st)
+            source = "任务书标志"
+        else:
+            mode = MODE_FULL  # 任务书缺席：回落旧缺省（骨架登记不因此拦）
+            source = "任务书缺席回落 full"
     goal = str(getattr(args, "goal", "") or "")
     rnd = 1
     try:
@@ -1970,7 +2169,13 @@ def cmd_plan_rework(args) -> int:
     except Exception:  # noqa: BLE001 - 任务书缺席不拦骨架（round 回落 1）
         rnd = 1
     try:
-        plan = build_rework_plan(tb_id, mode=mode, goal=goal, rework_round=rnd)
+        plan = build_rework_plan(
+            tb_id,
+            improve=improve,
+            mode=(mode if improve is None else None),
+            goal=goal,
+            rework_round=rnd,
+        )
     except ValueError as exc:
         print(f"[!] {exc}")
         return 2
@@ -1984,10 +2189,22 @@ def cmd_plan_rework(args) -> int:
     plan["id"] = plan_id
     _plan_path(plan_id).write_text(_dump_plan(plan), encoding="utf-8")
     _save_state(plan_id, _reconcile(plan, {"plan_id": plan_id, "created": _now()}))
+    from . import taskbooks as _tb
+
+    flags = _improve_of(plan)
     print(
-        f"[√] 返工计划已登记：{plan_id}（模式 {mode}，模板骨架 {len(plan['steps'])} 顶层节点）"
+        f"[√] 返工计划已登记：{plan_id}"
+        f"（{_tb.improve_label({'improve': flags})}，模板骨架 {len(plan['steps'])} 顶层节点）"
     )
-    print(f"    任务书 {tb_id}；必留叶子：{'、'.join(rework_required_leaves(mode))}")
+    print(f"    任务书 {tb_id}；标志来源：{source}")
+    print(f"    必留叶子：{'、'.join(rework_required_leaves(flags))}")
+    try:
+        digest = _tb.requirements_digest(tb_id)
+    except Exception:  # noqa: BLE001 - 附送面 fail-soft
+        digest = ""
+    if digest:
+        print()
+        print(digest.rstrip())
     tree = _tree(plan)
     for leaf in tree.leaves:
         indent = "  " * leaf.path.count(".")

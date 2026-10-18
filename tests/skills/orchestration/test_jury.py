@@ -94,6 +94,31 @@ def test_parse_case_reads_targets_and_sections(iso_jury):
     assert LIKE in case.option_a and DISLIKE in case.option_b
 
 
+def test_parse_case_tolerates_titled_option_headings(iso_jury):
+    """现场案卷 `## 选项 A：<描述>`＋`## 待裁决问题` 形态可解析（2026-10-17 用户实案）。
+
+    此前 `_lookup` 精确匹配整标题 → 抛「案卷缺小节」→ 盲审面整案空白（选项 A/B（无））。
+    前缀容错后 A/B/C 全量收集（C 曾整块不可见）；H1 兜底问题串剥「案卷：」前缀。
+    """
+    p = iso_jury / "evals" / "titled.md"
+    p.write_text(
+        "# 案卷：第三组工作点是否移离阈值（研究决策）\n\n"
+        "## 背景\n背景正文。\n\n"
+        "## 选项 A：移工作点重算\n甲（TA_MARK）\n\n"
+        "## 选项 B：保持原状\n乙（TB_MARK）\n\n"
+        "## 选项 C：双工作点并列\n丙（TC_MARK）\n\n"
+        "## 证据\n证据（TE_MARK）\n\n"
+        "## 待裁决问题\n按 A/B/C 哪条走？\n",
+        encoding="utf-8",
+    )
+    case = jury.parse_case(p)
+    assert case.question == "第三组工作点是否移离阈值（研究决策）"
+    assert "TA_MARK" in case.option_a and "TB_MARK" in case.option_b
+    assert "TE_MARK" in case.evidence
+    assert [lbl for lbl, _ in case.options] == ["A", "B", "C"]
+    assert "TC_MARK" in dict(case.options)["C"]
+
+
 def test_dossier_attaches_deterministic_material(iso_jury):
     """成功判据「--dry 输出完整组装材料」：git 读数 + 涉事文件字节读数 + 台账行。"""
     dossier = jury.build_dossier(jury.parse_case(seed_case(iso_jury)))

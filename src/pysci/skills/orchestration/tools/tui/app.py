@@ -28,6 +28,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
 from textual.widgets import (
     Button,
+    Checkbox,
     Footer,
     Header,
     Input,
@@ -61,6 +62,8 @@ from .theme import (
 )
 from .widgets import (
     ChainListItem,
+    Check,
+    CheckList,
     ChoiceCard,
     MarkedTree,
     MarkedVerticalScroll,
@@ -235,12 +238,13 @@ _SCROLL_PANES: dict[str, tuple[str, str]] = {
 #: 位置指示前缀（测试与用户读同一串）。
 _SCROLL_MARK_HEAD = "滚动：↑↓/PgUp/PgDn/Home/End ｜ 位置 "
 
-#: 返工三档模式 / 优先级在 TUI 里的**显示序**（RadioSet 下标 → 数据层取值）。
-_REWORK_MODE_BY_INDEX: tuple[str, ...] = ("full", "no_inspector", "rework_only")
-_REWORK_MODE_LABELS: tuple[str, ...] = (
-    "① 完整（综合项目改进＋监察改进＋返工执行）",
-    "② 无监察改进（A→B）",
-    "③ 仅返工（B，快速返工）",
+#: 改进项三复选（2026-10-17 三选一改造：8 种组合皆合法，返工执行 B 恒在）／
+#: 优先级在 TUI 里的**显示序**（SelectionList 值 / RadioSet 下标 → 数据层取值）。
+_IMPROVE_BY_INDEX: tuple[str, ...] = ("infra", "leader", "inspector")
+_IMPROVE_LABELS: tuple[str, ...] = (
+    "① 基础设施改进（A 组：综合项目改进）",
+    "② 组长改进（L 环节：反思+立单实施）",
+    "③ 监察改进（C 组）",
 )
 _PRIORITY_BY_INDEX: tuple[str, ...] = ("high", "normal", "low")
 _PRIORITY_LABELS: tuple[str, ...] = ("优先级 高", "优先级 中（默认）", "优先级 低")
@@ -305,8 +309,9 @@ class PysciTUI(App):
         ("r", "tb_reject", "驳回选中"),
         ("o", "tb_open_latest", "打开最新"),
         # 盲审选项键盘可达（只在 review-blind 视图内生效；输入框聚焦时按键归文本输入）
-        Binding("1", "blind_pick_a", "选项 A", show=False),
-        Binding("2", "blind_pick_b", "选项 B", show=False),
+        Binding("1", "blind_pick_a", "选项 1", show=False),
+        Binding("2", "blind_pick_b", "选项 2", show=False),
+        Binding("3", "blind_pick_c", "选项 3", show=False),
         ("j", "journal", "口述"),
         ("q", "quit", "退出"),
         # 详情页滚动（只在 detail/tb-detail 生效，见 check_action；不占 footer 广告面）
@@ -402,8 +407,7 @@ class PysciTUI(App):
     #blind-question {{ {_T_BODY} height: auto; }}
     #blind-evidence {{ {_T_SUBTLE} height: auto; margin-top: 1; }}
     #blind-options {{ height: auto; margin-top: 1; }}
-    #blind-a {{ width: 1fr; margin-right: 1; }}
-    #blind-b {{ width: 1fr; }}
+    .blind-card {{ width: 1fr; margin-right: 1; }}
     #blind-ask {{ height: auto; {_T_INSET} {_T_BORDER_SOFT} margin-top: 1; }}
     #blind-reason-label, #blind-remedy-label {{ {_T_SUBTLE} height: 1; }}
     #blind-reason {{ height: 4; }}
@@ -476,6 +480,7 @@ class PysciTUI(App):
         # 盲审与审查（s8）：逐案状态机 + 已裁决列表/详情
         self.blind_case_id = ""
         self.blind_count = 0
+        self.blind_letters: list[str] = []
         self.blind_selected = ""
         self.blind_ask_visible = False
         self.blind_remedy = ""
@@ -538,7 +543,7 @@ class PysciTUI(App):
                     "口述：这条内容是——（空格勾选①/②，回车在输入框里提交）",
                     id="journal-title",
                 )
-                yield SelectionList[int](
+                yield CheckList[int](
                     Selection(
                         "① 偏好陈述 → 决策日志（twin 训练语料；不要求行动）",
                         mirror.CHOICE_PREFERENCE,
@@ -565,7 +570,7 @@ class PysciTUI(App):
                 yield Static("", id="tb-scroll")
             with Vertical(id="tb-new"):
                 yield Static(
-                    "新增任务书（① 选优先级 → 标题 + 多行正文 → 点「投递」落盘）",
+                    "新增任务书（① 选优先级 → ② 复选改进项 → 标题 + 多行正文 → 点「投递」落盘）",
                     id="tb-new-title",
                 )
                 yield RadioSet(
@@ -574,6 +579,10 @@ class PysciTUI(App):
                         for lbl in _PRIORITY_LABELS
                     ),
                     id="tb-new-priority",
+                )
+                yield Check(
+                    "包含组长改进（link 时自动在 plan 末尾追加 L 环节）",
+                    id="tb-new-leader",
                 )
                 yield Input(placeholder="标题", id="tb-new-title-input")
                 yield TextArea(id="tb-new-body")
@@ -590,15 +599,19 @@ class PysciTUI(App):
                 yield Static("", id="tb-detail-scroll")
             with Vertical(id="tb-reject"):
                 yield Static(
-                    "驳回交付（返工=新大任务）：① 返工模式 → ② 优先级 → ③ 批语",
+                    "驳回交付（返工=新大任务）：① 改进项 → ② 优先级 → ③ 批语",
                     id="tb-reject-title",
                 )
-                yield RadioSet(
+                yield Static(
+                    "① 改进项（空格勾选；返工执行 B 恒在，8 种组合皆合法）",
+                    id="tb-reject-improve-label",
+                )
+                yield CheckList[str](
                     *(
-                        RadioButton(lbl, value=(i == 0))
-                        for i, lbl in enumerate(_REWORK_MODE_LABELS)
+                        Selection(lbl, flag, False)
+                        for flag, lbl in zip(_IMPROVE_BY_INDEX, _IMPROVE_LABELS)
                     ),
-                    id="tb-reject-mode",
+                    id="tb-reject-improve",
                 )
                 yield RadioSet(
                     *(
@@ -651,11 +664,7 @@ class PysciTUI(App):
                 yield MarkedVerticalScroll(
                     Static("", id="blind-question", markup=False),
                     Static("", id="blind-evidence", markup=False),
-                    Horizontal(
-                        ChoiceCard("A", "", id="blind-a", markup=False),
-                        ChoiceCard("B", "", id="blind-b", markup=False),
-                        id="blind-options",
-                    ),
+                    Horizontal(id="blind-options"),
                     id="blind-body",
                     can_focus=False,
                 )
@@ -1517,7 +1526,12 @@ class PysciTUI(App):
         self._panel_return = "taskbooks"  # Esc 回任务书列表（进入前视图）
         self._hide_all_views()
         self.query_one("#tb-new", Vertical).display = True
-        self._set_radio("#tb-new-priority", 1)  # 默认「中」
+        # 默认值从 [taskbooks] 读（2026-10-17：新建/reject 表单默认值可配）。
+        from .. import settings as _settings
+
+        form, _warns = _settings.taskbook_form_defaults()
+        self._set_radio("#tb-new-priority", _PRIORITY_BY_INDEX.index(form.new_priority))
+        self.query_one("#tb-new-leader", Checkbox).value = form.new_leader
         self.query_one("#tb-new-title-input", Input).value = ""
         self.query_one("#tb-new-body", TextArea).text = ""
         self._set_tb_new_msg("")
@@ -1543,12 +1557,24 @@ class PysciTUI(App):
         self.reject_target = tb_id
         self._hide_all_views()
         self.query_one("#tb-reject", Vertical).display = True
-        # 复位：模式回①、优先级回中（默认）、批语清空
-        self._set_radio("#tb-reject-mode", 0)
-        self._set_radio("#tb-reject-priority", 1)
+        # 复位：改进项/优先级回 [taskbooks] 默认（2026-10-17 可配），批语清空
+        from .. import settings as _settings
+
+        form, _warns = _settings.taskbook_form_defaults()
+        self._set_selections(
+            "#tb-reject-improve",
+            {
+                "infra": form.reject_infra,
+                "leader": form.reject_leader,
+                "inspector": form.reject_inspector,
+            },
+        )
+        self._set_radio(
+            "#tb-reject-priority", _PRIORITY_BY_INDEX.index(form.reject_priority)
+        )
         self.query_one("#tb-note", TextArea).text = ""
-        self._set_tb_reject_msg(f"驳回 {tb_id}：请依次选 ① 模式 → ② 优先级 → ③ 批语")
-        self.query_one("#tb-reject-mode", RadioSet).focus()
+        self._set_tb_reject_msg(f"驳回 {tb_id}：请依次选 ① 改进项 → ② 优先级 → ③ 批语")
+        self.query_one("#tb-reject-improve", SelectionList).focus()
 
     async def _tb_act(self, *, accept: bool) -> None:
         """对**选中行目标**批复：accept（驳回走三段式面板，见 :meth:`action_tb_reject`）。
@@ -1610,18 +1636,34 @@ class PysciTUI(App):
         if 0 <= index < len(btns):
             btns[index].value = True
 
+    def _set_selections(self, selector: str, checked: dict[str, bool]) -> None:
+        """程序化设置 SelectionList 勾选态（先全清再置——防双绿残留，同 ``_set_radio``）。"""
+        sel = self.query_one(selector, SelectionList)
+        for value in list(sel.selected):
+            sel.deselect(value)
+        for value, on in checked.items():
+            if on:
+                sel.select(value)
+
     async def _submit_new_taskbook(self) -> None:
-        """「投递」：程序化组装元数据（含优先级）并落盘（TASKBOOK-NEW 由 watch 增量报出）。"""
+        """「投递」：程序化组装元数据（优先级+改进标志）并落盘（TASKBOOK-NEW 由 watch 增量报出）。"""
         from .. import taskbooks as _tb
 
         title = self.query_one("#tb-new-title-input", Input).value.strip()
         body = self.query_one("#tb-new-body", TextArea).text
         priority = _PRIORITY_BY_INDEX[self._radio_index("#tb-new-priority", 1)]
+        leader = bool(self.query_one("#tb-new-leader", Checkbox).value)
         if not title:
             self._set_tb_new_msg("✗ 标题不能为空")
             return
         try:
-            st = _tb.create(title, body, source="mirror-tui", priority=priority)
+            st = _tb.create(
+                title,
+                body,
+                source="mirror-tui",
+                priority=priority,
+                improve={"leader": leader, "infra": False, "inspector": False},
+            )
         except ValueError as exc:
             self._set_tb_new_msg(f"✗ {exc}")
             return
@@ -1630,29 +1672,34 @@ class PysciTUI(App):
         # → 同一份任务书被投两遍；回列表后确认结果一眼可见（新件最新 → 高亮首行即它）。
         await self._open_taskbooks()
         self._set_tb_msg(
-            f"[√] 已投递：{st['id']}（优先级 {priority}；TASKBOOK-NEW 唤醒组长）"
+            f"[√] 已投递：{st['id']}（优先级 {priority}"
+            f"{'；含组长改进' if leader else ''}；TASKBOOK-NEW 唤醒组长）"
         )
 
     async def _submit_reject(self) -> None:
-        """三段式驳回落盘（模式→优先级→批语）→ 生成返工任务书（PSEP_3 §4.1）。"""
+        """三段式驳回落盘（改进项→优先级→批语）→ 生成返工任务书（2026-10-17 三复选）。"""
         from .. import taskbooks as _tb
 
         tb_id = self.reject_target
-        mode = _REWORK_MODE_BY_INDEX[self._radio_index("#tb-reject-mode", 0)]
+        picked = set(self.query_one("#tb-reject-improve", SelectionList).selected)
+        improve = {k: (k in picked) for k in _IMPROVE_BY_INDEX}
         priority = _PRIORITY_BY_INDEX[self._radio_index("#tb-reject-priority", 1)]
         note = self.query_one("#tb-note", TextArea).text.strip()
         try:
-            new = _tb.create_rework(tb_id, mode=mode, priority=priority, note=note)
+            new = _tb.create_rework(
+                tb_id, improve=improve, priority=priority, note=note
+            )
         except ValueError as exc:
             self._set_tb_reject_msg(f"[!] {exc}")
             return
         self.last_rework = str(new["id"])
         # 落账即给下一步命令（用户 2026-10-15：返工引导缺口——逐字写出 plan rework，
-        # 不让组长去 grep 才知道有这个入口）
+        # 不让组长去 grep 才知道有这个入口；改进项随任务书标志，无需 --mode）。
+        label = _tb.improve_label({"improve": improve})
         msg = (
             f"[√] {tb_id} → rejected（留档）；已生成返工任务书 {new['id']}"
-            f"（模式 {mode}，优先级 {priority}，第 {new['rework_round']} 轮）"
-            f"　下一步：orch plan rework {new['id']} --mode {mode} 生成返工骨架"
+            f"（{label}，优先级 {priority}，第 {new['rework_round']} 轮）"
+            f"　下一步：orch plan rework {new['id']} 生成返工骨架（改进项按任务书标志）"
         )
         self._set_tb_reject_msg(msg)
         await self._open_taskbooks()  # 回列表并重建（原项状态已变）
@@ -1706,7 +1753,7 @@ class PysciTUI(App):
         await self._render_blind_case()
 
     async def _render_blind_case(self) -> None:
-        """呈现队首一案：顶部计数 ＋ 案情（问题/证据）＋ 选项大卡 A/B；无待审 → 已裁决列表。"""
+        """呈现队首一案：顶部计数 ＋ 案情（问题/证据）＋ 选项大卡（全部选项，动态挂载）。"""
         queue = self._blind_queue()
         self.blind_count = len(queue)
         self.blind_selected = ""
@@ -1733,29 +1780,57 @@ class PysciTUI(App):
         self.query_one("#blind-evidence", Static).update(
             f"证据：{evidence}" if evidence else ""
         )
-        for value, sel in (("A", "a"), ("B", "b")):
-            option = str(item.get(f"option_{'a' if value == 'A' else 'b'}") or "（无）")
-            card_w = self.query_one(f"#blind-{sel}", ChoiceCard)
-            card_w.update(f"选项 {value}\n{option}")
-            card_w.set_selected(False)
+        # 选项卡动态挂载：案卷有几个选项就几张（三选项 consult 案卷全量呈现——
+        # 2026-10-17 实案 C 选项曾整块不可见）；解析失败回落 A/B 各一（可能「（无）」）。
+        options = [(str(lbl), str(txt)) for lbl, txt in (item.get("options") or [])]
+        if not options:
+            options = [
+                ("A", str(item.get("option_a") or "（无）")),
+                ("B", str(item.get("option_b") or "（无）")),
+            ]
+        self.blind_letters = [lbl for lbl, _ in options]
+        container = self.query_one("#blind-options", Horizontal)
+        await container.remove_children()
+        await container.mount(
+            *(
+                ChoiceCard(
+                    lbl,
+                    f"选项 {lbl}\n{txt}",
+                    id=f"blind-{lbl.lower()}",
+                    classes="blind-card",
+                    markup=False,
+                )
+                for lbl, txt in options
+            )
+        )
         self.query_one("#blind-submit", Button).disabled = False
 
     def _pick_blind_option(self, value: str) -> None:
-        """选中选项大卡（点击 / 键盘 1、2 共用；提交前画面只有选项本身）。"""
+        """选中选项大卡（点击 / 键盘 1、2、3 共用；提交前画面只有选项本身）。"""
         if self.view != "review-blind" or self.blind_ask_visible:
             return
         self.blind_selected = str(value)
-        for val, sel in (("A", "a"), ("B", "b")):
+        for letter in self.blind_letters:
             try:
-                self.query_one(f"#blind-{sel}", ChoiceCard).set_selected(val == value)
+                self.query_one(f"#blind-{letter.lower()}", ChoiceCard).set_selected(
+                    letter == value
+                )
             except Exception:  # noqa: BLE001 - 组合面容忍缺件
                 continue
 
+    def _pick_blind_nth(self, index: int) -> None:
+        """键盘选第 N 张卡（1/2/3 → 第 1/2/3 个选项，按案卷字母序）。"""
+        if 0 <= index < len(self.blind_letters):
+            self._pick_blind_option(self.blind_letters[index])
+
     def action_blind_pick_a(self) -> None:
-        self._pick_blind_option("A")
+        self._pick_blind_nth(0)
 
     def action_blind_pick_b(self) -> None:
-        self._pick_blind_option("B")
+        self._pick_blind_nth(1)
+
+    def action_blind_pick_c(self) -> None:
+        self._pick_blind_nth(2)
 
     def on_choice_card_chosen(self, event: ChoiceCard.Chosen) -> None:
         self._pick_blind_option(str(event.value))
@@ -1781,12 +1856,14 @@ class PysciTUI(App):
 
         cid = self.blind_case_id
         user = self.blind_selected
-        if not cid or user not in ("A", "B"):
-            self._set_blind_msg("请先选中 选项 A / 选项 B（点击卡片或按 1 / 2）再提交")
+        if not cid or user not in self.blind_letters:
+            self._set_blind_msg("请先选中一个选项（点击卡片或按 1/2/3）再提交")
             return
         rec = _taste.blind_case(cid) or {}
         twin = str(rec.get("choice") or "")
-        if twin and user == twin:
+        # 一致＝字母归一比对（consult 裁示常是整句「C（…）：…」，逐字比对永不一致）
+        letter = _taste.choice_letter(twin)
+        if twin and (user == twin or user == letter):
             rc, msg = _taste.apply_review(
                 cid,
                 verdict="confirmed",
