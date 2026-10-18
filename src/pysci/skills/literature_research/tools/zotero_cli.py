@@ -525,6 +525,14 @@ class ZoteroCli:
         data = _run_json(["get", "fulltext", key])
         return _text_from_data(data)
 
+    def get_children(self, key: str) -> list[dict[str, Any]]:
+        """列出条目的子项（附件/笔记）：``get children <key>``。
+
+        ``read`` 的 Zotero 兜底用它找本地 PDF 附件（附件路径/文件名在子项 data 里）。
+        """
+        data = _run_json(["get", "children", key])
+        return _items_from_data(data)
+
     def library_info(self) -> dict[str, Any]:
         """状态：预留，当前无调用方（仅测试覆盖）。
 
