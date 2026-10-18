@@ -48,6 +48,8 @@ import contextlib
 import io
 import json
 import re
+import shutil
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -1064,6 +1066,130 @@ def _oa_pdf_filename(work: dict[str, Any] | None, oa_url: str) -> str:
     return notes.slugify(stem, 60) + ".pdf"
 
 
+def _publisher_pdf_candidates(doi: str) -> list[str]:
+    """按 DOI 推导出版商 **PDF 直链**（机构 IP 下普通 GET 即 200，绕开 DOI 落地页）。
+
+    - APS：``https://journals.aps.org/<abbr>/pdf/<DOI>``（abbr 由期刊名映射）
+    - Science：``https://www.science.org/doi/pdf/<DOI>``
+
+    未知出版商返回 ``[]``（交由浏览器与 OA 回退处理）。2026-10-18 实测：机构 IP 下
+    ``curl`` 该 APS 直链 HTTP 200/PDF 正常，而 ``read`` 走 DOI 落地页被 Cloudflare 拦成
+    ``Cloudflare=True 机构访问=False``（20261018-221735-lit）。
+    """
+    doi = str(doi or "").strip()
+    low = doi.lower()
+    if low.startswith("10.1103/"):
+        suffix = doi.split("/", 1)[1] if "/" in doi else ""
+        journal, _, rest = suffix.partition(".")
+        abbr = _APS_PDF_ABBR.get(journal.lower())
+        if abbr:
+            # APS 路径**区分大小写**（OpenAlex 会把 DOI 小写化：physrevlett → 404，
+            # PhysRevLett → 200；2026-10-18 实测），按期刊名还原规范大小写。
+            canon = _APS_CANON.get(journal.lower(), journal)
+            doi_url = f"10.1103/{canon}.{rest}" if rest else f"10.1103/{canon}"
+            return [f"https://journals.aps.org/{abbr}/pdf/{doi_url}"]
+        return []
+    if low.startswith("10.1126/"):
+        return [f"https://www.science.org/doi/pdf/{doi}"]
+    return []
+
+
+#: APS 期刊名 → journals.aps.org 路径段（只列本仓常用的；未知期刊不猜）。
+_APS_PDF_ABBR: dict[str, str] = {
+    "physrevlett": "prl",
+    "physrevx": "prx",
+    "physrevapplied": "prapplied",
+    "physrevb": "prb",
+    "physrevresearch": "prresearch",
+    "physrevmaterials": "prmaterials",
+    "physrevfluids": "prfluids",
+    "revmodphys": "rmp",
+}
+
+#: APS DOI 期刊段的规范大小写（DOI 大小写不敏感，但 APS 的 PDF 路径敏感）。
+_APS_CANON: dict[str, str] = {
+    "physrevlett": "PhysRevLett",
+    "physrevx": "PhysRevX",
+    "physrevapplied": "PhysRevApplied",
+    "physrevb": "PhysRevB",
+    "physrevresearch": "PhysRevResearch",
+    "physrevmaterials": "PhysRevMaterials",
+    "physrevfluids": "PhysRevFluids",
+    "revmodphys": "RevModPhys",
+}
+
+
+def _curl_download_pdf(
+    url: str, dest: Path, *, force: bool = False, timeout_s: int = 180
+) -> Path | None:
+    """用 **curl 直连** 取出版商 PDF（机构 IP 下与人工 curl 同形）。
+
+    为什么不用 ``requests``：APS/Science 的 Cloudflare 按 TLS 指纹拦截 Python 客户端
+    ——同一 URL ``curl`` 得 200/685 KB，而 ``requests`` 无论换 UA/Accept 都 403
+    （2026-10-18 实测）。**禁代理**（``--noproxy *``）是硬要求：访问期刊数据库走代理会
+    丧失机构访问资格（basic.md §4）。curl 不存在/超时/非 PDF → ``None``（调用方回退）。
+    """
+    if dest.exists() and not force:
+        cache_manager.bump_mtime(dest)
+        print(f"[read] 直链 PDF 已在缓存：{dest}")
+        return dest
+    curl = shutil.which("curl")
+    if not curl:
+        print(
+            "[read] 未找到 curl，直链改用 requests（可能被 Cloudflare 指纹拦截）",
+            file=sys.stderr,
+        )
+        return None
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".part")
+    try:
+        from pysci.skills.orchestration.tools import procs
+
+        proc = procs.run_hidden(
+            [
+                curl,
+                "-L",
+                "-sS",
+                "--noproxy",
+                "*",
+                "--connect-timeout",
+                "20",
+                "--max-time",
+                str(int(timeout_s)),
+                "-o",
+                str(tmp),
+                "-w",
+                "%{http_code}",
+                url,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_s + 30,
+        )
+        status = (proc.stdout or "").strip()
+        print(f"[read] curl 直链 HTTP {status or '?'}（{url}）", file=sys.stderr)
+        data = tmp.read_bytes() if tmp.exists() else b""
+        if status == "200" and data.startswith(_PDF_MAGIC):
+            tmp.replace(dest)
+            return dest
+        return None
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"[read] curl 直链失败（{type(e).__name__}）", file=sys.stderr)
+        return None
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _download_direct(url: str, dest: Path, *, force: bool = False) -> Path | None:
+    """直链下载：curl 优先（机构 IP 指纹匹配），失败再走 requests。"""
+    got = _curl_download_pdf(url, dest, force=force)
+    if got is not None:
+        return got
+    return _try_oa_pdf(url, dest, force=force)
+
+
 def _try_oa_pdf(url: str, dest: Path, *, force: bool = False) -> Path | None:
     """一次普通 HTTP GET 直接取回 OA PDF；任何不成立的情形都返回 ``None``。
 
@@ -1188,19 +1314,34 @@ def cmd_read(args: argparse.Namespace) -> int:
                 bundle = _safe_fetch(url, out_dir, args)
                 pdf_path = bundle.pdf_path if bundle else None
         else:
-            # 抓取顺序（方案 H5）：**先试 OA 直链的普通 HTTP GET**（免费、不启动浏览器），
-            # 失败才起 Playwright。原实现对 DOI 一律拼 ``https://doi.org/{doi}`` 直接进浏览器，
-            # 而 ``oa_url`` 只在 openalex 分支用到——对 OpenAlex 已标明 OA 的论文，
-            # 这等于每次都为一份能直接 GET 到的 PDF 白付一次浏览器启动 + 页面渲染。
+            # 抓取顺序（方案 H5）：**先试直链的普通 HTTP GET**（免费、不启动浏览器），
+            # 失败才起 Playwright。直链候选＝OpenAlex 的 oa_url ＋**出版商 PDF 直链**
+            # （APS/Science；20261018-221735-lit：机构 IP 下 curl 直链 200，而 DOI 落地页
+            # 会被 Cloudflare 拦成假失败）。dest 按 DOI 稳定命名，多候选共用一份缓存。
             oa_url = str((work or {}).get("oa_url") or "")
-            direct = oa_url or (val if kind == "url" else "")
-            if direct:
-                print(f"[read] 先试 OA 直链（免浏览器）：{direct}")
-                pdf_path = _try_oa_pdf(
-                    direct,
-                    settings.cache_pdfs / _oa_pdf_filename(work, direct),
-                    force=force,
+            doi_for_url = str(
+                (work or {}).get("doi") or (val if kind == "doi" else "") or ""
+            )
+            candidates: list[str] = []
+            if oa_url:
+                candidates.append(oa_url)
+            elif kind == "url":
+                candidates.append(val)
+            if doi_for_url:
+                candidates.extend(_publisher_pdf_candidates(doi_for_url))
+            seen: set[str] = set()
+            for cand in candidates:
+                if cand in seen:
+                    continue
+                seen.add(cand)
+                dest = settings.cache_pdfs / _oa_pdf_filename(
+                    work,
+                    f"https://doi.org/{doi_for_url}" if doi_for_url else cand,
                 )
+                print(f"[read] 先试直链（免浏览器）：{cand}")
+                pdf_path = _download_direct(cand, dest, force=force)
+                if pdf_path:
+                    break
             if not pdf_path:
                 if kind == "url":
                     url = val
@@ -2906,8 +3047,16 @@ def _print_removed(removed: list[Path], dry_run: bool) -> None:
 
 
 def cmd_cache(args: argparse.Namespace) -> int:
-    """缓存治理：stats 概览 / clean 清 Tier B / prune 手动 LRU 淘汰 Tier A。"""
+    """缓存治理：stats 概览 / clean 清 Tier B / prune 手动 LRU 淘汰 Tier A / find 查缓存 PDF。"""
     action = args.action
+    if action == "find":
+        query = str(getattr(args, "query", "") or "")
+        path = cache_manager.find_cached_pdf(query)
+        if path is None:
+            print(f"[cache] 未找到已缓存 PDF：{query}")
+            return 1
+        print(f"[cache] {query} → {path}（{notes.fmt_size(path.stat().st_size)}）")
+        return 0
     if action == "stats":
         print(cache_manager.format_stats(cache_manager.stats()))
         return 0
@@ -3441,9 +3590,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_index)
 
     sp = sub.add_parser(
-        "cache", help="缓存治理（stats 概览 / clean 清 Tier B / prune 淘汰 Tier A）"
+        "cache",
+        help="缓存治理（stats / clean / prune / find 按 DOI 查找已缓存 PDF）",
     )
-    sp.add_argument("action", choices=["stats", "clean", "prune"])
+    sp.add_argument("action", choices=["stats", "clean", "prune", "find"])
+    sp.add_argument(
+        "query",
+        nargs="?",
+        default=None,
+        help="find：DOI / arXiv id / slug（扫描 pdfs/ 与 html_fulltext/）",
+    )
     sp.add_argument(
         "--all", action="store_true", help="clean：删除全部 Tier B（不限过期）"
     )

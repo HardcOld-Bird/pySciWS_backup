@@ -13,6 +13,18 @@ from pysci.skills.literature_research.tools import journal_metrics
 
 
 @pytest.fixture(autouse=True)
+def offline_curl_direct(monkeypatch: pytest.MonkeyPatch) -> None:
+    """默认关闭 curl 直链（测试必须离线）。
+
+    ``read`` 会先试出版商直链（curl 优先）；不隔离就会在涉及直链的用例里真联网。
+    需要验证 curl 分支的用例用模块级保存的原函数覆盖回本桩（见 test_read_fetch_order）。
+    """
+    from pysci.skills.literature_research.tools import research
+
+    monkeypatch.setattr(research, "_curl_download_pdf", lambda *a, **k: None)
+
+
+@pytest.fixture(autouse=True)
 def offline_oa_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """默认关闭 OA 回退的外部查询（S2）：测试必须离线、确定。
 

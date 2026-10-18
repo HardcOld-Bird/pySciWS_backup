@@ -58,6 +58,21 @@ when nothing was, `2` when an OpenAlex id could not be resolved to a fetchable U
 Europe PMC 全文 XML → S2 `openAccessPdf` 直链**；成功则继续正常抽取。S2 限流（429）
 或无记录时只留一行说明、不阻塞退出；`--headed` 仍用于人工过 Cloudflare。
 
+### 机构 IP 下的出版商 PDF 直链（2026-10-18）
+
+浏览器之前 `read` 先试**出版商 PDF 直链**（普通 GET，不启动 Playwright）：
+
+- APS：`https://journals.aps.org/<abbr>/pdf/<DOI>`（`PhysRevLett`→`prl`、`PhysRevX`→`prx`、
+  `PhysRevApplied`→`prapplied` …）；
+- Science：`https://www.science.org/doi/pdf/<DOI>`。
+
+机构 IP 下这些直链可像 `curl` 一样直接拿到 PDF（实测 200）；走 DOI 落地页则可能被
+Cloudflare 拦成 `Cloudflare=True 机构访问=False` 的假失败。直链失败才起浏览器/OA 回退。
+
+**统一缓存查找**：`pysci-research cache find <DOI>` 同时扫 `cache/pdfs/`（含 theme 子目录）
+与 `cache/html_fulltext/<目录>/*.pdf`（目录名按 DOI 归一匹配），批处理直接复用它，不再手抄
+`html_fulltext/...pdf` 路径（20261018-221735-lit）。
+
 ### DOI vs arXiv input
 
 - **DOI / OpenAlex id** → richest metadata (citation counts, normalized citations, JIF estimate,
