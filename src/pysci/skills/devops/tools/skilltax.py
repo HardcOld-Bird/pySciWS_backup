@@ -29,13 +29,13 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from pysci.paths import PODS_ROOT
+from pysci.skills.orchestration.tools import procs
 
 #: headless 会话 transcript 分储根（按 cwd 项目键分目录，README §1.1）。
 SESSIONS_ROOT = Path.home() / ".qoder-cn" / "projects"
@@ -401,7 +401,7 @@ def run_session(
         ".qoder/mcp.json",
         "--strict-mcp-config",
     ]
-    p = subprocess.run(
+    p = procs.run_hidden(
         cmd,
         capture_output=True,
         text=True,

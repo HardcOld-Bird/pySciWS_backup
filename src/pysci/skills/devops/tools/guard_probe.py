@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pysci.paths import ORCHESTRATION_ROOT
+from pysci.skills.orchestration.tools import procs
 
 DELIVERY_GATE = ORCHESTRATION_ROOT / "guards" / "delivery-gate.mjs"
 POD_GUARD = ORCHESTRATION_ROOT / "guards" / "pod-guard.mjs"
@@ -69,7 +70,7 @@ def _run(
 ) -> tuple[int, str]:
     full_env = dict(os.environ)
     full_env.update(env)
-    proc = subprocess.run(
+    proc = procs.run_hidden(
         [node, str(guard)],
         input=payload,
         capture_output=True,

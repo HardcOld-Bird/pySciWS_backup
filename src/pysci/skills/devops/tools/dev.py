@@ -26,6 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pysci.paths import ORCH_STATE_ROOT, PODS_ROOT, PROJECT_ROOT, WORKTREES_ROOT
+from pysci.skills.orchestration.tools import procs
 from pysci.skills.orchestration.tools.registry import dirty_tracked_state
 
 #: worktree 统一放置目录取自 ``pysci.paths.WORKTREES_ROOT``（与 Qoder 原生 --worktree
@@ -38,7 +39,7 @@ BASIC_RULE = "basic.md"
 
 def _git_proc(*args: str) -> subprocess.CompletedProcess[str]:
     """在项目根跑 git，返回原始 CompletedProcess（不裁剪输出）。"""
-    return subprocess.run(
+    return procs.run_hidden(
         ["git", *args],
         cwd=str(PROJECT_ROOT),
         capture_output=True,
@@ -373,7 +374,7 @@ def _locked_holder(exe: Path) -> str:
     直传（不经 shell），免疫 MSYS 把 ``/format:csv`` 改写成路径。
     """
     try:
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             ["wmic", "process", "get", "ProcessId,ExecutablePath", "/format:csv"],
             capture_output=True,
             text=True,
@@ -398,7 +399,7 @@ def _locked_holder(exe: Path) -> str:
 
 def run_uv_sync(extra: list[str]) -> tuple[int, str]:
     """在项目根跑 ``uv sync``，返回 (rc, 合并输出)。测试替身挂这一层。"""
-    proc = subprocess.run(
+    proc = procs.run_hidden(
         ["uv", "sync", *extra],
         cwd=str(PROJECT_ROOT),
         capture_output=True,
@@ -572,7 +573,7 @@ def _ignored_state_names(wt: Path) -> set[str]:
     try:
         # 用 bytes 通道：Windows subprocess text=True 会把 input 里的 \n 译成 \r\n，
         # 而 git check-ignore --stdin 只识别裸 LF（实测 \r 让整批查询静默返空）。
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             ["git", "-C", str(wt), "check-ignore", "--stdin"],
             input=payload.encode("utf-8"),
             capture_output=True,
@@ -1370,7 +1371,7 @@ def cmd_push(args: argparse.Namespace) -> int:
         _push_trace({"ts": now, "remote": remote, "branch": branch, "ok": ok, **extra})
 
     try:
-        proc = subprocess.run(
+        proc = procs.run_hidden(
             ["git", "push", remote, branch],
             cwd=str(PROJECT_ROOT),
             capture_output=True,

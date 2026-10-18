@@ -11,15 +11,19 @@
 # 安全：**fail-open**——读开关出错/环境缺失/gate 返回非预期码一律**放行（exit 0）**并
 # 在 stderr 留 `[night-gate fail-open]` 痕（不能因配置损坏就废掉提问工具；与
 # watch-arm.sh / night-policy.sh 同目录同风格，不塌任何主链路）。
+#
+# 2026-10-18（wake-bind-20261018 s1-noconsole）：钩子执行体在**无控制台**父进程下也可能是
+# pythonw/DETACHED——裸 spawn `python.exe` 会新开可见控制台。统一改 **pythonw.exe**
+# （GUI 子系统，永不分配控制台）；stdin 走 here-string、stderr 由 harness 捕获，语义不变。
 PAYLOAD=$(cat)
 ROOT="${QODER_PROJECT_DIR:-/d/XXXIIIGGG/projects/pySci/pySciWS}"
 cd "$ROOT" || exit 0
-PY="$ROOT/.venv/Scripts/python.exe"
-if [ ! -x "$PY" ]; then
-  echo "[night-gate fail-open] 环境缺失（python 不可执行）→ 放行" >&2
+PYW="$ROOT/.venv/Scripts/pythonw.exe"
+if [ ! -x "$PYW" ]; then
+  echo "[night-gate fail-open] 环境缺失（pythonw 不可执行）→ 放行" >&2
   exit 0
 fi
-PYTHONPATH="$ROOT/src" "$PY" -m pysci.skills.orchestration.tools.night \
+PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.night \
   --gate --settings "$ROOT/data/pysci_settings.toml" <<<"$PAYLOAD"
 rc=$?
 case "$rc" in

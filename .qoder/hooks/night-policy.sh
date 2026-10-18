@@ -11,11 +11,15 @@
 #
 # 安全：**一切异常 fail-open（exit 0、零输出）**——与 watch-arm.sh 同目录同风格，
 # 绝不塌任何主链路（watch-arm 的 token 竞争 / wake-claim 均不经过本脚本）。
+#
+# 2026-10-18（wake-bind-20261018 s1-noconsole）：钩子执行体可能是**无控制台**父进程
+# （pythonw/DETACHED/harness 钩子执行体）——裸 spawn `python.exe` 会新开可见控制台。
+# 统一改 **pythonw.exe**；stdout 由 harness 捕获（additionalContext JSON），不丢写。
 PAYLOAD=$(cat)
 ROOT="${QODER_PROJECT_DIR:-/d/XXXIIIGGG/projects/pySci/pySciWS}"
 cd "$ROOT" || exit 0
-PY="$ROOT/.venv/Scripts/python.exe"
-[ -x "$PY" ] || exit 0
-PYTHONPATH="$ROOT/src" "$PY" -m pysci.skills.orchestration.tools.night \
+PYW="$ROOT/.venv/Scripts/pythonw.exe"
+[ -x "$PYW" ] || exit 0
+PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.night \
   --settings "$ROOT/data/pysci_settings.toml" 2>/dev/null <<<"$PAYLOAD" || exit 0
 exit 0

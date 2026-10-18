@@ -310,10 +310,12 @@ def test_gate_deny_text_unchanged_semantics():
 # ⑥ 通道契约：Stop 钩子按差分输出走 stderr + exit 2（既有 rewake 路径）
 # ---------------------------------------------------------------------------
 def _fake_root(tmp_path: Path, *, canned: str) -> Path:
-    """假项目根：两个桩可执行 + 假配置。副作用全部落在 tmp（真会话的 watch 链零接触）。
+    """假项目根：桩 pythonw + 假配置。副作用全部落在 tmp（真会话的 watch 链零接触）。
 
-    ``python.exe`` 桩照读 ``canned.txt`` 当「night.py --diff 的输出」；``pysci-orch.exe``
-    桩让钩子走完归属判定与「一轮 watch」后干净退出（``watch`` 返回 rc=1 → 钩子 log 后 exit 0）。
+    钩子自 wake-bind-20261018 s1 起只认 **pythonw.exe**（GUI 子系统，无控制台下不闪窗），
+    且 orch 走 ``-m pysci.skills.orchestration.tools.orch``（不再用 console 启动器）。
+    桩按模块分流：night 读 ``canned.txt`` 当「--diff 输出」；orch ``watch`` 回 TIMEOUT+rc1，
+    让钩子走完归属判定与一轮 watch 后干净退出（rc 0）。
     """
     root = tmp_path / "root"
     scripts = root / ".venv" / "Scripts"
@@ -324,17 +326,22 @@ def _fake_root(tmp_path: Path, *, canned: str) -> Path:
         "[night]\nenabled = true\n", encoding="utf-8"
     )
     (scripts / "canned.txt").write_text(canned, encoding="utf-8")
-    py = scripts / "python.exe"
-    py.write_text(
-        '#!/bin/bash\ncat "$(dirname "$0")/canned.txt"\nexit 0\n', encoding="utf-8"
-    )
-    orch = scripts / "pysci-orch.exe"
-    orch.write_text(
-        '#!/bin/bash\ncase "$1" in\n  watch) echo TIMEOUT; exit 1 ;;\nesac\nexit 0\n',
+    pyw = scripts / "pythonw.exe"
+    pyw.write_text(
+        "#!/bin/bash\n"
+        'case "$2" in\n'
+        "  pysci.skills.orchestration.tools.night)\n"
+        '    cat "$(dirname "$0")/canned.txt"; exit 0 ;;\n'
+        "  pysci.skills.orchestration.tools.orch)\n"
+        '    case "$3" in\n'
+        "      watch) echo TIMEOUT; exit 1 ;;\n"
+        "    esac\n"
+        "    exit 0 ;;\n"
+        "esac\n"
+        "exit 0\n",
         encoding="utf-8",
     )
-    for p in (py, orch):
-        p.chmod(0o755)
+    pyw.chmod(0o755)
     return root
 
 

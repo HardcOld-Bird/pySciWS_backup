@@ -155,15 +155,20 @@ def test_run_hidden_sets_create_no_window_on_win32(monkeypatch):
 
 
 def test_no_bare_spawn_outside_the_single_landing_point():
-    """判据③（防再漏）：``orchestration/tools`` 下除 ``procs.py`` 外**不得有裸 spawn**。
+    """判据③（防再漏）：**无控制台可达面**（orchestration/tools + devops/tools）除口径实现
+    与显式豁免外**不得有裸 spawn**。
 
-    DEBT 清单已于本单（adhoc-debt-spawns）**清零**——最后 9 处低频站点（sync/registry×2/
-    replica×2/sessions×2/verdict/jury/eval/runner/drain 余 1）全部并入
-    ``procs.run_hidden``/``popen_hidden`` 口径，故此用例不再有豁免名单：新出现的裸 spawn
-    即红，把「再漏一处」从靠人盯变成机械拦截。
+    DEBT 清单已于 adhoc-debt-spawns **清零**；wake-bind-20261018 s1 把 devops/tools 的
+    低频遗留站点（mdgen/dev/probe/skilltax/keyscan/guard_probe）也并入同一口径——这些
+    工具会在 pythonw tick / DETACHED worker 的孙进程层级被调，裸 spawn 同样闪窗。
+    扫描面递归到子目录（tui 也在内）；新出现的裸 spawn 即红，把「再漏一处」从靠人盯
+    变成机械拦截。
+
+    **豁免**必须双证：文件在 ``EXEMPT`` 里给出理由，且源码含 ``spawn-hidden-exempt:``
+    标记（理由写在调用点旁边，代码移动/删除时一并可见）。
     """
 
-    from pysci.paths import ORCHESTRATION_ROOT
+    from pysci.paths import PROJECT_ROOT
 
     # 入口形态不止 ``subprocess.run/Popen``：``check_output``/``call``/``os.system``/
     # 未限定 ``Popen(`` 同样是裸 spawn（只是本树当前一处都没有——扫描面先收严）。
@@ -176,21 +181,37 @@ def test_no_bare_spawn_outside_the_single_landing_point():
         "os.system(",
         "os.popen(",
     )
-    tools = ORCHESTRATION_ROOT / "src" / "pysci" / "skills" / "orchestration" / "tools"
-    if not tools.is_dir():  # 真本树里没有 src（部署副本）：退到 PROJECT_ROOT
-        from pysci.paths import PROJECT_ROOT
-
-        tools = PROJECT_ROOT / "src" / "pysci" / "skills" / "orchestration" / "tools"
+    faces = (
+        PROJECT_ROOT / "src" / "pysci" / "skills" / "orchestration" / "tools",
+        PROJECT_ROOT / "src" / "pysci" / "skills" / "devops" / "tools",
+    )
+    # 显式豁免：rel 路径 → 理由（源码里必须同时有 spawn-hidden-exempt: 标记）。
+    exempt = {
+        "tui/app.py": "interactive-editor：VS Code 由用户在 TUI 显式拉起，可见属预期",
+    }
 
     offenders: list[str] = []
-    for p in sorted(tools.glob("*.py")):
-        if p.name == "procs.py":  # 唯一落点本体
+    for tools in faces:
+        if not tools.is_dir():
             continue
-        text = p.read_text(encoding="utf-8")
-        if any(pat in text for pat in patterns) or re.search(
-            r"(?<![\w.])Popen\(", text
-        ):
-            offenders.append(p.name)
+        for p in sorted(tools.rglob("*.py")):
+            if p.name == "procs.py":  # 唯一落点本体
+                continue
+            rel = p.relative_to(tools).as_posix()
+            text = p.read_text(encoding="utf-8")
+            has_bare = any(pat in text for pat in patterns) or re.search(
+                r"(?<![\w.])Popen\(", text
+            )
+            if rel in exempt:
+                assert "spawn-hidden-exempt:" in text, (
+                    f"{rel} 在豁免名单里，但源码缺 spawn-hidden-exempt: 标记"
+                )
+                continue
+            if has_bare:
+                offenders.append(rel)
+    assert "tui/app.py" in exempt and "spawn-hidden-exempt:" in (
+        faces[0] / "tui" / "app.py"
+    ).read_text(encoding="utf-8"), "交互式启动器的豁免理由必须留在源码里"
 
     assert offenders == [], (
         f"新出现裸 spawn（请改走 procs.run_hidden/popen_hidden）：{offenders}"

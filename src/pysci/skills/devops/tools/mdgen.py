@@ -33,13 +33,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import subprocess
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
 from pysci.paths import PROJECT_ROOT
+from pysci.skills.orchestration.tools import procs
 
 #: 与 `.pre-commit-config.yaml` §1 Official 的两支改写钩子对齐；顺序即执行顺序——
 #: trailing-whitespace 先削行末空白，end-of-file-fixer 再收敛文件末尾（否则末尾纯空格
@@ -97,7 +97,7 @@ def _run_hook(hook_id: str, files: list[Path], *, cwd: Path) -> int:
         "--files",
         *(str(p) for p in files),
     ]
-    proc = subprocess.run(
+    proc = procs.run_hidden(
         argv,
         cwd=str(cwd),
         capture_output=True,
