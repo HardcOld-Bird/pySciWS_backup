@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pysci.paths import PROJECT_ROOT
+from pysci.skills.orchestration.tools import procs
 
 #: 疑似密钥模式（id → 正则）。宁可多报再由人判读，也不要漏报——漏报的代价是 Key 进历史。
 #: 键名模式**故意不加词首 ``\b``**：真实泄漏最常见的形态是带前缀的环境变量名
@@ -59,7 +60,7 @@ def tracked_files(root: Path | None = None) -> list[str]:
     Raises:
         RuntimeError: 不在 git 仓库里 / git 不可用 / 超时——由调用方降级成 advisory。
     """
-    proc = subprocess.run(
+    proc = procs.run_hidden(
         ["git", "ls-files", "-z"],
         cwd=str(root or PROJECT_ROOT),
         capture_output=True,

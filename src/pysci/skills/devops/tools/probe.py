@@ -34,7 +34,6 @@ import json
 import re
 import secrets
 import shutil
-import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -44,6 +43,7 @@ from pysci.paths import ORCH_STATE_ROOT, PODS_ROOT
 
 #: 探针模型（flash 档足够复现规则注入/排除；省信用，与 skilltax 同源）。
 from pysci.skills.devops.tools.skilltax import PROBE_MODEL
+from pysci.skills.orchestration.tools import procs
 
 #: token 形态：不可猜随机串，模型只能逐字复述被注入上下文里的原值。
 TOKEN_RE = re.compile(r"TOK-[0-9a-f]{8,}")
@@ -68,7 +68,7 @@ def cli_version() -> str:
     """当前原生 exe 版本号（staleness 键的一部分；CLI 升级即触发复测）。进程内缓存。"""
     from pysci.skills.orchestration.tools.registry import resolve_exe
 
-    p = subprocess.run(
+    p = procs.run_hidden(
         [str(resolve_exe()), "--version"],
         capture_output=True,
         text=True,
@@ -131,7 +131,7 @@ def build_fixture() -> tuple[Path, str, str, Path, Path]:
     hide = "TOK-" + secrets.token_hex(8)
     (rules / "keep.md").write_text(_front_rule(keep, "应可见"), encoding="utf-8")
     (rules / "hide.md").write_text(_front_rule(hide, "应被排除"), encoding="utf-8")
-    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    procs.run_hidden(["git", "init", "-q", str(root)], check=True)
 
     def mkpod(name: str, excludes: list[str]) -> Path:
         p = root / name
@@ -167,7 +167,7 @@ def _run_session(pod_cwd: Path) -> dict[str, Any]:
         "-m",
         PROBE_MODEL,
     ]
-    p = subprocess.run(
+    p = procs.run_hidden(
         cmd,
         capture_output=True,
         text=True,

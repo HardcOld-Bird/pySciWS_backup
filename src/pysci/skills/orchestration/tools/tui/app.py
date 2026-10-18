@@ -161,6 +161,8 @@ def launch_editor(launcher: str, target: Path, *, popen=None) -> tuple[bool, str
         else [launcher, str(target)]
     )
     spawn = popen if popen is not None else subprocess.Popen
+    # spawn-hidden-exempt: interactive-editor —— VS Code 是用户在 TUI 里显式触发的
+    # 交互式编辑器，父进程是带控制台的组长会话；可见启动属预期，不属无控制台派发链。
     try:
         spawn(argv)
     except Exception as exc:  # noqa: BLE001 - 启动失败如实报（不抛给 UI 事件循环）

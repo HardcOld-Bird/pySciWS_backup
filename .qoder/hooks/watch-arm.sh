@@ -38,6 +38,13 @@
 #   差分），无变化零输出。开关**只归用户手动**（不实现自拨回/时限到期）。
 #
 # 安全：任何异常一律 exit 0（观察面塌不了主链路）；token 文件缺失时自抢（不误判为被取代）。
+#
+# v8（2026-10-18，空终端根治；wake-bind-20261018 s1-noconsole）：本脚本由 `watchdog._rearm`
+#   经 `DETACHED_PROCESS|CREATE_NO_WINDOW` 拉起——**父进程完全没有控制台**。此时裸 spawn
+#   console 子系统的 `python.exe` / `pysci-orch.exe` 会让 Windows 分配**新的可见控制台**
+#   （标题=解释器路径），看门狗反复重臂即反复闪窗。所有 venv 调用改走 **pythonw.exe**
+#   （GUI 子系统，永不分配控制台）；`orch` 改 `-m ...tools.orch`（有 __main__ 守卫）。
+#   每处调用的 stdout/stderr 重定向与命令替换语义保持不变（pythonw 下未重定向才会丢写）。
 PAYLOAD=$(cat)
 ROOT="${QODER_PROJECT_DIR:-/d/XXXIIIGGG/projects/pySci/pySciWS}"
 cd "$ROOT" || exit 0
@@ -59,13 +66,14 @@ else
   log "空载荷（看门狗重臂/无 stdin）→ fail-open 走旧 token 语义"
 fi
 
-PY="$ROOT/.venv/Scripts/python.exe"; ORCH="$ROOT/.venv/Scripts/pysci-orch.exe"
-{ [ -x "$PY" ] && [ -x "$ORCH" ]; } || { log "环境缺失（python/orch 不可执行）→ 退出"; exit 0; }
+PYW="$ROOT/.venv/Scripts/pythonw.exe"
+[ -x "$PYW" ] || { log "环境缺失（pythonw 不可执行）→ 退出"; exit 0; }
+orch() { PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.orch "$@"; }
 
 # 会话结束（SessionEnd 钩子）：显式释放 owner 后退出——正在结束的会话不挂 watch。
 if [ "$HEV" = "SessionEnd" ]; then
   if [ -n "$SID" ]; then
-    dec=$(printf '%s' "$PAYLOAD" | "$ORCH" wake-claim --check 2>>"$LOG"); log "SessionEnd：${dec:-<无输出>}"
+    dec=$(printf '%s' "$PAYLOAD" | orch wake-claim --check 2>>"$LOG"); log "SessionEnd：${dec:-<无输出>}"
   else
     log "SessionEnd（无 session_id，跳过释放）"
   fi
@@ -80,7 +88,7 @@ fi
 #   fail-open：读不出/异常一律零输出继续走原有链路（watch 语义零回退——本块在 token
 #   竞争与 watch 挂载之前，未命中时对既有行为**无任何影响**）。
 if [ -n "$SID" ]; then
-  ndiff=$(printf '%s' "$PAYLOAD" | PYTHONPATH="$ROOT/src" "$PY" -m pysci.skills.orchestration.tools.night \
+  ndiff=$(printf '%s' "$PAYLOAD" | PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.night \
     --diff --session "$SID" --settings "$ROOT/data/pysci_settings.toml" 2>>"$LOG")
   ndrc=$?
   if [ -n "$ndiff" ]; then
@@ -95,7 +103,7 @@ fi
 # rc 0=放行 / 3=非 owner 不抢 / 4=SessionEnd（上方已拦）；未知 rc=检查本身坏了 →
 # fail-open 按旧 token 语义监听并留痕（唤醒链不塌）。
 if [ -n "$SID" ]; then
-  dec=$(printf '%s' "$PAYLOAD" | "$ORCH" wake-claim --check 2>>"$LOG"); wcr=$?
+  dec=$(printf '%s' "$PAYLOAD" | orch wake-claim --check 2>>"$LOG"); wcr=$?
   case "$wcr" in
     0) log "归属判定：$dec" ;;
     3) log "归属判定：$dec → 不监听不抢，退出"; exit 0 ;;
@@ -108,7 +116,7 @@ else
 fi
 
 # 看门狗自启动（v4）：幂等——在场则秒返回，不在场则拉起分离监督进程（冷启动后即在位）。
-wd=$("$ORCH" watchdog start 2>&1); wdrc=$?
+wd=$(orch watchdog start 2>&1); wdrc=$?
 case "$wd" in
   *已后台启动*) log "看门狗不在场 → 自启动（$wd）" ;;
   *) [ "$wdrc" -ne 0 ] && log "watchdog 自启动失败（rc=$wdrc）：$wd" ;;
@@ -127,7 +135,7 @@ while :; do
     log "token 缺失 → 自抢（token=$MY）"
   fi
   [ "$cur" = "$MY" ] || { log "被取代（现持 $cur）→ 让位退出"; exit 0; }
-  out=$("$ORCH" watch --timeout "$CYCLE" 2>&1); rc=$?
+  out=$(orch watch --timeout "$CYCLE" 2>&1); rc=$?
   [ "$rc" -ne 0 ] && { log "watch rc=$rc → 退出"; exit 0; }
   case "$out" in
     *TIMEOUT*) : ;;

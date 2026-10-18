@@ -188,6 +188,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
 
+def _hook_exe() -> Path:
+    """hook 解释器路径：win32 优先同目录 ``pythonw.exe``（GUI 子系统，不分配控制台）。
+
+    派发会话的 CLI 自身由 ``CREATE_NO_WINDOW`` 拉起（有自己的**不可见**控制台），但
+    ``PostToolUse`` 钩子仍可能在无控制台父进程下执行（GUI/DETACHED 形态）——裸 spawn
+    ``python.exe`` 会新开可见控制台。pythonw 下 stdin/stdout/stderr 由 CLI 提供管道，
+    exit 2 + stderr 注入语义实测不变；非 win32 原样用 ``sys.executable``。
+    """
+    exe = Path(sys.executable).resolve()
+    if sys.platform == "win32":
+        candidate = exe.with_name("pythonw.exe")
+        if candidate.is_file():
+            return candidate
+    return exe
+
+
 def hook_settings(
     budget: int, *, ratio: float | None = None, since: float | None = None
 ) -> str:
@@ -202,7 +218,7 @@ def hook_settings(
         单行 JSON 字符串（``--settings`` 接受内联 JSON；与 pod 既有 settings 合并而非替换，
         实测 1.1.73：项目级 Stop hook 与内联 PostToolUse 同时生效）。
     """
-    exe = Path(sys.executable).resolve().as_posix()
+    exe = _hook_exe().as_posix()
     script = Path(__file__).resolve().as_posix()
     effective = warn_ratio() if ratio is None else ratio
     command = f'"{exe}" "{script}" --budget {int(budget)} --ratio {effective:g}'
