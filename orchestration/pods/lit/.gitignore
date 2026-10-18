@@ -1,6 +1,8 @@
 # 可再生物与草稿区不入库（README §2 git 策略）：
 # 部署技能副本由 orch skills sync 从真本再生；bench/outbox 是运行期产物。
-bench/
+# 例外：图区抽取器是耐久工具（缺陷修复的落点），随代码入库。
+bench/*
+!bench/extract_figs.py
 outbox/
 .qoder/skills/
 # 任务书运行态：orch dispatch 每次派发到 inbox 落 task-<ts>-<slug>.md，
