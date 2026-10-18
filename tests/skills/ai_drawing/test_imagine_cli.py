@@ -63,15 +63,15 @@ GROUP_CAPABLE_MODEL = "doubao-seedream-4-5-251128"
 
 
 def _fake_response(
-    n: int = 1, *, model: str = "doubao-seedream-4-0-250828"
+    n: int = 1, *, model: str = "doubao-seedream-4-0-250828", size: str = "4x4"
 ) -> _ark.ArkResponse:
     """造一个 n 张 PNG（b64_json）的响应，顶替真实云端返回。"""
     b64 = base64.b64encode(_png_bytes()).decode("ascii")
-    data = [{"b64_json": b64, "size": "4x4"} for _ in range(n)]
+    data = [{"b64_json": b64, "size": size} for _ in range(n)]
     return _ark.ArkResponse(
         model=model,
         created=1700000000,
-        images=[_ark.ArkImage(index=i, b64_json=b64, size="4x4") for i in range(n)],
+        images=[_ark.ArkImage(index=i, b64_json=b64, size=size) for i in range(n)],
         usage={"generated_images": n, "output_tokens": 10 * n, "total_tokens": 10 * n},
         request={"model": model, "prompt": "p", "watermark": False},
         raw={
@@ -694,6 +694,74 @@ def test_gen_end_to_end_offline(tmp_env, monkeypatch, capsys):
     assert meta["kind"] == "gen", meta
     assert (tmp_env / "runs" / "unit.json").is_file()
     assert (tmp_env / "LEDGER.md").is_file()
+
+
+# ---------------------------------------------------------------------------
+# 服务端静默改写尺寸：请求 W×H ≠ response.data[i].size 时必须显式告警
+# （backlog 20261018-103740-drawing；Seedream 5.0-pro 实测三例）
+# ---------------------------------------------------------------------------
+def _gen_with_actual_size(monkeypatch, actual: str, argv: list[str]) -> None:
+    monkeypatch.setattr(
+        imagine._ark, "generate", lambda *a, **kw: _fake_response(size=actual)
+    )
+    args = imagine.build_parser().parse_args(argv)
+    assert imagine._cloud_generate(args, images=None, kind="gen") == 0
+
+
+def test_gen_warns_when_server_rewrites_width_height(tmp_env, monkeypatch, capsys):
+    _gen_with_actual_size(
+        monkeypatch,
+        "2816x1584",
+        ["gen", "--prompt", "p", "--width", "2688", "--height", "1792"],
+    )
+    err = capsys.readouterr().err
+    assert "尺寸告警：请求 2688×1792 → 实际 2816×1584（服务端已改写）" in err
+    assert "比例" in err and "核对产物" in err
+
+
+def test_gen_silent_when_actual_size_matches(tmp_env, monkeypatch, capsys):
+    _gen_with_actual_size(
+        monkeypatch,
+        "1024x1024",
+        ["gen", "--prompt", "p", "--width", "1024", "--height", "1024"],
+    )
+    assert "尺寸告警" not in capsys.readouterr().err
+
+
+def test_gen_warns_for_custom_wxh_size(tmp_env, monkeypatch, capsys):
+    _gen_with_actual_size(
+        monkeypatch,
+        "1280x720",
+        ["gen", "--prompt", "p", "--size", "1024×1024"],
+    )
+    err = capsys.readouterr().err
+    assert "请求 1024×1024 → 实际 1280×720（服务端已改写）" in err
+
+
+def test_gen_tier_size_has_no_pixel_comparison(tmp_env, monkeypatch, capsys):
+    """``--size 2K`` 是档位语义（服务端自选像素），不是改写，不得误报。"""
+    _gen_with_actual_size(
+        monkeypatch, "2816x1584", ["gen", "--prompt", "p", "--size", "2K"]
+    )
+    assert "尺寸告警" not in capsys.readouterr().err
+
+
+def test_gen_size_warning_deduped_across_calls(tmp_env, monkeypatch, capsys):
+    """非组图多张＝多次独立请求；同一改写只提示一次，不刷屏。"""
+    calls = []
+
+    def fake(*a, **kw):
+        calls.append(1)
+        return _fake_response(size="2816x1584")
+
+    monkeypatch.setattr(imagine._ark, "generate", fake)
+    rc = imagine.main(
+        ["gen", "--prompt", "p", "--n", "2", "--width", "2688", "--height", "1792"]
+    )
+    assert rc == 0
+    assert len(calls) == 2, "非组图 --n 2 应发两次独立请求（去重口径才被真正覆盖）"
+    err = capsys.readouterr().err
+    assert err.count("尺寸告警") == 1, err
 
 
 def test_gen_passes_watermark_false_and_single_image(tmp_env, monkeypatch):
