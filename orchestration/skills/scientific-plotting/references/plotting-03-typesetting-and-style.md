@@ -18,8 +18,10 @@
 
 自查手段：`build`/`preview` 后 **Read `out/<stem>_preview.png`**，再逐子图放大判读（`panels/`）；
 `figures audit <figdir>` 查宽度/字号/嵌入/色盲；`figures inspect <png>` 查水印/logo、**等效物理尺寸
-（mm，由 PNG dpi 元数据换算）**，样式声明 `savefig.bbox=tight` 时并给一行**裁切提示**（成品尺寸
-＝裁切后包围盒，与自述 `figsize` 名义值不同——核验「自述 mm vs 成品实测」无须再反解版面常量）。
+（mm，由 PNG dpi 元数据换算）**。PNG **不记录**渲染时的 `savefig.bbox`，故 inspect 只给中性提示
+「bbox 模式未知」——**不得**据全局样式断言 tight 已生效（渲染可在 `rc_context(savefig.bbox=
+"standard")` 下进行；2026-10-18 backlog 20261018-114448-reviewer）。若确证 tight，成品为裁切后
+包围盒、与自述 `figsize` 名义值不同（核验「自述 mm vs 成品实测」无须再反解版面常量）。
 
 ## scienceplots 审美层（可选；契约层优先）
 

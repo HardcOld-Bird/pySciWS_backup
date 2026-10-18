@@ -166,32 +166,50 @@ def test_report_says_unknown_when_dpi_missing(tmp_path):
     assert "等效物理尺寸" in text and "未知" in text and "dpi 元数据" in text
 
 
-def test_tight_bbox_hint_only_when_declared(tmp_path):
+def test_bbox_hint_requires_proof(tmp_path):
+    """tight/standard 只在**确证**时断言；不可证 → 中性「bbox 模式未知」。"""
     p = tmp_path / "300.png"
     Image.fromarray(np.full((300, 400, 3), 255, dtype=np.uint8)).save(p, dpi=(300, 300))
     health, _ = imgcheck.inspect_image(p)
 
     with_hint = "\n".join(imgcheck.report_lines(health, tight_bbox=True))
-    without = "\n".join(imgcheck.report_lines(health))
+    standard = "\n".join(imgcheck.report_lines(health, tight_bbox=False))
+    unknown = "\n".join(imgcheck.report_lines(health))
 
     assert "等效物理尺寸    : 33.9×25.4 mm" in with_hint
-    assert "savefig.bbox=tight 已生效" in with_hint
+    assert "savefig.bbox=tight（已确证）" in with_hint
     assert "裁切后包围盒" in with_hint and "figsize 名义值" in with_hint
-    assert "savefig.bbox" not in without, "未声明 tight 时不许出裁切提示（防噪声）"
+    assert "savefig.bbox=standard（已确证）" in standard
+    assert "裁切后包围盒" not in standard
+    assert "bbox 模式未知" in unknown
+    assert "已生效" not in unknown and "已确证" not in unknown, (
+        "不可证不得断言任何 bbox 模式（2026-10-18 固定 tight 断言事故）"
+    )
 
 
-def test_style_is_the_single_source_of_the_hint():
-    """提示真源＝绘图样式契约（`style.savefig_bbox()`），不在体检面写死常量。"""
+def test_global_style_is_not_proof_of_render_bbox(tmp_path):
+    """反例实锤：全局样式声明 tight，但产物可以是 standard 画布渲染的。
+
+    inspect 不能从 PNG 反推渲染时模式——固定按样式断言 tight 会与事实相反
+    （backlog 20261018-114448-reviewer）。
+    """
     from pysci.skills.scientific_plotting.tools import style
 
-    assert style.savefig_bbox() == "tight"
+    assert style.savefig_bbox() == "tight", "前提：本仓全局样式声明 tight"
+    p = tmp_path / "standard.png"
+    Image.fromarray(np.full((300, 400, 3), 255, dtype=np.uint8)).save(p, dpi=(300, 300))
+    health, _ = imgcheck.inspect_image(p)
+    neutral = "\n".join(imgcheck.report_lines(health))
+    assert "bbox 模式未知" in neutral
+    assert "tight 已生效" not in neutral
 
 
-def test_cli_inspect_reports_mm_and_tight_hint(tmp_path, capsys):
+def test_cli_inspect_reports_mm_and_neutral_bbox_hint(tmp_path, capsys):
     p = tmp_path / "300.png"
     Image.fromarray(np.full((300, 400, 3), 255, dtype=np.uint8)).save(p, dpi=(300, 300))
     assert figures.main(["inspect", str(p)]) == 0
     out = capsys.readouterr().out
     assert "尺寸            : 400×300 px" in out
     assert "等效物理尺寸    : 33.9×25.4 mm" in out
-    assert "savefig.bbox=tight 已生效" in out, "本仓样式声明 tight → 命令行须出裁切提示"
+    assert "bbox 模式未知" in out, "CLI 不可证渲染时模式 → 中性提示"
+    assert "tight 已生效" not in out, "不得再固定断言 tight（与事实相反）"
