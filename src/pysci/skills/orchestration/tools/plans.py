@@ -816,7 +816,6 @@ def cmd_plan_run(args) -> int:
     steps_yaml = _leaf_map(plan)
     if (gate := _serial_gate(_plan_taskbook_id(plan_id, plan))) is not None:
         return gate
-    _print_digest_head(plan_id, plan)
 
     if tpl := template_violations(plan):
         print("[!] 推进被拒：rework 模板必留节点缺失/乱序（PSEP_3 §4.3 #1）——")
@@ -868,6 +867,8 @@ def cmd_plan_run(args) -> int:
             )
         else:
             _print_worklist(plan_id, plan, state)
+        if getattr(args, "full", False):
+            _print_digest_tail(plan_id, plan, full=True)
         return 0
 
     # blocked 环节续作：需要组长决策后带 --text/--task 重入
@@ -879,6 +880,11 @@ def cmd_plan_run(args) -> int:
         _print_worklist(plan_id, plan, state)
         return 2
 
+    first_guide = (
+        str(cur.get("status")) == "pending"
+        and not cur.get("session_id")
+        and not cur.get("job_id")
+    )
     sy = steps_yaml.get(cur["id"], {})
     # 送审 gate（§4.3 #2/#3）：gate_jury 叶子须案卷 verdict=A 才派单
     if (gate := _gate_blocks(plan_id, plan, state, cur, sy)) is not None:
@@ -957,6 +963,8 @@ def cmd_plan_run(args) -> int:
         _report_plan_complete(plan_id, state)
     for line in _routing_card(fresh=True):
         print(line)
+    if first_guide or getattr(args, "full", False):
+        _print_digest_tail(plan_id, plan, full=bool(getattr(args, "full", False)))
     return 0 if all(o.code == 0 for _, o in outcomes) else 2
 
 
@@ -1150,7 +1158,7 @@ def _routing_card(*, fresh: bool = False) -> list[str]:
             import importlib
 
             nextroute = importlib.reload(nextroute)
-        return nextroute.card_lines(None)
+        return nextroute.card_lines(None, include_digest=False)
     except Exception:  # noqa: BLE001 - 路由读数坏一项不塌推进
         return []
 
@@ -1281,19 +1289,23 @@ def _serial_gate(tb_id: str) -> int | None:
     return 2
 
 
-def _print_digest_head(plan_id: str, plan: dict) -> None:
-    """plan 面输出**头部置顶**要求与历史总览（用户 2026-10-17：决策面全量、一次性可见）。
+def _print_digest_tail(plan_id: str, plan: dict, *, full: bool = False) -> None:
+    """输出**末尾**附送要求与历史总览（行动面在前；tb-5 返工 L 摩擦 #1）。
 
-    仅当 plan 有归属任务书**且**总览含历史时打印（无历史任务书正文即原始要求，不重复）。
-    附送面 fail-soft：历史读数坏不阻塞推进。
+    原实现把 ~35KB 总览**置顶**，入队确认/工作清单/交接决策沉底，每次 advance 都要翻屏。
+    现在只在**该 leaf 首次引导**（由调用方判定）或 ``--full`` 时打，且固定后置。
     """
     try:
         from . import taskbooks as _tb
 
         tb_id = _plan_taskbook_id(plan_id, plan)
-        if tb_id and _tb.digest_has_history(tb_id):
-            print(_tb.requirements_digest(tb_id).rstrip())
-            print()
+        if not tb_id:
+            return
+        if not full and not _tb.digest_has_history(tb_id):
+            return
+        print()
+        print("—— 要求与历史总览（首次引导附送；后续用 --full 查看）——")
+        print(_tb.requirements_digest(tb_id).rstrip())
     except Exception:  # noqa: BLE001 - 附送面 fail-soft（推进主流程不被历史读数阻塞）
         pass
 
@@ -1364,7 +1376,6 @@ def cmd_plan_advance(args) -> int:
     steps_yaml = _leaf_map(plan)
     if (gate := _serial_gate(_plan_taskbook_id(plan_id, plan))) is not None:
         return gate
-    _print_digest_head(plan_id, plan)
 
     if tpl := template_violations(plan):
         print("[!] advance 被拒：rework 模板必留节点缺失/乱序（PSEP_3 §4.3 #1）——")
@@ -1435,7 +1446,15 @@ def cmd_plan_advance(args) -> int:
             _report_plan_complete(plan_id, state)
             return 0
         _print_worklist(plan_id, plan, state)
+        if getattr(args, "full", False):
+            _print_digest_tail(plan_id, plan, full=True)
         return 0
+    # 首次引导＝该 leaf 从未启动（无 session/job）：只有这一次在尾部附历史总览
+    first_guide = (
+        str(cur.get("status")) == "pending"
+        and not cur.get("session_id")
+        and not cur.get("job_id")
+    )
     if cur["status"] in ("blocked", "failed", "run_failed") and not (
         args.text or args.task
     ):
@@ -1454,6 +1473,8 @@ def cmd_plan_advance(args) -> int:
         _print_run_guidance(plan_id, cur, sy)
         print("\n[!] 尚未提供本环节任务书（延迟书写：只强制当前环节）。")
         _print_worklist(plan_id, plan, state)
+        if first_guide or getattr(args, "full", False):
+            _print_digest_tail(plan_id, plan, full=bool(getattr(args, "full", False)))
         return 2
 
     member = str(sy.get("member") or "")
@@ -1503,6 +1524,8 @@ def cmd_plan_advance(args) -> int:
     )
     for line in _routing_card():
         print(line)
+    if first_guide or getattr(args, "full", False):
+        _print_digest_tail(plan_id, plan, full=bool(getattr(args, "full", False)))
     return 0
 
 
@@ -2550,7 +2573,14 @@ def cmd_plan_list(args) -> int:
 
 def cmd_plan_adhoc(args) -> int:
     """单步快捷计划：登记并立即执行（计划外事项的正确姿势，README §4.1）。"""
-    plan_id = f"adhoc-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    plan_id = f"adhoc-{stamp}"
+    n = 2
+    # 同分钟/同秒两单曾共用 adhoc-YYYYMMDD-HHMMSS → 第二单覆盖第一单的 plan/state
+    # （2026-10-19 实测两单合并记账）。撞车即递增后缀，一单一 state。
+    while _plan_path(plan_id).exists() or _state_path(plan_id).exists():
+        plan_id = f"adhoc-{stamp}-{n:02d}"
+        n += 1
     plan = {
         "id": plan_id,
         "goal": f"adhoc：{str(args.text or args.task)[:60]}",

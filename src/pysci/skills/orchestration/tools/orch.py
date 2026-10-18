@@ -1212,6 +1212,11 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="把 pending 环节置 skipped（空改进清单等「合法不做事」收尾；如 --skip L.l3）",
     )
+    q.add_argument(
+        "--full",
+        action="store_true",
+        help="输出末尾附送要求与历史总览（默认仅首次引导）",
+    )
     q.set_defaults(func=_plan_router("advance"))
 
     q = psub.add_parser(
@@ -1320,6 +1325,11 @@ def main(argv: list[str] | None = None) -> int:
         help="本跳推理强度按项标注（不传=跟随用户级默认=中）",
     )
     q.add_argument("--max-turns", type=int)
+    q.add_argument(
+        "--full",
+        action="store_true",
+        help="输出末尾附送要求与历史总览（默认仅首次引导）",
+    )
     q.set_defaults(func=_plan_router("adhoc"))
 
     p = sub.add_parser(
