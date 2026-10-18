@@ -3730,11 +3730,14 @@
       "kind": "defect",
       "success_criteria": "图区检测排除期刊页眉/刊头横幅（或提供页眉裁切启发式/参数），对上述 3 个目录重提取后 figN.png 顶部不再含刊头条纹。",
       "evidence_file": "orchestration/state/suggestions/approved/20261018-224713-reviewer.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-18T22:49:30+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 7c464bd）",
       "started_at": "2026-10-18T22:49:32+08:00",
-      "worktree": "20261018-224713-reviewer"
+      "worktree": "20261018-224713-reviewer",
+      "done_at": "2026-10-18T23:37:15+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261018-224713-reviewer"
     }
   ]
 }
