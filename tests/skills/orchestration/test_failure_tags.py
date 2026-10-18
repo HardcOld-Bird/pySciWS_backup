@@ -281,3 +281,39 @@ def test_registry_tier_a_per_key_merge_and_fail_open(iso_registry):
         "window_hops": 20,
         "threshold": 3,
     }
+
+
+# --- 8. 标签纠正（Tier-A 20261018-212801-tier-a 复盘） ----------------------
+
+
+def test_reconcile_tags_merge_marker_reclassifies_whitelist_conflict():
+    """正文含 ``[✗] 交集`` = main 脏面相交 → merge_dirty_face（词表纪律的机械执行）。"""
+    tags, note = failure_tags.reconcile_tags(
+        ["whitelist_conflict", "tool_bug"],
+        "卡点\n[✗] 交集 1 项——合并会覆盖 main 工作区的未提交改动\n",
+    )
+    assert tags == ["merge_dirty_face", "tool_bug"], "顺序保持、只替换误标那一个"
+    assert "merge_dirty_face" in note
+
+
+def test_reconcile_tags_genuine_write_conflict_is_kept():
+    """无 merge 交集证据的写权限面冲突不得被改判（不猜）。"""
+    tags, note = failure_tags.reconcile_tags(
+        ["whitelist_conflict"], "pod-guard 拦下：目标路径不在本 pod 允许写面内"
+    )
+    assert tags == ["whitelist_conflict"] and note == ""
+
+
+def test_reconcile_tags_already_has_merge_tag_is_left_alone():
+    tags, note = failure_tags.reconcile_tags(
+        ["whitelist_conflict", "merge_dirty_face"], "[✗] 交集 2 项"
+    )
+    assert tags == ["whitelist_conflict", "merge_dirty_face"] and note == ""
+
+
+def test_reconcile_tags_empty_and_result_deliveries():
+    assert failure_tags.reconcile_tags([], "x [✗] 交集 1 项") == ([], "")
+    assert failure_tags.reconcile_tags(["whitelist_conflict"], "") == (
+        ["whitelist_conflict"],
+        "",
+    )

@@ -22,6 +22,13 @@ from pysci.paths import ORCH_STATE_ROOT
 
 TAGS_PATH: Path = ORCH_STATE_ROOT / "failure-tags.json"
 
+#: 标签纠正审计日志（运行态，随 ``state/`` 忽略）：每行一条「原标签 → 修正标签 + 证据」。
+#: Tier A 计数读台账的 ``tags``；历史误标纠正必须留原件，故台账行 + 本日志双留痕。
+CORRECTIONS_PATH: Path = ORCH_STATE_ROOT / "ledger" / "tag-corrections.jsonl"
+
+#: merge 脏面相交的**确定性**正文标记（``pysci-dev worktree merge`` 的固定输出行）。
+MERGE_CONFLICT_MARKER: str = "[✗] 交集"
+
 #: 词表缺席/损坏时的兜底集合（只保**键**，定义空串——真定义在文件里）。存在的意义是
 #: 让统计与立案在文件丢失时仍能跑（fail-open，不阻塞派发），而不是给组员一张空白名单。
 #: 键集合与随附文件的一致性由 `test_failure_tags.py` 钉住（改一边必改另一边）。
@@ -131,6 +138,61 @@ def unknown_tags(tags: list[str], vocab: dict[str, str] | None = None) -> list[s
     """返回不在词表内的标签（保持输入顺序）；``vocab`` 缺省现场读取。"""
     table = load_tags() if vocab is None else vocab
     return [t for t in tags if t not in table]
+
+
+def reconcile_tags(tags: list[str], body: str) -> tuple[list[str], str]:
+    """按**确定性证据**纠正明显误标（词表纪律的机械执行）。
+
+    唯一规则（词表 ``whitelist_conflict`` 定义明文）：``whitelist_conflict`` + 正文含
+    ``[✗] 交集`` = main 脏面与本次合并相交，应归 ``merge_dirty_face``——它不是写权限面
+    冲突。其余形状**原样返回、不猜**（doc/测试类失败的正确标签需人判，见
+    ``references/tier-a-tags.md``）。
+
+    Args:
+        tags: 交付解析出的失败标签。
+        body: 交付正文（原样，含 ``pysci-dev worktree merge`` 输出）。
+
+    Returns:
+        ``(最终标签, 说明)``；无需纠正时说明为空串。标签顺序保持不变。
+    """
+    clean = [str(t).strip() for t in (tags or []) if str(t).strip()]
+    if "whitelist_conflict" not in clean or "merge_dirty_face" in clean:
+        return clean, ""
+    if MERGE_CONFLICT_MARKER not in str(body or ""):
+        return clean, ""
+    corrected = ["merge_dirty_face" if t == "whitelist_conflict" else t for t in clean]
+    return corrected, (
+        "whitelist_conflict → merge_dirty_face（正文含 `[✗] 交集` 证据："
+        "main 脏面相交，非写权限面冲突）"
+    )
+
+
+def record_correction(
+    *,
+    member: str,
+    task_file: str,
+    original: list[str],
+    corrected: list[str],
+    reason: str,
+    ts: str | None = None,
+) -> None:
+    """把一次标签纠正写入审计日志（失败不抛：纠错面不阻塞派发）。"""
+    from datetime import datetime
+
+    entry = {
+        "ts": ts or datetime.now().astimezone().isoformat(timespec="seconds"),
+        "member": str(member or ""),
+        "task_file": str(task_file or ""),
+        "tags_original": list(original or []),
+        "tags_corrected": list(corrected or []),
+        "reason": str(reason or ""),
+    }
+    try:
+        CORRECTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with CORRECTIONS_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 def parse_reason(value: str | None) -> str:

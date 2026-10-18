@@ -312,6 +312,9 @@ def iso_state(tmp_path, monkeypatch):
     monkeypatch.setattr(workflow, "REPLIES_DIR", state / "replies")
     monkeypatch.setattr(workflow, "TIER_A_FILED_PATH", state / "tier-a-filed.json")
     monkeypatch.setattr(ledger, "LEDGER_PATH", state / "ledger" / "deliveries.jsonl")
+    monkeypatch.setattr(
+        failure_tags, "CORRECTIONS_PATH", state / "ledger" / "tag-corrections.jsonl"
+    )
     monkeypatch.setattr(failure_tags, "TAGS_PATH", state / "failure-tags.json")
     # E5b：每条判决（approve/reject/核验落地）都写决策日志，不 patch 就真写仓库里那份
     # 长期资产（git 跟踪——测试污染会直接变成脏跟踪面）。
@@ -816,6 +819,9 @@ def iso_dispatch(tmp_path, monkeypatch):
     # 直接 no-op save，防止测试写真实 registry.json
     monkeypatch.setattr(registry.Registry, "save", lambda self: None)
     monkeypatch.setattr(ledger, "LEDGER_PATH", state / "ledger.jsonl")
+    monkeypatch.setattr(
+        failure_tags, "CORRECTIONS_PATH", state / "tag-corrections.jsonl"
+    )
     monkeypatch.setattr(settings, "SETTINGS_PATH", state / "pysci_settings.toml")
     seed_settings(state)
     monkeypatch.setattr(channels, "EVENTS_PATH", state / "channel-events.jsonl")

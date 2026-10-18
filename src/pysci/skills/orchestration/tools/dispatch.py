@@ -26,7 +26,7 @@ from . import sessions as _sessions
 from . import sync as _sync
 from .checks import run_checks
 from .delivery import parse_delivery
-from .failure_tags import load_infra_kinds
+from .failure_tags import load_infra_kinds, reconcile_tags, record_correction
 from .ledger import LedgerEntry, append
 from .registry import (
     Member,
@@ -1805,6 +1805,20 @@ def do_dispatch(
         return outcome
 
     delivery = parse_delivery(env_json.result)
+    # 标签按确定性证据纠正（2026-10-18 Tier-A 20261018-212801-tier-a）：正文带
+    # ``[✗] 交集`` 的 whitelist_conflict 实为 merge_dirty_face——词表纪律的机械执行。
+    tags, retag_note = reconcile_tags(delivery.tags, delivery.body)
+    if retag_note:
+        if not eval_hop:
+            record_correction(
+                member=member_id,
+                task_file=orchestration_rel(taskbook),
+                original=list(delivery.tags),
+                corrected=tags,
+                reason=retag_note,
+            )
+        if not quiet:
+            print(f"[!] 标签纠正：{retag_note}")
     # ⑤ blocked 交付全文落 outbox 审计副本（184000 修复面⑤）：needs_leader note 截 200 字
     # 会让关键证据变残片（两案实证），全文必须留在 `pods/<m>/outbox/delivery-<ts>.xml`
     # 供组长/审计复原。失败通路（run_failed/系统性）同理——它们不走 parse_delivery，
@@ -1838,7 +1852,7 @@ def do_dispatch(
         # 未入库这件事仍可见：呈现面按 infra_kind 非空而本字段为假打「建议✗未入库」。
         infra_suggestion=bool(suggestion_id),
         infra_kind=delivery.infra_kind,
-        tags=delivery.tags,
+        tags=tags,
         reason=delivery.reason,
         num_turns=env_json.num_turns,
         duration_ms=env_json.duration_ms,
@@ -1882,7 +1896,7 @@ def do_dispatch(
         checks=check_results,
         infra_suggestion=delivery.infra_suggestion,
         infra_kind=delivery.infra_kind,
-        tags=delivery.tags,
+        tags=tags,
         reason=delivery.reason,
         warning=delivery.warning,
         suggestion_id=suggestion_id,
