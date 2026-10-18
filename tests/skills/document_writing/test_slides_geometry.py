@@ -15,6 +15,7 @@ pptx = pytest.importorskip("pptx", reason="需要 python-pptx")
 Image = pytest.importorskip("PIL.Image", reason="需要 Pillow")
 
 from pptx import Presentation  # noqa: E402
+from pptx.dml.color import RGBColor  # noqa: E402
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE  # noqa: E402
 from pptx.util import Inches  # noqa: E402
 
@@ -50,15 +51,16 @@ def _defective_deck(tmp_path: Path) -> Path:
 
 
 def _clean_deck(tmp_path: Path) -> Path:
-    """无缺陷对照：只有一个居中矩形 + 一张位于其内的图。"""
+    """无缺陷对照：只有一个居中矩形 + 一张位于其内、带黑描边的图。"""
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     slide.shapes.add_shape(
         MSO_SHAPE.RECTANGLE, Inches(1), Inches(1), Inches(8), Inches(5)
     )
-    slide.shapes.add_picture(
+    pic = slide.shapes.add_picture(
         str(_png(tmp_path / "ok.png")), Inches(2), Inches(2), Inches(2), Inches(2)
     )
+    pic.line.color.rgb = RGBColor(0, 0, 0)  # 预设第 4 条：非整页图加黑描边
     deck = tmp_path / "clean.pptx"
     prs.save(str(deck))
     return deck
@@ -237,14 +239,20 @@ def _titled_deck(tmp_path: Path, *, slide_titles: list[str], mutate=None) -> Pat
     """建「仅标题」版式 deck：先装配（含可选 ``mutate(prs, slides)`` 改动）**再存盘**。
 
     先给标题显式写 w/h——python-pptx 的占位符默认**不写** ``<a:xfrm><a:ext>``，不逼出它
-    就没有「xfrm 在、ext 缺」这一真实缺陷签名可删。
+    就没有「xfrm 在、ext 缺」这一真实缺陷签名可删。标题按预设方案写成「·标题·」且框宽
+    随文本估算自适应（否则会被新增的预设三项检查判违规，干扰 W1/W2 的判据）。
     """
+    from pptx.util import Pt
+
     prs = Presentation()
     for t in slide_titles:
         s = prs.slides.add_slide(prs.slide_layouts[5])  # Title Only
         title = s.shapes.title
-        title.text = t
-        title.width, title.height = Inches(8), Inches(1)
+        title.text = f"·{t}·"
+        for r in title.text_frame.paragraphs[0].runs:
+            r.font.size = Pt(20)
+        title.width = Inches(slides_visual.estimate_title_width_in(title))
+        title.height = Inches(0.44)
     slides = list(prs.slides)
     if mutate is not None:
         mutate(prs, slides)

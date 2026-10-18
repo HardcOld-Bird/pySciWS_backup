@@ -10,6 +10,9 @@
 - 几何端 :func:`geometry_report`（`slides geometry`）：**只读、不渲染**地硬判版面几何硬伤——
   外框边被更高 z 序图片**覆盖**、图元**越界**（画布/外框）、**图片互叠**面积。渲染闸只管
   「渲染出来了没 / 是不是空白」，命中不了「渲染出来了但版面是坏的」；这一端补上后者。
+- 预设端（同一命令内）：组会 PPT 预设方案的三项机械检查——标题「·…·」形态、标题框宽随文
+  适配（±10%）、非整页图黑描边。方案单源见 document-writing 技能
+  ``references/ppt-preset.md``。
 
 设计取向：验收只读**已落盘的渲染图**（不自行渲染），故「缺渲染」是一个可被机械抓住的
 真实状态（组员忘了渲染 → 渲染目录空 → FAIL），而非被本命令静默补齐。渲染与验收分成两条
@@ -19,6 +22,8 @@
 from __future__ import annotations
 
 import json
+import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -286,6 +291,32 @@ _EDGE_SAMPLES = 400
 #: 视作「背景图」的面积占比（≥ 此值不参与互叠判定——满版底图与内容图天然相交）。
 _BACKGROUND_AREA_FRAC = 0.8
 
+# ---------------------------------------------------------------------------
+# 组会 PPT 预设方案（references/ppt-preset.md）的三项机械判据
+# ---------------------------------------------------------------------------
+#: 标题区（预设第 3 条）：左 0.60 / 上 0.44 / 高 0.44 in。普通文本框落在该区亦视为标题
+#: （用户原件 `20260918.pptx` 用「文本框 1」承载标题，不是占位符）。
+TITLE_LEFT_IN = 0.60
+TITLE_TOP_IN = 0.44
+TITLE_HEIGHT_IN = 0.44
+TITLE_ZONE_TOL_IN = 0.06
+
+#: 标题框宽估算的字符宽系数（em，与字号成比例）。标定基准 = `20260918.pptx` 用户原件
+#: （20 pt 等线 Light）：「·现状总结·」6 字实测框宽 1.78 in、「·pySci·」7 字 1.39 in；
+#: 按 CJK/拉丁分别计解得 CJK 1.05 em/字、拉丁 0.58 em/字——四页用户标题拟合误差 ≤4%。
+TITLE_CJK_EM = 1.05
+TITLE_LATIN_EM = 0.58
+#: 标题 run 未显式写字号时的回退（PowerPoint 文本框默认 18 pt）。
+DEFAULT_TITLE_PT = 18.0
+#: 标题框宽适配容差（相对估算宽的 ±10%）。
+DEFAULT_TITLE_WIDTH_TOL = 0.10
+
+#: 整页满幅图豁免阈值：图片面积 ≥ 画布面积的此比例即免描边检查（16:9 满幅 AI 图）。
+FULL_PAGE_PIC_FRAC = 0.95
+
+#: 预设语义下「首页」页码（内容页标题检查的默认豁免）。
+FIRST_PAGE = 1
+
 
 @dataclass
 class ShapeBox:
@@ -343,16 +374,25 @@ class SlideGeometry:
     connector_hints: list[str] = field(default_factory=list)
     #: 缺 ``<a:ext>``（继承尺寸）的形状标签——一票否决项（backlog W1）。
     missing_ext: list[str] = field(default_factory=list)
+    #: 预设第 3 条：标题文本不是「·…·」形态。
+    title_form_issues: list[str] = field(default_factory=list)
+    #: 预设第 3 条：标题框宽与文本估算宽失配（超出 ±10%）。
+    title_width_issues: list[str] = field(default_factory=list)
+    #: 预设第 4 条：非整页图缺黑色描边（``<a:ln>`` 缺失或 noFill）。
+    picture_border_issues: list[str] = field(default_factory=list)
 
     @property
     def violations(self) -> int:
-        """本页违规项计数（有覆盖的边 + 互叠 + 越界 + 缺 ext）。"""
+        """本页违规项计数（有覆盖的边 + 互叠 + 越界 + 缺 ext + 预设三项）。"""
         return (
             len([e for e in self.edges if e.frac > 0])
             + len(self.overlaps)
             + len(self.off_canvas)
             + len(self.off_frame)
             + len(self.missing_ext)
+            + len(self.title_form_issues)
+            + len(self.title_width_issues)
+            + len(self.picture_border_issues)
         )
 
 
@@ -410,6 +450,12 @@ class GeometryReport:
                 lines.append(f"      提示（非违规）: {h}")
             for me in s.missing_ext:
                 lines.append(f"      缺 <a:ext>（继承尺寸，一票否决）: {me}")
+            for issue in s.title_form_issues:
+                lines.append(f"      标题「·…·」形态: {issue}")
+            for issue in s.title_width_issues:
+                lines.append(f"      标题框宽失配: {issue}")
+            for issue in s.picture_border_issues:
+                lines.append(f"      图片描边: {issue}")
         for d in self.title_diffs:
             lines.append(f"      标题不一致: {d}")
         if self.ext_missing_total:
@@ -455,6 +501,9 @@ class GeometryReport:
                     "off_frame": s.off_frame,
                     "connector_hints": s.connector_hints,
                     "missing_ext": s.missing_ext,
+                    "title_form_issues": s.title_form_issues,
+                    "title_width_issues": s.title_width_issues,
+                    "picture_border_issues": s.picture_border_issues,
                 }
                 for s in self.slides
             ],
@@ -644,6 +693,151 @@ def _title_inconsistencies(
     ]
 
 
+# ---------------------------------------------------------------------------
+# 预设方案三项检查（标题「·…·」/ 标题框宽适配 / 非整页图描边）
+# ---------------------------------------------------------------------------
+def _preset_title_shape(slide: Any) -> Any | None:
+    """定位内容页标题：占位符/命名标题优先，其次落在预设标题区的文本框。
+
+    用户原件 `20260918.pptx` 的标题是普通文本框（名「文本框 1」），不在标题占位符里；
+    预设第 3 条用**位置**把它定义清楚：左 0.60 / 上 0.44 / 高 0.44 in（±0.06）。
+    """
+    t = _title_shape(slide)
+    if t is not None:
+        return t
+    for sh in slide.shapes:
+        if not getattr(sh, "has_text_frame", False):
+            continue
+        try:
+            left = sh.left / _EMU_IN
+            top = sh.top / _EMU_IN
+            height = sh.height / _EMU_IN
+        except (AttributeError, TypeError):
+            continue
+        if None in (left, top, height):
+            continue
+        if (
+            abs(top - TITLE_TOP_IN) <= TITLE_ZONE_TOL_IN
+            and abs(height - TITLE_HEIGHT_IN) <= TITLE_ZONE_TOL_IN
+            and abs(left - TITLE_LEFT_IN) <= TITLE_ZONE_TOL_IN
+        ):
+            return sh
+    return None
+
+
+def _title_text(shape: Any) -> str:
+    try:
+        return " ".join((shape.text_frame.text or "").split())
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _has_preset_title_form(text: str) -> bool:
+    """标题文本是否为「·标题·」（前后各一「·」，中间非空）。"""
+    t = text.strip()
+    return (
+        len(t) >= 3 and t.startswith("·") and t.endswith("·") and t[1:-1].strip() != ""
+    )
+
+
+def _char_em(ch: str) -> float:
+    """单字符的宽度（em）：CJK/宽/歧义字符按 CJK 系数，其余按拉丁系数。"""
+    return (
+        TITLE_CJK_EM
+        if unicodedata.east_asian_width(ch) in ("W", "F", "A")
+        else TITLE_LATIN_EM
+    )
+
+
+def estimate_title_width_in(
+    shape: Any,
+    *,
+    default_pt: float = DEFAULT_TITLE_PT,
+) -> float:
+    """按文本与字号估算标题所需框宽（英寸，单行、不折行）。
+
+    字符宽系数以 `20260918.pptx` 用户原件标定（20 pt 等线 Light，``2026-10-18``）：
+    「·现状总结·」6 字实测框宽 1.78 in、「·pySci·」7 字 1.39 in，按 CJK/拉丁分别计
+    得 CJK 1.05 em/字、拉丁 0.58 em/字；四页用户标题拟合误差 ≤4%，故 ±10% 容差可靠。
+
+    Args:
+        shape: 标题形状（文本框或占位符）。
+        default_pt: run/段落均未显式写字号时的回退字号。
+
+    Returns:
+        估算宽度（英寸）；无文本或读取失败返回 0.0。
+    """
+    try:
+        paragraphs = list(shape.text_frame.paragraphs)
+    except Exception:  # noqa: BLE001
+        return 0.0
+    widths: list[float] = []
+    for para in paragraphs:
+        try:
+            para_pt = para.font.size.pt if para.font.size else None
+        except Exception:  # noqa: BLE001
+            para_pt = None
+        total = 0.0
+        for run in para.runs:
+            try:
+                pt = run.font.size.pt if run.font.size else (para_pt or default_pt)
+            except Exception:  # noqa: BLE001
+                pt = para_pt or default_pt
+            for ch in run.text:
+                if ch in "\r\n":
+                    continue
+                total += _char_em(ch) * pt / 72.0
+        widths.append(total)
+    return max(widths) if widths else 0.0
+
+
+def _preset_title_issues(
+    shape: Any, *, width_tol: float
+) -> tuple[list[str], list[str]]:
+    """一页标题的两项机械检查：返回 ``(形态问题, 框宽问题)``。"""
+    text = _title_text(shape)
+    if not text:
+        return [], []
+    form: list[str] = []
+    width: list[str] = []
+    if not _has_preset_title_form(text):
+        form.append(f"标题缺「·…·」形态：{text!r}（预设第 3 条）")
+    try:
+        actual = shape.width / _EMU_IN
+    except (AttributeError, TypeError):
+        actual = None
+    est = estimate_title_width_in(shape)
+    if actual is not None and est > 0:
+        delta = actual - est
+        if abs(delta) > width_tol * est:
+            width.append(
+                f"框宽 {actual:.2f} in 与文本估算 {est:.2f} in 失配"
+                f"（偏差 {delta / est * 100:+.0f}%，容差 ±{width_tol * 100:.0f}%；"
+                f"标题 {text!r}）"
+            )
+    return form, width
+
+
+_P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+_P_SPPR = f"{{{_P_NS}}}spPr"
+_A_LN = f"{{{_A_NS}}}ln"
+_A_NO_FILL = f"{{{_A_NS}}}noFill"
+
+
+def _picture_border_issue(shape: Any) -> str | None:
+    """非整页图的描边检查：``<a:ln>`` 缺失或显式 noFill 即报（有描边不究粗细）。"""
+    el = getattr(shape, "_element", None)
+    if el is None:
+        return None
+    sp_pr = el.find(_P_SPPR)
+    ln = sp_pr.find(_A_LN) if sp_pr is not None else None
+    if ln is None:
+        return "无描边（缺 <a:ln>；预设第 4 条要求非整页图加黑色描边）"
+    if ln.find(_A_NO_FILL) is not None:
+        return "描边为 noFill（预设第 4 条要求非整页图加黑色描边）"
+    return None
+
+
 def _detect_frame(boxes: list[ShapeBox], cw: float, ch: float) -> ShapeBox | None:
     """自动挑外框：画布面积的 10%–95% 之间、面积最大的矩形（满版底图被排除）。
 
@@ -751,12 +945,24 @@ def geometry_report(
     frame: str | None = None,
     tolerance: float = DEFAULT_TOLERANCE_IN,
     overlap_in2: float = DEFAULT_OVERLAP_IN2,
+    title_exempt_pages: Iterable[int] | None = None,
+    title_width_tol: float = DEFAULT_TITLE_WIDTH_TOL,
 ) -> GeometryReport:
-    """对 .pptx 做**只读几何体检**：外框边被覆盖率 / 图元越界（画布与外框）/ 图片互叠面积。
+    """对 .pptx 做**只读几何体检**：外框边被覆盖率 / 图元越界（画布与外框）/ 图片互叠面积，
+    外加组会 PPT 预设方案的三项机械检查。
 
     纯 bbox + z 序硬判，不渲染、不写盘——受审目录只读时也照跑（渲染闸 :func:`verify_pptx_render`
     才需要可写目录产 PNG）。**连接符**（``bentConnector*``/``straightConnector*``）的越界因 bbox
     不可信而只作**提示**（:attr:`SlideGeometry.connector_hints`），不计入 ``violations``。
+
+    预设三项（见 document-writing ``references/ppt-preset.md``）：
+
+    - **标题「·…·」形态**：内容页标题（占位符/命名标题/预设标题区的文本框）须匹配
+      ``·…·``；首页默认豁免，无标题形状的整页复制页自然跳过；
+    - **标题框宽适配**：按文本与字号估算宽（系数标定见 :func:`estimate_title_width_in`），
+      实际框宽超出 ±``title_width_tol`` 即报——不得把全篇标题框统一成同一宽度；
+    - **非整页图黑描边**：图片缺 ``<a:ln>``（或显式 noFill）即报；面积 ≥ 画布 95% 的整页
+      满幅图豁免。
 
     Args:
         pptx: 源 .pptx。
@@ -764,6 +970,8 @@ def geometry_report(
             识别不出则只报越界与互叠，不臆造外框。
         tolerance: 越界容差（英寸）。
         overlap_in2: 图片互叠面积阈值（平方英寸）。
+        title_exempt_pages: 免做标题检查的页码（1-based）；``None`` 时仅豁免首页。
+        title_width_tol: 标题框宽容差（相对估算宽的百分比，0.10 = ±10%）。
 
     Returns:
         GeometryReport。
@@ -778,6 +986,7 @@ def geometry_report(
         raise FileNotFoundError(f"pptx 不存在：{src}")
     prs = Presentation(str(src))
     cw, ch = prs.slide_width / _EMU_IN, prs.slide_height / _EMU_IN
+    exempt = {FIRST_PAGE} if title_exempt_pages is None else set(title_exempt_pages)
 
     slides: list[SlideGeometry] = []
     titles: list[tuple[int, tuple | None]] = []
@@ -801,6 +1010,32 @@ def geometry_report(
         # 渲染图上并不存在的越界当成真缺陷，逼执行端去改本不该改的源形状）。
         judged = [b for b in boxes if b.kind != "connector"]
         connectors = [b for b in boxes if b.kind == "connector"]
+
+        title_form: list[str] = []
+        title_width: list[str] = []
+        if i not in exempt:
+            title = _preset_title_shape(slide)
+            if title is not None:
+                title_form, title_width = _preset_title_issues(
+                    title, width_tol=title_width_tol
+                )
+
+        border: list[str] = []
+        full_page_area = FULL_PAGE_PIC_FRAC * cw * ch
+        for sh in slide.shapes:
+            if _shape_kind(sh) != "pic":
+                continue
+            try:
+                area = (sh.width or 0) * (sh.height or 0) / (_EMU_IN**2)
+            except TypeError:
+                continue
+            if area >= full_page_area:
+                continue
+            issue = _picture_border_issue(sh)
+            if issue:
+                label = getattr(sh, "name", "") or "?"
+                border.append(f"{label}：{issue}")
+
         sg = SlideGeometry(
             index=i,
             layout=layout,
@@ -814,6 +1049,9 @@ def geometry_report(
                 for s in _off_bounds(connectors, 0.0, 0.0, cw, ch, tolerance, "画布")
             ],
             missing_ext=_missing_ext(slide),
+            title_form_issues=title_form,
+            title_width_issues=title_width,
+            picture_border_issues=border,
         )
         if fr is not None:
             sg.edges = _edge_coverage(fr, [b for b in pics if b.z > fr.z])

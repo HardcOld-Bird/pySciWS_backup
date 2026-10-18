@@ -100,8 +100,8 @@ errors are already parsed to `file:line`; open that line in `main.tex`. Backend 
 
 （`*`=分册索引，按需读单册）
 
-- [latex.md](references/latex.md) — the LaTeX workflow in depth: templates (revtex / article / **beamer**), engines, the compile→verify loop, bibliography handling, manuscript-quality guidance, lint.
+- [latex.md](references/latex.md) — LaTeX workflow: templates (revtex / article / **beamer**), engines, compile→verify loop, bibliography, manuscript guidance, lint.
 - [read.md](references/read.md) — reading **and writing** pptx / docx / pdf: backends, caches, what each extractor preserves, Markdown outline conventions.
-- [visual-qa.md](references/visual-qa.md) — pptx 逐页渲染视觉验收；网页截图用 playwright。
+- [visual-qa.md](references/visual-qa.md) — pptx 逐页渲染视觉验收（网页截图用 playwright）；[ppt-preset.md](references/ppt-preset.md) — 组会 PPT 预设方案（基座/版式/标题/图像/密度/终检）。
 - [digest.md](references/digest.md) * — the `slides digest` interpretation workflow: per-figure loop, SearchReplace anchors, duplicate-figure reuse, resumable status ledger, batch cadence, narrative-review finish.
-- [maintenance.md](references/maintenance.md) * — how the backend works and how to fix or extend it (config, log parsing, adding templates, LibreOffice conversion).
+- [maintenance.md](references/maintenance.md) * — how the backend works and how to fix or extend it (config, log parsing, templates, conversion).

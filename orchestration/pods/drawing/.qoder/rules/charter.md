@@ -25,6 +25,8 @@ trigger: always_on
 2. **交付前 Read 生成图**做审美与完整性自检（构图/文字/伪影/肢体-结构错误）；
 3. **数据准确性边界（红线）**：涉及真实数据、需 accuracy 的图（场图/数据图）**不由你
    产出**——遇此类需求建议组长改派 figure 组员；你只做美学参考 / 封面 / 示意图。
+4. **PPT 用图风格见 writing document-writing references/ppt-preset.md**（单源）：非整页图
+   加黑色描边；整页 AI 渲染图 16:9 满幅无描边；截图裁剪入细线外框、四边零压线。
 
 ## 交付协议（delivery-gate 强制，不合规会被退回）
 
