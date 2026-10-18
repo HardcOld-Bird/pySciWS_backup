@@ -28,10 +28,10 @@
       }
     },
     "document-writing": {
-      "source_hash": "f6433d816108ade385e3c5206cd18fc44bc119c93cc52add63ec02f28bb629c8",
+      "source_hash": "533ba428d9b7448e83c97c5696d9a18662b78a0413dd3b1600145a04d86ddd56",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/document-writing": "f6433d816108ade385e3c5206cd18fc44bc119c93cc52add63ec02f28bb629c8",
-        "orchestration/pods/writing/.qoder/skills/document-writing": "f6433d816108ade385e3c5206cd18fc44bc119c93cc52add63ec02f28bb629c8"
+        "orchestration/pods/deputy/.qoder/skills/document-writing": "533ba428d9b7448e83c97c5696d9a18662b78a0413dd3b1600145a04d86ddd56",
+        "orchestration/pods/writing/.qoder/skills/document-writing": "533ba428d9b7448e83c97c5696d9a18662b78a0413dd3b1600145a04d86ddd56"
       }
     },
     "literature-research": {
