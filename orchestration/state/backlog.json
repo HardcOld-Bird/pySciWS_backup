@@ -3687,6 +3687,19 @@
       "note": "",
       "started_at": "2026-10-18T22:06:04+08:00",
       "worktree": "20261018-220003-lit"
+    },
+    {
+      "id": "20261018-221735-lit",
+      "member": "lit",
+      "summary": "success_criteria: `pysci-research read <APS-DOI>` 在机构 IP 下能像直链 curl 一样拿到 PDF；缓存扫描工具能自动涵盖 `cache/html_fulltext/<doi>/*.pdf`，不再需要人工复制。",
+      "kind": "defect",
+      "success_criteria": "`pysci-research read <APS-DOI>` 在机构 IP 下能像直链 curl 一样拿到 PDF；缓存扫描工具能自动涵盖 `cache/html_fulltext/<doi>/*.pdf`，不再需要人工复制。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261018-221735-lit.md",
+      "status": "in_progress",
+      "proposed": "2026-10-18T22:20:31+08:00",
+      "note": "",
+      "started_at": "2026-10-18T22:20:36+08:00",
+      "worktree": "20261018-221735-lit"
     }
   ]
 }
