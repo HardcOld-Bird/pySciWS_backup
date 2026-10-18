@@ -216,6 +216,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
         width=args.width,
         expect_panel_labels=args.panels,
         min_fontsize=args.min_fontsize,
+        annotations=args.annotations,
     )
     print(rep.report())
     return 0 if rep.ok else 1
@@ -582,7 +583,7 @@ def build_parser() -> argparse.ArgumentParser:
     # audit
     s = sub.add_parser(
         "audit",
-        help="出版规范自检（宽度/字号/字体嵌入/角标/色盲）",
+        help="出版规范 + 标注几何语义自检（宽度/字号/嵌入/角标/色盲/计数/包含/大小/连线）",
         epilog=_FIGDIR_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -591,6 +592,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--width", default=None)
     s.add_argument("--panels", action="store_true", help="要求多子图带 (a)(b)(c) 角标")
     s.add_argument("--min-fontsize", type=float, default=None, dest="min_fontsize")
+    s.add_argument(
+        "--annotations",
+        type=Path,
+        default=None,
+        help="标注语义声明路径（默认自动查找图目录 ANNOTATIONS.yaml|yml|json）",
+    )
     s.set_defaults(func=cmd_audit)
 
     # inspect（不依赖管线：对任意 PNG/JPG 体检；非 scaffold 产物的工具核验面）

@@ -33,8 +33,9 @@ def _lines_with(md: str, token: str) -> list[str]:
 # ---------------------------------------------------------------------------
 def test_version_bumped_and_changelog():
     md = _rubric()
-    assert "scientific-plotting）v0.4.2" in md
-    assert "v0.4.2（2026-10-17）" in md, "缺 v0.4.2 修订说明（判法可复跑 + 几何自标定）"
+    assert "scientific-plotting）v0.5" in md
+    assert "v0.5（2026-10-18）" in md, "缺 v0.5 修订说明（H6/对照表/布局节奏）"
+    assert "v0.4.2（2026-10-17）" in md, "v0.4.2 修订史应保留"
     assert "v0.4.1（2026-10-16）" in md, "v0.4.1 修订史应保留"
     assert "v0.4（2026-10-15）" in md, "v0.4 修订史应保留"
     assert "v0.3（2026-10-15）" in md, "v0.3 修订史应保留"
@@ -59,6 +60,37 @@ def test_item_v042_geometry_self_calibration_paradigm():
     md = _rubric()
     assert "自标定" in md and "反算" in md, "缺几何自标定范式"
     assert "像素→物理尺寸" in md, "缺换算方向（像素坐标 → 物理尺寸）"
+
+
+# ---------------------------------------------------------------------------
+# v0.5（tb-20261017-212141-3-3 a5）：H6 处置/指令对齐、参考图对照、布局节奏
+# ---------------------------------------------------------------------------
+def test_item_v05_h6_disposal_and_user_instruction():
+    md = _rubric()
+    h6 = " ".join(_lines_with(md, "| H6 |"))
+    assert "处置分支" in h6 and "指定分支" in h6
+    assert "用户显式指令" in h6 and "上报留痕" in h6
+    assert "FAIL" in h6
+
+
+def test_item_v05_g2_reference_table_hook():
+    md = _rubric()
+    g2 = md.split("### G2", 1)[1].split("## 硬项", 1)[0]
+    assert "参考图逐要素对照表" in g2
+    assert "照搬/适配/偏离" in g2 and "缺理解痕迹" in g2
+
+
+def test_item_v05_d5_layout_rhythm_four_rules():
+    md = _rubric()
+    d5 = " ".join(_lines_with(md, "| D5 "))
+    assert "布局节奏/编号锚定四条" in d5
+    for token in (
+        "标题与上方外缘间距 > 与下方子图间距",
+        "图例置于数据图下方、不压主体",
+        "子图组与脚注段留清晰间距",
+        "整体 bbox（含图例/colorbar/标注）左上角",
+    ):
+        assert token in d5, f"D5 缺布局准则：{token}"
 
 
 # ---------------------------------------------------------------------------
