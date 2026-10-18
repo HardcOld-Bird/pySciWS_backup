@@ -16,7 +16,7 @@ LLM 直接调用，无需了解底层模块实现。
     slides digest    大型 pptx → 图文互证 Markdown 工作区（去重导图/邻近文字/分节分块）
     slides render    把 .pptx 渲染成逐页 PNG（pptx→pdf→page-NNN.png，供视觉判读/交付附件）
     slides verify    机械验收逐页渲染（渲染存在 / 页数=幻灯片数 / 非空白页）
-    slides geometry  只读几何体检（外框边被覆盖 / 图元越界 / 图片互叠，不渲染不写盘）
+    slides geometry  只读几何体检（遮挡/越界/互叠 + 预设三项：标题形态/框宽/图片描边）
     verify <pdf>     把 PDF 渲染成 PNG，供 LLM「看图」校对版式
 
 用法（在项目根目录）::
@@ -54,6 +54,14 @@ def _list_templates() -> list[str]:
     return sorted(
         d.name for d in LATEX_TEMPLATES.iterdir() if (d / "main.tex").is_file()
     )
+
+
+def _page_list(text: str) -> set[int]:
+    """解析逗号/空格分隔的 1-based 页码（argparse ``type``）。"""
+    try:
+        return {int(p) for p in text.replace(",", " ").split() if p}
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"页码需为整数列表：{text!r}") from e
 
 
 def _resolve_main_tex(target: str) -> Path:
@@ -562,7 +570,12 @@ def cmd_slides_geometry(args: argparse.Namespace) -> int:
         return 2
     try:
         rep = slides_visual.geometry_report(
-            src, frame=args.frame, tolerance=args.tol, overlap_in2=args.overlap
+            src,
+            frame=args.frame,
+            tolerance=args.tol,
+            overlap_in2=args.overlap,
+            title_exempt_pages=args.title_exempt,
+            title_width_tol=args.title_width_tol,
         )
     except Exception as e:
         print(f"[slides geometry] 分析失败：{type(e).__name__}: {e}", file=sys.stderr)
@@ -986,7 +999,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_slides_verify)
 
     sp = slidessub.add_parser(
-        "geometry", help="只读几何体检（外框遮挡/越界/图片互叠，不渲染不写盘）"
+        "geometry",
+        help="只读几何体检（遮挡/越界/互叠 + 预设三项：标题形态/框宽/图片描边）",
     )
     sp.add_argument("pptx", help=".pptx 文件")
     sp.add_argument(
@@ -1000,6 +1014,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="图片互叠面积阈值（in²，默认 1.0）",
+    )
+    sp.add_argument(
+        "--title-exempt",
+        type=_page_list,
+        default=None,
+        dest="title_exempt",
+        help="免做标题检查的页码（逗号分隔，1-based；缺省仅豁免首页）",
+    )
+    sp.add_argument(
+        "--title-width-tol",
+        type=float,
+        default=0.10,
+        dest="title_width_tol",
+        help="标题框宽容差（相对估算宽的 ± 比例，默认 0.10）",
     )
     sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
     sp.add_argument(
