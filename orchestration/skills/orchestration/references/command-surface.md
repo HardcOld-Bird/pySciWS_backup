@@ -27,7 +27,7 @@ pysci-orch plan split <id> --step <leaf> (--before|--after) --member <id> --brie
 pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步：**同步阻塞到完成**
 #   └ 与 `plan advance`「入队即返回」相反（内部等在途收尾）；长任务**必须后台**（run_in_background），否则撞 Bash 超时（backlog 20261015-211200）
 pysci-orch plan list | plan drop <id>
-pysci-orch suggestions [ack <id> --as superseded|decision --by <ref> --why "<理由>"]  # 待审批（超 24h 醒目）
+pysci-orch suggestions [show <id> | ack <id> --as superseded|decision --by <ref> --why "<理由>"]  # 待审批（超 24h 醒目）
 #     └ ack＝**第三态销账**（非否决、不进 backlog，移入 `closed/`）；立单面 `supersedes: <id>[,…]` 随 approve 联动销账
 pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<理由>")
         [--note "..."] [--no-wake] [--criteria "<判据>"] [--solo]  # 四态必居其一
@@ -57,8 +57,8 @@ pysci-orch bench eval (--case <id>|--all) [--label L]  # Tier B **抽检面**（
 pysci-orch bench baseline [--label L] [--runner leader|bencher]  # 回填 baseline.json（不指定=混合，慎）
 pysci-orch bench add <run|capture|ab|check> [--cases a,b] [--ref-a R --ref-b R]
         [--label L] [--tier minimum] [--brief T] [--start]  # 测量任务入队
-pysci-orch bench start [--dry] | bench queue [--all] | bench seen <id> | bench stop
-        # bencher 生命周期（FIFO 非常驻）；判决进 status「待查看」不即时唤醒；要领
+pysci-orch bench start [--dry] | bench queue [--all] | bench seen <id> [<id> ...] | bench stop
+        # bencher 生命周期（FIFO 非常驻）；判决进 status「待查看」不即时唤醒
         # drain-watch.md、harness-eval.md
 pysci-orch twin taste <案卷.md> [--dry]  # twin 判断通道（未生效即拒；twin-taste-mirror.md）
 pysci-orch inspector start [--dry|--force] | inspector status | inspector patrol [--target 菜单id]
@@ -72,10 +72,10 @@ pysci-orch watchdog start|stop|status       # 看门狗：start 幂等 / stop �
 pysci-orch devops stop                       # 请求 devops worker 协作式停止（计划器 + FIFO worker）
 pysci-orch refresh-models                   # 按 --list-models 刷新 registry 模型映射
 pysci-orch twin review [case] (--list|--confirm|--reject) [--note "…"]  # 用户复核 twin 裁决（否决入 override 账）
-# —— 底层命令面（降级/调试）——
+# —— 底层命令面 ——
 pysci-orch dispatch <member> (--task F|--text T|--from-backlog) [--session latest|new|<sid>] ...
 pysci-orch sessions <member> [--all|--archive <sid> [--distill]|--prune <sid>]
-pysci-orch ledger [--member --days --stats] | sync [--check]
+pysci-orch ledger [--member --days --stats] | sync [--check] | state-commit [-m M]
 ```
 
 成员 id：sim figure writing theory lit drawing model3d；deputy reviewer devops

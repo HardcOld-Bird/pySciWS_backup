@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from pysci.skills.orchestration.tools import journal, watch, workflow
+from pysci.skills.orchestration.tools import journal, orch, watch, workflow
 
 from .conftest import read_backlog, seed_raw_suggestion
 
@@ -188,3 +188,48 @@ def test_supersedes_marker_forms(iso_state):
     assert workflow._supersedes_ids("supersedes：a") == ["a"]
     assert workflow._supersedes_ids("无关行") == []
     assert workflow._supersedes_ids("supersedes:") == []
+
+
+# ---------------------------------------------------------------------------
+# ⑦ `suggestions show <id>`：正文/证据/判据可查，归档件同样可查（tb-5 摩擦 #2）
+# ---------------------------------------------------------------------------
+def test_suggestions_show_pending_body(iso_state, capsys):
+    sid = _sugg(iso_state, at=datetime(2026, 10, 18, 12, 0, 0))
+    capsys.readouterr()
+    assert orch.main(["suggestions", "show", sid[:8]]) == 0
+    out = capsys.readouterr().out
+    assert f"== 建议 {sid}（待审批）==" in out
+    assert "kind: defect" in out and "success_criteria" in out
+    assert "跑 `orch suggestions` 能看到龄期列" in out, "正文/判据必须原样输出"
+
+
+def test_suggestions_show_archived_after_approval(iso_state, capsys):
+    sid = _sugg(iso_state, at=datetime(2026, 10, 18, 12, 0, 0))
+    workflow._archive(
+        workflow.SUGGESTIONS_DIR / f"{sid}.md",
+        workflow.SUGGESTIONS_DIR / "approved",
+    )
+    capsys.readouterr()
+    assert orch.main(["suggestions", "show", sid]) == 0
+    out = capsys.readouterr().out
+    assert "（已采纳）" in out and "success_criteria" in out
+
+
+def test_suggestions_show_missing_and_ambiguous(iso_state, capsys):
+    sid = _sugg(iso_state, at=datetime(2026, 10, 18, 12, 0, 0))
+    # 无命中：明确报不存在并给入口
+    assert orch.main(["suggestions", "show", "20990101-000000-devops"]) == 2
+    assert "未找到建议" in capsys.readouterr().out
+    # 前缀歧义：列出候选、要求更长前缀
+    other = seed_raw_suggestion(
+        iso_state, BODY, member="devops", sid=sid[:12] + "59-devops"
+    )
+    assert orch.main(["suggestions", "show", sid[:12]]) == 2
+    out = capsys.readouterr().out
+    assert "命中 2 条" in out and other in out
+
+
+def test_suggestions_show_requires_id():
+    with pytest.raises(SystemExit) as exc:
+        orch.main(["suggestions", "show"])
+    assert exc.value.code == 2

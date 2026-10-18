@@ -210,3 +210,39 @@ def test_taskbook_state_save_is_wired_to_commit_face():
 
     src = Path(taskbooks.__file__).read_text(encoding="utf-8")
     assert "statecommit.commit_face(TASKBOOKS_DIR, TASKBOOK_COMMIT_MSG)" in src
+
+
+# ---------------------------------------------------------------------------
+# ⑦ `orch state-commit`：一键清 state 面（tb-5 摩擦 #4；与「新留档即提交」互补）
+# ---------------------------------------------------------------------------
+def test_state_commit_cli_clears_orchestration_state(repo, monkeypatch, capsys):
+    from pysci import paths as _paths
+    from pysci.skills.orchestration.tools import orch
+
+    d = _seed_tracked_dir(repo, "orchestration/state")
+    monkeypatch.setattr(_paths, "ORCH_STATE_ROOT", d)
+    (d / "plans").mkdir()
+    (d / "plans" / "p.state.json").write_text("{}\n", encoding="utf-8")  # 新件
+    (d / "seed.md").write_text("改\n", encoding="utf-8")  # 已跟踪件改写
+
+    capsys.readouterr()
+    assert orch.main(["state-commit"]) == 0
+    out = capsys.readouterr().out
+    assert "已提交" in out, out
+    status = _git(repo, "status", "--porcelain", "--", "orchestration/state").stdout
+    assert status.strip() == "", f"一键命令后 state 面不该再脏：{status!r}"
+    assert "运行态收尾提交" in _git(repo, "log", "-1", "--format=%s").stdout
+
+
+def test_state_commit_noop_is_success(repo, monkeypatch, capsys):
+    from pysci import paths as _paths
+    from pysci.skills.orchestration.tools import orch
+
+    d = _seed_tracked_dir(repo, "orchestration/state")
+    monkeypatch.setattr(_paths, "ORCH_STATE_ROOT", d)
+    head = _git(repo, "rev-parse", "HEAD").stdout
+
+    capsys.readouterr()
+    assert orch.main(["state-commit"]) == 0
+    assert "无未提交改动" in capsys.readouterr().out
+    assert _git(repo, "rev-parse", "HEAD").stdout == head, "无改动不造空提交"

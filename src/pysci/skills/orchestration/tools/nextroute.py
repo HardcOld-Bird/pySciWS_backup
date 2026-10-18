@@ -12,12 +12,19 @@ from __future__ import annotations
 
 from typing import Any
 
-#: 动作类别权重（越小越先，§3.2）。
-CATEGORY_ORDER: dict[str, int] = {"blocked": 0, "review": 1, "dispatch": 2}
+#: 动作类别权重（越小越先，§3.2）。``inflight`` 是**等待**读数（无动作可做），
+#: 排在真动作之后：有可派发/待验收时先推真动作，只剩在途时才让卡片停在「等待完成事件」。
+CATEGORY_ORDER: dict[str, int] = {
+    "blocked": 0,
+    "review": 1,
+    "dispatch": 2,
+    "inflight": 3,
+}
 CATEGORY_LABEL: dict[str, str] = {
     "blocked": "blocked 决策",
     "review": "待验收",
     "dispatch": "可派发",
+    "inflight": "等待完成",
 }
 #: 优先级权重（越小越先）。
 PRIORITY_ORDER: dict[str, int] = {"high": 0, "normal": 1, "low": 2}
@@ -122,6 +129,12 @@ def collect_actions() -> list[dict[str, Any]]:
     for pid, _goal, _done, _total in _plans.list_plans():
         plan = _plans._load_yaml(pid)
         state = _plans._load_state(pid)
+        if not state.get("steps"):
+            # 无 state 档（或 steps 为空）= 未初始化的遗留 YAML，工作清单无真源：
+            # 若照 pending 全量兜底，卡片会长期冒充「首个可派发环节」（tb-5 实案：
+            # 同一大任务残留 <id>.plan.yaml 与 <id>.plan.plan.yaml，前者无 state，
+            # 抢在已链接的在途 plan 之前推 w1「书写本环节任务书并派发」——按卡重复派发）。
+            continue
         if state.get("completed_at") or state.get("abandoned_at"):
             continue  # 非活动 plan
         tb_id, tb = _plan_taskbook(pid, plan)
@@ -150,6 +163,21 @@ def collect_actions() -> list[dict[str, Any]]:
                     "position": _position(plan, sid),
                     "action": "blocked 决策：补充重派 / consult 副组长 / 上报用户",
                     "command": f'pysci-orch plan advance {pid} --text "<补充信息>"',
+                }
+            )
+        inflight = panes["inflight"]
+        if inflight:  # 在途只报「等待完成事件」，绝不再写成可派发
+            sid = inflight[0]
+            actions.append(
+                {
+                    **base,
+                    "category": "inflight",
+                    "step_id": sid,
+                    "position": _position(plan, sid),
+                    "action": "等待完成事件（环节已在途）",
+                    "command": (
+                        f"pysci-orch watch  # 或 orch plan advance {pid} 结算已完成环节"
+                    ),
                 }
             )
         disp = panes["dispatchable"]

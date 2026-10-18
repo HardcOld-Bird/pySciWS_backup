@@ -42,6 +42,9 @@ from pathlib import Path
 
 from pysci.paths import PROJECT_ROOT
 
+#: ``orch state-commit`` 的缺省提交信息（cz 规范；可用 ``--message`` 覆盖）。
+STATE_COMMIT_MSG = "chore(state): 运行态收尾提交"
+
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
     """在项目根跑一条 git（记账用；``PROJECT_ROOT`` 是模块级，便于测试注入）。
@@ -108,3 +111,23 @@ def commit_face(path: str | Path, message: str) -> str:
         return f"[↑] {rel} 已提交 {sha}"
     except (OSError, subprocess.SubprocessError) as exc:
         return f"[i] {rel} 自动提交异常（{type(exc).__name__}）——请手动提交"
+
+
+def cmd_state_commit(args) -> int:
+    """``orch state-commit [--message M]``：一键提交 ``orchestration/state`` 的运行态改动。
+
+    与「新留档即提交」互补：后者只管**新文件诞生**；plan / 建议 / 回复等**改写与新件**
+    仍会滞留工作区、以合并交集闸拦住组员合并（tb-5 一轮手动 chore(state) 7 次）。本命令
+    把收尾收成一步——**不自动触发**（目录里同时有人写一半的笔记，机器分不出在飞编辑），
+    由组长在派发/收工前显式跑。
+    """
+    from pysci.paths import ORCH_STATE_ROOT
+
+    msg = str(getattr(args, "message", "") or "").strip() or STATE_COMMIT_MSG
+    out = commit_face(ORCH_STATE_ROOT, msg)
+    if out:
+        print(out)
+    if not out:
+        print("[i] orchestration/state 无未提交改动")
+        return 0
+    return 0 if out.startswith("[↑]") else 1
