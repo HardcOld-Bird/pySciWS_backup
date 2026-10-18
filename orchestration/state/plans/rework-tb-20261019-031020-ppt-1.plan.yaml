@@ -49,10 +49,27 @@ steps:
     kind: self
     brief: 重拆解返工
     role: rework_plan
+  - id: b2f
+    member: figure
+    brief: 第7页思维导图重制（小圆角/直角）——按用户批语 8，导图方块顺应模板风格改小圆角或不用圆角；改 插图/第7页-思维导图.py 脚本重出 PNG/SVG，内容结构不变
+    dirs:
+    - data/大任务/5_开题PPT/插图
   - id: b2
+    member: writing
+    brief: 返工生产——①「学院正式汇报预设」升维修订（标题分散对齐+非线性字间距公式、分焦点块缩略引用框、递归切分饱满排版代数，批语 1–3 规则化）；②按逐页规格（批语 4–11）返工 研究背景v1.pptx 第 3–10 页（p4/p5 左侧手绘内容块、p7 导图入文本块、p9 补图 3 幅、引用框改分块制、动画沿用 focus-anim）；Science 334 保持占位图（a5 已证自动化不可行）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: b3
     member: devops
-    brief: 返工生产环节
-    member_placeholder: true
+    brief: 预设修订入库——b2 的预设修订稿按 8KB 预算入 orchestration/skills/document-writing/references/ 真本（拆册如需），pysci-dev sync 部署 + 预算回归
+    dirs:
+    - orchestration/skills
+    - orchestration/pods
+  - id: b_rv
+    member: reviewer
+    brief: 渲染视觉终检——渲染逐页 Read 第 3–10 页 + 机械闸（verify/geometry/slides layout 新判据），对照批语 4–11 逐页规格与预设三机制核验，出具 VERDICT；动画免检
+    dirs:
+    - data/大任务/5_开题PPT
   - id: b_last
     kind: self
     brief: 全流程报告组装
