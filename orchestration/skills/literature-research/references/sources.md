@@ -46,6 +46,23 @@ The `paper-search-mcp` MCP aggregates ~22 sources on the primary path — see `S
   free tier first, falls back to paid, and never blocks (degrades to `search`).
 
 
+## Third-party academic APIs — known local workarounds
+
+Direct `curl` / HTTP calls to these APIs (outside the `research` CLI) hit the following on this
+machine — they are **environment failures, not facts about the paper**:
+
+- **PubMed E-utilities** (`eutils.ncbi.nlm.nih.gov`) — `curl` may fail with
+  `schannel: next InitializeSecurityContext failed: CRYPT_E_REVOCATION_OFFLINE (0x80092013)`
+  because the Windows certificate-revocation check cannot reach the CA. Add `--ssl-no-revoke` to
+  that one command (`curl --ssl-no-revoke 'https://eutils.ncbi.nlm.nih.gov/...'`); do **not**
+  fall back to `-k` or persist a global curl config.
+- **Semantic Scholar API** — HTTP **429** means rate limiting on the shared key-less pool: back
+  off and retry sparingly, or switch to **OpenAlex** / **Crossref** (free REST, no key; the
+  citation gate already treats them as the independent sources — see [citecheck.md](citecheck.md)).
+  Do not retry-loop on 429; it says nothing about the paper. With no `OPENALEX_API_KEY` the
+  OpenAlex quota is also tiny (see above), so a zero-result search there is not proof of absence.
+
+
 ## Non-academic web pages — when the page won't fetch
 
 Vendor launch pages, product docs and changelogs you cite in a report (e.g. an OpenAI / Anthropic
