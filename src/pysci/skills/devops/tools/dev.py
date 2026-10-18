@@ -774,17 +774,57 @@ def _drop_stash(sha: str) -> bool:
     return False
 
 
+#: porcelain v1 的未合并 XY 码（Git 2.51 的 ``git status`` 无 ``--unmerged`` 选项，
+#: 按码筛选与它的语义等价）。
+_UNMERGED_CODES = frozenset({"DD", "AU", "UD", "UA", "DU", "AA", "UU"})
+
+
+def unmerged_entries() -> list[tuple[str, str]]:
+    """当前工作区的未合并条目 ``[(XY, path)]``。
+
+    ``git status`` 在 Git 2.51 会拒绝 ``--unmerged``（unknown option），故取
+    ``git status --porcelain`` 后按未合并 XY 码筛选——与 ``--unmerged`` 语义等价。
+    行格式定长 ``XY<空格>path``；非该形态的行跳过。按路径排序、同一路径去重——摘要要的
+    是「真正冲突的文件」，不是 git 输出的末行（那条常是未跟踪文件碰撞之类的补充信息）。
+    """
+    proc = _git_proc("-c", "core.quotepath=false", "status", "--porcelain")
+    entries: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        if len(line) < 4 or line[2] != " ":
+            continue
+        code = line[:2]
+        if code not in _UNMERGED_CODES:
+            continue
+        entries[line[3:].strip('"')] = code
+    return [(code, path) for path, code in sorted(entries.items())]
+
+
 def _reapply_shelf(sha: str) -> str:
-    """把搁置的改动三路应回工作区；成功 → 丢弃条目；冲突/失败 → **保留条目**（改动不丢），返回一行读数。"""
+    """把搁置的改动三路应回工作区；成功 → 丢弃条目；冲突/失败 → **保留条目**（改动不丢），返回一行读数。
+
+    冲突摘要取 ``git status --porcelain`` 里的**真实未合并条目**（见 :func:`unmerged_entries`）；
+    ``git stash apply`` 的末行只作补充（backlog 20261017-223552-devops：末行可能是与冲突无关
+    的未跟踪文件碰撞，曾被误当成冲突成因）。
+    """
     rc, out = _run_git("stash", "apply", sha)
     if rc == 0:
         _drop_stash(sha)
         return f"  [√] 已三路应回搁置的 main 侧改动（stash {sha[:8]}，条目已丢弃）"
     tail = [ln for ln in out.splitlines() if ln.strip()]
     why = tail[-1][:120] if tail else "git 报错"
+    conflicts = unmerged_entries()
+    if not conflicts:
+        return (
+            f"  [!] 搁置改动应回冲突——**未丢失**：仍在 stash {sha[:8]}，且已留在工作区待解（{why}）\n"
+            f"      处置：解决冲突后 `git add` + 提交；确认不需要时 `git stash drop {sha[:8]}`"
+        )
+    listing = "\n".join(f"        {code}  {path}" for code, path in conflicts)
     return (
-        f"  [!] 搁置改动应回冲突——**未丢失**：仍在 stash {sha[:8]}，且已留在工作区待解（{why}）\n"
-        f"      处置：解决冲突后 `git add` + 提交；确认不需要时 `git stash drop {sha[:8]}`"
+        f"  [!] 搁置改动应回冲突——**未丢失**：仍在 stash {sha[:8]}，且已留在工作区待解\n"
+        f"      未合并文件（git status --porcelain 筛选未合并 XY，{len(conflicts)} 个）：\n"
+        f"{listing}\n"
+        f"      处置：解决冲突后 `git add` + 提交；确认不需要时 `git stash drop {sha[:8]}`\n"
+        f"      git 末行（仅补充，非冲突成因）：{why}"
     )
 
 
