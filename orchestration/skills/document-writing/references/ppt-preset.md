@@ -1,5 +1,9 @@
 # 组会 PPT 预设方案（presentation preset）
 
+> **并列单源**：「学院正式汇报预设」见 `ppt-preset-formal.md`（主册；动画/配色与
+> 引用/终检见同目录 `ppt-preset-formal-02-animation.md`、`ppt-preset-formal-03-citations-and-acceptance.md`）
+> ——两套预设**并列、互不替代**，按汇报类型选用（学院正式汇报 vs 组会同步）。
+>
 > **单源**：本文件是组会 / 汇报类 PPT 美术设计方案的唯一真本。reviewer 量表与 drawing 技能
 > 只挂指针、不复制正文。机械检查：`pysci-compose slides geometry '<deck.pptx>'`
 > （标题形态 / 标题框宽适配 / 非整页图描边三项；`--strict` 违规即退出码非 0）。
