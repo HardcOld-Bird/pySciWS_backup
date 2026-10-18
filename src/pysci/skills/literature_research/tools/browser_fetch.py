@@ -551,21 +551,40 @@ class BundleResult:
     browser: str = ""
     char_count: int = 0
     notes: list[str] = field(default_factory=list)
+    #: 主页面 HTTP 状态（``page.goto`` 的 response；拿不到 → 0）。
+    status: int = 0
+    #: 正文 PDF 下载的 HTTP 状态（未尝试/未知 → 0）。
+    pdf_status: int = 0
+    #: 失败归类：cloudflare / paywall / transient / not_found / pdf_blocked / no_fulltext。
+    failure_kind: str = ""
+    #: 人读失败原因（含 HTTP 状态）。
+    error: str = ""
+    #: 检测到付费墙/登录墙标记。
+    paywalled: bool = False
+    #: 是否值得自动/手动重试（Cloudflare、429、5xx）。
+    retryable: bool = False
 
 
 def _looks_like_pdf(data: bytes | None) -> bool:
     return bool(data) and data[:5] == b"%PDF-"
 
 
-def _download_bytes(ctx: Any, href: str, timeout_ms: int) -> bytes | None:
-    """用浏览器上下文的 request（共享 cookie / CF 通行）下载二进制。"""
+def _download_bytes(ctx: Any, href: str, timeout_ms: int) -> tuple[bytes | None, int]:
+    """用浏览器上下文的 request（共享 cookie / CF 通行）下载二进制。
+
+    Returns:
+        ``(bytes|None, http_status)``——状态码供失败诊断（403 付费墙/Cloudflare 与
+        404 链接失效的处置相反）；异常/无响应 → ``(None, 0)``。
+    """
     try:
         resp = ctx.request.get(href, timeout=timeout_ms)
+        status = int(getattr(resp, "status", 0) or 0)
         if resp.ok:
-            return resp.body()
+            return resp.body(), status
+        return None, status
     except Exception:  # noqa: BLE001
         pass
-    return None
+    return None, 0
 
 
 def _download_via_click(page: Any, href: str) -> bytes | None:
@@ -752,7 +771,8 @@ def fetch_bundle(
                 accept_downloads=True,
             )
             page = ctx.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            res.status = int(getattr(response, "status", 0) or 0)
             if ad.wait_selector:
                 try:
                     page.wait_for_selector(ad.wait_selector, timeout=timeout_ms)
@@ -765,6 +785,7 @@ def fetch_bundle(
             page.wait_for_timeout(1000)
 
             html_low = page.content().lower()
+            res.paywalled = any(m in html_low for m in PAYWALL_MARKERS)
             res.cloudflare = (
                 any(m in html_low for m in CF_MARKERS)
                 or "just a moment" in (page.title() or "").lower()
@@ -775,7 +796,8 @@ def fetch_bundle(
                 or 'data-auth-required="false"' in html_low
             )
             if res.cloudflare:
-                res.notes.append("Cloudflare 拦截，未获取；可加 --headed 重试")
+                # 归类统一由 _classify_failure 产（含 Cloudflare 备注）；早退路径也要归。
+                _classify_failure(res)
                 return res
 
             meta = page.evaluate(_JS_META) or {}
@@ -811,7 +833,8 @@ def fetch_bundle(
             if want_pdf:
                 pdf_href = page.evaluate(_JS_PDF_LINK) or _derive_pdf_url(url)
                 if pdf_href:
-                    data = _download_bytes(ctx, pdf_href, timeout_ms)
+                    data, pdf_status = _download_bytes(ctx, pdf_href, timeout_ms)
+                    res.pdf_status = pdf_status
                     if not _looks_like_pdf(data):
                         data = _download_via_click(page, pdf_href)
                     if _looks_like_pdf(data):
@@ -819,7 +842,9 @@ def fetch_bundle(
                         pdf_path.write_bytes(data)
                         res.pdf_path = pdf_path
                     else:
-                        res.notes.append(f"PDF 下载失败或非 PDF 内容：{pdf_href}")
+                        res.notes.append(
+                            f"PDF 下载失败或非 PDF 内容：{pdf_href}（HTTP {pdf_status or '?'}）"
+                        )
                 else:
                     res.notes.append("未定位到正文 PDF 链接")
 
@@ -832,7 +857,7 @@ def fetch_bundle(
                     href = lk.get("href")
                     if not href:
                         continue
-                    data = _download_bytes(
+                    data, _ = _download_bytes(
                         ctx, href, timeout_ms
                     ) or _download_via_click(page, href)
                     if data:
@@ -847,6 +872,8 @@ def fetch_bundle(
                         res.notes.append(f"补充材料下载失败：{href}")
 
             res.ok = (res.html_path is not None) or (res.pdf_path is not None)
+            if not res.ok:
+                _classify_failure(res)
         finally:
             browser.close()
 
@@ -854,6 +881,61 @@ def fetch_bundle(
     if use_cache:
         _write_bundle_cache(res, url, base_out)
     return res
+
+
+#: 付费墙/登录墙的页面文案标记（仅在**未取得全文**时用于归因，不用于放行判断）。
+PAYWALL_MARKERS: tuple[str, ...] = (
+    "access denied",
+    "purchase this article",
+    "buy article",
+    "buy this article",
+    "get access",
+    "subscribe to",
+    "sign in to access",
+    "sign in to view",
+    "rent this article",
+    "institutional subscription",
+    "paywall",
+)
+
+
+def _classify_failure(res: BundleResult) -> None:
+    """按 HTTP 状态 / Cloudflare / 付费墙标记给出**可定位**的失败原因与可重试性。
+
+    - Cloudflare / 429 / 5xx：**可重试**（headed 或稍后）；
+    - 401/403 或付费墙标记：**需人工**（机构访问/OA 副本）；404/410：链接失效；
+    - PDF 链接状态非 200：单列 ``pdf_blocked``（主页可能可访问但 PDF 被拒）。
+    """
+    status = int(res.status or 0)
+    if res.cloudflare:
+        res.failure_kind = "cloudflare"
+        res.error = f"HTTP {status or '?'} Cloudflare 拦截"
+        res.retryable = True
+        res.notes.append("Cloudflare 拦截：可加 --headed 重试，或走 arXiv/PMC OA 副本")
+    elif res.paywalled or status in (401, 403):
+        res.failure_kind = "paywall"
+        res.error = f"HTTP {status or 403} 付费墙/无访问权限"
+        res.retryable = False
+        res.notes.append("非 OA 或机构访问未生效：需机构网络，或走 arXiv/PMC OA 副本")
+    elif status == 429 or status >= 500:
+        res.failure_kind = "transient"
+        res.error = f"HTTP {status} 服务端瞬时错误/限流"
+        res.retryable = True
+        res.notes.append("瞬时错误：稍后重试（或换浏览器通道）")
+    elif status in (404, 410):
+        res.failure_kind = "not_found"
+        res.error = f"HTTP {status} 页面不存在/已撤销"
+        res.retryable = False
+    elif res.pdf_status and res.pdf_status != 200:
+        res.failure_kind = "pdf_blocked"
+        res.error = f"PDF 下载 HTTP {res.pdf_status}"
+        res.retryable = res.pdf_status == 429 or res.pdf_status >= 500
+        res.notes.append("主页可访问但正文 PDF 被拒：需 OA 副本或机构访问")
+    else:
+        res.failure_kind = "no_fulltext"
+        res.error = "页面可访问但未取得 PDF/正文"
+        res.retryable = False
+        res.notes.append("页面无正文 PDF：可试 OA 副本（arXiv/PMC）或 --headed")
 
 
 def fetch_all(

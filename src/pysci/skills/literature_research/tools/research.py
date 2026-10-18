@@ -1092,6 +1092,10 @@ def _try_oa_pdf(url: str, dest: Path, *, force: bool = False) -> Path | None:
                 allow_redirects=True,
             )
             if r.status_code != 200:
+                print(
+                    f"[read] OA 直链 HTTP {r.status_code}（非 200，改用浏览器/副本）",
+                    file=sys.stderr,
+                )
                 return None
             chunks = r.iter_content(chunk_size=65536)
             # 累到足以验魔数为止，而不是假定第一个 chunk 就有 5 字节：
@@ -1103,7 +1107,10 @@ def _try_oa_pdf(url: str, dest: Path, *, force: bool = False) -> Path | None:
                     break
             if not head.startswith(_PDF_MAGIC):
                 # 200 + 非 PDF：几乎总是出版商的落地页或「需登录」提示。
-                # 不是错误，只是这条路走不通——不刷错误日志。
+                print(
+                    "[read] OA 直链返回非 PDF（多为落地页/登录墙），改用浏览器/副本",
+                    file=sys.stderr,
+                )
                 return None
             dest.parent.mkdir(parents=True, exist_ok=True)
             with tmp.open("wb") as f:
@@ -1257,6 +1264,39 @@ def cmd_read(args: argparse.Namespace) -> int:
             html_path = Path(bundle.html_path)
             print("[read] 无 PDF 或未抽出，回退到网页正文（不进 RAG 语料）。")
 
+    # 3.5) OA 副本回退（20261018-220003-lit）：出版商页面失败（Cloudflare/付费墙）时，
+    # 经 Semantic Scholar 找 arXiv 预印本 / Europe PMC 全文 / OA 直链——这些通道不受
+    # 出版商 Cloudflare 影响。没有 DOI 的 URL 入口无从回退。
+    if not md and not pdf_path and not html_path:
+        oa_doi = str((fm or {}).get("doi") or (work or {}).get("doi") or "").strip()
+        if oa_doi:
+            from . import oa_fallback
+
+            oa_md, oa_pdf, oa_note = oa_fallback.try_oa(
+                oa_doi,
+                title=str((fm or {}).get("title") or ""),
+                pdf_dest=settings.cache_pdfs
+                / _oa_pdf_filename(work, f"https://doi.org/{oa_doi}"),
+            )
+            print(f"[read] {oa_note}")
+            if oa_pdf is not None:
+                pdf_path = oa_pdf
+                try:
+                    md = pdf_extract.extract_pdf(
+                        pdf_path,
+                        backend=args.backend or None,
+                        write_cache=False,
+                    )
+                except Exception as e:  # noqa: BLE001 - 回退抽取失败不致命
+                    print(
+                        f"[read] OA 副本抽取失败：{type(e).__name__}: {e}",
+                        file=sys.stderr,
+                    )
+            elif oa_md:
+                md = oa_md
+                if fm is not None:
+                    fm["oa_status"] = fm.get("oa_status") or "green"
+
     # 4) 组装 frontmatter（URL-only 无元数据时回退最小骨架）
     if fm is None:
         fm = _minimal_fm(bundle, raw)
@@ -1289,9 +1329,20 @@ def cmd_read(args: argparse.Namespace) -> int:
     print()
     if bundle is not None:
         print(
-            f"[read] 抓取：ok={bundle.ok} 适配器={bundle.adapter or '—'} 浏览器={bundle.browser or '—'} "
+            f"[read] 抓取：ok={bundle.ok} status={getattr(bundle, 'status', 0) or '?'} "
+            f"适配器={bundle.adapter or '—'} 浏览器={bundle.browser or '—'} "
             f"耗时={bundle.seconds:.1f}s Cloudflare={bundle.cloudflare} 机构访问={bundle.institutional_access}"
         )
+        if not bundle.ok:
+            kind = getattr(bundle, "failure_kind", "") or "unknown"
+            err = getattr(bundle, "error", "") or "未知原因"
+            retry_txt = "是" if getattr(bundle, "retryable", False) else "否"
+            print(
+                f"[read] 失败归类：{kind} · {err} · 可重试={retry_txt}",
+                file=sys.stderr,
+            )
+        for note in getattr(bundle, "notes", []):
+            print(f"[read] 备注：{note}")
         if bundle.supp_paths:
             print(
                 f"[read] 补充材料 {len(bundle.supp_paths)} 份：{', '.join(str(p.name) for p in bundle.supp_paths)}"
@@ -1317,6 +1368,20 @@ def cmd_read(args: argparse.Namespace) -> int:
         )
     else:
         print("[read] 警告：未获得全文（PDF 抓取与抽取均失败）。", file=sys.stderr)
+        if bundle is not None:
+            kind = getattr(bundle, "failure_kind", "") or "unknown"
+            err = getattr(bundle, "error", "") or "未知原因"
+            retryable = bool(getattr(bundle, "retryable", False))
+            advice = (
+                "是（可加 --headed 或稍后重试；已自动尝试 OA 副本）"
+                if retryable
+                else "否（需 OA 副本：arXiv/PMC，或机构访问/换入口）"
+            )
+            print(
+                f"[read] 失败原因：HTTP {getattr(bundle, 'status', 0) or '?'} · {err}"
+                f"（{kind}）；可重试：{advice}",
+                file=sys.stderr,
+            )
     if note_path:
         _report_note_action("read", note_path, note_action, note_changed)
     return 0 if (md or html_path is not None or note_path) else 1
