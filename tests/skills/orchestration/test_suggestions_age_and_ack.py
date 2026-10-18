@@ -95,7 +95,9 @@ def test_patrol_reports_aged_suggestions(iso_state):
 
 
 def test_patrol_silent_when_suggestions_fresh(iso_state):
-    _sugg(iso_state, at=datetime.now() - timedelta(hours=2))
+    # 「新鲜」按建议面的真实判据＝**同一天**且未超 24h；不能用 now-2h（凌晨 0–2 点会
+    # 跨日 → 按「跨日即该处置」报警，测试随运行时刻翻红）。
+    _sugg(iso_state, at=datetime.now())
     press = watch.queue_pressure()
     assert not any("建议队列" in r for r in press["reasons"]), press["reasons"]
 

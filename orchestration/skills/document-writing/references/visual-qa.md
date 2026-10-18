@@ -66,6 +66,21 @@ compose slides geometry '<deck.pptx>' [--frame NAME] [--json] [--strict]
 转换链（`compose convert` / `slides render`）现**默认优先 wpscli**，LibreOffice 为 fallback，
 输出行注明所用后端；缺 `<a:ext>` 闸保留（WPS 同样会暴露该缺陷，且 wpscli 不可用时靠它兜底）。
 
+## 焦点块动画生成（学院正式汇报预设 §5）
+
+```
+compose slides focus-anim '<deck.pptx>' --page 3 \
+  --block '9:13' --block '21:11' [--fade 2:5] \
+  [--focus-color 8496B0] [--blur-fill ADB9CA] [--blur-line D6DCE4] \
+  [--focus-ms 250] [--blur-ms 1000] [--easing ease-out|linear] \
+  [--transition-ms 350] [--no-transition] [--out copy.pptx]
+```
+
+`--block chip:shape1,shape2` 每项一块，**块序＝触发序**：首块进入页面自动聚焦，其后每次
+单击「旧块失焦（1000 ms）＋新块聚焦（250 ms）」；按形状 ID 逐个打靶，不真组合。缺省值即
+学院正式汇报预设 §5；`--fade 块序号:shape` 给该块加「进入·淡入」。注入后仍须
+`slides render/verify` + 放映模式核对单击顺序（机械闸不验观感）。
+
 ## 网页截图（deck 里的官网 / 页面图）
 
 需要把网页截进幻灯片时用本机 `playwright`（已装，复用 literature_research 的浏览器）：
