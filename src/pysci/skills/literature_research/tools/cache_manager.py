@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import settings
-from .notes import fmt_size, load_frontmatter
+from .notes import fmt_size, load_frontmatter, slugify
 
 # ---------------------------------------------------------------------------
 # 分层定义
@@ -308,6 +308,67 @@ def _tier_summary(dirs: Iterable[Path]) -> dict[str, Any]:
             oldest = mt if not oldest or mt < oldest else oldest
             newest = mt if mt > newest else newest
     return {"files": len(files), "bytes": total, "oldest": oldest, "newest": newest}
+
+
+_NORM_KEY_RE = re.compile(r"[-_.\s/]+")
+
+
+def _norm_key(text: str) -> str:
+    """DOI/id/slug 的匹配键：大小写、``/``、`.`、``_``、``-`` 归一为 ``-``。"""
+    return _NORM_KEY_RE.sub("-", str(text or "").strip().lower()).strip("-")
+
+
+def find_cached_pdf(identifier: str, *, slug: str = "") -> Path | None:
+    """按 DOI / arXiv id / slug **统一查找已缓存 PDF**（批处理复用入口）。
+
+    扫描两处（20261018-221735-lit：此前只扫 ``cache/pdfs/<doi>.pdf``，浏览器抓到的
+    ``cache/html_fulltext/<slug>/<slug>.pdf`` 被漏掉，需人工复制）：
+
+    - ``cache/pdfs``（含 ingest 的 theme 子目录）；
+    - ``cache/html_fulltext/<目录>/*.pdf``——目录名按 DOI 归一匹配（兼容
+      ``10.1038_490472a`` / ``10-1038-490472a`` 两种写法），``slug`` 参数可直接指定标题 slug。
+
+    Args:
+        identifier: DOI / arXiv id / 其他稳定标识。
+        slug: 可选标题 slug（目录名与 DOI 无关时用）。
+
+    Returns:
+        mtime 最新的匹配 PDF；没有 → ``None``。
+    """
+    text = str(identifier or "").strip()
+    if not text:
+        return None
+    keys = {_norm_key(text)}
+    try:
+        keys.add(_norm_key(slugify(text, 60)))
+    except Exception:  # noqa: BLE001 - slug 只作补充键
+        pass
+    found: list[Path] = []
+
+    pdfs = settings.cache_pdfs
+    if pdfs.is_dir():
+        for p in pdfs.rglob("*.pdf"):
+            stem = _norm_key(p.stem)
+            if stem in keys or any(k and k in stem for k in keys):
+                found.append(p)
+
+    hdir = settings.cache_html_fulltext
+    if hdir.is_dir():
+        if slug:
+            d = hdir / slug
+            if d.is_dir():
+                found.extend(d.glob("*.pdf"))
+        for d in hdir.iterdir():
+            if not d.is_dir():
+                continue
+            dkey = _norm_key(d.name)
+            if any(k and (k in dkey or dkey in k) for k in keys):
+                found.extend(d.glob("*.pdf"))
+
+    files = [p for p in found if p.is_file()]
+    if not files:
+        return None
+    return max(files, key=lambda p: p.stat().st_mtime)
 
 
 def _expired_tier_b(max_age_days: int) -> list[Path]:

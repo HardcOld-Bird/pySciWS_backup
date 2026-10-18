@@ -30,6 +30,10 @@ from typing import Any
 import pytest
 
 from pysci.skills.literature_research.tools import research
+from pysci.skills.orchestration.tools import procs
+
+#: 模块级保存真实 curl 下载器（autouse 夹具默认把它换成 no-op；本文件回测时覆盖回来）。
+_REAL_CURL_DOWNLOAD = research._curl_download_pdf
 
 # ---------------------------------------------------------------------------
 # 夹具
@@ -203,6 +207,76 @@ def test_a_doi_with_an_oa_url_never_launches_a_browser(
     # 下载到的 PDF 确实进了抽取链路（而不是拿到就扔）
     assert len(box["extract_calls"]) == 1
     assert box["extract_calls"][0].parent == sandbox.root / "cache" / "pdfs"
+
+
+def test_aps_publisher_direct_is_tried_without_oa_url(
+    sandbox: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """机构 IP 下：即使元数据没有 ``oa_url``（OpenAlex 判 closed），也要先试出版商 PDF 直链。
+
+    20261018-221735-lit 实测：``curl https://journals.aps.org/prl/pdf/<DOI>`` 在机构 IP
+    返回 200/PDF，而走 DOI 落地页会被 Cloudflare 拦成 ``Cloudflare=True 机构访问=False``。
+    """
+    box = sandbox.box
+    box["work"] = {"id": "W1", "doi": _DOI}  # 无 oa_url（closed）
+    box["fm"] = {"title": "T", "short_title": "t", "doi": _DOI}
+    got = _fake_http(monkeypatch, _FakeResponse(200, _PDF_BYTES))
+
+    assert research.cmd_read(_args(_DOI)) == 0
+
+    assert box["fetch_calls"] == [], "直链成功时不得启动浏览器"
+    assert [c["url"] for c in got] == [_OA_URL], "APS 直链由 DOI 推导，先于浏览器"
+
+
+def test_curl_direct_download_accepts_pdf_and_flags_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """curl 直链：200+PDF 魔数收下；403/HTML 拒绝；**必须禁代理**（机构资格）。"""
+    monkeypatch.setattr(research, "_curl_download_pdf", _REAL_CURL_DOWNLOAD)
+    monkeypatch.setattr(
+        research.shutil, "which", lambda name: "/fake/curl" if name == "curl" else None
+    )
+    calls: list[list[str]] = []
+    box = {"code": "200", "body": _PDF_BYTES}
+
+    def fake_run(argv: list[str], **_kw: Any) -> SimpleNamespace:
+        calls.append(argv)
+        Path(argv[argv.index("-o") + 1]).write_bytes(box["body"])
+        return SimpleNamespace(stdout=box["code"], stderr="", returncode=0)
+
+    monkeypatch.setattr(procs, "run_hidden", fake_run)
+
+    dest = tmp_path / "ok.pdf"
+    assert research._curl_download_pdf("https://e.org/a.pdf", dest) == dest
+    assert dest.read_bytes() == _PDF_BYTES
+    argv = calls[-1]
+    assert "--noproxy" in argv and "*" in argv, "访问期刊数据库禁止走代理"
+
+    box.update(code="403", body=b"<html>blocked</html>")
+    assert (
+        research._curl_download_pdf("https://e.org/b.pdf", tmp_path / "bad.pdf") is None
+    )
+    assert not (tmp_path / "bad.pdf").exists()
+
+
+def test_publisher_pdf_candidate_derivation() -> None:
+    assert research._publisher_pdf_candidates("10.1103/PhysRevLett.117.034301") == [
+        "https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.117.034301"
+    ]
+    # OpenAlex 会把 DOI 小写化；APS 路径区分大小写，必须还原规范期刊名（实测 404→200）
+    assert research._publisher_pdf_candidates("10.1103/physrevlett.117.034301") == [
+        "https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.117.034301"
+    ]
+    assert research._publisher_pdf_candidates("10.1103/PhysRevX.4.031042") == [
+        "https://journals.aps.org/prx/pdf/10.1103/PhysRevX.4.031042"
+    ]
+    assert research._publisher_pdf_candidates("10.1103/PhysRevApplied.12.034021") == [
+        "https://journals.aps.org/prapplied/pdf/10.1103/PhysRevApplied.12.034021"
+    ]
+    assert research._publisher_pdf_candidates("10.1126/science.1210713") == [
+        "https://www.science.org/doi/pdf/10.1126/science.1210713"
+    ]
+    assert research._publisher_pdf_candidates("10.9999/unknown") == []
 
 
 def test_the_browser_is_the_fallback_when_the_direct_link_fails(
