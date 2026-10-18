@@ -1,0 +1,14 @@
+{
+  "plan_id": "adhoc-20261018-232226",
+  "created": "2026-10-18T23:22:26+08:00",
+  "goal": "adhoc：compose slides focus-anim 焦点块动画生成器（源自 tb-5 backlog 20261018-",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261018-232226-adhoc-20261018-232226-s1"
+    }
+  ],
+  "completed_at": null
+}

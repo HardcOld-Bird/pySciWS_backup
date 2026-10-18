@@ -3714,11 +3714,14 @@
       "kind": "defect",
       "success_criteria": "对含 8% 透明装饰水印的学院预设 deck，`slides geometry` 不把水印计入图片互叠/描边违规；页 3–10 内容图零误报。\n① 现象：`pysci-compose slides geometry 'data/大任务/5_开题PPT/研究背景v1.pptx' --title-exempt 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15` 在页 3–10 把 `Picture 3`（水印）报为与内容图互叠、缺 `<a:ln>`；实际该图为 8% alpha、`srcRect l=38699` 的装饰水印，非内容图。期望：装饰水印/背景图不参与图片互叠与描边判据。\n② 难用：无现成 focus-block timing 生成工具；本次用一次性脚本 `orchestration/pods/writing/bench/build_w2.py` 直接生成 XML。建议提供 `compose slides focus-anim`（输入块-形状 ID、聚焦/失焦色、时长/缓动，输出 timing），减少每轮手写 XML。",
       "evidence_file": "orchestration/state/suggestions/approved/20261018-223051-writing.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-18T22:33:11+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit fab9fcd）",
       "started_at": "2026-10-18T22:33:13+08:00",
-      "worktree": "20261018-223051-writing"
+      "worktree": "20261018-223051-writing",
+      "done_at": "2026-10-18T23:20:29+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261018-223051-writing"
     },
     {
       "id": "20261018-224713-reviewer",

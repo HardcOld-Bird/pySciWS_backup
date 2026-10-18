@@ -1,0 +1,8 @@
+id: adhoc-20261018-232226
+goal: adhoc：compose slides focus-anim 焦点块动画生成器（源自 tb-5 backlog 20261018-
+steps:
+- id: s1
+  member: devops
+  brief: compose slides focus-anim 焦点块动画生成器（源自 tb-5 backlog 20261018-223051-writing 证据条目②，前单未实施）。背景：学院正式汇报预设（orchestration/skills
+  dirs: []
+  review: false
