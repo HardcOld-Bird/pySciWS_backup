@@ -230,6 +230,80 @@ def test_visual_qa_documents_connector_hint():
 
 
 # ---------------------------------------------------------------------------
+# 透明装饰水印（学院正式预设）：不计内容图互叠/描边（backlog 20261018-223051-writing）
+# ---------------------------------------------------------------------------
+def _set_blip_alpha(shape, amt: int) -> None:
+    """在图片 blip 上写 ``<a:alphaModFix amt=…>``（100000 = 100%）。"""
+    from lxml import etree
+    from pptx.oxml.ns import qn
+
+    blip = shape._element.find(f".//{qn('a:blip')}")
+    etree.SubElement(blip, qn("a:alphaModFix"), amt=str(amt))
+
+
+def _watermark_deck(tmp_path: Path, *, alpha: int | None = 8000) -> Path:
+    """白卡外框 + 两张带描边内容图 + 一张压住内容图、无描边的透明水印。"""
+    prs = Presentation()  # 默认 10x7.5 in 画布
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(1), Inches(1), Inches(8), Inches(5)
+    )
+    img = _png(tmp_path / "content.png")
+    for x in (1.5, 5.0):  # 两张内容图彼此不叠
+        pic = slide.shapes.add_picture(
+            str(img), Inches(x), Inches(2), Inches(3), Inches(2)
+        )
+        pic.line.color.rgb = RGBColor(0, 0, 0)
+    wm = slide.shapes.add_picture(  # Picture 3：装饰水印，无 <a:ln>
+        str(img), Inches(1.2), Inches(1.5), Inches(3), Inches(4)
+    )
+    if alpha is not None:
+        _set_blip_alpha(wm, alpha)
+    deck = tmp_path / f"watermark-{alpha}.pptx"
+    prs.save(str(deck))
+    return deck
+
+
+def test_decorative_watermark_exempt_from_overlap_and_border(tmp_path):
+    """8% 透明水印压住内容图且无描边，不得计入图片互叠/描边——只作读数列出。"""
+    rep = slides_visual.geometry_report(_watermark_deck(tmp_path, alpha=8000))
+    sg = rep.slides[0]
+    assert len(sg.decorative_pics) == 1 and sg.decorative_pics[0].startswith(
+        "Picture"
+    ), sg.decorative_pics
+    assert sg.overlaps == [], f"水印被计入图片互叠：{sg.overlaps}"
+    assert sg.picture_border_issues == [], sg.picture_border_issues
+    assert sg.violations == 0 and rep.ok, rep.summary()
+    assert "装饰水印" in rep.summary()
+
+
+@pytest.mark.parametrize("alpha", [20000, None])
+def test_non_decorative_picture_still_flagged(tmp_path, alpha):
+    """对照：20% 不透明或未设透明度的图片仍是内容图——互叠与缺描边照报。"""
+    rep = slides_visual.geometry_report(_watermark_deck(tmp_path, alpha=alpha))
+    sg = rep.slides[0]
+    assert sg.decorative_pics == []
+    assert sg.overlaps, "内容图互叠未报出"
+    assert sg.picture_border_issues, "内容图缺描边未报出"
+    assert sg.violations > 0
+
+
+def test_geometry_json_exposes_decorative_pics(tmp_path, capsys):
+    import json
+
+    deck = _watermark_deck(tmp_path, alpha=8000)
+    assert compose.main(["slides", "geometry", str(deck), "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert len(data["slides"][0]["decorative_pics"]) == 1
+    assert data["violations"] == 0
+
+
+def test_strict_passes_with_decorative_watermark(tmp_path):
+    deck = _watermark_deck(tmp_path, alpha=8000)
+    assert compose.main(["slides", "geometry", str(deck), "--strict"]) == 0
+
+
+# ---------------------------------------------------------------------------
 # W1 形状缺 <a:ext> 机械闸（tb-20261017-044633-4-1016ppt-1）
 # ---------------------------------------------------------------------------
 _A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
