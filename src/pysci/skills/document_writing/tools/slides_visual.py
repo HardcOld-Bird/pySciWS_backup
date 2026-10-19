@@ -178,10 +178,13 @@ def resolve_render_dir(
 
     1. **显式** ``--render-dir``（最高优先，原样采用）；
     2. 约定 ``<stem>_render/``（原默认，非空即用——默认行为兼容）；
-    3. pptx **同级**含 PNG 的子目录：唯一一个即用；多个时取页数吻合者；仍歧义 → 报候选、
-       判 ``ambiguous``（不猜）。
+    3. pptx **同级**含 PNG 的子目录：多个时取页数吻合者；**唯一但张数与幻灯片页数不符
+       的旁路目录直接跳过**（返回 ``mismatch``）——否则把 `插图/` 一类素材目录当渲染件，
+       会把「缺渲染」误报成「页数不符」（20261019-192536-reviewer 实案：4≠15）。
+       仍歧义（多个候选且无一吻合）→ 报候选、判 ``ambiguous``（不猜）。
 
-    来源取值：``explicit`` / ``default`` / ``discovered`` / ``missing`` / ``ambiguous``。
+    来源取值：``explicit`` / ``default`` / ``discovered`` / ``missing`` / ``mismatch`` /
+    ``ambiguous``。
     """
     src = Path(pptx)
     if render_dir is not None and str(render_dir).strip():
@@ -202,7 +205,11 @@ def resolve_render_dir(
     if len(exact) == 1:
         return exact[0], "discovered", desc
     if len(cands) == 1:
-        return cands[0], "discovered", desc
+        only = cands[0]
+        n = _png_count(only)
+        if slide_count and n != slide_count:
+            return default, "mismatch", desc
+        return only, "discovered", desc
     return default, "ambiguous", desc
 
 
@@ -247,6 +254,13 @@ def verify_pptx_render(
             "渲染目录歧义：pptx 同级有多个含 PNG 的目录（"
             + "、".join(cands)
             + "）——用 `--render-dir` 指定"
+        )
+    elif how == "mismatch":
+        problems.append(
+            "已跳过张数与幻灯片页数不一致的旁路渲染目录（"
+            + "、".join(cands)
+            + f"）；缺 {default_render_dir(src).name}/ 或显式 `--render-dir`——"
+            "先跑 `compose slides render` 并在交付中附上"
         )
     elif not pngs:
         problems.append(
