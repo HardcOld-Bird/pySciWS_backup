@@ -2,7 +2,7 @@
   "id": "tb-20261019-105216-ppt-2",
   "ts": "2026-10-19T10:52:16+08:00",
   "title": "开题PPT制作（返工第 2 轮）",
-  "status": "planning",
+  "status": "active",
   "source": "mirror-tui",
   "priority": "low",
   "improve": {
@@ -15,5 +15,5 @@
   "rework_round": 2,
   "plan_id": "rework-tb-20261019-105216-ppt-2",
   "rejections": [],
-  "updated": "2026-10-19T11:01:42+08:00"
+  "updated": "2026-10-19T11:10:05+08:00"
 }
