@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261020-025142",
+  "created": "2026-10-20T02:51:42+08:00",
+  "goal": "adhoc：data/taskbooks/tb-20261019-232250-3-4.sim2fix-场图域返修.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "sim-20261020-025142-adhoc-20261020-025142-s1",
+      "task_file": "data/taskbooks/tb-20261019-232250-3-4.sim2fix-场图域返修.md"
+    }
+  ],
+  "completed_at": null
+}

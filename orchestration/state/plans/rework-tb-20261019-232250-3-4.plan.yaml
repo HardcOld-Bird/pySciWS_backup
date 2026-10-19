@@ -84,7 +84,7 @@ steps:
     - data/research/1_gain_ep
   - id: f3
     member: figure
-    brief: 大图装配——每情况一列、雷达行 1／场图行 2–3、共同右侧 colorbar、角标左上、标题间距、Exp.† 注记
+    brief: 大图装配——每情况一列、场图行 1–2（L/R 入射）／雷达行 3、每组独立色标共 3 支于共同右侧（与场图行等高）、角标左上、标题间距上远下近、Exp.† 注记
     dirs:
     - data/research/1_gain_ep
   - id: rv
