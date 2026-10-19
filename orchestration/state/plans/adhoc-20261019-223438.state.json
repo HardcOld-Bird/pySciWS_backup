@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261019-223438",
+  "created": "2026-10-19T22:34:38+08:00",
+  "goal": "adhoc：orchestration/state/plans/adhoc-rollback-corner-logo.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261019-223438-adhoc-20261019-223438-s1",
+      "task_file": "orchestration/state/plans/adhoc-rollback-corner-logo.task.md"
+    }
+  ],
+  "completed_at": null
+}

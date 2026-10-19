@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261019-223548",
+  "created": "2026-10-19T22:35:48+08:00",
+  "goal": "adhoc：orchestration/state/plans/adhoc-preset-rollback.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261019-223548-adhoc-20261019-223548-s1",
+      "task_file": "orchestration/state/plans/adhoc-preset-rollback.task.md"
+    }
+  ],
+  "completed_at": null
+}
