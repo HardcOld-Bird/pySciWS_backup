@@ -513,3 +513,74 @@ def test_repo_rule_refimg_silent_with_semantic_section():
     )
     warns = dispatch.lint_taskbook(body)
     assert not any("reference-image-needs-semantic-alignment" in w for w in warns)
+
+
+# ---------------------------------------------------------------------------
+# title-n-measured（backlog 20261020-000717-reviewer）：标题「…」（n=K）的 K
+# 须等于标题**非空白字符数**；w3/w6/w11 实测分别为 16/8/9（原写 17/7/10）
+# ---------------------------------------------------------------------------
+TITLE_N_RULE = {
+    "id": "title-n-measured",
+    "re": r"标题「([^」\n]+)」\s*[（(][^）\n]{0,80}n\s*=\s*(\d+)",
+    "title_n": True,
+    "hint": "标题 n 须按非空白字符实测登记",
+}
+
+
+@pytest.mark.parametrize(
+    ("title", "declared", "measured"),
+    [
+        ("理论背景：模式耦合理论（CMT）", 17, 16),
+        ("增益EP点的性质", 7, 8),
+        ("未来计划和预期成果", 10, 9),
+    ],
+)
+def test_title_n_flags_historical_typos(
+    tmp_path, monkeypatch, title, declared, measured
+):
+    _seed(tmp_path, monkeypatch, [TITLE_N_RULE])
+    warns = dispatch.lint_taskbook(f"标题「{title}」（n={declared}→右缘 4.469）")
+    assert len(warns) == 1 and "title-n-measured" in warns[0]
+    assert f"实测 n={measured}" in warns[0]
+
+
+@pytest.mark.parametrize(
+    ("title", "n"),
+    [
+        ("理论背景：模式耦合理论（CMT）", 16),
+        ("增益EP点的性质", 8),
+        ("未来计划和预期成果", 9),
+    ],
+)
+def test_title_n_silent_when_measured(tmp_path, monkeypatch, title, n):
+    _seed(tmp_path, monkeypatch, [TITLE_N_RULE])
+    assert dispatch.lint_taskbook(f"标题「{title}」（n={n}→右缘 4.129）") == []
+
+
+def test_title_n_ignores_titles_without_n(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [TITLE_N_RULE])
+    assert dispatch.lint_taskbook("标题「增益EP点的性质」按预设排。") == []
+
+
+def test_title_n_hint_reports_expected_right_edge(tmp_path, monkeypatch):
+    """告警附实测值与应得右缘（0.34n+1.069），便于当场改对。"""
+    _seed(tmp_path, monkeypatch, [TITLE_N_RULE])
+    warns = dispatch.lint_taskbook("标题「增益EP点的性质」（n=7→右缘 3.449）")
+    assert "实测 n=8" in warns[0] and "3.789" in warns[0]
+
+
+def test_title_n_flags_declaration_on_next_line(tmp_path, monkeypatch):
+    """w3 实况：标题独占一行，n 写在下一行括号里。"""
+    _seed(tmp_path, monkeypatch, [TITLE_N_RULE])
+    body = (
+        "标题「理论背景：模式耦合理论（CMT）」\n"
+        "   （装饰三层；n=17→右缘 6.849；accent 细节）。\n"
+    )
+    warns = dispatch.lint_taskbook(body)
+    assert len(warns) == 1 and "实测 n=16" in warns[0] and "6.509" in warns[0]
+
+
+def test_repo_rule_title_n_engages_on_historical_typo():
+    """随附规则：真实 LINT_RULES_PATH 能拦下 w6 的 n=7（实测 8）。"""
+    warns = dispatch.lint_taskbook("标题「增益EP点的性质」（n=7→右缘 3.449）")
+    assert any("title-n-measured" in w for w in warns)
