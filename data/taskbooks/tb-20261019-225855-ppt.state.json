@@ -2,7 +2,7 @@
   "id": "tb-20261019-225855-ppt",
   "ts": "2026-10-19T22:58:55+08:00",
   "title": "开题PPT（后半）",
-  "status": "planning",
+  "status": "delivered",
   "source": "mirror-tui",
   "priority": "low",
   "improve": {
@@ -15,6 +15,6 @@
   "rework_round": 0,
   "plan_id": "ppt-half2-20261019.plan",
   "rejections": [],
-  "updated": "2026-10-20T00:10:54+08:00",
+  "updated": "2026-10-20T00:10:57+08:00",
   "report": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\data\\taskbooks\\tb-20261019-225855-ppt.report.md"
 }
