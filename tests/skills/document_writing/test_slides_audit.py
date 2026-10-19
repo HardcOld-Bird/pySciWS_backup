@@ -356,6 +356,7 @@ def _aes_deck(
     frame_top: float = 0.94,
     logo_px: tuple[int, int] = (64, 48),
     crop: tuple[int, int] | None = None,
+    logo_box: tuple[float, float, float, float] = (0.76, 0.937, 3.18, 5.836),
 ):
     """两页达标样板：粗圆角外框 top 0.94/adj 3000、徽标 [0.76,0.937,3.18,5.836]、标题右缘公式。"""
     prs = Presentation()
@@ -379,10 +380,10 @@ def _aes_deck(
         title.text_frame.text = "声学超构表面"
         pic = s.shapes.add_picture(
             str(logo),
-            Inches(0.76),
-            Inches(0.937),
-            Inches(3.18 * (1.12 if stretch_logo else 1.0)),
-            Inches(5.836),
+            Inches(logo_box[0]),
+            Inches(logo_box[1]),
+            Inches(logo_box[2] * (1.12 if stretch_logo else 1.0)),
+            Inches(logo_box[3]),
         )
         if crop is not None:
             pic.crop_left = crop[0] / 100000.0
@@ -395,9 +396,15 @@ def _aes_deck(
     return deck, ids
 
 
-def _aes_spec(tmp_path: Path, ids: list[dict], *, src_rect: dict | None = None) -> Path:
+def _aes_spec(
+    tmp_path: Path,
+    ids: list[dict],
+    *,
+    src_rect: dict | str | None = None,
+    logo_ref: list[float] | None = None,
+) -> Path:
     aesthetics = {
-        "logo_bbox_ref": [0.76, 0.937, 3.18, 5.836],
+        "logo_bbox_ref": logo_ref or [0.76, 0.937, 3.18, 5.836],
         "logo_aspect_tol": 0.01,
         "logo_bbox_tol_in": 0.02,
         "frame_geom": {"prst": "roundRect", "adj": 3000, "adj_tol": 500},
@@ -528,6 +535,34 @@ def test_aesthetics_src_rect_absent_adds_no_rows(tmp_path):
     assert not any("徽标裁切" in i.name for i in rep.items)
     logo = next(i for i in rep.items if i.name == "徽标 p1")
     assert "box_in[" not in logo.detail
+
+
+def test_aesthetics_src_rect_none_pass(tmp_path):
+    """expect_srcRect: none + 1:1 完整图（无 srcRect）→ PASS（素比 1.0≈1.0）。"""
+    deck, ids = _aes_deck(
+        tmp_path, logo_px=(200, 200), logo_box=(0.09, 0.937, 5.836, 5.836)
+    )
+    rep = slides_audit.audit_deck(
+        deck,
+        _aes_spec(
+            tmp_path,
+            ids,
+            src_rect="none",
+            logo_ref=[0.09, 0.937, 5.836, 5.836],
+        ),
+    )
+    assert rep.ok, rep.summary()
+    row = next(i for i in rep.items if i.name == "徽标裁切 p1")
+    assert row.status == "pass" and "无 srcRect" in row.detail
+    assert "1.0000" in row.detail
+
+
+def test_aesthetics_src_rect_none_rejects_crop(tmp_path):
+    """expect_srcRect: none 但徽标带 srcRect → FAIL。"""
+    deck, ids = _aes_deck(tmp_path, logo_px=(200, 200), crop=(49515, 7343))
+    rep = slides_audit.audit_deck(deck, _aes_spec(tmp_path, ids, src_rect="none"))
+    row = next(i for i in rep.items if i.name == "徽标裁切 p1")
+    assert row.status == "fail" and "存在 srcRect" in row.detail
 
 
 def test_expect_src_rect_annotates_decoration_box(tmp_path):

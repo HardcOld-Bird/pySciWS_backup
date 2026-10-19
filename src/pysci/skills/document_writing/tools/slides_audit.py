@@ -538,27 +538,40 @@ def _src_rect(shape: Any) -> dict[str, int]:
 def _check_logo_crop(
     slide: Any, page: int, aes: dict[str, Any], ref_md5s: set[str]
 ) -> AuditItem:
-    """``aesthetics.expect_srcRect``：徽标 blipFill 裁切逐值 ＋ 裁后源区素比 ≈ 框比。"""
+    """``aesthetics.expect_srcRect``：徽标 blipFill 裁切逐值 ＋ 裁后源区素比 ≈ 框比。
+
+    配置为字符串 ``none`` 时断言**无 srcRect**（完整图；素比校验自然为 1.0≈1.0）。
+    """
     label = f"徽标裁切 p{page}"
-    cfg = aes.get("expect_srcRect")
-    cfg = cfg if isinstance(cfg, dict) else {}
+    raw_cfg = aes.get("expect_srcRect")
+    no_crop = isinstance(raw_cfg, str) and raw_cfg.strip().lower() == "none"
+    cfg = raw_cfg if isinstance(raw_cfg, dict) else {}
     tol = int(cfg.get("tol", 100))
     sh = _find_logo(slide, ref_md5s)
     if sh is None:
         return AuditItem(label, "fail", "未找到徽标图")
     rect = _src_rect(sh)
-    if not rect:
+    if no_crop:
+        if rect:
+            shown = " ".join(f"{k}={v}" for k, v in rect.items())
+            return AuditItem(
+                label,
+                "fail",
+                f"存在 srcRect {shown}（期望 none：内容页须完整图） box_in{_box(sh)}",
+            )
+    elif not rect:
         return AuditItem(
             label, "fail", f"缺 srcRect（期望 l={cfg.get('l')} b={cfg.get('b')}）"
         )
     bad: list[str] = []
-    for key in ("l", "t", "r", "b"):
-        if key not in cfg:
-            continue
-        want = int(cfg[key])
-        got = rect.get(key, 0)
-        if abs(got - want) > tol:
-            bad.append(f"{key}={got} ≠ {want}（tol {tol}）")
+    if not no_crop:
+        for key in ("l", "t", "r", "b"):
+            if key not in cfg:
+                continue
+            want = int(cfg[key])
+            got = rect.get(key, 0)
+            if abs(got - want) > tol:
+                bad.append(f"{key}={got} ≠ {want}（tol {tol}）")
     try:
         px_w, px_h = [float(v) for v in sh.image.size]
     except Exception:  # noqa: BLE001
@@ -568,9 +581,13 @@ def _check_logo_crop(
     ratio = crop_w / crop_h if crop_h else 0.0
     frame_ratio = sh.width / sh.height if sh.height else 0.0
     ratio_ok = bool(frame_ratio) and abs(ratio - frame_ratio) <= 0.01 * frame_ratio
-    shown = " ".join(f"{k}={v}" for k, v in rect.items())
+    shown = (
+        "无 srcRect"
+        if no_crop
+        else "srcRect " + " ".join(f"{k}={v}" for k, v in rect.items())
+    )
     detail = (
-        f"srcRect {shown}；裁后素比 {ratio:.4f} "
+        f"{shown}；裁后素比 {ratio:.4f} "
         f"{'≈' if ratio_ok else '≠'} 框比 {frame_ratio:.4f}（±1%）"
         f" box_in{_box(sh)}"
     )
