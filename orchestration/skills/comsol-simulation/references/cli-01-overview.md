@@ -15,6 +15,7 @@ when a solve or export misbehaves, or when you are about to change how sessions 
 | Command | Use when | Key output |
 |---|---|---|
 | `doctor` | Session start / anything broken | Config + COMSOL discovery + indexed manuals + MCP server & license state |
+| `domain-check FILE [--json]` | 仿真开工/交付前 | 「域几何声明」四问键齐全且带数值；缺项 exit 1（不启 JVM） |
 | `mcp ensure` | **Step 0** — before any `comsol` MCP tool call | Idempotent: reuse or spawn the HTTP server **detached via WMI**; prints URL / detached / license |
 | `mcp status` / `mcp stop` | Inspecting / releasing that server | `running`, `detached`, `holds_license`, machine-wide license holders |
 | `license` | "Is the one license free?" before a CLI solve or opening the GUI | `jvm.dll` scan across the whole machine |

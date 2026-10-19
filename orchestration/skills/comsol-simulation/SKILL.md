@@ -49,15 +49,14 @@ explicit `comsol_start`, `--restart` invalidating Qoder's session, and the 403 `
 [references/mcp-01-overview.md](references/mcp-01-overview.md).
 
 **Driving the MCP by hand? Read the
-[five measured constraints](references/mcp-03-building-a-model-through-the-m.md)
-first** — each cost a license-holding round trip to learn.
+[five measured constraints](references/mcp-03-building-a-model-through-the-m.md) first.**
 
 ## Invocation
 
 From the **project root**: `pysci-simulation <command> [options]`, abbreviated below to
 `simulation …`. (Not installed? `uv run --no-sync python -m pysci.skills.comsol_simulation.tools.simulation …`.)
 
-> **PowerShell:** this CLI prints Chinese — apply `.qoder/rules/basic.md` §3 or you read mojibake.
+> **PowerShell:** 中文输出按 `.qoder/rules/basic.md` §3 设 UTF-8。
 >
 > **Cost rule:** every command touching a live model (`inspect`, `run solve`, `export`, `build apply`)
 > boots a JVM (~30 s) and takes a license slot. Batch: prefer ONE session doing several things
@@ -69,7 +68,7 @@ From the **project root**: `pysci-simulation <command> [options]`, abbreviated b
 |---|---|
 | health | `doctor` · `diagnose --mph M` · `license` |
 | MCP | `mcp ensure` · `mcp status` · `mcp stop` |
-| read | `inspect tree` · `params` · `inventory` · `node --path P` · `java F.java` |
+| read | `inspect tree` · `params` · `inventory` · `node --path P` · `java F.java` · `domain-check F.md` |
 | write | `node set --path P --set k=v [--save O.mph]` · `build recipes` · `build apply --recipe R` |
 | run | `run solve [--study S] [--set-param k=v] [--clear]` · `run batch IN.mph --output OUT.mph` |
 | see | `export image --plotgroup PG --out O.png` · `export data --source D [--expr E]` · `export polar` · `export table` · `render F.vtk` · `post stats`/`quality`/`framebox` |
@@ -85,16 +84,16 @@ fields: [references/cli.md](references/cli.md), or `simulation <command> -h`.
 
 ## Standard closed-loop workflow
 
-Steps 3/5/7 can instead go through the **`comsol` MCP** when you don't need the CLI's differentiated
-export / render / validate.
+Steps 3/5/7 may use the **`comsol` MCP** instead. **仿真开工/交付前**必过
+`pysci-simulation domain-check <声明.md>`——「域几何声明」四问缺项即不合格
+([ref](references/domain-declaration.md))。
 
 1. `mcp ensure` (only if using the MCP) → 2. `doctor` → 3. `inspect tree --mph M.mph` → 4. edit via
    `build apply` / `node set` / `--set-param k=v` → 5. `run solve --mph M.mph --study std1 --clear` →
    6. `export image --plotgroup pg10 --out out.png`, then **Read that PNG** to actually see the field →
    7. `export data --source pg10 --expr acpr.p_t`, plus `render` / `post stats` / `post quality` as
-   programmatic eyes → 8. **trust it**: validate convergence / conservation / vs analytic with the
-   `tools/postprocess.py` validators (`compare_to_reference`, `check_conservation`, `convergence_order`,
-   `validate_field`).
+   programmatic eyes → 8. **trust it**: run `tools/postprocess.py` validators
+   (`compare_to_reference` / `check_conservation` / `convergence_order` / `validate_field`).
 
 ## Output locations
 
@@ -106,7 +105,7 @@ pitfalls · `runs/` exports/logs (+ `runs/tmp` tempdir).
 
 `simulation doctor` first. Then: **solve failure** → the `run solve` log tail + Java stack; **blank PNG**
 → sidecar `interior.blank` (usual cause: plot group with no dataset); **unknown node type/property** →
-never guess, never write probe scripts — `inspect node --path …` plus
+never guess — `inspect node --path …` plus
 `knowledge/java_api_pitfalls.md`. All failure modes:
 [cli-02](references/cli-02-when-something-breaks.md).
 
@@ -114,6 +113,7 @@ never guess, never write probe scripts — `inspect node --path …` plus
 
 （`*`=分册索引，按需读单册）
 
+- [references/domain-declaration.md](references/domain-declaration.md) — 强制四问模板/判定。
 - [references/mcp.md](references/mcp.md) * — the community MCP: transport, license probing,
   Step 0 internals, pinning, the five modelling constraints.
 - [references/cli.md](references/cli.md) * — the CLI: flag table, knowledge pipeline,

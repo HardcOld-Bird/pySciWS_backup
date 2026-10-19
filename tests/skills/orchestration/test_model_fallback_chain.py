@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime, timedelta
 
 from pysci.skills.orchestration.tools import (
     channels,
@@ -49,6 +50,13 @@ A = "seat-a"  # 首席（Mimo  analog）
 B = "seat-b"  # 次席（BYOK Qwen analog）
 C = "seat-c"  # 末席（内置免费 analog）
 OK_BODY = "<result>完工，commit abc1234 已合并。</result>"
+
+
+def _recent(hours: int = 1) -> str:
+    """相对当前时刻的事件时间（避免硬编码日期跌出「近 7 日」窗口）。"""
+    return (datetime.now().astimezone() - timedelta(hours=hours)).isoformat(
+        timespec="seconds"
+    )
 
 
 def _broken(state, sid_seen=None):
@@ -195,7 +203,7 @@ def test_drain_stops_and_logs_each_demote(iso_state, monkeypatch):
         ],
     )
     event = {
-        "ts": "2026-10-13T00:00:00+08:00",
+        "ts": _recent(3),
         "tier": "flash",
         "from": A,
         "from_label": A,
@@ -407,7 +415,7 @@ def test_mirror_status_item_reports_events(iso_state, iso_dispatch):
 
     channels.append_event(
         {
-            "ts": "2026-10-13T01:02:00+08:00",
+            "ts": _recent(2),
             "tier": "flash",
             "from": A,
             "from_label": A,
@@ -429,7 +437,7 @@ def test_orch_status_health_section_shows_fallbacks(iso_state, iso_dispatch):
     """``orch status`` 判决包健康段与 mirror 共读同一句话（单一口径，不各写各的）。"""
     channels.append_event(
         {
-            "ts": "2026-10-13T02:03:00+08:00",
+            "ts": _recent(1),
             "tier": "max",
             "from": "Mimo-V2.6-Pro",
             "from_label": "Mimo-V2.6-Pro",

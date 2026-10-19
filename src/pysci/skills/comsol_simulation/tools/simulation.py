@@ -36,6 +36,7 @@ from . import postprocess as _post
 from . import run as _run
 from . import session as _session
 from .config import settings
+from .domain import cmd_domain_check
 from .session import session
 
 # ---------------------------------------------------------------------------
@@ -618,6 +619,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("doctor", help="环境与能力自检")
     sp.set_defaults(func=cmd_doctor)
+
+    sp = sub.add_parser(
+        "domain-check",
+        help="检查「域几何声明」四问：节存在 + 键齐全 + 每问带数值",
+    )
+    sp.add_argument("file", type=Path, help="含「## 域几何声明」节的任务书/交付 md")
+    sp.add_argument("--json", action="store_true", help="输出 JSON")
+    sp.set_defaults(func=cmd_domain_check)
 
     sp = sub.add_parser(
         "diagnose", help="一键聚合诊断（doctor+tree+inventory+绑定状态+pitfalls）"

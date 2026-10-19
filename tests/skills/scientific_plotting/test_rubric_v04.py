@@ -33,7 +33,8 @@ def _lines_with(md: str, token: str) -> list[str]:
 # ---------------------------------------------------------------------------
 def test_version_bumped_and_changelog():
     md = _rubric()
-    assert "scientific-plotting）v0.5" in md
+    assert "scientific-plotting）v0.6" in md
+    assert "v0.6（2026-10-20）" in md, "缺 v0.6 修订说明（H7 仿真域声明/标度量程）"
     assert "v0.5（2026-10-18）" in md, "缺 v0.5 修订说明（H6/对照表/布局节奏）"
     assert "v0.4.2（2026-10-17）" in md, "v0.4.2 修订史应保留"
     assert "v0.4.1（2026-10-16）" in md, "v0.4.1 修订史应保留"

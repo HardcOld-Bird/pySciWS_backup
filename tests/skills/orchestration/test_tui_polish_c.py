@@ -208,10 +208,19 @@ def test_fallback_lines_empty_window(monkeypatch):
 
 def test_system_arbitration_card_renders_fallback_as_list(iso_state):
     """端到端：真事件流 → 仲裁卡里回退段逐条一行。"""
+    now = datetime.now().astimezone()
     for i, (when, frm, to) in enumerate(
         [
-            ("2026-10-13T01:02:00+08:00", "seat-a", "seat-b"),
-            ("2026-10-13T03:04:00+08:00", "seat-b", "seat-c"),
+            (
+                (now - timedelta(hours=2)).isoformat(timespec="seconds"),
+                "seat-a",
+                "seat-b",
+            ),
+            (
+                (now - timedelta(hours=1)).isoformat(timespec="seconds"),
+                "seat-b",
+                "seat-c",
+            ),
         ]
     ):
         channels.append_event(
