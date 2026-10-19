@@ -53,8 +53,45 @@ steps:
     role: rework_plan
   - id: b2
     member: devops
-    brief: 返工生产环节
-    member_placeholder: true
+    brief: 导出与后处理工具整备——雷达 1° 网格外推导出、半圆后处理裁剪、三组独立色标适配核查
+    dirs:
+    - src/pysci
+    - data/research/1_gain_ep
+  - id: sim1
+    member: sim
+    brief: 雷达域仿真——半径缩至直径＝8 周期（覆盖率 100%），背景场不覆盖管槽、PMB/后退 PML，1° 远场导出×3 组，附 M1 声明
+    dirs:
+    - data/research/1_gain_ep
+  - id: sim2
+    member: sim
+    brief: 场图域仿真——1m 旋转正方形域＋窄波束入射＋两侧 PMB 后退，31cm 菱形包容验证，场数据×3 组，附 M1 声明
+    dirs:
+    - data/research/1_gain_ep
+  - id: dr1
+    member: drawing
+    brief: 审美参考——三列大图布局/配色/标注语言参考图（指引 f1–f3）
+    dirs:
+    - data/research/1_gain_ep
+  - id: f1
+    member: figure
+    brief: 雷达图×3——二合一极坐标、1°、线性、组内 scale 适配、主瓣 45°/135° 复核、图例置下
+    dirs:
+    - data/research/1_gain_ep
+  - id: f2
+    member: figure
+    brief: 半圆场图×3——独立线性 colorbar（3–5 刻度）、菱形两框制、直径平直边、声压实部、小标题
+    dirs:
+    - data/research/1_gain_ep
+  - id: f3
+    member: figure
+    brief: 大图装配——每情况一列、雷达行 1／场图行 2–3、共同右侧 colorbar、角标左上、标题间距、Exp.† 注记
+    dirs:
+    - data/research/1_gain_ep
+  - id: rv
+    member: reviewer
+    brief: 终检——通用标准＋H7 硬项＋禁回退清单逐项＋VERDICT
+    dirs:
+    - data/research/1_gain_ep
   - id: b_last
     kind: self
     brief: 全流程报告组装

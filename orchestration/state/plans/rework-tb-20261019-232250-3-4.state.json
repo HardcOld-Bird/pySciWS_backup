@@ -29,18 +29,58 @@
     },
     {
       "id": "A.a5",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261020-003440-rework-tb-20261019-232250-3-4-A.a5",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.a5.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.a5.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
     },
     {
       "id": "B.b1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-232250-3-4.b1-重拆解.md"
+    },
+    {
+      "id": "B.b2",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261020-012515-rework-tb-20261019-232250-3-4-B.b2",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.b2.task.md"
+    },
+    {
+      "id": "B.sim1",
       "status": "pending",
       "review": "pending"
     },
     {
-      "id": "B.b2",
+      "id": "B.sim2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.dr1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.f1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.f2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.f3",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.rv",
       "status": "pending",
       "review": "pending"
     },
