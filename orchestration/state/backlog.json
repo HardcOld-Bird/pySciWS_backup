@@ -3787,6 +3787,76 @@
       "done_at": "2026-10-19T20:12:28+08:00",
       "batch_size": 1,
       "batch_seed": "20261019-192536-reviewer"
+    },
+    {
+      "id": "20261019-115501-lit",
+      "member": "lit",
+      "summary": "success_criteria: 图片提取工具应让每个 figN.png 的 bbox 对应真实的 figure 区域，且裁切不切掉坐标轴标签；目录命名应与文献实际主题一致，避免把新闻特写配图标为 PT 论文。",
+      "kind": "defect",
+      "success_criteria": "图片提取工具应让每个 figN.png 的 bbox 对应真实的 figure 区域，且裁切不切掉坐标轴标签；目录命名应与文献实际主题一致，避免把新闻特写配图标为 PT 论文。\n① PRApplied.12.034021：fig5.png 提取到的是第 1 页页眉/作者块（figures.json page=1, bbox=[69,241,543,314]），不是 figure。\n② NatMater18-783-2019：6 张中 5 张为整页扫描（含正文与中文批注），仅 fig3 可用。\n③ PRL80.5243-1998：fig1/fig2 裁切切掉坐标轴刻度标签；原文 Fig. 2（复 x 平面围道）缺失，PDF 有 3 张图但目录只提取 2 张。\n④ Nature490-472-2012：缓存 PDF 为 Mario Livio 的对称性新闻特写，两张图与 PT 无关，目录标签误导。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261019-115501-lit.md",
+      "status": "in_progress",
+      "proposed": "2026-10-20T00:03:41+08:00",
+      "note": "",
+      "started_at": "2026-10-20T00:03:44+08:00",
+      "worktree": "20261019-115501-lit"
+    },
+    {
+      "id": "20261019-120811-lit",
+      "member": "lit",
+      "summary": "success_criteria: 重提脚本能按 PDF 页全覆盖提取，且缓存 DOI 与目标文献一致；漏页/错缓存可被交付前检查自动发现并报错。",
+      "kind": "defect",
+      "success_criteria": "重提脚本能按 PDF 页全覆盖提取，且缓存 DOI 与目标文献一致；漏页/错缓存可被交付前检查自动发现并报错。\n① 提取漏页：`第8页-有源增益超表面-PhysRevLett.133.113801-2024` 仅提取 p2/p4 两张，PDF 第 3 页的 TD 单元胞/I–V/S₁₁ 图（草稿 s08_042c2b3b 正在用）未被提取；`第6页-...PhysRevLett.123.214302-2019` 仅提取 Fig.3/Fig.4，Fig.1/Fig.2 缺失（草稿 s06_942236b9 用 Fig.1）。复现：`ls data/大任务/5_开题PPT/文献图片/第6页-非厄米声学超构表面-PhysRevLett.123.214302-2019/` 只有 fig1.png、fig2.png，而 PDF 图注含 FIG.1–4。\n② 缓存张冠李戴：`data/skills/literature_research/cache/pdfs/10-1103-physrevlett-133-173801.pdf` 内容为另一篇论文（Coherent Perfect Absorption of Arbitrary Wavefronts at an Exceptional Point），目标文献应为 PRL 133, 113801。期望：缓存文件名/DOI 与任务文献一致，否则不进入图注核对链路。\n③ `sci.pdf` 损坏（PyMuPDF: FzErrorFormat code=7: no objects found），导致 Science387 图注无法从缓存核对。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261019-120811-lit.md",
+      "status": "pending",
+      "proposed": "2026-10-20T00:03:42+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261019-121447-lit",
+      "member": "lit",
+      "summary": "success_criteria: 提取器按 PDF 全页覆盖候选（含右栏小图），跨面板间距 ≤40 pt 时合并，且拒绝含正文的全宽版面条；交付前可用「figures.json 页覆盖 + 每图文本占比」自动审计。",
+      "kind": "defect",
+      "success_criteria": "提取器按 PDF 全页覆盖候选（含右栏小图），跨面板间距 ≤40 pt 时合并，且拒绝含正文的全宽版面条；交付前可用「figures.json 页覆盖 + 每图文本占比」自动审计。\n① 漏提右栏小图：`temporal_ep/temporal_ep_arxiv.pdf` p2 右栏 FIG.1（图像 `[335,52,544,166]`、图注 `[317,179,562,272]`）未被提取。复现：`ls data/大任务/5_开题PPT/文献图片/第9页-有源时变超表面-PhysRevApplied25-054054-2026/` 只有 fig1–fig6，`figures.json` 页码为 5/6/10/8/3/4，无 p2。期望：max_figs=6 的排名不应丢掉位于 p2 的正文首图。\n② 面板被裁掉：`nphoton_2020_s41566_020_0604_2.pdf` p6 Fig.5 的 RCS 面板 e 位于 y=339–393，当前 bbox 止于 y=302；两区间间距 37 pt > merge pad 18 pt，未被合并。期望：相邻面板 gap ≤40 pt 时合并，或以图注上沿为图区下界。\n③ 版面条误当图：`cpa_ep/ep_lasing_cpa.pdf` p13 的 FIG.7 与双栏正文被合并为一张 4742×2089 的横条。期望：候选区域内正文文本块占比超过阈值（如 30%）时拒绝或仅保留图区。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261019-121447-lit.md",
+      "status": "pending",
+      "proposed": "2026-10-20T00:03:42+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261019-050008-reviewer",
+      "member": "reviewer",
+      "summary": "场景：`compose slides geometry` 对学院预设页面（近满幅白卡占画布 96%）自动识别外框时，白卡超出 10%–95% 面积识别窗，工具回退取页面内最大子块矩形（焦点块面板）当「外框」，随后把其余列的图全报「越出外框」——本轮 p4–p7 实测 10 项此类假阳性（如 p7 报「Picture 9 越出外框：右 8.24in」，实为右图正常落在白卡内）；使用者须知道改跑 `-",
+      "kind": "usability",
+      "success_criteria": "外框自动识别对近满幅白卡（如面积占比 >95% 的最大矩形）不再回退到子块面板，或在回退时报「外框识别存疑，建议 --frame 指定」提示而非直接输出越界违规；对同一 deck，auto 与 --frame 白卡口径的 p3–10 违规数一致（均为 0）。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261019-050008-reviewer.md",
+      "status": "in_progress",
+      "proposed": "2026-10-20T00:03:43+08:00",
+      "note": "",
+      "started_at": "2026-10-20T00:03:49+08:00",
+      "worktree": "20261019-050008-reviewer"
+    },
+    {
+      "id": "20261019-171344-devops",
+      "member": "devops",
+      "summary": "success_criteria: `slides audit` 支持图槽数量、相对顺序（按 bbox 排序）、裁切参数（crop/bbox 与像素尺寸）三类机械判据，使 p8 中列多图、p9/p10 顺序与裁切项不再只能人工确认。",
+      "kind": "usability",
+      "success_criteria": "`slides audit` 支持图槽数量、相对顺序（按 bbox 排序）、裁切参数（crop/bbox 与像素尺寸）三类机械判据，使 p8 中列多图、p9/p10 顺序与裁切项不再只能人工确认。\n场景：本轮 B.b2 汇编 deck-spec 时，p8 中列「草稿 2 图 vs 成品 4 图」、p9 右中左顺序、p8 左右列裁切、p10 中列上下对换均无法由 audit 机械判定，只能登记为 manual；spec 已写入 slot order/placeholder 数量/裁切参数，工具侧一旦支持即可直接消费。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261019-171344-devops.md",
+      "status": "pending",
+      "proposed": "2026-10-20T00:03:43+08:00",
+      "note": ""
+    },
+    {
+      "id": "20261019-223633-writing",
+      "member": "writing",
+      "summary": "① 现象：aesthetics 徽标 bbox 的数组语义在 spec 与任务书之间不一致——任务书给定 `[0.09,0.937,5.926,6.773]` 并注明 w=h=5.836（即 [l,t,right,bottom]），spec 却按 [l,t,w,h] 读取，期望比 0.8749。",
+      "kind": "defect",
+      "success_criteria": "完整正方徽标 bbox 为 [0.09,0.937,5.836,5.836] 时徽标行 √，且宽高比 1.0 判据生效。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261019-223633-writing.md",
+      "status": "pending",
+      "proposed": "2026-10-20T00:03:44+08:00",
+      "note": ""
     }
   ]
 }
