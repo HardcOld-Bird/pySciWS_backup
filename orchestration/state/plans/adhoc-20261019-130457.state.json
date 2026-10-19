@@ -1,0 +1,14 @@
+{
+  "plan_id": "adhoc-20261019-130457",
+  "created": "2026-10-19T13:04:57+08:00",
+  "goal": "adhoc：w_r1 点修补丁：p6 页标题文字错误。实测（slide6.xml sz=2800 run）当前为「有源增益超表面」（",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261019-130457-adhoc-20261019-130457-s1"
+    }
+  ],
+  "completed_at": null
+}

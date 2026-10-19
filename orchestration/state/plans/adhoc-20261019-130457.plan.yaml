@@ -1,0 +1,8 @@
+id: adhoc-20261019-130457
+goal: adhoc：w_r1 点修补丁：p6 页标题文字错误。实测（slide6.xml sz=2800 run）当前为「有源增益超表面」（
+steps:
+- id: s1
+  member: writing
+  brief: w_r1 点修补丁：p6 页标题文字错误。实测（slide6.xml sz=2800 run）当前为「有源增益超表面」（与 p8 串位），应为「非厄米声学超构表面」（任务书第6页标题原文）。要求：仅改 slide6 页标题这一串文字（28p
+  dirs: []
+  review: false
