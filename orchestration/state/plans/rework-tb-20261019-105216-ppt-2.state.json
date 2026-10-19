@@ -206,15 +206,19 @@
     },
     {
       "id": "B.rv2",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "reviewer-20261019-130625-rework-tb-20261019-105216-ppt-2-B.rv2",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-105216-ppt-2.rv2.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-105216-ppt-2.rv2.task.md",
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
     },
     {
       "id": "B.d2",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261019-130919-rework-tb-20261019-105216-ppt-2-B.d2",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-105216-ppt-2.d2.task.md"
     },
     {
       "id": "B.b_last",
