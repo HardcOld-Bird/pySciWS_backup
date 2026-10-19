@@ -188,10 +188,18 @@ def test_audit_flags_missing_caption_figure(tmp_path):
     pdf = _save(doc, tmp_path)
     man = mod.extract(pdf, tmp_path / "out")
     audit = mod.audit_figures(pdf, man)
-    assert not audit["ok"]
+    assert audit["ok"], "默认题注覆盖缺失只给 warning"
     assert any(
-        i["code"] == "missing-figures" and "Fig. 2" in i["detail"]
+        i["code"] == "missing-figures" and i["level"] == "warning"
         for i in audit["issues"]
+    )
+    strict = mod.audit_figures(pdf, man, strict_coverage=True)
+    assert not strict["ok"]
+    assert any(
+        i["code"] == "missing-figures"
+        and i["level"] == "error"
+        and "Fig. 2" in i["detail"]
+        for i in strict["issues"]
     )
 
 
