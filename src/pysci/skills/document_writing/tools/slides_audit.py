@@ -400,6 +400,268 @@ def _check_animation(slide: Any, page: int) -> AuditItem:
     return AuditItem(f"动画 p{page}", "pass", "onBegin + nextAc=seek")
 
 
+#: 徽标识别：bbox 高 ≥5 in 的图片按水印层处理。
+_LOGO_MIN_HEIGHT_IN = 5.0
+
+#: 粗外框识别：描边 ≥5 pt、宽 ≥2 in。
+_FRAME_MIN_STROKE_EMU = 5 * 12700
+_FRAME_MIN_WIDTH_IN = 2.0
+
+#: roundRect 未显式写 adj 时的 DrawingML 默认值。
+_ROUNDRECT_DEFAULT_ADJ = 16667
+
+
+def _is_picture(shape: Any) -> bool:
+    try:
+        return int(shape.shape_type) == 13
+    except (TypeError, ValueError):
+        return False
+
+
+def _ltwh(shape: Any) -> list[float]:
+    """[left, top, width, height] in inches（``logo_bbox_ref`` 口径）。"""
+    return [
+        round(shape.left / _EMU_IN, 4),
+        round(shape.top / _EMU_IN, 4),
+        round(shape.width / _EMU_IN, 4),
+        round(shape.height / _EMU_IN, 4),
+    ]
+
+
+def _float4(value: Any) -> list[float] | None:
+    try:
+        out = [float(x) for x in value]
+    except (TypeError, ValueError):
+        return None
+    return out if len(out) == 4 else None
+
+
+def _logo_ref_md5s(prs: Any, ref: list[float], tol: float) -> set[str]:
+    """首两页徽标指纹：bbox 命中 ``logo_bbox_ref`` 或高度 ≥5 in 的图片。"""
+    out: set[str] = set()
+    for slide in list(prs.slides)[:2]:
+        for sh in slide.shapes:
+            if not _is_picture(sh):
+                continue
+            try:
+                ltwh = _ltwh(sh)
+                blob = sh.image.blob
+            except Exception:  # noqa: BLE001
+                continue
+            if ltwh[3] >= _LOGO_MIN_HEIGHT_IN or all(
+                abs(a - b) <= tol for a, b in zip(ltwh, ref)
+            ):
+                out.add(_md5(blob))
+    return out
+
+
+def _find_logo(slide: Any, ref_md5s: set[str]) -> Any | None:
+    """先按首两页指纹找徽标，退而找 bbox 高 ≥5 in 的水印层图片。"""
+    tall: Any | None = None
+    for sh in slide.shapes:
+        if not _is_picture(sh):
+            continue
+        try:
+            if ref_md5s and _md5(sh.image.blob) in ref_md5s:
+                return sh
+            if tall is None and sh.height / _EMU_IN >= _LOGO_MIN_HEIGHT_IN:
+                tall = sh
+        except Exception:  # noqa: BLE001
+            continue
+    return tall
+
+
+def _check_logo(
+    slide: Any, page: int, aes: dict[str, Any], ref_md5s: set[str]
+) -> AuditItem:
+    label = f"徽标 p{page}"
+    ref = _float4(aes.get("logo_bbox_ref"))
+    if ref is None:
+        return AuditItem(label, "fail", "logo_bbox_ref 需为 [x,y,w,h]（in）")
+    sh = _find_logo(slide, ref_md5s)
+    if sh is None:
+        return AuditItem(
+            label, "fail", "未找到徽标图（首两页同指纹或 bbox 高 ≥5 in 的水印层）"
+        )
+    tol = float(aes.get("logo_bbox_tol_in", 0.02))
+    aspect_tol = float(aes.get("logo_aspect_tol", 0.01))
+    got = _ltwh(sh)
+    want_aspect = ref[2] / ref[3] if ref[3] else 0.0
+    got_aspect = got[2] / got[3] if got[3] else 0.0
+    bbox_ok = all(abs(a - b) <= tol for a, b in zip(got, ref))
+    aspect_ok = abs(got_aspect - want_aspect) <= aspect_tol
+    detail = (
+        f"bbox {got} {'≈' if bbox_ok else '≠'} {ref}（tol {tol}）；"
+        f"宽高比 {got_aspect:.4f} {'≈' if aspect_ok else '≠'} {want_aspect:.4f}"
+        f"（tol {aspect_tol}）"
+    )
+    return AuditItem(label, "pass" if bbox_ok and aspect_ok else "fail", detail)
+
+
+def _stroke_width(shape: Any) -> int | None:
+    ln = shape._element.find(".//" + qn("a:ln"))
+    if ln is None or ln.get("w") is None:
+        return None
+    try:
+        return int(ln.get("w"))
+    except ValueError:
+        return None
+
+
+def _prst(shape: Any) -> str:
+    pg = shape._element.find(".//" + qn("a:prstGeom"))
+    return str(pg.get("prst")) if pg is not None else "custGeom"
+
+
+def _roundrect_adj(shape: Any) -> int | None:
+    pg = shape._element.find(".//" + qn("a:prstGeom"))
+    if pg is None:
+        return None
+    avl = pg.find(qn("a:avLst"))
+    if avl is None:
+        return None
+    for gd in avl.findall(qn("a:gd")):
+        if gd.get("name") == "adj":
+            m = re.search(r"val\s+(-?\d+)", gd.get("fmla") or "")
+            return int(m.group(1)) if m else None
+    return None
+
+
+def _coarse_frames(slide: Any) -> list[Any]:
+    out: list[Any] = []
+    for sh in slide.shapes:
+        if _is_picture(sh):
+            continue
+        try:
+            if sh.width / _EMU_IN < _FRAME_MIN_WIDTH_IN:
+                continue
+        except (AttributeError, TypeError):
+            continue
+        stroke = _stroke_width(sh)
+        if stroke is not None and stroke >= _FRAME_MIN_STROKE_EMU:
+            out.append(sh)
+    return out
+
+
+def _check_frames(slide: Any, page: int, aes: dict[str, Any]) -> list[AuditItem]:
+    frames = _coarse_frames(slide)
+    if not frames:
+        label = (
+            f"外框样式 p{page}"
+            if aes.get("frame_geom") is not None
+            else f"上缘 p{page}"
+        )
+        return [AuditItem(label, "fail", "未找到粗外框（描边 ≥5 pt 且宽 ≥2 in）")]
+    items: list[AuditItem] = []
+    geom = aes.get("frame_geom")
+    if geom is not None:
+        geom = geom if isinstance(geom, dict) else {}
+        want_prst = geom.get("prst")
+        want_adj = geom.get("adj")
+        adj_tol = float(geom.get("adj_tol", 500))
+        for sh in frames:
+            label = f"外框样式 p{page} shape={sh.shape_id}"
+            prst = _prst(sh)
+            bad: list[str] = []
+            if want_prst is not None and str(want_prst) != prst:
+                bad.append(f"prst={prst} ≠ {want_prst}")
+            adj = _roundrect_adj(sh)
+            if want_adj is not None:
+                actual = _ROUNDRECT_DEFAULT_ADJ if adj is None else adj
+                if abs(actual - int(want_adj)) > adj_tol:
+                    shown = "缺省 16667" if adj is None else str(adj)
+                    bad.append(f"adj={shown} ≠ {want_adj}（tol {adj_tol:g}）")
+            if bad:
+                items.append(AuditItem(label, "fail", "；".join(bad)))
+            else:
+                extra = f" adj={adj}" if prst == "roundRect" and adj is not None else ""
+                items.append(AuditItem(label, "pass", f"prst={prst}{extra}"))
+    if aes.get("frame_top") is not None:
+        want_top = float(aes["frame_top"])
+        tol = float(aes.get("frame_top_tol_in", 0.02))
+        for sh in frames:
+            label = f"上缘 p{page} shape={sh.shape_id}"
+            top = sh.top / _EMU_IN
+            ok = abs(top - want_top) <= tol
+            items.append(
+                AuditItem(
+                    label,
+                    "pass" if ok else "fail",
+                    f"top {top:.3f} {'≈' if ok else '≠'} {want_top} ±{tol}",
+                )
+            )
+    return items
+
+
+def _check_title_margins(
+    page_spec: dict[str, Any], slide: Any, page: int, aes: dict[str, Any]
+) -> list[AuditItem]:
+    titles = [t for t in (page_spec.get("titles") or []) if t.get("shape")]
+    if not titles:
+        return [
+            AuditItem(
+                f"标题边距 p{page}", "manual", "spec 未给 titles.shape，无法定位页标题"
+            )
+        ]
+    left_want = aes.get("title_left")
+    formula = aes.get("title_right_formula")
+    formula = formula if isinstance(formula, dict) else {}
+    slope = float(formula.get("slope", 0.34))
+    intercept = float(formula.get("intercept", 1.069))
+    right_tol = float(formula.get("tol_in", 0.1))
+    left_tol = float(aes.get("title_left_tol_in", 0.02))
+    out: list[AuditItem] = []
+    for entry in titles:
+        sid = int(entry["shape"])
+        sh = _shape_on(slide, sid)
+        label = f"标题边距 p{page} shape={sid}"
+        if sh is None:
+            out.append(AuditItem(label, "fail", "未找到标题形状"))
+            continue
+        n = len("".join(_slot_text(sh).split()))
+        left = sh.left / _EMU_IN
+        right = (sh.left + sh.width) / _EMU_IN
+        problems: list[str] = []
+        detail: list[str] = []
+        if left_want is not None:
+            ok = abs(left - float(left_want)) <= left_tol
+            detail.append(
+                f"left {left:.3f} {'≈' if ok else '≠'} "
+                f"{float(left_want):.3f} ±{left_tol}"
+            )
+            if not ok:
+                problems.append("left")
+        if formula:
+            want_right = slope * n + intercept
+            ok = abs(right - want_right) <= right_tol
+            detail.append(
+                f"right {right:.3f} {'≈' if ok else '≠'} {want_right:.3f}"
+                f"（n={n}, {slope:g}n+{intercept:g}）±{right_tol}"
+            )
+            if not ok:
+                problems.append("right")
+        out.append(AuditItem(label, "fail" if problems else "pass", "；".join(detail)))
+    return out
+
+
+def _check_aesthetics(
+    page_spec: dict[str, Any],
+    slide: Any,
+    page: int,
+    aes: dict[str, Any],
+    logo_ref_md5s: set[str],
+) -> list[AuditItem]:
+    """``invariants.aesthetics`` 三判据：徽标 / 外框几何+上缘 / 标题边距。"""
+    items: list[AuditItem] = []
+    if aes.get("logo_bbox_ref") is not None:
+        items.append(_check_logo(slide, page, aes, logo_ref_md5s))
+    if aes.get("frame_geom") is not None or aes.get("frame_top") is not None:
+        items.extend(_check_frames(slide, page, aes))
+    if aes.get("title_left") is not None or aes.get("title_right_formula"):
+        items.extend(_check_title_margins(page_spec, slide, page, aes))
+    return items
+
+
 def audit_deck(pptx: str | Path, spec: str | Path) -> AuditReport:
     """按 spec 审计 deck；spec 解析失败抛 ``ValueError``。"""
     import yaml
@@ -421,6 +683,19 @@ def audit_deck(pptx: str | Path, spec: str | Path) -> AuditReport:
     rep = AuditReport(pptx=src, spec=spec_path)
 
     inv = doc.get("invariants") or {}
+    aes = inv.get("aesthetics") if isinstance(inv, dict) else None
+    aes = aes if isinstance(aes, dict) else {}
+    logo_ref_md5s: set[str] = set()
+    if aes.get("logo_bbox_ref") is not None:
+        ref = _float4(aes.get("logo_bbox_ref"))
+        if ref is not None:
+            logo_ref_md5s = _logo_ref_md5s(
+                prs, ref, float(aes.get("logo_bbox_tol_in", 0.02))
+            )
+    # aesthetics 已接管标题几何时，旧 width=0.34n+0.55 判据不再适用。
+    titles_superseded = bool(
+        aes.get("title_left") is not None or aes.get("title_right_formula")
+    )
     pages = doc.get("pages") or []
     for page_spec in pages:
         page = int(page_spec.get("page") or 0)
@@ -481,7 +756,8 @@ def audit_deck(pptx: str | Path, spec: str | Path) -> AuditReport:
         for slot in slots:
             rep.items.extend(_check_slot(spec_path, slide, slot, page))
         for entry in page_spec.get("titles") or []:
-            rep.items.append(_check_formula(slide, entry, capsule=False))
+            if not titles_superseded:
+                rep.items.append(_check_formula(slide, entry, capsule=False))
         for entry in page_spec.get("capsules") or []:
             rep.items.append(_check_formula(slide, entry, capsule=True))
         refs = [
@@ -505,6 +781,10 @@ def audit_deck(pptx: str | Path, spec: str | Path) -> AuditReport:
                     )
         if page_spec.get("animation"):
             rep.items.append(_check_animation(slide, page))
+        if aes:
+            rep.items.extend(
+                _check_aesthetics(page_spec, slide, page, aes, logo_ref_md5s)
+            )
         for note in page_spec.get("manual") or []:
             rep.items.append(AuditItem(f"人工确认 p{page}", "manual", str(note)))
 

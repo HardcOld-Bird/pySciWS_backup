@@ -15,7 +15,7 @@ from pptx import Presentation  # noqa: E402
 from pptx.enum.shapes import MSO_SHAPE  # noqa: E402
 from pptx.enum.text import PP_ALIGN  # noqa: E402
 from pptx.oxml.ns import qn  # noqa: E402
-from pptx.util import Inches  # noqa: E402
+from pptx.util import Inches, Pt  # noqa: E402
 
 from pysci.skills.document_writing.tools import (  # noqa: E402
     compose,
@@ -342,3 +342,137 @@ def test_stale_note_hint_when_md5_matches(tmp_path):
         rep.summary()
     )
     assert rep.ok, "注记过期只是提示，不计 FAIL"
+
+
+# ---------------------------------------------------------------------------
+# 美学判据（R4 A.a5）：徽标 / 外框几何+上缘 / 标题边距
+# ---------------------------------------------------------------------------
+def _aes_deck(
+    tmp_path: Path,
+    *,
+    stretch_logo: bool = False,
+    frame_shape=MSO_SHAPE.ROUNDED_RECTANGLE,
+    shift_title: bool = False,
+    frame_top: float = 0.94,
+):
+    """两页达标样板：粗圆角外框 top 0.94/adj 3000、徽标 [0.76,0.937,3.18,5.836]、标题右缘公式。"""
+    prs = Presentation()
+    logo = _png(tmp_path / "logo.png")
+    ids: list[dict] = []
+    for _ in range(2):
+        s = prs.slides.add_slide(prs.slide_layouts[6])
+        frame = s.shapes.add_shape(
+            frame_shape, Inches(0.3), Inches(frame_top), Inches(4.0), Inches(5.0)
+        )
+        frame.line.width = Pt(6)
+        if frame_shape == MSO_SHAPE.ROUNDED_RECTANGLE:
+            frame.adjustments[0] = 0.03
+        title = s.shapes.add_textbox(
+            Inches(0.55 if shift_title else 0.30),
+            Inches(0.2),
+            Inches(2.809),
+            Inches(0.572),
+        )
+        title.text_frame.text = "声学超构表面"
+        pic = s.shapes.add_picture(
+            str(logo),
+            Inches(0.76),
+            Inches(0.937),
+            Inches(3.18 * (1.12 if stretch_logo else 1.0)),
+            Inches(5.836),
+        )
+        ids.append(
+            {"frame": frame.shape_id, "title": title.shape_id, "pic": pic.shape_id}
+        )
+    deck = tmp_path / "aes-deck.pptx"
+    prs.save(str(deck))
+    return deck, ids
+
+
+def _aes_spec(tmp_path: Path, ids: list[dict]) -> Path:
+    aesthetics = {
+        "logo_bbox_ref": [0.76, 0.937, 3.18, 5.836],
+        "logo_aspect_tol": 0.01,
+        "logo_bbox_tol_in": 0.02,
+        "frame_geom": {"prst": "roundRect", "adj": 3000, "adj_tol": 500},
+        "frame_top": 0.94,
+        "frame_top_tol_in": 0.02,
+        "title_left": 0.30,
+        "title_right_formula": {"slope": 0.34, "intercept": 1.069, "tol_in": 0.1},
+    }
+    doc = {
+        "invariants": {"aesthetics": aesthetics},
+        "pages": [
+            {"page": i + 1, "titles": [{"shape": ids[i]["title"]}]}
+            for i in range(len(ids))
+        ],
+    }
+    p = tmp_path / "aes-spec.yaml"
+    p.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    return p
+
+
+def test_aesthetics_compliant_deck_passes(tmp_path):
+    deck, ids = _aes_deck(tmp_path)
+    rep = slides_audit.audit_deck(deck, _aes_spec(tmp_path, ids))
+    assert rep.ok, rep.summary()
+    assert all(i.status == "pass" for i in rep.items), rep.summary()
+    names = {i.name.split(" shape=")[0] for i in rep.items}
+    for label in ("徽标 p1", "徽标 p2", "外框样式 p1", "上缘 p1", "标题边距 p1"):
+        assert label in names, rep.summary()
+    assert not any(i.name.startswith("标题公式") for i in rep.items)
+
+
+def test_aesthetics_logo_horizontal_stretch_fails(tmp_path):
+    """徽标横向拉伸 12% → 宽高比判 FAIL。"""
+    deck, ids = _aes_deck(tmp_path, stretch_logo=True)
+    rep = slides_audit.audit_deck(deck, _aes_spec(tmp_path, ids))
+    assert any(
+        i.name == "徽标 p1" and i.status == "fail" and "宽高比" in i.detail
+        for i in rep.items
+    ), rep.summary()
+
+
+def test_aesthetics_frame_prst_rect_fails(tmp_path):
+    """外框 prstGeom=rect → 外框样式判 FAIL。"""
+    deck, ids = _aes_deck(tmp_path, frame_shape=MSO_SHAPE.RECTANGLE)
+    rep = slides_audit.audit_deck(deck, _aes_spec(tmp_path, ids))
+    assert any(
+        i.name.startswith("外框样式 p1")
+        and i.status == "fail"
+        and "prst=rect" in i.detail
+        for i in rep.items
+    ), rep.summary()
+
+
+def test_aesthetics_frame_top_offset_fails(tmp_path):
+    """粗外框上缘偏离 frame_top → 上缘判 FAIL。"""
+    deck, ids = _aes_deck(tmp_path, frame_top=1.0)
+    rep = slides_audit.audit_deck(deck, _aes_spec(tmp_path, ids))
+    assert any(
+        i.name.startswith("上缘 p1") and i.status == "fail" for i in rep.items
+    ), rep.summary()
+
+
+def test_aesthetics_title_left_offset_fails(tmp_path):
+    """标题 left 偏移 → 标题边距判 FAIL。"""
+    deck, ids = _aes_deck(tmp_path, shift_title=True)
+    rep = slides_audit.audit_deck(deck, _aes_spec(tmp_path, ids))
+    assert any(
+        i.name.startswith("标题边距 p1") and i.status == "fail" and "left" in i.detail
+        for i in rep.items
+    ), rep.summary()
+
+
+def test_aesthetics_absent_adds_no_rows(tmp_path):
+    """空 aesthetics 节不新增任何行（无节 spec 零回归）。"""
+    deck, ids = _deck(tmp_path)
+    base = slides_audit.audit_deck(deck, _spec(tmp_path, ids))
+    doc = yaml.safe_load(_spec(tmp_path, ids).read_text(encoding="utf-8"))
+    doc["invariants"] = {"aesthetics": {}}
+    p = tmp_path / "spec-empty-aes.yaml"
+    p.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    got = slides_audit.audit_deck(deck, p)
+    assert [(i.name, i.status, i.detail) for i in base.items] == [
+        (i.name, i.status, i.detail) for i in got.items
+    ]
