@@ -17,6 +17,7 @@ def test_visual_volume_has_split_rules():
     md = (REF / "plan-decomposition-visual.md").read_text(encoding="utf-8")
     for token in ("每幅子图一单", "每页一单", "每幅一单", "缺陷清单", "视觉检验量"):
         assert token in md, token
+    assert "机械读数" in md and "索引去建议化" in md, "返工 3 轮教义增补缺失"
     assert len(md.encode("utf-8")) <= 8192
 
 

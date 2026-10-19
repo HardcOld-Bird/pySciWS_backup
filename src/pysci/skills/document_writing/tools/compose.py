@@ -20,6 +20,7 @@ LLM 直接调用，无需了解底层模块实现。
     slides geometry  只读几何体检（遮挡/越界/互叠 + 预设三项：标题形态/框宽/图片描边）
     slides focus-anim 按学院预设注入焦点块动画 timing（首块自动、其余单击）
     slides layout    排版机械判据（焦点块标题对齐 / 分焦点块引用框规则）
+    slides audit     按 deck-spec 机械审计（装饰/字体全槽/图槽/引用框/标题公式）
     verify <pdf>     把 PDF 渲染成 PNG，供 LLM「看图」校对版式
 
 用法（在项目根目录）::
@@ -631,6 +632,22 @@ def cmd_slides_geometry(args: argparse.Namespace) -> int:
         return 1
     print(rep.as_json() if args.json else rep.summary())
     # 默认**只报告**（版面硬伤需人判读，避免误报当闸）；--strict 才据违规置非零退出码。
+    return 1 if (args.strict and not rep.ok) else 0
+
+
+def cmd_slides_audit(args: argparse.Namespace) -> int:
+    from . import slides_audit
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides audit] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        rep = slides_audit.audit_deck(src, args.spec)
+    except (OSError, ValueError) as exc:
+        print(f"[slides audit] {exc}", file=sys.stderr)
+        return 2
+    print(rep.as_json() if args.json else rep.summary())
     return 1 if (args.strict and not rep.ok) else 0
 
 
@@ -1253,6 +1270,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--strict", action="store_true", help="有不通过项即退出码非 0（默认只报告）"
     )
     sp.set_defaults(func=cmd_slides_layout)
+
+    sp = slidessub.add_parser(
+        "audit",
+        help="按 deck-spec 机械审计（装饰/字体全槽/图槽/引用框/标题公式）",
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument("--spec", required=True, help="deck-spec YAML")
+    sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
+    sp.add_argument(
+        "--strict", action="store_true", help="有 FAIL 即退出码非 0（默认只报告）"
+    )
+    sp.set_defaults(func=cmd_slides_audit)
 
     # --- docx 子命令组 ---
     docx = sub.add_parser("docx", help="DOCX 读写（read/from-markdown/add/marks）")

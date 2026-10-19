@@ -94,6 +94,12 @@ compose slides layout '<deck.pptx>' --page 3 \
 - 取舍：①焦点块轮廓饱满 / ②同级间距一致性**本期未实现**——需显式块分组与递归切分语义，
   当前 deck 未暴露组结构，硬判误报率高；没给 ID 的判据只打印「跳过」，不臆造读数。
 
+## deck-spec 审计
+
+`compose slides audit '<deck>' --spec <spec.yaml>`：装饰层指纹 / 字体全槽（latin+ea+cs+
+panose）/ 图槽内容指纹 / 引用框 / 标题公式逐项 PASS/FAIL；spec 形态、切片约定与字体
+API 见 `slides-audit.md`。
+
 ## 图像裁剪（置入前去刊头/图注）
 
 ```
