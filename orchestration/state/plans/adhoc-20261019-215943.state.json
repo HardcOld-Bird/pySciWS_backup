@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261019-215943",
+  "created": "2026-10-19T21:59:43+08:00",
+  "goal": "adhoc：orchestration/state/plans/rework-tb-20261019-205524-ppt-4.rv",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261019-215943-adhoc-20261019-215943-s1",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-205524-ppt-4.rv2.task.md",
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-19T22:01:45+08:00"
+}

@@ -1,0 +1,9 @@
+id: adhoc-20261019-215943
+goal: adhoc：orchestration/state/plans/rework-tb-20261019-205524-ppt-4.rv
+steps:
+- id: s1
+  member: reviewer
+  brief: 见任务书
+  dirs:
+  - data/大任务/5_开题PPT
+  review: false
