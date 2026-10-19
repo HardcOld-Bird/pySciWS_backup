@@ -44,3 +44,17 @@
 - LibreOffice 在 `D:/XiGPrograms/libreOffice/base/program/soffice`（非默认安装路径，
   `which soffice` 找不到，需用绝对路径）；本机**无** `olefile`/`textract`/`catdoc`/`wvText`。
 - 图表/流程图页的文本层只给零散节点词，箭头逻辑无法还原——如实标注，勿臆测。
+
+## 图源索引事实（批 3，2026-10-19）
+
+- Light Sci. Appl. 15, 375 (2026) 全文第一张概念图 = 提取 `fig5.png`（原文 Fig.1）；
+  草稿 p9 的 ω±1 边带图与 ε(t)=ε(t+T) 图分别是其面板 a/b；`fig3.png` 已重提为
+  Fig.7 单图（原为整页双栏抓取）。
+- Nat. Commun. 17, 7079 (2026) 草稿 p9 的声子时间晶体图 = 提取 `fig2.png`（原文 Fig.1）。
+- Nat. Photonics 14, 383 (2020) 蓝色实验图 = `fig3.png` 面板 a；去下部 b 面板用
+  `crop-img --bottom-ratio 0.419`（3103×3591 → 3103×2086）。`fig5.png` 已重提补全
+  panel a–e（bbox `[42,100,552,401]`，4250×2509）。
+- Phys. Rev. Applied 25, 054054 (2026)：`fig7.png` = 原文 FIG.1（空间/时间 EP 对比，
+  2026-10-19 补提，2109×1084，草稿 p9 pic1 同款）；`fig2.png`=FIG.6、`fig8.png`=FIG.7。
+- PRL 123, 214302 (2019)：`fig3.png` = 原文 Fig.1（2026-10-19 补提，1859×959）；
+  fig1=Fig.4、fig2=Fig.3，Fig.2 仍缺。
