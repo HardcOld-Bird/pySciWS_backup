@@ -118,3 +118,58 @@ def test_command_surface_documents_plan_edit():
     md = CMDSURF.read_text(encoding="utf-8")
     assert "plan edit" in md
     assert "重排折行" in md  # 明示折行事实（criteria：文档/[NEXT] 明示）
+
+
+# ---------------------------------------------------------------------------
+# 叶子简写（tb-3 R4 L.l3 F5）：--step f3 → B.f3；错误列表给真实路径
+# ---------------------------------------------------------------------------
+NESTED_PLAN = """id: pn
+goal: demo
+steps:
+  - id: A
+    mode: serial
+    brief: 分析
+    children:
+      - id: a1
+        kind: self
+        brief: 分析叶
+  - id: B
+    mode: serial
+    brief: 返工
+    children:
+      - id: f1
+        member: figure
+        brief: 图一
+      - id: f2
+        member: figure
+        brief: 图二
+"""
+
+
+@pytest.fixture
+def nested_plan(qface, tmp_path):
+    p = tmp_path / "plans" / "pn.plan.yaml"
+    p.write_text(NESTED_PLAN, encoding="utf-8")
+    return "pn"
+
+
+def test_edit_accepts_short_leaf_id(nested_plan):
+    assert (
+        orch.main(["plan", "edit", nested_plan, "--step", "f2", "--brief", "新图二"])
+        == 0
+    )
+    assert _leaf(nested_plan, "B.f2")["brief"] == "新图二"
+
+
+def test_edit_unknown_step_lists_full_leaf_paths(nested_plan, capsys):
+    rc = orch.main(["plan", "edit", nested_plan, "--step", "zz", "--brief", "x"])
+    out = capsys.readouterr().out
+    assert rc == 2 and "无环节 zz" in out and "B.f2" in out
+
+
+def test_reassign_accepts_short_leaf_id(nested_plan):
+    rc = orch.main(
+        ["plan", "reassign", nested_plan, "--step", "f2", "--member", "devops"]
+    )
+    assert rc == 0
+    assert _leaf(nested_plan, "B.f2")["member"] == "devops"

@@ -866,6 +866,39 @@ def _title_n_warning(rule: dict, pat: re.Pattern[str], body: str) -> str | None:
     return f"{tag}{hint}：" + "；".join(bad[:5])
 
 
+#: 几何条款的溯源标注（F3，backlog/tb-3 R4 L.l3）：显式来源词、schema/代码路径、
+#: 常量名或含路径/赋值/常量的行内代码。**不含裸反引号**——`` `f2` `` 不是来源，
+#: 否则任何带环节名的行都会被误判为「已溯源」。
+_GEOMETRY_SOURCED_DEFAULT = (
+    r"源[：:]|来源|出处|依据|批语|schema|SCHEMA|SCAN_[A-Z0-9_]+"
+    r"|`[^`\n]*(?:/|\.|=|SCAN_)[^`\n]*`|\.(?:json|py|md|yaml|mph)(?![A-Za-z])"
+)
+
+
+def _geometry_sourced_warning(
+    rule: dict, pat: re.Pattern[str], body: str
+) -> str | None:
+    """几何量词所在行（含折行续行）无溯源标注 → 告警。"""
+    try:
+        sourced = re.compile(rule.get("sourced") or _GEOMETRY_SOURCED_DEFAULT)
+    except re.error:
+        return None
+    lines = body.splitlines()
+    bad: list[str] = []
+    for i, line in enumerate(lines):
+        if not pat.search(line):
+            continue
+        window = line + "\n" + (lines[i + 1] if i + 1 < len(lines) else "")
+        if sourced.search(window):
+            continue
+        bad.append(f"L{i + 1}: {line.strip()[:70]}")
+    if not bad:
+        return None
+    tag = f"[{rule['id']}] " if rule.get("id") else ""
+    hint = rule.get("hint", "几何条款须附实测值或权威源路径")
+    return f"{tag}{hint}（{'；'.join(bad[:5])}）"
+
+
 def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
     """扫任务书正文，返回命中的告警（空=干净）。**告警不阻断**。
 
@@ -885,6 +918,10 @@ def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
     - ``title_n: true``（标题 n 实测，backlog 20261020-000717-reviewer）：``re`` 第 1 捕获组
       为标题、第 2 为声明的 n；n 须等于标题的**非空白字符数**（markdown 强调符不计），
       否则告警并给出实测值与应得右缘。防任务书笔误把下游宽度带偏。
+    - ``geometry_sourced: true``（既定几何溯源，tb-3 R4 L.l3 F3）：逐行检测几何量词
+      （cm/mm/m、±角度、边长/近边/半径/菱形等）；该行（含折行续行）须带溯源标注
+      （源/出处/批语、schema/代码路径、常量名或含路径/赋值的行内代码），否则告警。
+      ``sourced`` 可覆盖默认溯源正则。
     """
     warnings: list[str] = []
     for rule in load_lint_rules():
@@ -904,6 +941,11 @@ def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
             continue
         if rule.get("title_n"):
             warn = _title_n_warning(rule, pat, body)
+            if warn:
+                warnings.append(warn)
+            continue
+        if rule.get("geometry_sourced"):
+            warn = _geometry_sourced_warning(rule, pat, body)
             if warn:
                 warnings.append(warn)
             continue
