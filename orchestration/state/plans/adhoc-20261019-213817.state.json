@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261019-213817",
+  "created": "2026-10-19T21:38:17+08:00",
+  "goal": "adhoc：orchestration/state/plans/adhoc-frame-bottom.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "writing-20261019-213817-adhoc-20261019-213817-s1",
+      "task_file": "orchestration/state/plans/adhoc-frame-bottom.task.md",
+      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-19T21:39:17+08:00"
+}
