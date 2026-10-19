@@ -20,14 +20,19 @@ pages:
       - {role: 胶囊, shapes: [9], slots: {latin: {typeface: 汉仪大宋简},
                                          ea: {typeface: 汉仪大宋简}}}
       - {role: 正文, shapes: [13, 14]}
-    slots:                            # 变量槽位：图槽内容指纹+原文图号+来源+裁切
+    placeholders:                     # 草稿占位图指纹：区分「草稿残留」与成品图
+      - {md5: "<草稿图 md5>"}
+    slots:                            # 变量槽位：内容指纹+顺序+原文图号+来源+裁切
       - shape: 8
+        id: p3-s1                     # 可选：审计行的可读标签
+        order: 1                      # 可选：相对顺序（按 bbox 机械校验）
         figure_no: "Fig. 7"
         anchor: "RPP 86 Fig.7 场分布"
         md5: "<源图/内嵌图相同 md5>"
         px: [2150, 2754]
         source: "../文献图片/第6页-.../fig7.png"
-        crop: {top: 0, bottom: 0}
+        crop: {note: "2080×1060；自 orig.png（4437×5827）裁 (2520,3600,4600,4660)"}
+        # 数值口径（a:srcRect，1/1000 %）亦可：crop: {l: 49515, b: 7343}
     titles:  [{shape: 6}]             # 公式：w = 0.34n + 0.55（algn=dist）
     capsules: [{shape: 9, cite_chars: 3}]  # c=方括号内字符数，不含 []
     refs:    [{ref: 30, anchor: 5}]   # 复用 slides layout 引用框判据
@@ -50,6 +55,14 @@ compose slides audit '<deck.pptx>' --spec deck-spec.yaml [--json] [--strict]
 - 装饰：按 `name` 或 `box_in`（±tol）匹配形状；缺失/错位 → FAIL。
 - 字体：每个 run 读 `a:latin/a:ea/a:cs`（含 panose 属性）；缺槽或 typeface 不符 → FAIL。
 - 图槽：目标必须为图片；内嵌 md5 与 `source` 文件 md5 一致、`px` 一致；否则 FAIL。
+- 图槽数量：成品内容图数（排除透明装饰图与 `placeholders` 草稿残留）须等于 `slots` 条数；
+  未登记成品图或缺槽形状 → FAIL。给了 `placeholders` 时同时核绑定（同草稿图不得超量绑定）。
+- 图槽顺序：给了 `order` 的槽按 bbox 分列（x 重叠 >30% 同列）——列内 top→bottom 的 order
+  递增、列间左→右首项 order 递增；不强制全页全局序列。中列上下对换、左中右反转 → FAIL。
+  未给 `order` 或槽缺 bbox → 该页不出顺序行。
+- 图槽裁切：`crop.note` 自洽——「输出 W×H」=「裁 (x0,y0,x1,y1)」的宽高、裁框在「源 W×H」
+  内、内嵌 px = 输出尺寸；注记含「去边」时按两步处理以输出尺寸为准。或 `crop: {l,t,r,b}`
+  逐值对 `a:srcRect`（1/1000 %）。未给 `crop` → 不出裁切行。
 - 引用框：委托 `slides layout`（左缘/行数/多框上缘下缘）；标题/胶囊：框宽公式 + `algn=dist`。
 - 动画：`<p:timing>` 存在、首块 `onBegin`、`p:seq nextAc="seek"`。
 - 退出码：默认只报告；`--strict` 有 FAIL 即 1；spec/文件错误 2。
