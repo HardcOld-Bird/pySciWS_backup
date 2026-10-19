@@ -212,3 +212,133 @@ def test_audit_cli_strict_and_json(tmp_path, capsys):
 
     data = json.loads(capsys.readouterr().out)
     assert data["failures"] >= 1 and data["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# A/B/C：绑定一致性 / 位置与文本判据 / 注记新鲜度（L.l3 三工单）
+# ---------------------------------------------------------------------------
+def _box_in(shape) -> list[float]:
+    return [
+        round(shape.left / 914400, 3),
+        round(shape.top / 914400, 3),
+        round((shape.left + shape.width) / 914400, 3),
+        round((shape.top + shape.height) / 914400, 3),
+    ]
+
+
+def _mutated_spec(tmp_path, ids, mutate) -> Path:
+    doc = yaml.safe_load(_spec(tmp_path, ids).read_text(encoding="utf-8"))
+    mutate(doc["pages"][0], ids)
+    p = tmp_path / "spec-mut.yaml"
+    p.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    return p
+
+
+def test_duplicate_placeholder_binding_fails(tmp_path):
+    deck, ids = _deck(tmp_path)
+    page = {
+        "page": 1,
+        "placeholders": [{"md5": "x"}],
+        "slots": [
+            {"shape": ids["title"], "placeholder": {"md5": "x"}},
+            {"shape": ids["cap"], "placeholder": {"md5": "x"}},
+        ],
+    }
+    p = tmp_path / "spec-dup.yaml"
+    p.write_text(yaml.safe_dump({"pages": [page]}), encoding="utf-8")
+    rep = slides_audit.audit_deck(deck, p)
+    assert any(
+        i.name.startswith("绑定 p1") and i.status == "fail" for i in rep.items
+    ), rep.summary()
+
+
+def test_semantic_source_anchor_mismatch_is_manual(tmp_path):
+    deck, ids = _deck(tmp_path)
+
+    def mutate(page, ids):
+        page["slots"][0]["anchor"] = "PRL 123 Fig.2 三面板"
+        page["slots"][0]["source"] = (
+            "文献图片/第5页-异常点-NatMater18-783-2019/fig7.png"
+        )
+
+    # 该来源不存在于 tmp_path 相对面 → 会同时报来源缺失；语义提示先于内容检查
+    rep = slides_audit.audit_deck(deck, _mutated_spec(tmp_path, ids, mutate))
+    assert any(
+        "绑定存疑" in i.name and "NatMater" in i.detail and "PRL" in i.detail
+        for i in rep.items
+    )
+
+
+def test_cyclic_rotation_is_suspected_and_ack_silences(tmp_path):
+    deck, ids = _deck(tmp_path)
+
+    def page_doc(ack: bool) -> dict:
+        slots = [
+            {"shape": ids["title"], "placeholder": {"md5": "b"}},
+            {"shape": ids["cap"], "placeholder": {"md5": "c"}},
+            {"shape": ids["body"], "placeholder": {"md5": "a"}},
+        ]
+        p = {
+            "page": 1,
+            "placeholders": [{"md5": "a"}, {"md5": "b"}, {"md5": "c"}],
+            "slots": slots,
+        }
+        if ack:
+            p["binding_ack"] = True
+        return p
+
+    for ack, expect in ((False, True), (True, False)):
+        p = tmp_path / f"spec-rot-{ack}.yaml"
+        p.write_text(yaml.safe_dump({"pages": [page_doc(ack)]}), encoding="utf-8")
+        rep = slides_audit.audit_deck(deck, p)
+        got = any("绑定错位疑似" in i.name for i in rep.items)
+        assert got is expect, rep.summary()
+
+
+def test_expect_box_pass_and_fail(tmp_path):
+    deck, ids = _deck(tmp_path)
+    prs = Presentation(str(deck))
+    pic = next(sh for sh in prs.slides[0].shapes if sh.shape_id == ids["pic"])
+    good = _box_in(pic)
+
+    def mutate(page, ids):
+        page["slots"][0]["expect_box"] = good
+        page["slots"][0]["box_tol_in"] = 0.05
+
+    rep = slides_audit.audit_deck(deck, _mutated_spec(tmp_path, ids, mutate))
+    assert any(i.name.startswith("位置") and i.status == "pass" for i in rep.items)
+
+    def mutate_bad(page, ids):
+        page["slots"][0]["expect_box"] = [0.0, 0.0, 1.0, 1.0]
+
+    rep_bad = slides_audit.audit_deck(deck, _mutated_spec(tmp_path, ids, mutate_bad))
+    assert any(i.name.startswith("位置") and i.status == "fail" for i in rep_bad.items)
+
+
+def test_expect_text_pass_and_fail(tmp_path):
+    deck, ids = _deck(tmp_path)
+
+    def mutate_ok(page, ids):
+        page["slots"].append({"shape": ids["title"], "expect_text": "研究"})
+
+    rep = slides_audit.audit_deck(deck, _mutated_spec(tmp_path, ids, mutate_ok))
+    assert any(i.name.startswith("文本") and i.status == "pass" for i in rep.items)
+
+    def mutate_bad(page, ids):
+        page["slots"].append({"shape": ids["title"], "expect_text": "不存在的文字"})
+
+    rep_bad = slides_audit.audit_deck(deck, _mutated_spec(tmp_path, ids, mutate_bad))
+    assert any(i.name.startswith("文本") and i.status == "fail" for i in rep_bad.items)
+
+
+def test_stale_note_hint_when_md5_matches(tmp_path):
+    deck, ids = _deck(tmp_path)
+
+    def mutate(page, ids):
+        page["slots"][0]["note"] = "批语：待换"
+
+    rep = slides_audit.audit_deck(deck, _mutated_spec(tmp_path, ids, mutate))
+    assert any("注记过期" in i.name and i.status == "manual" for i in rep.items), (
+        rep.summary()
+    )
+    assert rep.ok, "注记过期只是提示，不计 FAIL"

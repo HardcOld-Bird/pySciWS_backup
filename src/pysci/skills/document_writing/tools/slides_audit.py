@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -193,45 +194,162 @@ def _check_fonts(slide: Any, entry: dict[str, Any], page: int) -> list[AuditItem
     return out
 
 
+#: 注记待办词（槽修好后仍留这些词 → 「注记过期」提示）。
+_TODO_WORDS: tuple[str, ...] = ("待换", "待补", "判 ✗", "待核对", "待回填", "需核对")
+
+#: 文章种类指纹（source 路径 vs anchor 语义配对提示）。
+_ARTICLE_KINDS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("RPP", re.compile(r"RepProgPhys|Rep\.?\s*Prog|RPP", re.I)),
+    ("NatMater", re.compile(r"NatMater|Nat\.?\s*Mater", re.I)),
+    ("PRL", re.compile(r"PhysRevLett|Phys\.?\s*Rev\.?\s*Lett|PRL", re.I)),
+    (
+        "PRApplied",
+        re.compile(r"PhysRevApplied|Phys\.?\s*Rev\.?\s*Appl|PRApplied", re.I),
+    ),
+    ("CommunPhys", re.compile(r"CommunPhys|Commun\.?\s*Phys", re.I)),
+    ("NatCommun", re.compile(r"NatCommun|Nat\.?\s*Commun", re.I)),
+    ("NatPhotonics", re.compile(r"NatPhotonics|Nat\.?\s*Photonics", re.I)),
+    ("NaturePhys", re.compile(r"NaturePhys|Nature\s*Phys", re.I)),
+    ("LightSciAppl", re.compile(r"LightSciAppl|Light\s*Sci", re.I)),
+    ("Science", re.compile(r"\bScience\d|Science\s*\d{3}", re.I)),
+)
+
+
+def _article_kind(text: str) -> str:
+    for name, pat in _ARTICLE_KINDS:
+        if pat.search(text or ""):
+            return name
+    return ""
+
+
+def _semantic_mismatch(slot: dict[str, Any]) -> str:
+    """source 文章种类与 anchor 文章名冲突时的提示（都判不出种类 → 空串）。"""
+    sk = _article_kind(str(slot.get("source") or ""))
+    ak = _article_kind(str(slot.get("anchor") or ""))
+    if sk and ak and sk != ak:
+        return f"source 文章={sk}，anchor 文章={ak}"
+    return ""
+
+
+def _slot_text(shape: Any) -> str:
+    try:
+        return "".join(r.text for p in shape.text_frame.paragraphs for r in p.runs)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _check_slot(
     spec_file: Path, slide: Any, slot: dict[str, Any], page: int
-) -> AuditItem:
+) -> list[AuditItem]:
+    """一个图槽的多项判据：内容指纹 / 位置 / 文本 / 注记新鲜度。"""
     sid = int(slot.get("shape") or 0)
     label = f"图槽 p{page} shape={sid} {slot.get('figure_no') or ''}".strip()
     sh = _shape_on(slide, sid)
     if sh is None:
-        return AuditItem(label, "fail", "未找到图槽形状")
-    try:
-        blob = sh.image.blob
-        px = list(sh.image.size)
-    except Exception:  # noqa: BLE001
-        return AuditItem(label, "fail", "目标不是图片")
-    want = str(slot.get("md5") or "").lower()
-    source = slot.get("source")
-    src_md5 = ""
-    if source:
-        src_path = Path(str(source))
-        if not src_path.is_absolute():
-            src_path = spec_file.parent / src_path
-        if not src_path.exists():
-            return AuditItem(label, "fail", f"来源文件不存在：{src_path}")
-        src_md5 = _md5(src_path.read_bytes())
-        want = want or src_md5
-    got = _md5(blob)
-    if want and got != want:
-        return AuditItem(label, "fail", f"md5 {got[:12]}… ≠ spec {want[:12]}…")
-    if src_md5 and got != src_md5:
-        return AuditItem(label, "fail", "内嵌图与来源文件 md5 不一致")
-    want_px = slot.get("px")
-    if want_px and [int(x) for x in want_px] != [int(x) for x in px]:
-        return AuditItem(label, "fail", f"像素 {px} ≠ spec {want_px}")
-    extra = " / ".join(str(slot[k]) for k in ("anchor", "figure_no") if slot.get(k))
-    crop = slot.get("crop")
-    if crop:
-        extra += f" / crop={crop}"
-    return AuditItem(
-        label, "pass", f"md5 {got[:12]}… px {px}" + (f"（{extra}）" if extra else "")
-    )
+        return [AuditItem(label, "fail", "未找到图槽形状")]
+    items: list[AuditItem] = []
+    note = str(slot.get("note") or "")
+
+    expect_text = slot.get("expect_text")
+    if expect_text:
+        try:
+            rx = re.compile(str(expect_text))
+        except re.error as exc:
+            items.append(AuditItem(f"文本 {label}", "fail", f"expect_text 非法：{exc}"))
+        else:
+            text = _slot_text(sh)
+            ok = bool(rx.search(text))
+            items.append(
+                AuditItem(
+                    f"文本 {label}",
+                    "pass" if ok else "fail",
+                    f"regex {expect_text!r} "
+                    + (f"命中 {text[:40]!r}" if ok else f"未命中（{text[:40]!r}）"),
+                )
+            )
+
+    if slot.get("expect_box"):
+        try:
+            want = [float(x) for x in slot["expect_box"]]
+            tol = float(slot.get("box_tol_in", 0.05))
+            got = _box(sh)
+        except (TypeError, ValueError):
+            items.append(AuditItem(f"位置 {label}", "fail", "expect_box 格式错误"))
+        else:
+            ok = len(want) == 4 and all(abs(a - b) <= tol for a, b in zip(got, want))
+            items.append(
+                AuditItem(
+                    f"位置 {label}",
+                    "pass" if ok else "fail",
+                    f"bbox {got} "
+                    + ("≈" if ok else "≠")
+                    + f" spec {want}（tol {tol}）",
+                )
+            )
+
+    md5_ok: bool | None = None
+    if any(slot.get(k) for k in ("md5", "source", "px")):
+        try:
+            blob = sh.image.blob
+            px = list(sh.image.size)
+        except Exception:  # noqa: BLE001
+            items.append(AuditItem(label, "fail", "目标不是图片"))
+        else:
+            want = str(slot.get("md5") or "").lower()
+            source = slot.get("source")
+            src_md5 = ""
+            if source:
+                src_path = Path(str(source))
+                if not src_path.is_absolute():
+                    src_path = spec_file.parent / src_path
+                if not src_path.exists():
+                    items.append(
+                        AuditItem(label, "fail", f"来源文件不存在：{src_path}")
+                    )
+                    return items
+                src_md5 = _md5(src_path.read_bytes())
+                want = want or src_md5
+            got = _md5(blob)
+            md5_ok = (not want or got == want) and (not src_md5 or got == src_md5)
+            if not md5_ok:
+                why = (
+                    f"md5 {got[:12]}… ≠ spec {want[:12]}…"
+                    if want and got != want
+                    else "内嵌图与来源文件 md5 不一致"
+                )
+                items.append(AuditItem(label, "fail", why))
+            else:
+                want_px = slot.get("px")
+                if want_px and [int(x) for x in want_px] != [int(x) for x in px]:
+                    md5_ok = False
+                    items.append(
+                        AuditItem(label, "fail", f"像素 {px} ≠ spec {want_px}")
+                    )
+                else:
+                    extra = " / ".join(
+                        str(slot[k]) for k in ("anchor", "figure_no") if slot.get(k)
+                    )
+                    crop = slot.get("crop")
+                    if crop:
+                        extra += f" / crop={crop}"
+                    items.append(
+                        AuditItem(
+                            label,
+                            "pass",
+                            f"md5 {got[:12]}… px {px}"
+                            + (f"（{extra}）" if extra else ""),
+                        )
+                    )
+
+    if md5_ok and any(w in note for w in _TODO_WORDS):
+        items.append(
+            AuditItem(
+                f"注记过期 {label}",
+                "manual",
+                f"note 含待办词但 md5 已与 spec 一致——请刷新注记（{note[:40]}）",
+            )
+        )
+    return items
 
 
 def _check_formula(slide: Any, entry: dict[str, Any], *, capsule: bool) -> AuditItem:
@@ -314,8 +432,54 @@ def audit_deck(pptx: str | Path, spec: str | Path) -> AuditReport:
             rep.items.append(_check_decoration(slide, entry, page))
         for entry in page_spec.get("fonts") or []:
             rep.items.extend(_check_fonts(slide, entry, page))
-        for slot in page_spec.get("slots") or []:
-            rep.items.append(_check_slot(spec_path, slide, slot, page))
+        slots = page_spec.get("slots") or []
+        placeholders = page_spec.get("placeholders") or []
+        draft_count: dict[str, int] = {}
+        for ph in placeholders:
+            m = str(ph.get("md5") or "")
+            if m:
+                draft_count[m] = draft_count.get(m, 0) + 1
+        bound: dict[str, int] = {}
+        for slot in slots:
+            m = str((slot.get("placeholder") or {}).get("md5") or "")
+            if m:
+                bound[m] = bound.get(m, 0) + 1
+        for m, n in bound.items():
+            allowed = draft_count.get(m, 0)
+            if allowed == 0 or n > allowed:
+                rep.items.append(
+                    AuditItem(
+                        f"绑定 p{page}",
+                        "fail",
+                        f"placeholder.md5 {m[:12]}… 被 {n} 个槽绑定（草稿仅 {allowed} 处）",
+                    )
+                )
+        for slot in slots:
+            why = _semantic_mismatch(slot)
+            if why:
+                rep.items.append(
+                    AuditItem(f"绑定存疑 p{page} {slot.get('id')}", "manual", why)
+                )
+        # 整页循环错位：slot 占位序 == 草稿序的非平凡轮换（k=0 为正常序）
+        seq = [
+            str((s.get("placeholder") or {}).get("md5") or "")
+            for s in slots
+            if (s.get("placeholder") or {}).get("md5")
+        ]
+        draft_seq = [str(p.get("md5") or "") for p in placeholders if p.get("md5")]
+        if not page_spec.get("binding_ack") and len(seq) >= 3:
+            for k in range(1, len(draft_seq)):
+                if draft_seq[k:] + draft_seq[:k] == seq:
+                    rep.items.append(
+                        AuditItem(
+                            f"绑定错位疑似 p{page}",
+                            "manual",
+                            f"slot 占位序是草稿序的轮换（k={k}）——核对是否整页错位绑定",
+                        )
+                    )
+                    break
+        for slot in slots:
+            rep.items.extend(_check_slot(spec_path, slide, slot, page))
         for entry in page_spec.get("titles") or []:
             rep.items.append(_check_formula(slide, entry, capsule=False))
         for entry in page_spec.get("capsules") or []:
