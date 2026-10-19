@@ -835,3 +835,77 @@ def test_seed_fail_open_on_unwritable_target(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "write_bytes", _boom)
     line = dev._seed_runtime_from_main(wt)
     assert line.startswith("[!]") and "播种失败" in line
+
+
+# ---------------------------------------------------------------------------
+# 历史 merge_dirty_face 形状复盘（Tier A 20261019-111113）：
+#   ① data/taskbooks/*.state.json：组长改 status/updated，分支改 title
+#   ② 其他 pod 的 agents.md：成员并发写，分支只加索引行
+# 两形状都应走「自动搁置 → 合并 → 三路应回」，不再 rc=2。
+# ---------------------------------------------------------------------------
+def _repo_with_boxes(tmp_path: Path, files: dict[str, str]) -> tuple[Path, Path]:
+    main = tmp_path / "main"
+    main.mkdir()
+    _git(main, "init", "-q", "-b", "main")
+    for rel, content in files.items():
+        p = main / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+    _git(main, "add", "-A")
+    _git(main, "commit", "-q", "-m", "init")
+    wt = tmp_path / "wt"
+    _git(main, "worktree", "add", "-q", "-b", "wt-foo", str(wt))
+    return main, wt
+
+
+_STATE = (
+    '{\n  "title": "旧标题",\n'
+    + "".join(f'  "pad{i}": "x",\n' for i in range(6))
+    + '  "status": "new",\n  "updated": "00:00"\n}\n'
+)
+
+
+def test_auto_shelve_taskbook_state_non_overlapping(tmp_path, monkeypatch, capsys):
+    """历史形状①：分支改 title、main 未提交改 status/updated → 自动搁置后可合并、两侧都在。"""
+    rel = "data/taskbooks/tb-20261015-091655-1.state.json"
+    main, wt = _repo_with_boxes(tmp_path, {rel: _STATE})
+    b = wt / rel
+    b.write_text(_STATE.replace("旧标题", "旧标题（返工第 1 轮）"), encoding="utf-8")
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", "branch edits title")
+    (main / rel).write_text(
+        _STATE.replace('"new"', '"planning"').replace("00:00", "13:25:48"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+
+    rc = dev.cmd_worktree_merge("foo", wt)
+
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "自动搁置" in out and "已三路应回" in out
+    merged = (main / rel).read_text(encoding="utf-8")
+    assert "返工第 1 轮" in merged, "分支改动丢失"
+    assert '"planning"' in merged and "13:25:48" in merged, "main 在飞改动丢失"
+
+
+def test_auto_shelve_other_pod_agents_index_line(tmp_path, monkeypatch, capsys):
+    """历史形状②：分支只给他人 agents.md 加索引行，main 侧并发改首行 → 自动搁置合并。"""
+    rel = "orchestration/pods/reviewer/agents.md"
+    base = "# reviewer\n" + "".join(f"line {i}\n" for i in range(20))
+    main, wt = _repo_with_boxes(tmp_path, {rel: base})
+    b = wt / rel
+    b.write_text(base + "- [index] 新量表\n", encoding="utf-8")
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", "branch adds index")
+    (main / rel).write_text(
+        base.replace("# reviewer", "# reviewer（在飞）"), encoding="utf-8"
+    )
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+
+    rc = dev.cmd_worktree_merge("foo", wt)
+
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    merged = (main / rel).read_text(encoding="utf-8")
+    assert "[index] 新量表" in merged and "（在飞）" in merged
