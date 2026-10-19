@@ -1,0 +1,19 @@
+{
+  "id": "tb-20261019-205524-ppt-4",
+  "ts": "2026-10-19T20:55:24+08:00",
+  "title": "开题PPT制作（返工第 4 轮）",
+  "status": "new",
+  "source": "mirror-tui",
+  "priority": "low",
+  "improve": {
+    "infra": true,
+    "leader": true,
+    "inspector": false
+  },
+  "mode": "no_inspector",
+  "rework_of": "tb-20261019-151640-ppt-3",
+  "rework_round": 4,
+  "plan_id": "",
+  "rejections": [],
+  "updated": "2026-10-19T20:55:24+08:00"
+}
