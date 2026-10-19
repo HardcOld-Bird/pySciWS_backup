@@ -1,4 +1,5 @@
 goal: 返工：tb-20261019-105216-ppt-2
+read: plan-decomposition.md
 template: rework
 improve:
   infra: true
@@ -52,9 +53,108 @@ steps:
     brief: 重拆解返工
     role: rework_plan
   - id: b2
+    member: writing
+    brief: 预设修订（2 轮批语三组建议入「学院正式汇报预设」staging）——焦点块双路径与优先级（路径1=单多图块含标题、内部对象零描边、仅外框粗描边，全文优先；路径2=多块组合、窄边距、外框对齐）、细边框 3pt 单层/两层结构内层禁描边、文本块默认 16pt 先减字再缩号、公式一律渲染图（mpl/LaTeX）、图像占位同款硬优先+crop-img 裁剪规范
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: G1
+    mode: parallel
+    brief: 素材并行（自研素材每幅一单、标注分批、产物无交集）
+    children:
+    - id: F
+      mode: serial
+      brief: figure 自研素材链（同成员 FIFO，每幅一单）
+      children:
+      - id: f1
+        member: figure
+        brief: p4 左侧内容图——广义斯涅尔定律（透射/反射公式、界面光线、局域相位单元），matplotlib+LaTeX 学术渲染、公式字体美观（2 轮批语严重问题 2）
+        dirs:
+        - data/大任务/5_开题PPT/插图
+      - id: f2
+        member: figure
+        brief: p5 左侧内容图——PT 对称三框与算子公式，mpl+LaTeX 学术渲染
+        dirs:
+        - data/大任务/5_开题PPT/插图
+      - id: f3
+        member: figure
+        brief: p8 公式块美化图——左上角公式文本块内容重排为渲染图（mpl/LaTeX 学术样式，2 轮批语一般问题 3）
+        dirs:
+        - data/大任务/5_开题PPT/插图
+    - id: L
+      mode: serial
+      brief: lit 提取与标注链（同成员 FIFO；标注分批控单轮视觉量）
+      children:
+      - id: ls
+        member: lit
+        brief: Science 334 提取——用户已手工补 PDF（文献图片/第3页-声学超构表面-Science334-333-2011/），batch_extract 幂等提取高清图入同目录并刷新获取报告
+        dirs:
+        - data/大任务/5_开题PPT/文献图片
+      - id: la1
+        member: lit
+        brief: 图像内容标注批1（p3–p5 涉及的提取图）——逐张视觉识别写入 图像索引.md（图→内容/面板/占位同款判定），供 w3–w5 挑选；每张须 Read 目检
+        dirs:
+        - data/大任务/5_开题PPT/文献图片
+      - id: la2
+        member: lit
+        brief: 标注批2（p6–p8 涉及的提取图），同批1 判据
+        dirs:
+        - data/大任务/5_开题PPT/文献图片
+      - id: la3
+        member: lit
+        brief: 标注批3（p9–p10 涉及的提取图），同批1 判据
+        dirs:
+        - data/大任务/5_开题PPT/文献图片
+  - id: w3
+    member: writing
+    brief: p3 返工一单——焦点块路径1重造（全文推广首例）、Science 334 高清图置入替换占位、3pt/16pt/引用框按新预设、视觉识别核对（占位同款）、渲染自检
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w4
+    member: writing
+    brief: p4 返工一单——焦点块路径1重造；左侧置入 f1 渲染图（替换上轮低质手绘）；[3] PRAppl 12 换为占位符同款高清图（批语清单第1条，视觉识别核对）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w5
+    member: writing
+    brief: p5 返工一单——焦点块路径1重造；左侧置入 f2；中列 [3] Nat. Mater. 18 换占位同款；右列两图上下互换（批语清单第2/3条）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w6
+    member: writing
+    brief: p6 返工一单——焦点块路径1重造；4 篇文章图像全部换为占位符同款高清图（批语清单第4条，逐张视觉识别核对）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w7
+    member: writing
+    brief: p7 返工一单——焦点块路径1重造（左导图文本块化+右单图块并入统一外框语汇），图像无替换项
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w8
+    member: writing
+    brief: p8 返工一单——焦点块路径1重造；[6] Nat. Commun. 6 补图（参考草稿）、[7] PRL 133 第二幅（右下）换正确图；公式块置入 f3（批语清单第5条+一般问题3）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w9
+    member: writing
+    brief: p9 返工一单——焦点块路径1重造；[2] Nat. Commun. 17 换占位同款、[3] Light Sci. Appl. 15 用全文第一张概念图（批语清单第6条）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w10
+    member: writing
+    brief: p10 返工一单——焦点块路径1重造；中列 [2] Nat. Photonics 两图上下互换、蓝色实验图 crop-img 裁掉下部图表仅留上部（批语清单第7条）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: rv
+    member: reviewer
+    brief: 渲染视觉终检——逐页 Read 第3–10页 + 机械闸，对照 2 轮批语三组问题逐条核验（焦点块路径1/图像清单8组/3pt/16pt/公式渲染），出具 VERDICT
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: d2
     member: devops
-    brief: 返工生产环节
-    member_placeholder: true
+    brief: 预设修订入库——b2 的 staging 修订按 8KB 预算合入 ppt-preset-formal 真本（拆册如需）+ sync 部署
+    dirs:
+    - orchestration/skills
+    - orchestration/pods
   - id: b_last
     kind: self
     brief: 全流程报告组装
