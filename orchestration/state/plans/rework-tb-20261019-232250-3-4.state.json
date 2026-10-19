@@ -44,15 +44,19 @@
     },
     {
       "id": "B.b2",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261020-012515-rework-tb-20261019-232250-3-4-B.b2",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.b2.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.b2.task.md",
+      "session_id": "77e74664-8cf2-4408-a50c-992d4e4e67b6",
+      "kind": "result"
     },
     {
       "id": "B.sim1",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "sim-20261020-020307-rework-tb-20261019-232250-3-4-B.sim1",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.sim1.task.md"
     },
     {
       "id": "B.sim2",

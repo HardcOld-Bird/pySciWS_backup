@@ -3871,11 +3871,14 @@
       "kind": "defect",
       "success_criteria": "完整正方徽标 bbox 为 [0.09,0.937,5.836,5.836] 时徽标行 √，且宽高比 1.0 判据生效。",
       "evidence_file": "orchestration/state/suggestions/approved/20261019-223633-writing.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-20T00:03:44+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit ab1b989f）",
       "started_at": "2026-10-20T00:38:20+08:00",
-      "worktree": "20261019-223633-writing"
+      "worktree": "20261019-223633-writing",
+      "done_at": "2026-10-20T01:41:07+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261019-223633-writing"
     }
   ]
 }
