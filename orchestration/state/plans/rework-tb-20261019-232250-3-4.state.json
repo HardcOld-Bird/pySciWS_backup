@@ -107,30 +107,37 @@
     },
     {
       "id": "B.rv",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "reviewer-20261020-032552-rework-tb-20261019-232250-3-4-B.rv",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.rv.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.rv.task.md",
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
     },
     {
       "id": "B.b_last",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-232250-3-4.b_last-全流程报告.md"
     },
     {
       "id": "L.l1",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-232250-3-4.l1-摩擦反思.md"
     },
     {
       "id": "L.l2",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-232250-3-4.l2-拆解.md"
     },
     {
       "id": "L.l3",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261020-034426-rework-tb-20261019-232250-3-4-L.l3",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-232250-3-4.l3.task.md"
     }
   ],
   "completed_at": null
