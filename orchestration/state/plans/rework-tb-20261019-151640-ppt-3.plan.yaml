@@ -101,6 +101,21 @@ steps:
     brief: 终检——slides audit 全量输出为底稿 + 渲染逐页 Read + 3 轮批语 9+2 逐条核验，出具 VERDICT
     dirs:
     - data/大任务/5_开题PPT
+  - id: w_r1
+    member: writing
+    brief: rv3 返修 p5 一单——中图重提 p784 右下小图（Box1 EP/DP a/b，占位同款）替换 shape49；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w_r2
+    member: writing
+    brief: rv3 返修 p8 一单——左列下换 Science387 fig4 D/E 裁件、右列下补提 PRL133 Fig.3 重裁替换；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: rv2
+    member: reviewer
+    brief: 返修复审——3 缺陷逐条复验（占位同款目检+读数）+ 全量 audit + VERDICT
+    dirs:
+    - data/大任务/5_开题PPT
   - id: d_preset
     member: devops
     brief: 预设与教义收口——spec/audit 工作流、字体全槽、圆角结论、V5/V6 读数与去建议化规则入 ppt-preset-formal 真本（≤8KB 拆册）+ sync
