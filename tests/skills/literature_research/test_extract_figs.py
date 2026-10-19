@@ -246,3 +246,24 @@ def test_audit_warnings_do_not_block(tmp_path):
     audit = mod.audit_figures(pdf, man)
     assert audit["ok"], audit["issues"]
     assert any(i["code"] == "no-captions" for i in audit["issues"])
+
+
+def test_audit_flags_page1_uncaptioned_entry(tmp_path):
+    """首页无题注条目（旧 manifest 的刊头/作者块）要被点名。"""
+    mod = _module()
+    img = _img(tmp_path)
+    doc = fitz.open()
+    p1 = doc.new_page(width=612, height=792)
+    p1.insert_image(fitz.Rect(100, 100, 400, 400), filename=str(img))
+    pdf = _save(doc, tmp_path)
+    manifest = [
+        {
+            "fig": 1,
+            "page": 1,
+            "bbox": [100.0, 100.0, 400.0, 400.0],
+            "file": "fig1.png",
+            "figure_no": "",
+        }
+    ]
+    audit = mod.audit_figures(pdf, manifest)
+    assert any(i["code"] == "page1-uncaptioned" for i in audit["issues"])

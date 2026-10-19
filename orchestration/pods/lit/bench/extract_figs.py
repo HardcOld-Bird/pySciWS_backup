@@ -311,6 +311,14 @@ def audit_figures(
                     "detail": f"{name} p{page_no} 未关联到真题注图号",
                 }
             )
+            if page_no == 1:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "code": "page1-uncaptioned",
+                        "detail": f"{name} 在首页且无题注图号——多为刊头/作者块/图形摘要",
+                    }
+                )
 
     missing = sorted(set(captions_by_no) - manifest_nos)
     if missing:
