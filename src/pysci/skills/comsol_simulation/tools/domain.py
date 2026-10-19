@@ -46,15 +46,26 @@ def _section_lines(text: str) -> list[str] | None:
 
 
 def _value_for(lines: list[str], key: str) -> str | None:
-    """``- **键**：值`` / ``### 键`` 后的值；未出现返回 None。"""
+    """``- **键**：值`` / ``### 键`` 后的值（含缩进续行）；未出现返回 None。"""
     pat = re.compile(
         rf"^\s*(?:#{{1,6}}\s*|[-*]\s*)?(?:\*\*)?{re.escape(key)}"
         r"(?:\*\*)?\s*[:：]?\s*(.*)$"
     )
-    for line in lines:
+    for i, line in enumerate(lines):
         m = pat.match(line)
-        if m:
-            return m.group(1).strip()
+        if not m:
+            continue
+        parts = [m.group(1).strip()]
+        for nxt in lines[i + 1 :]:
+            s = nxt.strip()
+            if not s:
+                break
+            if re.match(r"^\s*(?:#{1,6}\s|[-*]\s)", nxt):
+                break
+            if not nxt.startswith((" ", "\t")):
+                break
+            parts.append(s)
+        return " ".join(p for p in parts if p)
     return None
 
 
