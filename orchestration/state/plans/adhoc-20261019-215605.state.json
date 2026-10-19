@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261019-215605",
+  "created": "2026-10-19T21:56:05+08:00",
+  "goal": "adhoc：orchestration/state/plans/adhoc-logo-srcRect.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "writing-20261019-215605-adhoc-20261019-215605-s1",
+      "task_file": "orchestration/state/plans/adhoc-logo-srcRect.task.md",
+      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-19T21:58:17+08:00"
+}
