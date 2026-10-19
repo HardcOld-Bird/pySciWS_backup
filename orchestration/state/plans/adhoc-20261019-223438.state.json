@@ -13,5 +13,6 @@
       "kind": "blocked"
     }
   ],
-  "completed_at": null
+  "completed_at": null,
+  "abandoned_at": "2026-10-19T22:46:42+08:00"
 }
