@@ -31,11 +31,12 @@
 - audit 逐 run 校验 `latin/ea/cs`（缺 `ea` 即 FAIL）；模板无 `cs` 时 spec 的
   `require_slots` 只要求实际存在的槽（通常 `latin+ea`），不虚增要求。
 
-## 4K. 粗外框圆角（R4 改判，覆盖 rv3 直角结论）
+## 4K. 粗外框直角（维持/回退结论）
 
-R4 用户批语要求「粗外框圆角」：粗外框（描边 ≥5 pt 且宽 ≥2 in）改用 `roundRect`，
-默认 `adj=3000`（暂定，用户可一句话改参重跑）。白卡/胶囊/内部对象语言不变；
-参数与复算见 `ppt-preset-formal-07-aesthetics.md` §4O。
+粗外框（描边 ≥5 pt 且宽 ≥2 in）维持 **`rect` 直角**。R4 曾按用户批语改判
+`roundRect adj=3000`，但用户 2026-10-19 口头改单裁决圆角太大，**回退直角并从预设
+移除该要求**；封面/胶囊的圆角形不在此列。参数见
+`ppt-preset-formal-07-aesthetics.md` §4O。
 
 ## 4L. V5/V6 的 PPT 语境操作化
 
@@ -74,10 +75,12 @@ R4 用户批语要求「粗外框圆角」：粗外框（描边 ≥5 pt 且宽 �
 
 | 行 | 判定 | 容差 / 失败含义 |
 |---|---|---|
-| `徽标 pN` | 首两页同 md5 或高 ≥5 in 的水印层；bbox 逐值 + 宽高比 | bbox ±0.02 in、比 ±0.01；FAIL=拉伸/移位 |
-| `外框样式 pN shape=…` | 粗外框 `prstGeom.prst` + roundRect `adj` | `adj` ±500；`adj=缺省 16667`=无 `gd`；FAIL=样式漂移 |
+| `徽标 pN` | 内容页完整 1:1 徽标（左缘 0.09）；封面/节页/尾页为宽边框特例（裁切） | bbox ±0.02 in、比 ±0.01；FAIL=拉伸/移位 |
+| `外框样式 pN shape=…` | 粗外框 `prstGeom.prst`（默认 `rect`；spec 带 `adj` 时一并校验） | `adj` ±500；FAIL=样式漂移 |
 | `上缘 pN shape=…` | 每个粗外框的 `top` | ±0.02 in；FAIL=切分起点漂移 |
 | `标题边距 pN shape=…` | `titles[].shape` 的 left + right(n) | left ±0.02、right ±0.1 in；FAIL=标题框漂移/公式过期 |
 
+- `expect_srcRect: none`：断言徽标 blipFill **无 `srcRect`**（内容页完整图，素比 1.0≈1.0）；
+  p1/p2 封面的半裁特例不适用此断言。
 - 参数只写 `invariants.aesthetics`（见 07 §4O）；改参后重跑即收敛。
 - `title_left`/`title_right_formula` 启用时，旧 `标题公式 0.34n+0.55` 行由本行接管。
