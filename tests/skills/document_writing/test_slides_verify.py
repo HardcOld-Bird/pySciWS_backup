@@ -210,3 +210,33 @@ def test_ambiguous_sibling_dirs_fail_with_candidates(tmp_path):
     rep = slides_visual.verify_pptx_render(deck)
     assert not rep.ok and any("歧义" in p for p in rep.problems), rep.problems
     assert rep.render_dir_source == "ambiguous"
+
+
+def test_single_mismatched_sibling_dir_is_skipped(tmp_path):
+    """唯一旁路目录张数不符（素材目录 `插图/` 4 张 ≠ 15 页）→ 跳过，不误报页数不符。
+
+    实案 20261019-192536-reviewer：默认 verify 把 `插图/`（4 PNG）当渲染件，
+    报「页数不符：渲染 4 页 ≠ 幻灯片 15 页」——缺渲染被伪装成版面缺陷。
+    """
+    deck = _mini_pptx(tmp_path / "deck.pptx", 2)
+    ext = tmp_path / "插图"
+    ext.mkdir()
+    for i in range(1, 5):
+        _write_png(ext / f"page-{i:03d}.png", blank=False)
+    rep = slides_visual.verify_pptx_render(deck)
+    assert not rep.ok
+    assert rep.render_dir_source == "mismatch", rep.render_dir_source
+    assert any("已跳过" in p and "插图" in p for p in rep.problems), rep.problems
+    assert not any("页数不符" in p for p in rep.problems), rep.problems
+    assert rep.png_count == 0
+
+
+def test_cli_verify_single_mismatched_bypass_is_rc1(tmp_path, capsys):
+    deck = _mini_pptx(tmp_path / "deck.pptx", 2)
+    ext = tmp_path / "插图"
+    ext.mkdir()
+    for i in range(1, 4):
+        _write_png(ext / f"page-{i:03d}.png", blank=False)
+    assert compose.main(["slides", "verify", str(deck)]) == 1
+    out = capsys.readouterr().out
+    assert "已跳过" in out and "页数不符" not in out
