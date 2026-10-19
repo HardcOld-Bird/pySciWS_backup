@@ -1,0 +1,9 @@
+id: adhoc-20261019-204823
+goal: adhoc：orchestration/state/plans/adhoc-p3-title-width.task.md
+steps:
+- id: s1
+  member: writing
+  brief: 见任务书
+  dirs:
+  - data/大任务/5_开题PPT
+  review: false
