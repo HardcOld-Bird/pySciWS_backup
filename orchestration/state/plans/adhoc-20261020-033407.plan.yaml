@@ -1,0 +1,9 @@
+id: adhoc-20261020-033407
+goal: adhoc：data/taskbooks/tb-20261019-232250-3-4.f3fix-色标近贴返修.md
+steps:
+- id: s1
+  member: figure
+  brief: 见任务书
+  dirs:
+  - data/research/1_gain_ep
+  review: false

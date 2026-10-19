@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261020-033407",
+  "created": "2026-10-20T03:34:07+08:00",
+  "goal": "adhoc：data/taskbooks/tb-20261019-232250-3-4.f3fix-色标近贴返修.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "figure-20261020-033407-adhoc-20261020-033407-s1",
+      "task_file": "data/taskbooks/tb-20261019-232250-3-4.f3fix-色标近贴返修.md"
+    }
+  ],
+  "completed_at": null
+}

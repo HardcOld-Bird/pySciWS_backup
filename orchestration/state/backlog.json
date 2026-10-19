@@ -3903,11 +3903,14 @@
       "kind": "defect",
       "success_criteria": "任务书标题 n 值按非空白字符实测登记（p14=16、p17=8、p22=9），下游按正确 n 计算右缘；避免任务书笔误造成宽度偏差。\n证据：本单 w3/w6/w11 任务书分别写 n=17/7/10，实测「理论背景：模式耦合理论（CMT）」16 字、「增益EP点的性质」8 字、「未来计划和预期成果」9 字；成品按实测值取右缘（6.509/3.789/4.129），公式均吻合。",
       "evidence_file": "orchestration/state/suggestions/approved/20261020-000717-reviewer.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-20T03:15:49+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit 872293de）",
       "started_at": "2026-10-20T03:15:52+08:00",
-      "worktree": "20261020-000717-reviewer"
+      "worktree": "20261020-000717-reviewer",
+      "done_at": "2026-10-20T03:32:29+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261020-000717-reviewer"
     }
   ]
 }
