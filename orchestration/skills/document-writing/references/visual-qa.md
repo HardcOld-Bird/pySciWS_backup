@@ -97,8 +97,8 @@ compose slides layout '<deck.pptx>' --page 3 \
 ## deck-spec 审计
 
 `compose slides audit '<deck>' --spec <spec.yaml>`：装饰层指纹 / 字体全槽（latin+ea+cs+
-panose）/ 图槽内容指纹 / 引用框 / 标题公式逐项 PASS/FAIL；spec 形态、切片约定与字体
-API 见 `slides-audit.md`。
+panose）/ 图槽内容指纹·数量·bbox 相对顺序·裁切参数 / 引用框 / 标题公式逐项 PASS/FAIL；
+spec 形态、切片约定与字体 API 见 `slides-audit.md`。
 
 ## 图像裁剪（置入前去刊头/图注）
 
