@@ -3763,11 +3763,14 @@
       "kind": "defect",
       "success_criteria": "任务白名单目录内的 Edit/Write 不再被 pod-guard 拦截；guard 启动时能把 `PYSCI_TASK_DIRS` 的实际解析结果写入日志，doctor 探针可复现「白名单内文件可写」。\n① 现象：本任务书第 5 行声明白名单 `data/大任务/5_开题PPT/文献图片/`，但 Edit 该目录下的 `图像索引.md` 被拦截：\n`pod-guard: 拦截对 D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\data\\大任务\\5_开题PPT\\文献图片\\图像索引.md 的写入——目标在 pod 与本任务白名单目录之外。`\n② 证据：同一会话内 `printf '%s\\n' \"$PYSCI_TASK_DIRS\"` 输出为空；`figures.json` 与图片由 Python 脚本写入成功（Bash 不在 guard 射程），说明路径本身在白名单内，失败点在环境变量注入/解析。\n③ 临时处置：用 `orchestration/pods/lit/bench/patch_index_refetch.py` 做精确字符串替换（每条断言唯一匹配、UTF-8、保留 LF），未扩大写范围。\n④ 期望：runner 正确注入分号分隔的绝对路径，或在 guard 内直接解析任务书的「、」分隔白名单；两者取其一并留痕。",
       "evidence_file": "orchestration/state/suggestions/approved/20261019-122007-lit.md",
-      "status": "in_progress",
+      "status": "done",
       "proposed": "2026-10-19T12:20:45+08:00",
-      "note": "",
+      "note": "drain 批量销账（commit be9b81d）",
       "started_at": "2026-10-19T12:20:48+08:00",
-      "worktree": "20261019-122007-lit"
+      "worktree": "20261019-122007-lit",
+      "done_at": "2026-10-19T12:39:46+08:00",
+      "batch_size": 1,
+      "batch_seed": "20261019-122007-lit"
     }
   ]
 }
