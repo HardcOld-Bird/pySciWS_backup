@@ -448,6 +448,46 @@ def test_aesthetics_logo_horizontal_stretch_fails(tmp_path):
     ), rep.summary()
 
 
+def test_aesthetics_logo_square_wh_ref_passes_ratio_one(tmp_path):
+    """backlog 20261019-223633：正方徽标 [0.09,0.937,5.836,5.836] → 徽标行 √、比 1.0。"""
+    deck, ids = _aes_deck(
+        tmp_path, logo_px=(200, 200), logo_box=(0.09, 0.937, 5.836, 5.836)
+    )
+    rep = slides_audit.audit_deck(
+        deck, _aes_spec(tmp_path, ids, logo_ref=[0.09, 0.937, 5.836, 5.836])
+    )
+    row = next(i for i in rep.items if i.name == "徽标 p1")
+    assert row.status == "pass", row.detail
+    assert "口径 [x,y,w,h]" in row.detail
+    assert "宽高比 1.0000 ≈ 1.0000" in row.detail
+
+
+def test_aesthetics_logo_ltrb_ref_resolves_against_shape(tmp_path):
+    """任务书 [l,t,r,b] 口径（[0.09,0.937,5.926,6.773]）按实测 bbox 解析为同框 → √。"""
+    deck, ids = _aes_deck(
+        tmp_path, logo_px=(200, 200), logo_box=(0.09, 0.937, 5.836, 5.836)
+    )
+    rep = slides_audit.audit_deck(
+        deck, _aes_spec(tmp_path, ids, logo_ref=[0.09, 0.937, 5.926, 6.773])
+    )
+    row = next(i for i in rep.items if i.name == "徽标 p1")
+    assert row.status == "pass", row.detail
+    assert "口径 [l,t,r,b]" in row.detail
+    assert "宽高比 1.0000 ≈ 1.0000" in row.detail
+
+
+def test_aesthetics_logo_ref_mismatch_fails_both_conventions(tmp_path):
+    """两种口径都对不上实测 → 仍 FAIL（口径识别不削弱断言）。"""
+    deck, ids = _aes_deck(
+        tmp_path, logo_px=(200, 200), logo_box=(0.09, 0.937, 5.836, 5.836)
+    )
+    rep = slides_audit.audit_deck(
+        deck, _aes_spec(tmp_path, ids, logo_ref=[0.09, 0.937, 5.5, 5.5])
+    )
+    row = next(i for i in rep.items if i.name == "徽标 p1")
+    assert row.status == "fail" and "口径 [x,y,w,h]" in row.detail
+
+
 def test_aesthetics_frame_prst_rect_fails(tmp_path):
     """外框 prstGeom=rect → 外框样式判 FAIL。"""
     deck, ids = _aes_deck(tmp_path, frame_shape=MSO_SHAPE.RECTANGLE)
