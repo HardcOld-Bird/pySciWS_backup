@@ -36,6 +36,12 @@
       "re": "标题「([^」\\n]+)」\\s*[（(][^）\\n]{0,80}n\\s*=\\s*(\\d+)",
       "title_n": true,
       "hint": "任务书标题 n 须按非空白字符实测登记（n = len(\"\".join(标题.split()))，右缘 = 0.34n + 1.069），禁止目测/沿用旧稿——20261020-000717-reviewer：w3/w6/w11 写 17/7/10，实测 16/8/9"
+    },
+    {
+      "id": "geometry-needs-source",
+      "re": "(?:\\d+(?:\\.\\d+)?\\s*(?:cm|mm|m)(?![A-Za-z])|±\\s*\\d+(?:\\.\\d+)?\\s*(?:°|度)|边长|近边|半径|直径|菱形|正方形)",
+      "geometry_sourced": true,
+      "hint": "条款含几何量词但无溯源标注——请附实测值与权威源（schema 键/代码行/批语出处），如「近边 0.30 m（源：field_schema.json geometry.diamonds）」；细则见 references/rework-geometry-and-final-list.md"
     }
   ]
 }

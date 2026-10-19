@@ -584,3 +584,70 @@ def test_repo_rule_title_n_engages_on_historical_typo():
     """随附规则：真实 LINT_RULES_PATH 能拦下 w6 的 n=7（实测 8）。"""
     warns = dispatch.lint_taskbook("标题「增益EP点的性质」（n=7→右缘 3.449）")
     assert any("title-n-measured" in w for w in warns)
+
+
+# ---------------------------------------------------------------------------
+# geometry-needs-source（tb-3 R4 L.l3 F3）：几何量词须带溯源标注
+# ---------------------------------------------------------------------------
+GEOM_RULE = {
+    "id": "geometry-needs-source",
+    "re": (
+        r"(?:\d+(?:\.\d+)?\s*(?:cm|mm|m)(?![A-Za-z])"
+        r"|±\s*\d+(?:\.\d+)?\s*(?:°|度)|边长|近边|半径|直径|菱形|正方形)"
+    ),
+    "geometry_sourced": True,
+    "hint": "几何条款须溯源",
+}
+
+
+def test_geometry_flags_bare_quantifier(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch, [GEOM_RULE])
+    warns = dispatch.lint_taskbook("sim2 要求 31cm 菱形包容验证。")
+    assert len(warns) == 1 and warns[0].startswith("[geometry-needs-source]")
+    assert "L1:" in warns[0]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "边长 0.31 m（源：field_schema.json geometry.diamonds）",
+        "近边 0.30 m（源：SCAN_NEAR_EDGE_M）",
+        "扫描区近边见 SCAN_NEAR_EDGE_M。",
+        "菱形尺寸见 `field_schema.py:80`。",
+        "近边 0.30 m\n（源：field_schema.json）",  # 源在折行续行
+    ],
+)
+def test_geometry_silent_when_sourced(tmp_path, monkeypatch, body):
+    _seed(tmp_path, monkeypatch, [GEOM_RULE])
+    assert dispatch.lint_taskbook(body) == [], body
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "三个焦点块间距 0.24、字号 16pt。",  # 无几何单位
+        "主瓣 45°/135° 复核。",  # 非 ±角度、无量词词
+        "行 1–2、行 3。",  # 行序不在本规则范围
+    ],
+)
+def test_geometry_silent_on_non_geometry_numbers(tmp_path, monkeypatch, body):
+    _seed(tmp_path, monkeypatch, [GEOM_RULE])
+    assert dispatch.lint_taskbook(body) == [], body
+
+
+def test_geometry_bare_backtick_is_not_a_source(tmp_path, monkeypatch):
+    """`` `f2` `` 不是来源；含路径/赋值/常量的行内代码才算。"""
+    _seed(tmp_path, monkeypatch, [GEOM_RULE])
+    warns = dispatch.lint_taskbook("菱形完整在域内（见 `f2`）。")
+    assert len(warns) == 1
+
+
+def test_repo_rule_geometry_engages_and_silences():
+    assert any(
+        "geometry-needs-source" in w
+        for w in dispatch.lint_taskbook("sim2 要求 31cm 菱形包容验证。")
+    )
+    assert not any(
+        "geometry-needs-source" in w
+        for w in dispatch.lint_taskbook("近边 0.30 m（源：SCAN_NEAR_EDGE_M）")
+    )

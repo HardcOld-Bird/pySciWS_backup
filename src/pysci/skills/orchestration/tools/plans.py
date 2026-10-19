@@ -1317,9 +1317,9 @@ def _apply_skip(plan_id: str, plan: dict, state: dict, leaf_path: str) -> int:
     一律拒绝。收尾同普通 advance：全完成则报完成，否则刷工作清单。
     """
     lm = _leaf_map(plan)
-    if leaf_path not in lm:
-        hint = "、".join(list(lm)[:8]) or "（无叶子）"
-        print(f"[!] 计划 {plan_id} 无环节 {leaf_path}；可用环节：{hint}")
+    leaf_path, err = _resolve_step(lm, leaf_path)
+    if leaf_path is None:
+        print(err)
         return 2
     row = next((s for s in state["steps"] if str(s["id"]) == leaf_path), None)
     if row is None:
@@ -2280,11 +2280,10 @@ def cmd_plan_edit(args) -> int:
         print(f"[!] 计划不存在：{plan_id}")
         return 2
     plan = _load_yaml(plan_id)
-    sid = str(getattr(args, "step", "") or "")
     leaves = _leaf_map(plan)
-    if sid not in leaves:
-        hint = "、".join(list(leaves)[:8]) or "（无叶子）"
-        print(f"[!] 计划 {plan_id} 无环节 {sid}；可用环节：{hint}")
+    sid, err = _resolve_step(leaves, str(getattr(args, "step", "") or ""))
+    if sid is None:
+        print(err)
         return 2
     leaf = leaves[sid]
     if args.brief is None and not args.append_brief and args.dirs is None:
@@ -2438,11 +2437,10 @@ def cmd_plan_split(args) -> int:
         print(f"[!] 计划不存在：{plan_id}")
         return 2
     plan = _load_yaml(plan_id)
-    sid = str(args.step or "")
     leaves = _leaf_map(plan)
-    if sid not in leaves:
-        hint = "、".join(list(leaves)[:8]) or "（无叶子）"
-        print(f"[!] 计划 {plan_id} 无环节 {sid}；可用环节：{hint}")
+    sid, err = _resolve_step(leaves, str(args.step or ""))
+    if sid is None:
+        print(err)
         return 2
     member = str(args.member or "").strip()
     brief = str(args.brief or "").strip()
