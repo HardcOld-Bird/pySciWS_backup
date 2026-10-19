@@ -162,7 +162,7 @@
       "base_url": "https://api.siliconflow.cn/v1",
       "model": "deepseek-ai/DeepSeek-V4-Pro"
     },
-    "call_timeout_s": 120,
+    "call_timeout_s": 240,
     "deadline_s": 300,
     "max_output_tokens": 8000,
     "pricing": {}
