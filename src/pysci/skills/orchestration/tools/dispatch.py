@@ -841,6 +841,31 @@ def _whitelist_warning(rule: dict, body: str) -> str | None:
     )
 
 
+#: 标题 n 实测（backlog 20261020-000717-reviewer）：``标题「…」（n=K`` 的 K 须等于标题的
+#: **非空白字符数**；markdown 强调符不计，全/半角标点照计（与 PPT 右缘公式口径一致）。
+_TITLE_EMPH_RE = re.compile(r"[*`]")
+
+
+def _title_n_warning(rule: dict, pat: re.Pattern[str], body: str) -> str | None:
+    """标题 n 与实际字符数不符 → 告警（附实测值与应得右缘，便于当场改）。"""
+    bad: list[str] = []
+    for m in pat.finditer(body):
+        title = m.group(1)
+        declared = int(m.group(2))
+        measured = len("".join(_TITLE_EMPH_RE.sub("", title).split()))
+        if declared != measured:
+            right = 0.34 * measured + 1.069
+            bad.append(
+                f"「{title}」写 n={declared}，实测 n={measured}"
+                f"（右缘 0.34n+1.069={right:.3f}）"
+            )
+    if not bad:
+        return None
+    tag = f"[{rule['id']}] " if rule.get("id") else ""
+    hint = rule.get("hint", "标题 n 值须按非空白字符实测登记")
+    return f"{tag}{hint}：" + "；".join(bad[:5])
+
+
 def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
     """扫任务书正文，返回命中的告警（空=干净）。**告警不阻断**。
 
@@ -857,6 +882,9 @@ def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
       「白名单」段时，正文点名的**改动目标**路径必须落在其内（同行动作词判「改动目标」），
       否则告警——这类路径会在派发时被 pod-guard 拦成 ``whitelist_conflict``。未声明
       白名单 → fail-open 不告警。
+    - ``title_n: true``（标题 n 实测，backlog 20261020-000717-reviewer）：``re`` 第 1 捕获组
+      为标题、第 2 为声明的 n；n 须等于标题的**非空白字符数**（markdown 强调符不计），
+      否则告警并给出实测值与应得右缘。防任务书笔误把下游宽度带偏。
     """
     warnings: list[str] = []
     for rule in load_lint_rules():
@@ -871,6 +899,11 @@ def lint_taskbook(body: str, *, plan_id: str | None = None) -> list[str]:
             continue
         if rule.get("whitelist"):
             warn = _whitelist_warning(rule, body)
+            if warn:
+                warnings.append(warn)
+            continue
+        if rule.get("title_n"):
+            warn = _title_n_warning(rule, pat, body)
             if warn:
                 warnings.append(warn)
             continue
