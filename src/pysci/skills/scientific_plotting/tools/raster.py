@@ -259,7 +259,8 @@ def compose_grid(spec: dict[str, Any]) -> GridResult:
       panel_labels       bool；自动 (a)(b)… 于每格左上（只计非空格）
       col_titles         长 cols 的标题列表（置于第 0 行各列上方）
       row_labels         长 rows 的标签列表（置于各行左侧，竖排）
-      colorbar           {cmap,vmin,vmax,label,location,axes:[name…],pad,fraction}
+      colorbar           {cmap,vmin,vmax,label,location,axes:[name…],pad,fraction}；
+                         **vmin/vmax 必填**（禁数据范围默认统一量程；多组对照各自独立 colorbar）
       suptitle           总标题
       rcparams           dict，绘制前 update 到 plt.rcParams
       gridspec_kw        dict，透传 add_gridspec（hspace/wspace 等）
@@ -296,6 +297,11 @@ def compose_grid(spec: dict[str, Any]) -> GridResult:
     cb = spec.get(
         "colorbar"
     )  # 提前：field 面板默认继承其 cmap/vmin/vmax 以保证严格一致
+    if cb and (cb.get("vmin") is None or cb.get("vmax") is None):
+        raise ValueError(
+            "共享 colorbar 必须显式给 vmin/vmax（禁数据范围默认统一量程）；"
+            "多组对照请各自独立 colorbar（field.independent_norms 生成逐组量程）"
+        )
 
     panels = spec.get("panels", []) or []
     occupied: set[tuple[int, int]] = {

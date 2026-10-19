@@ -89,3 +89,36 @@ def test_compose_grid_field_panel_strict_colorbar(tmp_path):
     res = raster.compose_grid(spec)
     assert res.field_axes and res.field_axes[0] is res.axes[0][0]
     res.close()
+
+
+# ---------------------------------------------------------------------------
+# 多组对照独立量程（禁统一量程/默认对数）
+# ---------------------------------------------------------------------------
+def test_independent_norms_per_group_linear():
+    norms = field.independent_norms(
+        {"full": np.array([0.0, 2.0]), "weak": np.array([-0.5, 0.5])}
+    )
+    from matplotlib.colors import LogNorm, Normalize
+
+    assert isinstance(norms["full"], Normalize)
+    assert not isinstance(norms["full"], LogNorm)
+    assert norms["full"].vmax == 2.0 and norms["full"].vmin == 0.0
+    assert norms["weak"].vmax == 0.5 and norms["weak"].vmin == -0.5
+    assert norms["full"].vmax != norms["weak"].vmax
+
+
+def test_independent_norms_rejects_scalar_vmax_and_unknown_group():
+    vals = {"a": np.array([0.0, 1.0])}
+    with pytest.raises(ValueError, match="逐组映射"):
+        field.independent_norms(vals, vmax=1.0)
+    with pytest.raises(ValueError, match="未知组"):
+        field.independent_norms(vals, vmax={"b": 1.0})
+
+
+def test_independent_norms_symmetric_and_override():
+    norms = field.independent_norms({"a": np.array([-3.0, 1.0])}, symmetric=True)
+    assert norms["a"].vmin == -3.0 and norms["a"].vmax == 3.0
+    norms2 = field.independent_norms(
+        {"a": np.array([0.0, 1.0])}, vmin={"a": 0.1}, vmax={"a": 0.9}
+    )
+    assert norms2["a"].vmin == 0.1 and norms2["a"].vmax == 0.9
