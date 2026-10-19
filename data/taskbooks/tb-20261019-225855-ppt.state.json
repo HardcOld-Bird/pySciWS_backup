@@ -1,0 +1,19 @@
+{
+  "id": "tb-20261019-225855-ppt",
+  "ts": "2026-10-19T22:58:55+08:00",
+  "title": "开题PPT（后半）",
+  "status": "new",
+  "source": "mirror-tui",
+  "priority": "low",
+  "improve": {
+    "infra": false,
+    "leader": true,
+    "inspector": false
+  },
+  "mode": "",
+  "rework_of": "",
+  "rework_round": 0,
+  "plan_id": "",
+  "rejections": [],
+  "updated": "2026-10-19T22:58:55+08:00"
+}
