@@ -40,6 +40,17 @@ def test_missing_key_fails():
     assert not rep["ok"] and rep["missing"] == ["覆盖率"]
 
 
+def test_wrapped_bullet_continuation_is_joined():
+    """四问值跨行（缩进续行）时，数值在续行上也要能识别。"""
+    text = GOOD.replace(
+        "- **边界适配**：外场弧用 PerfectlyMatchedBoundary（禁用 PML）；bpf 仅选空气域（域 1）。",
+        "- **边界适配**：外场弧用 PerfectlyMatchedBoundary（禁用 PML）；bpf 仅选空气域\n  （域 1），24 个管槽域均不在选择内。",
+    )
+    rep = domain.check_domain_declaration(text)
+    assert rep["ok"], rep
+    assert "24" in rep["questions"]["边界适配"]["value"]
+
+
 def test_placeholder_and_no_number_fail():
     text = GOOD.replace(
         "- **覆盖率**：超表面 8/8 周期覆盖入射面（100%，孔径 0.32m）。",
