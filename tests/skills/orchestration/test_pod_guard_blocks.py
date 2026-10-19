@@ -42,9 +42,15 @@ def run_guard(
     readonly: list[str] | None = None,
     deployed: list[str] | None = None,
     task_dirs: list[str] | None = None,
+    guard_log: str | None = None,
+    node_tmp: str | None = None,
     stdin: str | None = None,
 ) -> tuple[int, str]:
-    """以真实 PreToolUse 姿势调用 pod-guard：stdin 收 tool_use JSON，env 注入白名单。"""
+    """以真实 PreToolUse 姿势调用 pod-guard：stdin 收 tool_use JSON，env 注入白名单。
+
+    ``guard_log`` 缺省置空串＝**关闭启动日志**，避免测试往真实
+    ``orchestration/state/guard-log.jsonl`` 追加行；要验日志时传临时路径。
+    """
     env = dict(os.environ)
     if pod is not None:
         env["PYSCI_POD"] = pod
@@ -54,6 +60,12 @@ def run_guard(
     env["PYSCI_READONLY"] = ";".join(readonly or [])
     env["PYSCI_DEPLOYED_SKILLS"] = ";".join(deployed or [])
     env["PYSCI_TASK_DIRS"] = ";".join(task_dirs or [])
+    env["PYSCI_GUARD_LOG"] = guard_log if guard_log is not None else ""
+    if node_tmp is not None:
+        # Node 的 os.tmpdir() 读 TEMP/TMP：把「系统临时目录」挪走，才能让 tmp 下的
+        # fixture 真正走白名单判定（否则 tmp 兜底把所有测试写入都放行了）。
+        env["TEMP"] = node_tmp
+        env["TMP"] = node_tmp
     payload = json.dumps({"tool_input": {"file_path": file_path}})
     proc = subprocess.run(
         ["node", str(GUARD)],
@@ -185,3 +197,39 @@ def test_fail_open_on_bad_stdin_prints_trace(tmp_path):
     rc, err = run_guard(stdin="{not json", pod=str(tmp_path))
     assert rc == 0
     assert "[pod-guard fail-open]" in err
+
+
+@NODE_REQUIRED
+def test_startup_log_records_resolved_task_dirs(tmp_path):
+    """guard 启动即把 PYSCI_TASK_DIRS 的实际解析结果写日志（相对路径按项目根）。"""
+    log = tmp_path / "guard-log.jsonl"
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    fake_tmp = tmp_path / "node-tmp"
+    fake_tmp.mkdir()
+    rc, err = run_guard(
+        file_path=str(tmp_path / "data" / "x" / "note.md"),
+        pod=str(pod),
+        project_root=str(tmp_path),
+        task_dirs=["data/x"],
+        guard_log=str(log),
+        node_tmp=str(fake_tmp),
+    )
+    assert rc == 0, err
+    rows = [json.loads(ln) for ln in log.read_text(encoding="utf-8").splitlines()]
+    row = rows[-1]
+    assert row["task_dirs_env"] == "data/x"
+    assert row["task_dirs_resolved"][0].replace("\\", "/").endswith("/data/x")
+
+    # 空集也要留痕（「环境变量为空」正是 whitelist_conflict 的常见现场）
+    rc, _ = run_guard(
+        file_path=str(tmp_path / "src" / "y.md"),
+        pod=str(pod),
+        project_root=str(tmp_path),
+        task_dirs=[],
+        guard_log=str(log),
+        node_tmp=str(fake_tmp),
+    )
+    assert rc == 2
+    last = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    assert last["task_dirs_resolved"] == []

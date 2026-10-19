@@ -59,6 +59,8 @@ class GuardProbeResult:
     in_force: bool  # 阳性：违规被拦
     fail_open_traced: bool  # 阴性 + 留痕：坏 stdin 有 [name fail-open] 标签
     detail: str
+    #: 白名单内写入被放行，且启动日志含 `PYSCI_TASK_DIRS` 的实际解析结果（20261019-122007-lit）。
+    whitelist_ok: bool = True
 
 
 def _which_node() -> str | None:
@@ -182,19 +184,67 @@ def probe_pod_guard() -> GuardProbeResult:
         )
         traced = bad_rc == 0 and "[pod-guard fail-open]" in bad_err
 
-    if in_force and traced:
-        return GuardProbeResult(
-            name, "ok", True, True, "写只读层 exit=2 / bad-stdin exit=0 且留痕"
+        # 白名单内写入必须放行，且启动日志要能对盘解析结果（相对路径按项目根）
+        allowed = Path(td) / "data" / "allowed"
+        allowed.mkdir(parents=True, exist_ok=True)
+        target_ok = allowed / "probe.md"
+        target_ok.write_text("probe\n", encoding="utf-8")
+        log = Path(td) / "guard-log.jsonl"
+        fake_tmp = Path(td) / "node-tmp"
+        fake_tmp.mkdir(exist_ok=True)
+        ok_rc, ok_err = _run(
+            node,
+            POD_GUARD,
+            payload=json.dumps({"tool_input": {"file_path": str(target_ok)}}),
+            env={
+                "PYSCI_POD": str(pod),
+                "PYSCI_PROJECT_ROOT": str(td),
+                "PYSCI_READONLY": "",
+                "PYSCI_DEPLOYED_SKILLS": "",
+                "PYSCI_TASK_DIRS": "data/allowed",
+                "PYSCI_GUARD_LOG": str(log),
+                # 把 Node 的「系统临时目录」挪走：否则 fixture 落在真 Temp 下，tmp 兜底
+                # 会无差别放行，白名单判定根本没被执行（假绿）。
+                "TEMP": str(fake_tmp),
+                "TMP": str(fake_tmp),
+            },
         )
-    detail_bits = []
+        try:
+            rows = [
+                json.loads(ln)
+                for ln in log.read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            ]
+        except (OSError, json.JSONDecodeError):
+            rows = []
+        norm = lambda p: str(p).replace("\\", "/").lower()  # noqa: E731
+        whitelist_ok = ok_rc == 0 and any(
+            norm(allowed) in [norm(x) for x in (row.get("task_dirs_resolved") or [])]
+            for row in rows
+        )
+
+    if in_force and traced and whitelist_ok:
+        return GuardProbeResult(
+            name,
+            "ok",
+            True,
+            True,
+            "写只读层 exit=2 / bad-stdin exit=0 且留痕 / 白名单内 exit=0 且日志含解析结果",
+            True,
+        )
+    detail_bits: list[str] = []
     if not in_force:
         detail_bits.append(f"写只读层未被拦（rc={rc}，stderr 头 80：{err[:80]!r}）")
     if not traced:
         detail_bits.append(
             f"fail-open 未留痕（rc={bad_rc}，stderr 头 80：{bad_err[:80]!r}）"
         )
+    if not whitelist_ok:
+        detail_bits.append(
+            f"白名单内写入未放行或日志缺解析结果（rc={ok_rc}，stderr 头 80：{ok_err[:80]!r}）"
+        )
     return GuardProbeResult(
-        name, "bad", in_force, traced, "；".join(detail_bits) or "未知"
+        name, "bad", in_force, traced, "；".join(detail_bits) or "未知", whitelist_ok
     )
 
 

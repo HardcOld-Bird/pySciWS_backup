@@ -16,6 +16,7 @@
 
 import path from 'node:path';
 import os from 'node:os';
+import fs from 'node:fs';
 
 function failOpen(where, err) {
   const msg = err && (err.stack || err.message) ? err.stack || err.message : String(err);
@@ -47,6 +48,42 @@ try {
   const readonly = listEnv(process.env.PYSCI_READONLY);
   const deployed = listEnv(process.env.PYSCI_DEPLOYED_SKILLS);
   const taskDirs = listEnv(process.env.PYSCI_TASK_DIRS);
+
+  // 白名单目录的**实际解析结果**（相对路径按项目根解析）——同时落日志：
+  // 「环境变量有值但 guard 解析成别处/空集」是 whitelist_conflict 的静默根因，
+  // 必须有可直接对盘的观测面（20261019-122007-lit）。日志失败绝不影响执法。
+  const resolveTaskDir = d => {
+    let dd = d;
+    if (!path.isAbsolute(dd)) {
+      dd = projectRoot ? path.resolve(projectRoot, dd) : path.resolve(process.cwd(), dd);
+    }
+    return path.resolve(dd);
+  };
+  const resolvedTaskDirs = taskDirs.map(resolveTaskDir);
+  const guardLog =
+    'PYSCI_GUARD_LOG' in process.env
+      ? process.env.PYSCI_GUARD_LOG
+      : projectRoot
+        ? path.join(projectRoot, 'orchestration', 'state', 'guard-log.jsonl')
+        : '';
+  if (guardLog) {
+    try {
+      fs.mkdirSync(path.dirname(guardLog), { recursive: true });
+      try {
+        if (fs.statSync(guardLog).size > 2 * 1024 * 1024) fs.writeFileSync(guardLog, '');
+      } catch (e) {}
+      fs.appendFileSync(
+        guardLog,
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          pod,
+          target: fp,
+          task_dirs_env: process.env.PYSCI_TASK_DIRS || '',
+          task_dirs_resolved: resolvedTaskDirs,
+        }) + '\n'
+      );
+    } catch (e) {}
+  }
 
   // 目标路径解析为绝对路径：相对路径按 pod 解析（成员视角的相对路径即 pod 相对；
   // 真实 hook 运行 cwd 就是 pod，这里不依赖 process.cwd() 以便测试与异常场景稳健）
@@ -81,13 +118,8 @@ try {
   const tmpL = lower(os.tmpdir());
   if (absL.startsWith(tmpL)) process.exit(0);
 
-  // pod 外：仅任务白名单目录
-  for (const d of taskDirs) {
-    let dd = d;
-    if (!path.isAbsolute(dd)) {
-      dd = projectRoot ? path.resolve(projectRoot, dd) : path.resolve(process.cwd(), dd);
-    }
-    const ddL = lower(path.resolve(dd));
+  // pod 外：仅任务白名单目录（相对路径按项目根解析，与启动日志同一份结果）
+  for (const ddL of resolvedTaskDirs.map(lower)) {
     if (absL.startsWith(ddL + '/') || absL === ddL) process.exit(0);
   }
 

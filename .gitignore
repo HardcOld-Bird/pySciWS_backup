@@ -80,6 +80,8 @@ __pycache__/
 # 新增，纯运行态（永久痕迹在 ledger/backlog/delivery 与 git 提交本身），入库会让 main 每跳必 dirty。
 /orchestration/state/events.jsonl
 /orchestration/state/events-seen.json
+# pod-guard 启动日志（每次 Write/Edit 一行：PYSCI_TASK_DIRS 的实际解析结果；运行态不留脏面）
+/orchestration/state/guard-log.jsonl
 # 活跃会话注册表（README §12/M6，backpressure 写侧）：worker 拉起登记、周期心跳、
 # 退场注销，每跳（心跳≤3min）都在变——纯运行态（「此刻谁在跑」的活体读数），入库会让
 # main 每跳必 dirty。永久痕迹在 ledger/events。

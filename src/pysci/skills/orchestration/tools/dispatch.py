@@ -745,8 +745,43 @@ def _is_edit_line(ln: str) -> bool:
     return False
 
 
+def _whitelist_tokens(text: str) -> list[str]:
+    """一段声明 → 路径条目前缀（`、,，;；` 分隔；列表标记/包裹符/注记按既有口径剥）。"""
+    out: list[str] = []
+    for seg in re.split(r"[、,，;；]", text):
+        s = seg.strip().replace("\\", "/")
+        # 列表标记先剥（backlog 20261015-132939-fix3）：任务书白名单一律写成
+        # `- path` 项目符号，而路径样正则**认得 `-`**（它在字符类里），于是每行都被
+        # 判成 tok="-" 后丢弃 → 整段解析为空（实测：真实任务书一律解析出 []）。
+        s = re.sub(r"^[-*+•]\s+", "", s)
+        # 行首**包裹符**先去掉（`` `src/x` `` 是仓库里的常见写法）——但只在行首：
+        # 行中的括号/反引号要留作**终止符**，好让 `data/taskbooks/**（新建）` 的
+        # 注记不被粘进路径（下面那条注释）。
+        s = re.sub(r"^[`（(【\[]+", "", s)
+        # 行首取「路径样」片段，**在剥括号之前**取——这样 `（新建）` 一类括号注记
+        # 天然成为终止符。字符类**收中文**，因为 `data/大任务/` 是合法目录名：原实现
+        # 把它截成上级 `data`，**比声明更宽**（等于放行整棵 data/）——既是漏读也是
+        # 越权（backlog 20261015-130838-writing）。
+        m = re.match(r"[^\s`（）()【】\[\],，;；、。]+", s)
+        if not m:
+            continue
+        tok = m.group(0)
+        # 路径样才收（在规整**之前**判：`src/**` 规整成 `src` 后已不含 `/`）
+        if "/" not in tok and not tok.endswith((".md", ".py", ".toml", ".json")):
+            continue
+        norm = tok.rstrip("*").rstrip("/")
+        if norm:
+            out.append(norm)
+    return out
+
+
+#: **行内**白名单声明：``...白名单（写权限）：a/、b/。``（adhoc 任务书常把要求与
+#: 白名单写在同一行；只认段标题会解析出空集，组员照旧被拦截——20261019-122007-lit）。
+_INLINE_WHITELIST_RE = re.compile(r"白名单(?:（写权限）)?\s*[：:]\s*(.+)$")
+
+
 def _whitelist_entries(lines: list[str]) -> tuple[list[str], set[int]]:
-    """解析「白名单」段 → (条目前缀, 段内行号集)。无段 → ``([], set())``。"""
+    """解析「白名单」段/行内声明 → (条目前缀, 命中行号集)。无声明 → ``([], set())``。"""
     entries: list[str] = []
     used: set[int] = set()
     on = False
@@ -759,33 +794,16 @@ def _whitelist_entries(lines: list[str]) -> tuple[list[str], set[int]]:
             on = False
         if on:
             used.add(i)
-            for seg in re.split(r"[、,，;；]", ln):
-                s = seg.strip().replace("\\", "/")
-                # 列表标记先剥（backlog 20261015-132939-fix3）：任务书白名单一律写成
-                # `- path` 项目符号，而路径样正则**认得 `-`**（它在字符类里），于是每行都被
-                # 判成 tok="-" 后丢弃 → 整段解析为空（实测：真实任务书一律解析出 []）。
-                s = re.sub(r"^[-*+•]\s+", "", s)
-                # 行首**包裹符**先去掉（`` `src/x` `` 是仓库里的常见写法）——但只在行首：
-                # 行中的括号/反引号要留作**终止符**，好让 `data/taskbooks/**（新建）` 的
-                # 注记不被粘进路径（下面那条注释）。
-                s = re.sub(r"^[`（(【\[]+", "", s)
-                # 行首取「路径样」片段，**在剥括号之前**取——这样 `（新建）` 一类括号注记
-                # 天然成为终止符。字符类**收中文**，因为 `data/大任务/` 是合法目录名：原实现
-                # 把它截成上级 `data`，**比声明更宽**（等于放行整棵 data/）——既是漏读也是
-                # 越权（backlog 20261015-130838-writing）。
-                m = re.match(r"[^\s`（）()【】\[\],，;；、]+", s)
-                if not m:
-                    continue
-                tok = m.group(0)
-                # 路径样才收（在规整**之前**判：`src/**` 规整成 `src` 后已不含 `/`）
-                if "/" not in tok and not tok.endswith(
-                    (".md", ".py", ".toml", ".json")
-                ):
-                    continue
-                norm = tok.rstrip("*").rstrip("/")
-                if norm:
-                    entries.append(norm)
-    return entries, used
+            entries.extend(_whitelist_tokens(ln))
+        else:
+            m = _INLINE_WHITELIST_RE.search(ln)
+            if m:
+                used.add(i)
+                entries.extend(_whitelist_tokens(m.group(1)))
+    # 保序去重（段声明在前、行内声明在后）
+    seen: set[str] = set()
+    uniq = [e for e in entries if not (e in seen or seen.add(e))]
+    return uniq, used
 
 
 def _covered_by(path: str, entries: list[str]) -> bool:

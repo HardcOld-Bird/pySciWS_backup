@@ -235,3 +235,43 @@ def test_no_whitelist_section_emits_no_warning(tmp_path, capsys):
     p.write_text("# 任务书\n\n## 目标\n做事。\n", encoding="utf-8")
     assert dispatch.dirs_with_taskbook_whitelist(["src"], p) == ["src"]
     assert "解析不出任何目录" not in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# 行内白名单（adhoc 任务书把要求与白名单写在同一行；20261019-122007-lit）
+# ---------------------------------------------------------------------------
+TB_INLINE = (
+    "# 任务书 adhoc\n\n"
+    "要求：逐项重提并更新索引。白名单：data/大任务/5_开题PPT/文献图片/、"
+    "orchestration/pods/lit/、data/skills/literature_research/。\n"
+)
+
+
+def test_parses_inline_whitelist_line(tmp_path):
+    p = tmp_path / "adhoc.md"
+    p.write_text(TB_INLINE, encoding="utf-8")
+    assert dispatch.taskbook_whitelist_dirs(p) == [
+        "data/大任务/5_开题PPT/文献图片",
+        "orchestration/pods/lit",
+        "data/skills/literature_research",
+    ]
+
+
+@NODE_REQUIRED
+def test_inline_declared_dir_is_allowed_by_the_real_guard(tmp_path):
+    """真 guard：仅行内声明、无 --dirs → 图片索引文件 Edit 放行（原实案被拦）。"""
+    p = tmp_path / "adhoc.md"
+    p.write_text(TB_INLINE, encoding="utf-8")
+    dirs = dispatch.dirs_with_taskbook_whitelist([], p)
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    target = PROJECT_ROOT / "data" / "大任务" / "5_开题PPT" / "文献图片" / "图像索引.md"
+
+    rc, err = run_guard(
+        file_path=str(target),
+        pod=str(pod),
+        project_root=str(PROJECT_ROOT),
+        task_dirs=dirs,
+    )
+
+    assert rc == 0, err

@@ -97,6 +97,13 @@ plan 的 `task_file`，派发时 orch **复制**进成员 pod 的 `inbox/`（**�
 `[!] 任务书 … 声明了「白名单（写权限）」段，但解析不出任何目录（格式？）…`：否则组员到写文件
 才被 pod-guard 拦成 `whitelist_conflict`，而声明面看着「写了」（静默失败升级为可见失败）。
 
+- **行内声明同样生效**：adhoc 任务书把要求与白名单写在同一行
+  （`…。白名单：data/x/、orchestration/pods/lit/。`）；解析器按 `白名单：` 后半段切
+  `、,，;；`，条目须像路径（含 `/`）。
+- **排障**：guard 每次 Write/Edit 把 `PYSCI_TASK_DIRS` 的**实际解析结果**追加到
+  `orchestration/state/guard-log.jsonl`（gitignored）；`pysci-dev doctor` 的 pod-guard
+  活体探针含「白名单内写入 exit=0 且日志含解析结果」。
+
 ### 落点需实测校准的改动：给目标 + 复现锚点，别给裸像素值（backlog 20261016-040451）
 
 裁剪框、文本框右缘、行距这类**落点要按素材像素实测校准**的改动，任务书给的是**目标**
