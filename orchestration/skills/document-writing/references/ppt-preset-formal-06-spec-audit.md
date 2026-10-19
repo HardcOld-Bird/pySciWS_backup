@@ -31,13 +31,11 @@
 - audit 逐 run 校验 `latin/ea/cs`（缺 `ea` 即 FAIL）；模板无 `cs` 时 spec 的
   `require_slots` 只要求实际存在的槽（通常 `latin+ea`），不虚增要求。
 
-## 4K. 圆角结论（B.rv 终检一般 1 判决）
+## 4K. 粗外框圆角（R4 改判，覆盖 rv3 直角结论）
 
-**不执行圆角，维持直角粗边框**（rv3 终检判定）。理由：
-1. 页面 6 pt 外框与胶囊均为直角语言、网格感强；改圆角与胶囊直角矩形冲突；
-2. 三层装饰（外框/白卡/院徽）已提供圆角对比，再加圆角无收益；
-3. 与模板 p3/p5 实测（多图块直角）一致。
-保留为**可选项**：仅当整体设计改为全圆角语言时再启用，需用户审美终判。
+R4 用户批语要求「粗外框圆角」：粗外框（描边 ≥5 pt 且宽 ≥2 in）改用 `roundRect`，
+默认 `adj=3000`（暂定，用户可一句话改参重跑）。白卡/胶囊/内部对象语言不变；
+参数与复算见 `ppt-preset-formal-07-aesthetics.md` §4O。
 
 ## 4L. V5/V6 的 PPT 语境操作化
 
@@ -65,6 +63,21 @@
 
 ## 4M. 预算与单一真源
 
-- 本册与 02–05 各 ≤8192B；同一能力只保留一份实现：schema/命令口径在
+- 本册与 02–05、07 各 ≤8192B；同一能力只保留一份实现：schema/命令口径在
   `slides-audit.md`，教义在 `plan-decomposition-visual.md`，本册只做流程与实证。
 - staging（`data/大任务/5_开题PPT/学院正式汇报预设.md`）与本册同源同步。
+
+## 4N. audit aesthetics 四行读法（R4）
+
+`compose slides audit '<deck>' --spec deck-spec.yaml` 在 spec 带 `invariants.aesthetics`
+时新增四行；无该节时不产生（零回归）：
+
+| 行 | 判定 | 容差 / 失败含义 |
+|---|---|---|
+| `徽标 pN` | 首两页同 md5 或高 ≥5 in 的水印层；bbox 逐值 + 宽高比 | bbox ±0.02 in、比 ±0.01；FAIL=拉伸/移位 |
+| `外框样式 pN shape=…` | 粗外框 `prstGeom.prst` + roundRect `adj` | `adj` ±500；`adj=缺省 16667`=无 `gd`；FAIL=样式漂移 |
+| `上缘 pN shape=…` | 每个粗外框的 `top` | ±0.02 in；FAIL=切分起点漂移 |
+| `标题边距 pN shape=…` | `titles[].shape` 的 left + right(n) | left ±0.02、right ±0.1 in；FAIL=标题框漂移/公式过期 |
+
+- 参数只写 `invariants.aesthetics`（见 07 §4O）；改参后重跑即收敛。
+- `title_left`/`title_right_formula` 启用时，旧 `标题公式 0.34n+0.55` 行由本行接管。
