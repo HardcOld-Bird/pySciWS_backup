@@ -205,3 +205,15 @@ def test_figures_cli_compose_grid_parser():
     )
     assert args.func is figures.cmd_compose_grid
     assert args.spec.name == "s.yaml" and args.out.name == "o.png" and args.dpi == 200
+
+
+def test_compose_grid_shared_colorbar_requires_explicit_range():
+    """共享 colorbar 缺 vmin/vmax → 拒（禁数据范围默认统一量程）。"""
+    spec = {
+        "rows": 1,
+        "cols": 1,
+        "colorbar": {"cmap": "bwr"},
+        "panels": [{"kind": "blank"}],
+    }
+    with pytest.raises(ValueError, match="vmin/vmax"):
+        raster.compose_grid(spec)

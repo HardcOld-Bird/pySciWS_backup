@@ -10,12 +10,14 @@
 - :func:`load_field_points` — 读 VTK/VTU（pyvista）或 CSV/TXT → ``(xy Nx2, values N)``。
 - :func:`add_field_panel` — 在给定 ax 上 ``tripcolor`` 渲染（自动 Delaunay 或指定 triangles）。
 - :func:`render_field_panel` — 单面板 + colorbar + savefig 一步到位（colorbar 直接取面板 mappable）。
+- :func:`independent_norms` — 每组独立 vmin/vmax 的线性 norm（多组对照禁统一量程/默认对数）。
 
 多面板组装见 raster.compose_grid 的 ``kind: field`` 面板（与共享 colorbar 同 cmap/norm）。
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +137,60 @@ def add_field_panel(
     return ax.tripcolor(
         triang, vals, cmap=cmap, norm=norm or Normalize(vmin, vmax), shading=shading
     )
+
+
+def independent_norms(
+    values_by_group: Mapping[str, Any],
+    *,
+    vmax: Mapping[str, float] | None = None,
+    vmin: Mapping[str, float] | None = None,
+    symmetric: bool = False,
+) -> dict[str, Any]:
+    """每组**独立**的线性 ``Normalize``（多组对照禁统一量程、禁默认对数）。
+
+    Args:
+        values_by_group: ``{组名: 值数组}``；缺省量程按该组自身 min/max 取。
+        vmax/vmin: 逐组显式量程映射（键须属于 ``values_by_group``）。传标量会
+            raise——统一量程会掩盖弱组，须逐组给值。
+        symmetric: True 时缺省量程取对称 ``[-max|v|, +max|v|]``。
+
+    Returns:
+        ``{组名: matplotlib.colors.Normalize}``。需要对数/对称对数标度时由调用方
+        显式自建 norm——本函数不提供非线性入口（禁默认对数）。
+
+    Raises:
+        ValueError: 标量量程、未知组名、空数据或量程不可分。
+    """
+    from matplotlib.colors import Normalize  # noqa: PLC0415
+
+    for label, spec in (("vmax", vmax), ("vmin", vmin)):
+        if spec is not None and not isinstance(spec, Mapping):
+            raise ValueError(
+                f"{label} 须为逐组映射（禁统一量程）：{type(spec).__name__}"
+            )
+        unknown = set(spec or {}) - set(values_by_group)
+        if unknown:
+            raise ValueError(f"{label} 含未知组：{sorted(unknown)}")
+    out: dict[str, Any] = {}
+    for key, raw in values_by_group.items():
+        vals = np.asarray(raw, dtype=float).ravel()
+        vals = vals[np.isfinite(vals)]
+        if vals.size == 0:
+            raise ValueError(f"组 {key} 无有限数据")
+        hi = (
+            vmax[key]
+            if vmax and key in vmax
+            else float(np.max(np.abs(vals)) if symmetric else np.max(vals))
+        )
+        lo = (
+            vmin[key]
+            if vmin and key in vmin
+            else float(-hi if symmetric else np.min(vals))
+        )
+        if not (np.isfinite(lo) and np.isfinite(hi)) or lo >= hi:
+            raise ValueError(f"组 {key} 量程不可分：vmin={lo}, vmax={hi}")
+        out[key] = Normalize(vmin=lo, vmax=hi)
+    return out
 
 
 def render_field_panel(
