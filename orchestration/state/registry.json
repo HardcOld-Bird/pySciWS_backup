@@ -128,12 +128,6 @@
         "model": "deepseek-v4-pro"
       },
       {
-        "name": "glm",
-        "key_env": "GLM_API_KEY",
-        "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "model": "glm-5.3"
-      },
-      {
         "name": "kimi",
         "key_env": "KIMI_API_KEY",
         "base_url": "https://api.moonshot.cn/v1",
@@ -164,8 +158,20 @@
     },
     "call_timeout_s": 240,
     "deadline_s": 300,
-    "max_output_tokens": 8000,
-    "pricing": {}
+    "max_output_tokens": 16000,
+    "pricing": {},
+    "seats_suspended": [
+      {
+        "seat": {
+          "name": "glm",
+          "key_env": "GLM_API_KEY",
+          "base_url": "https://open.bigmodel.cn/api/paas/v4",
+          "model": "glm-5.3"
+        },
+        "reason": "glm-5.3 渠道持续故障（timeout/截断 4 连败），twin 终裁 A′（tb-20261019-151640-ppt-3-twin咨询-jury门2）授权本轮面板变更：按 registry「一席不可达减员开庭」机制摘席，平票 twin 兜底；glm 恢复后回填",
+        "at": "2026-10-19T16:20+08:00"
+      }
+    ]
   },
   "checks": {
     "figure-audit": {

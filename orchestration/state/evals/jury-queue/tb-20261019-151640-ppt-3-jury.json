@@ -1,7 +1,7 @@
 {
   "case_id": "tb-20261019-151640-ppt-3-jury",
   "case_file": "data\\taskbooks\\tb-20261019-151640-ppt-3-jury.md",
-  "queued_at": "2026-10-19T16:11:22+08:00",
-  "reason": "1/6 局失败：glm/BA 截断：正文未出（max_output_tokens=8000，reasoning_tokens=7993）",
+  "queued_at": "2026-10-19T16:34:28+08:00",
+  "reason": "1/6 局失败：glm/BA ReadTimeout: HTTPSConnectionPool(host='open.bigmodel.cn', port=443): Read timed out. (read timeout=240)",
   "question": "tb-5 第 3 轮批语定调：「返工次要，系统问题修复主要；一劳永逸解决要求失效问题；大重构\n级问题详报用户」。组长已完成系统性排查（a1，五根因带实证）与解决方案（a2，五件套）。\n请裁决：**是否采纳 a2 方案作为本轮蓝本并放行实施**（A=采纳放行 / B=退回）。\n\n方案要点：\n1. **deck-spec 规格书**：每 deck 机器可读真源——不变量（装饰三层/字体全槽/版式/动画）\n   + 图槽（占位符指纹/内容锚/原文图号/裁切参数），全部机械实测汇编；\n2. **`slides audit` 机械审计**：deck vs spec 逐项对账（装饰/字体 ea/图槽指纹/引用框/标题\n   公式），生产叶交付必附 audit 输出，rv 以 audit 为底稿——堵「报告说了不算」；\n3. **任务书 spec 切片生成 + 现状断言须附机械读数 + 索引去建议化**——堵前提错误（p10\n   反向案）与建议越权（p6/p8 选错图案案）；\n4. **提取管线补缺**：图区上限可配、原文图号靶向提取、整页 PDF 裁切提示、缺图重提\n  （RPP Fig.7/PRL123 Fig.2/NatMater 裁切）；\n5. **字体全槽 + 装饰层守护工具化**（latin+ea+panose、重建保留装饰层，audit 校验）。\n\n实施：a5（devops 建机制）→ b_spec（spec 汇编）→ w3–w10 按 spec 修复（9+2 批语+字体+\n背景）→ rv → 预设入库 → b_last。属中型工具建设，非推倒重构；已按用户要求在 a2 含\n「向用户汇报要点」。"
 }
