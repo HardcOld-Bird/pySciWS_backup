@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261019-183013",
+  "created": "2026-10-19T18:30:13+08:00",
+  "goal": "adhoc：orchestration/state/plans/adhoc-p9-refs.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "writing-20261019-183013-adhoc-20261019-183013-s1",
+      "task_file": "orchestration/state/plans/adhoc-p9-refs.task.md",
+      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-19T18:31:41+08:00"
+}
