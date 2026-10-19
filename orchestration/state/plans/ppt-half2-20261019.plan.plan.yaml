@@ -67,4 +67,24 @@ steps:
     kind: self
     brief: 全流程报告组装
     role: final_report
+- id: L
+  mode: serial
+  brief: 组长改进
+  children:
+  - id: l1
+    kind: self
+    brief: harnessing 摩擦反思
+    role: leader_reflection
+    evidence_sections:
+    - 摩擦反思
+    - 改进清单
+    - 结论
+  - id: l2
+    kind: self
+    brief: 拆解改进派单（空改进清单合法）
+    role: leader_improvement_plan
+  - id: l3
+    member: devops
+    brief: 改进实施
+    member_placeholder: true
 id: ppt-half2-20261019.plan

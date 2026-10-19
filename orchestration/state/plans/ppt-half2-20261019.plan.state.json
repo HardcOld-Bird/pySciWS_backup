@@ -107,6 +107,21 @@
       "status": "done",
       "review": "pending",
       "evidence": "data/taskbooks/tb-20261019-225855-ppt.b_last-全流程报告.md"
+    },
+    {
+      "id": "L.l1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l3",
+      "status": "pending",
+      "review": "pending"
     }
   ],
   "completed_at": "2026-10-20T00:08:54+08:00"
