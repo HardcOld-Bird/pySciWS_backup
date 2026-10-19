@@ -107,15 +107,19 @@
     },
     {
       "id": "B.G1.L.la3",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "lit-20261019-120852-rework-tb-20261019-105216-ppt-2-B.G1.L.la3",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-105216-ppt-2.la3.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-105216-ppt-2.la3.task.md",
+      "session_id": "be781483-5f9b-4f54-aea6-29f0abbaec83",
+      "kind": "result"
     },
     {
       "id": "B.w3",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261019-121602-rework-tb-20261019-105216-ppt-2-B.w3",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-105216-ppt-2.w3.task.md"
     },
     {
       "id": "B.w4",

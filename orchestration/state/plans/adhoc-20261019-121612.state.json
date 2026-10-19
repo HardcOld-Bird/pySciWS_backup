@@ -1,0 +1,14 @@
+{
+  "plan_id": "adhoc-20261019-121612",
+  "created": "2026-10-19T12:16:12+08:00",
+  "goal": "adhoc：提取图重提补单（源自 tb-5 返工2轮 la2/la3 重提清单，逐项见 文献图片/图像索引.md 备注段）。共 6 ",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "lit-20261019-121612-adhoc-20261019-121612-s1"
+    }
+  ],
+  "completed_at": null
+}

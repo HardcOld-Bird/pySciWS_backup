@@ -1,0 +1,8 @@
+id: adhoc-20261019-121612
+goal: 'adhoc：提取图重提补单（源自 tb-5 返工2轮 la2/la3 重提清单，逐项见 文献图片/图像索引.md 备注段）。共 6 '
+steps:
+- id: s1
+  member: lit
+  brief: 提取图重提补单（源自 tb-5 返工2轮 la2/la3 重提清单，逐项见 文献图片/图像索引.md 备注段）。共 6 项，重点三项：①PhysRevApplied25-054054 FIG.1 漏提（p2 右栏，clip 建议 [313,
+  dirs: []
+  review: false
