@@ -3879,6 +3879,32 @@
       "done_at": "2026-10-20T01:41:07+08:00",
       "batch_size": 1,
       "batch_seed": "20261019-223633-writing"
+    },
+    {
+      "id": "20261020-030949-figure",
+      "member": "figure",
+      "summary": "success_criteria: `pysci.research.gain_ep.simulation.farfield` 提供可直接读取其自身 `export_radar_groups` 宽表输出的加载函数（或让 `load_comsol_csv` 自动跳过表头/支持宽表），f1 无需绕过工具面即可完成读取。",
+      "kind": "defect",
+      "success_criteria": "`pysci.research.gain_ep.simulation.farfield` 提供可直接读取其自身 `export_radar_groups` 宽表输出的加载函数（或让 `load_comsol_csv` 自动跳过表头/支持宽表），f1 无需绕过工具面即可完成读取。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261020-030949-figure.md",
+      "status": "in_progress",
+      "proposed": "2026-10-20T03:15:42+08:00",
+      "note": "",
+      "started_at": "2026-10-20T03:15:44+08:00",
+      "worktree": "20261020-030949-figure"
+    },
+    {
+      "id": "20261020-000717-reviewer",
+      "member": "reviewer",
+      "summary": "success_criteria: 任务书标题 n 值按非空白字符实测登记（p14=16、p17=8、p22=9），下游按正确 n 计算右缘；避免任务书笔误造成宽度偏差。",
+      "kind": "defect",
+      "success_criteria": "任务书标题 n 值按非空白字符实测登记（p14=16、p17=8、p22=9），下游按正确 n 计算右缘；避免任务书笔误造成宽度偏差。\n证据：本单 w3/w6/w11 任务书分别写 n=17/7/10，实测「理论背景：模式耦合理论（CMT）」16 字、「增益EP点的性质」8 字、「未来计划和预期成果」9 字；成品按实测值取右缘（6.509/3.789/4.129），公式均吻合。",
+      "evidence_file": "orchestration/state/suggestions/approved/20261020-000717-reviewer.md",
+      "status": "in_progress",
+      "proposed": "2026-10-20T03:15:49+08:00",
+      "note": "",
+      "started_at": "2026-10-20T03:15:52+08:00",
+      "worktree": "20261020-000717-reviewer"
     }
   ]
 }
