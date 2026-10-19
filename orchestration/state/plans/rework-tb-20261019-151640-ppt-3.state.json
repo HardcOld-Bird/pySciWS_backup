@@ -161,15 +161,18 @@
     },
     {
       "id": "B.d_preset",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261019-192540-rework-tb-20261019-151640-ppt-3-B.d_preset",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-151640-ppt-3.d_preset.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-151640-ppt-3.d_preset.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
     },
     {
       "id": "B.b_last",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-151640-ppt-3.b_last-全流程报告.md"
     },
     {
       "id": "L.l1",
