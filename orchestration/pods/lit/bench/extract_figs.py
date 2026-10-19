@@ -241,8 +241,14 @@ def _label_claims(label):
     return claims
 
 
-def audit_figures(pdf_path, manifest, *, expected_doi=None, label=None):
+def audit_figures(
+    pdf_path, manifest, *, expected_doi=None, label=None, strict_coverage=False
+):
     """交付前审计：真题注覆盖、页覆盖、每图文本占比、DOI/目录标签。
+
+    Args:
+        strict_coverage: 真为题注覆盖要求**全量**入 manifest（缺失=error）；
+            默认只给 warning——deck 常按需取子集，不能让子集目录全红。
 
     Returns:
         ``{"ok": bool, "issues": [{level, code, detail}], ...}``；``ok`` 只由
@@ -310,7 +316,7 @@ def audit_figures(pdf_path, manifest, *, expected_doi=None, label=None):
     if missing:
         issues.append(
             {
-                "level": "error",
+                "level": "error" if strict_coverage else "warning",
                 "code": "missing-figures",
                 "detail": "真题注有、manifest 缺："
                 + "、".join(f"Fig. {n}（p{captions_by_no[n]}）" for n in missing),
@@ -389,6 +395,7 @@ def extract(
     pad=PAD_PT,
     expected_doi=None,
     label=None,
+    strict_coverage=False,
 ):
     """抽取图区；``crop_header=False`` 关闭刊头裁切（默认开启）。
 
@@ -607,7 +614,13 @@ def extract(
             entry["hint"] = c["hint"]
         manifest.append(entry)
 
-    report = audit_figures(pdf_path, manifest, expected_doi=expected_doi, label=label)
+    report = audit_figures(
+        pdf_path,
+        manifest,
+        expected_doi=expected_doi,
+        label=label,
+        strict_coverage=strict_coverage,
+    )
     report["rejected"] = rejected
     (out_dir / "figures.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8"
@@ -636,6 +649,11 @@ if __name__ == "__main__":
     )
     ap.add_argument("--expected-doi", default="", help="期望缓存 DOI（审计用）")
     ap.add_argument("--label", default="", help="目录标签（审计主题一致性）")
+    ap.add_argument(
+        "--strict-coverage",
+        action="store_true",
+        help="题注图号必须全量入 manifest（缺失=error；默认 warning）",
+    )
     ap.add_argument("--merge-gap", type=float, default=MERGE_GAP_PT)
     ap.add_argument("--pad", type=float, default=PAD_PT)
     a = ap.parse_args()
@@ -653,6 +671,7 @@ if __name__ == "__main__":
         pad=a.pad,
         expected_doi=a.expected_doi or None,
         label=a.label or None,
+        strict_coverage=a.strict_coverage,
     )
     for row in man:
         print(row)
