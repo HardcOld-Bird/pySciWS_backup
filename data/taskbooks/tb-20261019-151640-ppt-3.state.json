@@ -2,7 +2,7 @@
   "id": "tb-20261019-151640-ppt-3",
   "ts": "2026-10-19T15:16:40+08:00",
   "title": "开题PPT制作（返工第 3 轮）",
-  "status": "new",
+  "status": "planning",
   "source": "mirror-tui",
   "priority": "low",
   "improve": {
@@ -13,7 +13,7 @@
   "mode": "no_inspector",
   "rework_of": "tb-20261019-105216-ppt-2",
   "rework_round": 3,
-  "plan_id": "",
+  "plan_id": "rework-tb-20261019-151640-ppt-3",
   "rejections": [],
-  "updated": "2026-10-19T15:16:40+08:00"
+  "updated": "2026-10-19T15:18:35+08:00"
 }
