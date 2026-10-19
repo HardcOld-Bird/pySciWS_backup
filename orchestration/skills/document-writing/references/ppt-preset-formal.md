@@ -43,6 +43,7 @@
 | 块间距 | 同级子块 0.34（p3 纵 0.27）/ 焦点块间 0.24 / 块内 0.10 in |
 | 公式 | 渲染图（mpl/LaTeX）、≥300dpi、零描边；禁文本框拼公式 |
 | 裁剪 | `crop-img --strip-top/--strip-caption N` 或 `--*-ratio`；禁带噪置入 |
+| 验收 | `slides audit`（装饰/字体/图槽/公式；三态）；字体 `slides_fonts` |
 
 ## 1. 适用范围与基座
 
@@ -90,6 +91,6 @@
 - **焦点块动画规格（§5）与配色/字体阶梯（§6）**：`ppt-preset-formal-02-animation.md`。
 - **缩略引用与结尾页（§4）、视觉终检红线（§7）、与组会预设差异（§8）**：
   `ppt-preset-formal-03-citations-and-acceptance.md`。
-- **饱满排版代数（§4C）**：`ppt-preset-formal-04-layout-algebra.md`。
-- **焦点块双路径/边框/字号/公式/裁剪（§4D–4H）**：
-  `ppt-preset-formal-05-focus-paths.md`。
+- **04 排版 / 05 双路径·边框·公式·裁剪 / 06 spec·audit**：
+  `ppt-preset-formal-04-layout-algebra.md`、`ppt-preset-formal-05-focus-paths.md`、
+  `ppt-preset-formal-06-spec-audit.md`。

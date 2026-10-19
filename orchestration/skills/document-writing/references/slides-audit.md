@@ -3,6 +3,8 @@
 > 定位：学院正式预设的**要求唯一真源**落在每 deck 一份 YAML（`deck-spec.yaml`）；
 > `compose slides audit <deck> --spec <spec>` 逐项对账，生产叶交付附本页 audit 输出。
 > 主册/分册见 `ppt-preset-formal*.md`；本文件只讲 spec 形态与审计口径。
+> 工作流（建 spec→逐页修复→audit→终检）、字体全槽坑与实证案例：
+> `ppt-preset-formal-06-spec-audit.md`。
 
 ## spec 形态（YAML）
 
