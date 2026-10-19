@@ -391,6 +391,9 @@ class SlideGeometry:
     boxes: list[ShapeBox] = field(default_factory=list)
     frame: ShapeBox | None = None
     frame_source: str = ""  # "explicit" | "auto" | ""
+    #: 自动外框识别存疑时的提示（非违规）：存在近满幅白卡却选中子块，或只选中
+    #: 小块且有多个矩形候选。此时 edges/off_frame 不再输出，避免假阳性越界。
+    frame_note: str = ""
     edges: list[EdgeCoverage] = field(default_factory=list)
     overlaps: list[str] = field(default_factory=list)
     off_canvas: list[str] = field(default_factory=list)
@@ -462,6 +465,8 @@ class GeometryReport:
             else:
                 head += "：未识别外框（用 --frame 指定形状名可启用边覆盖判定）"
             lines.append(head)
+            if s.frame_note:
+                lines.append(f"      [!] {s.frame_note}")
             for e in s.edges:
                 if e.frac > 0:
                     lines.append(
@@ -522,6 +527,7 @@ class GeometryReport:
                         if s.frame is not None
                         else None
                     ),
+                    "frame_note": s.frame_note,
                     "edge_coverage": [
                         {"edge": e.edge, "frac": round(e.frac, 4), "spans": e.spans}
                         for e in s.edges
@@ -1009,15 +1015,18 @@ def _picture_border_issue(shape: Any) -> str | None:
 
 
 def _detect_frame(boxes: list[ShapeBox], cw: float, ch: float) -> ShapeBox | None:
-    """自动挑外框：画布面积的 10%–95% 之间、面积最大的矩形（满版底图被排除）。
+    """自动挑外框：画布面积的 10%–99.5% 之间、面积最大的矩形。
 
-    启发式，非稳准——命名外框（`--frame`）为首选；识别不出就只报越界/互叠，不臆造。
+    上限原为 95%，学院预设的近满幅白卡（画布 96%）因此被排除、回退到焦点块面板并
+    制造「其余列越出外框」假阳性（backlog 20261019-050008）。99.5% 只排除真正的
+    full-bleed 背景（≈100%），保留白卡。启发式，非稳准——命名外框（``--frame``）
+    仍是首选；识别存疑时由 :func:`geometry_report` 给 ``frame_note`` 并抑制越界行。
     """
     canvas_area = cw * ch
     cands = [
         b
         for b in boxes
-        if b.rect and 0.10 * canvas_area <= b.area <= 0.95 * canvas_area
+        if b.rect and 0.10 * canvas_area <= b.area <= 0.995 * canvas_area
     ]
     return max(cands, key=lambda b: b.area) if cands else None
 
@@ -1179,6 +1188,28 @@ def geometry_report(
         else:
             fr = _detect_frame(boxes, cw, ch)
             source = "auto" if fr is not None else ""
+        frame_note = ""
+        if fr is not None and source == "auto":
+            canvas_area = cw * ch
+            rect_cands = [
+                b
+                for b in boxes
+                if b.rect and 0.10 * canvas_area <= b.area <= 0.995 * canvas_area
+            ]
+            near_full = [b for b in rect_cands if b.area >= 0.95 * canvas_area]
+            frac = fr.area / max(1.0, canvas_area)
+            if near_full and frac < 0.95:
+                best = max(near_full, key=lambda b: b.area)
+                frame_note = (
+                    f"外框识别存疑：存在近满幅矩形 {best.name}"
+                    f"（{best.area / canvas_area:.0%} 画布），auto 选中 {fr.name}"
+                    f"（{frac:.0%}）；建议 --frame 指定"
+                )
+            elif frac < 0.5 and len(rect_cands) >= 2:
+                frame_note = (
+                    f"外框识别存疑：auto 选中 {fr.name}（{frac:.0%} 画布）"
+                    "且有多个矩形候选；建议 --frame 指定"
+                )
 
         pics = [b for b in boxes if b.kind == "pic" and not b.decorative]
         decorative_pics = [b.name for b in boxes if b.kind == "pic" and b.decorative]
@@ -1218,6 +1249,7 @@ def geometry_report(
             boxes=boxes,
             frame=fr,
             frame_source=source,
+            frame_note=frame_note,
             off_canvas=_off_bounds(judged, 0.0, 0.0, cw, ch, tolerance, "画布"),
             overlaps=_picture_overlaps(pics, cw, ch, overlap_in2),
             connector_hints=[
@@ -1230,7 +1262,7 @@ def geometry_report(
             picture_border_issues=border,
             decorative_pics=decorative_pics,
         )
-        if fr is not None:
+        if fr is not None and not frame_note:
             sg.edges = _edge_coverage(fr, [b for b in pics if b.z > fr.z])
             sg.off_frame = _off_bounds(
                 pics, fr.x0, fr.y0, fr.x1, fr.y1, tolerance, "外框"
