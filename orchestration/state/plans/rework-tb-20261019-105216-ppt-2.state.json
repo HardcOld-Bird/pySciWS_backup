@@ -1,0 +1,69 @@
+{
+  "plan_id": "rework-tb-20261019-105216-ppt-2",
+  "created": "2026-10-19T11:01:36+08:00",
+  "goal": "返工：tb-20261019-105216-ppt-2",
+  "steps": [
+    {
+      "id": "A.a1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-105216-ppt-2.a1-成因分析.md"
+    },
+    {
+      "id": "A.a2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-105216-ppt-2.a2-解决方案.md"
+    },
+    {
+      "id": "A.a3",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-105216-ppt-2.a3-送审结论.md"
+    },
+    {
+      "id": "A.a4",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-105216-ppt-2.a4-拆解改进派单.md"
+    },
+    {
+      "id": "A.a5",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261019-111005-rework-tb-20261019-105216-ppt-2-A.a5",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-105216-ppt-2.a5.task.md"
+    },
+    {
+      "id": "B.b1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.b2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.b_last",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l3",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null
+}
