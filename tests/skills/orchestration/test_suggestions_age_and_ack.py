@@ -235,3 +235,100 @@ def test_suggestions_show_requires_id():
     with pytest.raises(SystemExit) as exc:
         orch.main(["suggestions", "show"])
     assert exc.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# ⑧ 清账辅助：按 kind 分组摘要 + 批量销账（R4 L.l3）
+# ---------------------------------------------------------------------------
+def _sugg_body(state, *, at: datetime, kind: str, text: str, member: str = "devops"):
+    sid = at.strftime("%Y%m%d-%H%M%S") + f"-{member}"
+    body = (
+        f"# 改进建议（{member}，待审批）\n\nkind: {kind}\n现象：{text}。\n\n"
+        "success_criteria:\n- 可验收\n"
+    )
+    return seed_raw_suggestion(state, body, member=member, sid=sid)
+
+
+def test_suggestions_summary_groups_by_kind(iso_state, capsys):
+    now = datetime.now()
+    old = _sugg_body(
+        iso_state, at=now - timedelta(hours=31), kind="defect", text="旧缺陷甲"
+    )
+    _sugg_body(iso_state, at=now - timedelta(hours=3), kind="defect", text="旧缺陷丙")
+    use = _sugg_body(
+        iso_state, at=now - timedelta(hours=2), kind="usability", text="难用乙"
+    )
+    capsys.readouterr()
+
+    assert orch.main(["suggestions", "summary"]) == 0
+    out = capsys.readouterr().out
+    assert "== defect（2 条）==" in out and "== usability（1 条）==" in out
+    assert old in out and use in out
+    assert "龄期=31h" in out and "旧缺陷甲" in out
+    assert out.index("== defect") < out.index("== usability")
+
+
+def test_suggestions_ack_all_by_kind(iso_state, capsys):
+    now = datetime.now()
+    d1 = _sugg_body(iso_state, at=now - timedelta(hours=5), kind="defect", text="甲")
+    d2 = _sugg_body(iso_state, at=now - timedelta(hours=4), kind="defect", text="乙")
+    use = _sugg_body(
+        iso_state, at=now - timedelta(hours=3), kind="usability", text="丙"
+    )
+    capsys.readouterr()
+
+    rc = orch.main(
+        [
+            "suggestions",
+            "ack-all",
+            "--as",
+            "decision",
+            "--by",
+            "测试批量",
+            "--why",
+            "清账",
+            "--kind",
+            "defect",
+        ]
+    )
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "批量销账 2 条" in out, out
+    closed = workflow.SUGGESTIONS_DIR / workflow.CLOSED_DIR_NAME
+    assert (closed / f"{d1}.md").is_file() and (closed / f"{d2}.md").is_file()
+    assert (workflow.SUGGESTIONS_DIR / f"{use}.md").is_file(), "未选中的 kind 不得动"
+    assert not (iso_state / "backlog.json").exists(), "销账不该进 backlog"
+
+
+def test_suggestions_ack_all_no_match(iso_state, capsys):
+    _sugg(iso_state, at=datetime.now(), member="devops")
+    capsys.readouterr()
+    rc = orch.main(
+        [
+            "suggestions",
+            "ack-all",
+            "--as",
+            "decision",
+            "--by",
+            "x",
+            "--why",
+            "y",
+            "--kind",
+            "usability",
+        ]
+    )
+    assert rc == 0 and "无匹配" in capsys.readouterr().out
+    assert workflow.pending_suggestions(), "无匹配时不得误销账"
+
+
+def test_suggestions_summary_empty(iso_state, capsys):
+    capsys.readouterr()
+    assert orch.main(["suggestions", "summary"]) == 0
+    assert "（无待审批建议）" in capsys.readouterr().out
+
+
+def test_suggestions_ack_all_requires_why(iso_state):
+    with pytest.raises(SystemExit) as exc:
+        orch.main(["suggestions", "ack-all", "--as", "decision", "--by", "x"])
+    assert exc.value.code == 2

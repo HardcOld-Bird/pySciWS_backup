@@ -27,8 +27,8 @@ pysci-orch plan split <id> --step <leaf> (--before|--after) --member <id> --brie
 pysci-orch plan adhoc <member> --text "..." [--dirs d1,d2]  # 计划外单步：**同步阻塞到完成**
 #   └ 与 `plan advance`「入队即返回」相反（内部等在途收尾）；长任务**必须后台**（run_in_background），否则撞 Bash 超时（backlog 20261015-211200）
 pysci-orch plan list | plan drop <id>
-pysci-orch suggestions [show <id> | ack <id> --as superseded|decision --by <ref> --why "<理由>"]  # 待审批（超 24h 醒目）
-#     └ ack＝**第三态销账**（非否决、不进 backlog，移入 `closed/`）；立单面 `supersedes: <id>[,…]` 随 approve 联动销账
+pysci-orch suggestions [show <id> | summary | ack <id> | ack-all]  # 待审批（>24h）；summary 分组；ack/ack-all
+#     └ ack/ack-all＝**第三态销账**（非否决、不进 backlog，移入 `closed/`）；立单面 `supersedes: <id>[,…]` 随 approve 联动销账
 pysci-orch approve <建议id> (--jury | --bench <案id[,案id]> | --override "<理由>")
         [--note "..."] [--no-wake] [--criteria "<判据>"] [--solo]  # 四态必居其一
         # 例外=缺陷×当跳 blocked；判决包 verdict-package.md
