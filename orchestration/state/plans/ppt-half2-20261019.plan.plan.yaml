@@ -1,0 +1,70 @@
+goal: 开题PPT（后半）：草稿（后半）13 页入成品 12–24 位并按批注精修
+template: new
+taskbook: tb-20261019-225855-ppt
+steps:
+- id: G1
+  brief: 骨架植入与逐页精修
+  children:
+  - id: s1
+    member: writing
+    brief: 骨架植入——草稿（后半）13 页入成品 12–24 位（替换旧尾 12–15），未提及页原样搬运（PART.03×2/感谢/谢谢）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w1
+    member: writing
+    brief: 第1页「脉络：零点→极点」——唯一图包整页焦点块（无标题），底部引用框「[3] Science 387, eado4128 (2025).」
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w3
+    member: writing
+    brief: 第3页「理论背景：模式耦合理论（CMT）」——统一美学重包装，文字/公式/管槽示意图照搬，公式 LaTeX 渲染为图
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w4
+    member: writing
+    brief: 第4页「两种奇异点的对比」——保留插入图与大致布局，包为两个多图焦点块（无标题）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w5
+    member: writing
+    brief: 第5页「二者之间的对偶性」——同上，两个焦点块（无标题）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w6
+    member: writing
+    brief: 第6页「增益EP点的性质」——3 焦点块（拓扑性质/极端非对称响应/散射特性），右块全幅双图＋标题左上角式（参考模板 p20 右侧）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w7
+    member: writing
+    brief: 第7页「有源实验平台」——两图两焦点块（无源平台/有源平台），保留左右布局
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w8
+    member: writing
+    brief: 第8页「反馈系统的实际搭建」——按模板 p20 重设计：左「系统概况」链路箭头＋图片留空（用户手补）；右「反馈实现」公式截图×2＋算法文本
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w9
+    member: writing
+    brief: 第9页「实验结果」——唯一图包整页焦点块（无标题）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w11
+    member: writing
+    brief: 第11页「未来计划和预期成果」——三段拆上中下三个纯文本焦点块，标题＝冒号前，正文扩写冒号后
+    dirs:
+    - data/大任务/5_开题PPT
+- id: G2
+  brief: 终检与交付
+  children:
+  - id: rv
+    member: reviewer
+    brief: 终检——逐页批注落实＋美学一致性＋全量 audit＋渲染目检＋VERDICT
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: b_last
+    kind: self
+    brief: 全流程报告组装
+    role: final_report
+id: ppt-half2-20261019.plan

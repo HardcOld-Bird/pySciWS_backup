@@ -1,0 +1,70 @@
+{
+  "plan_id": "ppt-half2-20261019.plan",
+  "created": "2026-10-19T23:02:23+08:00",
+  "goal": "开题PPT（后半）：草稿（后半）13 页入成品 12–24 位并按批注精修",
+  "steps": [
+    {
+      "id": "G1.s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261019-230459-ppt-half2-20261019.plan-G1.s1",
+      "task_file": "orchestration/state/plans/ppt-half2-20261019.s1.task.md"
+    },
+    {
+      "id": "G1.w1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.w3",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.w4",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.w5",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.w6",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.w7",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.w8",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.w9",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G1.w11",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G2.rv",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "G2.b_last",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null
+}
