@@ -526,3 +526,46 @@ def test_adhoc_ids_are_unique_within_the_same_second(rface, monkeypatch, capsys)
         st = plans._load_state(pid)
         assert st["plan_id"] == pid and len(st["steps"]) == 1
         assert st["steps"][0]["status"] == "done", "每单各自完成一跳"
+
+
+# ===========================================================================
+#  ⑨ watch 通知分层：总览只随任务书首个通知附送（tb-5 返工 2 轮 L 摩擦）
+# ===========================================================================
+def _event(n: int) -> dict:
+    return {
+        "event": "JOB-DONE",
+        "subject": f"job-{n}",
+        "detail": "worker 收尾",
+        "action": "推进",
+    }
+
+
+def test_watch_digest_only_on_first_notification(rface, owner_side):
+    root = _mk_taskbook("原始大任务")
+    rw = taskbooks.create_rework(root, improve={}, note="上轮批语")["id"]
+    _mk_plan(rface, "p-watch-layer", tb_id=rw)
+    state = {"armed_by": owner_side}
+
+    out1: list[str] = []
+    assert watch._emit(state, [_event(1)], echo=out1.append) is True
+    joined1 = "\n".join(out1)
+    assert "要求与历史总览（自动附送）" in joined1, "首个通知仍须附送总览"
+    assert state["digest_sent"] == [rw]
+
+    out2: list[str] = []
+    assert watch._emit(state, [_event(2)], echo=out2.append) is True
+    joined2 = "\n".join(out2)
+    assert "要求与历史总览（自动附送）" not in joined2, "常规事件不得重复全量总览"
+    assert f"taskbooks show {rw}" in joined2, "须给按需取全文的指针"
+
+
+def test_watch_taskbook_new_forces_digest_even_if_previously_sent(rface, owner_side):
+    root = _mk_taskbook("原始大任务")
+    rw = taskbooks.create_rework(root, improve={}, note="上轮批语")["id"]
+    _mk_plan(rface, "p-watch-new", tb_id=rw)
+    state = {"armed_by": owner_side, "digest_sent": [rw]}
+
+    out: list[str] = []
+    ev = {**_event(3), "event": "TASKBOOK-NEW"}
+    assert watch._emit(state, [ev], echo=out.append) is True
+    assert "要求与历史总览（自动附送）" in "\n".join(out)

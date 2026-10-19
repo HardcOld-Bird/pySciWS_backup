@@ -1797,11 +1797,30 @@ def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> boo
     for line in auto_remount_lines():
         echo(line)
     # 机械推送点（PSEP_3 §3.3）：唤醒即携路由卡片（失败 fail-soft，推送面不拦唤醒）。
+    # **通知面分层**（tb-5 返工 2 轮 L 摩擦）：要求与历史总览只在该任务书的**首个通知**
+    # （TASKBOOK-NEW 或首次 JOB-DONE）附送；其后只给环节点要+指针，全文按需取
+    # （taskbooks show / plan advance --full）——否则 30 叶一轮重复 30 次 ~15KB。
     try:
         from . import nextroute
 
-        for line in nextroute.card_lines(None):
+        actions = nextroute.sort_actions(nextroute.collect_actions())
+        head = actions[0] if actions else {}
+        tb_id = str(head.get("tb_id") or "")
+        sent = [str(x) for x in (state.get("digest_sent") or [])]
+        first = any(str(ev.get("event")) == _events.TASKBOOK_NEW for ev in fresh) or (
+            bool(tb_id) and tb_id not in sent
+        )
+        for line in nextroute.card_lines(None, include_digest=bool(first)):
             echo(line)
+        if first and tb_id and tb_id not in sent:
+            sent.append(tb_id)
+            state["digest_sent"] = sent[-200:]
+            save_state(state)
+        if tb_id and not first:
+            echo(
+                f"[i] 要求与历史总览：pysci-orch taskbooks show {tb_id}"
+                "（或 plan advance --full）"
+            )
     except Exception:  # noqa: BLE001
         pass
     return True
