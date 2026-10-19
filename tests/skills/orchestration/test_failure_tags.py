@@ -317,3 +317,9 @@ def test_reconcile_tags_empty_and_result_deliveries():
         ["whitelist_conflict"],
         "",
     )
+
+
+def test_merge_dirty_face_definition_reflects_auto_shelve():
+    """词表定义不得再写「一律 rc=2」：默认自动搁置三路应回，只有失败/--no-shelve 才 rc=2。"""
+    d = failure_tags.load_tags()["merge_dirty_face"]
+    assert "自动搁置" in d and "rc=2" in d and "自动搁置失败" in d
