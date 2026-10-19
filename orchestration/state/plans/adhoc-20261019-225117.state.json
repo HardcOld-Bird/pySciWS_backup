@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261019-225117",
+  "created": "2026-10-19T22:51:17+08:00",
+  "goal": "adhoc：orchestration/state/plans/adhoc-logo-exemplar.task.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261019-225117-adhoc-20261019-225117-s1",
+      "task_file": "orchestration/state/plans/adhoc-logo-exemplar.task.md"
+    }
+  ],
+  "completed_at": null
+}

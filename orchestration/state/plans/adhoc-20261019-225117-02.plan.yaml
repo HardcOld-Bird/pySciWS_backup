@@ -1,0 +1,8 @@
+id: adhoc-20261019-225117-02
+goal: adhoc：orchestration/state/plans/adhoc-preset-logo4.task.md
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs: []
+  review: false
