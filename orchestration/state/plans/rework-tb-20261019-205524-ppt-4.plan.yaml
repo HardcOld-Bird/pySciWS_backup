@@ -55,6 +55,37 @@ steps:
     member: devops
     brief: 返工生产环节
     member_placeholder: true
+  - id: w1
+    member: writing
+    brief: 徽标工序——p3–p10 徽标 bbox 对齐 p1/p2 基准 [0.76,0.937,3.18,5.836]（批语 1）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w2
+    member: writing
+    brief: 圆角工序——p3–p10 全部粗外框 roundRect adj 3000（批语 2）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w3
+    member: writing
+    brief: 上缘工序——p3–p10 全部粗外框 top 0.94/下缘 6.634（批语 3）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w4
+    member: writing
+    brief: 标题边距工序——p4–p10 标题 left 0.30、right(n)=0.34n+1.069（批语 4）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: d_preset
+    member: devops
+    brief: 预设参数册——默认美学风格（徽标/圆角/上缘/标题边距）入 ppt-preset-formal + sync
+    dirs:
+    - orchestration/skills
+    - orchestration/pods
+  - id: rv
+    member: reviewer
+    brief: 终检——4 工序逐条＋全量 audit（含 aesthetics 判据）＋渲染目检＋VERDICT
+    dirs:
+    - data/大任务/5_开题PPT
   - id: b_last
     kind: self
     brief: 全流程报告组装

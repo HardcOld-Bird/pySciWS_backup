@@ -44,14 +44,48 @@
     },
     {
       "id": "B.b2",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261019-212215-rework-tb-20261019-205524-ppt-4-B.b2",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-205524-ppt-4.b2.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-205524-ppt-4.b2.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
+    },
+    {
+      "id": "B.w1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "writing-20261019-212707-rework-tb-20261019-205524-ppt-4-B.w1",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-205524-ppt-4.w1.task.md"
+    },
+    {
+      "id": "B.w2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.w3",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.w4",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.d_preset",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.rv",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "B.b_last",
-      "status": "pending",
+      "status": "self_awaiting",
       "review": "pending"
     },
     {
