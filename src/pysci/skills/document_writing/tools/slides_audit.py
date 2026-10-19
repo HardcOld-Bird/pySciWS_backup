@@ -1,5 +1,9 @@
 """``compose slides audit``：按 deck-spec 机械对账（装饰层/字体全槽/图槽/引用框/标题公式）。
 
+图槽判据含：内容指纹/位置/文本/注记新鲜度，以及**数量/相对顺序（bbox 列内+列序）/
+裁切参数（crop note 的裁框·源内·px 或数值 srcRect）**——p8 中列多图、p9/p10 顺序与
+裁切项不再只能人工确认。
+
 deck-spec（YAML）是本轮「要求唯一真源」的载体：**不变量**（装饰层指纹、字体全槽、动画
 指针）与**变量槽位**（每页每图槽：占位符指纹/内容锚/原文图号/来源/裁切）。审计逐项输出
 PASS/FAIL；无法机械判定的条目降级为「人工确认」行（必须留勾选痕迹，不计 FAIL）。
@@ -363,6 +367,200 @@ def _check_slot(
             )
         )
     return items
+
+
+_CROP_OUT_RE = re.compile(r"(\d+)\s*[×x]\s*(\d+)")
+_CROP_RECT_RE = re.compile(
+    r"裁\s*\(([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\)"
+)
+_CROP_SRC_RE = re.compile(r"自\s*([^（(]+?)\s*[（(]\s*(\d+)\s*[×x]\s*(\d+)\s*[）)]")
+
+
+def _slot_bbox(slide: Any, slot: dict[str, Any]) -> list[float] | None:
+    """图槽实际 bbox；形状缺失时退 ``expect_box``（p9/p10 既有字段）。"""
+    sid = int(slot.get("shape") or 0)
+    sh = _shape_on(slide, sid)
+    if sh is not None:
+        return _box(sh)
+    box = slot.get("expect_box")
+    if box:
+        try:
+            vals = [float(v) for v in box]
+        except (TypeError, ValueError):
+            return None
+        return vals if len(vals) == 4 else None
+    return None
+
+
+def _is_decorative_pic(shape: Any) -> bool:
+    """透明装饰图（水印，alphaModFix ≤10%）——不计入成品图槽数量。"""
+    try:
+        amt = shape._element.find(".//" + qn("a:alphaModFix"))
+        if amt is not None:
+            return int(amt.get("amt", "100000")) <= 10000
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
+def _pic_md5(shape: Any) -> str:
+    try:
+        return _md5(shape.image.blob)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _check_slot_count(
+    slide: Any, page_spec: dict[str, Any], page: int
+) -> list[AuditItem]:
+    """图槽数量：成品内容图数须等于 spec 槽数（草稿占位残留不计）。"""
+    slots = page_spec.get("slots") or []
+    if not slots:
+        return []
+    slot_ids = {int(s.get("shape") or 0) for s in slots}
+    placeholder_md5s = {
+        str(p.get("md5")) for p in page_spec.get("placeholders") or [] if p.get("md5")
+    }
+    pics = []
+    for sh in slide.shapes:
+        if not _is_picture(sh) or _is_decorative_pic(sh):
+            continue
+        if int(sh.shape_id) in slot_ids:
+            pics.append(sh)
+        elif _pic_md5(sh) not in placeholder_md5s:
+            pics.append(sh)
+    extra = [sh.name for sh in pics if int(sh.shape_id) not in slot_ids]
+    missing = [sid for sid in sorted(slot_ids) if _shape_on(slide, sid) is None]
+    detail = f"成品图 {len(pics)} / spec 槽 {len(slots)}"
+    if extra:
+        detail += f"；未登记图 {extra[:3]}"
+    if missing:
+        detail += f"；缺槽形状 {missing[:3]}"
+    ok = len(pics) == len(slots) and not extra and not missing
+    return [AuditItem(f"图槽数量 p{page}", "pass" if ok else "fail", detail)]
+
+
+def _column_groups(items: list[tuple[int, int, list[float]]]):
+    """按 bbox 的 x 重叠分列；每列内按 y0 上→下排序，列按左→右排序。"""
+    groups: list[list[tuple[int, int, list[float]]]] = []
+    for it in sorted(items, key=lambda x: x[2][0]):
+        x0, x1 = it[2][0], it[2][2]
+        for g in groups:
+            gx0 = min(x[2][0] for x in g)
+            gx1 = max(x[2][2] for x in g)
+            overlap = min(gx1, x1) - max(gx0, x0)
+            if overlap > 0.3 * min(gx1 - gx0, x1 - x0):
+                g.append(it)
+                break
+        else:
+            groups.append([it])
+    groups.sort(key=lambda g: min(x[2][0] for x in g))
+    return [sorted(g, key=lambda x: (x[2][1], x[2][0])) for g in groups]
+
+
+def _check_slot_order(slide: Any, page_spec: dict[str, Any], page: int):
+    """图槽相对顺序：列内 top→bottom 的 order 递增；列左→右首项 order 递增。
+
+    不强制全页行/列优先的全局序列（p3 是行序、p8/p10 是列序），只检查两个可机械
+    判定的相对关系——这正是「中列上下对换」「左中右反转」会破坏的部分。
+    """
+    slots = page_spec.get("slots") or []
+    items: list[tuple[int, int, list[float]]] = []
+    for slot in slots:
+        try:
+            order = int(slot.get("order"))
+        except (TypeError, ValueError):
+            continue
+        box = _slot_bbox(slide, slot)
+        if box is not None:
+            items.append((order, int(slot.get("shape") or 0), box))
+    if len(items) < 2 or len(items) != len(slots):
+        return []
+
+    def label(it: tuple[int, int, list[float]]) -> str:
+        sid = it[1]
+        return next(
+            (
+                str(s.get("id"))
+                for s in slots
+                if int(s.get("shape") or 0) == sid and s.get("id")
+            ),
+            f"shape={sid}",
+        )
+
+    groups = _column_groups(items)
+    problems: list[str] = []
+    for gi, g in enumerate(groups, 1):
+        orders = [it[0] for it in g]
+        if orders != sorted(orders):
+            problems.append(
+                f"列{gi} 内 y 序与 order 不符："
+                + "→".join(f"{label(it)}#{it[0]}" for it in g)
+            )
+    firsts = [g[0][0] for g in groups]
+    if firsts != sorted(firsts):
+        problems.append("列左→右首项 order 非递增：" + "→".join(map(str, firsts)))
+    layout = "→".join("(" + "→".join(label(it) for it in g) + ")" for g in groups)
+    detail = f"列序 {layout}" + ("" if not problems else "；" + "；".join(problems))
+    return [AuditItem(f"图槽顺序 p{page}", "fail" if problems else "pass", detail)]
+
+
+def _check_slot_crop(slide: Any, slot: dict[str, Any], page: int) -> AuditItem | None:
+    """裁切参数：crop note 的「输出尺寸＝裁框＝嵌入 px」＋ 裁框在源内；或数值 l/t/r/b。"""
+    crop = slot.get("crop")
+    if not isinstance(crop, dict) or not crop:
+        return None
+    note = str(crop.get("note") or "")
+    out = _CROP_OUT_RE.search(note)
+    rect = _CROP_RECT_RE.search(note)
+    src = _CROP_SRC_RE.search(note)
+    num_keys = [k for k in ("l", "t", "r", "b") if k in crop]
+    if not (out and rect) and not num_keys:
+        return None
+    sid = int(slot.get("shape") or 0)
+    label = f"图槽裁切 p{page} shape={sid}"
+    sh = _shape_on(slide, sid)
+    bad: list[str] = []
+    good: list[str] = []
+    if out and rect:
+        ow, oh = int(out.group(1)), int(out.group(2))
+        x0, y0, x1, y1 = (float(rect.group(i)) for i in range(1, 5))
+        cw, ch = x1 - x0, y1 - y0
+        trim = "去边" in note
+        if trim:
+            # 「裁 (x0,y0,x1,y1) 去边 Npx」是两步处理：最终尺寸以 note 输出/嵌入 px 为准。
+            good.append(f"输出 {ow}×{oh}（含去边处理）")
+        elif abs(cw - ow) > 1 or abs(ch - oh) > 1:
+            bad.append(f"裁框 {cw:g}×{ch:g} ≠ note {ow}×{oh}")
+        else:
+            good.append(f"裁框 {ow}×{oh}")
+        if src:
+            sw, shh = int(src.group(2)), int(src.group(3))
+            if not (0 <= x0 < x1 <= sw and 0 <= y0 < y1 <= shh):
+                bad.append(f"裁框 ({x0:g},{y0:g},{x1:g},{y1:g}) 越出源 {sw}×{shh}")
+            else:
+                good.append(f"源 {sw}×{shh} 内")
+        if sh is not None:
+            try:
+                px = [int(v) for v in sh.image.size]
+            except Exception:  # noqa: BLE001
+                px = []
+            if px and px != [ow, oh]:
+                bad.append(f"嵌入 px {px} ≠ note {ow}×{oh}")
+            elif px:
+                good.append(f"px {ow}×{oh}")
+    if num_keys:
+        actual = _src_rect(sh) if sh is not None else {}
+        for key in num_keys:
+            want = int(crop[key])
+            got = int(actual.get(key, 0))
+            if got != want:
+                bad.append(f"srcRect {key}={got} ≠ {want}")
+            else:
+                good.append(f"{key}={want}")
+    if bad:
+        return AuditItem(label, "fail", "；".join(bad))
+    return AuditItem(label, "pass", "；".join(good) or "裁切参数符合")
 
 
 def _check_formula(slide: Any, entry: dict[str, Any], *, capsule: bool) -> AuditItem:
@@ -863,6 +1061,12 @@ def audit_deck(pptx: str | Path, spec: str | Path) -> AuditReport:
                     break
         for slot in slots:
             rep.items.extend(_check_slot(spec_path, slide, slot, page))
+        rep.items.extend(_check_slot_count(slide, page_spec, page))
+        rep.items.extend(_check_slot_order(slide, page_spec, page))
+        for slot in slots:
+            crop_item = _check_slot_crop(slide, slot, page)
+            if crop_item is not None:
+                rep.items.append(crop_item)
         for entry in page_spec.get("titles") or []:
             if not titles_superseded:
                 rep.items.append(_check_formula(slide, entry, capsule=False))
