@@ -149,6 +149,16 @@ steps:
     brief: 渲染视觉终检——逐页 Read 第3–10页 + 机械闸，对照 2 轮批语三组问题逐条核验（焦点块路径1/图像清单8组/3pt/16pt/公式渲染），出具 VERDICT
     dirs:
     - data/大任务/5_开题PPT
+  - id: w_r1
+    member: writing
+    brief: rv2 返修一单（工序=标题回补+两处点修）——①p3–p10 补回 28pt 页标题（汉仪大宋简 #404040、algn=dist、w=0.34n+0.55、y=0.179）+左竖条（0.076,0.250，0.107×0.459，#BEC6D1），统一回 layout 1；②p3 两引用框右移（57→x=4.140、58→x=9.430）；③p10 右块胶囊改名（如「主动降噪超材料[3]」）；改后重渲染逐页 Read+复跑 verify/layout（Δ=0）
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: rv2
+    member: reviewer
+    brief: C 判后复审——复核返修三项（8 页标题/竖条在位、p3 引用框 Δ=0、p10 胶囊语义）+ 无新回归，出具终判 VERDICT
+    dirs:
+    - data/大任务/5_开题PPT
   - id: d2
     member: devops
     brief: 预设修订入库——b2 的 staging 修订按 8KB 预算合入 ppt-preset-formal 真本（拆册如需）+ sync 部署
