@@ -5,10 +5,12 @@
   "steps": [
     {
       "id": "s1",
-      "status": "queued",
+      "status": "blocked",
       "review": "pending",
       "job_id": "writing-20261019-223438-adhoc-20261019-223438-s1",
-      "task_file": "orchestration/state/plans/adhoc-rollback-corner-logo.task.md"
+      "task_file": "orchestration/state/plans/adhoc-rollback-corner-logo.task.md",
+      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "kind": "blocked"
     }
   ],
   "completed_at": null
