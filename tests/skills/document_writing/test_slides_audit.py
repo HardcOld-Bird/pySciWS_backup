@@ -575,3 +575,128 @@ def test_expect_src_rect_annotates_decoration_box(tmp_path):
     rep = slides_audit.audit_deck(deck, p)
     dec = next(i for i in rep.items if i.name.startswith("装饰 p1"))
     assert "box_in[" in dec.detail
+
+
+# ---------------------------------------------------------------------------
+# backlog 20261019-171344：图槽数量 / 相对顺序（bbox）/ 裁切参数
+# ---------------------------------------------------------------------------
+def _order_deck(tmp_path):
+    """4 张图：左列 1、中列上下 2、右列 1。"""
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    img = _png(tmp_path / "order.png")
+    ids = []
+    for x, y in ((0.5, 1.0), (4.0, 1.0), (4.0, 3.5), (8.0, 1.0)):
+        pic = s.shapes.add_picture(
+            str(img), Inches(x), Inches(y), Inches(2), Inches(1.5)
+        )
+        ids.append(pic.shape_id)
+    deck = tmp_path / "order.pptx"
+    prs.save(str(deck))
+    return deck, ids
+
+
+def _slots_spec(tmp_path, slots, placeholders=None, name="slots-spec.yaml"):
+    page = {"page": 1, "slots": slots}
+    if placeholders is not None:
+        page["placeholders"] = placeholders
+    p = tmp_path / name
+    p.write_text(
+        yaml.safe_dump({"pages": [page]}, allow_unicode=True), encoding="utf-8"
+    )
+    return p
+
+
+def test_slot_count_flags_unregistered_picture_and_ignores_unused_placeholders(
+    tmp_path,
+):
+    deck, ids = _order_deck(tmp_path)
+    good = _slots_spec(
+        tmp_path,
+        [{"shape": sid, "order": i + 1} for i, sid in enumerate(ids)],
+        placeholders=[{"md5": f"unused-{i}"} for i in range(5)],
+        name="count-good.yaml",
+    )
+    rep = slides_audit.audit_deck(deck, good)
+    row = next(i for i in rep.items if i.name == "图槽数量 p1")
+    assert row.status == "pass", row.detail
+    assert "成品图 4 / spec 槽 4" in row.detail
+
+    bad = _slots_spec(
+        tmp_path,
+        [{"shape": ids[0], "order": 1}],
+        name="count-bad.yaml",
+    )
+    rep_bad = slides_audit.audit_deck(deck, bad)
+    row_bad = next(i for i in rep_bad.items if i.name == "图槽数量 p1")
+    assert row_bad.status == "fail" and "未登记图" in row_bad.detail
+
+
+def test_slot_order_flags_middle_column_swap(tmp_path):
+    deck, ids = _order_deck(tmp_path)
+    good = _slots_spec(
+        tmp_path,
+        [{"shape": sid, "order": i + 1} for i, sid in enumerate(ids)],
+        name="order-good.yaml",
+    )
+    rep = slides_audit.audit_deck(deck, good)
+    row = next(i for i in rep.items if i.name == "图槽顺序 p1")
+    assert row.status == "pass", row.detail
+
+    # 中列上下对换：bbox y 序应为 order 2→3
+    swapped = _slots_spec(
+        tmp_path,
+        [
+            {"shape": ids[0], "order": 1},
+            {"shape": ids[1], "order": 3},
+            {"shape": ids[2], "order": 2},
+            {"shape": ids[3], "order": 4},
+        ],
+        name="order-swap.yaml",
+    )
+    rep_bad = slides_audit.audit_deck(deck, swapped)
+    row_bad = next(i for i in rep_bad.items if i.name == "图槽顺序 p1")
+    assert row_bad.status == "fail" and "列" in row_bad.detail, row_bad.detail
+
+
+def test_slot_order_flags_reversed_column_order(tmp_path):
+    deck, ids = _order_deck(tmp_path)
+    spec = _slots_spec(
+        tmp_path,
+        [
+            {"shape": ids[0], "order": 4},
+            {"shape": ids[1], "order": 3},
+            {"shape": ids[2], "order": 2},
+            {"shape": ids[3], "order": 1},
+        ],
+        name="order-rev.yaml",
+    )
+    rep = slides_audit.audit_deck(deck, spec)
+    row = next(i for i in rep.items if i.name == "图槽顺序 p1")
+    assert row.status == "fail" and "首项 order 非递增" in row.detail, row.detail
+
+
+def test_slot_crop_note_consistency_and_px(tmp_path):
+    deck, ids = _deck(tmp_path)
+
+    def spec(note: str, name: str) -> Path:
+        return _slots_spec(
+            tmp_path,
+            [{"shape": ids["pic"], "order": 1, "crop": {"note": note}}],
+            name=name,
+        )
+
+    ok = slides_audit.audit_deck(
+        deck,
+        spec("64×48；自 orig.png（128×96）裁 (32,24,96,72)", "crop-ok.yaml"),
+    )
+    row = next(i for i in ok.items if i.name.startswith("图槽裁切 p1"))
+    assert row.status == "pass", row.detail
+    assert "px 64×48" in row.detail and "源 128×96 内" in row.detail
+
+    bad = slides_audit.audit_deck(
+        deck,
+        spec("60×48；自 orig.png（128×96）裁 (32,24,96,72)", "crop-bad.yaml"),
+    )
+    row_bad = next(i for i in bad.items if i.name.startswith("图槽裁切 p1"))
+    assert row_bad.status == "fail" and "≠ note" in row_bad.detail
