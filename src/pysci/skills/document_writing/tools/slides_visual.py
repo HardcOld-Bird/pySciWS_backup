@@ -1150,8 +1150,9 @@ def geometry_report(
 
     Args:
         pptx: 源 .pptx。
-        frame: 外框形状名（``--frame``）。缺省自动挑「面积最大的矩形」（10%–95% 画布面积）；
-            识别不出则只报越界与互叠，不臆造外框。
+        frame: 外框形状名（``--frame``）。缺省自动挑「面积最大的矩形」（10%–99.5%
+            画布面积，近满幅白卡也纳入、≈100% 全幅背景排除）；选中子块存疑时给
+            :attr:`SlideGeometry.frame_note` 并抑制越界行。
         tolerance: 越界容差（英寸）。
         overlap_in2: 图片互叠面积阈值（平方英寸）。
         title_exempt_pages: 免做标题检查的页码（1-based）；``None`` 时仅豁免首页。
