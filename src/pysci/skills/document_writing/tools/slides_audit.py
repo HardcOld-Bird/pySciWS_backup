@@ -647,8 +647,22 @@ def _float4(value: Any) -> list[float] | None:
     return out if len(out) == 4 else None
 
 
+def _logo_ref_boxes(ref: list[float]) -> list[tuple[str, list[float]]]:
+    """``logo_bbox_ref`` 的两种历史口径，统一成 ``[x0,y0,x1,y1]``（in）。
+
+    正口径 ``[x,y,w,h]``；兼容历史任务书中把后两数写作右下角的 ``[l,t,r,b]``
+    （backlog 20261019-223633：同一数组两种读法曾把 1:1 徽标判成 0.8749）。
+    """
+    x, y, a, b = ref
+    return [
+        ("x,y,w,h", [round(v, 4) for v in (x, y, x + a, y + b)]),
+        ("l,t,r,b", [round(v, 4) for v in (x, y, a, b)]),
+    ]
+
+
 def _logo_ref_md5s(prs: Any, ref: list[float], tol: float) -> set[str]:
-    """首两页徽标指纹：bbox 命中 ``logo_bbox_ref`` 或高度 ≥5 in 的图片。"""
+    """首两页徽标指纹：bbox 命中 ``logo_bbox_ref``（任一口径）或高度 ≥5 in 的图片。"""
+    ref_boxes = [box for _, box in _logo_ref_boxes(ref)]
     out: set[str] = set()
     for slide in list(prs.slides)[:2]:
         for sh in slide.shapes:
@@ -656,11 +670,12 @@ def _logo_ref_md5s(prs: Any, ref: list[float], tol: float) -> set[str]:
                 continue
             try:
                 ltwh = _ltwh(sh)
+                box = _box(sh)
                 blob = sh.image.blob
             except Exception:  # noqa: BLE001
                 continue
-            if ltwh[3] >= _LOGO_MIN_HEIGHT_IN or all(
-                abs(a - b) <= tol for a, b in zip(ltwh, ref)
+            if ltwh[3] >= _LOGO_MIN_HEIGHT_IN or any(
+                all(abs(a - b) <= tol for a, b in zip(box, want)) for want in ref_boxes
             ):
                 out.add(_md5(blob))
     return out
@@ -693,7 +708,9 @@ def _check_logo(
     label = f"徽标 p{page}"
     ref = _float4(aes.get("logo_bbox_ref"))
     if ref is None:
-        return AuditItem(label, "fail", "logo_bbox_ref 需为 [x,y,w,h]（in）")
+        return AuditItem(
+            label, "fail", "logo_bbox_ref 需为 4 个数（[x,y,w,h] 或 [l,t,r,b]，in）"
+        )
     sh = _find_logo(slide, ref_md5s)
     if sh is None:
         return AuditItem(
@@ -702,17 +719,29 @@ def _check_logo(
     tol = float(aes.get("logo_bbox_tol_in", 0.02))
     aspect_tol = float(aes.get("logo_aspect_tol", 0.01))
     got = _ltwh(sh)
-    want_aspect = ref[2] / ref[3] if ref[3] else 0.0
+    got_box = _box(sh)
+    candidates = _logo_ref_boxes(ref)
+    hits = [
+        (name, box)
+        for name, box in candidates
+        if all(abs(a - b) <= tol for a, b in zip(got_box, box))
+    ]
+    # 正口径优先；两者皆中（如 x=y=0）时不歧义，仍标 [x,y,w,h]。
+    name, want_box = hits[0] if hits else candidates[0]
+    bbox_ok = bool(hits)
+    want_w = want_box[2] - want_box[0]
+    want_h = want_box[3] - want_box[1]
+    want_aspect = want_w / want_h if want_h else 0.0
     got_aspect = got[2] / got[3] if got[3] else 0.0
-    bbox_ok = all(abs(a - b) <= tol for a, b in zip(got, ref))
     aspect_ok = abs(got_aspect - want_aspect) <= aspect_tol
     detail = (
-        f"bbox {got} {'≈' if bbox_ok else '≠'} {ref}（tol {tol}）；"
+        f"bbox {got_box} {'≈' if bbox_ok else '≠'} {want_box}"
+        f"（口径 [{name}]，tol {tol}）；"
         f"宽高比 {got_aspect:.4f} {'≈' if aspect_ok else '≠'} {want_aspect:.4f}"
         f"（tol {aspect_tol}）"
     )
     if annotate_box:
-        detail += f" box_in{_box(sh)}"
+        detail += f" box_in{got_box}"
     return AuditItem(label, "pass" if bbox_ok and aspect_ok else "fail", detail)
 
 
