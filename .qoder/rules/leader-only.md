@@ -77,6 +77,8 @@ alwaysApply: true
 | twin | 用户偏好代理＋终裁 | 夜航决策、审美裁决 |
 | inspector | 闲时巡检（发现→分类→分流） | 自动运转，不派发 |
 
+- **复杂视觉任务**（多面板图/PPT 页/自研素材）：拆解前先视觉检查、按视觉检验单元
+  逐幅/逐页一单——见 `plan-decomposition-visual.md`。
 - **lit ↔ writing 分工**：科研文章（pdf）归 lit，办公文档（doc/docx/ppt/pptx）归
   writing——2026-10-15 实派偏过（doc/docx 误派 lit），拿不准先问 deputy。
 - **figure ↔ drawing 分工**：数据驱动/精确绘制归 figure，美术素材/审美指导归 drawing。常见协作——drawing 产出科研绘图审美参考图，figure 用mpl精确实现并加入真实数据落地。

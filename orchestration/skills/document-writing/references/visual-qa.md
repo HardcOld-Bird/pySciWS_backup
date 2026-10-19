@@ -94,6 +94,17 @@ compose slides layout '<deck.pptx>' --page 3 \
 - 取舍：①焦点块轮廓饱满 / ②同级间距一致性**本期未实现**——需显式块分组与递归切分语义，
   当前 deck 未暴露组结构，硬判误报率高；没给 ID 的判据只打印「跳过」，不臆造读数。
 
+## 图像裁剪（置入前去刊头/图注）
+
+```
+compose crop-img '<img>' [--strip-top 182] [--strip-caption 60] \
+  [--top|--bottom|--left|--right N | --top-ratio|... R] [--out '<new>'] [--dry-run]
+```
+
+四边可按像素或比例（同边二选一）；`--strip-top`＝去顶部条带（刊头）、
+`--strip-caption`＝去底部图注。缺省输出 `<stem>_cropped<ext>`（不覆盖源，置入 PPT 时用
+替换件）。裁后无剩余 / 同边双口径 → rc=2 且不写盘；先 `--dry-run` 核对尺寸。
+
 ## 网页截图（deck 里的官网 / 页面图）
 
 需要把网页截进幻灯片时用本机 `playwright`（已装，复用 literature_research 的浏览器）：

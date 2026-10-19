@@ -11,6 +11,7 @@ LLM 直接调用，无需了解底层模块实现。
     tex lint         chktex 静态检查
     tex refs         从 Zotero 导出 refs.bib（复用 literature_research）
     read <file>      统一提取（markitdown）→ Markdown（pptx/docx/pdf/xlsx/...）
+    crop-img <img>   图像裁剪（四边像素/比例；快捷去刊头/图注）→ 替换件
     docx marks       抽取 run 级标注（strike/底色/加粗/颜色），写作自检的机械对照面
     slides extract   结构化提取 .pptx（逐页文本/表格/图片/演讲者备注）
     slides digest    大型 pptx → 图文互证 Markdown 工作区（去重导图/邻近文字/分节分块）
@@ -352,6 +353,52 @@ def cmd_read(args: argparse.Namespace) -> int:
 # ===========================================================================
 # 子命令：slides extract（结构化 pptx）
 # ===========================================================================
+def cmd_crop_img(args: argparse.Namespace) -> int:
+    from . import image_crop
+
+    top, bottom = args.top or 0, args.bottom or 0
+    if args.strip_top is not None:
+        if top:
+            print("[crop-img] --strip-top 与 --top 只能给一个", file=sys.stderr)
+            return 2
+        top = args.strip_top
+    if args.strip_caption is not None:
+        if bottom:
+            print("[crop-img] --strip-caption 与 --bottom 只能给一个", file=sys.stderr)
+            return 2
+        bottom = args.strip_caption
+    try:
+        res = image_crop.crop_image(
+            args.image,
+            out=args.out,
+            quality=args.quality,
+            dry_run=args.dry_run,
+            top=top,
+            bottom=bottom,
+            left=args.left,
+            right=args.right,
+            top_ratio=args.top_ratio,
+            bottom_ratio=args.bottom_ratio,
+            left_ratio=args.left_ratio,
+            right_ratio=args.right_ratio,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"[crop-img] {exc}", file=sys.stderr)
+        return 2
+    m = res.margins
+    tail = (
+        "（dry-run，未写盘）"
+        if res.dry_run
+        else f"；输出：{res.dest}（置入时用此替换件）"
+    )
+    print(
+        f"[crop-img] {res.src.name}: {res.original[0]}x{res.original[1]} → "
+        f"{res.cropped[0]}x{res.cropped[1]}；去 上{m.top}/下{m.bottom}/左{m.left}/"
+        f"右{m.right}px{tail}"
+    )
+    return 0
+
+
 def cmd_slides_extract(args: argparse.Namespace) -> int:
     from . import pptx_io
 
@@ -912,6 +959,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--preview", action="store_true", help="打印前 1500 字符预览")
     sp.set_defaults(func=cmd_read)
+
+    # --- crop-img（置入前裁剪：去刊头/图注/冗余边条）---
+    sp = sub.add_parser(
+        "crop-img", help="图像裁剪（四边像素/比例；快捷去刊头/图注）→ 替换件"
+    )
+    sp.add_argument("image", help="源图片（PNG/JPEG/WebP/TIFF…）")
+    for side in ("top", "bottom", "left", "right"):
+        sp.add_argument(f"--{side}", type=int, default=0, help=f"{side} 边去 N px")
+        sp.add_argument(
+            f"--{side}-ratio",
+            type=float,
+            default=None,
+            dest=f"{side}_ratio",
+            help=f"{side} 边按比例裁（0–1，与 --{side} 二选一）",
+        )
+    sp.add_argument(
+        "--strip-top",
+        type=int,
+        default=None,
+        dest="strip_top",
+        help="快捷：去顶部条带（刊头）N px，等价 --top",
+    )
+    sp.add_argument(
+        "--strip-caption",
+        type=int,
+        default=None,
+        dest="strip_caption",
+        help="快捷：去底部图注 N px，等价 --bottom",
+    )
+    sp.add_argument("--out", default=None, help="输出路径（缺省 <stem>_cropped<ext>）")
+    sp.add_argument("--quality", type=int, default=95, help="JPEG/WebP 质量（默认 95）")
+    sp.add_argument("--dry-run", action="store_true", help="只算尺寸，不写文件")
+    sp.set_defaults(func=cmd_crop_img)
 
     # --- slides 子命令组 ---
     slides = sub.add_parser("slides", help="幻灯片（extract）")
