@@ -44,6 +44,7 @@ def test_probe_pod_guard_ok_on_current_source():
     assert r.name == "pod-guard"
     assert r.status == "ok", r.detail
     assert r.in_force and r.fail_open_traced
+    assert r.whitelist_ok, r.detail
 
 
 @NODE_REQUIRED
