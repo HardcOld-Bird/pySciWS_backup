@@ -152,3 +152,36 @@ def test_groups_from_comsol_csvs(tmp_path):
     got_angles, got_amp = ff.load_comsol_csv(path)
     assert np.allclose(got_angles, angles)
     assert np.allclose(got_amp, amp)
+
+
+def test_wide_loader_reads_own_export(tmp_path):
+    """导出→读取闭环：宽表 CSV 可直接用 load_radar_csv 读回。"""
+    written = ff.export_radar_groups(_groups(), tmp_path, formats=("csv",))
+    angles, series = ff.load_radar_csv(written["groove_gain.csv"])
+    assert angles.shape == (361,)
+    assert list(series) == ["L", "R"]
+    assert np.allclose(angles, np.arange(361, dtype=float))
+    assert np.allclose(series["L"], 2.0 * (1.0 + np.sin(np.radians(angles))))
+    assert np.allclose(series["R"], 1.5 * (1.0 + np.sin(np.radians(angles))))
+
+
+def test_load_comsol_csv_skips_wide_header(tmp_path):
+    """backlog 20261020-030949：宽表表头不再让 load_comsol_csv 崩。"""
+    written = ff.export_radar_groups(_groups(), tmp_path, formats=("csv",))
+    angles, amp = ff.load_comsol_csv(
+        written["groove_gain.csv"], angle_col=0, value_col=1
+    )
+    assert angles.shape == (361,) and amp.shape == (361,)
+    assert np.allclose(amp, 2.0 * (1.0 + np.sin(np.radians(angles))))
+
+
+def test_wide_loader_rejects_headerless_table(tmp_path):
+    src, _angles, _amp = _comsol_file(tmp_path, "far.csv", n=181)
+    with pytest.raises(ValueError, match="load_comsol_csv"):
+        ff.load_radar_csv(src)
+
+
+def test_schema_points_loader_hint(tmp_path):
+    written = ff.export_radar_groups(_groups(), tmp_path, formats=("csv",))
+    schema = json.loads(written["schema"].read_text(encoding="utf-8"))
+    assert schema["csv"]["loader"].endswith("load_radar_csv")
