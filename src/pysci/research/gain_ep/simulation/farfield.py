@@ -7,10 +7,14 @@ sim1 从 COMSOL 导出远场（角度 + ``|p_ext|``）后，用本模块把三�
 
 COMSOL 表口径（与 ``beam_scatter/raw/far_*.csv`` 一致）：``x, y, angle_deg,
 |p_ext|``，行首 ``%`` 注释。
+
+导出→读取闭环：宽表用 :func:`load_radar_csv`（``(angle, {series: amp})``），
+COMSOL/纯数值表用 :func:`load_comsol_csv`（注释与表头自动跳过）。
 """
 
 from __future__ import annotations
 
+import io
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -57,16 +61,85 @@ class RadarGroup:
     label: str = ""
 
 
+def _numeric_rows(path: str | Path) -> list[str]:
+    """跳过空行、``%`` 注释与表头，返回从首个数值行起的原始行。
+
+    表头判定：首个非注释行的首列不是数字（如本模块导出的 ``angle_deg,...``）。
+    数据区中间再出现非数值行仍交给 ``np.loadtxt`` 报错——不静默吞坏行。
+    """
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    rows: list[str] = []
+    started = False
+    for line in lines:
+        text = line.strip()
+        if not text or text.startswith("%"):
+            continue
+        if not started:
+            try:
+                float(text.split(",", 1)[0].strip())
+            except ValueError:
+                continue  # 表头
+            started = True
+        rows.append(line)
+    if not rows:
+        raise ValueError(f"{path} 无数据行")
+    return rows
+
+
 def load_comsol_csv(
     path: str | Path, *, angle_col: int = 2, value_col: int = 3
 ) -> tuple[np.ndarray, np.ndarray]:
-    """读 COMSOL 远场表 -> (角度 deg, |p_ext| Pa)；``%`` 开头的行按注释跳过。"""
-    arr = np.loadtxt(path, delimiter=",", comments="%", ndmin=2)
+    """读数值表 -> (角度 deg, |p_ext| Pa)。
+
+    ``%`` 注释与**表头行**自动跳过（本模块导出的宽表 ``angle_deg,L,R`` 也可用
+    ``angle_col=0, value_col=1`` 直接读）；更自然的宽表读法见 :func:`load_radar_csv`。
+    """
+    arr = np.loadtxt(
+        io.StringIO("\n".join(_numeric_rows(path))), delimiter=",", ndmin=2
+    )
     if arr.shape[1] <= max(angle_col, value_col):
         raise ValueError(
             f"{path} 列数 {arr.shape[1]} 不足（需要第 {angle_col}/{value_col} 列）"
         )
     return arr[:, angle_col].astype(float), arr[:, value_col].astype(float)
+
+
+def load_radar_csv(path: str | Path) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """读 :func:`export_radar_groups` 的宽表 CSV -> ``(角度 deg, {曲线名: 幅值})``。
+
+    首行须为表头（首列 ``angle_deg``，其后各列为曲线名）；``%`` 注释行跳过。
+    纯数值/COMSOL 表用 :func:`load_comsol_csv`。
+    """
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    header: list[str] | None = None
+    rows: list[str] = []
+    for line in lines:
+        text = line.strip()
+        if not text or text.startswith("%"):
+            continue
+        if header is None:
+            header = [c.strip() for c in text.split(",")]
+            if header[0] != "angle_deg":
+                raise ValueError(
+                    f"{path} 首列表头 {header[0]!r} ≠ 'angle_deg'"
+                    "（无表头表请用 load_comsol_csv）"
+                )
+            if len(header) < 2 or len(set(header)) != len(header):
+                raise ValueError(f"{path} 表头须唯一且至少含一列曲线：{header}")
+            if any(not name for name in header):
+                raise ValueError(f"{path} 表头含空列名：{header}")
+            continue
+        rows.append(line)
+    if header is None:
+        raise ValueError(f"{path} 缺表头")
+    if not rows:
+        raise ValueError(f"{path} 无数据行")
+    arr = np.loadtxt(io.StringIO("\n".join(rows)), delimiter=",", ndmin=2)
+    if arr.shape[1] != len(header):
+        raise ValueError(f"{path} 列数 {arr.shape[1]} ≠ 表头 {len(header)}")
+    return arr[:, 0].astype(float), {
+        name: arr[:, i].astype(float) for i, name in enumerate(header[1:], 1)
+    }
 
 
 def groups_from_comsol_csvs(
@@ -189,6 +262,7 @@ def _schema(
         "csv": {
             "format": "wide",
             "columns": ["angle_deg", "<series names in groups.*.series>"],
+            "loader": "pysci.research.gain_ep.simulation.farfield.load_radar_csv",
         },
         "mat": {
             "variables": ["angle_deg", "amp_<series>"],
