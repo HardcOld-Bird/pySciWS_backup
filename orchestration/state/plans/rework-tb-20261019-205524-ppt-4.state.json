@@ -125,11 +125,13 @@
     },
     {
       "id": "L.l3",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261019-220534-rework-tb-20261019-205524-ppt-4-L.l3",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-205524-ppt-4.l3.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-205524-ppt-4.l3.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-19T22:18:41+08:00"
 }
