@@ -119,6 +119,92 @@ def test_cli_geometry_reports_only_by_default_and_strict_fails(tmp_path, capsys)
     )
 
 
+# ---------------------------------------------------------------------------
+# backlog 20261019-050008：近满幅白卡（>95%）不得回退到焦点块面板
+# ---------------------------------------------------------------------------
+def _near_full_card_deck(tmp_path: Path) -> Path:
+    """10×7.5 画布：100% 背景 + 97.7% 白卡 + 两个面板 + 右侧图（在白卡内、面板外）。"""
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(10), Inches(7.5)
+    )
+    bg.name = "背景"
+    card = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(0.05), Inches(0.05), Inches(9.9), Inches(7.4)
+    )
+    card.name = "白卡"
+    left = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(0.2), Inches(0.2), Inches(4.0), Inches(6.5)
+    )
+    left.name = "面板左"
+    right = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(4.5), Inches(0.2), Inches(4.0), Inches(6.5)
+    )
+    right.name = "面板右"
+    # 右缘图落在白卡内（x 8.5–9.5 < 白卡 9.95），但在两个面板之外
+    slide.shapes.add_picture(
+        str(_png(tmp_path / "right.png")),
+        Inches(8.5),
+        Inches(2),
+        Inches(1),
+        Inches(1),
+    )
+    deck = tmp_path / "near-full-card.pptx"
+    prs.save(str(deck))
+    return deck
+
+
+def test_near_full_page_card_is_detected_as_frame(tmp_path):
+    deck = _near_full_card_deck(tmp_path)
+    rep = slides_visual.geometry_report(deck)
+    sg = rep.slides[0]
+    assert sg.frame is not None and sg.frame.name == "白卡", sg.frame
+    assert sg.frame_source == "auto"
+    assert not sg.frame_note
+    assert sg.off_frame == [], sg.off_frame
+
+
+def test_auto_and_explicit_white_card_agree_on_off_frame(tmp_path):
+    deck = _near_full_card_deck(tmp_path)
+    auto = slides_visual.geometry_report(deck).slides[0]
+    explicit = slides_visual.geometry_report(deck, frame="白卡").slides[0]
+    assert explicit.frame_source == "explicit"
+    assert len(auto.off_frame) == len(explicit.off_frame) == 0
+
+
+def test_uncertain_auto_frame_warns_instead_of_off_frame(tmp_path):
+    """小矩形占多数时 auto 仍选中 32% 卡，但给存疑提示并抑制越界行。"""
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    card = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(0.2), Inches(0.2), Inches(4.0), Inches(6.0)
+    )
+    card.name = "小卡"
+    for i, x in enumerate((4.8, 7.0)):
+        sh = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, Inches(x), Inches(1), Inches(3), Inches(3)
+        )
+        sh.name = f"面板{i + 1}"
+    slide.shapes.add_picture(
+        str(_png(tmp_path / "outside.png")),
+        Inches(9.0),
+        Inches(6.0),
+        Inches(0.8),
+        Inches(0.8),
+    )
+    deck = tmp_path / "uncertain.pptx"
+    prs.save(str(deck))
+    rep = slides_visual.geometry_report(deck)
+    sg = rep.slides[0]
+    assert sg.frame is not None and sg.frame.name == "小卡"
+    assert "存疑" in sg.frame_note, sg.frame_note
+    assert sg.off_frame == [], "存疑时不得直接输出越界违规"
+    assert sg.edges == []
+    assert "外框识别存疑" in rep.summary()
+    assert rep.as_dict()["slides"][0]["frame_note"]
+
+
 def test_cli_geometry_json_is_machine_readable(tmp_path, capsys):
     import json
 
