@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261019-192358",
+  "created": "2026-10-19T19:23:58+08:00",
+  "goal": "adhoc：spec 元数据清理复核（rv2 判 B 余项收尾）：三裁件已落盘文献图片目录（p5 p784_box1_EPDP_cr",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261019-192358-adhoc-20261019-192358-s1",
+      "task_file": null,
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-19T19:25:40+08:00"
+}

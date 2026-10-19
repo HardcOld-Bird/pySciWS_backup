@@ -1,0 +1,9 @@
+id: adhoc-20261019-192358
+goal: adhoc：spec 元数据清理复核（rv2 判 B 余项收尾）：三裁件已落盘文献图片目录（p5 p784_box1_EPDP_cr
+steps:
+- id: s1
+  member: reviewer
+  brief: spec 元数据清理复核（rv2 判 B 余项收尾）：三裁件已落盘文献图片目录（p5 p784_box1_EPDP_crop.png / p8 fig4_DE_crop.png / fig_design_gain_crop.png），sou
+  dirs:
+  - data/大任务/5_开题PPT
+  review: false

@@ -1,0 +1,9 @@
+id: adhoc-20261019-192945
+goal: adhoc：spec 注记清扫终判（rv3 判 B 余项收尾）：10 处过期措辞已全部刷新为现状（p3/p4/p5 五处『待核对』→
+steps:
+- id: s1
+  member: reviewer
+  brief: spec 注记清扫终判（rv3 判 B 余项收尾）：10 处过期措辞已全部刷新为现状（p3/p4/p5 五处『待核对』→『已核对』、p6 两处『待补/待换』→『已达标』、p8-s3/s7 与 p10-s1 三处『判 ✗/待换』→『已达标』）
+  dirs:
+  - data/大任务/5_开题PPT
+  review: false

@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261019-192945",
+  "created": "2026-10-19T19:29:45+08:00",
+  "goal": "adhoc：spec 注记清扫终判（rv3 判 B 余项收尾）：10 处过期措辞已全部刷新为现状（p3/p4/p5 五处『待核对』→",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "reviewer-20261019-192945-adhoc-20261019-192945-s1",
+      "task_file": null,
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-19T19:31:01+08:00"
+}
