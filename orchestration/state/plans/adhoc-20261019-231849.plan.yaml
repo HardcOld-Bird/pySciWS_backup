@@ -1,0 +1,9 @@
+id: adhoc-20261019-231849
+goal: adhoc：微修正：成品第 12 页缩略引用框字号 16pt→10pt（对齐成品引用框标准 p3–p10 sz=1000 与预设 §
+steps:
+- id: s1
+  member: writing
+  brief: 微修正：成品第 12 页缩略引用框字号 16pt→10pt（对齐成品引用框标准 p3–p10 sz=1000 与预设 §4B；16pt 系任务书笔误）。仅改该文本框 rPr sz 一处，其余零改动。交付附改前后读数＋audit 输出＋sha
+  dirs:
+  - data/大任务/5_开题PPT
+  review: false

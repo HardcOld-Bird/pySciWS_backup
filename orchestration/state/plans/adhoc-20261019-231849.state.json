@@ -1,0 +1,17 @@
+{
+  "plan_id": "adhoc-20261019-231849",
+  "created": "2026-10-19T23:18:49+08:00",
+  "goal": "adhoc：微修正：成品第 12 页缩略引用框字号 16pt→10pt（对齐成品引用框标准 p3–p10 sz=1000 与预设 §",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "done",
+      "review": "pending",
+      "job_id": "writing-20261019-231849-adhoc-20261019-231849-s1",
+      "task_file": null,
+      "session_id": "155339d1-3490-4b6c-b5f3-bb5b22c6bdfb",
+      "kind": "result"
+    }
+  ],
+  "completed_at": "2026-10-19T23:20:11+08:00"
+}
