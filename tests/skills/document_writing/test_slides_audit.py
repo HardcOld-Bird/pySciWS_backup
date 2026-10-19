@@ -354,10 +354,13 @@ def _aes_deck(
     frame_shape=MSO_SHAPE.ROUNDED_RECTANGLE,
     shift_title: bool = False,
     frame_top: float = 0.94,
+    logo_px: tuple[int, int] = (64, 48),
+    crop: tuple[int, int] | None = None,
 ):
     """两页达标样板：粗圆角外框 top 0.94/adj 3000、徽标 [0.76,0.937,3.18,5.836]、标题右缘公式。"""
     prs = Presentation()
-    logo = _png(tmp_path / "logo.png")
+    logo = tmp_path / "logo.png"
+    Image.new("RGB", logo_px, (10, 20, 30)).save(logo)
     ids: list[dict] = []
     for _ in range(2):
         s = prs.slides.add_slide(prs.slide_layouts[6])
@@ -381,6 +384,9 @@ def _aes_deck(
             Inches(3.18 * (1.12 if stretch_logo else 1.0)),
             Inches(5.836),
         )
+        if crop is not None:
+            pic.crop_left = crop[0] / 100000.0
+            pic.crop_bottom = crop[1] / 100000.0
         ids.append(
             {"frame": frame.shape_id, "title": title.shape_id, "pic": pic.shape_id}
         )
@@ -389,7 +395,7 @@ def _aes_deck(
     return deck, ids
 
 
-def _aes_spec(tmp_path: Path, ids: list[dict]) -> Path:
+def _aes_spec(tmp_path: Path, ids: list[dict], *, src_rect: dict | None = None) -> Path:
     aesthetics = {
         "logo_bbox_ref": [0.76, 0.937, 3.18, 5.836],
         "logo_aspect_tol": 0.01,
@@ -400,6 +406,8 @@ def _aes_spec(tmp_path: Path, ids: list[dict]) -> Path:
         "title_left": 0.30,
         "title_right_formula": {"slope": 0.34, "intercept": 1.069, "tol_in": 0.1},
     }
+    if src_rect is not None:
+        aesthetics["expect_srcRect"] = src_rect
     doc = {
         "invariants": {"aesthetics": aesthetics},
         "pages": [
@@ -476,3 +484,59 @@ def test_aesthetics_absent_adds_no_rows(tmp_path):
     assert [(i.name, i.status, i.detail) for i in base.items] == [
         (i.name, i.status, i.detail) for i in got.items
     ]
+
+
+# ---------------------------------------------------------------------------
+# 徽标裁切（R4 L.l3）：expect_srcRect 逐值 + 裁后源区素比 ≈ 框比
+# ---------------------------------------------------------------------------
+def test_aesthetics_src_rect_pass(tmp_path):
+    """2000×2000 源图裁 l=49515/b=7343 → 源区比 0.5449 ≈ 框比，PASS。"""
+    deck, ids = _aes_deck(tmp_path, logo_px=(200, 200), crop=(49515, 7343))
+    rep = slides_audit.audit_deck(
+        deck, _aes_spec(tmp_path, ids, src_rect={"l": 49515, "b": 7343, "tol": 100})
+    )
+    assert rep.ok, rep.summary()
+    row = next(i for i in rep.items if i.name == "徽标裁切 p1")
+    assert row.status == "pass" and "素比" in row.detail and "box_in[" in row.detail
+    logo = next(i for i in rep.items if i.name == "徽标 p1")
+    assert "box_in[" in logo.detail, "expect_srcRect 开启时徽标行须自描述坐标口径"
+
+
+def test_aesthetics_src_rect_missing_fails(tmp_path):
+    deck, ids = _aes_deck(tmp_path, logo_px=(200, 200))
+    rep = slides_audit.audit_deck(
+        deck, _aes_spec(tmp_path, ids, src_rect={"l": 49515, "b": 7343})
+    )
+    row = next(i for i in rep.items if i.name == "徽标裁切 p1")
+    assert row.status == "fail" and "缺 srcRect" in row.detail
+
+
+def test_aesthetics_src_rect_ratio_mismatch_fails(tmp_path):
+    """l/b 值对但裁后源区比 ≠ 框比 → FAIL。"""
+    deck, ids = _aes_deck(tmp_path, logo_px=(200, 200), crop=(30000, 7343))
+    rep = slides_audit.audit_deck(
+        deck, _aes_spec(tmp_path, ids, src_rect={"l": 30000, "b": 7343})
+    )
+    row = next(i for i in rep.items if i.name == "徽标裁切 p1")
+    assert row.status == "fail" and "素比" in row.detail and "≠" in row.detail
+
+
+def test_aesthetics_src_rect_absent_adds_no_rows(tmp_path):
+    """无 expect_srcRect → 不增裁切行，也不给旧徽标行加 box_in（零回归）。"""
+    deck, ids = _aes_deck(tmp_path)
+    rep = slides_audit.audit_deck(deck, _aes_spec(tmp_path, ids))
+    assert not any("徽标裁切" in i.name for i in rep.items)
+    logo = next(i for i in rep.items if i.name == "徽标 p1")
+    assert "box_in[" not in logo.detail
+
+
+def test_expect_src_rect_annotates_decoration_box(tmp_path):
+    """expect_srcRect 开启时装饰行尾标注 box_in[x0,y0,x1,y1]。"""
+    deck, ids = _deck(tmp_path)
+    doc = yaml.safe_load(_spec(tmp_path, ids).read_text(encoding="utf-8"))
+    doc["invariants"] = {"aesthetics": {"expect_srcRect": {"l": 49515, "b": 7343}}}
+    p = tmp_path / "spec-box.yaml"
+    p.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    rep = slides_audit.audit_deck(deck, p)
+    dec = next(i for i in rep.items if i.name.startswith("装饰 p1"))
+    assert "box_in[" in dec.detail

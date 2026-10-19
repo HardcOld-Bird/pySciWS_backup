@@ -101,7 +101,13 @@ def _shape_on(slide: Any, sid: int) -> Any | None:
     return next((sh for sh in slide.shapes if int(sh.shape_id) == int(sid)), None)
 
 
-def _check_decoration(slide: Any, entry: dict[str, Any], page: int) -> AuditItem:
+def _check_decoration(
+    slide: Any,
+    entry: dict[str, Any],
+    page: int,
+    *,
+    annotate_box: bool = False,
+) -> AuditItem:
     name = str(entry.get("name") or "")
     kind = str(entry.get("kind") or "")
     want = entry.get("box_in")
@@ -121,22 +127,29 @@ def _check_decoration(slide: Any, entry: dict[str, Any], page: int) -> AuditItem
     if not cands:
         return AuditItem(f"装饰 p{page} {label}", "fail", "未找到匹配形状")
     sh = cands[0]
+    box_suffix = f" box_in{_box(sh)}" if annotate_box else ""
     if want:
         got = _box(sh)
         if any(abs(a - float(b)) > tol for a, b in zip(got, want)):
             return AuditItem(
                 f"装饰 p{page} {label}",
                 "fail",
-                f"bbox {got} ≠ spec {want}（tol {tol}）",
+                f"bbox {got} ≠ spec {want}（tol {tol}）{box_suffix}",
             )
     if kind and kind.lower() not in str(getattr(sh, "shape_type", "")).lower():
         # kind 语义宽松（rectangle/picture/text），仅在显式给出时提示
         actual = str(getattr(sh, "name", "")) + " " + str(getattr(sh, "shape_type", ""))
         if kind.lower() not in actual.lower():
             return AuditItem(
-                f"装饰 p{page} {label}", "fail", f"kind 不匹配（实际 {actual[:60]}）"
+                f"装饰 p{page} {label}",
+                "fail",
+                f"kind 不匹配（实际 {actual[:60]}）{box_suffix}",
             )
-    return AuditItem(f"装饰 p{page} {label}", "pass", f"存在 @ {_box(sh)}（{sh.name}）")
+    return AuditItem(
+        f"装饰 p{page} {label}",
+        "pass",
+        f"存在 @ {_box(sh)}（{sh.name}）{box_suffix}",
+    )
 
 
 def _run_slots_ok(run: Any, expected: dict[str, Any]) -> tuple[bool, str]:
@@ -472,7 +485,12 @@ def _find_logo(slide: Any, ref_md5s: set[str]) -> Any | None:
 
 
 def _check_logo(
-    slide: Any, page: int, aes: dict[str, Any], ref_md5s: set[str]
+    slide: Any,
+    page: int,
+    aes: dict[str, Any],
+    ref_md5s: set[str],
+    *,
+    annotate_box: bool = False,
 ) -> AuditItem:
     label = f"徽标 p{page}"
     ref = _float4(aes.get("logo_bbox_ref"))
@@ -495,7 +513,70 @@ def _check_logo(
         f"宽高比 {got_aspect:.4f} {'≈' if aspect_ok else '≠'} {want_aspect:.4f}"
         f"（tol {aspect_tol}）"
     )
+    if annotate_box:
+        detail += f" box_in{_box(sh)}"
     return AuditItem(label, "pass" if bbox_ok and aspect_ok else "fail", detail)
+
+
+def _src_rect(shape: Any) -> dict[str, int]:
+    """图片 ``a:srcRect`` 四边裁切（1/1000 %；缺省边为 0）。"""
+    el = shape._element.find(".//" + qn("a:srcRect"))
+    if el is None:
+        return {}
+    out: dict[str, int] = {}
+    for key in ("l", "t", "r", "b"):
+        raw = el.get(key)
+        if raw is None:
+            continue
+        try:
+            out[key] = int(raw)
+        except ValueError:
+            continue
+    return out
+
+
+def _check_logo_crop(
+    slide: Any, page: int, aes: dict[str, Any], ref_md5s: set[str]
+) -> AuditItem:
+    """``aesthetics.expect_srcRect``：徽标 blipFill 裁切逐值 ＋ 裁后源区素比 ≈ 框比。"""
+    label = f"徽标裁切 p{page}"
+    cfg = aes.get("expect_srcRect")
+    cfg = cfg if isinstance(cfg, dict) else {}
+    tol = int(cfg.get("tol", 100))
+    sh = _find_logo(slide, ref_md5s)
+    if sh is None:
+        return AuditItem(label, "fail", "未找到徽标图")
+    rect = _src_rect(sh)
+    if not rect:
+        return AuditItem(
+            label, "fail", f"缺 srcRect（期望 l={cfg.get('l')} b={cfg.get('b')}）"
+        )
+    bad: list[str] = []
+    for key in ("l", "t", "r", "b"):
+        if key not in cfg:
+            continue
+        want = int(cfg[key])
+        got = rect.get(key, 0)
+        if abs(got - want) > tol:
+            bad.append(f"{key}={got} ≠ {want}（tol {tol}）")
+    try:
+        px_w, px_h = [float(v) for v in sh.image.size]
+    except Exception:  # noqa: BLE001
+        px_w = px_h = 0.0
+    crop_w = px_w * (1.0 - (rect.get("l", 0) + rect.get("r", 0)) / 100000.0)
+    crop_h = px_h * (1.0 - (rect.get("t", 0) + rect.get("b", 0)) / 100000.0)
+    ratio = crop_w / crop_h if crop_h else 0.0
+    frame_ratio = sh.width / sh.height if sh.height else 0.0
+    ratio_ok = bool(frame_ratio) and abs(ratio - frame_ratio) <= 0.01 * frame_ratio
+    shown = " ".join(f"{k}={v}" for k, v in rect.items())
+    detail = (
+        f"srcRect {shown}；裁后素比 {ratio:.4f} "
+        f"{'≈' if ratio_ok else '≠'} 框比 {frame_ratio:.4f}（±1%）"
+        f" box_in{_box(sh)}"
+    )
+    if bad:
+        detail = "；".join(bad) + "；" + detail
+    return AuditItem(label, "pass" if not bad and ratio_ok else "fail", detail)
 
 
 def _stroke_width(shape: Any) -> int | None:
@@ -651,10 +732,13 @@ def _check_aesthetics(
     aes: dict[str, Any],
     logo_ref_md5s: set[str],
 ) -> list[AuditItem]:
-    """``invariants.aesthetics`` 三判据：徽标 / 外框几何+上缘 / 标题边距。"""
+    """``invariants.aesthetics`` 判据：徽标 / 徽标裁切 / 外框几何+上缘 / 标题边距。"""
     items: list[AuditItem] = []
+    crop_on = bool(aes.get("expect_srcRect"))
     if aes.get("logo_bbox_ref") is not None:
-        items.append(_check_logo(slide, page, aes, logo_ref_md5s))
+        items.append(_check_logo(slide, page, aes, logo_ref_md5s, annotate_box=crop_on))
+    if crop_on:
+        items.append(_check_logo_crop(slide, page, aes, logo_ref_md5s))
     if aes.get("frame_geom") is not None or aes.get("frame_top") is not None:
         items.extend(_check_frames(slide, page, aes))
     if aes.get("title_left") is not None or aes.get("title_right_formula"):
@@ -704,7 +788,14 @@ def audit_deck(pptx: str | Path, spec: str | Path) -> AuditReport:
             continue
         slide = prs.slides[page - 1]
         for entry in page_spec.get("decoration") or []:
-            rep.items.append(_check_decoration(slide, entry, page))
+            rep.items.append(
+                _check_decoration(
+                    slide,
+                    entry,
+                    page,
+                    annotate_box=bool(aes.get("expect_srcRect")),
+                )
+            )
         for entry in page_spec.get("fonts") or []:
             rep.items.extend(_check_fonts(slide, entry, page))
         slots = page_spec.get("slots") or []
@@ -792,7 +883,14 @@ def audit_deck(pptx: str | Path, spec: str | Path) -> AuditReport:
         # 顶层 decoration：在所有页找一遍（模板级不变量）
         page = int(entry.get("page") or 0)
         if 1 <= page <= len(prs.slides):
-            rep.items.append(_check_decoration(prs.slides[page - 1], entry, page))
+            rep.items.append(
+                _check_decoration(
+                    prs.slides[page - 1],
+                    entry,
+                    page,
+                    annotate_box=bool(aes.get("expect_srcRect")),
+                )
+            )
         else:
             rep.items.append(
                 AuditItem(

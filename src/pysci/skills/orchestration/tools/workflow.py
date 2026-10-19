@@ -1254,6 +1254,104 @@ def cmd_suggestions(args) -> int:
     return 0
 
 
+def _suggestion_brief(body: str) -> tuple[str, str]:
+    """(kind, 一句话)：kind 取标记行；一句话取首个非标记正文行（截 70 字）。"""
+    kind, _ = parse_suggestion_fields(body)
+    first = next(
+        (
+            ln.strip()
+            for ln in body.splitlines()[2:]
+            if ln.strip() and not _HEAD_MARKER_RE.match(ln.strip())
+        ),
+        "",
+    )
+    return (kind or "(缺 kind)", first[:70])
+
+
+def suggestions_by_kind(
+    *, now: datetime | None = None
+) -> list[tuple[str, list[dict[str, Any]]]]:
+    """待审批建议按 kind 分组（组内龄期降序；缺 kind 排最后）。"""
+    moment = now or datetime.now()
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for p in pending_suggestions():
+        kind, brief = _suggestion_brief(p.read_text(encoding="utf-8"))
+        ts = _suggestion_ts(p.stem)
+        age_s = (moment - ts).total_seconds() if ts else None
+        stale = age_s is not None and (
+            age_s > SUGGESTION_STALE_S or ts.date() < moment.date()
+        )
+        groups.setdefault(kind, []).append(
+            {
+                "id": p.stem,
+                "age": _age_text(age_s),
+                "age_s": age_s,
+                "stale": stale,
+                "brief": brief,
+            }
+        )
+    ordered = sorted(groups, key=lambda k: (k.startswith("("), k))
+    return [
+        (
+            kind,
+            sorted(groups[kind], key=lambda it: (-(it["age_s"] or 0.0), it["id"])),
+        )
+        for kind in ordered
+    ]
+
+
+def cmd_suggestions_summary(args) -> int:
+    """``orch suggestions summary``：按 kind 分组摘要（id / 龄期 / 一句话）。"""
+    del args
+    groups = suggestions_by_kind()
+    total = sum(len(items) for _, items in groups)
+    if not total:
+        print("（无待审批建议）")
+        return 0
+    print(f"[建议摘要] 共 {total} 条，按 kind 分组（id / 龄期 / 一句话）：")
+    for kind, items in groups:
+        print(f"== {kind}（{len(items)} 条）==")
+        for it in items:
+            warn = "  ⚠ 超 24h 未判决" if it["stale"] else ""
+            print(f"  {it['id']}  龄期={it['age']}{warn}  {it['brief']}")
+    print()
+    print(
+        "[NEXT] 批量销账：pysci-orch suggestions ack-all --as decision --by <ref> "
+        '--why "<理由>" [--kind <kind>]；逐条：suggestions ack <id> --as …'
+    )
+    return 0
+
+
+def cmd_suggestions_ack_all(args) -> int:
+    """``orch suggestions ack-all``：按 kind 批量销账（第三态，非否决）。"""
+    kinds = {
+        k.strip() for k in str(getattr(args, "kind", "") or "").split(",") if k.strip()
+    }
+    selected: list[Path] = []
+    for p in pending_suggestions():
+        kind, _ = _suggestion_brief(p.read_text(encoding="utf-8"))
+        if kinds and kind not in kinds:
+            continue
+        selected.append(p)
+    if not selected:
+        scope = f"（kind={','.join(sorted(kinds))}）" if kinds else ""
+        print(f"（无匹配的待审批建议{scope}）")
+        return 0
+    done: list[Path] = []
+    for p in selected:
+        done.append(
+            _finalize_ack(
+                p, as_=args.as_, by=args.by, why=args.why, member=_member_of(p)
+            )
+        )
+    scope = f"，kind={','.join(sorted(kinds))}" if kinds else ""
+    print(f"[√] 批量销账 {len(done)} 条（as={args.as_}，by={args.by}{scope}）：")
+    for p, target in zip(selected, done):
+        print(f"  - {p.stem} → {target.relative_to(SUGGESTIONS_DIR.parent).as_posix()}")
+    print("[NEXT] orch suggestions 看余量；销账不封路，可再 approve 实施。")
+    return 0
+
+
 def cmd_suggestions_show(args) -> int:
     """``orch suggestions show <id>``：输出建议正文（含 kind / 证据 / success_criteria）。
 

@@ -1372,6 +1372,26 @@ def main(argv: list[str] | None = None) -> int:
     aq.add_argument("--why", required=True, help="销账理由（进决策日志与给成员的回复）")
     aq.set_defaults(func=_workflow.cmd_suggestions_ack)
 
+    su = ssub.add_parser("summary", help="按 kind 分组摘要（id / 龄期 / 一句话）")
+    su.set_defaults(func=_workflow.cmd_suggestions_summary)
+
+    aa = ssub.add_parser("ack-all", help="批量销账（非否决，第三态归档）")
+    aa.add_argument(
+        "--as",
+        dest="as_",
+        required=True,
+        choices=["superseded", "decision"],
+        help="销账类型：superseded=已被 --by 承接；decision=本单只为留档供决策",
+    )
+    aa.add_argument("--by", required=True, help="承接引用：新单 id / 计划名 / 裁定来源")
+    aa.add_argument("--why", required=True, help="销账理由（逐条进决策日志与回复）")
+    aa.add_argument(
+        "--kind",
+        default="",
+        help="只处理这些 kind（逗号分隔；缺省全部）",
+    )
+    aa.set_defaults(func=_workflow.cmd_suggestions_ack_all)
+
     p = sub.add_parser("approve", help="采纳建议 → backlog + 审批回复附送")
     p.add_argument("suggestion_id")
     p.add_argument("--note", default="")
