@@ -29,18 +29,73 @@
     },
     {
       "id": "A.a5",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261019-164223-rework-tb-20261019-151640-ppt-3-A.a5",
-      "task_file": "orchestration/state/plans/rework-tb-20261019-151640-ppt-3.a5.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261019-151640-ppt-3.a5.task.md",
+      "session_id": "c64eed46-170d-42f7-a9a9-eb089f4a697b",
+      "kind": "result"
     },
     {
       "id": "B.b1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261019-151640-ppt-3.b1-重拆解.md"
+    },
+    {
+      "id": "B.b2",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261019-170916-rework-tb-20261019-151640-ppt-3-B.b2",
+      "task_file": "orchestration/state/plans/rework-tb-20261019-151640-ppt-3.b2.task.md"
+    },
+    {
+      "id": "B.w3",
       "status": "pending",
       "review": "pending"
     },
     {
-      "id": "B.b2",
+      "id": "B.w4",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.w5",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.w6",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.w7",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.w8",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.w9",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.w10",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.rv",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.d_preset",
       "status": "pending",
       "review": "pending"
     },

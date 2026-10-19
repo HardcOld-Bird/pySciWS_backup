@@ -53,8 +53,60 @@ steps:
     role: rework_plan
   - id: b2
     member: devops
-    brief: 返工生产环节
-    member_placeholder: true
+    brief: deck-spec 汇编（机制首用）——按 slides-audit.md schema 汇编 deck-spec.yaml：不变量（装饰三层指纹、字体全槽、版式/动画）机械实测 + 图槽（占位符指纹/原文图号/来源/裁切，取 图像索引 事实并按 3 轮批语修正）；slides audit 试跑校准 spec
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w3
+    member: writing
+    brief: p3 修复一单（audit 驱动）——恢复装饰三层+字体全槽（全局不变量本页先行）；一般1 圆角卡片实验（可选，试于本页三块）；交付附 slides audit p3 输出
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w4
+    member: writing
+    brief: p4 修复一单——装饰三层+字体全槽；批语复核（右列图序/内容与占位逐项核对，按 spec 槽位）；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w5
+    member: writing
+    brief: p5 修复一单——装饰/字体；中列 Nat. Mater. 换 a5 补提 fig7（p784 右下小图，用户 bbox 裁切件）；右列顺序按占位符核对；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w6
+    member: writing
+    brief: p6 修复一单——装饰/字体；[1] 换 a5 补提 RPP Fig.7（fig7.png）、[2] 补 PRL123 Fig.2（fig4.png，fig1 保留）、右列两图换占位同款（图像索引事实件，禁建议覆盖）；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w7
+    member: writing
+    brief: p7 修复一单——装饰/字体（本页无图槽变更）；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w8
+    member: writing
+    brief: p8 修复一单——装饰/字体；左列下方图按占位符重裁重放（正确件=右侧那张裁切结果）；中列去多余 2 图（草稿占位仅 2 张）；右列下方图按占位符重裁重放；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w9
+    member: writing
+    brief: p9 修复一单——装饰/字体；左中右文章顺序反转（引用序与图序同步右中左）；图像内容不换；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: w10
+    member: writing
+    brief: p10 修复一单——装饰/字体；左列上图换占位同款；中列按占位符目标重排（以草稿占位为唯一真源，spec 槽位已核验方向——不再信二手断言）；audit 输出附
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: rv
+    member: reviewer
+    brief: 终检——slides audit 全量输出为底稿 + 渲染逐页 Read + 3 轮批语 9+2 逐条核验，出具 VERDICT
+    dirs:
+    - data/大任务/5_开题PPT
+  - id: d_preset
+    member: devops
+    brief: 预设与教义收口——spec/audit 工作流、字体全槽、圆角结论、V5/V6 读数与去建议化规则入 ppt-preset-formal 真本（≤8KB 拆册）+ sync
+    dirs:
+    - orchestration/skills
+    - orchestration/pods
   - id: b_last
     kind: self
     brief: 全流程报告组装
