@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261020-085521",
+  "created": "2026-10-20T08:55:21+08:00",
+  "goal": "adhoc：data/taskbooks/tb-20261020-080213-3-5.f3fix-轴题近贴返修.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "figure-20261020-085521-adhoc-20261020-085521-s1",
+      "task_file": "data/taskbooks/tb-20261020-080213-3-5.f3fix-轴题近贴返修.md"
+    }
+  ],
+  "completed_at": null
+}
