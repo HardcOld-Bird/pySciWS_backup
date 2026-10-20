@@ -53,15 +53,19 @@
     },
     {
       "id": "B.b2",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "figure-20261020-113703-rework-tb-20261020-100924-3-6-B.b2",
-      "task_file": "orchestration/state/plans/rework-tb-20261020-100924-3-6.b2.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261020-100924-3-6.b2.task.md",
+      "session_id": "b66519e4-1c3f-4deb-808f-7a12c95f440f",
+      "kind": "result"
     },
     {
       "id": "B.f3",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "figure-20261020-114405-rework-tb-20261020-100924-3-6-B.f3",
+      "task_file": "orchestration/state/plans/rework-tb-20261020-100924-3-6.f3.task.md"
     },
     {
       "id": "B.rv",
