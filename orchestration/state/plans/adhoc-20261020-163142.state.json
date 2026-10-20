@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261020-163142",
+  "created": "2026-10-20T16:31:42+08:00",
+  "goal": "adhoc：data/taskbooks/tb-口头反馈-菱形正方形-复核.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "reviewer-20261020-163142-adhoc-20261020-163142-s1",
+      "task_file": "data/taskbooks/tb-口头反馈-菱形正方形-复核.md"
+    }
+  ],
+  "completed_at": null
+}
