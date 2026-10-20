@@ -1,0 +1,11 @@
+id: adhoc-20261020-155941
+goal: adhoc：data/taskbooks/tb-口头反馈-菱形正方形-几何登记更正.md
+steps:
+- id: s1
+  member: devops
+  brief: 见任务书
+  dirs:
+  - src/pysci
+  - tests
+  - orchestration/skills
+  review: false

@@ -1,0 +1,9 @@
+id: adhoc-20261020-160027
+goal: adhoc：data/taskbooks/tb-口头反馈-菱形正方形-1.2m重跑.md
+steps:
+- id: s1
+  member: sim
+  brief: 见任务书
+  dirs:
+  - data/research/1_gain_ep/simulation
+  review: false
