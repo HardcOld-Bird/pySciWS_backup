@@ -11,6 +11,7 @@
 - :func:`add_field_panel` — 在给定 ax 上 ``tripcolor`` 渲染（自动 Delaunay 或指定 triangles）。
 - :func:`render_field_panel` — 单面板 + colorbar + savefig 一步到位（colorbar 直接取面板 mappable）。
 - :func:`independent_norms` — 每组独立 vmin/vmax 的线性 norm（多组对照禁统一量程/默认对数）。
+- :func:`display_region_max` — 显示区（严格 y>0 气域）实测 max 的**单一真源**（vmax-check 与 field_schema 导出共用）。
 - :func:`check_vmax_adaptive` — H7 硬项：vmax ÷ 显示区实测 max|value| ∈ [1.0, 1.1]。
 
 多面板组装见 raster.compose_grid 的 ``kind: field`` 面板（与共享 colorbar 同 cmap/norm）。
@@ -196,6 +197,15 @@ def independent_norms(
 
 
 @dataclass(frozen=True)
+class DisplayRegionMax:
+    """显示区（严格 y>0 气域）实测读数——F9 单一真源。"""
+
+    max_abs: float
+    n_points: int
+    region: str
+
+
+@dataclass(frozen=True)
 class VmaxCheck:
     """H7 vmax 自适应读数：``vmax / 显示区实测 max|value|``。"""
 
@@ -205,6 +215,43 @@ class VmaxCheck:
     measured_max: float
     n_points: int
     region: str
+
+
+def display_region_max(
+    xy: np.ndarray,
+    values: np.ndarray,
+    *,
+    center: tuple[float, float] = (0.0, 0.0),
+    radius: float | None = None,
+    y_min: float = 0.0,
+) -> DisplayRegionMax:
+    """显示区实测 max|value| 的**单一真源**（严格 ``y > y_min`` 气域）。
+
+    排除 y≤0 的管槽域与 y=0 口径线行；给了 ``radius`` 时再取圆内
+    ``(x-cx)^2 + (y-cy)^2 <= radius^2``。`check_vmax_adaptive` 与 field_schema 的
+    ``display_y_positive_max_abs_real_p_t`` 导出端共用本函数。
+    """
+    if radius is not None and (not np.isfinite(radius) or radius <= 0):
+        raise ValueError(f"radius 须为正有限数：{radius!r}")
+    pts = np.asarray(xy, dtype=float)
+    vals = np.asarray(values, dtype=float).ravel()
+    if pts.ndim != 2 or pts.shape[1] != 2:
+        raise ValueError(f"xy 须为 Nx2：{pts.shape!r}")
+    if pts.shape[0] != vals.size:
+        raise ValueError(f"点数不一致：xy {pts.shape[0]} vs values {vals.size}")
+    cx, cy = float(center[0]), float(center[1])
+    mask = (pts[:, 1] > y_min) & np.isfinite(vals)
+    region = f"y>{y_min:g}"
+    if radius is not None:
+        mask &= (pts[:, 0] - cx) ** 2 + (pts[:, 1] - cy) ** 2 <= radius**2
+        region += f", r<={radius:g}@({cx:g},{cy:g})"
+    if not mask.any():
+        raise ValueError(f"显示区无数据点（{region}）")
+    return DisplayRegionMax(
+        max_abs=float(np.max(np.abs(vals[mask]))),
+        n_points=int(mask.sum()),
+        region=region,
+    )
 
 
 def check_vmax_adaptive(
@@ -238,33 +285,17 @@ def check_vmax_adaptive(
     """
     if not np.isfinite(vmax) or vmax <= 0:
         raise ValueError(f"vmax 须为正有限数：{vmax!r}")
-    if radius is not None and (not np.isfinite(radius) or radius <= 0):
-        raise ValueError(f"radius 须为正有限数：{radius!r}")
     if not (0 < lo <= hi):
         raise ValueError(f"允许区间非法：lo={lo}, hi={hi}")
-    pts = np.asarray(xy, dtype=float)
-    vals = np.asarray(values, dtype=float).ravel()
-    if pts.ndim != 2 or pts.shape[1] != 2:
-        raise ValueError(f"xy 须为 Nx2：{pts.shape!r}")
-    if pts.shape[0] != vals.size:
-        raise ValueError(f"点数不一致：xy {pts.shape[0]} vs values {vals.size}")
-    cx, cy = float(center[0]), float(center[1])
-    mask = (pts[:, 1] > y_min) & np.isfinite(vals)
-    region = f"y>{y_min:g}"
-    if radius is not None:
-        mask &= (pts[:, 0] - cx) ** 2 + (pts[:, 1] - cy) ** 2 <= radius**2
-        region += f", r<={radius:g}@({cx:g},{cy:g})"
-    if not mask.any():
-        raise ValueError(f"显示区无数据点（{region}）")
-    measured = float(np.max(np.abs(vals[mask])))
-    ratio = float("inf") if measured == 0 else vmax / measured
+    stats = display_region_max(xy, values, center=center, radius=radius, y_min=y_min)
+    ratio = float("inf") if stats.max_abs == 0 else vmax / stats.max_abs
     return VmaxCheck(
         ok=bool(lo <= ratio <= hi),
         ratio=ratio,
         vmax=float(vmax),
-        measured_max=measured,
-        n_points=int(mask.sum()),
-        region=region,
+        measured_max=stats.max_abs,
+        n_points=stats.n_points,
+        region=stats.region,
     )
 
 

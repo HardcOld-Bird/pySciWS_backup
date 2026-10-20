@@ -108,3 +108,70 @@ def test_docs_record_cold_start_and_recovery_checklist():
     playbook = (ref / "dispatch-playbook.md").read_text(encoding="utf-8")
     assert "run_failed 恢复清单" in playbook
     assert "只核对与正式交付" in playbook
+
+
+# ---------------------------------------------------------------------------
+# F10：twin consult 默认 session=new（无参调用不再撞冷启动纪律墙）
+# ---------------------------------------------------------------------------
+def _twin_case(tmp_path):
+    case = tmp_path / "case.md"
+    case.write_text("# 案卷：\n问题\n\n## 选项 A\n\n## 选项 B\n", encoding="utf-8")
+    return case
+
+
+def _patch_twin_trace(monkeypatch, tmp_path):
+    from pysci.skills.orchestration.tools import taste, verdict
+
+    monkeypatch.setattr(verdict, "taste_enabled", lambda: True)
+    monkeypatch.setattr(taste, "write_record", lambda rec: tmp_path / "rec.json")
+    monkeypatch.setattr(taste, "_journal_ruling", lambda rec, why: None)
+    monkeypatch.setattr(taste, "_night_marker", lambda: {"night": False})
+
+
+def test_twin_consult_defaults_to_new_session(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from pysci.skills.orchestration.tools import dispatch, verdict
+
+    _patch_twin_trace(monkeypatch, tmp_path)
+    seen: dict = {}
+    ruling = (
+        '<result>{"choice": "批准", "reason": "援引 P-01", "confidence": 0.6}</result>'
+    )
+
+    def fake(member, **kw):
+        seen.update(kw)
+        return SimpleNamespace(
+            code=0, kind="", error="", body=ruling, envelope=None, sid=""
+        )
+
+    monkeypatch.setattr(dispatch, "do_dispatch", fake)
+    rc = verdict.cmd_consult_twin(
+        Namespace(case_file=str(_twin_case(tmp_path)), session=None)
+    )
+    assert rc == 0
+    assert seen["session"] == "new", "无参调用默认冷启动 new，不再撞纪律墙"
+
+
+def test_twin_consult_explicit_session_passthrough(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from pysci.skills.orchestration.tools import dispatch, verdict
+
+    _patch_twin_trace(monkeypatch, tmp_path)
+    seen: dict = {}
+    ruling = (
+        '<result>{"choice": "批准", "reason": "援引 P-01", "confidence": 0.6}</result>'
+    )
+
+    def fake(member, **kw):
+        seen.update(kw)
+        return SimpleNamespace(
+            code=0, kind="", error="", body=ruling, envelope=None, sid=""
+        )
+
+    monkeypatch.setattr(dispatch, "do_dispatch", fake)
+    rc = verdict.cmd_consult_twin(
+        Namespace(case_file=str(_twin_case(tmp_path)), session="latest")
+    )
+    assert rc == 0 and seen["session"] == "latest"

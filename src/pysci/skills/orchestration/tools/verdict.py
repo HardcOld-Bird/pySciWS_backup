@@ -510,6 +510,9 @@ def cmd_consult_twin(args) -> int:
     ``taste_enabled=false`` 时明确拒绝并提示待上线，不静默降级成 deputy 咨询：把「问
     了个不存在的声音」当成答案是更坏的失败。
 
+    会话默认 ``new``（F10）：twin 每次判断必须冷启动；无参调用不再撞冷启动纪律墙。
+    只有显式 ``--session latest`` / sid 才会触发冷启动拒绝。
+
     **追溯留痕**（task-20261014-psep2-n3）：本通道是夜航政策的「转 twin 终裁」落点，
     故裁示经**硬格式**（{choice, reason, confidence}）读出后落两处——记录
     ``evals/taste/<case_id>.json``（record_kind=consult，含夜航预授权标记）+ 单一账目源
@@ -548,7 +551,7 @@ def cmd_consult_twin(args) -> int:
         "twin",
         text=text,
         slug=f"twin consult-{datetime.now().strftime('%H%M%S')}",
-        session=args.session or "latest",
+        session=args.session or "new",
     )
     if outcome.error == "pod 不存在":
         print("    （twin pod 未就位：E6 上线前该通道不可用。）")
