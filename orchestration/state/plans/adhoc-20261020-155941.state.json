@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261020-155941",
+  "created": "2026-10-20T15:59:41+08:00",
+  "goal": "adhoc：data/taskbooks/tb-口头反馈-菱形正方形-几何登记更正.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "devops-20261020-155941-adhoc-20261020-155941-s1",
+      "task_file": "data/taskbooks/tb-口头反馈-菱形正方形-几何登记更正.md"
+    }
+  ],
+  "completed_at": null
+}

@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261020-160027",
+  "created": "2026-10-20T16:00:27+08:00",
+  "goal": "adhoc：data/taskbooks/tb-口头反馈-菱形正方形-1.2m重跑.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "sim-20261020-160027-adhoc-20261020-160027-s1",
+      "task_file": "data/taskbooks/tb-口头反馈-菱形正方形-1.2m重跑.md"
+    }
+  ],
+  "completed_at": null
+}
