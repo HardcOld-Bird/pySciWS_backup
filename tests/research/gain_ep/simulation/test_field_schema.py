@@ -87,7 +87,8 @@ def test_parse_scan_regions_contract():
             "scan_regions": [
                 {
                     "radial_deg": 135,
-                    "radial_m": 0.60,
+                    "shape": "square",
+                    "radial_m": 0.31,
                     "transverse_m": 0.31,
                     "near_edge_m": 0.25,
                     "center_m": [-0.106066, 0.388909],
@@ -99,7 +100,8 @@ def test_parse_scan_regions_contract():
     schema = fs.parse_field_schema(doc)
     assert len(schema.scan_regions) == 1
     reg = schema.scan_regions[0]
-    assert reg.radial_m == 0.60 and reg.transverse_m == 0.31
+    assert reg.shape == "square"
+    assert reg.radial_m == 0.31 and reg.transverse_m == 0.31
     assert reg.near_edge_m == 0.25 and reg.radial_deg == 135.0
     assert reg.source_key == "geometry.scan_regions"
 
@@ -110,7 +112,9 @@ def test_schema_contract_policy():
     assert "diamonds" in contract["geometry"]
     assert "scan_regions" in contract["geometry"]
     assert "display_semicircle" in contract["geometry"]
-    assert contract["scan_region"]["caliber"].startswith("R6")
+    caliber = contract["scan_region"]["caliber"]
+    assert caliber.startswith("用户口头反馈 2026-10-20")
+    assert "菱形永远正方形" in caliber
     assert "禁再增新同义键" in contract["policy"]
 
 
