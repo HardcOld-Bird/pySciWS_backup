@@ -5,11 +5,13 @@
   "steps": [
     {
       "id": "s1",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "reviewer-20261020-163142-adhoc-20261020-163142-s1",
-      "task_file": "data/taskbooks/tb-口头反馈-菱形正方形-复核.md"
+      "task_file": "data/taskbooks/tb-口头反馈-菱形正方形-复核.md",
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-20T16:35:03+08:00"
 }
