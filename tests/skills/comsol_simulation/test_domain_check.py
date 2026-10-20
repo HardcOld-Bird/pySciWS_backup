@@ -81,6 +81,52 @@ def test_ep_subquestion_accepts_cr_ci_form():
     assert rep["ok"], rep
 
 
+def _with_ep_version(versions: str) -> str:
+    return _with_excitation(
+        "高斯波束腰 0.03m；工作点 (cr, ci)=(-0.02, 0.073)，最近 EP 偏移 0.002；"
+        f"判据见 theory/x.md；{versions}"
+    )
+
+
+def test_domain_version_mismatch_warns_softly():
+    """域版本 ≠ 寻点版本且无重寻读数 → 软告警（不判 FAIL）。"""
+    rep = domain.check_domain_declaration(
+        _with_ep_version("域版本=1.8m，寻点版本=1.5m")
+    )
+    assert rep["ok"] is True
+    assert rep["warnings"] and "重寻" in rep["warnings"][0]
+
+
+def test_domain_version_mismatch_with_research_is_silent():
+    rep = domain.check_domain_declaration(
+        _with_ep_version("域版本=1.8m，寻点版本=1.5m，重寻偏移 Δ=0.003")
+    )
+    assert rep["ok"] is True and rep["warnings"] == []
+
+
+def test_domain_version_same_is_silent():
+    rep = domain.check_domain_declaration(
+        _with_ep_version("域版本=1.5m，寻点版本=1.5m")
+    )
+    assert rep["warnings"] == []
+
+
+def test_cli_prints_soft_warning(tmp_path, capsys):
+    p = tmp_path / "warn.md"
+    p.write_text(
+        GOOD.replace(
+            "- **激励口径**：高斯波束腰 0.03m、孔径 0.08m；实验换能器口径 0.05m，互证偏差 0.02m。\n"
+            "  工作点 (cr, ci)=(-0.02, 0.073)，最近 EP (cr*, ci*)=(-0.018, 0.071)，\n"
+            "  偏移 Δcr=0.002、Δci=0.002；寻点判据见 theory/增益EP与谱奇点理论探索小结.md。",
+            "- **激励口径**：工作点 (cr, ci)=(-0.02, 0.073)，最近 EP 偏移 0.002；"
+            "域版本=1.8m，寻点版本=1.5m；判据见 theory/x.md。",
+        ),
+        encoding="utf-8",
+    )
+    assert simulation.main(["domain-check", str(p)]) == 0
+    assert "[!]" in capsys.readouterr().out
+
+
 def test_missing_section_fails():
     rep = domain.check_domain_declaration("# 仿真交付\n\n没有声明节。\n")
     assert not rep["ok"] and not rep["section"]

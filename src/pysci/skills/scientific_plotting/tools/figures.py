@@ -888,7 +888,7 @@ def build_parser() -> argparse.ArgumentParser:
     # vmax-check
     s = sub.add_parser(
         "vmax-check",
-        help="H7 硬项：vmax ÷ 显示区（y>=0、r<=ROI）实测 max|value| 须 ∈ [1.0, 1.1]",
+        help="H7 硬项：vmax ÷ 显示区（严格 y>0、r<=ROI）实测 max|value| 须 ∈ [1.0, 1.1]",
     )
     s.add_argument(
         "--source", type=Path, required=True, help="场源 .vtk/.vtu/.csv/.txt"

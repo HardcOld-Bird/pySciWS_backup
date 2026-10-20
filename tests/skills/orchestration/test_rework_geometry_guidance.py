@@ -35,6 +35,14 @@ def test_f4_row_order_case_is_adjudicated():
     assert "覆盖来源" in text
 
 
+def test_f4_scan_geometry_case_is_adjudicated():
+    text = REF.read_text(encoding="utf-8")
+    assert "0.60（径向）×0.31（横向）" in text
+    assert "近边 0.25 m" in text
+    assert "R6 批语 2" in text and "twin 裁决 A" in text
+    assert "R1 批语 5" in text  # 旧口径只作覆盖来源
+
+
 def test_f4_colorbar_position_case_is_adjudicated():
     text = REF.read_text(encoding="utf-8")
     assert "每列紧邻右侧" in text
