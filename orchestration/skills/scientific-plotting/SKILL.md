@@ -79,6 +79,8 @@ Run `figures <command> -h`. **`new`: `<research> <slug>`; `build`/`preview`/`aud
 **零遮挡铁律（硬伤）**：①文字/刻度不压图线/彩色数据区 ②图体与标题留间距 ③colorbar
 标题↔色标、色标↔子图留边距 ④任何元素重叠=FAIL 无例外 ⑤**近而不交**：不该相交的线/框
 贴边/临界间距=缺陷。**判据命令**：`figures overlap <img> --white <删文字版.png>`。
+**测距唯一入口**：`pysci-figures ink-gap <png> --roi-a X0 Y0 X1 Y1 --roi-b …`
+（`--mode region`＝文字块间距 / `pixel`＝cKDTree 墨迹距；**禁**自写 1D 投影/区域取宽）。
 **设计用色克制**：整图设计用色 **1~2 个色系**；数据 colormap **不计入**色系计数，Rainbow
 类必选时设计用色取其**同族/中性**色，**勿另起色系**。
 **scienceplots**（可选审美层，契约层优先）：`STYLE.yaml scienceplots: true` 或
