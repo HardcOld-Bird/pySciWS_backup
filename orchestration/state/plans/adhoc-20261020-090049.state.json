@@ -5,11 +5,13 @@
   "steps": [
     {
       "id": "s1",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "reviewer-20261020-090049-adhoc-20261020-090049-s1",
-      "task_file": "data/taskbooks/tb-20261020-080213-3-5.rv复审-H4返修复核.md"
+      "task_file": "data/taskbooks/tb-20261020-080213-3-5.rv复审-H4返修复核.md",
+      "session_id": "6baaa0e5-79b9-497b-82be-79aeebc42c34",
+      "kind": "result"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-20T09:03:17+08:00"
 }
