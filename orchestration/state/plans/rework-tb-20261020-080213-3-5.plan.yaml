@@ -51,10 +51,18 @@ steps:
     kind: self
     brief: 重拆解返工
     role: rework_plan
+  - id: ep
+    member: sim
+    brief: EP 重寻＋工作点迁移＋6 组场数据重跑——9 号模型 (cr,ci) 参数空间寻点（判据|S21|极点+全波互证，报寻点读数），工作点迁新点，重跑 3 组×L/R 声压实部，schema 契约导出，M1 声明含 EP 子问；原件只读、雷达链路零改动
   - id: b2
-    member: devops
-    brief: 返工生产环节
-    member_placeholder: true
+    member: figure
+    brief: f2 场图×6 重绘——新数据上 vmax 自适应（所服务两面板显示区实测 max 紧致取整，vmax-check 比值∈[1.0,1.1]）、两框制/仅首列标签/平直直径边/声压实部/线性 5 刻度等已验收规格禁回退
+  - id: f3
+    member: figure
+    brief: f3 装配改版——色标每列紧邻右侧（列场图、cb、列场图、cb、列场图、cb；cb 高度与配色不变）、角标/标题间距/脚注等已验收项禁回退、脚注色标口径改 per-group adaptive
+  - id: rv
+    member: reviewer
+    brief: rv 终检——通用标准＋H7（含 vmax 自适应硬项与 EP 子问机械检查）＋禁回退逐项＋VERDICT
   - id: b_last
     kind: self
     brief: 全流程报告组装
