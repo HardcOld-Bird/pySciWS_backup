@@ -3,14 +3,29 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-from pysci.paths import PODS_ROOT
+from pysci.paths import PODS_ROOT, PROJECT_ROOT, research_asset_dir
 from pysci.skills.scientific_plotting.tools import field, figures
 
 RUBRIC = PODS_ROOT / "reviewer" / "rubrics" / "scientific-plotting.md"
+
+
+def _gain_ep_root() -> Path:
+    root = research_asset_dir("gain_ep")
+    if (root / "simulation" / "field_8period_1p5m_ep").is_dir():
+        return root
+    common = subprocess.run(
+        ["git", "-C", str(PROJECT_ROOT), "rev-parse", "--git-common-dir"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return Path(common).resolve().parent / "data" / "research" / "1_gain_ep"
 
 
 def test_boundary_ratio_40_over_36_05_fails():
@@ -44,6 +59,30 @@ def test_display_region_excludes_outside_values():
     rep = field.check_vmax_adaptive(xy, vals, 32.0, center=(0.0, 0.0), radius=1.0)
     assert rep.measured_max == pytest.approx(30.0)
     assert rep.ok and rep.n_points == 1
+
+
+def test_y_zero_caliber_line_excluded_strictly():
+    """严格 y>0：y=0 口径线行的大值不计入（M1 收紧）。"""
+    xy = np.array([[0.0, 0.0], [0.0, 0.1]])
+    vals = np.array([99.0, 1.0])
+    rep = field.check_vmax_adaptive(xy, vals, 2.0, center=(0.0, 0.0), radius=1.0)
+    assert rep.measured_max == pytest.approx(1.0)
+    assert rep.region.startswith("y>0")
+
+
+def test_ep_data_air_domain_baseline_1605():
+    """EP 数据：口径线行 2.535 排除；y>0 气域 max=1.605±1%。"""
+    path = (
+        _gain_ep_root()
+        / "simulation"
+        / "field_8period_1p5m_ep"
+        / "field_groove_nogain_L.csv"
+    )
+    xy, vals = field.load_field_points(path)
+    rep = field.check_vmax_adaptive(
+        xy, vals, 2.0, center=(0.282842712474619, 0.0), radius=0.7
+    )
+    assert rep.measured_max == pytest.approx(1.605, rel=0.01)
 
 
 def test_invalid_inputs_raise():
@@ -120,11 +159,12 @@ def test_cli_vmax_check_pass_fail_and_json(tmp_path, capsys):
     data = json.loads(capsys.readouterr().out)
     assert rc == 0 and data["ok"] is True
     assert data["measured_max"] == pytest.approx(35.0)
-    assert data["region"].startswith("y>=0")
+    assert data["region"].startswith("y>0,")
 
 
 def test_rubric_h7_declares_vmax_and_ep_subquestion():
     text = RUBRIC.read_text(encoding="utf-8")
     assert "vmax 自适应" in text and "[1.0,1.1]" in text and "vmax-check" in text
     assert "工作点 (cr,ci)" in text and "EP" in text
+    assert "严格 y>0" in text
     assert RUBRIC.stat().st_size <= 8192

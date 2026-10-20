@@ -8,9 +8,12 @@
   ``display_semicircle``（``radius_m`` / ``center_m`` / 边距）。
 
 本模块把二者归一为 :class:`FieldSchema`；别名只在 ``_LEGACY_*`` 集中登记，新导出
-一律用正口径（``geometry.diamonds`` + 根级 ``display_semicircle``），**禁再增新同义键**
-（:func:`key_drift_warnings` 可机械点名）。消费端（f2/f3 等）统一走
-:func:`load_field_schema`。
+一律用正口径，**禁再增新同义键**（:func:`key_drift_warnings` 可机械点名）。消费端
+（f2/f3 等）统一走 :func:`load_field_schema`。
+
+R6 twin 口径起，新导出用 ``geometry.scan_regions``（径向对齐矩形 0.60×0.31 m @ 近边
+0.25 m，见 ``scan_geometry.scan_geometry_block``）；1m/1.5m 历史 schema 的
+``diamonds``/``inner_diamond`` 继续可读。
 """
 
 from __future__ import annotations
@@ -26,6 +29,8 @@ SCHEMA_KIND = "gain_ep.field_export"
 KEY_GEOMETRY = "geometry"
 KEY_DIAMONDS = "diamonds"
 KEY_DISPLAY_SEMICIRCLE = "display_semicircle"
+#: R6 twin 口径的扫场区（径向对齐矩形 0.60×0.31 m @ 近边 0.25 m）。
+KEY_SCAN_REGIONS = "scan_regions"
 
 #: 历史别名（只为两代现存文件保留；新导出禁止使用）。
 _LEGACY_DIAMOND_KEYS = ("inner_diamond", "inner_diamonds")
@@ -40,6 +45,20 @@ class DiamondSpec:
     center_m: tuple[float, float] | None
     vertices_m: tuple[tuple[float, float], ...]
     side_m: float | None
+    source_key: str
+    raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
+
+
+@dataclass(frozen=True)
+class ScanRegionSpec:
+    """扫场区读数（R6 矩形口径；旧 schema 无此键时为空）。"""
+
+    radial_deg: float | None
+    radial_m: float | None
+    transverse_m: float | None
+    near_edge_m: float | None
+    center_m: tuple[float, float] | None
+    vertices_m: tuple[tuple[float, float], ...]
     source_key: str
     raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
@@ -60,6 +79,7 @@ class FieldSchema:
     kind: str
     version: int
     diamonds: tuple[DiamondSpec, ...]
+    scan_regions: tuple[ScanRegionSpec, ...]
     semicircle: SemicircleSpec | None
     raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
@@ -117,6 +137,24 @@ def _as_diamond_docs(value: Any) -> list[Any]:
     return []
 
 
+def _scan_region(doc: dict[str, Any], source_key: str) -> ScanRegionSpec:
+    def _f(key: str) -> float | None:
+        value = doc.get(key)
+        return float(value) if value is not None else None
+
+    radial = doc.get("radial_deg")
+    return ScanRegionSpec(
+        radial_deg=float(radial) if radial is not None else None,
+        radial_m=_f("radial_m"),
+        transverse_m=_f("transverse_m"),
+        near_edge_m=_f("near_edge_m"),
+        center_m=_pair(doc.get("center_m")),
+        vertices_m=_vertices(doc.get("vertices_m")),
+        source_key=source_key,
+        raw=dict(doc),
+    )
+
+
 def _semicircle(doc: dict[str, Any] | None, source_key: str) -> SemicircleSpec | None:
     if not isinstance(doc, dict):
         return None
@@ -162,10 +200,18 @@ def parse_field_schema(doc: dict[str, Any]) -> FieldSchema:
             geom.get(KEY_DISPLAY_SEMICIRCLE), f"{KEY_GEOMETRY}.{KEY_DISPLAY_SEMICIRCLE}"
         )
 
+    scan_regions: tuple[ScanRegionSpec, ...] = ()
+    if isinstance(geom.get(KEY_SCAN_REGIONS), list):
+        scan_regions = tuple(
+            _scan_region(d, f"{KEY_GEOMETRY}.{KEY_SCAN_REGIONS}")
+            for d in _as_diamond_docs(geom[KEY_SCAN_REGIONS])
+        )
+
     return FieldSchema(
         kind=str(doc.get("kind") or ""),
         version=int(doc.get("version") or 0),
         diamonds=tuple(diamonds),
+        scan_regions=scan_regions,
         semicircle=semicircle,
         raw=doc,
     )
@@ -200,8 +246,22 @@ def schema_contract() -> dict[str, Any]:
     return {
         "kind": SCHEMA_KIND,
         "geometry": {
-            KEY_DIAMONDS: "list[Diamond]（正口径）",
+            KEY_DIAMONDS: "list[Diamond]（1m/1.5m 历史 schema）",
+            KEY_SCAN_REGIONS: "list[ScanRegion]（R6 矩形口径，新导出正口径）",
             "display_semicircle": "根级对象（正口径）",
+        },
+        "scan_region": {
+            "keys": [
+                "radial_deg",
+                "radial_m",
+                "transverse_m",
+                "near_edge_m",
+                "edges_aligned_radial",
+                "center_m",
+                "vertices_m",
+            ],
+            "source": "pysci.research.gain_ep.scan_geometry.scan_geometry_block",
+            "caliber": "R6 批语 2 实测 ＋ twin 裁决 A：0.60(径向)×0.31(横向) m @ 近边 0.25 m",
         },
         "aliases": {
             f"{KEY_GEOMETRY}.inner_diamond": "单菱形旧 schema（1m）",
@@ -210,6 +270,14 @@ def schema_contract() -> dict[str, Any]:
         },
         "normalized": {
             "diamond": ["radial_deg", "center_m", "vertices_m", "side_m"],
+            "scan_region": [
+                "radial_deg",
+                "radial_m",
+                "transverse_m",
+                "near_edge_m",
+                "center_m",
+                "vertices_m",
+            ],
             "semicircle": ["radius_m", "center_m", "note"],
         },
         "policy": "新导出只用正口径；解析器只为两代现存文件保留别名，禁再增新同义键",

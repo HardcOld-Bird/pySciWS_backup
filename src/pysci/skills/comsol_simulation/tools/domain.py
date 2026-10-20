@@ -9,7 +9,8 @@
   偏移**与寻点判据出处（理论小结/探测脚本）
 
 缺节、缺键、无数字或占位词（待补/TBD/…）均判 FAIL；激励口径缺 EP 子问亦 FAIL
-（tb-3 R5 M4）。
+（tb-3 R5 M4）。域版本与寻点版本不一致且无重寻读数时给**软告警**（不判 FAIL，
+tb-3 R6 M5：扩域/换形后须在新域重寻 EP）。
 """
 
 from __future__ import annotations
@@ -42,9 +43,14 @@ _EXC_SOURCE_RE = re.compile(
     re.I,
 )
 
+#: 域版本/寻点版本（R5 批语 3：扩域/换形后须在新域重寻 EP）。
+_DOMAIN_VER_RE = re.compile(r"域版本\s*[：:=]\s*([^\s；;，,。）)]+)")
+_EP_VER_RE = re.compile(r"寻点版本\s*[：:=]\s*([^\s；;，,。）)]+)")
+_RESEARCH_RE = re.compile(r"重寻[^。；\n]{0,48}\d|重寻偏移|re-?search", re.I)
+
 
 def _check_excitation_ep(value: str) -> dict:
-    """激励口径的 EP 子问：工作点 (cr,ci)、最近 EP 偏移、寻点判据出处。"""
+    """激励口径的 EP 子问：工作点、偏移、出处；域版本不一致时软告警。"""
     missing: list[str] = []
     point = bool(_EXC_PAIR_RE.search(value)) or (
         bool(_EXC_CR_RE.search(value)) and bool(_EXC_CI_RE.search(value))
@@ -55,7 +61,27 @@ def _check_excitation_ep(value: str) -> dict:
         missing.append("最近EP偏移")
     if not _EXC_SOURCE_RE.search(value):
         missing.append("寻点判据出处")
-    return {"ok": not missing, "missing": missing, "value": value}
+    domain_ver = (_DOMAIN_VER_RE.search(value) or [None, ""])[1]
+    ep_ver = (_EP_VER_RE.search(value) or [None, ""])[1]
+    warnings: list[str] = []
+    if (
+        domain_ver
+        and ep_ver
+        and domain_ver != ep_ver
+        and not _RESEARCH_RE.search(value)
+    ):
+        warnings.append(
+            f"域版本 {domain_ver} ≠ 寻点版本 {ep_ver} 且未见重寻读数——"
+            "扩域/换形后须在新域重寻 EP 并报偏移（R5 批语 3）"
+        )
+    return {
+        "ok": not missing,
+        "missing": missing,
+        "value": value,
+        "domain_version": domain_ver,
+        "ep_version": ep_ver,
+        "warnings": warnings,
+    }
 
 
 def _section_lines(text: str) -> list[str] | None:
@@ -117,9 +143,11 @@ def check_domain_declaration(text: str) -> dict:
                 "ok": False,
                 "missing": ["工作点(cr,ci)", "最近EP偏移", "寻点判据出处"],
                 "value": "",
+                "warnings": [],
             },
             "missing": list(KEYS),
             "non_numeric": [],
+            "warnings": [],
             "detail": f"缺「{SECTION_KEY}」节",
         }
     questions: dict[str, dict] = {}
@@ -160,6 +188,7 @@ def check_domain_declaration(text: str) -> dict:
         "excitation_ep": excitation,
         "missing": missing,
         "non_numeric": non_numeric,
+        "warnings": list(excitation.get("warnings") or []),
         "detail": "；".join(parts) or "四问齐全且带数值（含工作点-EP 偏移）",
     }
 
@@ -187,5 +216,7 @@ def cmd_domain_check(args) -> int:
                 "  [✗] 激励口径·工作点-EP 偏移：缺 "
                 + "、".join(exc.get("missing") or [])
             )
+        for warn in rep.get("warnings") or []:
+            print(f"  [!] {warn}")
         print(f"  {rep['detail']}")
     return 0 if rep["ok"] else 1

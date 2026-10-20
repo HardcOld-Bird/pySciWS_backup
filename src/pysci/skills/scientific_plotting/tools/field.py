@@ -220,7 +220,8 @@ def check_vmax_adaptive(
 ) -> VmaxCheck:
     """硬项判据：色标 ``vmax`` 与**显示区实测** max|value| 的比值须 ∈ ``[lo, hi]``。
 
-    显示区＝``y >= y_min`` 且（给了 ``radius`` 时）``r <= radius``（圆心 ``center``）。
+    显示区＝**严格 ``y > y_min``**（默认 y>0 气域：排除 y=0 口径线行与管槽域）且
+    （给了 ``radius`` 时）``r <= radius``（圆心 ``center``）。
     实测只取该区内的有限值；必须读面板数据本身，不接受生产者声明的 vmax 说明。
 
     Args:
@@ -248,8 +249,8 @@ def check_vmax_adaptive(
     if pts.shape[0] != vals.size:
         raise ValueError(f"点数不一致：xy {pts.shape[0]} vs values {vals.size}")
     cx, cy = float(center[0]), float(center[1])
-    mask = (pts[:, 1] >= y_min) & np.isfinite(vals)
-    region = f"y>={y_min:g}"
+    mask = (pts[:, 1] > y_min) & np.isfinite(vals)
+    region = f"y>{y_min:g}"
     if radius is not None:
         mask &= (pts[:, 0] - cx) ** 2 + (pts[:, 1] - cy) ** 2 <= radius**2
         region += f", r<={radius:g}@({cx:g},{cy:g})"

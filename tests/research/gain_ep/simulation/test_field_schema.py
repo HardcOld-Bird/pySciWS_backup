@@ -78,11 +78,39 @@ def test_unknown_diamond_key_does_not_parse_as_diamonds():
     assert schema.diamonds == ()
 
 
+def test_parse_scan_regions_contract():
+    """R6 新口径：geometry.scan_regions 可被同源解析。"""
+    doc = {
+        "kind": fs.SCHEMA_KIND,
+        "version": 1,
+        "geometry": {
+            "scan_regions": [
+                {
+                    "radial_deg": 135,
+                    "radial_m": 0.60,
+                    "transverse_m": 0.31,
+                    "near_edge_m": 0.25,
+                    "center_m": [-0.106066, 0.388909],
+                    "vertices_m": [[0, 0], [0, 1], [1, 1], [1, 0]],
+                }
+            ]
+        },
+    }
+    schema = fs.parse_field_schema(doc)
+    assert len(schema.scan_regions) == 1
+    reg = schema.scan_regions[0]
+    assert reg.radial_m == 0.60 and reg.transverse_m == 0.31
+    assert reg.near_edge_m == 0.25 and reg.radial_deg == 135.0
+    assert reg.source_key == "geometry.scan_regions"
+
+
 def test_schema_contract_policy():
     contract = fs.schema_contract()
     assert contract["kind"] == fs.SCHEMA_KIND
     assert "diamonds" in contract["geometry"]
+    assert "scan_regions" in contract["geometry"]
     assert "display_semicircle" in contract["geometry"]
+    assert contract["scan_region"]["caliber"].startswith("R6")
     assert "禁再增新同义键" in contract["policy"]
 
 
