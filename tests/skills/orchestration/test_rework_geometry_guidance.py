@@ -33,3 +33,10 @@ def test_f4_row_order_case_is_adjudicated():
     assert "场图行 1–2、雷达行 3" in text
     assert "2026-10-17 第 2 轮批语 3" in text
     assert "覆盖来源" in text
+
+
+def test_f4_colorbar_position_case_is_adjudicated():
+    text = REF.read_text(encoding="utf-8")
+    assert "每列紧邻右侧" in text
+    assert "第 5 轮批语 1" in text
+    assert "共同的右侧" in text  # 旧值仅作覆盖来源留档
