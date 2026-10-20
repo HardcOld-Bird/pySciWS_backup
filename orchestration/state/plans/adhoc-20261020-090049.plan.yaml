@@ -1,0 +1,9 @@
+id: adhoc-20261020-090049
+goal: adhoc：data/taskbooks/tb-20261020-080213-3-5.rv复审-H4返修复核.md
+steps:
+- id: s1
+  member: reviewer
+  brief: 见任务书
+  dirs:
+  - data/research/1_gain_ep
+  review: false

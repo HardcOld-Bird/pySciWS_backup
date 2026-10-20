@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261020-090049",
+  "created": "2026-10-20T09:00:49+08:00",
+  "goal": "adhoc：data/taskbooks/tb-20261020-080213-3-5.rv复审-H4返修复核.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "reviewer-20261020-090049-adhoc-20261020-090049-s1",
+      "task_file": "data/taskbooks/tb-20261020-080213-3-5.rv复审-H4返修复核.md"
+    }
+  ],
+  "completed_at": null
+}
