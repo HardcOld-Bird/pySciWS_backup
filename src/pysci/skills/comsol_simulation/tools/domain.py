@@ -5,9 +5,11 @@
 - 兼容性：目标场区/标注范围完整位于有效域内 + 边距值
 - 覆盖率：散射体占入射面比例；<100% 须显式声明
 - 边界适配：外场边界/PML 选择 + 背景压力场不覆盖散射体内部
-- 激励口径：波束宽度 vs 孔径 + 实验口径互证
+- 激励口径：波束宽度 vs 孔径 + 实验口径互证；并含**工作点 (cr,ci) ↔ 最近异常点(EP)
+  偏移**与寻点判据出处（理论小结/探测脚本）
 
-缺节、缺键、无数字或占位词（待补/TBD/…）均判 FAIL。
+缺节、缺键、无数字或占位词（待补/TBD/…）均判 FAIL；激励口径缺 EP 子问亦 FAIL
+（tb-3 R5 M4）。
 """
 
 from __future__ import annotations
@@ -22,6 +24,38 @@ KEYS: tuple[str, ...] = ("兼容性", "覆盖率", "边界适配", "激励口径
 _HEADING_RE = re.compile(r"^(#{1,6})\s*(.*?)\s*$")
 _PLACEHOLDER_RE = re.compile(r"待补|待定|待核|待确认|TBD|TODO|N/?A|—|\.\.\.|…", re.I)
 _DIGIT_RE = re.compile(r"\d")
+
+#: 激励口径的「工作点-异常点偏移」子问（tb-3 R5 M4）：(cr,ci)、EP 偏移、寻点出处。
+_EXC_CR_RE = re.compile(r"(?<![A-Za-z])cr(?![A-Za-z])\s*(?:[=:：]|\s)\s*-?\d", re.I)
+_EXC_CI_RE = re.compile(r"(?<![A-Za-z])ci(?![A-Za-z])\s*(?:[=:：]|\s)\s*-?\d", re.I)
+_EXC_PAIR_RE = re.compile(
+    r"\(\s*cr\s*,\s*ci\s*\)\s*[=:：]\s*\(?\s*-?\d+(?:\.\d+)?\s*,\s*-?\d", re.I
+)
+_EXC_OFFSET_RE = re.compile(
+    r"(?:偏移|Δ|delta|距(?:离)?[^。；\n]{0,24}(?:EP|异常点|谱奇点))"
+    r"[^。；\n]{0,48}\d",
+    re.I,
+)
+_EXC_SOURCE_RE = re.compile(
+    r"源[：:]|出处|依据|判据|理论小结|探测脚本|探针脚本"
+    r"|\.(?:md|py|json|yaml)(?![A-Za-z])",
+    re.I,
+)
+
+
+def _check_excitation_ep(value: str) -> dict:
+    """激励口径的 EP 子问：工作点 (cr,ci)、最近 EP 偏移、寻点判据出处。"""
+    missing: list[str] = []
+    point = bool(_EXC_PAIR_RE.search(value)) or (
+        bool(_EXC_CR_RE.search(value)) and bool(_EXC_CI_RE.search(value))
+    )
+    if not point:
+        missing.append("工作点(cr,ci)")
+    if not _EXC_OFFSET_RE.search(value):
+        missing.append("最近EP偏移")
+    if not _EXC_SOURCE_RE.search(value):
+        missing.append("寻点判据出处")
+    return {"ok": not missing, "missing": missing, "value": value}
 
 
 def _section_lines(text: str) -> list[str] | None:
@@ -79,6 +113,11 @@ def check_domain_declaration(text: str) -> dict:
             "questions": {
                 k: {"present": False, "numeric": False, "value": ""} for k in KEYS
             },
+            "excitation_ep": {
+                "ok": False,
+                "missing": ["工作点(cr,ci)", "最近EP偏移", "寻点判据出处"],
+                "value": "",
+            },
             "missing": list(KEYS),
             "non_numeric": [],
             "detail": f"缺「{SECTION_KEY}」节",
@@ -86,6 +125,7 @@ def check_domain_declaration(text: str) -> dict:
     questions: dict[str, dict] = {}
     missing: list[str] = []
     non_numeric: list[str] = []
+    excitation: dict = {"ok": True, "missing": [], "value": ""}
     for key in KEYS:
         val = _value_for(lines, key)
         present = val is not None
@@ -104,18 +144,23 @@ def check_domain_declaration(text: str) -> dict:
             missing.append(key)
         elif not numeric:
             non_numeric.append(key)
+        elif key == "激励口径":
+            excitation = _check_excitation_ep(val or "")
     parts = []
     if missing:
         parts.append("缺键：" + "、".join(missing))
     if non_numeric:
         parts.append("无有效数值/占位：" + "、".join(non_numeric))
+    if excitation["missing"]:
+        parts.append("激励口径缺：" + "、".join(excitation["missing"]))
     return {
-        "ok": not missing and not non_numeric,
+        "ok": not missing and not non_numeric and excitation["ok"],
         "section": True,
         "questions": questions,
+        "excitation_ep": excitation,
         "missing": missing,
         "non_numeric": non_numeric,
-        "detail": "；".join(parts) or "四问齐全且带数值",
+        "detail": "；".join(parts) or "四问齐全且带数值（含工作点-EP 偏移）",
     }
 
 
@@ -134,5 +179,13 @@ def cmd_domain_check(args) -> int:
         for key, q in rep["questions"].items():
             mark = "√" if q["present"] and q["numeric"] else "✗"
             print(f"  [{mark}] {key}：{q['value'] or '（缺）'}")
+        exc = rep.get("excitation_ep") or {}
+        if exc.get("value") and exc.get("ok"):
+            print("  [√] 激励口径·工作点-EP 偏移：工作点/偏移/出处齐全")
+        elif exc.get("value"):
+            print(
+                "  [✗] 激励口径·工作点-EP 偏移：缺 "
+                + "、".join(exc.get("missing") or [])
+            )
         print(f"  {rep['detail']}")
     return 0 if rep["ok"] else 1

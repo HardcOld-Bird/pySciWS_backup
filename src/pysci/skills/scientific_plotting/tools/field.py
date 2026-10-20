@@ -11,6 +11,7 @@
 - :func:`add_field_panel` — 在给定 ax 上 ``tripcolor`` 渲染（自动 Delaunay 或指定 triangles）。
 - :func:`render_field_panel` — 单面板 + colorbar + savefig 一步到位（colorbar 直接取面板 mappable）。
 - :func:`independent_norms` — 每组独立 vmin/vmax 的线性 norm（多组对照禁统一量程/默认对数）。
+- :func:`check_vmax_adaptive` — H7 硬项：vmax ÷ 显示区实测 max|value| ∈ [1.0, 1.1]。
 
 多面板组装见 raster.compose_grid 的 ``kind: field`` 面板（与共享 colorbar 同 cmap/norm）。
 """
@@ -18,6 +19,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -191,6 +193,78 @@ def independent_norms(
             raise ValueError(f"组 {key} 量程不可分：vmin={lo}, vmax={hi}")
         out[key] = Normalize(vmin=lo, vmax=hi)
     return out
+
+
+@dataclass(frozen=True)
+class VmaxCheck:
+    """H7 vmax 自适应读数：``vmax / 显示区实测 max|value|``。"""
+
+    ok: bool
+    ratio: float
+    vmax: float
+    measured_max: float
+    n_points: int
+    region: str
+
+
+def check_vmax_adaptive(
+    xy: np.ndarray,
+    values: np.ndarray,
+    vmax: float,
+    *,
+    center: tuple[float, float] = (0.0, 0.0),
+    radius: float | None = None,
+    y_min: float = 0.0,
+    lo: float = 1.0,
+    hi: float = 1.1,
+) -> VmaxCheck:
+    """硬项判据：色标 ``vmax`` 与**显示区实测** max|value| 的比值须 ∈ ``[lo, hi]``。
+
+    显示区＝``y >= y_min`` 且（给了 ``radius`` 时）``r <= radius``（圆心 ``center``）。
+    实测只取该区内的有限值；必须读面板数据本身，不接受生产者声明的 vmax 说明。
+
+    Args:
+        xy: Nx2 点坐标。
+        values: N 个值（可为负，按绝对值取 max）。
+        vmax: 色标上限（>0）。
+        center: 显示半圆中心（x, y）。
+        radius: 半圆半径；None = 只按 ``y_min`` 裁。
+        y_min: 显示区下界（默认 0，即只取上半域）。
+        lo/hi: 允许比值区间（默认 [1.0, 1.1]）。
+
+    Returns:
+        :class:`VmaxCheck`；`measured_max=0` 时 ratio 为 inf、``ok=False``。
+    """
+    if not np.isfinite(vmax) or vmax <= 0:
+        raise ValueError(f"vmax 须为正有限数：{vmax!r}")
+    if radius is not None and (not np.isfinite(radius) or radius <= 0):
+        raise ValueError(f"radius 须为正有限数：{radius!r}")
+    if not (0 < lo <= hi):
+        raise ValueError(f"允许区间非法：lo={lo}, hi={hi}")
+    pts = np.asarray(xy, dtype=float)
+    vals = np.asarray(values, dtype=float).ravel()
+    if pts.ndim != 2 or pts.shape[1] != 2:
+        raise ValueError(f"xy 须为 Nx2：{pts.shape!r}")
+    if pts.shape[0] != vals.size:
+        raise ValueError(f"点数不一致：xy {pts.shape[0]} vs values {vals.size}")
+    cx, cy = float(center[0]), float(center[1])
+    mask = (pts[:, 1] >= y_min) & np.isfinite(vals)
+    region = f"y>={y_min:g}"
+    if radius is not None:
+        mask &= (pts[:, 0] - cx) ** 2 + (pts[:, 1] - cy) ** 2 <= radius**2
+        region += f", r<={radius:g}@({cx:g},{cy:g})"
+    if not mask.any():
+        raise ValueError(f"显示区无数据点（{region}）")
+    measured = float(np.max(np.abs(vals[mask])))
+    ratio = float("inf") if measured == 0 else vmax / measured
+    return VmaxCheck(
+        ok=bool(lo <= ratio <= hi),
+        ratio=ratio,
+        vmax=float(vmax),
+        measured_max=measured,
+        n_points=int(mask.sum()),
+        region=region,
+    )
 
 
 def render_field_panel(

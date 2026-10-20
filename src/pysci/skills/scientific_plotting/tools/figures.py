@@ -17,6 +17,7 @@ build/preview 会在图目录的 out/ 下产出交付件与 _preview.png，供 A
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import threading
 import time
@@ -466,6 +467,54 @@ def cmd_field_panel(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# vmax-check（H7：vmax 自适应，读显示区实测值）
+# ---------------------------------------------------------------------------
+def cmd_vmax_check(args: argparse.Namespace) -> int:
+    try:
+        xy, vals = _field.load_field_points(
+            args.source,
+            scalars=args.scalars,
+            cols=tuple(args.cols) if args.cols else (0, 1, 2),
+        )
+        rep = _field.check_vmax_adaptive(
+            xy,
+            vals,
+            args.vmax,
+            center=tuple(args.center),
+            radius=args.radius,
+            lo=args.lo,
+            hi=args.hi,
+        )
+    except ValueError as e:
+        print(f"[figures] vmax-check 失败：{e}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "ok": rep.ok,
+                    "ratio": rep.ratio,
+                    "vmax": rep.vmax,
+                    "measured_max": rep.measured_max,
+                    "n_points": rep.n_points,
+                    "region": rep.region,
+                    "allow": [args.lo, args.hi],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        verdict = "PASS" if rep.ok else "FAIL"
+        print(
+            f"[vmax-check] {args.source}：{verdict} "
+            f"ratio={rep.ratio:.4f} = vmax {rep.vmax:g} / 实测 max {rep.measured_max:.4g}"
+            f"（{rep.region}；允许 [{args.lo:g}, {args.hi:g}]；n={rep.n_points}）"
+        )
+    return 0 if rep.ok else 1
+
+
+# ---------------------------------------------------------------------------
 # list
 # ---------------------------------------------------------------------------
 def cmd_list(args: argparse.Namespace) -> int:
@@ -777,6 +826,37 @@ def build_parser() -> argparse.ArgumentParser:
         "--axis-off", action="store_true", dest="axis_off", help="关闭坐标轴"
     )
     s.set_defaults(func=cmd_field_panel)
+
+    # vmax-check
+    s = sub.add_parser(
+        "vmax-check",
+        help="H7 硬项：vmax ÷ 显示区（y>=0、r<=ROI）实测 max|value| 须 ∈ [1.0, 1.1]",
+    )
+    s.add_argument(
+        "--source", type=Path, required=True, help="场源 .vtk/.vtu/.csv/.txt"
+    )
+    s.add_argument(
+        "--scalars", default=None, help="VTK 标量数组名（默认首个 point_data）"
+    )
+    s.add_argument(
+        "--cols",
+        type=int,
+        nargs=3,
+        default=None,
+        metavar=("XI", "YI", "VI"),
+        help="CSV 的 x/y/value 列索引（默认 0 1 2）",
+    )
+    s.add_argument("--vmax", type=float, required=True, help="色标上限")
+    s.add_argument(
+        "--center", type=float, nargs=2, default=(0.0, 0.0), metavar=("CX", "CY")
+    )
+    s.add_argument(
+        "--radius", type=float, default=None, help="ROI 半径（缺省只按 y>=0）"
+    )
+    s.add_argument("--lo", type=float, default=1.0, help="允许比值下限（默认 1.0）")
+    s.add_argument("--hi", type=float, default=1.1, help="允许比值上限（默认 1.1）")
+    s.add_argument("--json", action="store_true", help="JSON 输出")
+    s.set_defaults(func=cmd_vmax_check)
 
     return p
 
