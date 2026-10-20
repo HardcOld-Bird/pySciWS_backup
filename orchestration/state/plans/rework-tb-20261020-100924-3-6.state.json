@@ -98,11 +98,13 @@
     },
     {
       "id": "L.l3",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261020-115757-rework-tb-20261020-100924-3-6-L.l3",
-      "task_file": "orchestration/state/plans/rework-tb-20261020-100924-3-6.l3.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261020-100924-3-6.l3.task.md",
+      "session_id": "77e74664-8cf2-4408-a50c-992d4e4e67b6",
+      "kind": "result"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-20T12:13:45+08:00"
 }
