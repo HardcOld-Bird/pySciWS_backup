@@ -1,15 +1,19 @@
-"""gain_ep 扫描区几何单一真源（R6 twin 裁决口径）。
+"""gain_ep 扫描区几何单一真源（用户口头反馈 2026-10-20：菱形永远正方形）。
 
-**R6 批语 2（用户实测）＋ twin 裁决 A**（案卷
-``data/taskbooks/tb-20261020-080213-3-5.twin案卷-R6几何口径.md``）定：
+**用户口头反馈（2026-10-20，不发返工）**：半圆场域内外的菱形**永远应该是正方形**。
+完整口径：
 
-- 扫场区＝**径向对齐矩形 0.60 m（径向）× 0.31 m（横向）**；
-- **近边距超表面中心 0.25 m**（远边 0.85 m）；
-- 沿 **±45° 径向**对称布置两区（左右不重叠）。
+- 扫场区＝**边长 0.31 m 正方形**（径向＝横向＝0.31 m），边平行/垂直径向；
+- **近边距超表面中心 0.25 m**（远边 0.25+0.31＝**0.56 m**≈用户「约 60cm」，指远边距离，
+  不是径向长度）；
+- 沿 ±45° 径向对称布置两区；
+- 外框（放大视图）同样正方形：0.31×1.23≈0.3813 m。
 
-覆盖 R1 批语 5 的旧口径（31 cm 正方形、近边 30 cm）。本模块是该口径的单一真源：
-field_schema 导出与绘图侧一律引用这里，不再各处手抄数字（任务书引用时须附「源：本模块」
-或 schema 键）。
+来源与覆盖关系：用户口头反馈**覆盖** twin 裁决 A 的「60 cm 径向长度（25→85 cm 矩形）」
+（该读法误把「约 60cm」当径向长度）与 R1 批语 5 的旧近边 30 cm。**菱形永远正方形**是
+长期不变量（见 ``DIAMOND_IS_SQUARE``），任何矩形/菱形变形口径一律错误。
+
+本模块是该口径的单一真源：field_schema 导出与绘图侧一律引用这里，不再各处手抄数字。
 """
 
 from __future__ import annotations
@@ -19,22 +23,25 @@ from typing import Any
 
 import numpy as np
 
-#: 扫场区径向长度（m）：近边 0.25 → 远边 0.85。
-SCAN_RADIAL_M = 0.60
-#: 扫场区横向宽度（m）。
-SCAN_TRANSVERSE_M = 0.31
-#: 近边到超表面中心的距离（m）。
+#: 扫场区边长（m）：径向＝横向（菱形→正方形）。
+SCAN_SIDE_M = 0.31
+#: 径向尺寸（m）＝SCAN_SIDE_M。
+SCAN_RADIAL_M = SCAN_SIDE_M
+#: 横向尺寸（m）＝SCAN_SIDE_M。
+SCAN_TRANSVERSE_M = SCAN_SIDE_M
+#: 近边到超表面中心的距离（m）；远边 = 0.25 + 0.31 = 0.56 m。
 SCAN_NEAR_EDGE_M = 0.25
 #: 两组扫描区所在的径向通道（deg，自 +x 逆时针）。
 SCAN_RADIAL_DEG = (135.0, 45.0)
-#: 矩形边与径向/切向轴对齐（不是斜接）。
+#: 正方形边与径向/切向轴对齐（不是斜接）。
 SCAN_ALIGNED_RADIAL = True
+#: 形状不变量：**菱形永远正方形**（用户明文，长期有效）。
+SCAN_SHAPE = "square"
+DIAMOND_IS_SQUARE = True
 #: 超表面中心（m）：X0 = 4D，D = lambda/sqrt(2)，lambda = 0.1 m。
 METASURFACE_CENTER_M = (0.282842712474619, 0.0)
 
-#: 旧名兼容（R1「31 cm 边长」读横向宽；新代码请用 SCAN_TRANSVERSE_M）。
-SCAN_SIDE_M = SCAN_TRANSVERSE_M
-#: 旧名兼容（同 SCAN_ALIGNED_RADIAL）。
+#: 旧名兼容（R6 矩形读法已废弃；同 SCAN_ALIGNED_RADIAL）。
 SCAN_EDGES_PARALLEL_RADIAL = SCAN_ALIGNED_RADIAL
 
 
@@ -52,25 +59,30 @@ def scan_region_vertices(
     near_edge_m: float = SCAN_NEAR_EDGE_M,
     center: tuple[float, float] = METASURFACE_CENTER_M,
 ) -> np.ndarray:
-    """径向对齐矩形扫场区 4 顶点（m）。
+    """正方形扫场区 4 顶点（m）。
 
-    近边垂直于径向、距 ``center`` 为 ``near_edge_m``；径向长 ``radial_m``（远边
-    ``near_edge_m + radial_m``），横向宽 ``transverse_m``（±``transverse_m/2``）。
-    返回无序集合语义；需要多边形顺序用 :func:`ordered_vertices`。
+    近边垂直于径向、距 ``center`` 为 ``near_edge_m``；边长 ``radial_m``（须等于
+    ``transverse_m``——**菱形永远正方形**）。返回无序集合语义；需要多边形顺序用
+    :func:`ordered_vertices`。
     """
-    if radial_m <= 0 or transverse_m <= 0 or near_edge_m < 0:
+    if not math.isclose(
+        float(radial_m), float(transverse_m), rel_tol=0.0, abs_tol=1e-12
+    ):
         raise ValueError(
-            f"radial_m/transverse_m 须 >0、near_edge_m 须 >=0：{radial_m}, "
-            f"{transverse_m}, {near_edge_m}"
+            "菱形永远正方形：radial_m 必须等于 transverse_m"
+            f"（收到 {radial_m} vs {transverse_m}）"
+        )
+    if radial_m <= 0 or near_edge_m < 0:
+        raise ValueError(
+            f"radial_m 须 >0、near_edge_m 须 >=0：{radial_m}, {near_edge_m}"
         )
     u = radial_unit(radial_deg)
     v = np.array([-u[1], u[0]])
     c = np.asarray(center, dtype=float) + (near_edge_m + radial_m / 2.0) * u
-    half_r = radial_m / 2.0
-    half_t = transverse_m / 2.0
+    half = radial_m / 2.0
     return np.array(
         [
-            c + su * half_r * u + sv * half_t * v
+            c + su * half * u + sv * half * v
             for su, sv in ((1, 1), (1, -1), (-1, -1), (-1, 1))
         ]
     )
@@ -83,13 +95,12 @@ def scan_square_vertices(
     near_edge_m: float = SCAN_NEAR_EDGE_M,
     center: tuple[float, float] = METASURFACE_CENTER_M,
 ) -> np.ndarray:
-    """旧名兼容转发：默认返回新矩形；显式给 ``side_m`` 时返回旧正方形。"""
-    if side_m is None:
-        return scan_region_vertices(radial_deg, near_edge_m=near_edge_m, center=center)
+    """正方形顶点旧名：``side_m`` 缺省＝SCAN_SIDE_M；显式给值亦为边长。"""
+    side = SCAN_SIDE_M if side_m is None else side_m
     return scan_region_vertices(
         radial_deg,
-        radial_m=side_m,
-        transverse_m=side_m,
+        radial_m=side,
+        transverse_m=side,
         near_edge_m=near_edge_m,
         center=center,
     )
@@ -110,6 +121,7 @@ def scan_geometry_block(radial_deg: float) -> dict[str, Any]:
     vertices = ordered_vertices(scan_region_vertices(radial_deg))
     return {
         "radial_deg": float(radial_deg),
+        "shape": SCAN_SHAPE,
         "radial_m": SCAN_RADIAL_M,
         "transverse_m": SCAN_TRANSVERSE_M,
         "near_edge_m": SCAN_NEAR_EDGE_M,

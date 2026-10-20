@@ -37,10 +37,11 @@ def test_f4_row_order_case_is_adjudicated():
 
 def test_f4_scan_geometry_case_is_adjudicated():
     text = REF.read_text(encoding="utf-8")
-    assert "0.60（径向）×0.31（横向）" in text
-    assert "近边 0.25 m" in text
-    assert "R6 批语 2" in text and "twin 裁决 A" in text
-    assert "R1 批语 5" in text  # 旧口径只作覆盖来源
+    assert "0.31 m 正方形 @ 近边 0.25 m" in text
+    assert "用户口头反馈 2026-10-20" in text
+    assert "菱形永远正方形" in text
+    assert "twin 裁决 A" in text and "60×31 矩形" in text  # 被覆盖的误读留档
+    assert "R1 批语 5" in text
 
 
 def test_f4_colorbar_position_case_is_adjudicated():

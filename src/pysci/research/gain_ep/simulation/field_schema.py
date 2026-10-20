@@ -11,9 +11,9 @@
 一律用正口径，**禁再增新同义键**（:func:`key_drift_warnings` 可机械点名）。消费端
 （f2/f3 等）统一走 :func:`load_field_schema`。
 
-R6 twin 口径起，新导出用 ``geometry.scan_regions``（径向对齐矩形 0.60×0.31 m @ 近边
-0.25 m，见 ``scan_geometry.scan_geometry_block``）；1m/1.5m 历史 schema 的
-``diamonds``/``inner_diamond`` 继续可读。
+新导出用 ``geometry.scan_regions``（**0.31 m 正方形 @ 近边 0.25 m**，用户口头反馈
+2026-10-20 覆盖 twin A 的 60×31 矩形读法；见 ``scan_geometry.scan_geometry_block``）；
+1m/1.5m 历史 schema 的 ``diamonds``/``inner_diamond`` 继续可读。
 
 ``files.*.display_y_positive_max_abs_real_p_t`` 的语义是**严格 y>0 气域**（排除
 y=0 口径线行与管槽），导出端一律用 :func:`display_declaration`（与 `vmax-check`
@@ -38,7 +38,7 @@ KEY_DISPLAY_POINTS = "display_points"
 KEY_GEOMETRY = "geometry"
 KEY_DIAMONDS = "diamonds"
 KEY_DISPLAY_SEMICIRCLE = "display_semicircle"
-#: R6 twin 口径的扫场区（径向对齐矩形 0.60×0.31 m @ 近边 0.25 m）。
+#: 扫场区（用户口头反馈 2026-10-20：0.31 m 正方形 @ 近边 0.25 m）。
 KEY_SCAN_REGIONS = "scan_regions"
 
 #: 历史别名（只为两代现存文件保留；新导出禁止使用）。
@@ -60,9 +60,10 @@ class DiamondSpec:
 
 @dataclass(frozen=True)
 class ScanRegionSpec:
-    """扫场区读数（R6 矩形口径；旧 schema 无此键时为空）。"""
+    """扫场区读数（正方形口径；旧 schema 无此键时为空）。"""
 
     radial_deg: float | None
+    shape: str
     radial_m: float | None
     transverse_m: float | None
     near_edge_m: float | None
@@ -154,6 +155,7 @@ def _scan_region(doc: dict[str, Any], source_key: str) -> ScanRegionSpec:
     radial = doc.get("radial_deg")
     return ScanRegionSpec(
         radial_deg=float(radial) if radial is not None else None,
+        shape=str(doc.get("shape") or ""),
         radial_m=_f("radial_m"),
         transverse_m=_f("transverse_m"),
         near_edge_m=_f("near_edge_m"),
@@ -281,6 +283,7 @@ def schema_contract() -> dict[str, Any]:
         "scan_region": {
             "keys": [
                 "radial_deg",
+                "shape",
                 "radial_m",
                 "transverse_m",
                 "near_edge_m",
@@ -289,7 +292,10 @@ def schema_contract() -> dict[str, Any]:
                 "vertices_m",
             ],
             "source": "pysci.research.gain_ep.scan_geometry.scan_geometry_block",
-            "caliber": "R6 批语 2 实测 ＋ twin 裁决 A：0.60(径向)×0.31(横向) m @ 近边 0.25 m",
+            "caliber": (
+                "用户口头反馈 2026-10-20：0.31 m 正方形 @ 近边 0.25 m（远边 0.56 m），"
+                "菱形永远正方形；覆盖 twin A 的 60×31 矩形读法与 R1 旧近边 30 cm"
+            ),
         },
         "aliases": {
             f"{KEY_GEOMETRY}.inner_diamond": "单菱形旧 schema（1m）",
