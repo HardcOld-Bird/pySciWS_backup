@@ -117,3 +117,52 @@ def test_schema_contract_policy():
 def test_parse_rejects_non_mapping():
     with pytest.raises(ValueError):
         fs.parse_field_schema([])  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# F9：显示区严格 y>0 口径单一真源（1p8m_ep2 三组 L = 1001.87/1.368/1.984）
+# ---------------------------------------------------------------------------
+from pysci.skills.scientific_plotting.tools import field  # noqa: E402
+
+CENTER = (0.282842712474619, 0.0)
+RADIUS = 0.90
+EP2 = _gain_ep_root() / "simulation" / "field_8period_1p8m_ep2"
+EXPECTED_STRICT = {
+    "groove_gain": 1001.87,
+    "groove_nogain": 1.368,
+    "gain_nogroove": 1.984,
+}
+LEGACY_SCHEMA = {
+    "groove_gain": 1005.6568,
+    "groove_nogain": 2.1720,
+    "gain_nogroove": 2.5264,
+}
+
+
+def test_display_declaration_strict_values_and_same_source():
+    """声明值 = strict y>0 实测 = vmax-check 读数（同源函数）。"""
+    for group, want in EXPECTED_STRICT.items():
+        xy, vals = field.load_field_points(EP2 / f"field_{group}_L.csv")
+        decl = fs.display_declaration(xy, vals, center=CENTER, radius=RADIUS)
+        got = decl[fs.KEY_DISPLAY_MAX]
+        assert got == pytest.approx(want, rel=0.01), (group, got)
+        chk = field.check_vmax_adaptive(xy, vals, got, center=CENTER, radius=RADIUS)
+        assert chk.measured_max == got, "声明值必须与 vmax-check 同源"
+        assert chk.n_points == decl[fs.KEY_DISPLAY_POINTS]
+
+
+def test_counterexample_current_schema_values_include_caliber_line():
+    """现值 1005.66/2.172/2.526 与 y>=0（含口径线）一致——钉为反例。"""
+    schema = json.loads((EP2 / "field_schema.json").read_text(encoding="utf-8"))
+    for group, old in LEGACY_SCHEMA.items():
+        xy, vals = field.load_field_points(EP2 / f"field_{group}_L.csv")
+        y = xy[:, 1]
+        mask = (y >= 0) & ((xy[:, 0] - CENTER[0]) ** 2 + y**2 <= RADIUS**2)
+        legacy = float(np.abs(vals[mask]).max())
+        assert legacy == pytest.approx(old, rel=0.01)
+        declared = schema["files"][f"{group}_L"][fs.KEY_DISPLAY_MAX]
+        assert declared == pytest.approx(old, rel=0.01), "当前 schema 仍是 y>=0 口径"
+        strict = fs.display_declaration(xy, vals, center=CENTER, radius=RADIUS)[
+            fs.KEY_DISPLAY_MAX
+        ]
+        assert strict < legacy, "strict y>0 必须小于含口径线的旧读数"

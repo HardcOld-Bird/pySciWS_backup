@@ -14,6 +14,10 @@
 R6 twin 口径起，新导出用 ``geometry.scan_regions``（径向对齐矩形 0.60×0.31 m @ 近边
 0.25 m，见 ``scan_geometry.scan_geometry_block``）；1m/1.5m 历史 schema 的
 ``diamonds``/``inner_diamond`` 继续可读。
+
+``files.*.display_y_positive_max_abs_real_p_t`` 的语义是**严格 y>0 气域**（排除
+y=0 口径线行与管槽），导出端一律用 :func:`display_declaration`（与 `vmax-check`
+同源）；不得再写 y≥0 口径。
 """
 
 from __future__ import annotations
@@ -25,7 +29,12 @@ from typing import Any
 
 import numpy as np
 
+from pysci.skills.scientific_plotting.tools.field import display_region_max
+
 SCHEMA_KIND = "gain_ep.field_export"
+#: ``files.*`` 的显示区声明：严格 y>0 气域 max|Re p_t|（与 `vmax-check` 同源）。
+KEY_DISPLAY_MAX = "display_y_positive_max_abs_real_p_t"
+KEY_DISPLAY_POINTS = "display_points"
 KEY_GEOMETRY = "geometry"
 KEY_DIAMONDS = "diamonds"
 KEY_DISPLAY_SEMICIRCLE = "display_semicircle"
@@ -227,6 +236,25 @@ def load_field_schema(path: str | Path) -> FieldSchema:
     return parse_field_schema(doc)
 
 
+def display_declaration(
+    xy: np.ndarray,
+    values: np.ndarray,
+    *,
+    center: tuple[float, float] = (0.0, 0.0),
+    radius: float | None = None,
+) -> dict[str, Any]:
+    """``files.*`` 的显示区声明（严格 y>0 气域；与 ``vmax-check`` 同源）。
+
+    导出端用它写 ``display_y_positive_max_abs_real_p_t`` / ``display_points``，
+    禁止另写一套 y≥0 口径（F9）。
+    """
+    stats = display_region_max(xy, values, center=center, radius=radius)
+    return {
+        KEY_DISPLAY_MAX: stats.max_abs,
+        KEY_DISPLAY_POINTS: stats.n_points,
+    }
+
+
 def key_drift_warnings(doc: dict[str, Any]) -> list[str]:
     """点名**新同义键**（geometry/根级里含 diamond/semicircle 但不在允许集）。"""
     allowed = {KEY_DIAMONDS, KEY_DISPLAY_SEMICIRCLE, *_LEGACY_DIAMOND_KEYS}
@@ -267,6 +295,13 @@ def schema_contract() -> dict[str, Any]:
             f"{KEY_GEOMETRY}.inner_diamond": "单菱形旧 schema（1m）",
             f"{KEY_GEOMETRY}.inner_diamonds": "list 别名（历史）",
             f"{KEY_GEOMETRY}.display_semicircle": "半圆旧位置（1m）",
+        },
+        "files": {
+            KEY_DISPLAY_MAX: (
+                "严格 y>0 气域实测 max|Re p_t|（排除 y=0 口径线行与管槽；"
+                "由 field.display_region_max 计算，与 `vmax-check` 同源）"
+            ),
+            KEY_DISPLAY_POINTS: "参与计算的显示区点数",
         },
         "normalized": {
             "diamond": ["radial_deg", "center_m", "vertices_m", "side_m"],

@@ -1487,7 +1487,7 @@ def main(argv: list[str] | None = None) -> int:
         help="咨询 twin 组员（高风险裁决第二意见；taste_enabled=false 时明确拒绝并提示待上线）",
     )
     q.add_argument("case_file", help="案卷路径（## 问题 / ## 选项 A / ## 选项 B）")
-    q.add_argument("--session", help="latest(默认)|new|<sid前缀>")
+    q.add_argument("--session", help="new(默认，冷启动纪律)|latest|<sid前缀>")
     q.set_defaults(func=_verdict.cmd_consult_twin)
 
     p = sub.add_parser(
