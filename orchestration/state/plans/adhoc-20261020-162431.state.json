@@ -1,0 +1,15 @@
+{
+  "plan_id": "adhoc-20261020-162431",
+  "created": "2026-10-20T16:24:31+08:00",
+  "goal": "adhoc：data/taskbooks/tb-口头反馈-菱形正方形-f重绘装配.md",
+  "steps": [
+    {
+      "id": "s1",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "figure-20261020-162431-adhoc-20261020-162431-s1",
+      "task_file": "data/taskbooks/tb-口头反馈-菱形正方形-f重绘装配.md"
+    }
+  ],
+  "completed_at": null
+}

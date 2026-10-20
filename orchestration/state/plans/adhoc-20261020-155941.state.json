@@ -5,11 +5,13 @@
   "steps": [
     {
       "id": "s1",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261020-155941-adhoc-20261020-155941-s1",
-      "task_file": "data/taskbooks/tb-口头反馈-菱形正方形-几何登记更正.md"
+      "task_file": "data/taskbooks/tb-口头反馈-菱形正方形-几何登记更正.md",
+      "session_id": "77e74664-8cf2-4408-a50c-992d4e4e67b6",
+      "kind": "result"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-20T16:23:13+08:00"
 }
