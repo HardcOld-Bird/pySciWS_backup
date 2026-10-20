@@ -29,18 +29,38 @@
     },
     {
       "id": "A.a5",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "devops-20261020-104515-rework-tb-20261020-100924-3-6-A.a5",
-      "task_file": "orchestration/state/plans/rework-tb-20261020-100924-3-6.a5.task.md"
+      "task_file": "orchestration/state/plans/rework-tb-20261020-100924-3-6.a5.task.md",
+      "session_id": "77e74664-8cf2-4408-a50c-992d4e4e67b6",
+      "kind": "result"
     },
     {
       "id": "B.b1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261020-100924-3-6.b1-重拆解.md"
+    },
+    {
+      "id": "B.ep2",
+      "status": "queued",
+      "review": "pending",
+      "job_id": "sim-20261020-112327-rework-tb-20261020-100924-3-6-B.ep2",
+      "task_file": "orchestration/state/plans/rework-tb-20261020-100924-3-6.ep2.task.md"
+    },
+    {
+      "id": "B.b2",
       "status": "pending",
       "review": "pending"
     },
     {
-      "id": "B.b2",
+      "id": "B.f3",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.rv",
       "status": "pending",
       "review": "pending"
     },

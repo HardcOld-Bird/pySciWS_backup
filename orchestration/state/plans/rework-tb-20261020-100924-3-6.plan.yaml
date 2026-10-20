@@ -51,10 +51,18 @@ steps:
     kind: self
     brief: 重拆解返工
     role: rework_plan
+  - id: ep2
+    member: sim
+    brief: 扩域+EP 重寻+六组重跑——新几何（扫场区 0.60x0.31@0.25，登记同源）下域扩至含显示半圆 r>=0.90m（旋转正方形边长>=1.8m，不含 PMB）；新域重寻 EP（|S21| 极点+全波互证，报新旧点偏移读数）并迁工作点；六组 L/R 声压实部重跑，schema F6 契约（含 scan_regions 新几何）；M1 声明含 EP 子问+域/寻点版本；原件只读、雷达链路零改动
   - id: b2
-    member: devops
-    brief: 返工生产环节
-    member_placeholder: true
+    member: figure
+    brief: f2 场图x6 重绘——新数据新几何：内框重定位为扫场矩形（0.60x0.31@近边0.25，±45°，登记同源）、外框放大沿用、vmax 严格 y>0 气域自适应（vmax-check 硬项）、其余已验收规格禁回退
+  - id: f3
+    member: figure
+    brief: f3 装配——col-cb 紧邻版式沿用（R5 定版）、雷达素材 sha 零改动、脚注色标口径更新为新 vmax 读数、外框完整入 bbox（必要时缩放显示，R3 条款）
+  - id: rv
+    member: reviewer
+    brief: rv 终检——通用标准+H7（vmax 严格 y>0 气域硬项、EP 子问+域/寻点版本、ink-gap 测距）+禁回退逐项+VERDICT
   - id: b_last
     kind: self
     brief: 全流程报告组装
