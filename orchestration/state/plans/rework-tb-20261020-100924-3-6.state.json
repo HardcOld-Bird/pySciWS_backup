@@ -1,0 +1,65 @@
+{
+  "plan_id": "rework-tb-20261020-100924-3-6",
+  "created": "2026-10-20T10:32:56+08:00",
+  "goal": "返工：tb-20261020-100924-3-6",
+  "steps": [
+    {
+      "id": "A.a1",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261020-100924-3-6.a1-成因分析.md"
+    },
+    {
+      "id": "A.a2",
+      "status": "done",
+      "review": "pending",
+      "evidence": "data/taskbooks/tb-20261020-100924-3-6.a2-解决方案.md"
+    },
+    {
+      "id": "A.a3",
+      "status": "self_awaiting",
+      "review": "pending"
+    },
+    {
+      "id": "A.a4",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "A.a5",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.b1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.b2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "B.b_last",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l1",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l2",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "L.l3",
+      "status": "pending",
+      "review": "pending"
+    }
+  ],
+  "completed_at": null
+}
