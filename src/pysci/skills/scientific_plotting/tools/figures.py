@@ -31,6 +31,7 @@ matplotlib.use("Agg")
 from . import audit as _audit  # noqa: E402
 from . import field as _field  # noqa: E402
 from . import imgcheck as _imgcheck  # noqa: E402
+from . import ink_gap as _ink  # noqa: E402
 from . import occlusion as _occ  # noqa: E402
 from . import palette as _palette  # noqa: E402
 from . import raster as _raster  # noqa: E402
@@ -467,6 +468,63 @@ def cmd_field_panel(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# ink-gap（H4：文字块/墨迹间距的唯一测距入口）
+# ---------------------------------------------------------------------------
+def cmd_ink_gap(args: argparse.Namespace) -> int:
+    try:
+        img = _ink.load_image(args.image)
+        kw = {"max_channel": args.max_channel, "max_delta": args.max_delta}
+        if args.roi_a and args.roi_b:
+            rep = _ink.gap_between_rois(
+                img,
+                tuple(args.roi_a),
+                tuple(args.roi_b),
+                mode=args.mode,
+                dpi=args.dpi,
+                **kw,
+            )
+            reps = [rep]
+        else:
+            reps = _ink.pairwise_gaps(
+                img,
+                box=tuple(args.box) if args.box else None,
+                top=args.top,
+                dpi=args.dpi,
+                **kw,
+            )
+    except (ValueError, OSError) as e:
+        print(f"[figures] ink-gap 失败：{e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "mode": reps[0].mode if reps else args.mode,
+                    "readings": [
+                        {
+                            "a": r.a,
+                            "b": r.b,
+                            "distance_px": r.distance_px,
+                            "distance_mm": r.distance_mm,
+                        }
+                        for r in reps
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+    if not reps:
+        print("[ink-gap] 无可测成分对")
+        return 0
+    for r in reps:
+        mm = "" if r.distance_mm is None else f" = {r.distance_mm:.3f} mm"
+        print(f"[ink-gap] {r.mode}: {r.distance_px:.1f} px{mm}  A{r.a} ↔ B{r.b}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # vmax-check（H7：vmax 自适应，读显示区实测值）
 # ---------------------------------------------------------------------------
 def cmd_vmax_check(args: argparse.Namespace) -> int:
@@ -857,6 +915,29 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--hi", type=float, default=1.1, help="允许比值上限（默认 1.1）")
     s.add_argument("--json", action="store_true", help="JSON 输出")
     s.set_defaults(func=cmd_vmax_check)
+
+    # ink-gap
+    s = sub.add_parser(
+        "ink-gap",
+        help="H4 唯一测距入口：暗墨 2D 成分；region=文字块间距 / pixel=墨迹最小距",
+    )
+    s.add_argument("image", type=Path, help="PNG/JPG 成品图")
+    s.add_argument(
+        "--roi-a", type=int, nargs=4, default=None, metavar=("X0", "Y0", "X1", "Y1")
+    )
+    s.add_argument(
+        "--roi-b", type=int, nargs=4, default=None, metavar=("X0", "Y0", "X1", "Y1")
+    )
+    s.add_argument(
+        "--box", type=int, nargs=4, default=None, metavar=("X0", "Y0", "X1", "Y1")
+    )
+    s.add_argument("--mode", choices=["region", "pixel"], default="region")
+    s.add_argument("--max-channel", type=int, default=_ink.DEFAULT_MAX_CHANNEL)
+    s.add_argument("--max-delta", type=int, default=_ink.DEFAULT_MAX_DELTA)
+    s.add_argument("--dpi", type=float, default=None, help="给定时同时输出 mm")
+    s.add_argument("--top", type=int, default=10, help="两两表最多输出条数")
+    s.add_argument("--json", action="store_true", help="JSON 输出")
+    s.set_defaults(func=cmd_ink_gap)
 
     return p
 

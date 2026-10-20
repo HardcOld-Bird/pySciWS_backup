@@ -487,6 +487,23 @@ def test_advance_full_flag_reprints_digest(rface, monkeypatch, capsys):
     assert out.index("[NEXT] 工作清单") < out.index("要求与历史总览")
 
 
+def test_advance_digest_separator_partitions_output(rface, monkeypatch, capsys):
+    """F8：动作块与历史总览之间有显式分区标记（tail 截取不再混入历史）。"""
+    root = _mk_taskbook("原始大任务")
+    rw = taskbooks.create_rework(root, improve={}, note="上轮批语")["id"]
+    _mk_plan(rface, "p-sep", tb_id=rw)
+    monkeypatch.setattr(queueworker, "wake_member", lambda m, **k: (True, "stub"))
+    capsys.readouterr()
+
+    assert plans.cmd_plan_advance(_args("p-sep", text="t")) == 0
+    out = capsys.readouterr().out
+    assert plans.DIGEST_SEPARATOR in out
+    action, history = out.split(plans.DIGEST_SEPARATOR, 1)
+    assert "[NEXT] 工作清单" in action
+    assert "要求与历史总览" not in action, "动作块不得混入历史文本"
+    assert "要求与历史总览" in history
+
+
 def test_adhoc_ids_are_unique_within_the_same_second(rface, monkeypatch, capsys):
     """同一秒两单：后缀递增，各一 plan/state（实测 050159 曾吞两单）。"""
     from datetime import datetime as _dt

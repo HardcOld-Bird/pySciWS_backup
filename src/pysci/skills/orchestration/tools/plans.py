@@ -1289,6 +1289,11 @@ def _serial_gate(tb_id: str) -> int | None:
     return 2
 
 
+#: 动作面/历史总览的分区标记（F8，tb-3 R5 L.l3）：tail 截取动作块时以此为界，
+#: 历史文本不得混入 NEXT/工作清单。
+DIGEST_SEPARATOR = "==== 历史总览开始（非动作，勿当作 NEXT） ===="
+
+
 def _print_digest_tail(plan_id: str, plan: dict, *, full: bool = False) -> None:
     """输出**末尾**附送要求与历史总览（行动面在前；tb-5 返工 L 摩擦 #1）。
 
@@ -1304,6 +1309,7 @@ def _print_digest_tail(plan_id: str, plan: dict, *, full: bool = False) -> None:
         if not full and not _tb.digest_has_history(tb_id):
             return
         print()
+        print(DIGEST_SEPARATOR)
         print("—— 要求与历史总览（首次引导附送；后续用 --full 查看）——")
         print(_tb.requirements_digest(tb_id).rstrip())
     except Exception:  # noqa: BLE001 - 附送面 fail-soft（推进主流程不被历史读数阻塞）
