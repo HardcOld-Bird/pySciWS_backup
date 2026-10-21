@@ -42,10 +42,10 @@
       }
     },
     "theoretical-computation": {
-      "source_hash": "3782430bef46cedd431abcd7250ec3dd62f07e0ad42b08909bafd276ed14818a",
+      "source_hash": "d33199c77770205aa1e38d3b665a9ae6d665c97b5c9ad2ef85c9c08c8596648c",
       "targets": {
-        "orchestration/pods/deputy/.qoder/skills/theoretical-computation": "3782430bef46cedd431abcd7250ec3dd62f07e0ad42b08909bafd276ed14818a",
-        "orchestration/pods/theory/.qoder/skills/theoretical-computation": "3782430bef46cedd431abcd7250ec3dd62f07e0ad42b08909bafd276ed14818a"
+        "orchestration/pods/deputy/.qoder/skills/theoretical-computation": "d33199c77770205aa1e38d3b665a9ae6d665c97b5c9ad2ef85c9c08c8596648c",
+        "orchestration/pods/theory/.qoder/skills/theoretical-computation": "d33199c77770205aa1e38d3b665a9ae6d665c97b5c9ad2ef85c9c08c8596648c"
       }
     },
     "ai-drawing": {
