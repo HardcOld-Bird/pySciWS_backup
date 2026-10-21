@@ -23,22 +23,28 @@
     },
     {
       "id": "G2.G2a.t3",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "theory-20261021-192128-cmt-pipeline-20261021-G2.G2a.t3",
-      "task_file": "data/taskbooks/cmt-pipeline-20261021.t3.task.md"
+      "task_file": "data/taskbooks/cmt-pipeline-20261021.t3.task.md",
+      "session_id": "64b4a929-539c-498b-bfb7-4e880514a810",
+      "kind": "result"
     },
     {
       "id": "G2.G2b.t4",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "sim-20261021-191638-cmt-pipeline-20261021-G2.G2b.t4",
-      "task_file": "data/taskbooks/cmt-pipeline-20261021.t4.task.md"
+      "task_file": "data/taskbooks/cmt-pipeline-20261021.t4.task.md",
+      "session_id": "461e48cc-50bf-4bc5-9bd0-4bfeeeb4e45d",
+      "kind": "result"
     },
     {
       "id": "G2.G2b.t5",
-      "status": "pending",
-      "review": "pending"
+      "status": "queued",
+      "review": "pending",
+      "job_id": "theory-20261021-194121-cmt-pipeline-20261021-G2.G2b.t5",
+      "task_file": "data/taskbooks/cmt-pipeline-20261021.t5.task.md"
     },
     {
       "id": "G3.t6",

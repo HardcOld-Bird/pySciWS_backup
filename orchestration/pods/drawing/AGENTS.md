@@ -81,14 +81,12 @@
 - 一条浅灰**水平虚线跨越分界并向两侧各伸出火箭外一小段**是强调比例的免费手法，纯几何、不引数字，
   实测稳定复现。标题左上 + 浅灰小注左下 = 与页4/页5 成套的固定版式。
 
-### 研究线 1_gain_ep / beam_scatter（第 3 轮定版，2026-10-18）
+### 研究线 1_gain_ep / beam_scatter（R4 定版，2026-10-20）
 
-- 本轮定版：**3 列(case) × 3 行** = 场图 L/R **两行在上**、雷达**第 3 行**；右侧共享
-  colorbar **只跨场图两行**（旧 `设计说明.md` 配色/线宽/字号仍有效，行序作废）。
-  规格：`artwork/beam_scatter_审美参考.设计说明.md`。
-- 交付：`artwork/beam_scatter_{整体版面,局部细节}_审美参考.png`；prompt `bench/p8_*`；
-  快照 `runs/beam_scatter_r3_*`；gallery `beam_scatter_r3_layout_a`/`_detail_c`。
-- 上一轮 `beam_layout_ref_{2,3}.png` 几何仍可参考（雷达在上版式）。
-- **半圆 prompt 铁律**：面板「宽>高、dome、底边一条直线、线以下无内容」；写「不要整圆」
-  仍可能画整圆，**横画幅比竖画幅稳**。Seedream 5.0-pro **会改写请求 width/height**
-  （2688×1792→2816×1584；2048×1536→2816×1584；1536×2048→1280×3200）→ 比例参数不可靠。
+- 版面：3 列(case) × 3 行 = 场图 L/R 两行在上、雷达第 3 行；右侧 **3 支独立线性 colorbar**
+  横排、各跨场图两行（**禁统一条/禁 log**，R4 批语 2）；零值黄绿（COMSOL Rainbow，用户既定）。
+- 双框：内框 31cm ≈0.39D（±45° 近 rim）+ 外框 1.23× ≈0.47D，虚线连接；Exp.†/Sim. 仅首列、框外。
+- 现行规格：`artwork/beam_scatter_审美参考.设计说明.md`（旧 R3「唯一共享条」作废）。
+  交付 `beam_scatter_{整体版面,局部细节}_审美参考.png`；prompt `bench/p8b_*`；gallery layout_b/detail_a。
+- **半圆 prompt 铁律**：面板「宽>高、dome、底边直线、线以下无内容」；写「不要整圆」仍可能画整圆，
+  横画幅更稳；5.0-pro 会改写 width/height（CLI 已告警）→ 比例不可控。
