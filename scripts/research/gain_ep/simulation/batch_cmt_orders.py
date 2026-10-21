@@ -7,9 +7,11 @@
         --point 0.070710678,45 --point 0.15,30 \
         --out data/research/1_gain_ep/simulation/cmt_batch.json
 
-每个设计点按 (f, theta, D) 计算传播阶次集合 n: |kx0+n*2*pi/D| <= k，沿
-scan1（L 入射）/scan2（R 入射）导出散射场 p_s，做空间 Fourier 积分
-r_n = (1/L)∫ p_s exp(-i kx_n x) dx；不硬编码 0/±1。
+每个设计点用 **参考端口栅格**（`solve_s_matrix(MetagratingParams(f0, theta, D)).ports`）
+确定传播阶次与 kx，沿 scan1（L 入射）/scan2（R 入射）导出散射场 p_s，做空间 Fourier
+积分 ``r_m = (1/2D) ∫ p_s exp(+i kx_m x) dx``（扫描场 x 相位为 e^{-i kx x}，故提取
+用正号；旧版用入射栅格 + 负号，3 端口时 L 侧漏掉传播阶）。输出 JSON 保存复数
+``re/im/abs/phase_rad``，不硬编码 0/±1。
 """
 
 from __future__ import annotations
@@ -24,18 +26,40 @@ import mph
 import numpy as np
 
 from pysci.paths import research_asset_dir
+from pysci.research.gain_ep.theory.cmt_reflection_s_matrix import (
+    MetagratingParams,
+    solve_s_matrix,
+)
 from pysci.skills.comsol_simulation.tools.export import export_data
 
 
-def order_set(
-    f: float, theta_deg: float, D: float, c0: float = 343.0
-) -> list[tuple[int, float]]:
-    k = 2.0 * math.pi * f / c0
-    kx0 = math.sin(math.radians(theta_deg)) * k
-    step = 2.0 * math.pi / D
-    n_min = int(math.ceil((-k - kx0) / step))
-    n_max = int(math.floor((k - kx0) / step))
-    return [(n, kx0 + n * step) for n in range(n_min, n_max + 1)]
+def reference_ports(f: float, theta_deg: float, D: float, c0: float = 343.0):
+    """参考端口栅格（端口集合/顺序/ kx 与 CMT ``S`` 完全一致）。
+
+    端口集合只依赖 (f, θi, D)，与槽几何无关；``MetagratingParams`` 的几何缺省
+    （EP 名义参数）足够定端口。
+    """
+    params = MetagratingParams(f0=f, c0=c0, theta_i=theta_deg, period=D)
+    return solve_s_matrix(params).ports
+
+
+def extract_coefficients(x, ps, ports, D: float, *, k: float) -> dict:
+    """按参考端口栅格提取复反射系数 ``r_m = (1/2D)∫ p_s e^{+i kx_m x} dx``。
+
+    扫描场 x 相位是 e^{-i kx x}，故提取用正号；返回每阶的
+    ``kx_over_k/re/im/abs/phase_rad``（JSON 友好）。
+    """
+    coeffs = {}
+    for port in ports:
+        r = np.trapezoid(ps * np.exp(1j * port.kx * x), x) / (2.0 * D)
+        coeffs[str(port.order)] = {
+            "kx_over_k": port.kx / k,
+            "re": float(r.real),
+            "im": float(r.imag),
+            "abs": float(abs(r)),
+            "phase_rad": float(np.angle(r)),
+        }
+    return coeffs
 
 
 def main() -> int:
@@ -85,11 +109,12 @@ def main() -> int:
             jm.param().set(k, v)
         comp.geom("geom1").run()
         comp.mesh("mesh1").run()
-        orders = order_set(3430.0, theta, D)
+        ports = reference_ports(3430.0, theta, D)
+        k = 2.0 * math.pi * 3430.0 / 343.0
         entry = {
             "D_m": D,
             "theta_deg": theta,
-            "orders": [n for n, _ in orders],
+            "orders": [p.order for p in ports],
             "sides": {},
         }
         for side in [s for s in args.sides.split(",") if s]:
@@ -107,16 +132,11 @@ def main() -> int:
             b = np.loadtxt(paths[1], delimiter=",", comments="%")
             x = a[:, 0]
             ps = a[:, -1] + 1j * b[:, -1]
-            coeffs = {}
-            for n, kxn in orders:
-                r = np.trapezoid(ps * np.exp(-1j * kxn * x), x) / (2.0 * D)
-                coeffs[str(n)] = {
-                    "kx_over_k": kxn / (2 * math.pi * 3430.0 / 343.0),
-                    "abs": float(abs(r)),
-                }
+            coeffs = extract_coefficients(x, ps, ports, D, k=k)
             entry["sides"][side] = coeffs
             print(
-                f"D={D:.6g} theta={theta:.3g} side={side} orders={[n for n, _ in orders]} "
+                f"D={D:.6g} theta={theta:.3g} side={side} "
+                f"orders={[p.order for p in ports]} "
                 f"|r|={[round(v['abs'], 5) for v in coeffs.values()]}"
             )
         result.append(entry)
