@@ -94,8 +94,19 @@ def main(session_dir: Path | None = None) -> None:
 
 Computation scripts import the toolkit directly:
 `from pysci.skills.theoretical_computation.tools import cas, numerical, eigen, topology, visualize`,
-plus `session` (`ensure_session` / `save_results` / `save_plot`) and `config.settings`. The exact
-import block and the per-module function inventory: [api.md](references/api.md).
+plus `session` (`ensure_session` / `save_results` / `save_plot`) and `config.settings`.
+Imports/function inventory: [api.md](references/api.md).
+
+## CMT pipeline API (gain_ep)
+
+- **Forward** (no COMSOL, sub-ms): `MetagratingParams()` → `compute_s_matrix(p)` (S=|M|×|M|;
+  ports vary with f0/θi/D) or `solve_s_matrix(p)` (Port labels); batch
+  `solve_s_matrix_batch` / `CMTForwardKernel` / `sweep_medium`.
+- **Inverse**: `inverse_design(DesignSpace(), CombinedObjective((MatrixMatch(…), …)), workers=0)`
+  → `InverseResult` (DE; checkpoint/resume).
+- **COMSOL validation**: `validate_s_matrix(p)` / `validate_s_matrix_batch(ps)` — needs
+  COMSOL/mph (no env → error/skip).
+Details: [cmt-pipeline-api.md](references/cmt-pipeline-api.md).
 
 ## Visual closed loop
 

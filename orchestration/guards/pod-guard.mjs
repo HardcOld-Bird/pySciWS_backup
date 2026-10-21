@@ -6,6 +6,9 @@
 //           （bench/outbox/AGENTS.md/自建 rules/自建 skills = 自维护层）；
 //   pod 外：仅任务白名单目录（PYSCI_TASK_DIRS，项目相对或绝对路径）与系统临时目录；
 //   其余一律拦截。
+//   **用户专属区**（2026-10-21 用户裁决，leader-only §1）：data/用户的inbox/ 全员只读，
+//   唯一常设写授权＝data/用户的inbox/大任务/<任务>/outbox/ 子目录；任务白名单**不能**
+//   覆盖该区（派单白名单越界也会被这里拦下）。
 // 环境变量由 orch dispatch 注入（runner.build_env）：
 //   PYSCI_POD / PYSCI_PROJECT_ROOT / PYSCI_READONLY / PYSCI_DEPLOYED_SKILLS / PYSCI_TASK_DIRS
 // 诚实条款：只拦 Write/Edit/NotebookEdit 工具，Bash 重定向不在射程（README §9）。
@@ -96,6 +99,24 @@ try {
     console.error(`pod-guard: 拦截对 ${fp} 的写入——${reason}。任务白名单由任务书声明；如需扩大范围或修改只读层，请在交付中提出 <infra_suggestion>。`);
     process.exit(2);
   };
+
+  // 用户专属区先于一切白名单判定（2026-10-21 用户裁决）：data/用户的inbox/ 全员只读，
+  // 仅「大任务/<任务>/outbox/」常设放行；即便 PYSCI_TASK_DIRS 显式包含 inbox 也拦。
+  if (projectRoot) {
+    const inboxL = lower(path.resolve(projectRoot, 'data', '用户的inbox'));
+    if (absL === inboxL || absL.startsWith(inboxL + '/')) {
+      const rel = sep(abs).slice(inboxL.length + 1);
+      if (!/^大任务\/[^/]+\/outbox(\/|$)/.test(rel)) {
+        console.error(
+          `pod-guard: 拦截对 ${fp} 的写入——data/用户的inbox/ 为用户专属区` +
+            `（2026-10-21 用户裁决）：全员只读；唯一常设写授权＝` +
+            `data/用户的inbox/大任务/<任务>/outbox/ 子目录（任务白名单不能覆盖本区）。`
+        );
+        process.exit(2);
+      }
+      process.exit(0);
+    }
+  }
 
   // 白名单顺序（backlog 20261010-193601-devops 调整）：pod 内**先于**系统 tmp 判定，
   // 这样 fixture 或探针即便把 pod 建在 Temp 下（pytest tmp_path 的常规形态），只读层
