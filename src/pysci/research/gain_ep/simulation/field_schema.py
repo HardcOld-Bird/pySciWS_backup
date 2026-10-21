@@ -257,6 +257,69 @@ def display_declaration(
     }
 
 
+def recompute_display_declarations(
+    schema_path: str | Path,
+    *,
+    csv_dir: str | Path | None = None,
+) -> dict[str, dict[str, Any]]:
+    """把 schema 的 ``files.*`` 显示区声明按**严格 y>0** 重算并落盘（幂等）。
+
+    显示区＝根级 ``display_semicircle``（半径/圆心）；每个 ``field_<key>.csv`` 经
+    :func:`display_declaration`（＝``vmax-check`` 同源）重算
+    ``display_y_positive_max_abs_real_p_t`` / ``display_points``。无变更不写盘。
+
+    Args:
+        schema_path: ``field_schema.json`` 路径。
+        csv_dir: CSV 目录（缺省＝ schema 同目录）。
+
+    Returns:
+        ``{series: {old, new, old_points, new_points}}``（只含实际变更的 series）。
+
+    Raises:
+        ValueError: schema 缺 ``display_semicircle`` 或缺 ``files``。
+    """
+    path = Path(schema_path)
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    parsed = parse_field_schema(doc)
+    if parsed.semicircle is None or parsed.semicircle.radius_m is None:
+        raise ValueError(
+            f"{path} 缺根级 display_semicircle（radius/center），无法定显示区"
+        )
+    center = parsed.semicircle.center_m or (0.0, 0.0)
+    radius = float(parsed.semicircle.radius_m)
+    files = doc.get("files")
+    if not isinstance(files, dict) or not files:
+        raise ValueError(f"{path} 缺 files 段")
+    directory = Path(csv_dir) if csv_dir is not None else path.parent
+
+    from pysci.skills.scientific_plotting.tools.field import (  # noqa: PLC0415 - 仅重算需要
+        load_field_points,
+    )
+
+    summary: dict[str, dict[str, Any]] = {}
+    for key in sorted(files):
+        xy, vals = load_field_points(directory / f"field_{key}.csv")
+        decl = display_declaration(xy, vals, center=center, radius=radius)
+        entry = files.setdefault(key, {})
+        old_max = entry.get(KEY_DISPLAY_MAX)
+        old_points = entry.get(KEY_DISPLAY_POINTS)
+        if old_max == decl[KEY_DISPLAY_MAX] and old_points == decl[KEY_DISPLAY_POINTS]:
+            continue
+        entry[KEY_DISPLAY_MAX] = decl[KEY_DISPLAY_MAX]
+        entry[KEY_DISPLAY_POINTS] = decl[KEY_DISPLAY_POINTS]
+        summary[key] = {
+            "old": old_max,
+            "new": decl[KEY_DISPLAY_MAX],
+            "old_points": old_points,
+            "new_points": decl[KEY_DISPLAY_POINTS],
+        }
+    if summary:
+        path.write_text(
+            json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    return summary
+
+
 def key_drift_warnings(doc: dict[str, Any]) -> list[str]:
     """点名**新同义键**（geometry/根级里含 diamond/semicircle 但不在允许集）。"""
     allowed = {KEY_DIAMONDS, KEY_DISPLAY_SEMICIRCLE, *_LEGACY_DIAMOND_KEYS}

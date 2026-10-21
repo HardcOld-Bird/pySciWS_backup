@@ -909,7 +909,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--center", type=float, nargs=2, default=(0.0, 0.0), metavar=("CX", "CY")
     )
     s.add_argument(
-        "--radius", type=float, default=None, help="ROI 半径（缺省只按 y>=0）"
+        "--radius", type=float, default=None, help="ROI 半径（缺省只按严格 y>0 气域）"
     )
     s.add_argument("--lo", type=float, default=1.0, help="允许比值下限（默认 1.0）")
     s.add_argument("--hi", type=float, default=1.1, help="允许比值上限（默认 1.1）")

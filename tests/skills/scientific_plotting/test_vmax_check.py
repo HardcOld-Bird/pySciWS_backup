@@ -168,3 +168,11 @@ def test_rubric_h7_declares_vmax_and_ep_subquestion():
     assert "工作点 (cr,ci)" in text and "EP" in text
     assert "严格 y>0" in text
     assert RUBRIC.stat().st_size <= 8192
+
+
+def test_vmax_check_radius_help_documents_strict_caliper(capsys):
+    """③ 帮助文本同步：--radius 说明须为严格 y>0（不再写 y>=0）。"""
+    with pytest.raises(SystemExit):
+        figures.main(["vmax-check", "-h"])
+    out = capsys.readouterr().out
+    assert "严格 y>0" in out and "y>=0" not in out

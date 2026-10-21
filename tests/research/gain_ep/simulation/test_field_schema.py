@@ -155,18 +155,70 @@ def test_display_declaration_strict_values_and_same_source():
         assert chk.n_points == decl[fs.KEY_DISPLAY_POINTS]
 
 
-def test_counterexample_current_schema_values_include_caliber_line():
-    """现值 1005.66/2.172/2.526 与 y>=0（含口径线）一致——钉为反例。"""
-    schema = json.loads((EP2 / "field_schema.json").read_text(encoding="utf-8"))
+def test_counterexample_stale_y_ge_zero_caliber_pinned():
+    """旧口径反例：y>=0（含口径线）＝1005.66/2.172/2.526——比 strict y>0 显著偏高。"""
     for group, old in LEGACY_SCHEMA.items():
         xy, vals = field.load_field_points(EP2 / f"field_{group}_L.csv")
         y = xy[:, 1]
         mask = (y >= 0) & ((xy[:, 0] - CENTER[0]) ** 2 + y**2 <= RADIUS**2)
         legacy = float(np.abs(vals[mask]).max())
         assert legacy == pytest.approx(old, rel=0.01)
-        declared = schema["files"][f"{group}_L"][fs.KEY_DISPLAY_MAX]
-        assert declared == pytest.approx(old, rel=0.01), "当前 schema 仍是 y>=0 口径"
         strict = fs.display_declaration(xy, vals, center=CENTER, radius=RADIUS)[
             fs.KEY_DISPLAY_MAX
         ]
         assert strict < legacy, "strict y>0 必须小于含口径线的旧读数"
+
+
+# ---------------------------------------------------------------------------
+# 20261020-114233-figure：真实 schema 与 vmax-check 口径一致（f2 可直接引用）
+# ---------------------------------------------------------------------------
+EP3 = _gain_ep_root() / "simulation" / "field_8period_1p2m_ep3"
+
+
+def _schema_pairs():
+    for path in (EP2 / "field_schema.json", EP3 / "field_schema.json"):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        semi = doc["display_semicircle"]
+        yield path, doc, (tuple(semi["center_m"]), float(semi["radius_m"]))
+
+
+def test_real_schemas_display_values_match_vmax_check():
+    """两代真实 schema 的 files.* 声明值 == vmax-check 严格 y>0 实测（f2 直接引用）。"""
+    for path, doc, (center, radius) in _schema_pairs():
+        assert doc["files"], path
+        for key, entry in doc["files"].items():
+            xy, vals = field.load_field_points(path.parent / f"field_{key}.csv")
+            chk = field.check_vmax_adaptive(
+                xy, vals, entry[fs.KEY_DISPLAY_MAX], center=center, radius=radius
+            )
+            assert chk.measured_max == entry[fs.KEY_DISPLAY_MAX], (path.name, key)
+            assert chk.n_points == entry[fs.KEY_DISPLAY_POINTS], (path.name, key)
+    # 1p8m_ep2 三组 L 的目标值（f2 验收读数）
+    doc = json.loads((EP2 / "field_schema.json").read_text(encoding="utf-8"))
+    for group, want in EXPECTED_STRICT.items():
+        assert doc["files"][f"{group}_L"][fs.KEY_DISPLAY_MAX] == pytest.approx(
+            want, rel=0.01
+        )
+
+
+def test_recompute_display_declarations_roundtrip(tmp_path):
+    """重算助手：把旧值改回 strict y>0，且二次运行幂等（不写盘）。"""
+    path, doc, (center, radius) = next(iter(_schema_pairs()))
+    key = "groove_nogain_L"
+    stale = dict(doc)
+    stale["files"] = {key: dict(doc["files"][key])}
+    stale["files"][key][fs.KEY_DISPLAY_MAX] = 2.172
+    stale["files"][key][fs.KEY_DISPLAY_POINTS] = 108937
+    tmp = tmp_path / "field_schema.json"
+    tmp.write_text(
+        json.dumps(stale, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+    changed = fs.recompute_display_declarations(tmp, csv_dir=EP2)
+    assert key in changed and changed[key]["old"] == pytest.approx(2.172, rel=1e-6)
+    fixed = json.loads(tmp.read_text(encoding="utf-8"))
+    assert fixed["files"][key][fs.KEY_DISPLAY_MAX] == pytest.approx(1.3676, rel=0.01)
+    assert fixed["files"][key][fs.KEY_DISPLAY_POINTS] == 108476
+    assert fs.recompute_display_declarations(tmp, csv_dir=EP2) == {}, (
+        "二次运行须幂等不写盘"
+    )
