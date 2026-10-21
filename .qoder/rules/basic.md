@@ -46,10 +46,7 @@ alwaysApply: true
   报错或给出**假阴性**（2026-10-10 实测：`tasklist /FI "PID eq N"` 据此把活进程误判为
   死）。对策（择一）：命令前缀 `MSYS_NO_PATHCONV=1`、参数写双斜杠 `//FI`、或改用
   Python `subprocess` 直接传 argv 列表（不经 shell，免疫）。
-- **仅当显式调用 PowerShell（5.1）时**才需其历史纪律（中文输出先设
-  `[Console]::OutputEncoding=UTF8`、双引号会被剥离一律单引号、链式用 `;` 不用 `&&`、
-  `Get/Set-Content` 必须 `-Encoding UTF8`）——完整实测结论见 git 历史本文件
-  2026-10 前版本的 §3，无必要不再使用 PowerShell。
+- **PowerShell（5.1）无必要不再使用**；确需使用时的历史纪律见 git 历史本文件 2026-10 前版 §3。
 - **pre-commit 死循环（2026-10-15 实测踩 4 次）**：工作区有 unstaged 改动时提交，hook
   自动修复（ruff format/尾换行）会与 stash 冲突**回滚且提交失败**。对策：提交前先
   `uv run --no-sync ruff format <面>` + 补尾换行，再 `git add` **全部待交文件**（不留
@@ -77,7 +74,8 @@ alwaysApply: true
 - **产物落盘**：写入 `data/` 前用 `pysci.paths.assert_within_data(path)` 断言（防散落护栏）；
   论文插图 / 理论计算 / 效果图 / 模型分别用 `research_fig_dir(name, slug=...)` /
   `research_theory_dir(...)` / `research_artwork_dir(...)` / `research_model_dir(...)` 定位，
-  **不得散落到仓库根或代码树中**。
+  **不得散落到仓库根或代码树中**。**`data/用户的inbox/` 为用户专属区（2026-10-21 裁决）：
+  全员只读（显式授权除外；任务 `outbox/` 子目录为常设写授权），代码与管线不得依赖其中文件。**
 - **分层**：`src/pysci/` 下的包**只定义**，`scripts/` **只使用**（不在 `scripts/` 里定义复杂类
   或长函数）。`pysci` 中公共接口须有 Google 风格 docstring 与完整类型注解。
 - ❌ **不创建未被要求的文件**：不写 README / 说明文档 / demo / example，用法写进 docstring 与注释。

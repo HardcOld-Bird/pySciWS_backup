@@ -1,0 +1,59 @@
+goal: CMT 管槽超表面计算与设计管线（严格遵循 data/research/1_gain_ep/theory/参考-透反射管槽结构的S矩阵理论计算/CMT计算与仿真参考.md）：①CMT 正问题通用化（不含透射型）②高性能正问题核＋逆向设计管线（性能优先）③COMSOL 验证封装（与 CMT 同入同出 API），最终表层 API 入理论计算组员 harnessing
+template: new
+steps:
+- id: G1
+  brief: CMT 正问题通用化与物理正确性基座（不含透射型 B.3）
+  children:
+  - id: t1
+    member: theory
+    brief: CMT 正问题通用化——周期 D 与入射角 θᵢ 解耦为自由输入（不再由光栅方程反推锁死 ±45°）；参数校验（管槽总宽≤D、逐槽尺寸为正、复声速非零）；修 MetagratingParams.__post_init__ 部分指定静默回填默认值的坑；单频→频率批量接口；任意 J 根管槽、逐槽独立复声速 c_s/宽 w/深 h/位置 x 的语义固化与文档化。单元测试锚点：互易性恒等式（任意几何 S11≡S22 到机器精度、S12 与 S21 无约束——本人已实测确认）＋文献 EP/DP 名义参数回归。仅反射型（文档 B.1/B.2 形态），透射型不在范围；【用户裁决 2026-10-21】S 矩阵不恒为 2×2：传播通道数由附录 A 衍射模式分布图决定（WA 线 k_x+m(2π/D)=±n₀k、声锥边界），可多端口、理论上可趋向无穷阶。通用化必须包含：由 (f₀, θᵢ, D) 判定传播阶次集合→端口集合→S 矩阵维度，且每元带通道语义标注（入射通道×出射阶次）；±45°/D=√2λ/2 的 2×2 只是特例；互易性恒等式测试须推广到一般维度。
+    dirs:
+    - src/pysci/research/gain_ep
+    - tests/research/gain_ep
+    - data/research/1_gain_ep/theory
+- id: G2
+  mode: parallel
+  brief: 并行双轨：高性能核与逆向设计 ∥ COMSOL 验证封装
+  children:
+  - id: G2a
+    brief: 高性能正问题核与逆向设计管线（用户裁决：性能至上，可独立管线不强求复用）
+    children:
+    - id: t2
+      member: theory
+      brief: 高性能 CMT 前向核——以 G1 物理为基准实现快核：解析积分全 numpy 向量化（M22 正交性闭式对角、fenbu 积分广播化）＋块对角 Schur 消元（P3 按槽块对角，主系统降 N×N）＋同参数族缓存（几何不变量 P2/V3 与 β/U 分离）。性能验收：J=3/N=21/K=31 基准单次 S 矩阵求值 <5 ms 硬门槛（目标 <2 ms；现基线 520 ms），且与 G1 旧实现逐点对拍 rtol≤1e-10。新核即唯一实现，旧 cmt_reflection_s_matrix 调用面同提交内迁移收敛（同一能力不留两份实现）；纯 numpy 不达标再评估 numba（改 pyproject 须 pysci-dev venv-sync）；【用户裁决 2026-10-21】极致性能：5ms 只是地板不是天花板——未来负载未知（如 10+ 维高维参数空间探索），速度越快越好。授权自由引入 numba 或任何确有帮助的依赖（改 pyproject 须 pysci-dev venv-sync）；按 profile 逐级压：目标单次求值亚毫秒、力争数十微秒级，评估吞吐 ≥2000 次/s/核；快核须支持一般通道维度（同 G1.t1 裁决）。
+      dirs:
+      - src/pysci/research/gain_ep
+      - tests/research/gain_ep
+    - id: t3
+      member: theory
+      brief: 逆向设计管线——目标 S 规格（约当块判据、单向隐身、幅相加权最小二乘等目标函数）＋优化器外壳（差分进化/GA，种群级多进程并行）＋几何约束（总宽≤D、最小特征尺寸）＋断点续算与结果导出。验收：①扰动初值反演回收已知 EP/DP 构型（S 匹配容差内）②评估吞吐 ≥200 次/s/核（基于 t2 快核），10⁵ 评估量级单机分钟级；【用户裁决 2026-10-21】目标 S 规格须支持一般通道维度（不止 2×2，见 G1.t1 裁决）；吞吐上限以 t2 极致快核为准，10+ 维高维参数空间不得成为瓶颈。
+      dirs:
+      - src/pysci/research/gain_ep
+      - tests/research/gain_ep
+      - data/research/1_gain_ep/theory
+  - id: G2b
+    brief: COMSOL 参数化验证封装（附录 C 口径：Floquet＋PML＋背景场）
+    children:
+    - id: t4
+      member: sim
+      brief: 参数化 mph 模板集——参考 data/research/1_gain_ep/simulation/refs/1 周期化-傅里叶变换法-上下对调.mph 的设置；单模板起步（3 管槽反射型：D、θᵢ、逐槽 w/h/x/c_r/c_i 全参数化为全局参数＋run solve --set-param），变 J 拓扑以多模板路由覆盖（J=2..6 按需扩，用户已认可多 mph＋智能路由）；沿用 CMT-COMSOL单点验证.py 的探针→S 元映射标定与无损锚点校准口径；模板与配套说明落 simulation 资产目录；【用户裁决 2026-10-21】阶次提取（探针+空间 FFT）须覆盖目标设计点的全部传播阶次集合，而非硬编码 0/±1。
+      dirs:
+      - data/research/1_gain_ep/simulation
+      - scripts/research/gain_ep/simulation
+    - id: t5
+      member: theory
+      brief: validate_s_matrix(params)->S 封装——输入输出与 compute_s_matrix 完全一致（同一参数类、同一 2×2 S 矩阵语义），内部按 J/参数智能路由 mph 模板、批扫共用一次 JVM 会话；与 CMT 快核对拍（无损锚点 4 位有效数字口径沿用既有验证结论）；表层 API 收敛为三个函数：compute_s_matrix / inverse_design / validate_s_matrix，用法不暴露 mph 细节；【用户裁决 2026-10-21】validate_s_matrix 输出维度与通道语义随传播阶次集合变化（同 G1.t1 裁决），与 compute_s_matrix 严格一致。
+      dirs:
+      - src/pysci/research/gain_ep
+      - tests/research/gain_ep
+      - scripts/research/gain_ep
+      - data/research/1_gain_ep/simulation
+- id: G3
+  brief: harnessing 集成（用户指示：最终表层接口入理论计算组员 harnessing）
+  children:
+  - id: t6
+    member: devops
+    brief: 理论计算组员 harnessing 集成——charter/部署技能加入三表层 API 速查（compute_s_matrix/inverse_design/validate_s_matrix 一行调用、参数语义、何时用哪个），charter ≤8KB 预算内完成；同时把目录权属新政策（data/用户的inbox 全员只读、代码不得依赖）落进 pod-guard/白名单机械护栏
+    dirs:
+    - orchestration
+id: cmt-pipeline-20261021
