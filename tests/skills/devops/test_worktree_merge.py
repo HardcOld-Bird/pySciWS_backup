@@ -597,6 +597,78 @@ def test_cmd_merge_auto_shelves_and_reapplies(tmp_path, monkeypatch, capsys):
     assert '"v": 2' in merged and "main-uncommitted" in merged, merged
 
 
+def test_find_stash_by_message_ignores_stash0_drift(monkeypatch):
+    """并发 stash 让 stash@{0} 漂移时，按唯一 message 定位（Tier A 20261021-174433）。"""
+    listing = (
+        "stash@{0} aaa111 On main: pysci-merge-shelve 20260101 (1)\n"
+        "stash@{1} bbb222 On main: pysci-merge-shelve 20260101 (3)\n"
+    )
+    monkeypatch.setattr(dev, "_run_git", lambda *a: (0, listing))
+    assert dev._find_stash_by_message("pysci-merge-shelve 20260101 (3)") == "bbb222"
+    assert dev._find_stash_by_message("no-such-message") is None
+
+
+def test_shelve_falls_back_to_stash_all_on_pathspec_failure(
+    tmp_path, monkeypatch, capsys
+):
+    """pathspec 搁置失败 → 回退整面 stash，合并成功且 main 在飞改动完整应回。"""
+    main, wt = _repo_with_multiline_registry(tmp_path)
+    (wt / "orchestration" / "state" / "registry.json").write_text(
+        _reg(2, "base"), encoding="utf-8"
+    )
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", "branch bumps v")
+    (main / "orchestration" / "state" / "registry.json").write_text(
+        _reg(1, "main-uncommitted"), encoding="utf-8"
+    )
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(4))
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(1))
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+    real = dev._run_git
+
+    def fake(*args):
+        if args[:2] == ("stash", "push") and "--" in args:
+            return 1, "pathspec failed"
+        return real(*args)
+
+    monkeypatch.setattr(dev, "_run_git", fake)
+    rc = dev.cmd_worktree_merge("foo", wt)
+
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "回退整面" in out and "tracked" in out and "已三路应回" in out
+    merged = (main / "orchestration" / "state" / "registry.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"v": 2' in merged and "main-uncommitted" in merged, merged
+
+
+def test_shelve_fails_both_paths_returns_rc2(tmp_path, monkeypatch, capsys):
+    """两级搁置都失败 → 仍按旧行为 rc=2（不丢改动，面与分支保留）。"""
+    main, wt = _repo_with_multiline_registry(tmp_path)
+    (wt / "orchestration" / "state" / "registry.json").write_text(
+        _reg(2, "base"), encoding="utf-8"
+    )
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", "branch bumps v")
+    (main / "orchestration" / "state" / "registry.json").write_text(
+        _reg(1, "main-uncommitted"), encoding="utf-8"
+    )
+    _mk_state(wt, "sessions-runtime.json", _runtime_bytes(4))
+    _mk_state(main, "sessions-runtime.json", _runtime_bytes(1))
+    monkeypatch.setattr(dev, "PROJECT_ROOT", main)
+    real = dev._run_git
+
+    def fake(*args):
+        if args[:2] == ("stash", "push"):
+            return 1, "stash failed"
+        return real(*args)
+
+    monkeypatch.setattr(dev, "_run_git", fake)
+    assert dev.cmd_worktree_merge("foo", wt) == 2
+    assert "自动搁置失败" in capsys.readouterr().out
+
+
 def test_cmd_merge_shelve_conflict_keeps_stash(tmp_path, monkeypatch, capsys):
     """应回冲突：不丢改动——stash 条目保留、冲突如实报（合并本身仍已完成）。"""
     main, wt = _repo_with_multiline_registry(tmp_path)

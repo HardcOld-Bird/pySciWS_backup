@@ -66,8 +66,10 @@ git -c core.quotepath=false status --porcelain    # main 工作区未提交面�
 照常合并（交集为空即放行），交付时在 `<result>` 里报告其存在——不替组长清理别人的工作区。
 运行态文件（`sessions-runtime.json` 等 gitignored）不进交集：由 merge 的 cp 阶段专门搬运
 （见 `registry-runtime.md`）；**但 `*.lock` 永不跨树**（`dev.MERGE_STATE_EXCLUDE_SUFFIXES`）——
-锁不是数据而是「谁在跑」的活体读数，把他树锁 cp 进 main，`orch status` 就误报 worker 在跑、
-真在跑的 drain 反被这把假锁挡住（实测两次合并各拖进一把 `inspector.lock`）。锁的现场性归判活面。
+锁是「谁在跑」的活体读数，把他树锁 cp 进 main，`orch status` 就误报 worker 在跑、真 drain
+反被假锁挡住（实测两次各拖进 `inspector.lock`）。锁的现场性归判活面。
+
+- 搁置失败两级兜底（Tier A 20261021-174433）见 `references/worktree-merge-shelve.md`。
 
 ### 仍 rc=2 时：`<blocked tags="merge_dirty_face">` 的形状（backlog 20261013-102152-devops）
 

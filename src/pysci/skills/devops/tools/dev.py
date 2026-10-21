@@ -746,17 +746,45 @@ def dirty_face() -> set[str]:
     return porcelain_paths(proc.stdout)
 
 
+def _find_stash_by_message(msg: str) -> str | None:
+    """按唯一 message 找 stash sha（并发 stash 下 ``stash@{0}`` 会漂移）。"""
+    rc, out = _run_git("stash", "list", "--format=%gd %H %s")
+    if rc != 0:
+        return None
+    for line in out.splitlines():
+        parts = line.split(maxsplit=2)
+        if len(parts) >= 2 and msg in line:
+            return parts[1]
+    return None
+
+
 def _shelve_paths(paths: list[str], ts: str) -> str | None:
     """把 main 侧这批未提交路径（含未跟踪）收进 ``git stash``，返回 stash commit sha。
 
     成功即这些路径在工作区变干净、``git merge`` 得以进行；任何失败返回 ``None`` **且不动
     工作区**（调用方据此退回旧行为 rc=2）。条目带唯一 message，记录 sha 供合并后按 sha
     精确三路应回/丢弃——避免并发 push 让 ``stash@{0}`` 漂移。
+
+    两级兜底（Tier A 20261021-174433：``merge_dirty_face`` 历史高频）：
+    ① pathspec 搁置失败（未跟踪目录/并发 index.lock 等）→ 回退**整面** ``git stash -u``，
+    合并后一并应回（无关脏项也不丢）；② sha 按 message 定位，找不到才退 ``stash@{0}``。
     """
     msg = f"pysci-merge-shelve {ts} ({len(paths)})"
     rc, _ = _run_git("stash", "push", "-u", "-m", msg, "--", *paths)
     if rc != 0:
-        return None
+        msg = f"pysci-merge-shelve-all {ts} ({len(paths)})"
+        print(
+            "  [i] 交集路径搁置失败 → 回退整面 **tracked** stash（不动未跟踪/运行态；"
+            "合并后一并三路应回，不丢改动）"
+        )
+        # 不带 -u：只收 tracked 修改。未跟踪的运行态会被 `_cp_ignored_state` 正常覆盖，
+        # 若把它们也 stash，应回时会与 cp 后的文件冲突（实测 could not restore untracked）。
+        rc, _ = _run_git("stash", "push", "-m", msg)
+        if rc != 0:
+            return None
+    sha = _find_stash_by_message(msg)
+    if sha:
+        return sha
     rc, sha = _run_git("rev-parse", "--verify", "--quiet", "stash@{0}")
     sha = sha.strip()
     return sha if rc == 0 and sha else None
