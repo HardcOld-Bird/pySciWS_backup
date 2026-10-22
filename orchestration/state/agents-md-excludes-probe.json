@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "config_hash": "ddc7f14db2b49759",
-  "cli_version": "1.1.67",
+  "config_hash": "9c13ccef98996960",
+  "cli_version": "1.1.76",
   "patterns": [
     "leader-only.md"
   ],
