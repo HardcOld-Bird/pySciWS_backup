@@ -224,7 +224,7 @@ def pending_count(queue_path: Path) -> int:
 
 #: 条目「入队时刻」的候选字段（各成员队列写法不同；取首个能解析的）。缺该字段的条目
 #: **不参与**超时判据——拿不到时间戳就别发告警（坏数据不该变成告警噪声）。
-_TS_KEYS: tuple[str, ...] = ("enqueued_at", "created")
+_TS_KEYS: tuple[str, ...] = ("enqueued_at", "created_at", "created")
 
 
 def item_epoch(it: dict[str, Any]) -> float | None:

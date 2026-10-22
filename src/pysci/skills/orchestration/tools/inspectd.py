@@ -7,9 +7,9 @@
 
 四类闸门（都在 :func:`activation_gate` 一处收口，任何入口都绕不过）：
 
-1. **全局开关** 真源 ``data/用户的inbox/pysci_settings.toml [inspector] enabled``（:func:`enabled`，legacy ``state/inspector.enabled`` 只在 toml 缺席时回落）：**缺席=开启**（§7
-   「默认开启」），``orch inspector disable`` 写 ``false`` 后所有拉起逻辑 no-op——关比开容易
-   生效是刻意的（成本失控时用户要一键止住，而不是去猜默认值）。
+1. **全局开关** 真源 ``data/用户的inbox/pysci_settings.toml [inspector] enabled``（:func:`enabled`；
+   legacy ``state/inspector.enabled`` 不再参与判开——常闭裁决 2026-10-22）：**缺席/读不出=关闭**，
+   ``orch inspector enable`` 写 ``true`` 后才拉起；关闭态零入队、零唤醒。
 2. **激活预算**（registry ``inspector.max_hops`` / ``wallclock_s``）：单次激活派给
    inspector 本人的跳数与墙钟到顶即自停（``.done`` 记 ``stopped=budget_*``）。
 3. **冷却**（``cooldown_s``）：读最近一次 ``.done`` 的时间。没有这一条，内嵌拉起会让
@@ -239,24 +239,16 @@ PATROL_BY_ID: dict[str, dict[str, Any]] = {e["id"]: e for e in PATROL_MENU}
 # 全局开关与参数
 # ---------------------------------------------------------------------------
 def enabled() -> bool:
-    """巡检引擎是否允许被拉起（§7 全局开关：缺席=开启）。
+    """巡检引擎是否允许被拉起（§7 全局开关；**常闭**裁决 2026-10-22）。
 
     真源 = ``data/用户的inbox/pysci_settings.toml`` 的 ``[inspector] enabled``（用户裁决 2026-10-12
     22:4x：原 ``state/inspector.enabled`` 迁至该文件，`orch inspector enable/disable` 改写它）。
-    toml 缺席 / 键缺席才回落 legacy 文件——迁移期两处并存时 toml 恒优先（真源唯一）。
+    **常闭**（用户 2026-10-22 裁决「无限期停用、消除噪声」）：真源缺席/读不出一律判**关**，
+    legacy 文件（``ENABLE_PATH``）不再参与判开——它曾是「toml 瞬时读失败 → 判开 →
+    无头入队」的复活通道（insp-20261022-151947 无头案：条目 created_at/enqueued_at 全 None）。
     """
     flag = _settings.inspector_flag()
-    if flag is not None:
-        return flag
-    if not ENABLE_PATH.exists():
-        return True
-    try:
-        raw = ENABLE_PATH.read_text(encoding="utf-8").strip().lower()
-    except OSError:
-        return True
-    if not raw:
-        return True
-    return raw not in ("false", "0", "off", "no")
+    return bool(flag) if flag is not None else False
 
 
 def set_enabled(on: bool) -> str:
@@ -264,6 +256,8 @@ def set_enabled(on: bool) -> str:
 
     优先外科式改写真源 toml（只动 ``enabled =`` 一行、注释逐字保留）；toml 不可写
     （文件缺席/只读）才回落 legacy 文件——便利入口保留，真源仍只有一处被更新。
+    注意（常闭裁决 2026-10-22）：``enabled()`` 只认 toml，故 legacy 回落写入是**惰性留痕**
+    （判开无效）；toml 可写时才是有效开关。
     """
     try:
         return _settings.set_inspector_enabled(on)
@@ -479,6 +473,10 @@ def enqueue(
         "summary": summary or f"{kind}: {brief[:60] or '（按菜单素材执行）'}",
         "status": workq.STATUS_PENDING,
         "enqueued_at": _now(),
+        # 诊断字段（insp-20261022-151947 无头案：旧条目 created_at/enqueued_at 全 None，
+        # 无法判断「谁在什么开关态下入的队」——新条目必须留下开关读数快照）。
+        "created_at": _now(),
+        "enabled_at_enqueue": enabled(),
     }
     return workq.append(QUEUE_PATH, item)
 
@@ -1480,12 +1478,20 @@ def notify_stale_queue(
 
     落 ``timeout_notified_at`` 于条目上做**去重**——否则看门狗每 60s tick 都会对同一个
     卡死项再发一条，把事件流淹掉。返回本次**新报**的条目。
+
+    常闭降噪（用户 2026-10-22 裁决）：``enabled()`` 为关时，``patrol`` 项（自调度产物）
+    **不报**——开关关＝巡检本来就不跑，其滞留只会让 QUEUE-TIMEOUT 每 30min 唤醒组长去
+    处理一个不会执行的队列（噪声本体）。组长手工入队的 ``assignment``/``tier-a-draft``
+    等照常报。
     """
     from . import events as _events
 
     out: list[dict[str, Any]] = []
     moment = datetime.now().timestamp() if now is None else float(now)
+    closed = not enabled()
     for it in stale_queue_items(timeout_s=timeout_s, now=moment):
+        if closed and it.get("kind") == "patrol":
+            continue
         if it.get("timeout_notified_at"):
             continue
         epoch = workq.item_epoch(it)

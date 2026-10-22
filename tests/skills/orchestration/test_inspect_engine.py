@@ -146,9 +146,23 @@ def idle_lock(monkeypatch):
 # ---------------------------------------------------------------------------
 # ① 全局开关（§7：默认开启，关闭即拉起 no-op）
 # ---------------------------------------------------------------------------
-def test_switch_absent_means_on_and_off_blocks_wake(iso_engine):
-    assert inspectd.enabled() is True, "§7 默认开启：文件缺席必须判 on"
-    assert inspectd.set_enabled(False) == "false"
+def test_switch_absent_means_closed_and_off_blocks_wake(iso_engine):
+    """常闭（用户 2026-10-22 裁决）：真源缺席必须判关——旧「缺席=开启」曾在 toml 读失败
+    瞬间把已停用的系统判成开启（insp-20261022-151947 无头案）。"""
+    from pysci.skills.orchestration.tools import settings as _settings
+
+    _settings.SETTINGS_PATH.unlink(missing_ok=True)  # 模拟真源缺席/瞬时读不出
+    assert inspectd.enabled() is False, "常闭：文件缺席必须判关"
+    # 缺席下 set_enabled(True) 只落 legacy 惰性留痕——不复活判开（无头案根因通道）
+    assert inspectd.set_enabled(True) == "true"
+    assert inspectd.enabled() is False, "legacy 回落写入不得复活判开"
+    _settings.SETTINGS_PATH.write_text(
+        '[model]\npreset = "mimo"\n\n[inspector]\nenabled = false\n', encoding="utf-8"
+    )
+    assert inspectd.enabled() is False
+    assert inspectd.set_enabled(True) == "true"
+    assert inspectd.enabled() is True
+    inspectd.set_enabled(False)
     assert inspectd.enabled() is False
     spawned, msg = inspectd.wake_inspector()
     assert spawned is False and "开关" in msg
