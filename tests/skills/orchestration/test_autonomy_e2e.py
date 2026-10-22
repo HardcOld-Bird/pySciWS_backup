@@ -276,6 +276,8 @@ def test_patrol_chain_never_touches_real_inspector_queue(
 # ---------------------------------------------------------------------------
 def test_queue_timeout_chain_event_to_tui(tmp_path, monkeypatch):
     root = _state_paths(monkeypatch, tmp_path)
+    # 常闭降噪后 patrol 的超时告警只在开关开启时发生——本链测「开」态的告警链路
+    monkeypatch.setattr(inspectd, "enabled", lambda: True)
     it = inspectd.enqueue("patrol", target="code-audit")
     workq.mutate(inspectd.QUEUE_PATH, it["id"], enqueued_at=_iso(time.time() - 35 * 60))
 

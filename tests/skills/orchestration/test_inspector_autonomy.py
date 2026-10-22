@@ -187,7 +187,9 @@ def test_watchdog_tick_is_the_coupling_point(state, monkeypatch):
 # ---------------------------------------------------------------------------
 # ② 队列入队超时告警：事件发出 + 去重 + TUI 读数可见（不许静默积压）
 # ---------------------------------------------------------------------------
-def test_stale_queue_item_emits_event_and_tui_reading(state):
+def test_stale_queue_item_emits_event_and_tui_reading(state, monkeypatch):
+    # 常闭降噪后 patrol 的超时告警只在开关开启时发生——本链测「开」态的告警链路
+    monkeypatch.setattr(_insp, "enabled", lambda: True)
     it = _insp.enqueue("patrol", target="code-audit")
     # 把入队时刻回拨 35min（> QUEUE_TIMEOUT_S）
     workq.mutate(_insp.QUEUE_PATH, it["id"], enqueued_at=_iso(time.time() - 35 * 60))

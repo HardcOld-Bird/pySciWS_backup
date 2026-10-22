@@ -464,13 +464,18 @@ def test_inspector_off_on_rewrites_toml_preserving_comments(iso_state):
     assert inspectd.set_enabled(True) == "true" and inspectd.enabled() is True
 
 
-def test_inspector_enabled_falls_back_to_legacy_when_toml_absent(iso_state):
+def test_inspector_enabled_ignores_legacy_when_toml_absent(iso_state):
+    """常闭（用户 2026-10-22 裁决）：toml 缺席判关，legacy "true" 不得复活。
+
+    旧「toml 缺席回落 legacy」曾让 toml 瞬时读失败的瞬间把已停用的系统判成开启
+    （insp-20261022-151947 无头入队案）。
+    """
     settings.SETTINGS_PATH.unlink()
     state_file = inspectd.ENABLE_PATH
     state_file.write_text("false\n", encoding="utf-8")
-    assert inspectd.enabled() is False, "toml 缺席才回落 legacy 文件"
+    assert inspectd.enabled() is False
     state_file.write_text("true\n", encoding="utf-8")
-    assert inspectd.enabled() is True
+    assert inspectd.enabled() is False, "legacy true 不得复活（常闭）"
 
 
 def test_inspector_cli_switch_writes_toml(iso_state, capsys):
