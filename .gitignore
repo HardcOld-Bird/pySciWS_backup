@@ -154,4 +154,4 @@ __pycache__/
 *.tif
 *.tiff
 *.svg
-/data/logs/
+/data/others/logs/
