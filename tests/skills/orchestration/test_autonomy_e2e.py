@@ -15,8 +15,11 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
-from pysci.paths import PROJECT_ROOT
+import pytest
+
+from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
 from pysci.skills.orchestration.tools import (
     drain,
     events,
@@ -29,6 +32,8 @@ from pysci.skills.orchestration.tools import (
 from pysci.skills.orchestration.tools.tui.modules import modules
 
 _INSPECTOR_TOML = PROJECT_ROOT / "data" / "用户的inbox" / "pysci_settings.toml"
+#: 真实巡检队列（e2e 只许读、不许写；insp-20261022-141842）。
+REAL_QUEUE = ORCH_STATE_ROOT / "inspector" / "queue.json"
 
 
 def _iso(epoch: float) -> str:
@@ -164,10 +169,48 @@ def test_killed_listener_rearms_with_log(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # ③ inspector 自调度链：watchdog tick → self_patrol_tick → 队列 → worker
 # ---------------------------------------------------------------------------
-def test_inspector_chain_from_watchdog_tick_to_worker(tmp_path, monkeypatch):
-    root = _state_paths(monkeypatch, tmp_path)
-    before = _INSPECTOR_TOML.read_text(encoding="utf-8")
+REAL_QUEUE = ORCH_STATE_ROOT / "inspector" / "queue.json"
 
+
+def _real_queue_bytes() -> bytes:
+    return REAL_QUEUE.read_bytes() if REAL_QUEUE.exists() else b""
+
+
+def _is_test_leftover(it: dict) -> bool:
+    """测试期新入队且非人手发起的 patrol 项＝测试遗留（真实开关=off，leader 不会 self）。"""
+    return it.get("kind") == "patrol" and it.get("requested_by") == "self"
+
+
+@pytest.fixture
+def no_real_queue_pollution():
+    """真实队列零遗留：teardown 兜底摘除测试期新入队的 self-patrol 项。
+
+    现场（insp-20261022-114925-patrol）：巡检链若有任何路径漏到真实队列，开关=off 时
+    无人消化 → QUEUE-TIMEOUT 每 30min 唤醒组长。兜底清理与下方不变量用例双保险；只摘
+    「测试窗口内新出现且 requested_by=self」的项，不碰他人在飞写入。
+    """
+    before_ids = {str(it.get("id")) for it in workq.load(REAL_QUEUE)}
+    yield
+    try:
+        items = workq.load(REAL_QUEUE)
+        leftover = [
+            it
+            for it in items
+            if str(it.get("id")) not in before_ids and _is_test_leftover(it)
+        ]
+        if leftover:
+            workq.save(REAL_QUEUE, [it for it in items if it not in leftover])
+            print(
+                "[teardown] 摘除测试期漏入真实队列的巡检项："
+                + ", ".join(str(it.get("id")) for it in leftover)
+            )
+    except Exception:  # noqa: BLE001 - 兜底清理不得影响测试结论
+        pass
+
+
+def _run_patrol_chain(tmp_path, monkeypatch) -> tuple[list[list[str]], Path]:
+    """驱动 watchdog→self_patrol_tick→队列→worker 链（只内存开启）。返回 (spawns, run_log)。"""
+    root = _state_paths(monkeypatch, tmp_path)
     # ⚠ 只在内存里模拟开启态（用户指令：真源开关=off，不得改）
     monkeypatch.setattr(inspectd, "enabled", lambda: True)
     monkeypatch.setattr(
@@ -197,6 +240,14 @@ def test_inspector_chain_from_watchdog_tick_to_worker(tmp_path, monkeypatch):
     watchdog.run_watchdog(
         run_log, interval_s=1, stale_s=5, sleeps=fake_sleep, now=clock.now
     )
+    return spawns, run_log
+
+
+def test_inspector_chain_from_watchdog_tick_to_worker(
+    tmp_path, monkeypatch, no_real_queue_pollution
+):
+    before = _INSPECTOR_TOML.read_text(encoding="utf-8")
+    spawns, run_log = _run_patrol_chain(tmp_path, monkeypatch)
 
     assert workq.pending_count(inspectd.QUEUE_PATH) >= 1, (
         "tick → self_patrol_tick → 队列"
@@ -205,6 +256,19 @@ def test_inspector_chain_from_watchdog_tick_to_worker(tmp_path, monkeypatch):
     assert "_inspect-worker" in spawns[0], spawns[0]
     assert "inspector tick 异常" not in run_log.read_text(encoding="utf-8")
     assert _INSPECTOR_TOML.read_text(encoding="utf-8") == before, "不得改写开关真源"
+
+
+def test_patrol_chain_never_touches_real_inspector_queue(
+    tmp_path, monkeypatch, no_real_queue_pollution
+):
+    """根治回归（insp-20261022-141842）：巡检链只写 tmp 队列，真实队列零字节变化。"""
+    real_before = _real_queue_bytes()
+    spawns, _ = _run_patrol_chain(tmp_path, monkeypatch)
+    assert workq.pending_count(inspectd.QUEUE_PATH) >= 1, "tmp 队列必须拿到项"
+    assert spawns, "worker spawn 链完好（不因隔离而丢覆盖）"
+    assert _real_queue_bytes() == real_before, (
+        "巡检链不得写真实 inspector 队列（泄漏→开关 off 时无人消化→QUEUE-TIMEOUT 唤醒组长）"
+    )
 
 
 # ---------------------------------------------------------------------------
