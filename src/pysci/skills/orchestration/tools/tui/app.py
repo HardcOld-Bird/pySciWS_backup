@@ -727,7 +727,7 @@ class PysciTUI(App):
         """异常免疫（backlog 20261017-120500）：先落日志，**不退出**。
 
         textual 默认经 ``_fatal_error`` 直接退出——低概率×整夜长跑下的事件竞态必然命中，
-        退出即丢失整场会话。这里记录完整 traceback（``data/logs/tui-*.log``）后继续运行；
+        退出即丢失整场会话。这里记录完整 traceback（``data/others/logs/tui-*.log``）后继续运行；
         真缺陷仍可从日志对盘。
         """
         _tlog.log_exception(error, where="event")

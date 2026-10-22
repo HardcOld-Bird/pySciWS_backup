@@ -324,7 +324,7 @@ def _boundary_hold(
     Returns:
         ``(一行读数, 实际等待秒)``；不需避让/判不出 → ``("", 0)``。
 
-    单一真源：生效值取 ``data/pysci_settings.toml`` ``[model] boundary_hold_s``
+    单一真源：生效值取 ``data/用户的inbox/pysci_settings.toml`` ``[model] boundary_hold_s``
     （2026-10-14 用户实测反馈迁 toml）；仅当 toml 未配置时回退 registry 旧位**并出声**提示迁移。
     """
     if no_hold:
@@ -337,7 +337,7 @@ def _boundary_hold(
         if hold_s > 0 and not quiet:
             print(
                 "[!] boundary_hold_s 仍在 registry 旧位（routing.boundary_hold_s）——"
-                "本次已兼容读取；请迁进 data/pysci_settings.toml 的 [model] 节生效键"
+                "本次已兼容读取；请迁进 data/用户的inbox/pysci_settings.toml 的 [model] 节生效键"
             )
     if hold_s <= 0:
         return "", 0
@@ -755,7 +755,7 @@ def _whitelist_tokens(text: str) -> list[str]:
         # 判成 tok="-" 后丢弃 → 整段解析为空（实测：真实任务书一律解析出 []）。
         s = re.sub(r"^[-*+•]\s+", "", s)
         # 行首**包裹符**先去掉（`` `src/x` `` 是仓库里的常见写法）——但只在行首：
-        # 行中的括号/反引号要留作**终止符**，好让 `data/taskbooks/**（新建）` 的
+        # 行中的括号/反引号要留作**终止符**，好让 `data/others/taskbooks/**（新建）` 的
         # 注记不被粘进路径（下面那条注释）。
         s = re.sub(r"^[`（(【\[]+", "", s)
         # 行首取「路径样」片段，**在剥括号之前**取——这样 `（新建）` 一类括号注记
@@ -1431,7 +1431,7 @@ def do_dispatch(
         if not quiet:
             print(f"[!] {gate}")
             print(
-                "    处置：改 data/pysci_settings.toml 的 [model] preset（合法串见该文件注释）。"
+                "    处置：改 data/用户的inbox/pysci_settings.toml 的 [model] preset（合法串见该文件注释）。"
             )
         return _out(code=2, kind="run_failed", member=member_id, error=gate)
     if not quiet:

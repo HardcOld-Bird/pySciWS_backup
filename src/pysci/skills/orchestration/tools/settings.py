@@ -1,7 +1,9 @@
-"""人机运行时配置真源 ``data/pysci_settings.toml`` 的读写面。
+"""人机运行时配置真源 ``data/用户的inbox/pysci_settings.toml`` 的读写面。
 
 用户裁决 2026-10-12 22:4x（backlog 20261012-225500-leader）：运行时旋钮收敛到本文件，
-**手改一行即在下一次派发生效**，在途会话不受影响。本模块只承担两件事：
+**手改一行即在下一次派发生效**，在途会话不受影响。2026-10-22 用户裁决：文件随目录
+划分迁至 ``data/用户的inbox/``（用户自管配置真源——inbox 禁依赖规则的显式例外，
+读侧 fail-open 即缺席/被改名时回落出厂值，不阻塞生产）。本模块只承担两件事：
 
 - **读侧 fail-open**：文件缺席 / 键缺席 / 解析失败一律回落出厂值，并把原因作为警告
   带回调用方——一个人工配置文件不该能把生产阻塞死；
@@ -19,7 +21,7 @@ from typing import Any
 
 from pysci.paths import DATA_ROOT
 
-SETTINGS_PATH: Path = DATA_ROOT / "pysci_settings.toml"
+SETTINGS_PATH: Path = DATA_ROOT / "用户的inbox" / "pysci_settings.toml"
 
 #: ``[model] preset`` 合法值（精确串，全小写；大小写敏感是 toml 注释里的原话）。
 PRESET_NAMES: tuple[str, ...] = ("qwen", "mimo", "deepseek")

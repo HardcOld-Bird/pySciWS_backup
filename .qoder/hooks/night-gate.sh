@@ -2,7 +2,7 @@
 # .qoder/hooks/night-gate.sh — 夜航模式 AskUserQuestion 机械拦截（PreToolUse）
 #
 # PSEP_2 §3.3a（实施单 task-20261014-psep2-n2）：matcher=AskUserQuestion；读
-# data/pysci_settings.toml 的 [night] enabled（**每回合现读，热切换**）。
+# data/用户的inbox/pysci_settings.toml 的 [night] enabled（**每回合现读，热切换**）。
 #   ON  → **exit 2**（harness 拦截语义）并在 stderr 注出「转 twin 终裁」指令——
 #         提问工具本身成为不可能，不依赖模型自觉；
 #   OFF → exit 0 放行（零行为变化）。
@@ -27,7 +27,7 @@ if [ ! -x "$PYW" ]; then
   exit 0
 fi
 PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.night \
-  --gate --settings "$ROOT/data/pysci_settings.toml" <<<"$PAYLOAD"
+  --gate --settings "$ROOT/data/用户的inbox/pysci_settings.toml" <<<"$PAYLOAD"
 rc=$?
 case "$rc" in
   0|2) exit "$rc" ;;

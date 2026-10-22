@@ -217,7 +217,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     for line in _routing.status_lines():
         print(line)
 
-    # 夜航读数（backlog adhoc-guidance-fixes ①）：真源 `data/pysci_settings.toml [night] enabled`
+    # 夜航读数（backlog adhoc-guidance-fixes ①）：真源 `data/用户的inbox/pysci_settings.toml [night] enabled`
     # 且**热切换**——不看这一行就得上手 grep 才知道在不在夜航。判据复用 `settings.night_enabled`
     # （单一实现），fail-open：读不出/坏文件 → 显示「未知」而不是崩。
     from .settings import night_enabled
@@ -1609,7 +1609,8 @@ def main(argv: list[str] | None = None) -> int:
     q = tbsub.add_parser("sync", help="幂等对账：所链 plan 完成 → 置 delivered")
     q.set_defaults(func=cmd_taskbooks)
     q = tbsub.add_parser(
-        "report", help="组装全流程报告 → data/taskbooks/<id>.report.md（§4.3 #5）"
+        "report",
+        help="组装全流程报告 → data/others/taskbooks/<id>.report.md（§4.3 #5）",
     )
     q.add_argument("id")
     q.set_defaults(func=cmd_taskbooks)

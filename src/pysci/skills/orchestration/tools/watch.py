@@ -354,7 +354,7 @@ def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
        （backlog 20261017-001500）：``JOB-DONE``/``STEP-REVIEW-DONE`` 且其 ``subject`` 对应
        条目已终态／留档在盘 → 降级 ``notes``（「已处理疑未销账」，不唤醒）；其余（含
        ``NEEDS-LEADER`` 等无旁证可查者）才是**真积压**，进 ``reasons`` 唤醒；
-    5. ``data/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）；
+    5. ``data/others/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）；
     6. **夜航时段**（``[night] enabled=true``，PSEP_2 §3.3b）``state/mirror-pending.json``
        非空——此刻「谁在等用户」的事项应转 twin 或自行裁决，不得等用户；非夜航时段
        **不加**此判据（白天等用户是正常的）。

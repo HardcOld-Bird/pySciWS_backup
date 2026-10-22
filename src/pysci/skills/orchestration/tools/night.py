@@ -1,6 +1,6 @@
 """夜航模式（PSEP_2）政策注入层：SessionStart / PostCompact 钩子的**判定与载荷单点**。
 
-用户离机时段需无人值守推进（夜航）：总开关是 ``data/pysci_settings.toml`` 的
+用户离机时段需无人值守推进（夜航）：总开关是 ``data/用户的inbox/pysci_settings.toml`` 的
 ``[night] enabled``（手动一行、**每回合现读热切换**）；本模块只做**政策注入层**——
 开关 ON 时产出 ``hookSpecificOutput.additionalContext`` 载荷（政策全文＝用户签发的
 限时授权书），由 ``.qoder/hooks/night-policy.sh`` 在 SessionStart / PostCompact 两个

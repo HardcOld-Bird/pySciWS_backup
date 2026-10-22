@@ -147,7 +147,7 @@ twin A 的「取消自动转让、迁移只走人工」被该指令覆盖（`twi
   ```
 - **三级防线（谁在哪一级兜底，a1–a3 定型）**：
   1. **会话级·watch 钩子**——`Stop` 钩子每回合接管 `watch-arm.sh`（token 竞争、循环 `orch watch`）：有监听时命中即 `exit 2` 唤醒。主路，**零轮询**。
-  2. **会话级·队列感知巡更**（`watch` 的 `PENDING-WORK` / `STALL` 伪事件，与 ① **同一循环同帧**判定，走同一条 `detect → echo → exit 2` 唤醒链）——兜「**没有事件但状态该看**」：队列 / devops backlog / 事件流 / `data/taskbooks/` **有活却没人干**，或条目 `in_progress` 停滞超期。判据单一实现 `watch.queue_pressure`（四条任一即「非空」：backlog pending；成员队列 pending 且**该成员无存活 worker**；事件流有超 30 min 未排空；taskbooks 有 `new` 态）。**自动起止**：队列全空 → 纯 TIMEOUT 循环**零唤醒**，组长**不手工挂/撤 cron**（2026-10-14 用户设计，手工巡更 cron 退役）。同类事件 **≤1 次/30 min**（`registry.watch.pending_throttle_s` / `stall_threshold_s` 可配），节流账随 `watch.json` 持久化（重启不重置）。它与铁律「禁止 sleep-轮询」**不冲突**——禁的是拿轮询**等工作完成**，巡更不是驱动工作的机制。就位步骤与可证伪判据见 orchestration 技能 `references/patrol-watchdog.md`。
+  2. **会话级·队列感知巡更**（`watch` 的 `PENDING-WORK` / `STALL` 伪事件，与 ① **同一循环同帧**判定，走同一条 `detect → echo → exit 2` 唤醒链）——兜「**没有事件但状态该看**」：队列 / devops backlog / 事件流 / `data/others/taskbooks/` **有活却没人干**，或条目 `in_progress` 停滞超期。判据单一实现 `watch.queue_pressure`（四条任一即「非空」：backlog pending；成员队列 pending 且**该成员无存活 worker**；事件流有超 30 min 未排空；taskbooks 有 `new` 态）。**自动起止**：队列全空 → 纯 TIMEOUT 循环**零唤醒**，组长**不手工挂/撤 cron**（2026-10-14 用户设计，手工巡更 cron 退役）。同类事件 **≤1 次/30 min**（`registry.watch.pending_throttle_s` / `stall_threshold_s` 可配），节流账随 `watch.json` 持久化（重启不重置）。它与铁律「禁止 sleep-轮询」**不冲突**——禁的是拿轮询**等工作完成**，巡更不是驱动工作的机制。就位步骤与可证伪判据见 orchestration 技能 `references/patrol-watchdog.md`。
   3. **机器级·`pysci-watchdog`**（`orch watchdog start|stop|status`）——listener/watchdog 被无声杀死、会话消亡连坐时于阈值内重臂。**注册/卸载**（重启/重登后自动点火）：
      ```
      powershell -ExecutionPolicy Bypass -File orchestration\scripts\watchdog-scheduler.ps1 -Mode install
@@ -158,9 +158,9 @@ twin A 的「取消自动转让、迁移只走人工」被该指令覆盖（`twi
 - **日志完整化（hook v3）**：环境缺失 / token 写失败 / token 自抢分支均留痕，另加 `TERM/INT` 陷阱留痕（SIGKILL 无法拦，故由看门狗按心跳判死重臂）。
 - **已知残余风险**：① SIGKILL 类外部终止由看门狗兜底，但**阈值 300 s 内**仍有真空（心跳新鲜期不会重臂）；② 看门狗本身若被同一类外部杀手干掉，只有 `watchdog-scheduler.ps1`（OS 任务计划）能在下一个 5 min 点重臂——未注册该任务时，重启后看门狗不在场；③ `schtasks` 默认当前用户交互令牌，**用户未登录时任务不跑**（此时也无组长会话可唤醒，影响面为零）。
 
-#### 夜航模式（PSEP_2，2026-10-14 晚定型；规格 `data/others/original_designs/PSEP_2.md`）
+#### 夜航模式（PSEP_2，2026-10-14 晚定型；规格 `data/用户的inbox/others/original_designs/PSEP_2.md`）
 
-用户离机时段需无人值守推进：**手动单开关** `data/pysci_settings.toml [night] enabled`——
+用户离机时段需无人值守推进：**手动单开关** `data/用户的inbox/pysci_settings.toml [night] enabled`——
 **热切换**（钩子每次触发现读文件，无需重启会话）；读取失败/键缺席/非法值一律回落 `false`
 并出声（`settings.night_enabled` 读侧 fail-open）。**关闭即回到现状、零残留**。三层：
 

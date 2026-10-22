@@ -7,7 +7,7 @@
 
 四类闸门（都在 :func:`activation_gate` 一处收口，任何入口都绕不过）：
 
-1. **全局开关** 真源 ``data/pysci_settings.toml [inspector] enabled``（:func:`enabled`，legacy ``state/inspector.enabled`` 只在 toml 缺席时回落）：**缺席=开启**（§7
+1. **全局开关** 真源 ``data/用户的inbox/pysci_settings.toml [inspector] enabled``（:func:`enabled`，legacy ``state/inspector.enabled`` 只在 toml 缺席时回落）：**缺席=开启**（§7
    「默认开启」），``orch inspector disable`` 写 ``false`` 后所有拉起逻辑 no-op——关比开容易
    生效是刻意的（成本失控时用户要一键止住，而不是去猜默认值）。
 2. **激活预算**（registry ``inspector.max_hops`` / ``wallclock_s``）：单次激活派给
@@ -241,7 +241,7 @@ PATROL_BY_ID: dict[str, dict[str, Any]] = {e["id"]: e for e in PATROL_MENU}
 def enabled() -> bool:
     """巡检引擎是否允许被拉起（§7 全局开关：缺席=开启）。
 
-    真源 = ``data/pysci_settings.toml`` 的 ``[inspector] enabled``（用户裁决 2026-10-12
+    真源 = ``data/用户的inbox/pysci_settings.toml`` 的 ``[inspector] enabled``（用户裁决 2026-10-12
     22:4x：原 ``state/inspector.enabled`` 迁至该文件，`orch inspector enable/disable` 改写它）。
     toml 缺席 / 键缺席才回落 legacy 文件——迁移期两处并存时 toml 恒优先（真源唯一）。
     """

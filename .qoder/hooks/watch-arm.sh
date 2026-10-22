@@ -111,7 +111,7 @@ fi
 #   fail-open：读不出/异常一律零输出继续走原有链路。
 if [ -n "$SID" ]; then
   ndiff=$(printf '%s' "$PAYLOAD" | PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.night \
-    --diff --session "$SID" --settings "$ROOT/data/pysci_settings.toml" 2>>"$LOG")
+    --diff --session "$SID" --settings "$ROOT/data/用户的inbox/pysci_settings.toml" 2>>"$LOG")
   ndrc=$?
   if [ -n "$ndiff" ]; then
     log "夜航差分注入（session=$SID）→ exit 2（rewake）"

@@ -29,3 +29,6 @@
   self-maint-audit 必逐条 ls 核对存在性，不能只看句式一致就假定可解析。
 - 「pod 仅 N 个文件入库」类计数宣称用 `git ls-files orchestration/pods/<id>` 实测；
   特化 pod（inspector/reviewer/twin）各多 1 个 charter 侧资产，别拿脚手架数当全量基线。
+- 核验「审批/闸门强制面」零副作用招：`verdict.validate(SimpleNamespace(), kind, delivery)`
+  可直测四态强制与缺陷例外（validate 对缺失属性按未提供处理），免构造真实 approve；
+  同法可探 `channel_of` 三开关归一。intent-drift/code-walk 对宣称闸门优先用它而非改状态面。

@@ -105,6 +105,12 @@
       "max_turns": 60,
       "timeout_s": 7200,
       "mcp_config": ".qoder/mcp.json"
+    },
+    "theory": {
+      "pod": "orchestration\\pods\\theory",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
     }
   },
   "inspector": {

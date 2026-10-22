@@ -1,6 +1,6 @@
 """声明「入 git」的内容面的**落盘即提交**（backlog 20261015-085823-devops）。
 
-**为什么需要它**：``orchestration/state/deliveries/`` 与 ``data/taskbooks/`` 都在源头声明
+**为什么需要它**：``orchestration/state/deliveries/`` 与 ``data/others/taskbooks/`` 都在源头声明
 「入 git」（``queueworker.DELIVERIES_DIR``——交付全文是黄金任务回归集唯一入库落点；用户裁决
 「用户可见可编辑」），但两个写入方**只写文件、从不 ``git add``**：承诺只在本地成立，新克隆
 与远端都取不到任务书与交付全文，而 TUI 详情页正把这些路径当权威引用呈现给用户（2026-10-15
@@ -15,7 +15,7 @@ backlog 20261013-203724-devops 已合入）——跟踪面由工具改写，工�
 改写……交给既有的 state『收尾』扫描」，而**仓里根本没有那个扫描**——读它的人会以为有安全网，实际
 没有；实案：main 未提交 16 项，一单已完工全绿却因合并交集闸 rc=2 只能停链等清面）：
 
-- **本模块负责的两张内容面**（``orchestration/state/deliveries/``、``data/taskbooks/``）的**新增**
+- **本模块负责的两张内容面**（``orchestration/state/deliveries/``、``data/others/taskbooks/``）的**新增**
   由 :func:`commit_face` 落盘即提交（调用点：``queueworker.archive_delivery`` / ``taskbooks.create``
   / ``taskbooks.build_report``）。
 - **其余跟踪面**（``state/registry.json``、``backlog.json``、``plans/*``、``leader-notes``、
@@ -79,7 +79,7 @@ def commit_face(path: str | Path, message: str) -> str:
     把它纳入版本控制（与 ``sync._commit_ledger`` 同判据）。无改动则不产生空提交。
 
     Args:
-        path: 面（``data/taskbooks`` 目录、``state/deliveries`` 目录或单个文件）。
+        path: 面（``data/others/taskbooks`` 目录、``state/deliveries`` 目录或单个文件）。
         message: 提交信息（cz 规范；钩子 commitizen 会校验）。
     """
     rel = rel_to_root(path)

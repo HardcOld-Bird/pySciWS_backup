@@ -34,7 +34,7 @@
     须含「前次改进复盘」段（lint）。**空改进清单合法**：`plan advance <pid> --skip L.l3`（--skip 只对
     pending 叶子＝「从未需要做」，不是撤销）。
   - **交付=全流程报告**：`taskbooks report <id>` 程序化拼装（任务概述/环节完成清单/组长改进/历轮摘要/
-    本轮成因分析/解决方案/裁决书/监察判断/改进清单/返工产物报告）→ `data/taskbooks/<id>.report.md`；
+    本轮成因分析/解决方案/裁决书/监察判断/改进清单/返工产物报告）→ `data/others/taskbooks/<id>.report.md`；
     **sync/delivered 与驳回时缺报告自动补建**（③历轮收获的取数源）。**循环语义**：驳回→新返工大任务→
     全流程→交付→再驳回……任一轮 accept 即终。
 - **要求与历史总览（2026-10-17 返工上下文修复）**：`taskbooks.requirements_digest` 从家族链**机械

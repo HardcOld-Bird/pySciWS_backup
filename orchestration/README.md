@@ -30,8 +30,9 @@
 **唯一真源 `src/pysci/paths.py`**（`PROJECT_ROOT`/`ORCHESTRATION_ROOT`/`ORCH_STATE_ROOT`/`PODS_ROOT`/
 `DATA_ROOT`/`research_*_dir()`）。`orchestration/` = README（权威）+ `skills/`（真本）+ `guards/` +
 `pods/<id>/`（组员，从属 orchestration/）+ `state/`（运行态）+ `bench/`；`src/pysci/` 只**定义**、
-`scripts/` 只**使用**；写 `data/` 前过 `assert_within_data()`。**写权限矩阵**（pod-guard 两层执法，§9）：自维护层放行（bench/outbox/AGENTS.md/自建 rules·skills）／
-只读层拦截（charter/部署技能/settings/mcp.json/inbox）／pod 外拦（白名单除外）；名单经
+`scripts/` 只**使用**；写 `data/` 前过 `assert_within_data()`。**写权限矩阵**（pod-guard 执法，§9）：自维护层放行（bench/outbox/AGENTS.md/自建 rules·skills）／
+只读层拦截（charter/部署技能/settings/mcp.json）／**用户专属区 `data/用户的inbox/` 写入放行、
+删除拦截**（删除须用户同意，2026-10-22 裁决）／pod 外拦（白名单除外）；名单经
 `PYSCI_TASK_DIRS`+`PYSCI_READONLY_PATHS` 注入。
 
 ## 3. 记忆、会话、派发与协议
@@ -150,7 +151,7 @@ Phase 0–4、E0–E7、M1–M7 **均已完成**；逐条阶段记述**移档**
 
 ## 15. 夜航模式（PSEP_2）
 
-单开关 `data/pysci_settings.toml [night] enabled`（读侧 fail-open、热切换）。两层：**政策注入**
+单开关 `data/用户的inbox/pysci_settings.toml [night] enabled`（读侧 fail-open、热切换）。两层：**政策注入**
 （SessionStart + PostCompact 注入政策全文；用户在场时该注入是**授权书**——事后追溯责任在用户、决策权等同
 用户、限时预授权）+ **判据拦截**（`AskUserQuestion` 拒绝并转 twin 终裁；mirror-pending 非空触发夜航
 PENDING-WORK）；配套 **twin 仲裁盲测追溯板块**。细则见技能 `references/patrol-watchdog.md` §5。

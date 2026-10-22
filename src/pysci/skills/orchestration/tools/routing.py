@@ -1,7 +1,7 @@
 """谷时隐性 DeepSeek 路由：时间驱动的预设覆盖（用户设计 2026-10-13，backlog 20261013-093000-leader）。
 
 官方 DeepSeek 定价分峰谷（峰时 2 倍价）。用户的裁决是：**谷时段自动落到 DeepSeek 席**，
-而且「隐性」——``data/pysci_settings.toml`` 的 ``[model] preset`` 那一行**不动**、不新增
+而且「隐性」——``data/用户的inbox/pysci_settings.toml`` 的 ``[model] preset`` 那一行**不动**、不新增
 第四个预设，只在谷时把 qwen/mimo 预设的**主力席（main）**与仲裁团面板换血，到峰时自动
 切回。升档席（pro）成员**不受覆盖**（用户终裁 2026-10-13：隐性态下 pro 席保持原席，
 提高工作质量）——被时间换血的只有普通成员那一档。
@@ -25,7 +25,7 @@
 （:data:`CN_TZ_NAME`）；机器时区不是 UTC+8 时归一换算并注记一句。
 
 配置面（全部可选，非法值回落出厂并警告，读侧 fail-open）：路由键在
-``data/pysci_settings.toml`` 的 ``[model]`` 节——``enabled`` / ``valley_preset`` /
+``data/用户的inbox/pysci_settings.toml`` 的 ``[model]`` 节——``enabled`` / ``valley_preset`` /
 ``leadtime_s`` / ``peak`` / ``jury_panel``（原 ``[routing]`` 节，用户 2026-10-13「模型类
 设置集中一处」并入本节；旧位置逐键兼容读一次并告警请迁移）。席位本身不在这里：谷时主席取 ``valley_preset`` 的席位链
 （跟踪 ``registry.json presets.<name>`` 整链覆盖 ← 出厂表），仲裁团席位取
@@ -658,7 +658,7 @@ def status_lines(*, moment: datetime | None = None) -> list[str]:
     """``orch status`` 的「路由模式」段（与 mirror 概览共读 :func:`state`，文案不另起炉灶）。"""
     reading = state(moment=moment)
     out = [
-        "== 路由模式（谷时隐性 DeepSeek，真源 data/pysci_settings.toml [routing]）==",
+        "== 路由模式（谷时隐性 DeepSeek，真源 data/用户的inbox/pysci_settings.toml [routing]）==",
         f"  配置预设 {reading.preset}｜生效路由 {reading.mode}"
         f"（谷时主席取 {reading.valley_preset} 席链）",
         f"  判据读数：{reading.basis}",

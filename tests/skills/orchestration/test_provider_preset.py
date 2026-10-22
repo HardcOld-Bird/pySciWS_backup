@@ -1,7 +1,7 @@
 """提供商预设三面契约（backlog 20261012-225500-leader：档位退役，改 qwen/mimo/deepseek 预设）。
 
 success_criteria 落点：
-- 三预设切换 = 改 ``data/pysci_settings.toml`` **一行** → 席位表/status 换血 → 派发取到
+- 三预设切换 = 改 ``data/用户的inbox/pysci_settings.toml`` **一行** → 席位表/status 换血 → 派发取到
   该预设的席（台账 model 字段即证据）；pro 席成员按预设名单取 pro 席；
 - 仲裁团构成随预设换血且排除同族（家族名面板，配置核验 + 读数行证据）；
 - deepseek 预设**已回填激活**（BYOK UUID 首席与内置同名 → UUID 消歧；激活闸=席表非空：
@@ -141,7 +141,7 @@ def test_legacy_tier_names_normalize_but_bogus_rejected(iso_state):
 def test_status_lines_show_preset_and_chains(iso_registry):
     reg = registry.Registry.load()
     out = "\n".join(presets.status_lines(reg))
-    assert "预设 mimo" in out and "data/pysci_settings.toml" in out
+    assert "预设 mimo" in out and "data/用户的inbox/pysci_settings.toml" in out
     assert "Mimo-V2.6-Flash" in out and BUILTIN not in out, (
         "各席解析值要给人看；内置席被硬过滤不得出现（用户明令 2026-10-15）"
     )

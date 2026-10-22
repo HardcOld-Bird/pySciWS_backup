@@ -28,7 +28,7 @@ from pysci.skills.orchestration.tools import (
 )
 from pysci.skills.orchestration.tools.tui.modules import modules
 
-_INSPECTOR_TOML = PROJECT_ROOT / "data" / "pysci_settings.toml"
+_INSPECTOR_TOML = PROJECT_ROOT / "data" / "用户的inbox" / "pysci_settings.toml"
 
 
 def _iso(epoch: float) -> str:

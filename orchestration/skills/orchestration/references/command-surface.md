@@ -9,7 +9,7 @@ pysci-orch plan new <计划.yaml> [--id X]  # 登记计划（格式见 README §
 #   └ id 缺省取文件名 stem（建议显式 --id）；YAML 复制进 `state/plans/<id>.plan.yaml`（源可删；勿与目标同名）
 pysci-orch plan advance <id> [--text/--task] [--evidence <报告.md>] [--skip <leaf>] # 事件驱动：入队即返回（成员含 devops）
 #   └ --evidence：收尾 kind:self 组长环节（文件在 + 标题段 lint 过才置 done，PSEP_3 §2.1）
-#     └ 落点 `data/taskbooks/<id>.<leaf>-<名>.md`；骨架=`# <标题>`+对应标题段（如 `## 拆解`）
+#     └ 落点 `data/others/taskbooks/<id>.<leaf>-<名>.md`；骨架=`# <标题>`+标题段（如`## 拆解`）
 #   └ --skip：pending 环节置 skipped（空改进清单等「合法不做事」收尾，如 --skip L.l3）
 #   └ 旗标（run 已废、旗标并入）：
 # advance 旗标：--text --task --session --name --model-tier --effort --max-turns --dirs --dry --evidence --skip --full

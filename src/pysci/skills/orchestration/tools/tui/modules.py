@@ -398,7 +398,7 @@ def _hold_line(fv: Any) -> str:
 
     hold = fv.boundary_hold_s
     if hold is None:
-        return "  边界避让：toml 未配置 → 回退 registry 旧位（请迁进 data/pysci_settings.toml）"
+        return "  边界避让：toml 未配置 → 回退 registry 旧位（请迁进 data/用户的inbox/pysci_settings.toml）"
     if hold <= 0:
         return "  边界避让：已关闭（0s，切换点前照常派发）"
     reading = _rt.state()

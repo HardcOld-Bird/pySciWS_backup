@@ -139,7 +139,7 @@ def test_channel_section_is_provider_preset_mode():
     readme = _read("orchestration/README.md")
     sec = readme[readme.index("### 3.5") : readme.index("## 4. orch CLI")]
     for marker in (
-        "data/pysci_settings.toml",
+        "data/用户的inbox/pysci_settings.toml",
         "qwen",
         "mimo",
         "deepseek",

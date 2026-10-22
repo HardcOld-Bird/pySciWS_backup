@@ -82,7 +82,7 @@ owner 侧消费语义见 `patrol-watchdog-02-onboarding-and-ownership.md`（2026
 `test_backlog_fifo.py`（approve→入队→销账 / 锁忙排队 / STALL 心跳双向 / 降噪）
 与 `test_autonomy_e2e.py`（迟到唤醒 / 看门狗 / 三线 e2e）。
 
-## 5. 夜航模式（PSEP_2；总开关 `data/pysci_settings.toml [night] enabled`）
+## 5. 夜航模式（PSEP_2；总开关 `data/用户的inbox/pysci_settings.toml [night] enabled`）
 
 用户离机无人值守推进：**手动单开关**（钩子每回合现读）。**政策注入**（`night-policy.sh`：
 SessionStart/PostCompact 注授权书全文；**开关变更下一轮生效**——Stop 钩子按会话差分注入，

@@ -41,16 +41,22 @@
     },
     {
       "id": "G2.G2b.t5",
-      "status": "queued",
+      "status": "done",
       "review": "pending",
       "job_id": "theory-20261021-194121-cmt-pipeline-20261021-G2.G2b.t5",
-      "task_file": "data/taskbooks/cmt-pipeline-20261021.t5.task.md"
+      "task_file": "data/taskbooks/cmt-pipeline-20261021.t5.task.md",
+      "session_id": "64b4a929-539c-498b-bfb7-4e880514a810",
+      "kind": "result"
     },
     {
       "id": "G3.t6",
-      "status": "pending",
-      "review": "pending"
+      "status": "done",
+      "review": "pending",
+      "job_id": "devops-20261021-195448-cmt-pipeline-20261021-G3.t6",
+      "task_file": "data/taskbooks/cmt-pipeline-20261021.t6.task.md",
+      "session_id": "77e74664-8cf2-4408-a50c-992d4e4e67b6",
+      "kind": "result"
     }
   ],
-  "completed_at": null
+  "completed_at": "2026-10-21T20:17:30+08:00"
 }

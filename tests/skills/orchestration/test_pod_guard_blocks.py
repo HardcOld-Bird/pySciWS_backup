@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -233,3 +234,119 @@ def test_startup_log_records_resolved_task_dirs(tmp_path):
     assert rc == 2
     last = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert last["task_dirs_resolved"] == []
+
+
+# ===========================================================================
+#  用户专属区新语义（2026-10-22 用户裁决）：增删改放行，删除须用户同意
+# ===========================================================================
+
+
+@NODE_REQUIRED
+def test_inbox_write_is_allowed(tmp_path):
+    """组员对 data/用户的inbox/ 可增删改——写入（创建/修改）面放行。"""
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    rc, err = run_guard(
+        file_path=str(PROJECT_ROOT / "data" / "用户的inbox" / "note.md"),
+        pod=str(pod),
+        project_root=str(PROJECT_ROOT),
+    )
+    assert rc == 0, err
+
+
+@NODE_REQUIRED
+def test_inbox_outbox_write_still_allowed(tmp_path):
+    """outbox 不再是唯一例外（2026-10-22 取代只读版），与任意 inbox 写入同权。"""
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    rc, err = run_guard(
+        file_path=str(
+            PROJECT_ROOT
+            / "data"
+            / "用户的inbox"
+            / "大任务"
+            / "x"
+            / "outbox"
+            / "交付.md"
+        ),
+        pod=str(pod),
+        project_root=str(PROJECT_ROOT),
+    )
+    assert rc == 0, err
+
+
+@NODE_REQUIRED
+def test_inbox_delete_via_bash_is_blocked(tmp_path):
+    """删除须征求用户同意——Bash 删除动词 × 专属区路径同现即拦。"""
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    stdin = json.dumps({"tool_input": {"command": "rm data/用户的inbox/旧稿.md"}})
+    rc, err = run_guard(pod=str(pod), project_root=str(PROJECT_ROOT), stdin=stdin)
+    assert rc == 2 and "征求用户同意" in err
+
+
+@NODE_REQUIRED
+def test_inbox_delete_via_python_unlink_is_blocked(tmp_path):
+    """python 侧删除（.unlink()/rmtree）同样在保守网内。"""
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    stdin = json.dumps(
+        {
+            "tool_input": {
+                "command": "python -c \"from pathlib import Path; Path('data/用户的inbox/x.txt').unlink()\""
+            }
+        }
+    )
+    rc, err = run_guard(pod=str(pod), project_root=str(PROJECT_ROOT), stdin=stdin)
+    assert rc == 2 and "征求用户同意" in err
+
+
+@NODE_REQUIRED
+def test_inbox_non_delete_bash_is_allowed(tmp_path):
+    """非删除的 Bash（读取/列目录）不拦——保守网只针对删除动词。"""
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    stdin = json.dumps({"tool_input": {"command": "ls data/用户的inbox"}})
+    rc, err = run_guard(pod=str(pod), project_root=str(PROJECT_ROOT), stdin=stdin)
+    assert rc == 0, err
+
+
+@NODE_REQUIRED
+def test_inbox_rename_via_bash_is_allowed(tmp_path):
+    """改名/移动＝「改」，不在「删除须同意」范围（2026-10-22 裁决）。"""
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    stdin = json.dumps(
+        {"tool_input": {"command": "mv data/用户的inbox/a.md data/用户的inbox/b.md"}}
+    )
+    rc, err = run_guard(pod=str(pod), project_root=str(PROJECT_ROOT), stdin=stdin)
+    assert rc == 0, err
+
+
+@NODE_REQUIRED
+def test_delete_outside_inbox_not_in_scope(tmp_path):
+    """专属区外的删除不归本门禁管（任务白名单面由既有规则覆盖）。"""
+    pod = tmp_path / "pod"
+    pod.mkdir()
+    stdin = json.dumps({"tool_input": {"command": "rm /tmp/junk.txt"}})
+    rc, err = run_guard(pod=str(pod), project_root=str(PROJECT_ROOT), stdin=stdin)
+    assert rc == 0, err
+
+
+def test_src_keeps_no_dependency_on_user_inbox():
+    """通用基建禁依赖用户专属区（2026-10-22 裁决）：src/ 内仅 settings.py 可**构造**
+    ``用户的inbox`` 路径（用户自管配置真源的显式例外，读侧 fail-open）；消息文案里
+    提及路径不计（判别＝独立路径段字面量 ``"用户的inbox"``）。需用用户区文件时
+    复制到 data/research、data/skills 用副本。"""
+    seg = re.compile(r"['\"]用户的inbox['\"]")
+    hits = []
+    for p in sorted((PROJECT_ROOT / "src").rglob("*.py")):
+        try:
+            text = p.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if seg.search(text):
+            hits.append(p.relative_to(PROJECT_ROOT).as_posix())
+    assert hits == ["src/pysci/skills/orchestration/tools/settings.py"], (
+        f"src/ 出现用户专属区路径构造（除 settings.py 显式例外外禁止）：{hits}"
+    )

@@ -2303,11 +2303,11 @@ def drain_backlog(run_log: Path, *, dry: bool = False) -> dict[str, Any]:
         reason = gate
         _log(
             run_log,
-            f"[!] {reason}——计划器拒绝开工（改 data/pysci_settings.toml [model] preset 后重跑）",
+            f"[!] {reason}——计划器拒绝开工（改 data/用户的inbox/pysci_settings.toml [model] preset 后重跑）",
         )
         print(f"[!] {reason}")
         print(
-            "    处置：改 data/pysci_settings.toml 的 [model] preset（合法串见该文件注释）。"
+            "    处置：改 data/用户的inbox/pysci_settings.toml 的 [model] preset（合法串见该文件注释）。"
         )
         return {
             "skipped": "preset_unavailable",

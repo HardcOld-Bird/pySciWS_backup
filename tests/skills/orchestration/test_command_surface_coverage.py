@@ -129,7 +129,9 @@ def test_evidence_and_case_skeletons_documented():
     只在旧案卷里可见，twin 同构前三段无文档。样例段在场即视为补齐。
     """
     doc = _doc()
-    assert "data/taskbooks/<id>.<leaf>-<名>.md" in doc, "缺 evidence 落点与命名惯例"
+    assert "data/others/taskbooks/<id>.<leaf>-<名>.md" in doc, (
+        "缺 evidence 落点与命名惯例"
+    )
     assert "`# <标题>`" in doc and "`## 拆解`" in doc, "缺 evidence 骨架样例"
     for sec in ("## 问题", "## 选项 A", "## 选项 B", "## 证据", "## 送审结论"):
         assert sec in doc, f"案卷骨架缺段：{sec}"

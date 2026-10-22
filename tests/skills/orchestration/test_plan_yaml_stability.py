@@ -126,7 +126,7 @@ def test_self_guidance_prints_evidence_landing(capsys):
     """引导块附 evidence 落点与命名惯例（backlog 20261017-104501）。"""
     plans._print_self_guidance("p1", {"id": "a1"}, {"role": "cause"})
     out = capsys.readouterr().out
-    assert "data/taskbooks/<id>.<leaf>-<名>.md" in out, "落点未附送到触发点"
+    assert "data/others/taskbooks/<id>.<leaf>-<名>.md" in out, "落点未附送到触发点"
     assert "`# 标题`" in out, "骨架样例未附送"
 
 

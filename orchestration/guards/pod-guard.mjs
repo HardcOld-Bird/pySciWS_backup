@@ -6,12 +6,16 @@
 //           （bench/outbox/AGENTS.md/自建 rules/自建 skills = 自维护层）；
 //   pod 外：仅任务白名单目录（PYSCI_TASK_DIRS，项目相对或绝对路径）与系统临时目录；
 //   其余一律拦截。
-//   **用户专属区**（2026-10-21 用户裁决，leader-only §1）：data/用户的inbox/ 全员只读，
-//   唯一常设写授权＝data/用户的inbox/大任务/<任务>/outbox/ 子目录；任务白名单**不能**
-//   覆盖该区（派单白名单越界也会被这里拦下）。
+//   **用户专属区**（2026-10-22 用户裁决，取代 2026-10-21 只读版；leader-only §1）：
+//   data/用户的inbox/ 组员**可增删改**（写入面放行），但**删除须用户同意**——删除类
+//   操作在 Bash 命令面机械拦截；用户可随时自行删除/重命名/移动其中文件，故通用基建
+//   （src/research、src/skills）**严禁依赖**本区文件（需用则复制到 data/research、
+//   data/skills 用副本）；pysci_settings.toml 为用户自管配置真源的显式例外（读侧
+//   fail-open）。任务白名单与本区判定无关（不再有 outbox 例外）。
 // 环境变量由 orch dispatch 注入（runner.build_env）：
 //   PYSCI_POD / PYSCI_PROJECT_ROOT / PYSCI_READONLY / PYSCI_DEPLOYED_SKILLS / PYSCI_TASK_DIRS
-// 诚实条款：只拦 Write/Edit/NotebookEdit 工具，Bash 重定向不在射程（README §9）。
+// 诚实条款：写工具（Write/Edit/NotebookEdit）全量拦；Bash 面只做用户专属区删除的
+// 保守扫描（删除动词×专属区路径同现才拦），重定向写与其余 Bash 行为不在射程（README §9）。
 // fail-open：输入解析失败或门禁自身异常时放行——门禁故障不阻塞生产；**但必须留痕**：
 // 所有吞异常处 stderr 打 `[pod-guard fail-open] <原因>` 再 exit 0，让上层（doctor 活体
 // 探针 / runner 告警扫描）能机械识别「本该拦但放行了」的静默退化（backlog
@@ -40,7 +44,8 @@ try {
 
 try {
   const fp = (data.tool_input && data.tool_input.file_path) || '';
-  if (!fp) process.exit(0);
+  const cmd = (data.tool_input && data.tool_input.command) || '';
+  if (!fp && !cmd) process.exit(0);
 
   const sep = p => p.replace(/\\/g, '/');
   const lower = p => sep(p).toLowerCase();
@@ -100,17 +105,22 @@ try {
     process.exit(2);
   };
 
-  // 用户专属区先于一切白名单判定（2026-10-21 用户裁决）：data/用户的inbox/ 全员只读，
-  // 仅「大任务/<任务>/outbox/」常设放行；即便 PYSCI_TASK_DIRS 显式包含 inbox 也拦。
+  // 用户专属区先于一切白名单判定（2026-10-22 用户裁决，取代 2026-10-21 只读版）：
+  // 写入（创建/修改）放行；**删除须用户同意**——Bash 命令面「删除动词 × 专属区路径」
+  // 同现即拦（保守网：宁可误拦待申诉，不放行误删）。
   if (projectRoot) {
     const inboxL = lower(path.resolve(projectRoot, 'data', '用户的inbox'));
-    if (absL === inboxL || absL.startsWith(inboxL + '/')) {
-      const rel = sep(abs).slice(inboxL.length + 1);
-      if (!/^大任务\/[^/]+\/outbox(\/|$)/.test(rel)) {
+    const underInbox = absL === inboxL || absL.startsWith(inboxL + '/');
+    if (fp && underInbox) process.exit(0); // 增/改放行（2026-10-22 裁决）
+    if (!fp && cmd) {
+      const delVerb =
+        /\b(rm|del|erase|unlink|rmdir)\b|rmtree|os\.remove|shutil\.rmtree|\.unlink\(/i;
+      const mentionsInbox = /用户的inbox/i.test(cmd) || lower(cmd).includes(inboxL);
+      if (mentionsInbox && delVerb.test(cmd)) {
         console.error(
-          `pod-guard: 拦截对 ${fp} 的写入——data/用户的inbox/ 为用户专属区` +
-            `（2026-10-21 用户裁决）：全员只读；唯一常设写授权＝` +
-            `data/用户的inbox/大任务/<任务>/outbox/ 子目录（任务白名单不能覆盖本区）。`
+          `pod-guard: 拦截删除操作——data/用户的inbox/ 内容的删除须征求用户同意` +
+            `（2026-10-22 用户裁决）：组员可增删改该目录，但删除文件时应当征求用户同意、` +
+            `非必要不应主动删除。请在交付中说明缘由并等待用户授权。`
         );
         process.exit(2);
       }

@@ -9,7 +9,7 @@
   （预设 → main/pro 席位链，账号级 UUID 整链覆盖）、models/model_chains（只余独立的
   minimum）、model_fallback（粘滞窗参数）、jury（仲裁席定义）、checks、
   est_tokens_per_char。人手编辑、随代码评审演进；**模型档位 model_tier/max|flash 已退役**
-  （2026-10-12 22:4x），预设名在 `data/pysci_settings.toml`。
+  （2026-10-12 22:4x），预设名在 `data/用户的inbox/pysci_settings.toml`。
 - `orchestration/state/sessions-runtime.json`（**gitignore**）= 高频运行态：会话池
   `members[*].sessions`（sid/name/hops/last_active/**chars_offset**/status），加上席位
   面三键 `models_resolved` / `model_seat_names` / `model_seat_fail`（见下两节）。每次派发
@@ -53,7 +53,7 @@ sessions/hops/chars_offset 是**心跳**——每派发必变。留在跟踪的 
 
 ## 预设与角色：席位表三级读（080410-devops 方案 A 沿用 / 225500-leader 改键）
 
-`main`/`pro` 的席位链**随预设**（`data/pysci_settings.toml` `[model] preset` 选，见
+`main`/`pro` 的席位链**随预设**（`data/用户的inbox/pysci_settings.toml` `[model] preset` 选，见
 `presets.py`）；`minimum` 独立不随预设。机器自愈只服务**人没写值**的键——故：
 
 - **读取三级回退**：`Registry.model_chain(角色)` = 跟踪 `presets.<预设>.<role>`（整链覆盖）

@@ -1,7 +1,7 @@
 """TUI 运行日志（backlog 20261017-120500）：生命周期 + 未捕获异常 traceback 落盘。
 
 为什么需要：本仓此前**无 TUI 运行日志**，04:48 的 MouseDown 崩溃只能靠 traceback 机理推演。
-日志面独立于 orch 的 watch/events——它是「终端里发生了什么」的唯一留痕，落 ``data/logs/``
+日志面独立于 orch 的 watch/events——它是「终端里发生了什么」的唯一留痕，落 ``data/others/logs/``
 （gitignored，运行态）。
 """
 
@@ -14,11 +14,11 @@ from pathlib import Path
 from pysci.paths import PROJECT_ROOT
 
 #: 日志目录（测试可 monkeypatch）。
-LOG_DIR: Path = PROJECT_ROOT / "data" / "logs"
+LOG_DIR: Path = PROJECT_ROOT / "data" / "others" / "logs"
 
 
 def log_path() -> Path:
-    """当日日志文件：``data/logs/tui-YYYYMMDD.log``。"""
+    """当日日志文件：``data/others/logs/tui-YYYYMMDD.log``。"""
     return LOG_DIR / f"tui-{datetime.now().strftime('%Y%m%d')}.log"
 
 

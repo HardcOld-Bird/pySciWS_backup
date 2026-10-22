@@ -74,8 +74,8 @@ alwaysApply: true
 - **产物落盘**：写入 `data/` 前用 `pysci.paths.assert_within_data(path)` 断言（防散落护栏）；
   论文插图 / 理论计算 / 效果图 / 模型分别用 `research_fig_dir(name, slug=...)` /
   `research_theory_dir(...)` / `research_artwork_dir(...)` / `research_model_dir(...)` 定位，
-  **不得散落到仓库根或代码树中**。**`data/用户的inbox/` 为用户专属区（2026-10-21 裁决）：
-  全员只读（显式授权除外；任务 `outbox/` 子目录为常设写授权），代码与管线不得依赖其中文件。**
+  **不得散落到仓库根或代码树中**。**`data/用户的inbox/`（2026-10-22 裁决）：可增删改，
+  删除须用户同意；基建严禁依赖其中文件（需用则复制副本）。**
 - **分层**：`src/pysci/` 下的包**只定义**，`scripts/` **只使用**（不在 `scripts/` 里定义复杂类
   或长函数）。`pysci` 中公共接口须有 Google 风格 docstring 与完整类型注解。
 - ❌ **不创建未被要求的文件**：不写 README / 说明文档 / demo / example，用法写进 docstring 与注释。

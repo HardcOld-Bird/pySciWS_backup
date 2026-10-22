@@ -63,7 +63,7 @@ def iso_reg(tmp_path, monkeypatch):
     reg_file = tmp_path / "registry.json"
     monkeypatch.setattr(registry, "REGISTRY_PATH", reg_file)
     # 预设真源（toml）一并隔离：presets.active() 读 settings.SETTINGS_PATH——不隔离则用例
-    # 跟随**真实** data/pysci_settings.toml 的 preset 行，合法换预设即红（2026-10-15：mimo→
+    # 跟随**真实** data/用户的inbox/pysci_settings.toml 的 preset 行，合法换预设即红（2026-10-15：mimo→
     # deepseek 实锤）。锚隔离预设（出厂 mimo），不锁运行面当前值。
     monkeypatch.setattr(settings, "SETTINGS_PATH", tmp_path / "pysci_settings.toml")
     seed_settings(tmp_path)
@@ -334,7 +334,7 @@ def test_readme_clause_matches_preset_tables():
         f"README §3.5 缺 minimum 链席位 {min_chain}"
     )
     assert "独立、不随预设走" in clause, "minimum 与预设解耦的语义必须写明"
-    assert "data/pysci_settings.toml" in clause, "真源文件名必须逐字可检索"
+    assert "data/用户的inbox/pysci_settings.toml" in clause, "真源文件名必须逐字可检索"
     assert "--model-tier pro|main" in clause, "角色覆盖旗标的合法值写进文档"
 
 

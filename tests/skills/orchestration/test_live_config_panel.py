@@ -77,7 +77,7 @@ def test_boundary_hold_registry_fallback_speaks_up(monkeypatch, capsys):
     reg = SimpleNamespace(routing_hold_s=180)
     line, wait = dispatch._boundary_hold(reg, no_hold=False)
     out = capsys.readouterr().out
-    assert "registry 旧位" in out and "data/pysci_settings.toml" in out
+    assert "registry 旧位" in out and "data/用户的inbox/pysci_settings.toml" in out
     assert (line, wait) == ("", 0)
 
 
@@ -95,7 +95,9 @@ def test_shipped_settings_file_has_effective_keys():
     """**事故根治的机械哨兵**：真源文件里这两键必须是**生效键**（不许写成 `#` 注释示例）。"""
     from pysci.paths import PROJECT_ROOT
 
-    text = (PROJECT_ROOT / "data" / "pysci_settings.toml").read_text(encoding="utf-8")
+    text = (PROJECT_ROOT / "data" / "用户的inbox" / "pysci_settings.toml").read_text(
+        encoding="utf-8"
+    )
     lines = [
         ln.strip()
         for ln in text.splitlines()

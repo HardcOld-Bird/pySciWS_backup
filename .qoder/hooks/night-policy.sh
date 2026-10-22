@@ -1,7 +1,7 @@
 #!/bin/bash
 # .qoder/hooks/night-policy.sh — 夜航模式政策注入（SessionStart + PostCompact）
 #
-# PSEP_2 §3.2（实施单 task-20261014-psep2-n1）：读 data/pysci_settings.toml 的
+# PSEP_2 §3.2（实施单 task-20261014-psep2-n1）：读 data/用户的inbox/pysci_settings.toml 的
 # [night] enabled（**每回合现读，热切换**——用户改一行即生效，无需重启会话）。
 #   ON  → 经既有钩子体系 hookSpecificOutput.additionalContext 注入政策全文（含 twin
 #         授权书；判定与文本单点在 src/pysci/…/tools/night.py）；
@@ -24,5 +24,5 @@ cd "$ROOT" || exit 0
 PYW="$ROOT/.venv/Scripts/pythonw.exe"
 [ -x "$PYW" ] || exit 0
 PYTHONPATH="$ROOT/src" "$PYW" -m pysci.skills.orchestration.tools.night \
-  --settings "$ROOT/data/pysci_settings.toml" 2>/dev/null <<<"$PAYLOAD" || exit 0
+  --settings "$ROOT/data/用户的inbox/pysci_settings.toml" 2>/dev/null <<<"$PAYLOAD" || exit 0
 exit 0

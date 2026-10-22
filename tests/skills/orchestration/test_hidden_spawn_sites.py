@@ -58,7 +58,10 @@ def test_hook_scripts_use_pythonw_and_keep_redirections():
 
     gate = "\n".join(_code_lines(HOOKS / "night-gate.sh"))
     assert '"$PYW" -m pysci.skills.orchestration.tools.night' in gate
-    assert '--gate --settings "$ROOT/data/pysci_settings.toml" <<<"$PAYLOAD"' in gate
+    assert (
+        '--gate --settings "$ROOT/data/用户的inbox/pysci_settings.toml" <<<"$PAYLOAD"'
+        in gate
+    )
     assert "exit 0" in gate and "[night-gate fail-open]" in gate
 
     policy = "\n".join(_code_lines(HOOKS / "night-policy.sh"))

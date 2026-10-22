@@ -1,6 +1,6 @@
 """用户任务书：存储 + 状态机（README §12，M3）。
 
-落点 ``data/taskbooks/``（**入 git**，用户裁决 ①：用户可见可编辑）。每件两个文件：
+落点 ``data/others/taskbooks/``（**入 git**，用户裁决 ①：用户可见可编辑）。每件两个文件：
 
 - ``<id>.taskbook.md``：元数据头（ts / title / status / source）＋ 用户**纯文本正文**；
 - ``<id>.state.json``：**状态机真源**（status / plan_id / rejections / 时间戳）——任何界面
@@ -29,7 +29,7 @@ from . import events, statecommit
 
 #: 任务书目录（**入 git**；用户裁决 ① 的落点）。新建文件由 :mod:`statecommit` 落盘即提交
 #: （backlog 20261015-085823-devops：此前只声明不提交，远端/新克隆取不到任务书）。
-TASKBOOKS_DIR: Path = DATA_ROOT / "taskbooks"
+TASKBOOKS_DIR: Path = DATA_ROOT / "others" / "taskbooks"
 
 #: 新任务书 / 新报告的落盘即提交信息（:mod:`statecommit`）。
 TASKBOOK_COMMIT_MSG: str = "chore(state): 任务书入库（新建即提交）"
@@ -364,11 +364,11 @@ def _save_state(tb_id: str, state: dict[str, Any]) -> dict[str, Any]:
     """落状态真源，并**即写即提交**该内容面（backlog 20261015-153541-tier-a）。
 
     为什么改写也要提交（此前只在新文件诞生时提交，见 :mod:`statecommit` docstring）：
-    `data/taskbooks/` 是**声明入 git** 的面，而它的 ``state.json`` 由运行期（TUI 推进/批复/
+    `data/others/taskbooks/` 是**声明入 git** 的面，而它的 ``state.json`` 由运行期（TUI 推进/批复/
     对账）反复改写 → 忠实停在 main 工作区改动态。后果不是「看着脏」而是**合并被拦**：
     别的成员合并时 `pysci-dev worktree merge` 的交集闸报 rc=2（Tier A 立案的 3 次
-    `merge_dirty_face` 里，2026-10-15T13:34 那次正是 `data/taskbooks/tb-…state.json` 相交）。
-    ``commit_face`` 只提交**本面**（``data/taskbooks/``），不碰别人的在飞编辑——故这是
+    `merge_dirty_face` 里，2026-10-15T13:34 那次正是 `data/others/taskbooks/tb-…state.json` 相交）。
+    ``commit_face`` 只提交**本面**（``data/others/taskbooks/``），不碰别人的在飞编辑——故这是
     「机械收尾提交」在**内容面**上的安全落点（组长 2026-10-15 的取舍指向此路）。
     """
     state["updated"] = _now()
@@ -728,7 +728,7 @@ def create_rework(
 
 
 def report_path(tb_id: str) -> Path:
-    """全流程报告落点（``data/taskbooks/<id>.report.md``；**delivered 交付物即本报告**，§4.3 #5）。"""
+    """全流程报告落点（``data/others/taskbooks/<id>.report.md``；**delivered 交付物即本报告**，§4.3 #5）。"""
     return TASKBOOKS_DIR / f"{tb_id}.report.md"
 
 

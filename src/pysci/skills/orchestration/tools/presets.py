@@ -1,7 +1,7 @@
 """提供商预设：qwen / mimo / deepseek 一键切换（backlog 20261012-225500-leader）。
 
 用户裁决 2026-10-12 22:4x：**档位模式（max/flash）退役**。预设把「主力席 + pro 席 +
-仲裁团构成」打包成一个字符串，改 ``data/pysci_settings.toml`` 的 ``[model] preset``
+仲裁团构成」打包成一个字符串，改 ``data/用户的inbox/pysci_settings.toml`` 的 ``[model] preset``
 一行即整体换血；生效粒度=下一次派发，在途会话不受影响。
 
 三条边界：
@@ -235,7 +235,7 @@ def status_lines(reg: Any) -> list[str]:
     act = active()
     preset = act.preset
     reading = routing.state()
-    out = ["== 模型预设（真源 data/pysci_settings.toml [model] preset）=="]
+    out = ["== 模型预设（真源 data/用户的inbox/pysci_settings.toml [model] preset）=="]
     note = _chain_source_note(preset)
     if reading.hidden:
         note = (
