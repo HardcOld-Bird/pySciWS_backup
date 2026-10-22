@@ -2,7 +2,8 @@
 //（README §3.4 / §9；basic.md §1 三档裁决；README §5.4 tags）。
 // Stop hook：① 最终回复缺 <result>/<blocked> → exit 2 退回改正；② <infra_suggestion> 的
 // kind、<blocked> 的 tags 若存在必须落在受控词表内 → exit 2 + 精确整改指令；③ pod 的
-// AGENTS.md / 自建 rules / 自建 skills 超预算或违规 always_on → exit 2 + 精确整改指令。
+// AGENTS.md / 自建 rules / 自建 skills 超预算或违规 always_on → exit 2 + 精确整改指令；
+// ④ <result> 与 <blocked> **互斥**（含且仅含一个）：同给两块 → exit 2（charter 协议）。
 // 多类问题一次全报（合并成一轮整改）。
 //
 // 防循环：stop_hook_active 为真时放行（避免死循环）。
@@ -136,6 +137,22 @@ function run() {
               : '')
         );
       }
+    }
+  }
+
+  // 互斥（charter：含且仅含一个 <result> 或 <blocked>；insp-20261022-141826）：
+  // 旧实现只用 TAG_RE.test 判「至少一个」，同给两块被放行——下游解析器只取第一块，
+  // 另一块被静默丢弃，审计面判成功而正文含 blocked 失败，交付状态分裂。
+  if (msg) {
+    const nResult = (msg.match(/<result\b[^>]*>[\s\S]*?<\/result>/g) || []).length;
+    const nBlocked = (msg.match(/<blocked\b[^>]*>[\s\S]*?<\/blocked>/g) || []).length;
+    if (nResult && nBlocked) {
+      problems.push(
+        `交付格式不合规：同一条交付同时含 <result>（${nResult} 块）与 <blocked>（${nBlocked} 块）——` +
+          'charter 要求**含且仅含一个**，二者互斥；解析器只取第一块，另一块会被静默丢弃，' +
+          '造成「判成功而正文含失败」的状态分裂。动作：只保留实际发生的一个块' +
+          '（成功用 <result>、失败用 <blocked>），另一块内容移入保留块内或删除后重发。'
+      );
     }
   }
 
