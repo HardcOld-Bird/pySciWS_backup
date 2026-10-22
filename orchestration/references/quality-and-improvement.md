@@ -171,7 +171,7 @@ approve**（规程建议连带选 M 复跑原失败案）；组长拒绝仍记 o
   needs_leader 提醒（组长据此 `orch requeue` 回排重派 / 改任务书 / `orch resolve` 销账 / 上报）
 → 组长的等待面（代码化，§4.5）：唤醒/采纳/交办三处输出固定附 `orch watch` 挂载指令；
   watch 后台阻塞轮询 state 文件与锁，命中 QUEUE-COMPLETE / NEEDS-LEADER / QUOTA-STOP /
-  CHANNEL-STOP / CRASH 即单行退出唤醒会话（devops backlog 的**完成唤醒自 backlog-fifo 起
+  CHANNEL-STOP / CRASH / SALVAGE 即单行退出唤醒会话（devops backlog 的**完成唤醒自 backlog-fifo 起
   走事件流 `QUEUE-EMPTY`**，由执行侧 worker 退出时发）；watch 随会话消亡、不影响 drain，漏掉的账由下次 `orch status`
   的 watch 段一次性补账
 → 涉及发起人 pod 的改动完成后，组长可立即重派该成员验证
