@@ -79,12 +79,11 @@ __pycache__/
 !/orchestration/state/backlog.json
 
 # 组员 pod 只保留初始 harnessing（AGENTS.md/charter、settings/mcp 配置面、各 pod
-# .gitignore）；部署技能副本由 orch sync 再生，工作文件与组员自建 rules/rubrics/
-# 咨询产物等一律本地保留不上传。
+# .gitignore、reviewer/inspector 的 rubrics 审查量表——charter 引用的只读标准层）；
+# 部署技能副本由 orch sync 再生，工作文件与组员自建 rules/咨询产物等一律本地保留不上传。
 /orchestration/pods/*/bench/
 /orchestration/pods/*/inbox/
 /orchestration/pods/*/outbox/
-/orchestration/pods/*/rubrics/
 /orchestration/pods/twin/PREFERENCE*.md
 /orchestration/pods/*/.qoder/skills/
 /orchestration/pods/*/.qoder/rules/*

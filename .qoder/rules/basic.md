@@ -56,9 +56,9 @@ alwaysApply: true
 
 - **默认直连；访问期刊数据库 / 下载正版全文绝对禁止走代理**（走代理即丧失机构访问资格）。
 - 访问国内常无法直连的站点（GitHub、Google、YouTube 等）失败时，用本机代理
-  `http://127.0.0.1:7890` 重试（2026-10-05 实测可用），**仅限单命令级注入，禁止持久化**：
-  `git -c http.proxy=http://127.0.0.1:7890 push ...`、`curl -x http://127.0.0.1:7890 ...`、
-  bash 前缀 `https_proxy=http://127.0.0.1:7890 <cmd>`。
+  `http://127.0.0.1:12450` 重试（2026-10-30 实测可用，端口迁移自 7890），**仅限单命令级注入，禁止持久化**：
+  `git -c http.proxy=http://127.0.0.1:12450 push ...`、`curl -x http://127.0.0.1:12450 ...`、
+  bash 前缀 `https_proxy=http://127.0.0.1:12450 <cmd>`。
 - ❌ 禁止 `git config --global/--local http.proxy`、`setx`、写 profile、`export`/`$env:` 残留。
 
 ## 5. 环境与代码约定

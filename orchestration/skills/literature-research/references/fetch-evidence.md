@@ -18,7 +18,7 @@ Never present a `[二手互证]` fact as if it were `[直取]`.
 
 1. **Try direct first** (WebFetch / `curl` / plain GET). Content returned → `[直取]`.
 2. On **403 / bot-block** or timeout, retry **once** through the local proxy
-   `http://127.0.0.1:7890` — *single-command injection only*. The rules live in
+   `http://127.0.0.1:12450` — *single-command injection only*. The rules live in
    `.qoder/rules/basic.md` §4 (default direct; proxy never persisted; **never for journal
    databases / licensed full text**). `curl` exit 7 = the proxy isn't running → do **not**
    loop-retry; go to step 3.

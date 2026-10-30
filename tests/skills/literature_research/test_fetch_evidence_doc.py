@@ -52,7 +52,7 @@ def test_spec_names_the_two_failure_classes():
 # ---------------------------------------------------------------------------
 def test_spec_routes_proxy_rules_to_basic_md_not_a_copy():
     md = _text(SPEC)
-    assert "127.0.0.1:7890" in md, "未给出 fallback 代理地址"
+    assert "127.0.0.1:12450" in md, "未给出 fallback 代理地址"
     assert "basic.md" in md and "§4" in md, "代理纪律必须回指 basic.md §4（单一真源）"
     assert "single-command" in md, "未写明仅单命令级注入"
     assert "never persisted" in md or "禁止持久化" in md, "未写明禁止持久化"
