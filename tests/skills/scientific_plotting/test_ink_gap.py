@@ -18,18 +18,24 @@ SKILL = ORCHESTRATION_ROOT / "skills" / "scientific-plotting" / "SKILL.md"
 
 
 def _example_root() -> Path:
-    """worktree 不含 gitignored 成品 → 只读回退到主树（git common dir 的父级）。"""
+    """worktree 不含 gitignored 成品 → 只读回退到主树（git common dir 的父级）。
+
+    无 git 环境（如骨架抽取验证）时直接返回主路径，由 skipif 判缺席。
+    """
     root = research_asset_dir("example")
     if (
         root / "article" / "figures" / "demo_case" / "demo_case_combined_r5.png"
     ).exists():
         return root
-    common = subprocess.run(
-        ["git", "-C", str(PROJECT_ROOT), "rev-parse", "--git-common-dir"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    try:
+        common = subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), "rev-parse", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return root
     return Path(common).resolve().parent / "data" / "research" / "1_example"
 
 
