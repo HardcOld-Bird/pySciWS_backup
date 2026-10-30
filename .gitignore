@@ -77,14 +77,27 @@ __pycache__/
 !/orchestration/state/failure-tags.json
 !/orchestration/state/taskbook-lint.json
 !/orchestration/state/backlog.json
+# 随附模板与判词汇表（harnessing，非痕迹）：jury 简报模板、harness 三案卷、
+# taste_enabled 的授权批准单（registry 配置面的授权留痕，缺它 test_registry 不认）。
+!/orchestration/state/evals/
+/orchestration/state/evals/*
+!/orchestration/state/evals/jury-brief.md
+!/orchestration/state/evals/harness/
+!/orchestration/state/suggestions/
+/orchestration/state/suggestions/*
+!/orchestration/state/suggestions/approved/
+/orchestration/state/suggestions/approved/*
+!/orchestration/state/suggestions/approved/20261012-164601-leader.md
 
 # 组员 pod 只保留初始 harnessing（AGENTS.md/charter、settings/mcp 配置面、各 pod
 # .gitignore、reviewer/inspector 的 rubrics 审查量表——charter 引用的只读标准层）；
 # 部署技能副本由 orch sync 再生，工作文件与组员自建 rules/咨询产物等一律本地保留不上传。
-/orchestration/pods/*/bench/
+/orchestration/pods/*/bench/*
+!/orchestration/pods/lit/bench/extract_figs.py
 /orchestration/pods/*/inbox/
 /orchestration/pods/*/outbox/
 /orchestration/pods/twin/PREFERENCE*.md
+!/orchestration/pods/twin/PREFERENCE.md
 /orchestration/pods/*/.qoder/skills/
 /orchestration/pods/*/.qoder/rules/*
 !/orchestration/pods/*/.qoder/rules/charter.md

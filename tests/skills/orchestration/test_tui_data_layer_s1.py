@@ -440,6 +440,10 @@ def test_line_queues_reports_real_deviation_count(mface):
 # ---------------------------------------------------------------------------
 # ⑤ taskbooks：家族归组 + Markdown 详情
 # ---------------------------------------------------------------------------
+@pytest.mark.skipif(
+    not taskbooks.TASKBOOKS_DIR.is_dir() or not any(taskbooks.TASKBOOKS_DIR.iterdir()),
+    reason="真实任务书数据缺席（本地保留、不入库）",
+)
 def test_families_on_real_taskbook_data():
     """真实 ``data/taskbooks/`` 实测：既有返工家族 tb-20261015-194834-3 在册且归组自洽。
 
