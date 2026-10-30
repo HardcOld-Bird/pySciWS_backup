@@ -1,0 +1,68 @@
+# 技能部署 manifest（README §2/§7）：唯一真本 → 部署目标的映射。
+# 真本 = orchestration/skills/<name>/（git 跟踪，devops 维护）；
+# 部署副本 = <target>/<name>/（gitignored，`pysci-orch sync` / `pysci-dev sync` 再生，哈希防漂移）。
+# 红线：sync 只触碰此处声明的部署名，绝不删除成员自建技能。
+# targets 只列**已建成**的 pod；Phase 4 建各专职 pod 时把对应 target 追加进来。
+version = 1
+
+[[skills]]
+name = "scientific-plotting"
+source = "orchestration/skills/scientific-plotting"
+targets = ["orchestration/pods/figure/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
+
+[[skills]]
+name = "comsol-simulation"
+source = "orchestration/skills/comsol-simulation"
+targets = ["orchestration/pods/sim/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
+
+[[skills]]
+name = "document-writing"
+source = "orchestration/skills/document-writing"
+targets = ["orchestration/pods/writing/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
+
+[[skills]]
+name = "literature-research"
+source = "orchestration/skills/literature-research"
+targets = ["orchestration/pods/lit/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
+
+[[skills]]
+name = "theoretical-computation"
+source = "orchestration/skills/theoretical-computation"
+targets = ["orchestration/pods/theory/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
+
+[[skills]]
+name = "ai-drawing"
+source = "orchestration/skills/ai-drawing"
+targets = ["orchestration/pods/drawing/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
+
+[[skills]]
+name = "modeling3d"
+source = "orchestration/skills/modeling3d"
+targets = ["orchestration/pods/model3d/.qoder/skills",
+           "orchestration/pods/deputy/.qoder/skills"]
+
+[[skills]]
+name = "orchestration"
+source = "orchestration/skills/orchestration"
+targets = [".qoder/skills"]   # 项目根 = 组长专属（skills 不向下泄漏，Phase 0 实锤）
+
+[[skills]]
+name = "devops"
+source = "orchestration/skills/devops"
+targets = ["orchestration/pods/devops/.qoder/skills"]
+
+[[skills]]
+name = "bencher"
+source = "orchestration/skills/bencher"
+targets = ["orchestration/pods/bencher/.qoder/skills"]
+
+[[skills]]
+name = "inspector"
+source = "orchestration/skills/inspector"
+targets = ["orchestration/pods/inspector/.qoder/skills"]

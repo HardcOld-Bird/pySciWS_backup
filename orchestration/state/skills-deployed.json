@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "skills": {
+    "scientific-plotting": {
+      "source_hash": "86e9002310dc0c951fd214ed74ddc9f925dad58580e664e251221e31ad9150f1",
+      "targets": {
+        "orchestration/pods/figure/.qoder/skills/scientific-plotting": "86e9002310dc0c951fd214ed74ddc9f925dad58580e664e251221e31ad9150f1",
+        "orchestration/pods/deputy/.qoder/skills/scientific-plotting": "86e9002310dc0c951fd214ed74ddc9f925dad58580e664e251221e31ad9150f1"
+      }
+    },
+    "orchestration": {
+      "source_hash": "75cc0372549c66c55a4e2cd53c531196b95da04ece3e64ad13ab71b72d4c6dc9",
+      "targets": {
+        ".qoder/skills/orchestration": "75cc0372549c66c55a4e2cd53c531196b95da04ece3e64ad13ab71b72d4c6dc9"
+      }
+    },
+    "devops": {
+      "source_hash": "07cdd17669fe860c5176cc2ff020f6ef4e5a6b1328bf06dfaf6efbfc65ceac17",
+      "targets": {
+        "orchestration/pods/devops/.qoder/skills/devops": "07cdd17669fe860c5176cc2ff020f6ef4e5a6b1328bf06dfaf6efbfc65ceac17"
+      }
+    },
+    "comsol-simulation": {
+      "source_hash": "f30d61e3160f65224d247bab72f2b11d209829b5b67db181d2b3a533e734def7",
+      "targets": {
+        "orchestration/pods/deputy/.qoder/skills/comsol-simulation": "f30d61e3160f65224d247bab72f2b11d209829b5b67db181d2b3a533e734def7",
+        "orchestration/pods/sim/.qoder/skills/comsol-simulation": "f30d61e3160f65224d247bab72f2b11d209829b5b67db181d2b3a533e734def7"
+      }
+    },
+    "document-writing": {
+      "source_hash": "df83a07a86ef37176d77763ba95584a79ace93f8416bcae3e68c74b6b511a7ac",
+      "targets": {
+        "orchestration/pods/deputy/.qoder/skills/document-writing": "df83a07a86ef37176d77763ba95584a79ace93f8416bcae3e68c74b6b511a7ac",
+        "orchestration/pods/writing/.qoder/skills/document-writing": "df83a07a86ef37176d77763ba95584a79ace93f8416bcae3e68c74b6b511a7ac"
+      }
+    },
+    "literature-research": {
+      "source_hash": "163a91be3c4c1c9346130dce01124073b99c6cacf8bc3639e109af494b0cb228",
+      "targets": {
+        "orchestration/pods/deputy/.qoder/skills/literature-research": "163a91be3c4c1c9346130dce01124073b99c6cacf8bc3639e109af494b0cb228",
+        "orchestration/pods/lit/.qoder/skills/literature-research": "163a91be3c4c1c9346130dce01124073b99c6cacf8bc3639e109af494b0cb228"
+      }
+    },
+    "theoretical-computation": {
+      "source_hash": "d33199c77770205aa1e38d3b665a9ae6d665c97b5c9ad2ef85c9c08c8596648c",
+      "targets": {
+        "orchestration/pods/deputy/.qoder/skills/theoretical-computation": "d33199c77770205aa1e38d3b665a9ae6d665c97b5c9ad2ef85c9c08c8596648c",
+        "orchestration/pods/theory/.qoder/skills/theoretical-computation": "d33199c77770205aa1e38d3b665a9ae6d665c97b5c9ad2ef85c9c08c8596648c"
+      }
+    },
+    "ai-drawing": {
+      "source_hash": "ab86414a453995fb82c5d72af622a5864b279e937b8fac8e5aa339a7c325ab4f",
+      "targets": {
+        "orchestration/pods/deputy/.qoder/skills/ai-drawing": "ab86414a453995fb82c5d72af622a5864b279e937b8fac8e5aa339a7c325ab4f",
+        "orchestration/pods/drawing/.qoder/skills/ai-drawing": "ab86414a453995fb82c5d72af622a5864b279e937b8fac8e5aa339a7c325ab4f"
+      }
+    },
+    "modeling3d": {
+      "source_hash": "4a2ec2dfe942828dfc1eb099fa3d99c58b62f7f07356e7f85e0b55fee5077764",
+      "targets": {
+        "orchestration/pods/deputy/.qoder/skills/modeling3d": "4a2ec2dfe942828dfc1eb099fa3d99c58b62f7f07356e7f85e0b55fee5077764",
+        "orchestration/pods/model3d/.qoder/skills/modeling3d": "4a2ec2dfe942828dfc1eb099fa3d99c58b62f7f07356e7f85e0b55fee5077764"
+      }
+    },
+    "bencher": {
+      "source_hash": "f807bf51a1b26d967fcc04cb22eba10cbdb88b69ba4e438024a9da1eab47d64e",
+      "targets": {
+        "orchestration/pods/bencher/.qoder/skills/bencher": "f807bf51a1b26d967fcc04cb22eba10cbdb88b69ba4e438024a9da1eab47d64e"
+      }
+    },
+    "inspector": {
+      "source_hash": "cc233777397720f1551c4c0abc752d91341719cab228706dd606df64927af561",
+      "targets": {
+        "orchestration/pods/inspector/.qoder/skills/inspector": "cc233777397720f1551c4c0abc752d91341719cab228706dd606df64927af561"
+      }
+    }
+  }
+}

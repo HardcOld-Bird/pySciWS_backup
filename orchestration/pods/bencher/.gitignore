@@ -1,0 +1,7 @@
+# 可再生物与草稿区不入库（README §2 git 策略）
+bench/
+outbox/
+.qoder/skills/
+# 任务书运行态：正文已被队列条目（state/bencher/queue.json）与压测台账
+# （state/ledger/evals.jsonl）记录，再入库只会污染 git status。
+inbox/task-*.md

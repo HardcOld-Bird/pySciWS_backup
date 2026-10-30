@@ -1,0 +1,5 @@
+# worktree add 播种清单：gitignored 的「测试必需」本地资产（repo 相对路径或 glob，
+# 一行一项；# 注释与空行跳过）。动机见 dev.py WORKTREE_ASSETS_CONFIG 注释：
+# 新 worktree 只带 git 跟踪面，缺这些资产时「合并前自跑全量」必假红、每次人工从主树补种。
+# 各研究线按需在此登记自己的本地必需资产；播种名单须随资产重命名同步（漏改会致新
+# worktree 里对应测试组缺资产假绿）。

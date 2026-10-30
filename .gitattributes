@@ -1,0 +1,5 @@
+# 脚本类资产强制 LF：CRLF 曾把 hook 的 fail-open（exit 0）变成 bash 致命错误
+# （`exit 0\r` → numeric argument required → 非零退出被 harness 视为拦截），2026-10-25 实案。
+*.sh text eol=lf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

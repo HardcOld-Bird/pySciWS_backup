@@ -1,0 +1,68 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/watch-arm.sh",
+            "name": "watch-arm",
+            "asyncRewake": true,
+            "rewakeMessage": "[watch 自动续挂]",
+            "rewakeSummary": "drain 事件到达",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/watch-arm.sh",
+            "name": "watch-arm-release",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/night-policy.sh",
+            "name": "night-policy",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/night-policy.sh",
+            "name": "night-policy",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".qoder/hooks/night-gate.sh",
+            "name": "night-gate",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
+}

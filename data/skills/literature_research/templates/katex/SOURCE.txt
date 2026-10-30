@@ -1,0 +1,15 @@
+KaTeX 本地化 bundle（bilingual render 的公式排版资产）
+================================================
+
+- 版本：KaTeX 0.19.0（npm dist，katex.min.js / katex.min.css / contrib/auto-render.min.js）
+- 来源：https://registry.npmmirror.com/katex/-/katex-0.19.0.tgz
+  （官方等价源 https://github.com/KaTeX/KaTeX/releases ，2026-10-23 下载；
+  GitHub 直连与本机代理当日均不可用，经国内 npm 镜像取官方 npm 包）
+- 许可：MIT（KaTeX 上游）
+- 字体：仅保留 fonts/*.woff2（Chrome 打印通道用 woff2 足够；渲染时 CSS 的
+  font url() 会被内联为 data: URI，无跨源字体加载问题）
+- 选型（任务书 §二.3 要求注明）：选 KaTeX、弃 MathJax——KaTeX 同步排版（无异步
+  typeset 时序坑，page.pdf 取帧即最终版面）、bundle 小（约 600KB 含字体）、
+  auto-render 扩展对 \(..\)/\[..\] 语义定界符开箱即用；MathJax 异步排版需额外
+  等待信号与 page.pdf 抢时序、单文件 bundle 更大。pandoc 的 --mathml（Chrome
+  原生 MathML）不在任务书指定的二者内，弃。

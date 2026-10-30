@@ -1,0 +1,274 @@
+"""「域几何声明」机械检查：节存在 + 四问键齐全 + 每问带数值。"""
+
+from __future__ import annotations
+
+import json
+
+from pysci.skills.comsol_simulation.tools import domain, simulation
+
+GOOD = """# 仿真交付
+
+## 域几何声明
+
+- **兼容性**：目标场区（示例菱形区）完整位于 R=0.40m 域内，最小边距 0.06m。
+- **覆盖率**：超表面 8/8 周期覆盖入射面（100%，孔径 0.32m）。
+- **边界适配**：外场弧用 PerfectlyMatchedBoundary（禁用 PML）；bpf 仅选空气域（域 1）。
+- **激励口径**：高斯波束腰 0.03m、孔径 0.08m；实验换能器口径 0.05m，互证偏差 0.02m。
+  工作点 (cr, ci)=(-0.02, 0.073)，最近 EP (cr*, ci*)=(-0.018, 0.071)，
+  偏移 Δcr=0.002、Δci=0.002；寻点判据见 theory/谱奇点探索小结.md。
+
+## 其他
+- 与声明无关的正文。
+"""
+
+#: 旧版四问（无工作点-EP 偏移子问）——须 FAIL（tb-3 R5 M4）。
+GOOD_NO_EP = GOOD.replace(
+    "  工作点 (cr, ci)=(-0.02, 0.073)，最近 EP (cr*, ci*)=(-0.018, 0.071)，\n"
+    "  偏移 Δcr=0.002、Δci=0.002；寻点判据见 theory/谱奇点探索小结.md。\n",
+    "",
+)
+
+
+def test_complete_declaration_passes():
+    rep = domain.check_domain_declaration(GOOD)
+    assert rep["ok"], rep
+    assert rep["section"] and all(q["numeric"] for q in rep["questions"].values())
+
+
+def _with_excitation(value: str) -> str:
+    return GOOD_NO_EP.replace(
+        "- **激励口径**：高斯波束腰 0.03m、孔径 0.08m；实验换能器口径 0.05m，互证偏差 0.02m。",
+        f"- **激励口径**：{value}",
+    )
+
+
+def test_missing_ep_subquestion_fails():
+    """四问齐全但激励口径缺 EP 子问 → FAIL（tb-3 R5 M4）。"""
+    rep = domain.check_domain_declaration(GOOD_NO_EP)
+    assert not rep["ok"]
+    assert rep["excitation_ep"]["ok"] is False
+    assert set(rep["excitation_ep"]["missing"]) == {
+        "工作点(cr,ci)",
+        "最近EP偏移",
+        "寻点判据出处",
+    }
+    assert "激励口径缺" in rep["detail"]
+
+
+def test_ep_subquestion_requires_offset():
+    rep = domain.check_domain_declaration(
+        _with_excitation("工作点 (cr, ci)=(-0.02, 0.073)；寻点见 theory/x.md。")
+    )
+    assert not rep["ok"]
+    assert rep["excitation_ep"]["missing"] == ["最近EP偏移"]
+
+
+def test_ep_subquestion_requires_source():
+    rep = domain.check_domain_declaration(
+        _with_excitation("工作点 (cr, ci)=(-0.02, 0.073)，偏移 Δ=0.002。")
+    )
+    assert not rep["ok"]
+    assert rep["excitation_ep"]["missing"] == ["寻点判据出处"]
+
+
+def test_ep_subquestion_accepts_cr_ci_form():
+    rep = domain.check_domain_declaration(
+        _with_excitation(
+            "高斯波束腰 0.03m；cr=-0.02、ci=0.073，最近 EP 偏移 0.002；"
+            "判据见 theory/x.md。"
+        )
+    )
+    assert rep["ok"], rep
+
+
+def _with_ep_version(versions: str) -> str:
+    return _with_excitation(
+        "高斯波束腰 0.03m；工作点 (cr, ci)=(-0.02, 0.073)，最近 EP 偏移 0.002；"
+        f"判据见 theory/x.md；{versions}"
+    )
+
+
+def test_domain_version_mismatch_warns_softly():
+    """域版本 ≠ 寻点版本且无重寻读数 → 软告警（不判 FAIL）。"""
+    rep = domain.check_domain_declaration(
+        _with_ep_version("域版本=1.8m，寻点版本=1.5m")
+    )
+    assert rep["ok"] is True
+    assert rep["warnings"] and "重寻" in rep["warnings"][0]
+
+
+def test_domain_version_mismatch_with_research_is_silent():
+    rep = domain.check_domain_declaration(
+        _with_ep_version("域版本=1.8m，寻点版本=1.5m，重寻偏移 Δ=0.003")
+    )
+    assert rep["ok"] is True and rep["warnings"] == []
+
+
+def test_domain_version_same_is_silent():
+    rep = domain.check_domain_declaration(
+        _with_ep_version("域版本=1.5m，寻点版本=1.5m")
+    )
+    assert rep["warnings"] == []
+
+
+def test_domain_version_same_is_silent_for_each_separator():
+    """三种分隔符（；、、，）写同一版本都不告警，且 token 不串台（顿号修复钉子）。"""
+    for sep in ("；", "、", "，"):
+        rep = domain.check_domain_declaration(
+            _with_ep_version(f"域版本=1.5m{sep}寻点版本=1.5m")
+        )
+        ep = rep["excitation_ep"]
+        assert ep["domain_version"] == "1.5m", (sep, ep)
+        assert ep["ep_version"] == "1.5m", (sep, ep)
+        assert rep["warnings"] == [], (sep, rep["warnings"])
+
+
+def test_domain_version_mismatch_still_warns_with_dunhao_separator():
+    rep = domain.check_domain_declaration(
+        _with_ep_version("域版本=1.8m、寻点版本=1.5m")
+    )
+    assert rep["ok"] is True
+    assert rep["warnings"] and "重寻" in rep["warnings"][0]
+
+
+def test_cli_prints_soft_warning(tmp_path, capsys):
+    p = tmp_path / "warn.md"
+    p.write_text(
+        GOOD.replace(
+            "- **激励口径**：高斯波束腰 0.03m、孔径 0.08m；实验换能器口径 0.05m，互证偏差 0.02m。\n"
+            "  工作点 (cr, ci)=(-0.02, 0.073)，最近 EP (cr*, ci*)=(-0.018, 0.071)，\n"
+            "  偏移 Δcr=0.002、Δci=0.002；寻点判据见 theory/谱奇点探索小结.md。",
+            "- **激励口径**：工作点 (cr, ci)=(-0.02, 0.073)，最近 EP 偏移 0.002；"
+            "域版本=1.8m，寻点版本=1.5m；判据见 theory/x.md。",
+        ),
+        encoding="utf-8",
+    )
+    assert simulation.main(["domain-check", str(p)]) == 0
+    assert "[!]" in capsys.readouterr().out
+
+
+def test_missing_section_fails():
+    rep = domain.check_domain_declaration("# 仿真交付\n\n没有声明节。\n")
+    assert not rep["ok"] and not rep["section"]
+    assert rep["missing"] == list(domain.KEYS)
+
+
+def test_missing_key_fails():
+    text = GOOD.replace(
+        "- **覆盖率**：超表面 8/8 周期覆盖入射面（100%，孔径 0.32m）。\n", ""
+    )
+    rep = domain.check_domain_declaration(text)
+    assert not rep["ok"] and rep["missing"] == ["覆盖率"]
+
+
+def test_wrapped_bullet_continuation_is_joined():
+    """四问值跨行（缩进续行）时，数值在续行上也要能识别。"""
+    text = GOOD.replace(
+        "- **边界适配**：外场弧用 PerfectlyMatchedBoundary（禁用 PML）；bpf 仅选空气域（域 1）。",
+        "- **边界适配**：外场弧用 PerfectlyMatchedBoundary（禁用 PML）；bpf 仅选空气域\n  （域 1），24 个散射体域均不在选择内。",
+    )
+    rep = domain.check_domain_declaration(text)
+    assert rep["ok"], rep
+    assert "24" in rep["questions"]["边界适配"]["value"]
+
+
+def test_placeholder_and_no_number_fail():
+    text = GOOD.replace(
+        "- **覆盖率**：超表面 8/8 周期覆盖入射面（100%，孔径 0.32m）。",
+        "- **覆盖率**：待补。",
+    )
+    rep = domain.check_domain_declaration(text)
+    assert not rep["ok"] and "覆盖率" in rep["non_numeric"]
+
+    text2 = GOOD.replace(
+        "- **激励口径**：高斯波束腰 0.03m、孔径 0.08m；实验换能器口径 0.05m，互证偏差 0.02m。\n"
+        "  工作点 (cr, ci)=(-0.02, 0.073)，最近 EP (cr*, ci*)=(-0.018, 0.071)，\n"
+        "  偏移 Δcr=0.002、Δci=0.002；寻点判据见 theory/谱奇点探索小结.md。",
+        "- **激励口径**：已按实验口径核对，合理。",
+    )
+    rep2 = domain.check_domain_declaration(text2)
+    assert not rep2["ok"] and "激励口径" in rep2["non_numeric"]
+
+
+def test_em_dash_parenthetical_is_not_placeholder():
+    """中文解释性插入语「——」不算占位（backlog 20261029-203125-sim）：
+    四问数值齐全即 PASS，不再整问作废。"""
+    rep = domain.check_domain_declaration(
+        _with_excitation(
+            "工作点在 (cr, ci)=(-0.02, 0.073)——最近 EP 偏移 0.002；判据见 theory/x.md。"
+        )
+    )
+    assert rep["ok"], rep["detail"]
+    assert rep["non_numeric"] == [] and rep["placeholder_hits"] == {}
+
+
+def test_standalone_dash_placeholder_reports_token_and_offset():
+    """值整体是独立破折号（占位）→ FAIL，且给出命中 token 与偏移，便于一次改正。"""
+    text = GOOD.replace(
+        "- **覆盖率**：超表面 8/8 周期覆盖入射面（100%，孔径 0.32m）。",
+        "- **覆盖率**：——",
+    )
+    rep = domain.check_domain_declaration(text)
+    assert not rep["ok"] and "覆盖率" in rep["non_numeric"]
+    assert rep["placeholder_hits"]["覆盖率"] == {"token": "——", "offset": 0}
+    assert "命中占位 '——'@0" in rep["detail"]
+
+    text2 = GOOD.replace(
+        "- **覆盖率**：超表面 8/8 周期覆盖入射面（100%，孔径 0.32m）。",
+        "- **覆盖率**：超表面 8/8 周期覆盖入射面，缺口 —— 见附录。",
+    )
+    rep2 = domain.check_domain_declaration(text2)
+    val = rep2["questions"]["覆盖率"]["value"]
+    assert rep2["placeholder_hits"]["覆盖率"]["offset"] == val.index("——")
+
+
+def test_reference_documents_ep_subquestion():
+    from pysci.paths import ORCHESTRATION_ROOT
+
+    doc = (
+        ORCHESTRATION_ROOT
+        / "skills"
+        / "comsol-simulation"
+        / "references"
+        / "domain-declaration.md"
+    )
+    text = doc.read_text(encoding="utf-8")
+    assert "工作点-异常点偏移" in text
+    assert "(cr, ci)" in text and "寻点判据" in text
+
+
+def test_reference_documents_material_sign_equation():
+    """材料符号口径须给逐符号等式 + e^{±iωt} 依据（backlog 20261029-002034-sim）：
+    对照表只给物理标签曾致符号反接、五代表点阈值以上伪迹。"""
+    from pysci.paths import ORCHESTRATION_ROOT
+
+    doc = (
+        ORCHESTRATION_ROOT
+        / "skills"
+        / "comsol-simulation"
+        / "references"
+        / "domain-declaration.md"
+    )
+    text = doc.read_text(encoding="utf-8")
+    assert "soundspeed = 343[m/s]*(crN + ciN*i)" in text
+    assert "e^{+iωt}" in text and "ciN<0 = 增益" in text
+    assert "逐符号等式" in text and "模块坐标" in text
+    assert "ci2 = −0.05" in text, "须给『名义幅值→材料参数符号』的显式换算例"
+
+
+def test_cli_pass_fail_and_json(tmp_path, capsys):
+    good = tmp_path / "good.md"
+    good.write_text(GOOD, encoding="utf-8")
+    assert simulation.main(["domain-check", str(good)]) == 0
+    out = capsys.readouterr().out
+    assert "PASS" in out and "[√] 兼容性" in out
+
+    bad = tmp_path / "bad.md"
+    bad.write_text("# 无声明\n", encoding="utf-8")
+    assert simulation.main(["domain-check", str(bad)]) == 1
+    capsys.readouterr()
+
+    assert simulation.main(["domain-check", str(good), "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["ok"] is True and data["section"] is True
+    assert data["excitation_ep"]["ok"] is True

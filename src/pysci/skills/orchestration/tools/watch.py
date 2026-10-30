@@ -1,0 +1,2123 @@
+"""orch watch 事件等待器：把 drain 观察闭环从「组长记得去查」硬化成代码（README §4.5/§6）。
+
+理念（用户裁决 2026-10-10：能代码硬保证的不靠 LLM 纪律）：后台 drain worker 是**分离
+进程**，组长派发完就没事了，体系此前只能靠组长自觉轮询 ``orch status`` 才知道队列跑完 /
+崩了 / 卡在额度上——这正是「靠纪律」的软点。结构上限在于**唤醒注册只能由组长会话的
+工具发起**（外部进程无法向 TUI 注入通知），故硬化到能硬的那一层：
+
+- **事件判定全在代码**（本模块）：读状态文件 + Python 侧 ``_pid_alive``（不起 shell，
+  故 MSYS 路径转换问题免疫），**六类**事件——CRASH / QUOTA-STOP / CHANNEL-STOP /
+  NEEDS-LEADER / QUEUE-COMPLETE / SALVAGE（基线差分），**外加从统一事件流读取的生产者
+  直发事件** JOB-DONE / STEP-REVIEW-DONE / QUEUE-EMPTY / TASKBOOK-NEW（§3.2/M5 收编：
+  TASKBOOK-NEW 的旧基线差分 ``taskbook_ids`` 已删，改由 :mod:`taskbooks` 直发入流）。
+  差分命中的 legacy 事件另**镜像**入流（:func:`_mirror`）供记录面读出。
+- **挂载自 2026-10-13 起自动化**（README §4.5 v2）：组长回合结束由 ``Stop + asyncRewake``
+  钩子（``.qoder/hooks/watch-arm.sh``）每回合抢「最新在听者」并挂 ``orch watch``——**无需
+  组长手动挂**；:func:`autowatch_lines` 只在交办/唤醒当刻回报「已自动挂载」。自 2026-10-14
+  晚起钩子先过**唤醒权程序化归属闸**（:func:`hook_decision`：存活会话登记表 +
+  创建时序——候选＝存活∧cwd==项目根，主会话＝创建更早者；owner 存活保持、死亡/
+  SessionEnd 自动补位；pod 直聊永不入候选）——次要会话不再被误投唤醒（2026-10-18
+  用户裁决：程序化硬保证、零人工命令）。
+
+手动挂载降为**兜底**（仅钩子不可用时）：组长以 Bash ``run_in_background`` 启动
+``pysci-orch watch``（阻塞轮询，默认 60 s、硬上限 60 s），命中即原生后台通知唤醒本会话；
+**必须作为该后台调用的唯一顶层命令**（嵌入 ``&``/``&&``/管道会被连坐杀死）。watch 随组长
+会话消亡、**不影响 detached drain**；漏挂/会话中断期间的账由下次 ``orch status`` 经
+:func:`reconcile` 补账。
+
+状态落 ``state/watch.json``（人类可读 JSON）：基线快照 + 心跳 + 已发事件 + 黑匣子
+末帧（:data:`RECENT_MAX`），供 status 判断 watch 是否仍挂载（心跳新鲜=挂载中）。
+
+QUEUE-COMPLETE 的判定纪律（backlog 20261011-220622-leader，源于 210557 那场
+``fired=[]`` 脱靶）：**完成事实的存在性优先于锁的自称**——``.done`` 由 drain 在
+``release_lock`` 之后写出，故「该 run 有 ``.done``」即收尾硬证据，此刻锁仍显示
+running 只可能是 unlink 失败残留 + 判活说谎（pid 回收 / tasklist 超时保守判活）。
+完成身份是 **(run 名, completed 时刻, count) 三元组**，且**抑制帧 / 瞬态空值一律
+不得推进基线**（:func:`advance_base`）——否则被吞掉的事实永不参与下次比较，watch
+与 status 补账会同时哑掉。判读所需现场每帧写进 ``recent``。
+
+同一条纪律现已在**锁面**同样执法（backlog 20261011-225933-devops 的 released 墓碑 +
+20261011-231237-devops 的 ``_run_concluded`` 判活否决），新代码不再产生「谎锁压事件」
+的帧；本模块 :func:`_in_progress` 的抑制支与转移帧兜底因此退为**保险**：既护升级瞬间
+残留的旧基线，也顶住 ``.done`` 半写这类读不出证据的瞬态。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import subprocess
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from pysci.paths import ORCH_STATE_ROOT, PROJECT_ROOT
+from pysci.toolchain import git_exe
+
+from . import drain as _drain
+from . import events as _events
+from . import live_sessions as _live
+from . import procs as _procs
+from . import stallwatch as _stallwatch
+from . import workflow as _workflow
+
+#: watch 自身状态文件（基线快照 / 心跳 / 已发事件）；仅 watch 写、status 读。
+WATCH_PATH: Path = ORCH_STATE_ROOT / "watch.json"
+
+#: 默认轮询间隔与超时（秒）。超时 4 h 覆盖一次完整 drain run（README §6）。
+DEFAULT_INTERVAL_S: int = 60
+DEFAULT_TIMEOUT_S: int = 4 * 3600
+
+#: 轮询间隔硬上限——再长就会漏掉短命窗口的崩溃信号（用户裁决：≤60s）。
+MAX_INTERVAL_S: int = 60
+MIN_INTERVAL_S: int = 1
+
+#: 心跳宽限：超过 interval × 此系数 + 余量即判 watch 已不在挂载（会话结束/被杀）。
+HEARTBEAT_GRACE_FACTOR: int = 3
+HEARTBEAT_GRACE_S: int = 60
+
+#: 事件优先级（同刻多事件时取首个为主事件，其余以「同时」附注）。SALVAGE 排最后：
+#: 它是「进度已保住、队列已自动接上」的知会，不要求组长动手，不该盖住真要处理的信号。
+PRIORITY: tuple[str, ...] = (
+    "CRASH",
+    "QUOTA-STOP",
+    "CHANNEL-STOP",
+    "NEEDS-LEADER",
+    # 用户投递大任务（README §12）：**立即唤醒组长**。M5 收编——旧的最小差分
+    # （`taskbook_ids` 基线）已删，改由 :mod:`taskbooks` 生产者直发、本模块从统一事件流
+    # （:data:`events.STREAM_TYPES`）读出后唤醒。保留本优先级项供多事件同刻排序。
+    "TASKBOOK-NEW",
+    "JOB-DONE",
+    "STEP-REVIEW-DONE",
+    "QUEUE-EMPTY",
+    "QUEUE-COMPLETE",
+    # 队列感知伪事件（adhoc-20261014-124521-s1）**排在 SALVAGE 之前、真实事件之后**：
+    # 巡更 nudge 不该抢在真实事件前当主行（否则 a1「首个唤醒=真实事件」的契约被挤掉——
+    # 2026-10-14 main 实测：backlog 恰 1 条 pending → 聋期 e2e 的 echoed[0] 拿到
+    # PENDING-WORK），但它毕竟是要组长动手的信号，比 SALVAGE（知会、无需动手）更该先说。
+    "PENDING-WORK",
+    "STALL",
+    # SALVAGE 必须保持**最低优先级**（test_salvage_sits_at_lowest_priority 钉住）：
+    # 「进度已保住、队列自己在续」是知会，不该盖住真要处理的信号。
+    "SALVAGE",
+)
+
+#: run 日志里的额度类全局停止痕迹（drain 在触发全局停止前打 ``[Q]`` 行）。日志判定
+#: 早于 .done 落盘，能让 watch 在 drain 收尾的瞬间就唤醒，而不是等摘要写完。
+QUOTA_RE = re.compile(r"quota_exhausted|额度耗尽|credit usage limit", re.IGNORECASE)
+
+#: run 日志里的渠道级故障全局停止痕迹（drain 打 ``[C]`` 行并显式写出 kind，
+#: backlog 20261012-194500-leader）。判据与 QUOTA 同构：**日志先于 .done**，早一拍唤醒。
+CHANNEL_RE = re.compile(r"channel_error|渠道级故障|custom model service error", re.I)
+
+#: 系统性故障族全表：(``.done`` 的 stopped 值, 快照身份字段, 事件名, 日志判据, 读数)。
+#: 五列并置是有意为之——kind、字段、事件名、文案若分处五地各写一遍，加下一族时必漏一列
+#: （本表新加的就是第二族）。事件名须都在 :data:`PRIORITY` 里（test_watch 钉住这一条）。
+SYSTEMIC_FACES: tuple[tuple[str, str, str, re.Pattern[str], str], ...] = (
+    ("quota_exhausted", "quota_run", "QUOTA-STOP", QUOTA_RE, "额度类失败"),
+    ("channel_error", "channel_run", "CHANNEL-STOP", CHANNEL_RE, "渠道级故障"),
+)
+
+#: 快照字段 → (kind, 事件名)，供 :func:`detect` 逐族差分。
+_SYSTEMIC_EVENTS: tuple[tuple[str, str, str], ...] = tuple(
+    (field, kind, event) for kind, field, event, _rx, _read in SYSTEMIC_FACES
+)
+
+#: kind → 事件 detail 里的故障读数（两类停止动作相同、成因不同，须说得出差别）。
+_SYSTEMIC_READINGS: dict[str, str] = {
+    kind: read for kind, _f, _e, _rx, read in SYSTEMIC_FACES
+}
+
+#: 以 run 名为身份、须受 ``hold`` 保护的字段。系统性族一支由 :data:`SYSTEMIC_FACES`
+#: 派生——加第三族时若还手写在下面这张表里，抑制帧就会把新事件的身份抹掉（同一 run
+#: 重复报 CHANNEL-STOP，或反过来在瞬态空帧里丢掉停止事实）。
+_HOLD_RUN_FIELDS: tuple[str, ...] = (
+    "crash_run",
+    *(field for _kind, field, _event, _rx, _read in SYSTEMIC_FACES),
+)
+
+#: 完成事件的身份三元组字段：任一变化即「新完成事实」——同 run 的 ``.done`` 被重写
+#: （配额/协作停止后续跑完）也能再报（backlog 20261011-220622-leader 要求 1）。
+DONE_IDENTITY_FIELDS: tuple[str, ...] = ("done", "done_completed", "done_count")
+
+#: 黑匣子环形缓冲帧数。命中/超时之外，脱靶复盘只需要「最近几帧各自看见了什么」。
+RECENT_MAX: int = 10
+
+#: ``fired`` 审计留痕保留条数。
+FIRED_KEEP: int = 20
+
+#: 队列感知伪事件（adhoc-20261014-124521-s1）的节流窗口（秒）：同一事件类 ≤1 次/窗口——
+#: 防「唤醒→看一眼→无新事→再唤醒」的循环；它取代了原先 30 min 一次的手工巡更 cron。
+#: registry 顶层 ``watch`` 块可覆盖（:func:`_watch_cfg`）。
+PENDING_THROTTLE_S: int = 30 * 60
+
+#: STALL 判据阈值（秒）：``in_progress`` 条目超过它仍无收尾即报（默认 60 min，可配）。
+STALL_THRESHOLD_S: int = 60 * 60
+
+#: 消费水位保留条数（``consumed`` 去重账只留最近 N 条，重启不堆积）。
+CONSUMED_KEEP: int = 40
+
+#: watch.json 里**跨挂载继承**的运行态键。``arm()`` 整体覆写 watch.json，故这些账必须
+#: 显式搬运：``consumed``=单一消费水位（同一事件只唤醒一次的硬判据）、``throttle``=节流账、
+#: ``guard_seen``=看护模式命中去重账（基线不推进时同一事件每轮再检出，不搬即刷屏）。
+#: （夜航 ``night_seen`` 已迁到独立文件 ``state/night-seen.json``——持旧快照写回的交错会
+#: 盖掉它，搬键防不住；见 ``night.NIGHT_SEEN_PATH``，backlog 20261017-133500。）
+CARRY_KEYS: tuple[str, ...] = ("consumed", "throttle", "guard_seen")
+
+
+def _now() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _age_s(iso: Any) -> float:
+    """距某个 ISO 时刻的秒数；不可解析时返回 -1（视为未知）。"""
+    try:
+        dt = datetime.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return -1.0
+    return (datetime.now().astimezone() - dt).total_seconds()
+
+
+def _stem(path_like: Any) -> str:
+    """run 日志/摘要串 → 文件名 stem（``…/devops-runs/20261010-160413.log`` → 时间戳名）。"""
+    s = str(path_like or "")
+    return Path(s).stem if s else ""
+
+
+def _age_epoch(iso: Any, moment: float) -> float | None:
+    """某 ISO 时刻距 ``moment``（epoch 秒）的秒数；不可解析 → ``None``。"""
+    try:
+        return moment - datetime.fromisoformat(str(iso)).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def _watch_cfg() -> dict[str, int]:
+    """队列感知巡更的阈值（registry 顶层 ``watch`` 块可覆盖；读不到走出厂默认）。
+
+    逐键 fail-open（与 ``Registry.tier_a`` 同纪律）：配置坏了不该让巡更停摆。
+    """
+    out = {
+        "pending_throttle_s": PENDING_THROTTLE_S,
+        "stall_threshold_s": STALL_THRESHOLD_S,
+    }
+    try:
+        from .registry import Registry
+
+        raw = Registry.load().data.get("watch")
+    except Exception:  # noqa: BLE001 - 读配置失败不阻塞巡更
+        return out
+    if not isinstance(raw, dict):
+        return out
+    for key in out:
+        try:
+            value = int(raw.get(key, out[key]))
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            out[key] = value
+    return out
+
+
+def _paths_live(paths: Any) -> bool:
+    """某组 worker 生命周期落点（锁）是否 ``running``；读不到 → 视为无（宁可报）。"""
+    try:
+        return _drain.lock_status(paths).get("state") == "running"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _member_worker_live(member: str, qw: Any) -> bool:
+    """该成员队列是否有存活 worker（per-成员 worker 锁）。读不到 → 视为无（宁可报）。"""
+    try:
+        return _paths_live(qw.member_paths(member))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _devops_dispatch_inflight() -> bool:
+    """devops 成员队列是否有**在途**条目（批次/直派正在被消化——组长注 13:xx 的场景）。
+
+    与「worker 在跑」互校：worker 持锁但正阻塞在一次长派发里时，队列条目带 in_progress；
+    两者任一为真即「有活且有人干」，backlog pending 属**正常在途**而非告警。
+    """
+    try:
+        from . import queues as _queues
+
+        return any(
+            str(i.get("status")) == "in_progress" for i in _queues.items("devops")
+        )
+    except Exception:  # noqa: BLE001 - 读数失败按「无在途」保守处理（宁可报）
+        return False
+
+
+#: 可就地查旁证的事件类型（``subject`` = **成员队列条目 id**）——backlog 20261017-001500：
+#: 这两类的「积压」多半只是**账面欠盖章**（活已干完、``ack_seq`` 未推），不该按「有活却
+#: 没人干」叫醒组长；其余类型（NEEDS-LEADER 等人工事项）无旁证可查，维持原唤醒。
+_EVIDENCE_EVENT_TYPES: frozenset[str] = frozenset(
+    {_events.JOB_DONE, _events.STEP_REVIEW_DONE}
+)
+
+
+def _branch_still_unmerged(branch: str) -> bool | None:
+    """分支是否**仍有未并入 main 的提交**：False=已并入（或分支已删）/ True=仍有 / None=查不出。
+
+    用于 NEEDS-LEADER「已提交未合并」的**消费时旁证**（backlog 20261017-111500）：patrol 在
+    job 在途时发的报警，等组长 drain 时 job 往往已自行合并——陈旧报不该再当待办。
+    """
+    try:
+        r = _procs.run_hidden(
+            [git_exe(), "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if r.returncode != 0:
+            return False  # 分支已删（合并后摘面）
+        c = _procs.run_hidden(
+            [git_exe(), "rev-list", "--count", f"main..{branch}"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if c.returncode != 0:
+            return None
+        return int(c.stdout.strip() or "0") > 0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def unmerged_stale_note(ev: dict[str, Any]) -> str:
+    """NEEDS-LEADER「已提交未合并」的**消费时新鲜度重核**（两条消费通道的单一实现）。
+
+    live 判据（adhoc-20261023-083549）：**分支存在且 ``main..branch`` 仍有未合并提交**；
+    已合并 / 分支已删 → 返回「陈旧自动销」留痕行——调用方据此**不再呈现为待处理、不再
+    唤醒**（销账本身由 ``events drain`` 推水位线完成）。非本类事件或查不出（``None``）
+    → 空串（宁可报，不静默——兜底防漏唤）。**绝不自动合并**：patrol 不合并是护栏级语义，
+    本函数只重核只读旁证。两消费通道：watch 自动唤醒（:func:`_suspect_acked`）与
+    ``orch events drain``（呈现面）。
+    """
+    kind = str(ev.get("event") or "")
+    subj = str(ev.get("subject") or "").strip()
+    if kind != _events.NEEDS_LEADER or not subj.startswith("wt-"):
+        return ""
+    if _branch_still_unmerged(subj) is not False:
+        return ""
+    return f"陈旧自动销：已合并/分支已删——{subj}（已合并陈旧报）"
+
+
+def _suspect_acked(ev: dict[str, Any]) -> str:
+    """「疑已处理」旁证：回证据短语（**非空即疑已处理**），查不到回空串（照常唤醒）。
+
+    两路旁证（任一成立即可，都便宜且确定性）：
+
+    1. ``subject`` 对应的条目在当前队列里已落**终态**（``done``/``failed``）——活已收尾，
+       欠的只是 :func:`events.drain` 那一次盖章；
+    2. ``subject`` 的**交付全文留档** ``state/deliveries/<subject>.md`` 在盘——队列被裁剪/
+       轮转后仍可作证。
+
+    边界（决定「哪边叫醒组长」）：事件类型不在 :data:`_EVIDENCE_EVENT_TYPES`（无旁证可查）
+    → 空串；``subject`` 查不到或条目仍在队里（``pending``/``in_progress``）→ 空串；旁证面
+    读失败 → 空串（**宁可报，不静默**——兜底防漏唤是这条报警的本意）。
+    """
+    kind = str(ev.get("event") or "")
+    subj = str(ev.get("subject") or "").strip()
+    if not subj:
+        return ""
+    # ③ NEEDS-LEADER「已提交未合并」：消费时复查分支——已并入 main / 分支已删 → 陈旧报，
+    # 降级为 status 注记，不再唤醒组长（backlog 20261017-111500；与 001500 同款病灶；
+    # 新鲜度重核的单一实现在 :func:`unmerged_stale_note`，与 events drain 共用）。
+    if kind == _events.NEEDS_LEADER and subj.startswith("wt-"):
+        return unmerged_stale_note(ev)
+    if kind not in _EVIDENCE_EVENT_TYPES:
+        return ""
+    try:
+        from . import queues as _queues
+        from . import queueworker as _qw
+
+        for member in _queues.all_members():
+            for it in _queues.items(member):
+                if str(it.get("id")) != subj:
+                    continue
+                status = str(it.get("status") or "")
+                if status in ("done", "failed"):
+                    return f"{member}:{subj} 队列条目已终态（{status}）"
+                return ""  # 还在队里排队/在跑 → 真积压，维持唤醒
+        if (_qw.DELIVERIES_DIR / f"{subj}.md").is_file():
+            return f"{subj} 交付留档已在盘"
+    except Exception:  # noqa: BLE001 - 旁证面读失败按「无证据」（宁可报）
+        return ""
+    return ""
+
+
+def queue_pressure(*, now: float | None = None) -> dict[str, Any]:
+    """队列压力读数（PENDING-WORK / STALL 判据的**单一实现**，§纪律「同一能力不留两份」）。
+
+    「非空」= 有活却没人干，六条任一成立即真：
+
+    1. devops backlog 有 ``pending``**且无 devops FIFO worker 在跑、也无在途条目**
+       （backlog-fifo-20261014：执行归 FIFO，worker 在场/有在途时 pending 是正常在途——
+       降噪为 ``notes`` 里的**标注**而非告警，此即 144 注记与组长注 13:xx 的场景）；
+    2. 任一**成员**队列（:data:`queues.QUEUE_MEMBERS`，10 队）有 ``pending``，且该成员
+       **无存活 worker**（worker 在场时队列有活是常态，不该叫醒组长）；
+    3. **支撑席**队列有 ``pending`` 且无 worker：bencher 常驻；inspector 仅**开关开启时**计入
+       （开关关闭 → 不拉起巡检，其存量只报不告警——否则每次巡更都叫醒组长去处理一个本来
+       就不跑的队列，正是「唤醒→无事」的反面示例，用户 2026-10-14 点名降噪）；
+    4. 统一事件流有超一个巡更周期未排空的事件（:func:`events.unacked`）——**按旁证细分**
+       （backlog 20261017-001500）：``JOB-DONE``/``STEP-REVIEW-DONE`` 且其 ``subject`` 对应
+       条目已终态／留档在盘 → 降级 ``notes``（「已处理疑未销账」，不唤醒）；其余（含
+       ``NEEDS-LEADER`` 等无旁证可查者）才是**真积压**，进 ``reasons`` 唤醒；
+    5. ``data/others/taskbooks/`` 有 ``new`` 态未处理（用户投了单没人拆解）；
+    6. **夜航时段**（``[night] enabled=true``，PSEP_2 §3.3b）``state/mirror-pending.json``
+       非空——此刻「谁在等用户」的事项应转 twin 或自行裁决，不得等用户；非夜航时段
+       **不加**此判据（白天等用户是正常的）。
+
+    ``stall`` 单列：任一队列条目 ``in_progress`` 且距 ``started_at`` 超阈值**且该成员无
+    心跳新鲜的活会话**（慢而不死不报，backlog-fifo-20261014）。
+
+    Returns:
+        ``{"pending": bool, "reasons": [...], "notes": [...], "stall": [...], "signature": str}``。
+    """
+    moment = time.time() if now is None else float(now)
+    cfg = _watch_cfg()
+    reasons: list[str] = []
+    notes: list[str] = []
+    stall: list[str] = []
+    # 活跃会话心跳面（backlog-fifo-20261014）：STALL 判活着读它——「in_progress 超期」若
+    # 该成员仍有心跳新鲜的 worker 会话，是**慢而不死**（重型环节正当耗时），不告警。
+    try:
+        from . import backpressure as _bp
+
+        live_members = {
+            str(e.get("worker") or "") for e in _bp.live_entries(now=moment)
+        }
+    except Exception:  # noqa: BLE001 - 心跳面读失败按「无活会话」保守处理（宁可报）
+        live_members = set()
+    try:
+        from . import queueworker as _qw
+
+        devops_worker_live = _member_worker_live("devops", _qw)
+    except Exception:  # noqa: BLE001
+        devops_worker_live = False
+    try:
+        backlog = _workflow.backlog_pending()
+    except Exception:  # noqa: BLE001
+        backlog = []
+    # 有 devops 队列 worker 在跑**或**有在途条目即降噪（backlog-fifo-20261014 + 组长注
+    # 13:xx）：批次执行已归 FIFO，待消化期间 backlog 有 pending 是**正常在途**——降噪为
+    # 标注（notes，非告警），由 orch status 呈现；两者皆无才真告警。
+    if backlog:
+        if devops_worker_live or _devops_dispatch_inflight():
+            notes.append(
+                f"devops backlog {len(backlog)} 项 pending：等待在途消化完成后续（非告警）"
+            )
+        else:
+            reasons.append(f"devops backlog {len(backlog)} 项 pending")
+    # 夜航判据（PSEP_2 §3.3b，task-20261014-psep2-n2）：夜间「在等用户」＝停滞——真源
+    # state/mirror-pending.json（此刻谁在等用户）非空即并入 PENDING-WORK（detail 带夜航
+    # 提示）；**仅夜航时段生效**（白天等用户是正常的，不加此判据）；节流复用既有
+    # PENDING-WORK 窗口（同一事件名同一 30min 账），不另造节流实现。
+    try:
+        from . import settings as _settings
+
+        night_on, _night_warns = _settings.night_enabled()
+    except Exception:  # noqa: BLE001 - 读开关失败按非夜航（宁少报不多报）
+        night_on = False
+    if night_on:
+        try:
+            from . import mirror as _mirror
+
+            waiting = _mirror.pending_items()
+        except Exception:  # noqa: BLE001 - 待决面读失败不阻塞巡更
+            waiting = []
+        if waiting:
+            reasons.append(
+                f"夜航：待决事项 {len(waiting)} 项（mirror-pending）——应转 twin 或自行"
+                "裁决，不得等用户"
+            )
+    try:
+        from . import queues as _queues
+
+        for member in _queues.all_members():
+            items = _queues.items(member)
+            waiting = [i for i in items if str(i.get("status")) == "pending"]
+            if waiting and not _member_worker_live(member, _qw):
+                reasons.append(f"{member} 队列 {len(waiting)} 项 pending 且无 worker")
+            for it in items:
+                if str(it.get("status")) != "in_progress":
+                    continue
+                age = _age_epoch(it.get("started_at"), moment)
+                if age is None or age <= cfg["stall_threshold_s"]:
+                    continue
+                if member in live_members:
+                    # 慢而不死：该成员有心跳新鲜的活会话（LiveSession ≤120s 心跳）——
+                    # 重型环节正当耗时，不报（2026-14 晚实测误报的根治面）。
+                    continue
+                stall.append(f"{member}:{it.get('id')} in_progress {age / 60:.0f}min")
+            if member in live_members:
+                # **心跳活着却不动**（task-20261015-worker-stall 实案：心跳照跳、零会话
+                # 登记、零 token、条目假挂 31+min）——心跳闸结构上看不见这一维，故在
+                # 「有心跳」这一支上再补一层无进展判据（判据单一实现在 stallwatch）。
+                reasons.extend(
+                    _stallwatch.patrol_reasons(
+                        member,
+                        items,
+                        now=moment,
+                        age_threshold_s=cfg["stall_threshold_s"],
+                    )
+                )
+    except Exception:  # noqa: BLE001 - 队列面读失败不阻塞巡更
+        pass
+    try:
+        from . import benchd as _bd
+        from . import inspectd as _insp
+        from . import workq as _workq
+
+        bench_pending = int(_bd.queue_counts().get("pending", 0) or 0)
+        if bench_pending and not _paths_live(_bd.BENCH_PATHS):
+            reasons.append(f"bencher 队列 {bench_pending} 项 pending 且无 worker")
+        if _insp.enabled():  # 开关关闭 → 不计入（其存量只报不告警）
+            insp_pending = int(_workq.pending_count(_insp.QUEUE_PATH))
+            if insp_pending and not _paths_live(_insp.INSPECT_PATHS):
+                reasons.append(f"inspector 队列 {insp_pending} 项 pending 且无 worker")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        unacked = _events.unacked()
+    except Exception:  # noqa: BLE001
+        unacked = []
+    # 只算**久未排空**的（早于一个巡更周期）：刚产生的事件正是本帧要唤醒的那几条，计入会让
+    # 每个流事件都顺带报一次 PENDING-WORK（与既有事件重复，a1 回归测试抓到过）。
+    stale = [
+        e
+        for e in unacked
+        if (_age_epoch(e.get("ts"), moment) or 0) > cfg["pending_throttle_s"]
+    ]
+    # 超时项**旁证细分**（backlog 20261017-001500）：消费账是两段式——watch 唤醒（叫人）
+    # ≠ `events drain` 销账（盖章）。组长常已把事件**处理完毕**却没盖章，旧口径一律打成
+    # 「有活却没人干」＝错怪，还逼出一轮纯记账性唤醒。故先查旁证：
+    #   有旁证 → 「已处理疑未销账」**降级为 status 注记**（notes，不唤醒）；
+    #   无旁证 / 旁证不成立 / 类型无旁证可查（如 NEEDS-LEADER）→ 维持唤醒（兜底防漏唤）。
+    if stale:
+        unhandled: list[dict[str, Any]] = []
+        suspected: list[str] = []
+        for ev in stale:
+            evidence = _suspect_acked(ev)
+            if evidence:
+                suspected.append(evidence)
+            else:
+                unhandled.append(ev)
+        if suspected:
+            shown = "；".join(suspected[:3]) + (
+                f"…（共 {len(suspected)} 条）" if len(suspected) > 3 else ""
+            )
+            notes.append(
+                f"统一事件流 {len(suspected)} 条**已处理疑未销账**"
+                "（请 `orch events drain` 盖章——活已收尾，不再唤醒）：" + shown
+            )
+        if unhandled:
+            reasons.append(
+                f"统一事件流 {len(unhandled)} 条超 "
+                f"{cfg['pending_throttle_s'] // 60}min 未排空"
+            )
+    try:
+        from . import taskbooks as _taskbooks
+
+        fresh = [
+            t
+            for t in _taskbooks.list_all()
+            if str(t.get("status")) == _taskbooks.STATUS_NEW
+        ]
+    except Exception:  # noqa: BLE001
+        fresh = []
+    if fresh:
+        reasons.append(f"taskbooks {len(fresh)} 份 new 态未处理")
+    # 建议队列超龄（backlog 20261017-050500）：19 条 pending 超 24h 却零报警——「待审批建议=N」
+    # 虚高误导组长逐条重判已办结项，成员也因原单不闭环而重报。判据/文案取单一取数口
+    # `workflow.suggestion_backlog`（与 `orch suggestions` 的龄期列同源）。
+    try:
+        back = _workflow.suggestion_backlog()
+    except Exception:  # noqa: BLE001 - 读数失败不阻塞巡更
+        back = {}
+    if back.get("aged"):
+        reasons.append(
+            f"建议队列 {back['aged']} 条超 24h 未判决（最老 {back['oldest_hours']}h）"
+        )
+    return {
+        "pending": bool(reasons),
+        "reasons": reasons,
+        "notes": notes,
+        "stall": stall,
+        "signature": "; ".join(sorted([*reasons, *stall])),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 单一消费水位（adhoc-20261014-124521-s1：同一底层事件只唤醒一次）
+# ---------------------------------------------------------------------------
+def _consumed_map(state: dict[str, Any] | None = None) -> dict[str, str]:
+    """已消费事件身份的账（``watch.json`` 的 ``consumed``；**读盘为准**，跨实例共享）。"""
+    st = state if state is not None else load_state()
+    raw = st.get("consumed")
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _identity(ev: dict[str, Any]) -> str:
+    """事件身份（去重的键）：**流事件＝内容身份**（名＋时刻＋主体＋内容散列）；差分事件＝名+主体+指纹。
+
+    为什么流事件不用 ``seq``（backlog 20261016-203600-devops 实锤缺陷）：seq 是**流内序号**，
+    事件流被覆盖/重置后会**回卷复用**（merge cp 覆盖 events.jsonl：45 条被 6 条覆盖、seq
+    重新编号），旧消费账 ``JOB-DONE|#6`` 与回卷后的新 ``#6`` 撞车 → :func:`filter_consumed`
+    静默吞掉真事件（组长零唤醒、PENDING-WORK 失效）。**内容身份抗回卷**：同一底层事实的
+    身份稳定（幂等去重不退化），不同事实哪怕 seq 相同也身份不同（不再误吞）。
+
+    差分事件的身份必须**只由底层事实**决定（run 名 / 条目 id / 完成三元组），否则同一
+    底层事实在两次独立检测里会算出不同身份、去重失效（2026-10-14 12:44 双唤醒的教训）。
+    """
+    name = str(ev.get("event", ""))
+    try:
+        seq = int(ev.get("seq", 0) or 0)
+    except (TypeError, ValueError):
+        seq = 0
+    if seq:
+        payload = "\x1f".join(
+            str(ev.get(k) or "") for k in ("ts", "subject", "detail", "action")
+        )
+        return f"{name}|{hashlib.sha1(payload.encode('utf-8')).hexdigest()[:16]}"
+    return f"{name}|{ev.get('subject', '')}|{ev.get('fingerprint', '')}"
+
+
+def filter_consumed(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """单一消费水位：只留**未被任何实例消费过**的事件（账在 watch.json，读盘为准）。
+
+    这是「同一底层事件只唤醒一次」的硬判据——旧实现里两个 watch 实例各持**自己的**内存
+    基线，被取代的那任仍会在 ``orch watch`` 返回时唤醒一次（2026-10-14 12:44 生产实锤）。
+
+    **条件型伪事件不受此账约束**（``events.CONDITIONAL_TYPES``）：它们不是「发生过一次」
+    的事实而是「持续成立的状态」，抗重复由**节流窗口**（≤1 次/30min、跨挂载持久）负责。
+    若也记进消费账，同一签名就被永久吃掉——「≤1 次/30min」会退化成「一辈子 1 次」
+    （2026-10-14 返工发现的交互缺陷）。
+    """
+    seen = _consumed_map()
+    return [
+        e
+        for e in events
+        if str(e.get("event")) in _events.CONDITIONAL_TYPES or _identity(e) not in seen
+    ]
+
+
+def mark_consumed(events: list[dict[str, Any]], state: dict[str, Any]) -> None:
+    """把 ``events`` 的身份记进消费账（合并读盘结果，只留最近 :data:`CONSUMED_KEEP` 条）。
+
+    条件型伪事件**不入账**（见 :func:`filter_consumed`）——节流账才是它们的记忆。
+    """
+    durable = [
+        e for e in events if str(e.get("event")) not in _events.CONDITIONAL_TYPES
+    ]
+    merged = {**_consumed_map(), **{_identity(e): _now() for e in durable}}
+    items = sorted(merged.items(), key=lambda kv: kv[1])[-CONSUMED_KEEP:]
+    state["consumed"] = dict(items)
+
+
+# ---------------------------------------------------------------------------
+# 快照：drain 观察面的单帧全貌（全部字段皆代码判定，无 LLM 参与）
+# ---------------------------------------------------------------------------
+def _systemic_runs(
+    lock_run: str, done_name: str, done: dict[str, Any] | None
+) -> dict[str, str]:
+    """各类系统性故障发生在哪个 run（未发生的 kind 缺席）。
+
+    两路取一：``.done`` 的 ``stopped=<kind>``（收尾后），或 run 日志现该族痕迹（收尾前）
+    ——后者让 watch 早一拍唤醒。一次扫日志把两族都判掉，别为第二类再开一遍文件。
+    """
+    found: dict[str, str] = {}
+    texts: dict[str, str] = {}
+    for kind, _field, _event, rx, _read in SYSTEMIC_FACES:
+        if done and done.get("stopped") == kind:
+            found[kind] = done_name
+            continue
+        for name in (lock_run, done_name):
+            if not name:
+                continue
+            if name not in texts:
+                try:
+                    texts[name] = (_drain.DEVOPS_RUNS_DIR / f"{name}.log").read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                except OSError:
+                    texts[name] = ""
+            if rx.search(texts[name]):
+                found[kind] = name
+                break
+    return found
+
+
+def snapshot() -> dict[str, Any]:
+    """当前 drain 观察面快照（六类事件的判据原料）。
+
+    字段全部为「身份 + 状态」，供 :func:`detect` 做**基线差分**：崩溃与系统性故障以
+    run 名为身份（同一 run 不重复报，新 run 再报），完成以 (名, completed, count)
+    三元组为身份，needs_leader 与抢救续作分别以条目 id 集合为身份。
+    """
+    lock = _drain.lock_status()
+    done = _drain.latest_done()
+    crashed = lock["state"] == "stale" and bool(lock.get("crashed"))
+    lock_run = _stem(lock.get("run_log", ""))
+    done_name = str((done or {}).get("name", ""))
+    needs = sorted(
+        {
+            str(i.get("id", ""))
+            for i in _workflow.backlog_by_status("needs_leader")
+            if i.get("id")
+        }
+    )
+    salvaged = sorted(
+        {str(i.get("id", "")) for i in _workflow.backlog_salvage() if i.get("id")}
+    )
+    systemic = _systemic_runs(lock_run, done_name, done)
+    pressure = queue_pressure()
+    return {
+        "ts": _now(),
+        "epoch": time.time(),
+        "lock_state": lock["state"],
+        "lock_pid": int(lock.get("pid", 0) or 0),
+        "lock_run": lock_run,
+        "lock_done": _lock_done_key(lock_run),
+        "crash_run": lock_run if crashed else "",
+        "done": done_name,
+        "done_stopped": str((done or {}).get("stopped", "") or ""),
+        # .done 的种类（backlog-fifo-20261014）：``plan`` = 计划器记账（只计划了几批），
+        # 不是消费完成事实——完成唤醒归执行侧（QUEUE-EMPTY 流事件），detect 据此静默。
+        "done_kind": str((done or {}).get("kind", "") or ""),
+        "done_completed": str((done or {}).get("completed", "") or ""),
+        "done_count": int((done or {}).get("count", 0) or 0),
+        "done_elapsed_s": (done or {}).get("elapsed_s", "?"),
+        "needs_leader": needs,
+        "events_seq": _events.latest_seq(),
+        "salvage": salvaged,
+        "pending": len(_workflow.backlog_pending()),
+        "quota_run": systemic.get("quota_exhausted", ""),
+        "channel_run": systemic.get("channel_error", ""),
+        "queue_pending": bool(pressure["pending"]),
+        "queue_signature": str(pressure["signature"]),
+        "queue_reasons": list(pressure["reasons"]),
+        "queue_notes": list(pressure.get("notes") or []),
+        "queue_stall": list(pressure["stall"]),
+    }
+
+
+#: ``.done`` 的 ``stopped`` 字段 → 完成方式的人类读数。
+_HOW_DONE = {
+    "cooperative": "协作停止",
+    "quota_exhausted": "额度耗尽全局停止",
+    "channel_error": "渠道级故障全局停止",
+}
+
+
+def _complete_event(
+    name: str,
+    data: dict[str, Any],
+    pending: int,
+    *,
+    via: str = "",
+    fingerprint: str = "",
+) -> dict[str, Any]:
+    """QUEUE-COMPLETE 事件体——``data`` 为该 run 的 ``.done`` 读数（或快照同名字段）。
+
+    ``fingerprint`` 是消费水位的去重键（= 完成身份三元组），必须**只由底层事实**决定：
+    两个 watch 实例对同一次收尾算出的身份要一致，否则去重失效（双唤醒）。
+    """
+    how = _HOW_DONE.get(str(data.get("stopped", "") or ""), "自然跑完")
+    detail = f"处理 {int(data.get('count', 0) or 0)} 项 / {data.get('elapsed_s', '?')}s，{how}"
+    return {
+        "event": "QUEUE-COMPLETE",
+        "subject": name,
+        "detail": f"{detail}（{via}）" if via else detail,
+        "action": f"剩余 pending={pending}；orch status 看交付明细与台账",
+        "fingerprint": fingerprint,
+    }
+
+
+def _complete_event_from_key(
+    key: str, cur: dict[str, Any], *, via: str
+) -> dict[str, Any]:
+    """按完成身份三元组串补报（转移帧：该 run 的 ``.done`` 没占住 latest_done 名额）。"""
+    name = key.split("|", 1)[0]
+    return _complete_event(
+        name,
+        _done_file(name),
+        int(cur.get("pending", 0) or 0),
+        via=via,
+        fingerprint=key,
+    )
+
+
+def _done_file(name: str) -> dict[str, Any]:
+    """按 run 名直读 ``devops-runs/<name>.done``（缺席/半写/损坏 → ``{}``）。
+
+    与 :func:`_drain.latest_done` 的区别是**点名查询**：锁自称在跑的那个 run 是否已经
+    留下收尾摘要，只能这么查——它是拆穿「锁还活着」这个谎的唯一硬证据。
+    """
+    if not name:
+        return {}
+    try:
+        data = json.loads(
+            (_drain.DEVOPS_RUNS_DIR / f"{name}.done").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _key(name: Any, completed: Any, count: Any) -> str:
+    """完成身份三元组串（无名 → 空串＝无完成事实）。"""
+    n = str(name or "")
+    return (
+        "" if not n else f"{n}|{completed or ''}|{count if count is not None else ''}"
+    )
+
+
+def _done_key(s: dict[str, Any]) -> str:
+    """快照/基线里的完成身份（:data:`DONE_IDENTITY_FIELDS` 三字段的读数）。"""
+    return _key(s.get("done"), s.get("done_completed"), s.get("done_count"))
+
+
+def _lock_done_key(name: str) -> str:
+    """锁自称在跑的那个 run 的收尾身份；无 ``.done`` 时为空串（= 真的还在跑）。"""
+    data = _done_file(name)
+    return "" if not data else _key(name, data.get("completed"), data.get("count"))
+
+
+def _in_progress(s: dict[str, Any]) -> bool:
+    """锁自称正在跑「那个 run」**且该 run 确实还没留下收尾摘要**，才叫进行中。
+
+    ``.done`` 由 drain 在 ``release_lock`` 之后写出，所以「锁还在、摘要已存在」只能是
+    释放失败残留 + 判活误真（pid 被 Windows 回收 / tasklist 超时保守判活）——210557 那场
+    QUEUE-COMPLETE 就是被这种假「进行中」抑制后又被推进基线而永久吞掉的。
+
+    锁面自 20261011-231237-devops 起把「该 run 已有 ``.done``」直接判为非活，故本支只
+    可能在两种情况下为真：旧代码写下的锁/基线仍在场，或 ``.done`` 半写到读不出证据。
+    保留它 = 观察面对锁面的不信任仍是防线，不是冗余。
+    """
+    return (
+        s.get("lock_state") == "running"
+        and bool(s.get("lock_run"))
+        and s.get("lock_run") == s.get("done")
+        and not s.get("lock_done")
+    )
+
+
+def detect(
+    base: dict[str, Any],
+    cur: dict[str, Any],
+    *,
+    throttle: dict[str, Any] | None = None,
+    queue_watch: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """基线 → 当前 的差分判定。返回 ``(events, verdict)``。
+
+    ``verdict = {"hold": set[str], "why": str, "throttle": dict[str, float]}``——``hold`` 是
+    本帧**不得**并入基线的身份组（由 :func:`advance_base` 执行）；``throttle`` 是本帧新
+    记的节流账（调用方并进 ``state["throttle"]``）；``why`` 是抑制/无事的原因，进黑匣子留痕。
+
+    ``queue_watch``：**队列感知巡更通道**（``PENDING-WORK``/``STALL``）的开关，缺省关。
+    伪事件是「持续成立的条件」而非「基线差分事实」——开着它，任何**真实** backlog/队列
+    存量都会挤进每一帧的事件列表，把 a1 的「聋期事件必须被读出 / 首轮无事件 / 水位单调」
+    断言变成**依赖运行期状态**的脆弱判据（2026-10-14 实测：main 上 backlog 恰有 1 条
+    pending → 4 个 a1 用例集体变红）。故只有**观察循环**（:func:`run_watch` / 补账
+    :func:`reconcile`）打开它，基线差分调用方一律走默认关。
+
+    判定规则（每条都是「新出现」而非「当前存在」——既存状态是基线的一部分，不重复
+    打扰组长）：
+
+    - **CRASH**：锁持有者 pid 已死且该 run 无 ``.done``，且该 run 未报过。
+    - **QUOTA-STOP**：额度类全局停止出现在某个尚未报过的 run 上。
+    - **CHANNEL-STOP**：渠道级故障全局停止，判据与上一条同族（:data:`SYSTEMIC_FACES`）。
+    - **NEEDS-LEADER**：backlog 里新出现的 needs_leader 条目（逐个成事件）。
+    - **QUEUE-COMPLETE**：完成身份三元组（名, completed, count）变化，且该 run 不是
+      「锁自称在跑且尚无 ``.done``」的真进行中 run。**收尾事实优先于锁的自称**。
+    - **转移帧兜底**（要求 2）：基线里那个自称在跑的 run 已留下 ``.done``，而本帧锁已
+      不在它身上、其身份又从未报出（``.done`` 名额被更晚的 run 占了）→ 照报。锁面采纳
+      收尾否决后新基线不会再带 ``lock_state=running`` + ``lock_done`` 的矛盾帧，此支转为
+      护升级前旧基线的保险。
+
+    瞬态空值（``.done`` 半写、latest_done 读不到）与抑制帧都走 ``hold``：身份保持
+    基线原值，下一帧继续比较——这是 210557 那场「 fired=[] 且补账同哑」的反制。
+    """
+    out: list[dict[str, Any]] = []
+    hold: set[str] = set()
+    why = ""
+    new_throttle: dict[str, float] = {}
+
+    crash = str(cur.get("crash_run", "") or "")
+    if crash:
+        if crash != base.get("crash_run", ""):
+            out.append(
+                {
+                    "event": "CRASH",
+                    "subject": crash,
+                    "detail": f"pid {cur.get('lock_pid', 0)} 已死且该 run 无 .done",
+                    "action": (
+                        "worker 被中途杀死：下次 approve/_drain-devops 自动接管并回收孤儿条目"
+                    ),
+                }
+            )
+    else:
+        hold.add("crash_run")
+
+    for field, kind, event in _SYSTEMIC_EVENTS:
+        hit = str(cur.get(field, "") or "")
+        if hit:
+            if hit != base.get(field, ""):
+                out.append(
+                    {
+                        "event": event,
+                        "subject": hit,
+                        "detail": f"{_SYSTEMIC_READINGS[kind]}触发全局停止",
+                        "action": "条目均保持 pending，待渠道恢复后 approve/drain 续消化",
+                    }
+                )
+        else:
+            hold.add(field)
+
+    seen = set(base.get("needs_leader") or [])
+    for bid in cur.get("needs_leader") or []:
+        if bid not in seen:
+            out.append(
+                {
+                    "event": "NEEDS-LEADER",
+                    "subject": bid,
+                    "detail": "drain 判定该条目须组长处理（已跳过，不阻塞队列）",
+                    "action": "查 state/backlog.json 的 note 后重派 / 改任务书 / 上报用户",
+                }
+            )
+
+    # 抢救知会（backlog 20261012-234000-leader）：上次尝试的未收尾进度已被机器保住并
+    # 自动接上了——这是「不必动手」的知会，报一次即可，队列自己在续完。
+    seen_salvage = set(base.get("salvage") or [])
+    for bid in cur.get("salvage") or []:
+        if bid not in seen_salvage:
+            out.append(
+                {
+                    "event": "SALVAGE",
+                    "subject": bid,
+                    "detail": "上次尝试的未收尾进度已抢救为提交，续作已自动接上（零手动）",
+                    "action": "无需处置；想核实现场：orch status 的抢救段 / state/backlog.json",
+                }
+            )
+
+    # 统一事件流（§3.2/M5）：生产者**直发**的类型（JOB-DONE / STEP-REVIEW-DONE /
+    # QUEUE-EMPTY / TASKBOOK-NEW）从流里按水位线 ``events_seq`` 读出即为「新事件」——
+    # 边沿触发：多 worker 同时完工在本帧**一次全读出**（合并唤醒，防唤醒风暴）。legacy
+    # 类型（CRASH/QUOTA/CHANNEL/NEEDS-LEADER/SALVAGE）仍走上方的基线差分（native 唤醒），
+    # 不经流回读——否则同一事件被「直发」与「差分」各报一次（双触发）。
+    cur_seq = int(cur.get("events_seq", 0) or 0)
+    base_seq = int(base.get("events_seq", 0) or 0)
+    if cur_seq < base_seq:
+        # **流回卷**（backlog 20261016-203600-devops）：基线水位高于当前流最大 seq ⇒ 流被
+        # 覆盖/重置（旧基线对新编号无意义）。**从 0 起重扫**——消费账此时按**内容身份**
+        # 去重（见 :func:`_identity`），已消费过的同一事实不会重复唤醒，新事实不再被吞。
+        base_seq = 0
+    if cur_seq > base_seq:
+        for ev in _events.read_after(base_seq):
+            if str(ev.get("event")) not in _events.STREAM_TYPES:
+                continue
+            out.append(
+                {
+                    "event": str(ev.get("event")),
+                    "subject": str(ev.get("subject", "")),
+                    "detail": str(ev.get("detail", "")),
+                    "action": str(ev.get("action", "")),
+                    "seq": int(ev.get("seq", 0) or 0),
+                }
+            )
+
+    # 队列感知伪事件（adhoc-20261014-124521-s1，用户设计）：**条件型**——不是「某次发生的
+    # 事实」而是「持续成立的状态」。故判据 = 条件成立 + **同类事件距上次超节流窗口**；不按
+    # 基线差分（挂载时队列已非空也要报一次：那正是「没人干」的现场），**节流就是防抖机制**
+    # （节流账持久化在 watch.json，跨挂载继承 → 重启不重置、不刷屏）。
+    # `queue_watch` 关（缺省）时本通道整体静默——见本函数 docstring：伪事件不该把真实
+    # backlog/队列存量塞进每一帧的差分结果里。
+    moment = float(cur.get("epoch", 0) or 0) or time.time()
+
+    def _throttled(name: str) -> bool:
+        """节流判定；``queue_watch=False`` 恒 True = **关掉本通道**（差分调用方无伪事件）。"""
+        if not queue_watch:
+            return True
+        try:
+            last = float((throttle or {}).get(name, 0) or 0)
+        except (TypeError, ValueError):
+            last = 0.0
+        window = float(_watch_cfg()["pending_throttle_s"])
+        return last > 0 and (moment - last) < window
+
+    if cur.get("queue_pending"):
+        if _throttled(_events.PENDING_WORK):
+            why = why or "queue-pending-throttled"
+        else:
+            out.append(
+                {
+                    "event": _events.PENDING_WORK,
+                    "subject": "队列非空",
+                    "detail": "有活却没人干："
+                    + "；".join(cur.get("queue_reasons") or [])
+                    + "".join(f"｜{n}" for n in (cur.get("queue_notes") or [])),
+                    "action": (
+                        "orch status 看队列/backlog/任务书明细；"
+                        "必要时 approve 唤醒 drain、queues enqueue 补 worker、或拆解 new 任务书"
+                    ),
+                    "fingerprint": str(cur.get("queue_signature", "") or ""),
+                }
+            )
+            new_throttle[_events.PENDING_WORK] = moment
+    stall = list(cur.get("queue_stall") or [])
+    if stall:
+        if _throttled(_events.STALL):
+            why = why or "stall-throttled"
+        else:
+            out.append(
+                {
+                    "event": _events.STALL,
+                    "subject": "条目停滞",
+                    "detail": "in_progress 超期无进展：" + "；".join(stall),
+                    "action": "查该条目 worker 是否已死（orch status）；必要时重置孤儿并重派",
+                    "fingerprint": "; ".join(stall),
+                }
+            )
+            new_throttle[_events.STALL] = moment
+
+    key = _done_key(cur)
+    base_key = _done_key(base)
+    if not key:
+        hold.add("done")
+        why = "no-done"
+    elif key != base_key:
+        if str(cur.get("done_kind") or "") == "plan":
+            # 计划器记账帧（backlog-fifo-20261014）：``kind="plan"`` 的 .done 说的是
+            # 「计划了 N 批」，不是「消化完 N 项」——完成唤醒已归执行侧（QUEUE-EMPTY
+            # 流事件）。此处静默推进基线，不报 QUEUE-COMPLETE（否则每次 approve 都会
+            # 误报一次「队列消化完」）。
+            why = "plan-done-bookkeeping"
+        elif _in_progress(cur):
+            hold.add("done")
+            why = "lock-claims-running"
+        else:
+            out.append(
+                _complete_event(
+                    str(cur.get("done", "")),
+                    {
+                        "count": cur.get("done_count", 0),
+                        "elapsed_s": cur.get("done_elapsed_s", "?"),
+                        "stopped": cur.get("done_stopped", ""),
+                    },
+                    int(cur.get("pending", 0) or 0),
+                    fingerprint=key,
+                )
+            )
+    if (
+        base.get("lock_state") == "running"
+        and base.get("lock_done")
+        and cur.get("lock_run") != base.get("lock_run")
+        and base.get("lock_done") not in (base_key, key)
+    ):
+        out.append(
+            _complete_event_from_key(str(base["lock_done"]), cur, via="锁释放转移帧")
+        )
+
+    order = {name: i for i, name in enumerate(PRIORITY)}
+    return sorted(out, key=lambda e: order.get(e["event"], len(order))), {
+        "hold": hold,
+        "why": why,
+        "throttle": new_throttle,
+    }
+
+
+def detect_events(base: dict[str, Any], cur: dict[str, Any]) -> list[dict[str, Any]]:
+    """只要事件列表的便捷面（不关心基线推进时用）；判定全在 :func:`detect`。"""
+    return detect(base, cur)[0]
+
+
+def advance_base(
+    base: dict[str, Any], cur: dict[str, Any], hold: Any = ()
+) -> dict[str, Any]:
+    """把当前帧并入基线，但 ``hold`` 里的身份组保持基线原值。
+
+    抑制帧/瞬态空值若照样推进基线，被吞掉的完成事实就再不参与比较——watch 与 ``orch
+    status`` 补账会同时哑掉（backlog 20261011-220622-leader 要求 3）。
+    """
+    groups = hold if isinstance(hold, (set, frozenset)) else set(hold or ())
+    nxt = dict(cur)
+    if "done" in groups:
+        for field in DONE_IDENTITY_FIELDS:
+            nxt[field] = base.get(field, "" if field != "done_count" else 0)
+    for field in _HOLD_RUN_FIELDS:
+        if field in groups:
+            nxt[field] = base.get(field, "")
+    return nxt
+
+
+def format_event(ev: dict[str, Any]) -> str:
+    """事件的**单行**呈现（watch 命中时首行即此，供组长一眼判读）。"""
+    return f"{ev['event']} {ev['subject']} —— {ev['detail']}｜建议处置：{ev['action']}"
+
+
+# ---------------------------------------------------------------------------
+# watch.json：基线 / 心跳 / 已发事件
+# ---------------------------------------------------------------------------
+def load_state() -> dict[str, Any]:
+    """读 watch 状态；不存在或损坏返回 ``{}``（fail-open，status 会重建基线）。"""
+    if not WATCH_PATH.exists():
+        return {}
+    try:
+        data = json.loads(WATCH_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_state(data: dict[str, Any]) -> None:
+    """落 watch 状态（可读 JSON）。写失败不抛（观察面塌不了主链路）。"""
+    try:
+        WATCH_PATH.parent.mkdir(parents=True, exist_ok=True)
+        WATCH_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# 唤醒权自动归属（wake-owner，用户设计定稿 2026-10-14 晚）：session_id 识别 + 零人工认领
+# ---------------------------------------------------------------------------
+#: 唤醒权真源（gitignored 运行态）：``session_id`` + ``claimed_at`` + ``last_turn_at``。
+#: 身份来自钩子 stdin 载荷自带的 ``session_id``（hook-config 文档）——无手工认领步骤：
+#: 无 owner → 首个钩子自动认领（首会话即主会话）；owner ≠ 我 → 永不抢占。
+WAKE_OWNER_PATH: Path = ORCH_STATE_ROOT / "wake-owner.json"
+
+#: owner 心跳断供阈值（秒）：仅用于 **status 呈现/判读**——归属**不再按心跳判死**
+#: （wake-adopt-20261018 s1：PID 存活优先；PID 缺失才用登记表 `last_seen` 心跳回退）。
+#: 取 30 min 与历史日志同口径，便于对照；长回合心跳停摆而 PID 存活 = 存活。
+OWNER_STALE_S: int = 30 * 60
+
+#: 钩子挂载 watch 时携带的 owner 身份环境变量（watch-arm.sh ``export`` → ``orch watch``
+#: 继承 → :func:`arm` 落 ``armed_by``）。「owner 自己的 watch」才挡接管；看门狗重臂的
+#: 无主替身（``armed_by`` 空）不冒充 owner 的 watch——否则接管条款在看门狗常开的生产
+#: 环境里永远触发不了，owner 硬死即永久空窗。
+WATCH_OWNER_ENV: str = "PYSCI_WAKE_OWNER"
+
+
+def _owner_path() -> Path:
+    """唤醒权真源路径：``PYSCI_WAKE_OWNER_PATH`` 可覆盖（钩子子进程测试/副本隔离）。"""
+    override = os.environ.get("PYSCI_WAKE_OWNER_PATH", "").strip()
+    return Path(override) if override else WAKE_OWNER_PATH
+
+
+def load_owner() -> dict[str, Any]:
+    """读唤醒权真源；缺失/损坏 → ``{}``（= 无 owner，下个钩子自动认领）。"""
+    path = _owner_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_owner(data: dict[str, Any]) -> None:
+    """写唤醒权真源（可读 JSON）。写失败不抛——观察面塌不了主链路。"""
+    try:
+        path = _owner_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def _new_owner(sid: str) -> dict[str, Any]:
+    """以 ``sid`` 为 owner 的真源帧（带上登记表里的 cwd/pid/创建时刻，供存活复核）。"""
+    entry = _live.load_registry().get(sid) or {}
+    now = _now()
+    return {
+        "session_id": sid,
+        "claimed_at": now,
+        "last_turn_at": now,
+        "cwd": str(entry.get("cwd") or ""),
+        "pid": entry.get("pid"),
+        "created_at": entry.get("created_at"),
+        "first_seen": str(entry.get("first_seen") or ""),
+    }
+
+
+def _owner_alive(owner: dict[str, Any]) -> bool:
+    """owner 是否仍存活且仍是项目根会话（程序化判据：PID 优先，心跳仅兜底）。
+
+    登记表有条目 → 以条目为准（PID 存活且 cwd==项目根）；旧记录/登记表丢失但记录自带
+    ``pid``+``cwd`` → 按记录复核；两者都判不了 → 视为缺席（触发自动补位）。
+    """
+    sid = str(owner.get("session_id") or "")
+    if not sid:
+        return False
+    entry = _live.load_registry().get(sid)
+    if entry:
+        return _live.is_project_root_cwd(
+            entry.get("cwd")
+        ) is True and _live.session_alive(entry)
+    if _live.is_project_root_cwd(owner.get("cwd")) is not True:
+        return False
+    pid = int(owner.get("pid") or 0)
+    return pid > 0 and _procs.pid_alive(pid)
+
+
+def _owner_watch_live(owner_sid: str, state: dict[str, Any] | None = None) -> bool:
+    """owner **自己**的 watch 是否还活着：挂载新鲜（心跳在宽限内）且挂载者就是它。
+
+    ``armed_by`` 缺席（手动挂载 / 看门狗重臂的无主替身 / 旧帧）一律不算 owner 的
+    watch——接管判据里的「其 watch 已死」指的是**这个** owner 的监听，不是任何监听。
+    """
+    st = state if state is not None else load_state()
+    if not st or not mounted(st):
+        return False
+    return str(st.get("armed_by") or "") == owner_sid
+
+
+def _consumption_authorized(state: dict[str, Any]) -> tuple[bool, str]:
+    """本 watch 实例是否有权**消费**事件（记 consumed 账并 exit 2 唤醒）。
+
+    只有 **owner 自己的挂载**（``armed_by`` 非空且等于当前 owner）可以消费：
+
+    - 看门狗重臂的**无主替身**（``armed_by`` 空）命中的 exit 2 到不了任何会话，若记
+      consumed，owner 回归后的迟到唤醒就被吞掉（2026-10-18 缺陷 3）；
+    - 被人工迁移**取代**的旧 owner watch（``armed_by`` ≠ 当前 owner）同样不得消费——
+      单一消费水位只认 owner 侧，防旧实例抢账/双唤醒。
+    """
+    armed = str(state.get("armed_by") or "")
+    cur = str(load_owner().get("session_id") or "")
+    if not armed:
+        return False, "armed_by 空（看门狗重臂的无主替身/手动挂载）"
+    if not cur or armed != cur:
+        return False, f"armed_by={armed} ≠ 当前 owner={cur or '（无）'}"
+    return True, ""
+
+
+def _owner_released(owner: dict[str, Any]) -> bool:
+    """真源是否为 **SessionEnd 释放墓碑**（无 session_id 但有 ``released_at``）。
+
+    2026-10-18 起墓碑只是**留痕**（释放事件记录），**不再阻止自动补位**：归属按
+    「创建更早的存活项目根会话」重新求值（wake-adopt-20261018 s1）。
+    """
+    return not owner.get("session_id") and bool(owner.get("released_at"))
+
+
+def _session_cwd(data: dict[str, Any]) -> str:
+    """会话 cwd：载荷 ``cwd`` 优先；其次钩子脚本 ``cd`` 前导出的 ``PYSCI_HOOK_CWD``；
+    最后 ``QODER_PROJECT_DIR``（最弱兜底——它恒指项目根，只能防「无任何读数」）。"""
+    for key in ("cwd", "project_dir"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for env_key in ("PYSCI_HOOK_CWD", "QODER_PROJECT_DIR"):
+        value = os.environ.get(env_key, "")
+        if value.strip():
+            return value.strip()
+    return ""
+
+
+def cwd_is_project_root(raw: str) -> bool | None:
+    """``raw`` 是否项目根（单点实现委托 :func:`live_sessions.is_project_root_cwd`）。
+
+    兼容 MSYS 形态 ``/d/repo`` 与 Windows 形态；空/不可解析 → ``None``（判不了不拦）。
+    """
+    return _live.is_project_root_cwd(raw)
+
+
+def prune_live_sessions() -> list[str]:
+    """清理死会话登记（看门狗 tick 与状态读数共用）；返回被清掉的 sid。"""
+    return _live.prune_dead()
+
+
+def session_binding(payload: dict[str, Any] | None) -> tuple[bool, str]:
+    """night 注入/gate 的**主会话绑定**判据（单一实现，night.py 复用）。
+
+    Returns:
+        ``(eligible, reason)``：
+        - cwd 可判定且非项目根（pod 直聊会话）→ ``False``；
+        - 有 owner 记录且 ``session_id`` 不同（子会话）→ ``False``；
+        - 无 owner/释放墓碑（冷启动引导窗口）/缺 session_id/cwd 判不了 → ``True``
+          （fail-open：night 不是唤醒，不能因归属读数缺失就停掉政策注入）。
+    """
+    data = payload if isinstance(payload, dict) else {}
+    raw_cwd = _session_cwd(data)
+    root = cwd_is_project_root(raw_cwd)
+    if root is False:
+        return False, f"cwd 非项目根（{raw_cwd}）→ pod 直聊会话不受夜航约束"
+    sid = str(data.get("session_id") or "").strip()
+    owner = load_owner()
+    cur = str(owner.get("session_id") or "")
+    if sid and cur and sid != cur:
+        return False, f"非 owner（owner={cur}）→ 夜航只绑主会话"
+    return True, ""
+
+
+def _release_owner(sid: str) -> tuple[int, str]:
+    """SessionEnd：注销登记；若结束的是 owner → **立即**按创建时序补位。返回 ``(4, 判定行)``。
+
+    墓碑只是**留痕**（不再阻止补位）：无存活候选时写 ``released_at``；下一钩子照常按
+    「最早存活项目根会话」求值（用户 2026-10-18 裁决：程序化自动补位、零人工命令）。
+    """
+    _live.unregister_session(sid)
+    owner = load_owner()
+    cur = str(owner.get("session_id") or "")
+    if cur and cur != sid:
+        return 4, f"release：非 owner 会话结束（owner={cur}）不释放 → 钩子退出不监听"
+    cands = _live.ordered_candidates()
+    if cands:
+        nxt = str(cands[0].get("session_id") or "")
+        save_owner(_new_owner(nxt))
+        return 4, (
+            f"release：owner 会话结束（sid={sid}）→ 自动补位最早存活项目根会话"
+            f"（{nxt}）→ 钩子退出不监听"
+        )
+    save_owner(
+        {
+            "session_id": "",
+            "released_at": _now(),
+            "released_by": "SessionEnd",
+            "released_sid": sid,
+        }
+    )
+    return (
+        4,
+        f"release：会话结束（sid={sid}）→ 无存活候选；墓碑仅留痕（不阻止后续自动补位）"
+        "→ 钩子退出不监听",
+    )
+
+
+def hook_decision(payload: str) -> tuple[int, str]:
+    """钩子 stdin 载荷 → ``(退出码, 判定行)``——唤醒权归属的**单一实现**（README §4.5）。
+
+    判据（用户 2026-10-18 裁决）：候选集＝**存活 ∧ cwd==项目根 ∧ 会话种类=cli**；
+    主会话＝候选集中**创建更早者**；owner 记录指向者仍存活 → 保持/恢复；owner 缺席/死亡
+    → 最早存活项目根会话**自动补位**；晚创建者在早者存活期间永不夺主；pod cwd 永不入
+    候选。**会话种类闸**（用户 2026-10-29 裁决）：QoderCN 桌面版应用会话、普通终端、
+    判别不了者一律 deny（rc=3，不入候选/不认领/不监听；事件留水位）——owner 记录若指向
+    非 CLI 会话也不再保持，按候选重新补位。
+
+    码表（watch-arm.sh 据此分支，未知码一律 fail-open 放行）：
+
+    - ``0`` = 放行监听：``owner``（保持/恢复存活 owner）、``adopt``（自动补位为最早
+      存活项目根会话）、``fail-open``（空载荷=看门狗重臂、载荷解析失败、无
+      ``session_id`` → **走旧 token 语义**并留痕，不崩唤醒链）；
+    - ``3`` = 拒绝：非 owner / 晚创建者 / pod 直聊 cwd / 无存活候选——钩子留痕后
+      ``exit 0``，不监听、不抢 token、绝不 ``exit 2``。事件留持久水位，owner/补位者
+      下次挂载迟到唤醒补上（**不存在「转投其他会话」语义**）；
+    - ``4`` = SessionEnd：注销 + 需要时立即补位，钩子直接退出（会话正在结束）。
+    """
+    raw = str(payload or "")
+    if not raw.strip():
+        return 0, "fail-open：空载荷（看门狗重臂/无 stdin）→ 走旧 token 语义"
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return 0, f"fail-open：载荷解析失败（{exc.msg}）→ 走旧 token 语义"
+    if not isinstance(data, dict):
+        return 0, "fail-open：载荷非 JSON 对象 → 走旧 token 语义"
+    sid = str(data.get("session_id") or "").strip()
+    if not sid:
+        return 0, "fail-open：载荷无 session_id → 走旧 token 语义"
+    if str(data.get("hook_event_name") or "") == "SessionEnd":
+        return _release_owner(sid)
+
+    raw_cwd = _session_cwd(data)
+    # 自登记（pod 会话也登记，供 status/清理；候选过滤在 ordered_candidates）。
+    entry = _live.register_session(sid, raw_cwd)
+    cwd_root = cwd_is_project_root(raw_cwd)
+    if cwd_root is False:
+        return 3, (
+            f"deny：会话 cwd 非项目根（{raw_cwd}）→ pod 直聊会话不入候选/不认领/不监听"
+        )
+    # 会话种类闸（用户 2026-10-29 裁决）：候选仅限 qodercn CLI 会话；桌面版应用会话、
+    # 普通终端、判别不了者一律不认领/不监听（fail-close，事件留水位）。
+    if str(entry.get("kind") or "") != "cli":
+        return 3, (
+            f"deny：非 qodercn CLI 会话（kind={entry.get('kind') or 'unknown'}："
+            f"{entry.get('kind_reason') or '判别不了'}）→ 不入候选/不认领/不监听"
+        )
+
+    owner = load_owner()
+    cur = str(owner.get("session_id") or "")
+    cur_entry = _live.load_registry().get(cur) or {}
+    cur_is_cli = str(cur_entry.get("kind") or "") == "cli"
+    if cur and cur_is_cli and _owner_alive(owner):
+        if cur == sid:
+            # 保持/恢复：watchdog 重启后按记录恢复；顺带刷新心跳与锚定读数。
+            owner["last_turn_at"] = _now()
+            entry = _live.load_registry().get(sid) or {}
+            if entry:
+                owner["pid"] = entry.get("pid")
+                owner["cwd"] = str(entry.get("cwd") or owner.get("cwd") or "")
+                owner["created_at"] = entry.get("created_at")
+            save_owner(owner)
+            return 0, f"owner：保持/恢复存活 owner（sid={sid}）"
+        return 3, (
+            f"deny：非 owner（owner={cur} 存活）→ 不监听不抢"
+            "（晚创建者在早者存活期间永不夺主；事件留水位，owner 下次挂载补唤醒）"
+        )
+
+    cands = _live.ordered_candidates()
+    if not cands:
+        return 3, (
+            "deny：无存活项目根候选 → 不监听不抢"
+            "（事件留持久水位；存活候选出现后按创建时序自动补位）"
+        )
+    main_entry = cands[0]
+    main_sid = str(main_entry.get("session_id") or "")
+    if main_sid != cur:
+        save_owner(_new_owner(main_sid))
+    if main_sid == sid:
+        if main_sid == cur:  # 记录已是它：只刷新心跳
+            owner["last_turn_at"] = _now()
+            save_owner(owner)
+        return 0, f"adopt：最早存活项目根会话自动成为 owner（sid={sid}）"
+    return 3, (
+        f"deny：非最早存活项目根会话（main={main_sid}）→ 不监听不抢；"
+        "事件留水位，main 下次挂载补唤醒"
+    )
+
+
+def wake_claim_status() -> list[str]:
+    """``pysci-orch wake-claim status``：候选集/创建时序/owner 存活性的新判据读数。"""
+    _live.prune_dead()
+    owner = load_owner()
+    cur = str(owner.get("session_id") or "")
+    cands = _live.ordered_candidates(prune=False)
+    lines = [
+        "  主会话判据 = 存活 ∧ cwd==项目根 ∧ 会话种类=cli（桌面版应用/普通终端/"
+        "判别不了者不入候选，用户 2026-10-29 裁决）；取创建更早者（平局按 session_id）；"
+        "PID 存活优先于心跳",
+    ]
+    if cands:
+        lines.append(f"  候选集（{len(cands)}，按创建时序升序；首位=主会话）：")
+        for entry in cands:
+            mark = " ← owner" if entry.get("session_id") == cur else ""
+            lines.append(f"    · {_live.session_lines(entry)}{mark}")
+    else:
+        lines.append("  候选集：空（无存活项目根会话）")
+    if cur:
+        alive = _owner_alive(owner)
+        hb_age = _age_s(owner.get("last_turn_at"))
+        lines.append(
+            f"  owner = {cur}（"
+            f"{'存活→保持/恢复' if alive else '已死/不可证→下钩子自动补位'}；"
+            f"末次心跳 {hb_age:.0f}s 前）"
+        )
+        lines.append(
+            f"  owner watch = {'在挂载' if _owner_watch_live(cur) else '已死'}"
+            "（仅观察面；归属按创建时序，不按心跳判死）"
+        )
+    elif _owner_released(owner):
+        lines.append(
+            f"  owner = 无（SessionEnd 于 {owner.get('released_at', '?')} 留痕；"
+            "下钩子按创建时序自动补位）"
+        )
+    else:
+        lines.append("  owner = 无（冷启动；下钩子按创建时序自动补位）")
+    lines.extend(
+        [
+            f"  真源 = {_owner_path()}",
+            "  应急通道：`pysci-orch wake-claim --force --session-id <id>`"
+            "（强制指定，存活期间保持）；`--force` 不带 id = 清除记录（下钩子自动补位）。",
+            "  （事件不丢：owner 缺席期间留持久水位，下次挂载迟到唤醒补上。）",
+        ]
+    )
+    return lines
+
+
+def wake_claim_force(session_id: str = "") -> list[str]:
+    """``wake-claim --force``：应急通道——带 id 强制指定 owner，否则清除记录。"""
+    prev = str(load_owner().get("session_id") or "") or "（无）"
+    if session_id:
+        save_owner(_new_owner(session_id))
+        return [
+            f"[√] 强制迁移：{prev} → {session_id}"
+            "（应急通道；目标存活期间保持，死亡/结束后自动补位）"
+        ]
+    try:
+        path = _owner_path()
+        if path.exists():
+            path.unlink()
+    except OSError:
+        pass
+    return [f"[√] 强制清除：{prev} → 无记录（下一钩子按创建时序自动补位）"]
+
+
+# ---------------------------------------------------------------------------
+# 黑匣子：每帧现场 + 退出原因（脱靶复盘的唯一线索来源）
+# ---------------------------------------------------------------------------
+#: 等待器没来得及写退出原因（被外部杀死 / 会话连坐崩溃）时补上的记号。
+KILLED = "killed（无退出记录）"
+
+
+def _frame(cur: dict[str, Any], why: str = "") -> dict[str, Any]:
+    """黑匣子一帧：判读脱靶所需的最小现场（锁自称 + 完成身份 + 抑制原因）。"""
+    return {
+        "ts": cur.get("ts", ""),
+        "lock_state": cur.get("lock_state", ""),
+        "lock_run": cur.get("lock_run", ""),
+        "done": _done_key(cur),
+        "why": why,
+    }
+
+
+def fmt_frame(f: dict[str, Any]) -> str:
+    """黑匣子帧的单行呈现（``orch status`` 判读用）。"""
+    return (
+        f"{str(f.get('ts', ''))[:19]} 锁={f.get('lock_state', '?')}"
+        f"/{f.get('lock_run') or '-'} done={f.get('done') or '-'}"
+        f"{' 抑制=' + str(f['why']) if f.get('why') else ''}"
+    )
+
+
+def push_recent(state: dict[str, Any], frame: dict[str, Any]) -> None:
+    """帧进 ``recent`` 环形缓冲（只留最近 :data:`RECENT_MAX` 帧）。"""
+    recent = list(state.get("recent") or [])
+    recent.append(frame)
+    state["recent"] = recent[-RECENT_MAX:]
+
+
+def _legacy(prior: dict[str, Any]) -> dict[str, Any]:
+    """把上一任等待器折成「遗言」块（:func:`arm` 继承——被杀死的那任没机会自己留话）。"""
+    reason = str(prior.get("exit_reason", "") or "")
+    if not reason:
+        reason = KILLED if prior.get("heartbeat_at") else "unknown"
+    block = {"armed_at": str(prior.get("armed_at", "") or ""), "exit_reason": reason}
+    recent = prior.get("recent")
+    if isinstance(recent, list) and recent:
+        block["recent"] = recent[-RECENT_MAX:]
+    return block
+
+
+def last_words_lines(state: dict[str, Any] | None = None) -> list[str]:
+    """上一任遗言：只有**非正常结束**才出声——脱靶复盘的入口，别在正常态刷屏。
+
+    两个来源：本任状态被 :func:`reconcile` 追认成 ``KILLED``，或 :func:`arm` 从被杀
+    的前任那里继承来的 ``prev`` 块。
+    """
+    st = state if state is not None else load_state()
+    deceased: dict[str, Any] | None = None
+    if st.get("exit_reason") == KILLED:
+        deceased = st
+    else:
+        prev = st.get("prev")
+        if isinstance(prev, dict) and prev.get("exit_reason") == KILLED:
+            deceased = prev
+    if deceased is None:
+        return []
+    armed = str(deceased.get("armed_at", ""))[:19] or "?"
+    out = [
+        f"  [!] 上一任等待器（起于 {armed}）没有退出记录——被外部杀死或连坐崩溃；"
+        "黑匣子末帧："
+    ]
+    for frame in list(deceased.get("recent") or [])[-3:]:
+        out.append(f"    · {fmt_frame(frame)}")
+    return out
+
+
+def unacked_fired(state: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """``fired`` 里尚未被 ``orch status`` 确认过的事件（水位线 :data:`fired_ack` 之上）。
+
+    watch 命中即写 ``fired`` 然后退出——唤醒靠**后台任务完成通知**，而通知只随「顶层
+    单命令挂载」这条通道存在。2026-10-12 夜航的形态是：挂载被 `&` 嵌进别的命令，
+    事件命中、留痕完整，唤醒却永远没送出。故 ``fired`` 才是命中事实的持久面，水位线
+    让它**至少被补报一次**而不是一直沉默、也不重复刷屏。
+
+    ts 由 :func:`_now` 产出（同时区、秒精度 ISO 串），字典序即时间序；水位线缺失
+    （旧版 watch.json 无 ``fired_ack`` 键）时全部视为未确认——宁可多报一次。
+    """
+    st = state if state is not None else load_state()
+    ack = str(st.get("fired_ack", "") or "")
+    return [e for e in (st.get("fired") or []) if str(e.get("ts", "")) > ack]
+
+
+def ack_fired(events: list[dict[str, Any]], *, state: dict[str, Any] | None = None):
+    """把水位线推到 ``events`` 末条并落盘（展示即确认，与补账的一次性清算同语义）。"""
+    st = state if state is not None else load_state()
+    if events:
+        st["fired_ack"] = str(events[-1].get("ts", "") or _now())
+        save_state(st)
+    return events
+
+
+def fired_lines() -> list[str]:
+    """``orch status`` 的 fired 未确认明细段：**展示即确认**（就地推进水位线）。
+
+    自读自写盘，调用方勿传自己的旧 state 字典——``reconcile()`` 会整体重写
+    watch.json，拿旧副本回写会把刚推进的补账基线覆盖回去（水位与基线互相抹掉，
+    正是本单要杜绝的「命中了但没人知道」的另一种复发形态）。
+    """
+    ev = unacked_fired()
+    if not ev:
+        return []
+    out = [
+        f"  [!] fired 未确认={len(ev)} 起（watch 已命中，唤醒未必送达；现补报明细）："
+    ]
+    out.extend(f"    · {format_event(e)}" for e in ev)
+    ack_fired(ev)
+    return out
+
+
+def mounted(state: dict[str, Any] | None = None) -> bool:
+    """watch 是否仍在挂载：心跳新鲜度在 interval×3+60 s 宽限内。
+
+    watch 随组长会话消亡（会话结束/机器重启即死），故心跳是唯一可用的存活信号
+    ——它不是「进程判活」（那需要 pid 与 shell），只是「最后一次轮询距今多久」。
+    """
+    st = state if state is not None else load_state()
+    interval = int(st.get("interval_s", DEFAULT_INTERVAL_S) or DEFAULT_INTERVAL_S)
+    age = _age_s(st.get("heartbeat_at", ""))
+    if age < 0:
+        return False
+    return age <= interval * HEARTBEAT_GRACE_FACTOR + HEARTBEAT_GRACE_S
+
+
+def arm(
+    *,
+    timeout_s: int = DEFAULT_TIMEOUT_S,
+    interval_s: int = DEFAULT_INTERVAL_S,
+    heartbeat: bool = True,
+) -> dict[str, Any]:
+    """以当前快照为基线建立 watch 状态并落盘（``run_watch`` 启动即调用）。
+
+    Args:
+        timeout_s/interval_s: 记入状态的等待参数（status 呈现与心跳宽限用）。
+        heartbeat: True 表示**真有等待器在跑**（run_watch 挂载）；False 用于 status
+            首次建立基线——此时写新鲜心跳会把「没人等」谎报成「已挂载」。
+
+    ``watch.json`` 是全局单例：新挂载会整体覆写，故先把上一任折进 ``prev``（遗言）。
+    测试/诊断性挂载前须确认无 live 挂载，否则会覆写正在等待那任的状态文件。
+
+    **基线是持久水位，不是「挂载瞬间快照」**（autonomy-fix a1）：有历史基线时**继承**它，
+    而非重置为当前快照——聋期（无监听期间）产生的事件必须在下次挂载**立即命中唤醒**，
+    不能被新快照吸收掉（2026-10-14 02:30 那起 QUEUE-EMPTY 正是被 07:40 的新基线吞掉的）。
+    只有首次（无历史基线）才用当前快照种子（无可迟发项）。继承即置 ``catchup``，
+    供 :func:`_mark_late` 把迟到事件在 detail 上标注；首轮后清除（避免后续正常事件被误标）。
+    """
+    cur = snapshot()
+    now = _now()
+    prior = load_state()
+    prev_base = prior.get("base") if isinstance(prior, dict) else None
+    inherit = isinstance(prev_base, dict) and bool(prev_base)
+    base = dict(prev_base) if inherit else cur
+    state = {
+        "version": 1,
+        "armed_at": now,
+        # 本任挂载者身份（钩子 export 的 owner sid；手动/看门狗重臂=空）。接管判据
+        # 「owner 自己的 watch 已死」读它——空值不冒充任何 owner 的 watch。
+        "armed_by": os.environ.get(WATCH_OWNER_ENV, "") or "",
+        "heartbeat_at": now if heartbeat else "",
+        # 前任心跳（供 _mark_late 判「事件发生时有 listener 在岗」——20261016-215945-devops：
+        # 补报一律标「聋期」会把「被去重账吞掉后补报」误归因成「没人听」）。
+        "prior_heartbeat_at": str(prior.get("heartbeat_at") or ""),
+        "timeout_s": timeout_s,
+        "interval_s": interval_s,
+        "polls": 0,
+        "base": base,
+        "catchup": inherit,
+        "fired": [],
+        "fired_ack": "",
+        "recent": [],
+    }
+    # 跨挂载继承的运行态账（**单一消费水位**与节流账）：watch.json 整体覆写，不搬就丢——
+    # 丢了消费账 → 同一事件下次挂载再唤醒一次（2026-10-14 12:44 双唤醒的形态）；
+    # 丢了节流账 → 队列感知巡更在每次重挂后立刻再报一次（重启即重置的反面）。
+    for key in CARRY_KEYS:
+        value = prior.get(key)
+        if isinstance(value, dict) and value:
+            state[key] = dict(value)
+    if prior.get("armed_at"):
+        state["prev"] = _legacy(prior)
+        # 未确认的命中跨任继承：watch.json 是全局单例、新挂载整体覆写，若前任的
+        # fired 从未被 status 呈现过（嵌入式挂载丢唤醒的夜航形态），这些账必须活过
+        # 覆写——否则「命中了但没人知道」会被下一次挂载永久抹掉。
+        carry = unacked_fired(prior)
+        if carry:
+            state["fired"] = carry[-FIRED_KEEP:]
+            state["fired_ack"] = str(prior.get("fired_ack", "") or "")
+    save_state(state)
+    return state
+
+
+# ---------------------------------------------------------------------------
+# 等待已自动化：不再催挂（手动挂载降为兜底，见 README §4.5 / references/drain-watch.md）
+# ---------------------------------------------------------------------------
+def watch_argv(*, timeout_s: int = DEFAULT_TIMEOUT_S) -> str:
+    """手动**兜底**要挂的命令行串（裸名优先，README §11 CLI 范式）；自动挂载不经此串。"""
+    return f"pysci-orch watch --timeout {timeout_s}"
+
+
+def autowatch_lines(*, indent: str = "") -> list[str]:
+    """「等待已自动化」提示行：交办/唤醒当刻由代码回报——组长**无需手动挂载**。
+
+    自动挂载（README §4.5 v2：``Stop + asyncRewake`` 钩子每回合接管）之后，这里不再给
+    挂载命令、也不再列事件名（那些属**手动兜底**，见技能真本 / ``references/drain-watch.md``）；
+    只回报「已自动挂载」，免得组长照旧提示重复挂一条。
+    """
+    return [
+        f"{indent}watch 等待已自动化（Stop 钩子每回合自动挂载，无需手动）；"
+        "钩子不可用时照 README §4.5 手动兜底。"
+    ]
+
+
+def auto_remount_lines(*, indent: str = "") -> list[str]:
+    """watch 命中/超时退出后的提示：下一空闲回合由钩子自动重挂，无需手动。"""
+    return [f"{indent}（watch 已退；下一空闲回合由 Stop 钩子自动重挂，无需手动。）"]
+
+
+# ---------------------------------------------------------------------------
+# 阻塞等待
+# ---------------------------------------------------------------------------
+def clamp_interval(interval_s: int | None) -> int:
+    """轮询间隔钳制到 [MIN, MAX]（None/非法 → 默认；超上限会漏短命崩溃窗口）。"""
+    try:
+        n = int(DEFAULT_INTERVAL_S if interval_s is None else interval_s)
+    except (TypeError, ValueError):
+        return DEFAULT_INTERVAL_S
+    if n <= 0:
+        return DEFAULT_INTERVAL_S
+    return max(MIN_INTERVAL_S, min(n, MAX_INTERVAL_S))
+
+
+def _touch(
+    state: dict[str, Any],
+    cur: dict[str, Any],
+    base: dict[str, Any],
+    verdict: dict[str, Any],
+) -> None:
+    """本帧落进状态：按 ``hold`` 约束推进基线 + 刷新心跳 + 轮次 + 黑匣子帧。"""
+    state["base"] = base
+    state["heartbeat_at"] = _now()
+    state["polls"] = int(state.get("polls", 0)) + 1
+    if int(state.get("polls", 0)) > 1:
+        # 迟到标注只作用于**首轮**：水位推进之后本任看到的都是新事件（autonomy-fix a1）。
+        state["catchup"] = False
+    for name, epoch in (verdict.get("throttle") or {}).items():
+        state.setdefault("throttle", {})[name] = epoch
+    push_recent(state, _frame(cur, str(verdict.get("why", "") or "")))
+
+
+def _mirror(events_list: list[dict[str, Any]]) -> None:
+    """把本帧差分命中、且属 legacy 类型的事件**镜像**入统一事件流（§3.2「沿现制迁入同一流」）。
+
+    只镜 :data:`events.MIRROR_TYPES`（CRASH/QUOTA/CHANNEL/NEEDS-LEADER/SALVAGE）；唤醒已由
+    上方差分 native 送出，这里只补记录面（供 ``orch events drain``/``orch status`` 读出）。
+    QUEUE-COMPLETE 不镜（与生产者的 QUEUE-EMPTY 是同一次收尾的两副名）。写失败 fail-open。
+    """
+    for ev in events_list:
+        name = str(ev.get("event", ""))
+        if name not in _events.MIRROR_TYPES:
+            continue
+        try:
+            _events.emit(
+                name,
+                str(ev.get("subject", "")),
+                str(ev.get("detail", "")),
+                str(ev.get("action", "")),
+            )
+        except Exception:  # noqa: BLE001 - 记录面写失败不炸等待器（§0.6）
+            pass
+
+
+def _listener_covered_event(ts: str, state: dict[str, Any]) -> bool:
+    """事件发生时刻**是否有在岗 listener**（前任心跳覆盖该时刻）。
+
+    判据与 :func:`mounted` 同源（同一宽限窗 ``interval×3+60s``）：前任心跳
+    ``prior_heartbeat_at`` 与事件 ``ts`` 的间距落在窗内即算覆盖（心跳晚于事件＝那个
+    listener 之后仍在跑，更是覆盖）。读不到心跳/无 ts → ``False``（不冒充判断）。
+    """
+    hb = str(state.get("prior_heartbeat_at") or "")
+    if not hb or not ts:
+        return False
+    interval = int(state.get("interval_s", DEFAULT_INTERVAL_S) or DEFAULT_INTERVAL_S)
+    window = interval * HEARTBEAT_GRACE_FACTOR + HEARTBEAT_GRACE_S
+    gap = _age_s(hb) - _age_s(ts)  # = ts − hb（秒；正=心跳早于事件）
+    if gap < 0:
+        return True
+    return gap <= window
+
+
+def _mark_late(events: list[dict[str, Any]], state: dict[str, Any]) -> None:
+    """把**迟到唤醒**的事件在 detail 上标注（autonomy-fix a1：聋期事件下次挂载立即命中，
+    并说清来源——让组长一眼分辨「刚发生的」与「刚才没人听时积压的」）。
+
+    两条判据，任一命中即迟：
+    ① 事件自带 ``ts`` 且早于本任挂载时刻（统一事件流的生产者直发事件有 ``ts``）；
+    ② 本任**继承了上一任持久水位**（``catchup``）——差分型事件（CRASH/QUEUE-COMPLETE 等）
+       不自带时间，但「继承水位后才被报出来」本身就说明它们发生在挂载前。
+    ``catchup`` 首轮后即清除（:func:`_touch`），故后续正常事件不会被误标。
+
+    **归因细分**（20261016-215945-devops 实测教训）：事件时刻**有在岗 listener 心跳**时
+    **不得**标「聋期」——那类补报的真成因是去重账/水位把事件吞了（如 seq 回卷撞消费账），
+    标成「没人听」会把第一轮判断引向「watcher 被杀/看门狗失效」。
+    """
+    armed = str(state.get("armed_at") or "")
+    catchup = bool(state.get("catchup"))
+    for ev in events:
+        ts = str(ev.get("ts") or "")
+        late = catchup or (bool(ts) and bool(armed) and ts < armed)
+        if not late:
+            continue
+        detail = str(ev.get("detail") or "")
+        if "迟到" not in detail:
+            note = (
+                " 〔迟到补报：发生时有 listener 在岗——去重账/水位吞后补报〕"
+                if _listener_covered_event(ts, state)
+                else " 〔迟到唤醒：发生于挂载前（聋期）〕"
+            )
+            ev["detail"] = detail + note
+        ev["late"] = True
+
+
+def _emit(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> bool:
+    """命中收场：``fired`` 审计留痕（最近 :data:`FIRED_KEEP` 条）+ ``exit_reason`` + 单行呈现。
+
+    ``fired`` 只追加、不置水位线：本进程打出的单行**可能**永远到不了组长会话
+    （挂载通道被 `&` 嵌死时的夜航形态），确认权交给 ``orch status`` 的展示动作。
+
+    **单一消费水位**（adhoc-20261014-124521-s1）：先按 ``watch.json`` 的 ``consumed`` 账滤掉
+    已被消费的身份——被取代的 watch 实例（其内存基线是旧的）拿不到唤醒权，返回 ``False``；
+    只有真唤醒（``True``）才记消费账。返回 ``False`` 时调用方继续等（不是本实例的账）。
+
+    **只有 owner 侧挂载才能消费**（2026-10-18 主会话绑定，twin 裁决 A）：无主替身/被迁移
+    取代的旧实例命中事件时**不记 consumed、不推进持久水位**，事件原样留给 owner 下次挂载
+    的迟到唤醒（exit 2 到不了任何会话，记了账就等于吞掉）。
+    """
+    authorized, why = _consumption_authorized(state)
+    if not authorized:
+        state["last_exit"] = "event-unowned"
+        state["exit_reason"] = "unowned:" + ",".join(str(e["event"]) for e in events)
+        for ev in events:
+            echo(format_event(ev))
+        echo(
+            f"[watch] 命中事件但本实例非 owner 侧（{why}）→ 不记消费账、不推进水位；"
+            "事件留待 owner 下次挂载迟到唤醒"
+        )
+        return True
+    fresh = filter_consumed(events)
+    if not fresh:
+        return False
+    mark_consumed(fresh, state)
+    fired = list(state.get("fired", []))
+    _mark_late(fresh, state)
+    for ev in fresh:
+        fired.append({"ts": _now(), **ev})
+    state["fired"] = fired[-FIRED_KEEP:]
+    state["last_exit"] = "event"
+    state["exit_reason"] = "event:" + ",".join(str(e["event"]) for e in fresh)
+    _mirror(fresh)  # legacy 类型补流账（§3.2）；native 唤醒不受影响
+    save_state(state)
+    echo(format_event(fresh[0]))
+    for ev in fresh[1:]:
+        echo(f"  同时：{format_event(ev)}")
+    for line in auto_remount_lines():
+        echo(line)
+    # 机械推送点（PSEP_3 §3.3）：唤醒即携路由卡片（失败 fail-soft，推送面不拦唤醒）。
+    # **通知面分层**（tb-5 返工 2 轮 L 摩擦）：要求与历史总览只在该任务书的**首个通知**
+    # （TASKBOOK-NEW 或首次 JOB-DONE）附送；其后只给环节点要+指针，全文按需取
+    # （taskbooks show / plan advance --full）——否则 30 叶一轮重复 30 次 ~15KB。
+    try:
+        from . import nextroute
+
+        actions = nextroute.sort_actions(nextroute.collect_actions())
+        head = actions[0] if actions else {}
+        tb_id = str(head.get("tb_id") or "")
+        sent = [str(x) for x in (state.get("digest_sent") or [])]
+        first = any(str(ev.get("event")) == _events.TASKBOOK_NEW for ev in fresh) or (
+            bool(tb_id) and tb_id not in sent
+        )
+        for line in nextroute.card_lines(None, include_digest=bool(first)):
+            echo(line)
+        if first and tb_id and tb_id not in sent:
+            sent.append(tb_id)
+            state["digest_sent"] = sent[-200:]
+            save_state(state)
+        if tb_id and not first:
+            echo(
+                f"[i] 要求与历史总览：pysci-orch taskbooks show {tb_id}"
+                "（或 plan advance --full）"
+            )
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
+def _guard_note(state: dict[str, Any], events: list[dict[str, Any]], echo: Any) -> None:
+    """看护模式命中登记（无会话附着，exit 2 无接收方）：留痕去重，不记消费账、不发唤醒。
+
+    为什么留痕不去重会刷屏：看护命中**不推进基线**（事件要留给 owner 下次挂载迟到唤醒），
+    同一事件每轮都会被再检出——``guard_seen`` 按 :func:`_identity` 去重（与消费账同源），
+    只有身份变化（新事件/指纹变）才再报。账随 :data:`CARRY_KEYS` 跨挂载继承。
+    """
+    seen = dict(state.get("guard_seen") or {})
+    fresh = [e for e in events if _identity(e) not in seen]
+    if not fresh:
+        return
+    stamp = _now()
+    for ev in fresh:
+        seen[_identity(ev)] = stamp
+        echo(format_event(ev))
+    state["guard_seen"] = dict(
+        sorted(seen.items(), key=lambda kv: kv[1])[-CONSUMED_KEEP:]
+    )
+    echo(
+        "[watch] 看护模式命中（无会话附着，exit 2 无接收方）→ 不发唤醒、不记消费账；"
+        "事件留持久水位，owner 下次挂载迟到唤醒"
+    )
+
+
+def run_watch(
+    *,
+    timeout_s: int | None = None,
+    interval_s: int | None = None,
+    sleep: Any = time.sleep,
+    monotonic: Any = time.monotonic,
+    echo: Any = print,
+    queue_watch: bool = True,
+    guardian: bool = False,
+) -> int:
+    """阻塞轮询直到命中事件或超时；无论命中或超时均返回 0（非零会被误读为故障）。
+
+    Args:
+        timeout_s: 总等待秒数（默认 4 h；``<=0`` 视作立即超时判定一轮）。
+        interval_s: 轮询间隔，钳制到 :data:`MIN_INTERVAL_S`–:data:`MAX_INTERVAL_S`。
+        sleep/monotonic: 注入口，测试用假时钟免真等。
+        echo: 输出注入口。
+        queue_watch: 是否开**队列感知巡更通道**（``PENDING-WORK``/``STALL``）。生产缺省开
+            （观察循环的职责）；测试要验**纯差分链路**（迟到唤醒/水位单调等）时关掉，
+            免得运行期恰好存在的 backlog/队列存量挤进断言（判据必须自己隔离自己的输入）。
+        guardian: **看护模式**（看门狗补位实例专用，2026-10-27 wake-repair）：无会话
+            附着的实例命中事件时「stderr + exit 2」到不了任何会话（实测喊给空气、退出→
+            看门狗再臂→再命中死循环），故只登记看护账（:func:`_guard_note`）、基线不推进
+            （owner 下次挂载迟到唤醒），继续轮询不断心跳——看门狗见心跳新鲜即不再空转重臂。
+            手动兜底挂载**不带**此旗标：其唤醒通道=进程退出通知，命中即返回。
+
+    每轮按 :func:`advance_base` 把当前快照并入 ``base``（受 :func:`detect` 的 ``hold``
+    约束：抑制帧与瞬态空值**不推进**，被压住的完成事实下一帧仍在比较），同时刷新心跳
+    （status 判挂载用）并把该帧现场写进 ``recent`` 黑匣子。命中但**未消费**（无主替身/
+    被取代实例）的返回路径不落盘——落盘即把基线推进掉，owner 的迟到唤醒就吞了。
+    """
+    interval = clamp_interval(interval_s)
+    total = DEFAULT_TIMEOUT_S if timeout_s is None else int(timeout_s)
+    state = arm(timeout_s=total, interval_s=interval)
+    prev = state["base"]
+    deadline = monotonic() + max(0, total)
+
+    while True:
+        left = deadline - monotonic()
+        if left <= 0:
+            break
+        sleep(min(interval, left))
+        cur = snapshot()
+        events, verdict = detect(
+            prev, cur, throttle=state.get("throttle"), queue_watch=queue_watch
+        )
+        if events and guardian and not _consumption_authorized(state)[0]:
+            _guard_note(state, events, echo)
+            _touch(state, cur, prev, verdict)  # 基线保持 prev：水位留待迟到唤醒
+            save_state(state)
+            continue
+        prev = advance_base(prev, cur, verdict["hold"])
+        _touch(state, cur, prev, verdict)
+        if events and _emit(state, events, echo):
+            return 0
+        save_state(state)
+
+    cur = snapshot()
+    events, verdict = detect(
+        prev, cur, throttle=state.get("throttle"), queue_watch=queue_watch
+    )
+    if events and guardian and not _consumption_authorized(state)[0]:
+        _guard_note(state, events, echo)
+        _touch(state, cur, prev, verdict)
+    else:
+        prev = advance_base(prev, cur, verdict["hold"])
+        _touch(state, cur, prev, verdict)
+        if events and _emit(state, events, echo):  # 最后一拍才落地的收尾也照报
+            return 0
+    state["last_exit"] = "timeout"
+    state["exit_reason"] = "timeout"
+    save_state(state)
+    echo(
+        f"TIMEOUT {_human(total)} 内无事件"
+        f"（锁态={cur.get('lock_state', '?')}，pending={cur.get('pending', 0)}，"
+        f"needs_leader={len(cur.get('needs_leader') or [])}）"
+    )
+    for line in auto_remount_lines():
+        echo(line)
+    return 0
+
+
+def _human(seconds: int) -> str:
+    """秒数的人类读数（超时行的时长描述）。"""
+    h, rem = divmod(int(seconds), 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h{m:02d}m" if m else f"{h}h"
+    return f"{m}m{s:02d}s" if m else f"{s}s"
+
+
+# ---------------------------------------------------------------------------
+# orch status 补账（一次性清算：报完即推进基线，幂等）
+# ---------------------------------------------------------------------------
+def reconcile() -> tuple[list[dict[str, Any]], bool]:
+    """补账自上次基线以来漏掉的事件。
+
+    Returns:
+        ``(events, settled)``。``settled=True`` 表示本次已把基线推进到当前快照
+        （事件只补一次，重复运行 status 不会刷屏）；watch 仍挂载时返回
+        ``([], False)``——事件归 watch 的原生通知负责，此处不抢账、不动基线。
+    """
+    state = load_state()
+    base = state.get("base")
+    if not isinstance(base, dict) or not base:
+        arm(
+            timeout_s=DEFAULT_TIMEOUT_S,
+            interval_s=clamp_interval(None),
+            heartbeat=False,
+        )
+        return [], False
+    if mounted(state):
+        return [], False
+    if (
+        state.get("heartbeat_at")
+        and not state.get("exit_reason")
+        and not state.get("last_exit")
+    ):
+        # 有心跳却无退出记录 = 被外部杀死：追认遗言，供 status 读黑匣子
+        state["exit_reason"] = KILLED
+    cur = snapshot()
+    events, verdict = detect(
+        base, cur, throttle=state.get("throttle"), queue_watch=True
+    )
+    state["base"] = advance_base(base, cur, verdict["hold"])
+    push_recent(state, _frame(cur, str(verdict.get("why", "") or "")))
+    state["heartbeat_at"] = ""
+    state["reconciled_at"] = _now()
+    for name, epoch in (verdict.get("throttle") or {}).items():
+        state.setdefault("throttle", {})[name] = epoch
+    # 单一消费水位同样管补账面：已被 watch 唤醒过的事件不再重报（否则「唤醒 + 补账」双份）。
+    events = filter_consumed(events)
+    mark_consumed(events, state)
+    _mark_late(events, state)  # 补账补到的多半是聋期积压（autonomy-fix a1）
+    state["catchup"] = False
+    state["settled"] = events
+    _mirror(events)  # 补账命中的 legacy 事件同样补流账（§3.2）
+    save_state(state)
+    return events, True
+
+
+def status_lines() -> list[str]:
+    """``orch status`` 的 watch 段文案（挂载态 + 补账 + 上一任遗言）。"""
+    state = load_state()
+    if not isinstance(state.get("base"), dict) or not state.get("base"):
+        arm(
+            timeout_s=DEFAULT_TIMEOUT_S,
+            interval_s=clamp_interval(None),
+            heartbeat=False,
+        )
+        return [
+            "  （首次运行：已按当前状态建立补账基线——此后 drain 期间的事件要么由挂载的"
+            "watch 实时报，要么下次 orch status 补账）"
+        ]
+    if mounted(state):
+        interval = int(
+            state.get("interval_s", DEFAULT_INTERVAL_S) or DEFAULT_INTERVAL_S
+        )
+        age = _age_s(state.get("heartbeat_at", ""))
+        if state.get("last_exit"):
+            # 刚命中/刚超时退出：心跳仍新鲜，但等待器已经不在了——别把「刚结束」读成「在等」
+            return [
+                f"  ⊘ 上次运行已结束（{state['last_exit']}，心跳 {age:.0f}s 前）——"
+                f"继续等待由 Stop 钩子自动重挂（无需手动；兜底命令 {watch_argv()}）"
+            ] + fired_lines()
+        return [
+            f"  ▶ 已挂载（心跳 {age:.0f}s 前，每 {interval}s 轮询，已跑 "
+            f"{state.get('polls', 0)} 轮）——命中将以原生后台通知送达"
+        ]
+    events, _ = reconcile()
+    armed = str(state.get("armed_at", ""))[:19] or "?"
+    out: list[str] = []
+    if state.get("last_exit"):
+        out.append(f"  ⊘ 未挂载（上次运行至 {state['last_exit']}，起于 {armed}）")
+    else:
+        out.append(f"  ⊘ 未挂载（基线 {armed}——组长会话结束后无人观察）")
+    out.extend(last_words_lines())  # reconcile 可能刚追认「被杀死」，重读磁盘为准
+    if events:
+        out.append(f"  [!] 补账 {len(events)} 起事件：")
+        for ev in events:
+            out.append(f"    · {format_event(ev)}")
+    else:
+        out.append("  （自上次基线以来无新事件）")
+    out.extend(fired_lines())  # reconcile 之后：水位与基线各写各的，互不覆盖
+    if _workflow.backlog_pending() or _drain.lock_status()["state"] == "running":
+        out.append("  等待 drain：watch 由 Stop 钩子自动挂载（无需手动；退出即唤醒）")
+    return out
+
+
+def cmd_watch(args: Any) -> int:
+    """``orch watch``：阻塞等待 drain 事件（手动**兜底**用；常态由 Stop 钩子自动挂载）。"""
+    return run_watch(
+        timeout_s=getattr(args, "timeout", None),
+        interval_s=getattr(args, "interval", None),
+        guardian=bool(getattr(args, "guardian", False)),
+    )
+
+
+__all__ = [
+    "CARRY_KEYS",
+    "CONSUMED_KEEP",
+    "DONE_IDENTITY_FIELDS",
+    "FIRED_KEEP",
+    "KILLED",
+    "OWNER_STALE_S",
+    "PENDING_THROTTLE_S",
+    "RECENT_MAX",
+    "STALL_THRESHOLD_S",
+    "WATCH_PATH",
+    "WATCH_OWNER_ENV",
+    "WAKE_OWNER_PATH",
+    "ack_fired",
+    "advance_base",
+    "arm",
+    "cmd_watch",
+    "detect",
+    "detect_events",
+    "filter_consumed",
+    "fired_lines",
+    "fmt_frame",
+    "format_event",
+    "hook_decision",
+    "last_words_lines",
+    "load_owner",
+    "load_state",
+    "mark_consumed",
+    "autowatch_lines",
+    "push_recent",
+    "queue_pressure",
+    "reconcile",
+    "auto_remount_lines",
+    "run_watch",
+    "save_owner",
+    "snapshot",
+    "status_lines",
+    "unacked_fired",
+    "wake_claim_force",
+    "wake_claim_status",
+    "watch_argv",
+]

@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "exe": null,
+  "taste_enabled": true,
+  "models": {
+    "minimum": [
+      "017036af-b630-498a-bfea-883a20c67e33",
+      "Qwen3.8-Flash"
+    ]
+  },
+  "members": {
+    "figure": {
+      "pod": "orchestration\\pods\\figure",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
+    },
+    "devops": {
+      "pod": "orchestration\\pods\\devops",
+      "max_turns": 150,
+      "timeout_s": 10800,
+      "mcp_config": ".qoder/mcp.json",
+      "extra_dirs": [
+        "."
+      ],
+      "tier_note": "2026-10-10 用户裁决降档；架构敏感项由组长派发时 --model-tier max 升档；台账观察 2-3 周",
+      "turns_note": "2026-10-12 夜航实测：多部分大单（E2/E6-prep）在 80 轮处三连 run_failed（num_turns 恒 80，00:04/01:38/03:29）——腰斩的是参数不是规格，故 80→150；timeout 维持 10800（3h 内 150 轮实测有余量）。观察点：若仍见 num_turns 触顶，属任务粒度过大，应拆单而非继续加轮。"
+    },
+    "reviewer": {
+      "pod": "orchestration\\pods\\reviewer",
+      "max_turns": 40,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json",
+      "readonly_extra": [
+        "rubrics"
+      ],
+      "tier_note": "2026-10-11 REFACTOR v1.0 §1.1 定稿降档 flash（全项目 flash 主力，二者几乎无台账存量随时可改）；架构/推理敏感项由组长派发时 --model-tier max 升档；台账观察失败率/返工率，质量下滑即回调"
+    },
+    "deputy": {
+      "pod": "orchestration\\pods\\deputy",
+      "max_turns": 60,
+      "timeout_s": 10800,
+      "mcp_config": ".qoder/mcp.json",
+      "extra_dirs": [
+        "."
+      ],
+      "tier_note": "2026-10-11 REFACTOR v1.0 §1.1 定稿降档 flash（全项目 flash 主力，二者几乎无台账存量随时可改）；架构/推理敏感项由组长派发时 --model-tier max 升档；台账观察失败率/返工率，质量下滑即回调"
+    },
+    "lit": {
+      "pod": "orchestration\\pods\\lit",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
+    },
+    "twin": {
+      "pod": "orchestration\\pods\\twin",
+      "max_turns": 8,
+      "timeout_s": 900,
+      "mcp_config": ".qoder/mcp.json",
+      "cold_start": true,
+      "readonly_extra": [
+        "PREFERENCE.md",
+        "AGENTS.md"
+      ],
+      "tier_note": "REFACTOR §9：twin=审美孪生，单跳判断，flash 起步（成本敏感=免费档优先）；max_turns 8/timeout 900 是「冷启动单跳、不做多轮探索」的代码化；cold_start 使 dispatch 拒绝任何非 new 会话（无记忆纪律，硬代码优先）；readonly_extra 保护宪章与笔记面（AGENTS.md 按 charter 不得积累）；**项目根只读=不配 extra_dirs**（extra_dirs 是 pod-guard 的写白名单，给了即可写；--add-dir 未用于成员面）"
+    },
+    "bencher": {
+      "pod": "orchestration\\pods\\bencher",
+      "max_turns": 120,
+      "timeout_s": 10800,
+      "mcp_config": ".qoder/mcp.json",
+      "extra_dirs": [
+        "orchestration/state/evals"
+      ],
+      "tier_note": "REFACTOR §8/E4：harness 实测专职工。flash 是**组员身份**的档位（被组长指派核查跑时用）；压测跑的被测档位由案卷 tier:/任务参数决定（默认 minimum），与本行无关。extra_dirs 只给 state/evals——案卷、基线、判决产物是它唯一的项目内常设写面（charter 权限面），src/guards/其他 pod 零写权：设施缺陷走 <infra_suggestion> 交 devops，不自己修。max_turns 120：A/B 副本一轮含两腿多案，比 devops 单跑轻但比 twin 单跳重。"
+    },
+    "inspector": {
+      "pod": "orchestration\\pods\\inspector",
+      "max_turns": 50,
+      "timeout_s": 1200,
+      "mcp_config": ".qoder/mcp.json",
+      "extra_dirs": [
+        "orchestration/state/inspector",
+        "orchestration/state/evals/jury-cases"
+      ],
+      "readonly_extra": [
+        "rubrics"
+      ],
+      "tier_note": "REFACTOR §7/E5a：闲时巡检专职工，flash 起步（成本敏感：巡检是每日常态而非疑难攻坚；需要更高分辨率的 rubric 判断由引擎侧指派项 --model-tier max 升档）。全项目**只读**：extra_dirs 只给两处产出面（发现台账/证据/队列所在的 state/inspector，与判决案卷所在的 state/evals/jury-cases），其余零写权——巡检发现靠晋升 backlog 交 devops 消化，不自己动手。readonly_extra=rubrics 把 pod 内设计审查 rubric 锁成只读（修订权归用户）。timeout_s 1200 刻意小于引擎 wallclock_s 1800：单跳要显著短于单次激活的墙钟预算，否则「预算到顶自停」会退化成「跳完才发现超预算」。"
+    },
+    "sim": {
+      "pod": "orchestration\\pods\\sim",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
+    },
+    "writing": {
+      "pod": "orchestration\\pods\\writing",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
+    },
+    "drawing": {
+      "pod": "orchestration\\pods\\drawing",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
+    },
+    "theory": {
+      "pod": "orchestration\\pods\\theory",
+      "max_turns": 60,
+      "timeout_s": 7200,
+      "mcp_config": ".qoder/mcp.json"
+    }
+  },
+  "inspector": {
+    "_note": "闲时巡检引擎参数（REFACTOR §7/§5.2）。逐键覆盖 src 的 DEFAULT_INSPECTOR；此处显式写全八键是为了让 orch inspector-status 的阈值读数可核对（缺席=出厂值，行为不变）。pause_*/resume_* 四键若不满足 resume 严格低于 pause，整体回落出厂值并在 status 面标注「配置被忽略」。",
+    "max_hops": 3,
+    "wallclock_s": 1800,
+    "cooldown_s": 3600,
+    "yield_window_s": 900,
+    "pause_backlog": 12,
+    "pause_bench": 6,
+    "resume_backlog": 8,
+    "resume_bench": 4
+  },
+  "jury": {
+    "_note": "Tier C 仲裁团三席官方直调（REFACTOR §4 用户裁决 2026-10-12 修订，E3-live）。型号=各提供商 /models 实测目录内的在架旗舰（10-12 实测：deepseek 2 个、bigmodel 11 个、moonshot 2 个）；base_url 逐家核官方 OpenAI 兼容端点。选型权归用户，改这里即可，代码不内置候选清单。\"pricing\" 故意留空：三家刊例（且用户可能挂套餐/Agent Plan）须由用户按账号实价填，缺席时留痕记 cost.amount=null 并附 note——不猜价。kimi 席 params.temperature=1 是实测必需（该型号只接受 1，写 0 即 400，见 references/jury-panel.md）。max_output_tokens=8000：三席皆推理型，真案卷（prompt≈4k）上 reasoning 是重尾的（实测 432～3986），额度不足会随机把正文截空；截断按渠道错误入队并点名席位，不记无效票。席内两局按「同端点+同 Key 变量」串行：DeepSeek 实测 max organization concurrency=1，同席并发必 429。路由 v3（backlog 20261013-093000-leader，终裁 v4 2026-10-13 定格）仲裁矩阵：qwen→glm+kimi+mimo；mimo/mimomax→glm+kimi+qwen；deepseek→glm+kimi+mimo；谷时隐性 DeepSeek 态→glm+kimi+mimo（固定三席，不随预设漂）——面板构成随**被评模型**换血，deepseek 席因此在任何面板里都不出庭（它是被评方）。**一律按量付费**：TokenPlan 套餐端点整个不做（两家个人版条款禁止 API 自动化调用，违规封 Key），席位因此没有 endpoints/billing 键，一席一条端点。缺 Key 的席标 unavailable + 双面告警（调用者面+mirror 面），本庭减员照常开庭（平票由 twin 终裁兜底）；被评模型同族的回退席不上场（§4）。**待用户供**：MIMO_API_KEY、QWEN_API_KEY 及 qwen/mimo 旗舰的按量 base_url 与在架型号串——不猜端点也不猜型号，缺席时 orch status/mirror 的「面板缺席：mimo|qwen（registry.jury.seats 未配置）」一行就是催办信号。｜2026-10-13 组长按用户矩阵补 qwen 席（mimo 预设第三席=Qwen 旗舰；DashScope compatible-mode 探针实测通）。｜2026-10-13 组长补 mimo 席（按量直调 api.xiaomimimo.com/v1，探针实测通；谷时隐性面板 glm+kimi+mimo 与 deepseek 预设面板所需）。",
+    "seats": [
+      {
+        "name": "deepseek",
+        "key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-pro"
+      },
+      {
+        "name": "kimi",
+        "key_env": "KIMI_API_KEY",
+        "base_url": "https://api.moonshot.cn/v1",
+        "model": "kimi-k2.6",
+        "params": {
+          "temperature": 1
+        }
+      },
+      {
+        "name": "qwen",
+        "key_env": "QWEN_API_KEY",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-max"
+      },
+      {
+        "name": "mimo",
+        "key_env": "MIMO_API_KEY",
+        "base_url": "https://api.xiaomimimo.com/v1",
+        "model": "mimo-v2.6-pro"
+      }
+    ],
+    "fallback": {
+      "enabled": true,
+      "name": "siliconflow",
+      "key_env": "SILICONFLOW_API_KEY",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "model": "deepseek-ai/DeepSeek-V4-Pro"
+    },
+    "call_timeout_s": 240,
+    "deadline_s": 300,
+    "max_output_tokens": 16000,
+    "pricing": {},
+    "seats_suspended": [
+      {
+        "seat": {
+          "name": "glm",
+          "key_env": "GLM_API_KEY",
+          "base_url": "https://open.bigmodel.cn/api/paas/v4",
+          "model": "glm-5.3"
+        },
+        "reason": "glm-5.3 渠道持续故障（timeout/截断 4 连败），twin 终裁 A′（tb-20261019-151640-ppt-3-twin咨询-jury门2）授权本轮面板变更：按 registry「一席不可达减员开庭」机制摘席，平票 twin 兜底；glm 恢复后回填",
+        "at": "2026-10-19T16:20+08:00"
+      }
+    ]
+  },
+  "checks": {
+    "figure-audit": {
+      "cmd": [
+        "uv",
+        "run",
+        "--no-sync",
+        "pysci-figures",
+        "audit",
+        "{path}",
+        "--panels"
+      ]
+    },
+    "orch-tests": {
+      "cmd": [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest",
+        "{path}",
+        "-q"
+      ],
+      "path_default": "tests/skills/orchestration"
+    },
+    "guards-in-force": {
+      "cmd": [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest",
+        "tests/skills/orchestration/test_pod_guard_blocks.py",
+        "tests/skills/orchestration/test_guards_in_force.py",
+        "tests/skills/orchestration/test_delivery_gate_budget.py",
+        "tests/skills/devops/test_guard_probe.py",
+        "-q"
+      ]
+    },
+    "pptx-visual": {
+      "cmd": [
+        "uv",
+        "run",
+        "--no-sync",
+        "pysci-compose",
+        "slides",
+        "verify",
+        "{path}"
+      ]
+    }
+  },
+  "model_chains": {
+    "minimum": [
+      "Mimo-V2.6-Flash",
+      "Qwen3.8-Flash"
+    ]
+  },
+  "model_fallback": {
+    "skip_window_s": 3600,
+    "event_tail": 5
+  },
+  "channel_note": "用户裁决 2026-10-12 22:4x（backlog 20261012-225500-leader）：档位模式（max/flash）退役，改**提供商预设**——data/pysci_settings.toml [model] preset 一键切换，预设打包 main/pro 席位表与仲裁团构成；观察期默认 mimo（组员主力=Mimo-V2.6-Flash，pro 席四人组）。席位不可用沿 #80 有序回退链粘滞降级（跳过故障席→内置默认，调用者+mirror 双面告警）；minimum 压测档独立不随预设走（E3-live 实测火山方舟不可行，维持 Mimo-Flash→内置）。上一轮注记（2026-10-12 21:1x 三级链）的机制被本单直接复用，未推翻。",
+  "presets": {
+    "_note": "提供商预设的席位表（用户裁决 2026-10-12 22:4x，backlog 20261012-225500-leader）：data/pysci_settings.toml [model] preset 选预设（qwen/mimo/mimomax/deepseek），本块给该预设的 main/pro 席位链（UUID=账号级 BYOK，选型权归用户，整链覆盖代码出厂表 presets.PRESETS）。仲裁团构成（glm/kimi/mimo|qwen 家族）与 pro 成员名单在代码出厂表，随预设整体换血；席的端点/型号在 registry.jury.seats。deepseek 席已回填（2026-10-13 用户供 Key）：UUID 首席+内置同名回退落代码出厂表（同名消歧须 UUID 在场），本块不覆盖即生效；整链覆盖为空=未配置、预设不可激活（presets.preset_gate）。minimum 压测档独立（models/model_chains），不随预设走。｜2026-10-13 用户裁决：两预设主力链插入 DeepSeek-Flash BYOK 为第二席（Mimo 抖动/对族套餐不可用时落 DeepSeek 付费，仅抖动跳付费；内置免费居末）。pro 链暂未动（待用户确认对称处理）。｜pro 链同步插 DeepSeek 第二席（用户 2026-10-13 确认对称处理）。｜2026-10-22 新增 mimomax（用户裁决）：全员 Mimo-V2.6-Pro、main/pro 同链、**单席无回退**（简单粗暴，故障即告警不落他席）；谷时隐性 DeepSeek 照旧覆盖 main；pro 名单四人组（代码出厂表）与 mimo 同构——谷时只覆盖 main，四人**免疫**（用户二次裁决）。",
+    "qwen": {
+      "main": [
+        "ed6f5996-0992-479f-86a8-3f29ce0e794c",
+        "1a54cc57-e614-4521-80cc-447de31dc896"
+      ],
+      "pro": [
+        "982ae403-bc5e-4f74-996d-04a9cd66f933",
+        "1a54cc57-e614-4521-80cc-447de31dc896"
+      ]
+    },
+    "mimo": {
+      "main": [
+        "017036af-b630-498a-bfea-883a20c67e33",
+        "1a54cc57-e614-4521-80cc-447de31dc896"
+      ],
+      "pro": [
+        "99127e47-626d-421f-b0cb-02ffdbf1ada7",
+        "1a54cc57-e614-4521-80cc-447de31dc896"
+      ]
+    },
+    "mimomax": {
+      "main": [
+        "99127e47-626d-421f-b0cb-02ffdbf1ada7"
+      ],
+      "pro": [
+        "99127e47-626d-421f-b0cb-02ffdbf1ada7"
+      ]
+    }
+  }
+}

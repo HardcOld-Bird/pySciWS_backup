@@ -1,0 +1,35 @@
+# ===== 缓存与临时文件（绝不入库）=====
+# 提取的 Markdown、渲染的 PNG、样例 pptx/pdf 等
+cache/
+*.tmp
+
+# ===== LaTeX 构建产物（projects/*/build 及散落的中间文件）=====
+build/
+*.aux
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*.fls
+*.fdb_latexmk
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.synctex.gz
+*.xdv
+*.nav
+*.snm
+*.vrb
+
+# ===== 凭据 =====
+.env
+*.key
+*.pem
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/

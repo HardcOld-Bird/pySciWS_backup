@@ -1,0 +1,1363 @@
+"""compose —— 文档写作统一 CLI 门面（document-writing skill 的后端）。
+
+一个入口收敛「LaTeX 论文工作流 + 文档/PPTX 阅读提取」的全部能力，供 skill 文档与
+LLM 直接调用，无需了解底层模块实现。
+
+子命令
+------
+    doctor           环境与能力自检（TeX / LibreOffice / Python 库）
+    tex new          从模板脚手架一个写作项目
+    tex build        latexmk 编译 → 解析报错（文件:行号）
+    tex lint         chktex 静态检查
+    tex refs         从 Zotero 导出 refs.bib（复用 literature_research）
+    read <file>      统一提取（markitdown）→ Markdown（pptx/docx/pdf/xlsx/...）
+    crop-img <img>   图像裁剪（四边像素/比例；快捷去刊头/图注）→ 替换件
+    docx marks       抽取 run 级标注（strike/底色/加粗/颜色），写作自检的机械对照面
+    slides extract   结构化提取 .pptx（逐页文本/表格/图片/演讲者备注）
+    slides digest    大型 pptx → 图文互证 Markdown 工作区（去重导图/邻近文字/分节分块）
+    slides render    把 .pptx 渲染成逐页 PNG（pptx→pdf→page-NNN.png，供视觉判读/交付附件）
+    slides verify    机械验收逐页渲染（渲染存在 / 页数=幻灯片数 / 非空白页）
+    slides geometry  只读几何体检（遮挡/越界/互叠 + 预设三项：标题形态/框宽/图片描边）
+    slides focus-anim 按学院预设注入焦点块动画 timing（首块自动、其余单击）
+    slides layout    排版机械判据（焦点块标题对齐 / 分焦点块引用框规则）
+    slides audit     按 deck-spec 机械审计（装饰/字体全槽/图槽/引用框/标题公式）
+    verify <pdf>     把 PDF 渲染成 PNG，供 LLM「看图」校对版式
+
+用法（在项目根目录）::
+
+    .venv\\Scripts\\python.exe -m pysci.skills.document_writing.tools.compose <cmd> [options]
+
+设计原则：只做编排，重活交给 latex_build / pdf_render / extract / pptx_io / refs_bridge。
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import shutil
+import sys
+from pathlib import Path
+
+from . import latex_build, pdf_render
+from .config import settings
+
+# ---------------------------------------------------------------------------
+# 路径常量
+# ---------------------------------------------------------------------------
+TEMPLATES_DIR: Path = settings.templates_dir
+LATEX_TEMPLATES: Path = TEMPLATES_DIR / "latex"
+PROJECTS_DIR: Path = settings.projects_dir
+
+
+# ===========================================================================
+# 通用小工具
+# ===========================================================================
+def _list_templates() -> list[str]:
+    if not LATEX_TEMPLATES.exists():
+        return []
+    return sorted(
+        d.name for d in LATEX_TEMPLATES.iterdir() if (d / "main.tex").is_file()
+    )
+
+
+def _page_list(text: str) -> set[int]:
+    """解析逗号/空格分隔的 1-based 页码（argparse ``type``）。"""
+    try:
+        return {int(p) for p in text.replace(",", " ").split() if p}
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"页码需为整数列表：{text!r}") from e
+
+
+def _resolve_main_tex(target: str) -> Path:
+    """把 项目名 / 项目目录 / .tex 文件 解析为主 .tex 路径。"""
+    p = Path(target)
+    # 1) 直接给 .tex 文件
+    if p.is_file() and p.suffix.lower() == ".tex":
+        return p.resolve()
+    # 2) 给目录
+    if p.is_dir():
+        return _main_in_dir(p)
+    # 3) 给项目名（projects/<name>）
+    guess = PROJECTS_DIR / target
+    if guess.is_dir():
+        return _main_in_dir(guess)
+    raise FileNotFoundError(
+        f"无法解析目标：{target}（可为 .tex 文件、项目目录，或 projects/ 下的项目名）"
+    )
+
+
+def _main_in_dir(d: Path) -> Path:
+    main = d / "main.tex"
+    if main.is_file():
+        return main.resolve()
+    cands = [
+        f
+        for f in sorted(d.glob("*.tex"))
+        if "\\documentclass" in f.read_text(encoding="utf-8", errors="ignore")
+    ]
+    if len(cands) == 1:
+        return cands[0].resolve()
+    if len(cands) > 1:
+        names = ", ".join(c.name for c in cands)
+        raise ValueError(
+            f"{d} 下有多个含 \\documentclass 的 .tex：{names}，请直接指定其一"
+        )
+    raise FileNotFoundError(f"{d} 下未找到 main.tex 或含 \\documentclass 的 .tex")
+
+
+def _project_dir(main_tex: Path) -> Path:
+    return main_tex.parent
+
+
+# ===========================================================================
+# 子命令：doctor
+# ===========================================================================
+def cmd_doctor(args: argparse.Namespace) -> int:
+    print("=== pySciWS document_writing — 能力自检 (doctor) ===\n")
+    print(settings.summary())
+    print()
+    print("【Phase 1 能力清单】")
+    tex_ok = settings.tex_ready
+    libs = settings.python_libs
+    print(
+        f"  LaTeX 编译      : {'✓ 就绪' if tex_ok else '✗ 需安装 TeX Live（见上方指引）'}"
+    )
+    print(f"  PDF 看图校对    : {'✓ 就绪' if libs['pymupdf'] else '✗ 缺 pymupdf'}")
+    print(f"  PPTX 结构化读取 : {'✓ 就绪' if libs['pptx'] else '✗ 需 uv sync'}")
+    print(f"  文档→Markdown   : {'✓ 就绪' if libs['markitdown'] else '✗ 需 uv sync'}")
+    print(
+        "  Markdown→Office : "
+        + (
+            f"✓ 就绪（pandoc {settings.pandoc_version()}）"
+            if settings.pandoc_ready
+            else "✗ 未检测到 pandoc"
+        )
+    )
+    try:
+        from pysci.skills.literature_research.tools import zotero_cli as _zc
+
+        _zotero_ok = _zc.available()
+    except Exception:
+        _zotero_ok = False
+    print(
+        f"  Zotero→refs.bib : {'✓ 复用 literature_research（zotero-cli）' if _zotero_ok else '△ 需装 zotero-cli（见 scripts/zotero_mcp/）'}"
+    )
+    print()
+    print(
+        f"  LaTeX 模板      : {', '.join(_list_templates()) or '（templates/latex/ 下暂无）'}"
+    )
+    print(f"  写作项目目录    : {PROJECTS_DIR}")
+    if not tex_ok:
+        print(
+            "\n[!] 尚未检测到 TeX。安装 TeX Live 完整版后重开终端，再跑 `compose doctor`。\n"
+            "    PPTX 读取 / 文档提取 / PDF 渲染不依赖 TeX，可立即使用。"
+        )
+    print("=== 自检结束 ===")
+    return 0
+
+
+# ===========================================================================
+# 子命令：tex new
+# ===========================================================================
+def cmd_tex_new(args: argparse.Namespace) -> int:
+    tpls = _list_templates()
+    if args.template not in tpls:
+        print(
+            f"[tex new] 未知模板 '{args.template}'。可用：{', '.join(tpls) or '（无）'}",
+            file=sys.stderr,
+        )
+        return 2
+    tpl_dir = LATEX_TEMPLATES / args.template
+
+    proj = PROJECTS_DIR / args.slug
+    if proj.exists() and any(proj.iterdir()) and not args.force:
+        print(
+            f"[tex new] 项目已存在且非空：{proj}（加 --force 覆盖模板文件）",
+            file=sys.stderr,
+        )
+        return 2
+    proj.mkdir(parents=True, exist_ok=True)
+
+    copied: list[str] = []
+    for f in tpl_dir.rglob("*"):
+        if not f.is_file():
+            continue
+        rel = f.relative_to(tpl_dir)
+        dest = proj / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists() and not args.force:
+            continue
+        shutil.copy2(f, dest)
+        copied.append(str(rel))
+
+    (proj / "figures").mkdir(exist_ok=True)
+    (proj / "build").mkdir(exist_ok=True)
+
+    main = proj / "main.tex"
+    if args.title and main.exists():
+        txt = main.read_text(encoding="utf-8")
+        txt = re.sub(
+            r"\\title\{[^}]*\}", lambda m: f"\\title{{{args.title}}}", txt, count=1
+        )
+        main.write_text(txt, encoding="utf-8")
+
+    print(f"[tex new] 项目已创建：{proj}")
+    print(f"[tex new] 模板 '{args.template}' → 复制文件：{', '.join(copied)}")
+    print("[tex new] 下一步：")
+    print(f"    1. 编辑 {main}")
+    print(
+        f"    2. compose tex refs {args.slug} --query '<主题>'   # 从 Zotero 刷新 refs.bib"
+    )
+    print(f"    3. compose tex build {args.slug}                  # 编译")
+    print(f"    4. compose verify {proj / 'build' / 'main.pdf'}    # 渲染 PNG 看图校对")
+    return 0
+
+
+# ===========================================================================
+# 子命令：tex build
+# ===========================================================================
+def cmd_tex_build(args: argparse.Namespace) -> int:
+    try:
+        main = _resolve_main_tex(args.target)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[tex build] {e}", file=sys.stderr)
+        return 2
+
+    if not settings.tex_ready:
+        print(latex_build.TeXNotInstalled())
+        return 3
+
+    print(f"[tex build] 编译 {main}（engine={args.engine or 'auto'}）...")
+    try:
+        res = latex_build.build(
+            main,
+            engine=args.engine,
+            bib=not args.no_bib,
+            out_dir=args.out_dir,
+            timeout=args.timeout,
+            extra_args=["-shell-escape"] if args.shell_escape else None,
+        )
+    except latex_build.TeXNotInstalled as e:
+        print(e, file=sys.stderr)
+        return 3
+
+    print(res.summary())
+    if not res.ok:
+        if res.stdout_tail:
+            print("\n--- 编译输出末尾 ---")
+            print(res.stdout_tail)
+        print("\n[tex build] 修复上述错误后重跑。", file=sys.stderr)
+        return 1
+
+    print(f"\n✓ PDF：{res.pdf_path}")
+    if args.render and res.pdf_path:
+        pngs = pdf_render.render_pdf_pages(res.pdf_path, dpi=args.dpi)
+        print(f"[tex build] 已渲染 {len(pngs)} 页 PNG（用 Read 查看版式）：")
+        for p in pngs:
+            print(f"    {p}")
+    else:
+        print(f"[tex build] 看图校对：compose verify {res.pdf_path}")
+    return 0
+
+
+# ===========================================================================
+# 子命令：tex lint
+# ===========================================================================
+def cmd_tex_lint(args: argparse.Namespace) -> int:
+    try:
+        main = _resolve_main_tex(args.target)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[tex lint] {e}", file=sys.stderr)
+        return 2
+    if not settings.find_tex_tools().get("chktex"):
+        print("[tex lint] 未检测到 chktex（随 TeX Live 提供）。", file=sys.stderr)
+        return 3
+    issues = latex_build.lint(main)
+    if not issues:
+        print(f"[tex lint] {main.name}：未发现问题。")
+        return 0
+    for it in issues:
+        print(it.fmt())
+    print(f"[tex lint] 共 {len(issues)} 条提示。")
+    return 0
+
+
+# ===========================================================================
+# 子命令：tex refs
+# ===========================================================================
+def cmd_tex_refs(args: argparse.Namespace) -> int:
+    from . import refs_bridge
+
+    try:
+        main = _resolve_main_tex(args.target)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[tex refs] {e}", file=sys.stderr)
+        return 2
+    proj = _project_dir(main)
+    out = Path(args.out) if args.out else proj / "refs.bib"
+    keys = [k.strip() for k in args.keys.split(",")] if args.keys else None
+
+    if not (args.collection or args.tag or args.query or keys):
+        print(
+            "[tex refs] 需指定筛选：--query / --collection / --tag / --keys 之一。",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        res = refs_bridge.export_bib(
+            collection=args.collection,
+            tag=args.tag,
+            query=args.query,
+            keys=keys,
+            limit=args.limit,
+            out_path=out,
+        )
+    except Exception as e:
+        print(f"[tex refs] 导出失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+
+    print(f"[tex refs] backend={res.backend} 导出 {res.count} 条 → {res.out_path}")
+    if res.citekeys:
+        preview = ", ".join(res.citekeys[:12])
+        more = " ..." if len(res.citekeys) > 12 else ""
+        print(f"[tex refs] citekeys：{preview}{more}")
+    return 0
+
+
+# ===========================================================================
+# 子命令：read（统一提取）
+# ===========================================================================
+def cmd_read(args: argparse.Namespace) -> int:
+    from . import extract
+
+    src = Path(args.file)
+    if not src.exists():
+        print(f"[read] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        res = extract.to_markdown(src, force=args.force, backend=args.backend)
+    except Exception as e:
+        print(f"[read] 提取失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(
+        f"[read] backend={res.backend}  from_cache={res.from_cache}  "
+        f"chars={res.char_count}"
+    )
+    print(f"[read] Markdown：{res.cache_path}（用 Read 查看全文）")
+    if args.preview:
+        print("\n--- 预览（前 1500 字符）---")
+        print(res.markdown[:1500])
+    return 0
+
+
+# ===========================================================================
+# 子命令：slides extract（结构化 pptx）
+# ===========================================================================
+def cmd_crop_img(args: argparse.Namespace) -> int:
+    from . import image_crop
+
+    top, bottom = args.top or 0, args.bottom or 0
+    if args.strip_top is not None:
+        if top:
+            print("[crop-img] --strip-top 与 --top 只能给一个", file=sys.stderr)
+            return 2
+        top = args.strip_top
+    if args.strip_caption is not None:
+        if bottom:
+            print("[crop-img] --strip-caption 与 --bottom 只能给一个", file=sys.stderr)
+            return 2
+        bottom = args.strip_caption
+    try:
+        res = image_crop.crop_image(
+            args.image,
+            out=args.out,
+            quality=args.quality,
+            dry_run=args.dry_run,
+            top=top,
+            bottom=bottom,
+            left=args.left,
+            right=args.right,
+            top_ratio=args.top_ratio,
+            bottom_ratio=args.bottom_ratio,
+            left_ratio=args.left_ratio,
+            right_ratio=args.right_ratio,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"[crop-img] {exc}", file=sys.stderr)
+        return 2
+    m = res.margins
+    tail = (
+        "（dry-run，未写盘）"
+        if res.dry_run
+        else f"；输出：{res.dest}（置入时用此替换件）"
+    )
+    print(
+        f"[crop-img] {res.src.name}: {res.original[0]}x{res.original[1]} → "
+        f"{res.cropped[0]}x{res.cropped[1]}；去 上{m.top}/下{m.bottom}/左{m.left}/"
+        f"右{m.right}px{tail}"
+    )
+    return 0
+
+
+def cmd_slides_extract(args: argparse.Namespace) -> int:
+    from . import pptx_io
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides] 文件不存在：{src}", file=sys.stderr)
+        return 2
+
+    export_dir = args.export_images
+    if export_dir is None and args.with_images:
+        export_dir = settings.cache_extracted / f"{src.stem}_images"
+
+    try:
+        slides = pptx_io.read_pptx(src, export_images_to=export_dir)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[slides] {e}", file=sys.stderr)
+        return 2
+    except ImportError as e:
+        print(f"[slides] {e}", file=sys.stderr)
+        return 3
+
+    md = pptx_io.slides_to_markdown(
+        slides, source_name=src.name, include_notes=not args.no_notes
+    )
+    out = (
+        Path(args.out)
+        if args.out
+        else settings.cache_extracted / f"{src.stem}__slides.md"
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(md, encoding="utf-8")
+
+    n_notes = sum(1 for s in slides if s.notes)
+    n_imgs = sum(len(s.images) for s in slides)
+    n_tables = sum(len(s.tables) for s in slides)
+    print(
+        f"[slides] {src.name}：{len(slides)} 页，{n_tables} 表，{n_imgs} 图，{n_notes} 页含备注"
+    )
+    print(f"[slides] Markdown：{out}（用 Read 查看全文）")
+    if export_dir:
+        print(f"[slides] 图片已导出到：{export_dir}（可用 Read 查看）")
+    if args.preview:
+        print("\n--- 预览（前 1500 字符）---")
+        print(md[:1500])
+    return 0
+
+
+# ===========================================================================
+# 子命令：slides new / add / from-markdown（PPTX 写入）
+# ===========================================================================
+def cmd_slides_new(args: argparse.Namespace) -> int:
+    from . import pptx_io
+
+    out = Path(args.out)
+    pptx_io.build_pptx(
+        [], out, deck_title=args.title, deck_subtitle=args.subtitle or ""
+    )
+    print(f"[slides new] 已创建：{out}")
+    print(
+        f"[slides new] 追加页面：compose slides add '{out}' --title '...' --bullet '...'"
+    )
+    return 0
+
+
+def cmd_slides_add(args: argparse.Namespace) -> int:
+    from . import pptx_io
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides add] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    spec = pptx_io.SlideSpec(
+        title=args.title or "", bullets=args.bullet or [], notes=args.notes or ""
+    )
+    pptx_io.add_slide_to(src, spec)
+    print(f"[slides add] 已追加一页 → {src}")
+    return 0
+
+
+def cmd_slides_from_markdown(args: argparse.Namespace) -> int:
+    from . import pandoc_convert
+
+    md = Path(args.markdown)
+    if not md.exists():
+        print(f"[slides from-markdown] 文件不存在：{md}", file=sys.stderr)
+        return 2
+    out = Path(args.out) if args.out else md.with_suffix(".pptx")
+    # Pandoc 直接读文件（自行处理 utf-8/BOM）；演讲者备注用 `::: notes` fenced div。
+    try:
+        pandoc_convert.md_to_pptx(
+            md, out, slide_level=args.slide_level, reference_doc=args.reference_doc
+        )
+    except pandoc_convert.PandocNotAvailable as e:
+        print(e, file=sys.stderr)
+        return 3
+    except FileNotFoundError as e:
+        print(f"[slides from-markdown] {e}", file=sys.stderr)
+        return 2
+    print(
+        f"[slides from-markdown] {md.name} → {out}（Pandoc, slide-level={args.slide_level}）"
+    )
+    print(f"[slides from-markdown] 回读校验：compose slides extract '{out}'")
+    return 0
+
+
+# ===========================================================================
+# 子命令：slides digest（大型 pptx → 图文互证 Markdown 工作区）
+# ===========================================================================
+def cmd_slides_digest(args: argparse.Namespace) -> int:
+    from . import deck_digest
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides digest] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    out = Path(args.out) if args.out else settings.cache_dir / "digests" / src.stem
+
+    if args.lint:
+        rep = deck_digest.verify_links(out)
+        print(
+            f"[slides digest --lint] 链接存在 {rep['ok']} 个；缺失 {len(rep['broken'])} 个；"
+            f"待渲染 {len(rep['pending_renders'])} 个"
+        )
+        for b in rep["broken"][:20]:
+            print(f"    ✗ {b}")
+        if rep["pending_renders"]:
+            print(
+                f"    … 待渲染（跑 --render 后生成）：{len(rep['pending_renders'])} 个"
+            )
+        return 1 if rep["broken"] else 0
+
+    try:
+        res = deck_digest.digest_pptx(
+            src,
+            out,
+            render=args.render,
+            dpi=args.dpi,
+            gif_frames=args.gif_frames,
+            chunk_by=args.chunk_by,
+            max_chunk_slides=args.max_chunk_slides,
+            chunk_size=args.chunk_size,
+            batch_figure=args.batch_figure,
+            batch_text=args.batch_text,
+            section_starts=(
+                [int(x) for x in args.section_at.split(",") if x.strip()]
+                if args.section_at
+                else None
+            ),
+            force=args.force,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[slides digest] {e}", file=sys.stderr)
+        return 2
+    except ImportError as e:
+        print(f"[slides digest] {e}", file=sys.stderr)
+        return 3
+    except Exception as e:
+        print(f"[slides digest] 失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+
+    print(res.summary())
+    if res.sections:
+        print("\n[slides digest] 检测到的分节：")
+        for s in res.sections[:40]:
+            print(f"    Slide {s['start']:03d}–{s['end']:03d}  {s['title']}")
+        if len(res.sections) > 40:
+            print(f"    …共 {len(res.sections)} 节")
+    print("\n[slides digest] 下一步：")
+    if not res.rendered and res.n_figure_slides:
+        print(
+            f"    1. 补整页合成渲染（需 LibreOffice）：compose slides digest '{src}' "
+            f"--out '{out}' --render"
+        )
+    print(f"    2. 阅读 {res.index_md}（导航 + Phase B 约定）")
+    print(
+        f"    3. 逐批翻译（每批 {args.batch_figure} 图页 / {args.batch_text} 文本页），填写每图「解读」"
+    )
+    print(f"    4. 批末体检：compose slides digest '{src}' --out '{out}' --lint")
+    return 0
+
+
+# ===========================================================================
+# 子命令：slides render / verify（pptx → 逐页 PNG + 视觉验收）
+# ===========================================================================
+def cmd_slides_render(args: argparse.Namespace) -> int:
+    from . import office_convert, slides_visual
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides render] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        res = slides_visual.render_pptx_pages(src, out_dir=args.out, dpi=args.dpi)
+    except office_convert.LibreOfficeNotInstalled as e:
+        print(e, file=sys.stderr)
+        return 3
+    except Exception as e:
+        print(f"[slides render] 渲染失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(res.summary())
+    print("[slides render] 用 Read 逐一查看下列 PNG 做视觉判读：")
+    for p in res.pngs:
+        print(f"    {p}")
+    # 打印**可直接粘贴**的验收命令：渲染目录非约定位置时不必记住 --render-dir 旗标名。
+    print(
+        f"[slides render] 验收：pysci-compose slides verify '{src}' "
+        f"--render-dir '{res.out_dir}'"
+    )
+    return 0
+
+
+def cmd_slides_geometry(args: argparse.Namespace) -> int:
+    from . import slides_visual
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides geometry] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        rep = slides_visual.geometry_report(
+            src,
+            frame=args.frame,
+            tolerance=args.tol,
+            overlap_in2=args.overlap,
+            title_exempt_pages=args.title_exempt,
+            title_width_tol=args.title_width_tol,
+        )
+    except Exception as e:
+        print(f"[slides geometry] 分析失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(rep.as_json() if args.json else rep.summary())
+    # 默认**只报告**（版面硬伤需人判读，避免误报当闸）；--strict 才据违规置非零退出码。
+    return 1 if (args.strict and not rep.ok) else 0
+
+
+def cmd_slides_audit(args: argparse.Namespace) -> int:
+    from . import slides_audit
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides audit] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        rep = slides_audit.audit_deck(src, args.spec)
+    except (OSError, ValueError) as exc:
+        print(f"[slides audit] {exc}", file=sys.stderr)
+        return 2
+    print(rep.as_json() if args.json else rep.summary())
+    return 1 if (args.strict and not rep.ok) else 0
+
+
+def cmd_slides_layout(args: argparse.Namespace) -> int:
+    from . import slides_layout
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides layout] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        rep = slides_layout.layout_report(
+            src,
+            page=args.page,
+            titles=slides_layout._parse_ids(args.title),
+            refs=slides_layout.parse_ref_pairs(args.refs),
+            tol=args.tol,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"[slides layout] {exc}", file=sys.stderr)
+        return 2
+    print(rep.as_json() if args.json else rep.summary())
+    return 1 if (args.strict and not rep.ok) else 0
+
+
+def cmd_slides_focus_anim(args: argparse.Namespace) -> int:
+    from . import slides_anim
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides focus-anim] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        blocks = slides_anim.parse_block_specs(args.block)
+        slides_anim.parse_fade_specs(args.fade, blocks)
+        opts = slides_anim.AnimOptions(
+            focus_color=args.focus_color,
+            blur_fill=args.blur_fill,
+            blur_line=args.blur_line,
+            focus_ms=args.focus_ms,
+            blur_ms=args.blur_ms,
+            transition_ms=args.transition_ms,
+            easing=args.easing,
+            transition=not args.no_transition,
+        )
+        res = slides_anim.apply_focus_anim(
+            src, page=args.page, blocks=blocks, opts=opts, out=args.out
+        )
+    except (OSError, ValueError) as exc:
+        print(f"[slides focus-anim] {exc}", file=sys.stderr)
+        return 2
+    switch = (
+        f"页面切换 fade {opts.transition_ms}ms" if opts.transition else "不设页面切换"
+    )
+    print(
+        f"[slides focus-anim] {res.pptx.name} 第 {res.page} 页：{res.blocks} 块 / "
+        f"{res.targets} 个打靶形状；聚焦 {opts.focus_ms}ms、失焦 {opts.blur_ms}ms、"
+        f"缓动={opts.easing}；{switch}"
+    )
+    print(f"[slides focus-anim] 已写入：{res.pptx}")
+    print(
+        "[NEXT] 视觉终检：compose slides render '<deck>' → compose slides verify '<deck>'，"
+        "并在放映模式核对「进入即首块深色、每次单击只前进一块」。"
+    )
+    return 0
+
+
+def cmd_slides_verify(args: argparse.Namespace) -> int:
+    from . import slides_visual
+
+    src = Path(args.pptx)
+    if not src.exists():
+        print(f"[slides verify] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    rep = slides_visual.verify_pptx_render(
+        src, render_dir=args.render_dir, min_ink_ratio=args.min_ink
+    )
+    print(rep.summary())
+    return 0 if rep.ok else 1
+
+
+# ===========================================================================
+# 子命令：docx read / from-markdown / add（DOCX 读写）
+# ===========================================================================
+def cmd_docx_read(args: argparse.Namespace) -> int:
+    from . import docx_io
+
+    src = Path(args.file)
+    if not src.exists():
+        print(f"[docx read] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        md = docx_io.docx_to_markdown(src)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[docx read] {e}", file=sys.stderr)
+        return 2
+    except ImportError as e:
+        print(f"[docx read] {e}", file=sys.stderr)
+        return 3
+    out = (
+        Path(args.out)
+        if args.out
+        else settings.cache_extracted / f"{src.stem}__docx.md"
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(md, encoding="utf-8")
+    print(f"[docx read] {src.name} → {out}（用 Read 查看全文）")
+    if args.preview:
+        print("\n--- 预览（前 1500 字符）---")
+        print(md[:1500])
+    return 0
+
+
+def cmd_docx_from_markdown(args: argparse.Namespace) -> int:
+    from . import pandoc_convert
+
+    md = Path(args.markdown)
+    if not md.exists():
+        print(f"[docx from-markdown] 文件不存在：{md}", file=sys.stderr)
+        return 2
+    out = Path(args.out) if args.out else md.with_suffix(".docx")
+    try:
+        pandoc_convert.md_to_docx(md, out, reference_doc=args.reference_doc)
+    except pandoc_convert.PandocNotAvailable as e:
+        print(e, file=sys.stderr)
+        return 3
+    except FileNotFoundError as e:
+        print(f"[docx from-markdown] {e}", file=sys.stderr)
+        return 2
+    print(f"[docx from-markdown] {md.name} → {out}（Pandoc）")
+    print(f"[docx from-markdown] 回读校验：compose docx read '{out}'")
+    return 0
+
+
+def cmd_docx_marks(args: argparse.Namespace) -> int:
+    """抽取 run 级标注（strike / shd 底色 / highlight / bold / color），按段人读可 grep。"""
+    from collections import Counter
+
+    from . import docx_io
+
+    src = Path(args.docx)
+    if not src.exists():
+        print(f"[docx marks] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        grouped, total = docx_io.extract_run_marks(src, para=args.para)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[docx marks] {e}", file=sys.stderr)
+        return 2
+    except ImportError as e:
+        print(f"[docx marks] {e}", file=sys.stderr)
+        return 3
+    scope = f"，--para {args.para!r}" if args.para else ""
+    print(f"docx marks: {src.name}（{len(grouped)} 段有标注，标注 run {total}{scope}）")
+    for idx, text, runs in grouped:
+        head = " ".join(text.split())
+        if len(head) > 80:
+            head = head[:80] + "…"
+        print(f"== 段 {idx}：{head} ==")
+        for mr in runs:
+            frag = " ".join(mr.text.split())
+            print(f"  r{mr.run_index}  {' '.join(mr.marks)}  「{frag}」")
+    if not grouped:
+        print("  （无标注 run）" if not args.para else "  （无匹配段落或无标注 run）")
+        return 0
+    tally: Counter[str] = Counter()
+    for _idx, _text, runs in grouped:
+        for mr in runs:
+            tally.update(mr.marks)
+    print("汇总：" + " ".join(f"{k}={v}" for k, v in sorted(tally.items())))
+    return 0
+
+
+def cmd_docx_add(args: argparse.Namespace) -> int:
+    from . import docx_io
+
+    src = Path(args.docx)
+    if not src.exists():
+        print(f"[docx add] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    if args.heading:
+        block = docx_io.DocxBlock(kind="heading", text=args.heading, level=args.level)
+    elif args.bullet:
+        block = docx_io.DocxBlock(kind="bullet", text=args.bullet)
+    elif args.text:
+        block = docx_io.DocxBlock(kind="paragraph", text=args.text)
+    else:
+        print("[docx add] 需指定 --heading / --bullet / --text 之一。", file=sys.stderr)
+        return 2
+    docx_io.add_block_to(src, block)
+    print(f"[docx add] 已追加 → {src}")
+    return 0
+
+
+# ===========================================================================
+# 子命令：convert（LibreOffice headless 格式转换）
+# ===========================================================================
+def cmd_convert(args: argparse.Namespace) -> int:
+    from . import office_convert
+
+    src = Path(args.file)
+    if not src.exists():
+        print(f"[convert] 文件不存在：{src}", file=sys.stderr)
+        return 2
+    try:
+        out, backend = office_convert.convert_ex(src, args.to, out_dir=args.out_dir)
+    except office_convert.LibreOfficeNotInstalled as e:
+        print(e, file=sys.stderr)
+        return 3
+    except Exception as e:
+        print(f"[convert] 失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    # 注明所用后端：wpscli＝用户所见（WPS/MS Office 口径）；libreoffice＝兜底（backlog 105200）
+    print(f"[convert] {src.name} → {out}（后端 {backend}）")
+    if args.to == "pdf" and args.verify:
+        pngs = pdf_render.render_pdf_pages(out, dpi=args.dpi)
+        print(f"[convert] 已渲染 {len(pngs)} 页 PNG（用 Read 查看）：")
+        for p in pngs:
+            print(f"    {p}")
+    return 0
+
+
+# ===========================================================================
+# 子命令：verify（PDF → PNG）
+# ===========================================================================
+def cmd_verify(args: argparse.Namespace) -> int:
+    pdf = Path(args.pdf)
+    if not pdf.exists():
+        print(f"[verify] PDF 不存在：{pdf}", file=sys.stderr)
+        return 2
+    pages = [int(x) for x in args.pages.split(",")] if args.pages else None
+    try:
+        pngs = pdf_render.render_pdf_pages(
+            pdf,
+            out_dir=args.out_dir,
+            dpi=args.dpi,
+            pages=pages,
+            max_pages=args.max_pages,
+        )
+    except Exception as e:
+        print(f"[verify] 渲染失败：{type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    total = pdf_render.page_count(pdf)
+    print(
+        f"[verify] {pdf.name}：共 {total} 页，已渲染 {len(pngs)} 页 PNG（dpi={args.dpi}）"
+    )
+    print("[verify] 用 Read 工具逐一查看下列 PNG，即可核对真实版式：")
+    for p in pngs:
+        print(f"    {p}")
+    return 0
+
+
+# ===========================================================================
+# 参数解析与入口
+# ===========================================================================
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="pysci-compose",
+        description="pySciWS 文档写作统一 CLI（LaTeX 论文工作流 + PPTX/文档阅读提取）",
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sp = sub.add_parser("doctor", help="环境与能力自检")
+    sp.set_defaults(func=cmd_doctor)
+
+    # --- tex 子命令组 ---
+    tex = sub.add_parser("tex", help="LaTeX 工作流（new/build/lint/refs）")
+    texsub = tex.add_subparsers(dest="tex_cmd", required=True)
+
+    sp = texsub.add_parser("new", help="从模板脚手架写作项目")
+    sp.add_argument("slug", help="项目名（在 projects/ 下建同名目录）")
+    sp.add_argument(
+        "--template",
+        default="revtex",
+        help="模板名（见 templates/latex/，默认 revtex）",
+    )
+    sp.add_argument("--title", default=None, help="替换 \\title{}")
+    sp.add_argument("--force", action="store_true", help="覆盖已存在的模板文件")
+    sp.set_defaults(func=cmd_tex_new)
+
+    sp = texsub.add_parser("build", help="latexmk 编译 + 报错解析")
+    sp.add_argument("target", help="项目名 / 项目目录 / main.tex")
+    sp.add_argument(
+        "--engine", default=None, help="auto / pdflatex / xelatex / lualatex"
+    )
+    sp.add_argument(
+        "--out-dir",
+        default=None,
+        dest="out_dir",
+        help="构建产物目录（默认 <项目>/build）",
+    )
+    sp.add_argument(
+        "--no-bib", action="store_true", dest="no_bib", help="不跑 bibtex/biber"
+    )
+    sp.add_argument("--timeout", type=int, default=600)
+    sp.add_argument(
+        "--shell-escape",
+        action="store_true",
+        dest="shell_escape",
+        help="启用 -shell-escape",
+    )
+    sp.add_argument("--render", action="store_true", help="编译成功后渲染全部页 PNG")
+    sp.add_argument("--dpi", type=int, default=140)
+    sp.set_defaults(func=cmd_tex_build)
+
+    sp = texsub.add_parser("lint", help="chktex 静态检查")
+    sp.add_argument("target", help="项目名 / 项目目录 / .tex")
+    sp.set_defaults(func=cmd_tex_lint)
+
+    sp = texsub.add_parser("refs", help="从 Zotero 导出 refs.bib")
+    sp.add_argument("target", help="项目名 / 项目目录 / main.tex")
+    sp.add_argument("--query", default=None, help="按关键词搜索 Zotero")
+    sp.add_argument("--collection", default=None, help="按分类 key 导出")
+    sp.add_argument("--tag", default=None, help="按标签导出")
+    sp.add_argument("--keys", default=None, help="逗号分隔的条目 key")
+    sp.add_argument("--out", default=None, help="输出 .bib（默认 <项目>/refs.bib）")
+    sp.add_argument("--limit", type=int, default=200)
+    sp.set_defaults(func=cmd_tex_refs)
+
+    # --- read ---
+    sp = sub.add_parser("read", help="统一提取（markitdown）→ Markdown")
+    sp.add_argument("file", help="pptx/docx/pdf/xlsx/html/...")
+    sp.add_argument("--force", action="store_true", help="忽略缓存重新提取")
+    sp.add_argument(
+        "--backend", default="auto", help="auto/markitdown/pymupdf4llm/pptx_io"
+    )
+    sp.add_argument("--preview", action="store_true", help="打印前 1500 字符预览")
+    sp.set_defaults(func=cmd_read)
+
+    # --- crop-img（置入前裁剪：去刊头/图注/冗余边条）---
+    sp = sub.add_parser(
+        "crop-img", help="图像裁剪（四边像素/比例；快捷去刊头/图注）→ 替换件"
+    )
+    sp.add_argument("image", help="源图片（PNG/JPEG/WebP/TIFF…）")
+    for side in ("top", "bottom", "left", "right"):
+        sp.add_argument(f"--{side}", type=int, default=0, help=f"{side} 边去 N px")
+        sp.add_argument(
+            f"--{side}-ratio",
+            type=float,
+            default=None,
+            dest=f"{side}_ratio",
+            help=f"{side} 边按比例裁（0–1，与 --{side} 二选一）",
+        )
+    sp.add_argument(
+        "--strip-top",
+        type=int,
+        default=None,
+        dest="strip_top",
+        help="快捷：去顶部条带（刊头）N px，等价 --top",
+    )
+    sp.add_argument(
+        "--strip-caption",
+        type=int,
+        default=None,
+        dest="strip_caption",
+        help="快捷：去底部图注 N px，等价 --bottom",
+    )
+    sp.add_argument("--out", default=None, help="输出路径（缺省 <stem>_cropped<ext>）")
+    sp.add_argument("--quality", type=int, default=95, help="JPEG/WebP 质量（默认 95）")
+    sp.add_argument("--dry-run", action="store_true", help="只算尺寸，不写文件")
+    sp.set_defaults(func=cmd_crop_img)
+
+    # --- slides 子命令组 ---
+    slides = sub.add_parser("slides", help="幻灯片（extract）")
+    slidessub = slides.add_subparsers(dest="slides_cmd", required=True)
+
+    sp = slidessub.add_parser("extract", help="结构化提取 .pptx")
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument(
+        "--no-notes", action="store_true", dest="no_notes", help="不含演讲者备注"
+    )
+    sp.add_argument(
+        "--with-images",
+        action="store_true",
+        dest="with_images",
+        help="导出图片到缓存目录",
+    )
+    sp.add_argument(
+        "--export-images", default=None, dest="export_images", help="导出图片到指定目录"
+    )
+    sp.add_argument(
+        "--out", default=None, help="输出 .md（默认 cache/extracted/<名>__slides.md）"
+    )
+    sp.add_argument("--preview", action="store_true")
+    sp.set_defaults(func=cmd_slides_extract)
+
+    sp = slidessub.add_parser("new", help="新建 .pptx（可选标题页）")
+    sp.add_argument("out", help="输出 .pptx 路径")
+    sp.add_argument("--title", default=None, help="标题页主标题")
+    sp.add_argument("--subtitle", default=None, help="标题页副标题")
+    sp.set_defaults(func=cmd_slides_new)
+
+    sp = slidessub.add_parser("add", help="向已有 .pptx 追加一页")
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument("--title", default=None, help="该页标题")
+    sp.add_argument(
+        "--bullet",
+        action="append",
+        default=None,
+        dest="bullet",
+        help="项目符号，可重复；前缀 2 空格表示下一级",
+    )
+    sp.add_argument("--notes", default=None, help="演讲者备注")
+    sp.set_defaults(func=cmd_slides_add)
+
+    sp = slidessub.add_parser("from-markdown", help="Markdown 大纲 → .pptx（Pandoc）")
+    sp.add_argument("markdown", help=".md 大纲文件")
+    sp.add_argument("--out", default=None, help="输出 .pptx（默认同名）")
+    sp.add_argument(
+        "--slide-level",
+        type=int,
+        default=2,
+        dest="slide_level",
+        help="哪级标题开新页（默认 2：# 标题/分节，## 内容页）",
+    )
+    sp.add_argument(
+        "--reference-doc",
+        default=None,
+        dest="reference_doc",
+        help="PowerPoint 母版模板 .pptx（套用样式）",
+    )
+    sp.set_defaults(func=cmd_slides_from_markdown)
+
+    sp = slidessub.add_parser(
+        "digest", help="大型 pptx → 图文互证 Markdown 工作区（Phase A）"
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument("--out", default=None, help="输出目录（默认 cache/digests/<名>/）")
+    sp.add_argument(
+        "--render", action="store_true", help="同时渲染整页合成 PNG（需 LibreOffice）"
+    )
+    sp.add_argument("--dpi", type=int, default=140)
+    sp.add_argument(
+        "--gif-frames",
+        type=int,
+        default=3,
+        dest="gif_frames",
+        help="gif 动图抽帧预览的帧数（含首末帧；LLM 不能直读 gif）",
+    )
+    sp.add_argument(
+        "--chunk-by",
+        default="section",
+        choices=["section", "fixed"],
+        dest="chunk_by",
+        help="分块策略：section=按检测到的分节（推荐），fixed=固定页数",
+    )
+    sp.add_argument(
+        "--max-chunk-slides",
+        type=int,
+        default=40,
+        dest="max_chunk_slides",
+        help="单个 md 块最大页数（连续小节合并至此上限）",
+    )
+    sp.add_argument(
+        "--section-at",
+        default=None,
+        dest="section_at",
+        help="逗号分隔的分节起始页（人工定界，跳过自动检测）",
+    )
+    sp.add_argument(
+        "--chunk-size",
+        type=int,
+        default=50,
+        dest="chunk_size",
+        help="chunk-by=fixed 时每块页数",
+    )
+    sp.add_argument(
+        "--batch-figure",
+        type=int,
+        default=5,
+        dest="batch_figure",
+        help="Phase B 每批含图页数（写入 progress.json）",
+    )
+    sp.add_argument(
+        "--batch-text",
+        type=int,
+        default=15,
+        dest="batch_text",
+        help="Phase B 每批纯文本页数（写入 progress.json）",
+    )
+    sp.add_argument("--force", action="store_true", help="全量重建（会覆盖已填解读）")
+    sp.add_argument("--lint", action="store_true", help="只对既有输出做图片链接体检")
+    sp.set_defaults(func=cmd_slides_digest)
+
+    sp = slidessub.add_parser(
+        "render", help="把 .pptx 渲染成逐页 PNG（pptx→pdf→page-NNN.png）"
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument(
+        "--out",
+        default=None,
+        help="输出目录（默认 <stem>_render/，与 verify 约定一致）",
+    )
+    sp.add_argument("--dpi", type=int, default=140)
+    sp.set_defaults(func=cmd_slides_render)
+
+    sp = slidessub.add_parser("verify", help="机械验收逐页渲染（存在/页数一致/非空白）")
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument(
+        "--render-dir",
+        default=None,
+        dest="render_dir",
+        help="渲染图目录（默认 <stem>_render/）",
+    )
+    sp.add_argument(
+        "--min-ink",
+        type=float,
+        default=0.002,
+        dest="min_ink",
+        help="空白页阈值：墨迹像素占比低于它即判空白（默认 0.002）",
+    )
+    sp.set_defaults(func=cmd_slides_verify)
+
+    sp = slidessub.add_parser(
+        "geometry",
+        help="只读几何体检（遮挡/越界/互叠 + 预设三项：标题形态/框宽/图片描边）",
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument(
+        "--frame", default=None, help="外框形状名（缺省自动挑面积最大的矩形）"
+    )
+    sp.add_argument(
+        "--tol", type=float, default=0.05, help="越界容差（英寸，默认 0.05）"
+    )
+    sp.add_argument(
+        "--overlap",
+        type=float,
+        default=1.0,
+        help="图片互叠面积阈值（in²，默认 1.0）",
+    )
+    sp.add_argument(
+        "--title-exempt",
+        type=_page_list,
+        default=None,
+        dest="title_exempt",
+        help="免做标题检查的页码（逗号分隔，1-based；缺省仅豁免首页）",
+    )
+    sp.add_argument(
+        "--title-width-tol",
+        type=float,
+        default=0.10,
+        dest="title_width_tol",
+        help="标题框宽容差（适配区间上下限的 ± 比例，默认 0.10）",
+    )
+    sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
+    sp.add_argument(
+        "--strict", action="store_true", help="有违规即退出码非 0（默认只报告）"
+    )
+    sp.set_defaults(func=cmd_slides_geometry)
+
+    sp = slidessub.add_parser(
+        "focus-anim",
+        help="按学院正式汇报预设注入焦点块动画 timing（首块自动、其余单击）",
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument("--page", type=int, required=True, help="目标页（1-based）")
+    sp.add_argument(
+        "--block",
+        action="append",
+        required=True,
+        help="块-形状映射 chip:shape1,shape2（可重复；块序＝触发序）",
+    )
+    sp.add_argument(
+        "--fade",
+        action="append",
+        default=[],
+        help="进入·淡入 块序号:shape1,shape2（可重复；块被聚焦时同刻淡入）",
+    )
+    sp.add_argument(
+        "--focus-color",
+        default="8496B0",
+        help="聚焦色（胶囊填充与面板/主图描边，默认 8496B0）",
+    )
+    sp.add_argument(
+        "--blur-fill", default="ADB9CA", help="失焦胶囊填充色（默认 ADB9CA）"
+    )
+    sp.add_argument("--blur-line", default="D6DCE4", help="失焦描边色（默认 D6DCE4）")
+    sp.add_argument("--focus-ms", type=int, default=250, help="聚焦时长 ms（默认 250）")
+    sp.add_argument(
+        "--blur-ms", type=int, default=1000, help="失焦时长 ms（默认 1000）"
+    )
+    sp.add_argument(
+        "--easing",
+        choices=["ease-out", "linear"],
+        default="ease-out",
+        help="颜色效果缓动（默认 ease-out=decel 100000）",
+    )
+    sp.add_argument(
+        "--transition-ms",
+        type=int,
+        default=350,
+        help="页面切换 fade 时长 ms（默认 350）",
+    )
+    sp.add_argument(
+        "--no-transition", action="store_true", help="不写页面切换（只注入 timing）"
+    )
+    sp.add_argument("--out", default=None, help="输出路径（缺省就地更新源文件）")
+    sp.set_defaults(func=cmd_slides_focus_anim)
+
+    sp = slidessub.add_parser(
+        "layout",
+        help="排版机械判据（焦点块标题对齐 / 分焦点块引用框规则）",
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument("--page", type=int, required=True, help="目标页（1-based）")
+    sp.add_argument(
+        "--title",
+        default=None,
+        help="焦点块标题形状 ID，逗号分隔（≥2 个时查上缘或左缘对齐）",
+    )
+    sp.add_argument(
+        "--refs",
+        action="append",
+        default=[],
+        help="引用框:焦点块形状 ID（REF:ANCHOR，可重复）",
+    )
+    sp.add_argument("--tol", type=float, default=0.05, help="对齐容差 in（默认 0.05）")
+    sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
+    sp.add_argument(
+        "--strict", action="store_true", help="有不通过项即退出码非 0（默认只报告）"
+    )
+    sp.set_defaults(func=cmd_slides_layout)
+
+    sp = slidessub.add_parser(
+        "audit",
+        help="按 deck-spec 机械审计（装饰/字体全槽/图槽/引用框/标题公式）",
+    )
+    sp.add_argument("pptx", help=".pptx 文件")
+    sp.add_argument("--spec", required=True, help="deck-spec YAML")
+    sp.add_argument("--json", action="store_true", help="输出 JSON（机器可读）")
+    sp.add_argument(
+        "--strict", action="store_true", help="有 FAIL 即退出码非 0（默认只报告）"
+    )
+    sp.set_defaults(func=cmd_slides_audit)
+
+    # --- docx 子命令组 ---
+    docx = sub.add_parser("docx", help="DOCX 读写（read/from-markdown/add/marks）")
+    docxsub = docx.add_subparsers(dest="docx_cmd", required=True)
+
+    sp = docxsub.add_parser("read", help="结构化读取 .docx → Markdown")
+    sp.add_argument("file", help=".docx 文件")
+    sp.add_argument(
+        "--out", default=None, help="输出 .md（默认 cache/extracted/<名>__docx.md）"
+    )
+    sp.add_argument("--preview", action="store_true")
+    sp.set_defaults(func=cmd_docx_read)
+
+    sp = docxsub.add_parser("from-markdown", help="Markdown → .docx（Pandoc）")
+    sp.add_argument("markdown", help=".md 文件")
+    sp.add_argument("--out", default=None, help="输出 .docx（默认同名）")
+    sp.add_argument(
+        "--reference-doc",
+        default=None,
+        dest="reference_doc",
+        help="Word 样式模板 .docx（套用样式）",
+    )
+    sp.set_defaults(func=cmd_docx_from_markdown)
+
+    sp = docxsub.add_parser(
+        "marks", help="抽取 run 级标注（strike/底色/高亮/加粗/颜色），按段输出"
+    )
+    sp.add_argument("docx", help=".docx 文件")
+    sp.add_argument(
+        "--para", default="", help="按段文本关键词过滤（子串匹配；缺省=全部段落）"
+    )
+    sp.set_defaults(func=cmd_docx_marks)
+
+    sp = docxsub.add_parser("add", help="向已有 .docx 追加一个块")
+    sp.add_argument("docx", help=".docx 文件")
+    sp.add_argument("--heading", default=None, help="追加标题")
+    sp.add_argument("--level", type=int, default=1, help="标题级别（1..9）")
+    sp.add_argument("--bullet", default=None, help="追加项目符号")
+    sp.add_argument("--text", default=None, help="追加正文段落")
+    sp.set_defaults(func=cmd_docx_add)
+
+    # --- convert ---
+    sp = sub.add_parser(
+        "convert", help="LibreOffice headless 转换（pptx/docx → pdf 等）"
+    )
+    sp.add_argument("file", help="输入文件（pptx/docx/odt/xlsx/...）")
+    sp.add_argument("--to", default="pdf", help="目标格式（pdf/docx/pptx/html/...）")
+    sp.add_argument(
+        "--out-dir", default=None, dest="out_dir", help="输出目录（默认同 src）"
+    )
+    sp.add_argument("--verify", action="store_true", help="转 pdf 后渲染 PNG 看图")
+    sp.add_argument("--dpi", type=int, default=140)
+    sp.set_defaults(func=cmd_convert)
+
+    # --- verify ---
+    sp = sub.add_parser("verify", help="PDF → PNG（供 LLM 看图校对版式）")
+    sp.add_argument("pdf", help="PDF 文件")
+    sp.add_argument("--dpi", type=int, default=140)
+    sp.add_argument("--pages", default=None, help="逗号分隔的 1-based 页码")
+    sp.add_argument("--max-pages", type=int, default=None, dest="max_pages")
+    sp.add_argument("--out-dir", default=None, dest="out_dir")
+    sp.set_defaults(func=cmd_verify)
+
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        rc = args.func(args)
+        return int(rc) if rc else 0
+    except KeyboardInterrupt:
+        print("\n[compose] 已中断。", file=sys.stderr)
+        return 130
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

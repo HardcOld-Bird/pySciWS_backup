@@ -1,0 +1,634 @@
+"""后处理与验证：Agent「评估」仿真的程序化通道（去 GUI 的眼睛与尺子）。
+
+两条输入通道：
+- **网格/场文件**（VTK/VTU/STL/PLY，由 :mod:`export` 产出）→ pyvista 离屏渲染 + 程序化场分析。
+- **COMSOL CSV**（``% key,value`` 头 + 数据列）→ numpy 数组，做数值后处理与理论比对。
+
+能力分组：
+- 渲染：:func:`render_grid`（离屏 PNG，几何/网格/场，去 GUI 的"眼睛"）。
+- 场分析：:func:`field_stats` / :func:`slice_grid` / :func:`probe_point` / :func:`integrate_scalar`。
+- 网格质量：:func:`mesh_quality`。
+- 收敛性：:func:`convergence_order`（h-refinement 观测收敛阶）。
+- 验证器：:func:`compare_to_reference` / :func:`check_conservation` / :func:`validate_field`，
+  把"评估"固化为可复用检查。
+- 渲染栅格自检：:func:`read_gray_png` / :func:`detect_frame_box` / :func:`interior_blank_metrics`，
+  检测 COMSOL 渲染 PNG 的轴框像素框（pixel↔data 映射用）与轴框内部是否空白（导出自校验用）。
+- 传递函数：:func:`transfer_function`（复数比，example 类研究的通用原语）。
+
+pyvista 为**惰性导入**：纯数值函数（CSV 解析、收敛阶、比对）不依赖 pyvista/VTK，
+可在无图形栈的环境（CI、纯 Python 单测）中运行；仅渲染类函数需要 pyvista。
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+# ---------------------------------------------------------------------------
+# COMSOL CSV 解析
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ComsolTable:
+    """解析后的 COMSOL 导出 CSV：``% key,value`` 元信息 + 列名 + 数据矩阵。"""
+
+    meta: dict[str, str] = field(default_factory=dict)
+    columns: list[str] = field(default_factory=list)
+    data: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        return self.data.shape
+
+    def column(self, name: str) -> np.ndarray:
+        """按列名取一列；不存在则抛 KeyError。"""
+        idx = self.columns.index(name)
+        return self.data[:, idx]
+
+    def has(self, name: str) -> bool:
+        return name in self.columns
+
+
+def read_comsol_csv(path: str | Path) -> ComsolTable:
+    """解析 COMSOL 导出的 CSV（``%`` 注释头 + 可选列名行 + 数值行）。
+
+    兼容多种形态（判据统一为「``%`` 行首字段是坐标列 x/X」，避免误抓 ``% Model,...`` 等元信息行）：
+    - 数据集导出（``% Expressions,0``）：列名取 ``% X,Y`` 行（大写坐标列）；
+    - 表导出：列名取 ``% x,y,Value`` 行（小写坐标列 + 值列）；
+    - 含场表达式：列名行形如 ``% X,Y,acpr.p_t``。
+    """
+    p = Path(path)
+    meta: dict[str, str] = {}
+    header_line: str | None = None
+    rows: list[list[float]] = []
+
+    with p.open(encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            if line.startswith("%"):
+                body = line.lstrip("%").strip()
+                # 列名行：body 以坐标名前缀开头（"X" 或 "X,Y[,expr...]")
+                if body.split(",")[0].strip().lower() == "x":
+                    header_line = body
+                    continue
+                if "," in body:
+                    k, _, v = body.partition(",")
+                    meta[k.strip()] = v.strip()
+                continue
+            parts = [x for x in line.split(",")]
+            if all(_is_num(x) for x in parts):
+                rows.append([float(x) for x in parts])
+            elif header_line is None:
+                header_line = line  # 首个非数值行当作列名
+
+    data = np.array(rows, dtype=float) if rows else np.zeros((0, 0))
+    columns: list[str] = []
+    if header_line:
+        columns = [c.strip() for c in header_line.split(",")]
+    # 列名与数据列数对齐：不足补 colN，多余截断
+    ncols = data.shape[1] if data.ndim == 2 else 0
+    if len(columns) < ncols:
+        columns += [f"col{i}" for i in range(len(columns), ncols)]
+    columns = columns[:ncols]
+    return ComsolTable(meta=meta, columns=columns, data=data)
+
+
+def _is_num(s: str) -> bool:
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# pyvista 惰性加载
+# ---------------------------------------------------------------------------
+def _pv() -> Any:
+    """惰性导入 pyvista 并切到离屏渲染。"""
+    import pyvista as pv  # noqa: PLC0415 - 渲染才需要，避免无图形栈环境导入失败
+
+    pv.OFF_SCREEN = True
+    return pv
+
+
+def load_grid(path: str | Path) -> Any:
+    """读取网格/场文件（VTK/VTU/STL/PLY/...）为 pyvista 数据集。"""
+    pv = _pv()
+    return pv.read(str(path))
+
+
+# ---------------------------------------------------------------------------
+# 渲染（去 GUI 的眼睛）
+# ---------------------------------------------------------------------------
+def render_grid(
+    grid: Any,
+    out_png: str | Path,
+    *,
+    scalars: str | None = None,
+    cmap: str = "coolwarm",
+    show_edges: bool = False,
+    clip_normal: tuple[float, float, float] | None = None,
+    clip_origin: tuple[float, float, float] | None = None,
+    window_size: tuple[int, int] = (1200, 900),
+    title: str | None = None,
+) -> Path:
+    """把网格/场离屏渲染为 PNG。
+
+    Args:
+        grid: pyvista 数据集（:func:`load_grid` 的产物）。
+        out_png: 输出 PNG。
+        scalars: 要着色的点/胞标量名；None → 几何/网格本色。
+        cmap: matplotlib 色表名。
+        show_edges: 是否画网格边（看网格质量用）。
+        clip_normal/clip_origin: 若给则先沿法向剖切再渲染（看内部场）。
+        window_size: 渲染窗口像素。
+        title: 图标题。
+    """
+    pv = _pv()
+    out = Path(out_png)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    target = grid
+    if clip_normal is not None:
+        target = grid.clip(normal=clip_normal, origin=clip_origin or (0, 0, 0))
+
+    plotter = pv.Plotter(off_screen=True, window_size=window_size)
+    if scalars is not None and target.point_data and scalars in target.point_data:
+        plotter.add_mesh(target, scalars=scalars, cmap=cmap, show_edges=show_edges)
+    elif scalars is not None and target.cell_data and scalars in target.cell_data:
+        plotter.add_mesh(target, scalars=scalars, cmap=cmap, show_edges=show_edges)
+    else:
+        plotter.add_mesh(target, show_edges=show_edges, color="lightblue")
+    if title:
+        plotter.add_text(title, font_size=12)
+    plotter.screenshot(str(out))
+    plotter.close()
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 场分析
+# ---------------------------------------------------------------------------
+def field_stats(grid: Any, scalars: str) -> dict[str, float]:
+    """标量场的 min/max/mean/rms/L2 范数统计。"""
+    arr = _scalar_array(grid, scalars)
+    if arr.size == 0:
+        return {"min": 0.0, "max": 0.0, "mean": 0.0, "rms": 0.0, "l2": 0.0, "n": 0}
+    a = np.asarray(arr, dtype=float).ravel()
+    return {
+        "min": float(a.min()),
+        "max": float(a.max()),
+        "mean": float(a.mean()),
+        "rms": float(np.sqrt(np.mean(a**2))),
+        "l2": float(np.linalg.norm(a)),
+        "n": int(a.size),
+    }
+
+
+def _scalar_array(grid: Any, scalars: str) -> np.ndarray:
+    if scalars in getattr(grid, "point_data", {}):
+        return np.asarray(grid.point_data[scalars])
+    if scalars in getattr(grid, "cell_data", {}):
+        return np.asarray(grid.cell_data[scalars])
+    raise KeyError(
+        f"数据集无标量 '{scalars}'；可用：{list(getattr(grid, 'array_names', []))}"
+    )
+
+
+def slice_grid(
+    grid: Any,
+    normal: tuple[float, float, float] = (0, 0, 1),
+    origin: tuple[float, float, float] | None = None,
+) -> Any:
+    """沿法向剖切，返回剖面数据集（看内部场分布）。"""
+    return grid.clip(normal=normal, origin=origin or grid.center)
+
+
+def probe_point(grid: Any, point: tuple[float, float, float], scalars: str) -> float:
+    """在任意点插值取标量值（探针）。"""
+    sampled = grid.sample(np.array([point], dtype=float))
+    arr = _scalar_array(sampled, scalars)
+    return float(np.asarray(arr).ravel()[0])
+
+
+def integrate_scalar(grid: Any, scalars: str) -> float:
+    """对标量场做体/面积分（守恒检查用）。"""
+    arr = np.asarray(_scalar_array(grid, scalars), dtype=float)
+    areas = grid.cell_data.get("Area", None) if grid.cell_data else None
+    if grid.point_data and scalars in grid.point_data:
+        # 点标量 → 用胞体积/面积加权（若可得），否则直接求和近似
+        vols = grid.compute_cell_sizes().cell_data.get(
+            "Volume", grid.compute_cell_sizes().cell_data.get("Area", None)
+        )
+        if vols is not None:
+            cell_avg = grid.point_data_to_cell_data().cell_data[scalars]
+            return float(
+                np.sum(
+                    np.asarray(cell_avg, dtype=float) * np.asarray(vols, dtype=float)
+                )
+            )
+        return float(np.sum(arr))
+    if areas is not None:
+        return float(np.sum(arr * np.asarray(areas, dtype=float)))
+    return float(np.sum(arr))
+
+
+# ---------------------------------------------------------------------------
+# 网格质量
+# ---------------------------------------------------------------------------
+def mesh_quality(mesh: Any) -> dict[str, Any]:
+    """网格基本质量统计：单元数、点数为必给；质量度量尽力而为。"""
+    out: dict[str, Any] = {
+        "n_cells": int(mesh.n_cells),
+        "n_points": int(mesh.n_points),
+        "bounds": tuple(float(b) for b in mesh.bounds),
+    }
+    try:
+        q = mesh.cell_quality()  # pyvista ≥0.43 提供多种度量
+        for name in ("volume", "area", "scaled_jacobian", "skew", "quality"):
+            if name in q.cell_data:
+                arr = np.asarray(q.cell_data[name], dtype=float)
+                out[f"{name}_min"] = float(np.nanmin(arr))
+                out[f"{name}_mean"] = float(np.nanmean(arr))
+                out[f"{name}_max"] = float(np.nanmax(arr))
+    except Exception:  # noqa: BLE001 - 度量不可用时降级
+        pass
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 收敛性（h-refinement）
+# ---------------------------------------------------------------------------
+def convergence_order(hs: list[float], errs: list[float]) -> float:
+    """由 (网格尺寸 h, 误差 err) 序列拟合观测收敛阶 p（log-log 最小二乘）。"""
+    h = np.asarray(hs, dtype=float)
+    e = np.asarray(errs, dtype=float)
+    mask = (h > 0) & (e > 0)
+    if mask.sum() < 2:
+        return float("nan")
+    lh = np.log(h[mask])
+    le = np.log(e[mask])
+    p, _ = np.polyfit(lh, le, 1)
+    return float(p)
+
+
+# ---------------------------------------------------------------------------
+# 验证器（把"评估"固化为可复用检查）
+# ---------------------------------------------------------------------------
+@dataclass
+class CheckResult:
+    name: str
+    passed: bool
+    detail: str
+
+    def report(self) -> str:
+        return f"[{'PASS' if self.passed else 'FAIL'}] {self.name}: {self.detail}"
+
+
+def compare_to_reference(
+    measured: np.ndarray,
+    reference: np.ndarray,
+    *,
+    rtol: float = 1e-2,
+    atol: float = 1e-8,
+    name: str = "compare_to_reference",
+) -> CheckResult:
+    """与理论/参考解比对：逐点 allclose + 报告最大相对偏差。"""
+    m = np.asarray(measured, dtype=complex if np.iscomplexobj(measured) else float)
+    r = np.asarray(reference, dtype=complex if np.iscomplexobj(reference) else float)
+    if m.shape != r.shape:
+        return CheckResult(name, False, f"形状不匹配 {m.shape} vs {r.shape}")
+    denom = np.maximum(np.abs(r), atol)
+    rel = np.abs(m - r) / denom
+    max_rel = float(np.max(rel)) if rel.size else 0.0
+    ok = bool(np.allclose(m, r, rtol=rtol, atol=atol))
+    return CheckResult(name, ok, f"max_rel_dev={max_rel:.3e} (rtol={rtol})")
+
+
+def check_conservation(
+    inflow: float,
+    outflow: float,
+    *,
+    rtol: float = 1e-2,
+    name: str = "conservation",
+) -> CheckResult:
+    """守恒检查：|in-out|/|in| <= rtol（能量/通量守恒）。"""
+    if abs(inflow) < 1e-300:
+        return CheckResult(
+            name, abs(outflow) < 1e-300, f"inflow≈0, outflow={outflow:.3e}"
+        )
+    dev = abs(inflow - outflow) / abs(inflow)
+    return CheckResult(name, dev <= rtol, f"rel_dev={dev:.3e} (rtol={rtol})")
+
+
+def validate_field(
+    grid: Any,
+    scalars: str,
+    *,
+    finite: bool = True,
+    max_abs: float | None = None,
+    name: str = "validate_field",
+) -> CheckResult:
+    """物理合理性检查：场有限、（可选）幅值上界。"""
+    arr = np.asarray(_scalar_array(grid, scalars), dtype=float).ravel()
+    if finite and not np.all(np.isfinite(arr)):
+        return CheckResult(name, False, "场含 NaN/Inf")
+    peak = float(np.max(np.abs(arr))) if arr.size else 0.0
+    if max_abs is not None and peak > max_abs:
+        return CheckResult(name, False, f"峰值 {peak:.3e} 超上界 {max_abs:.3e}")
+    return CheckResult(name, True, f"finite ok, peak={peak:.3e}")
+
+
+# ---------------------------------------------------------------------------
+# 渲染栅格自检（轴框检测 + 空白度量，纯 numpy 可单测）
+# ---------------------------------------------------------------------------
+def read_gray_png(path: str | Path) -> np.ndarray | None:
+    """读 PNG 为 0-255 灰度数组（origin 顶左）；读取失败返回 None。"""
+    try:
+        from matplotlib.image import imread  # noqa: PLC0415 - 仅栅格自检需要
+
+        a = np.asarray(imread(str(path)), dtype=float)
+        gray = a[..., :3].mean(axis=-1) if a.ndim == 3 else a
+        if gray.max() <= 1.0:
+            gray = gray * 255.0
+        return gray
+    except Exception:  # noqa: BLE001 - 自检通道绝不抛断主流程
+        return None
+
+
+def _longest_dark_run(row: np.ndarray) -> tuple[int, int, int] | None:
+    """一维布尔数组的最长连续 True 段 → (长度, 起, 止) 含端；全 False 返回 None。"""
+    idx = np.flatnonzero(row)
+    if idx.size == 0:
+        return None
+    breaks = np.flatnonzero(np.diff(idx) > 1)
+    starts = np.concatenate(([idx[0]], idx[breaks + 1]))
+    ends = np.concatenate((idx[breaks], [idx[-1]]))
+    lengths = ends - starts + 1
+    k = int(np.argmax(lengths))
+    return int(lengths[k]), int(starts[k]), int(ends[k])
+
+
+def detect_frame_box_array(
+    gray: np.ndarray, *, dark_thresh: float = 128.0, min_frac: float = 0.5
+) -> tuple[int, int, int, int] | None:
+    """检测渲染图轴框像素框 → (x0, y0, x1, y1)，origin 顶左；失败返回 None。
+
+    启发式（best-effort）：轴框是图中唯一"水平边暗色连续段 ≥ min_frac×宽"的矩形框
+    （colorbar 顶底边、标题文字均不满足）；左右界取顶边行最长暗段的两端，
+    从而排除 colorbar 的竖直边；再校验左右列在顶底边之间暗占比 ≥ 0.8。
+    """
+    dark = gray < dark_thresh
+    h, w = dark.shape
+    if h < 8 or w < 8:
+        return None
+    runs = [_longest_dark_run(dark[i]) for i in range(h)]
+    rows = [i for i in range(h) if runs[i] is not None and runs[i][0] >= min_frac * w]
+    if len(rows) < 2:
+        return None
+    top, bot = rows[0], rows[-1]
+    run = runs[top]
+    if run is None or run[2] - run[1] < min_frac * w:
+        return None
+    _, xa, xb = run
+    span = bot - top
+    if span < 8:
+        return None
+    for x in (xa, xb):
+        if dark[top : bot + 1, x].sum() < 0.8 * span:
+            return None
+    return (xa, top, xb, bot)
+
+
+def detect_frame_box(path: str | Path, **kw: Any) -> tuple[int, int, int, int] | None:
+    """:func:`detect_frame_box_array` 的文件路径便捷版。"""
+    gray = read_gray_png(path)
+    return None if gray is None else detect_frame_box_array(gray, **kw)
+
+
+def interior_blank_metrics(
+    gray: np.ndarray, box: tuple[int, int, int, int], *, pad: int = 3
+) -> dict[str, Any] | None:
+    """轴框内部（缩进 pad 像素）的空白度量：量化唯一色数 + 灰度 std。
+
+    ``blank`` 判据：unique_q ≤ 4 且 std < 8（内部近纯色 → 绘图组无数据/未绑数据集）。
+    """
+    x0, y0, x1, y1 = box
+    inner = gray[y0 + pad : y1 - pad, x0 + pad : x1 - pad]
+    if inner.size == 0:
+        return None
+    uniq = int(np.unique((inner // 8).astype(np.int32)).size)
+    std = float(inner.std())
+    return {
+        "unique_q": uniq,
+        "std": round(std, 2),
+        "blank": bool(uniq <= 4 and std < 8.0),
+    }
+
+
+def comsol_auto_window(
+    geom_bbox: tuple[float, float, float, float],
+    crop_box: tuple[int, int, int, int],
+) -> tuple[float, float, float, float]:
+    """COMSOL 2D auto-zoom 数据窗口反演：(几何 bbox, 轴框像素框) → 数据窗口 extent。
+
+    COMSOL Java API 对 2D 绘图组/视图**不暴露**轴限属性（export --extent 对 2D 无效），
+    但其 auto-zoom 规则可精确建模：等纵横比、以几何包围盒为中心、按轴框像素框
+    （:func:`detect_frame_box` / sidecar.crop_box_px）的长宽比在宽/高受限方向展开。
+    几何 bbox 可由建模参数或导出网格/几何的坐标范围精确算出。
+
+    Args:
+        geom_bbox: 几何包围盒 (x0, x1, y0, y1)（数据坐标）。
+        crop_box: 轴框像素框 (x0, y0, x1, y1)（origin 顶左）。
+
+    Returns:
+        数据窗口 (xmin, xmax, ymin, ymax)，可直接作 imshow 的 extent。
+    """
+    gx0, gx1, gy0, gy1 = geom_bbox
+    gw, gh = gx1 - gx0, gy1 - gy0
+    w_px, h_px = crop_box[2] - crop_box[0], crop_box[3] - crop_box[1]
+    s = max(gw / w_px, gh / h_px)  # 数据/像素（受限方向贴几何 bbox）
+    cx, cy = (gx0 + gx1) / 2, (gy0 + gy1) / 2
+    return (cx - w_px * s / 2, cx + w_px * s / 2, cy - h_px * s / 2, cy + h_px * s / 2)
+
+
+# ---------------------------------------------------------------------------
+# 传递函数（复数比）
+# ---------------------------------------------------------------------------
+def transfer_function(
+    output: np.ndarray | complex,
+    input_: np.ndarray | complex,
+) -> np.ndarray:
+    """复数传递函数 H = output / input（逐元素）。"""
+    o = np.asarray(output, dtype=complex)
+    i = np.asarray(input_, dtype=complex)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        h = o / i
+    return h
+
+
+def db(x: np.ndarray | float) -> np.ndarray:
+    """幅值转分贝 20*log10|x|。"""
+    a = np.abs(np.asarray(x, dtype=complex if np.iscomplexobj(x) else float))
+    with np.errstate(divide="ignore"):
+        return 20.0 * np.log10(np.maximum(a, 1e-300))
+
+
+# ---------------------------------------------------------------------------
+# 解析参考解示例：刚壁硬波导平面波
+# ---------------------------------------------------------------------------
+def rigid_waveguide_pressure(
+    x: np.ndarray,
+    *,
+    freq: float,
+    c0: float = 343.0,
+    amplitude: float = 1.0,
+    direction: float = 1.0,
+) -> np.ndarray:
+    """刚壁波导中沿 x 的平面波解析解 p = A*exp(i*k*x*direction)（低于截止频率的单模）。"""
+    k = 2.0 * math.pi * freq / c0
+    return amplitude * np.exp(1j * k * np.asarray(x, dtype=float) * direction)
+
+
+# ---------------------------------------------------------------------------
+# 品牌标记（COMSOL logo）的探测与抹除（backlog 20261015-204911）
+# ---------------------------------------------------------------------------
+#: 品牌标记的探测窗口（相对图像的宽/高比例，锚**右上角**）。COMSOL 把 logo 画在渲染图右上角
+#: 的固定小方块里——实测 900×900 导出图上占据 x∈[877,892]、y∈[8,20]（宽 1.7% / 高 1.4%）。
+#: 窗口取 22%×8% 足以容纳更大的导出尺寸，又能把图内数据（colormap 常占据中部）排除在外。
+BRAND_WINDOW_FRAC: tuple[float, float] = (0.22, 0.08)
+
+
+def _brand_colors(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """在 ``(H, W, 3)`` uint8/float 数组上判「品牌蓝」「品牌黄」。
+
+    COMSOL logo = 深蓝方块 + 黄色字块。实测像素：蓝 ≈ (96–112, 144, 192–208)、
+    黄 ≈ (240, 240, 96)。判据取**色相主导**而非固定值，故对缩放/抗锯齿的浅化也稳。
+    """
+    r, g, b = (
+        rgb[..., 0].astype(float),
+        rgb[..., 1].astype(float),
+        rgb[..., 2].astype(float),
+    )
+    blue = (b > g) & (g > r) & (b >= 140.0) & ((b - r) >= 55.0) & ((g - r) >= 15.0)
+    yellow = (r >= 175.0) & (g >= 175.0) & (b <= 150.0) & (np.abs(r - g) <= 70.0)
+    return blue, yellow
+
+
+def find_brand_box(
+    rgb: np.ndarray, *, frac: tuple[float, float] = BRAND_WINDOW_FRAC
+) -> tuple[int, int, int, int] | None:
+    """在**右上角窗口**内找 COMSOL 品牌标记，返回 ``(x0, y0, x1, y1)``（含端）；无 → ``None``。
+
+    防误报的核心是**蓝+黄成对**判据：图内数据（等高线/色标/散点）可能单独出现黄或蓝，
+    但「深蓝块紧邻黄块」的方形标记只有品牌 logo 有。窗口限定在角区，进一步把数据面排除。
+    """
+    h, w = rgb.shape[0], rgb.shape[1]
+    bw, bh = max(1, int(w * frac[0])), max(1, int(h * frac[1]))
+    x_off, y_off = w - bw, 0
+    win = rgb[y_off : y_off + bh, x_off : x_off + bw]
+    blue, yellow = _brand_colors(win)
+    if not (blue.any() and yellow.any()):
+        return None
+    ys, xs = np.where(blue | yellow)
+    return (
+        int(xs.min()) + x_off,
+        int(ys.min()) + y_off,
+        int(xs.max()) + x_off,
+        int(ys.max()) + y_off,
+    )
+
+
+def read_rgb_png(path: str | Path) -> np.ndarray | None:
+    """读 PNG 为 ``(H, W, 3)`` uint8 数组（origin 顶左）；读取失败返回 ``None``。
+
+    用 ``np.array(...)`` 而非 ``asarray``：PIL 转出的缓冲是**只读**的，就地改绘会抛
+    ``assignment destination is read-only``（实测）。
+    """
+    try:
+        from PIL import Image  # noqa: PLC0415 - 仅栅格改绘需要
+
+        with Image.open(path) as im:
+            return np.array(im.convert("RGB"), dtype=np.uint8)
+    except Exception:  # noqa: BLE001 - 栅格通道绝不抛断主流程
+        return None
+
+
+def _ring_median(
+    arr: np.ndarray, box: tuple[int, int, int, int], pad: int
+) -> np.ndarray:
+    """取 ``box`` 外扩 ``pad`` 圈的像素**中位数**色（= 标记周围的底色，自适应深浅背景）。
+
+    内框用**坐标掩膜**剔除（不用颜色比较——底色与标记色可能撞上）。
+    """
+    h, w = arr.shape[0], arr.shape[1]
+    x0, y0, x1, y1 = box
+    ox0, oy0 = max(0, x0 - pad), max(0, y0 - pad)
+    ox1, oy1 = min(w - 1, x1 + pad), min(h - 1, y1 + pad)
+    sub = arr[oy0 : oy1 + 1, ox0 : ox1 + 1]
+    mask = np.ones(sub.shape[:2], dtype=bool)
+    mask[y0 - oy0 : y1 - oy0 + 1, x0 - ox0 : x1 - ox0 + 1] = False
+    ring = sub[mask]
+    if ring.size == 0:
+        return np.array([255, 255, 255], dtype=float)
+    return np.median(ring.astype(float), axis=0)
+
+
+def strip_brand(path: str | Path, *, pad: int = 3) -> dict[str, Any]:
+    """就地把 PNG 右上角的 COMSOL 品牌标记抹除（周边底色填充）；返回审计读数。
+
+    用途：`export image --clean` / `--strip-brand` 的**像素级兜底**——COMSOL 的原生开关
+    （image 导出节点的 ``options*d=on`` + ``logo*d=off``）在部分版本/绘图组类型上可能不生效，
+    故导出后一律核验一次：仍在就地抹除并在 sidecar 留痕，保证「角区品牌像素 0 命中」。
+
+    Returns:
+        ``{"found", "bbox", "fill", "pixels"}``；读不到图像时 ``{"found": False, "error": ...}``。
+    """
+    arr = read_rgb_png(path)
+    if arr is None:
+        return {"found": False, "error": "PNG 读不到"}
+    box = find_brand_box(arr)
+    if box is None:
+        return {"found": False, "bbox": None}
+    fill = _ring_median(arr, box, pad)
+    h, w = arr.shape[0], arr.shape[1]
+    x0, y0 = max(0, box[0] - pad), max(0, box[1] - pad)
+    x1, y1 = min(w - 1, box[2] + pad), min(h - 1, box[3] + pad)
+    region = arr[y0 : y1 + 1, x0 : x1 + 1]
+    n = int(region.shape[0] * region.shape[1])
+    region[:, :] = np.round(fill).astype(np.uint8)
+    try:
+        from PIL import Image  # noqa: PLC0415
+
+        Image.fromarray(arr, mode="RGB").save(str(path))
+    except Exception as exc:  # noqa: BLE001 - 落盘失败只回报，不抛断导出主流程
+        return {"found": True, "bbox": list(box), "error": f"回写失败：{exc}"}
+    return {
+        "found": True,
+        "bbox": list(box),
+        "fill": [int(v) for v in np.round(fill)],
+        "pixels": n,
+    }
+
+
+def count_brand_pixels(path: str | Path) -> int:
+    """角区品牌像素计数（核验口径，复用 I.i3 报告的方法）；读不到 → ``-1``。"""
+    arr = read_rgb_png(path)
+    if arr is None:
+        return -1
+    h, w = arr.shape[0], arr.shape[1]
+    bw, bh = (
+        max(1, int(w * BRAND_WINDOW_FRAC[0])),
+        max(1, int(h * BRAND_WINDOW_FRAC[1])),
+    )
+    win = arr[0:bh, w - bw : w]
+    blue, yellow = _brand_colors(win)
+    return int((blue | yellow).sum())

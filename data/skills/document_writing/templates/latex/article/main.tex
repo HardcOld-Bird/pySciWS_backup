@@ -1,0 +1,48 @@
+% !TEX program = xelatex
+% ============================================================
+%  通用文章模板（可中英文；默认 xelatex，支持 ctex 中文）
+%  编译：compose tex build <本项目目录>
+%  参考文献：biblatex + biber，条目写进 refs.bib，用 \cite{key} 引用
+% ============================================================
+\documentclass[11pt,a4paper]{article}
+
+% --- 中文支持：需要写中文时取消下一行注释（本模板默认用 xelatex 编译） ---
+% \usepackage[UTF8,heading=true]{ctex}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\usepackage[backend=biber,style=numeric,sorting=none]{biblatex}
+\addbibresource{refs.bib}
+
+\title{文档标题}
+\author{作者姓名}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+在此写摘要。中文文档请启用上面的 \texttt{ctex} 宏包。
+\end{abstract}
+
+\section{引言}
+正文示例，引用文献~\cite{zhu2018simultaneous}。
+
+\section{方法}
+一个公式：
+\begin{equation}
+  \int_{-\infty}^{\infty} e^{-x^2}\,\mathrm{d}x = \sqrt{\pi}.
+  \label{eq:gaussian}
+\end{equation}
+参见式~\eqref{eq:gaussian}。
+
+\section{结论}
+总结。
+
+\printbibliography
+\end{document}

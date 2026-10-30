@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "discipline": "受控词表（REFACTOR v1.0 §2）。组员 <blocked tags=\"a,b\"> 只能取本表 tags 的键；缺省不标注合法（=空列表，不阻断交付）。增补须**附定义**（definition 非空）并走 devops 交付 + pre-commit 校验——词表改动会改变全体组员的失败分类面与 Tier A 统计口径，不是本地偏好。删减同规矩。库侧读取口：pysci.skills.orchestration.tools.failure_tags.load_tags()，Node 侧：orchestration/guards/delivery-gate.mjs。**提案分类同用本文件**（infra_kinds 键）：<infra_suggestion kind=\"…\"> 的合法取值以此表为准，gate 拦、dispatch 落盘复核、approve 入队三面共读同一份——词表若有两份就会漂移，非法分类便可能只被其中一面看见（backlog 20261012-120001-leader）。**blocked 成因档位同用本文件**（reasons 键）：<blocked reason=\"…\"> 的合法取值以此表为准（缺省不标注合法），供 orch status 与 drain 的 .done 按档分列计数、让链路策略可按档分化（backlog 20261013-191213-devops）。",
+  "tags": {
+    "whitelist_conflict": "写权限面冲突：目标路径不在本 pod 允许写面内（pod-guard 路径拦截、或须经他人/组长代写）。**只归这一类**——main 脏面与本次合并相交（`pysci-dev worktree merge` 报「[✗] 交集 N 项」）用 merge_dirty_face；同一隔离面/会话被并发写者占用用 concurrent_writer。**别把它当「写不下去」的兜底标签**：20261014-113347-tier-a 立案的 4 次命中里，3 次实为 merge_dirty_face、1 次为并发写者，误标把 Tier A 计数抬过了阈值。",
+    "cli_missing": "所需 CLI/子命令不存在、未部署或签名与文档不符（含 PATH 与 editable 安装漂移）。",
+    "doc_stale": "文档/技能真本与代码实际行为不一致——读了会做错（比 tool_bug 更值得立案，因为它污染每一次决策）。",
+    "tool_bug": "既有工具行为缺陷（有复现、非新需求）：结果与声明的语义不符。",
+    "harness_gap": "harness/编排设施能力缺口：任务本身没问题，是机制还没长出来（词表里最该转成 backlog 的一类）。",
+    "model_capability": "模型能力不足：轮次耗尽、理解偏差、不遵循指令、输出质量不达标（换档/加轮次可能解，属档位策略信号）。",
+    "quota": "额度/配额耗尽或被限流（含平台 credit limit、上游 API 配额）。",
+    "env_broken": "环境损坏：venv/PATH/node/编码/代理/钩子接线等本机设施不可用（通常一次修复消掉一批失败）。",
+    "merge_dirty_face": "main 工作区脏面与本次合并相交。**默认已自愈**：`pysci-dev worktree merge` 自动搁置相交改动 → 合并 → 三路应回（rc=0，不丢在飞改动）；仅 `--no-shelve` 或自动搁置失败时才 rc=2。rc=2 时重跑无用——须在 main 提交/还原相交文件后由组长合并；blocked 正文请原样贴上交集文件清单。",
+    "concurrent_writer": "同一隔离面/会话被并发写者占用：同一 worktree 已有活写者（「一个 worktree 一个写者」），或同一 sid 被两个进程并发执行。**停手勿抢写**，换面/换 sid 后重派（派发侧 sid 在途闸对批次自动换 sid，人工派发默认拒绝并点名占用证据）。",
+    "visual_occlusion": "产物版面遮挡（演示/图件类）：文字或图块压住图线、色块、模板外框（零遮挡铁律违规）——审查硬伤判 FAIL 后的返工成因，标注在返工/受阻交付上，让「同类版面缺陷反复出现」可被 Tier A 计数看见。",
+    "text_overflow": "产物文字溢出：固定框文本被裁或越出框/画布（投影字号与框尺寸不匹配）——审查硬伤类返工成因。",
+    "asset_quality": "产物素材质量不达标：糊图/拉伸变形/断词/无出处/图文错配——审查硬伤类返工成因。",
+    "design_smell": "设计异味：能跑但方向可疑，需要人裁决而非修 bug（Goodhart 防护：别让它混进 bug 计数）。",
+    "unknown": "归不进以上任何一类。**慎用**：它的出现即说明词表该补一项——若反复出现，Tier A 会把它立案出来。"
+  },
+  "infra_kinds": {
+    "defect": "缺陷：既有机制行为与其声明不符（须附复现命令与实际输出，否则不可证伪）。",
+    "usability": "难用/体验：机制能跑但路径别扭、要人记住本不该记的规矩（描述场景即可，不强制复现）。"
+  },
+  "reasons": {
+    "needs_decision": "已侦察、待裁决：修复形状=change 但缺判决记录、或多个权衡面需组长/用户定夺——重派同一单改变不了它（无新信息），停链等裁决。",
+    "capacity": "执行端余量不足：会话/轮次/预算耗尽导致半做或未做——非规格障碍，补足余量后重派可直接落地。",
+    "blocked_by_env": "环境/权限受阻：工具缺失、代理、钩子接线、写权限面冲突等本机设施不可用——先修设施再重派。",
+    "blocked_by_upstream": "上游前置缺失：依赖的数据/产物/判决尚未就绪——等前置完成再重派。"
+  }
+}

@@ -1,0 +1,101 @@
+# pycache
+__pycache__/
+
+# dirs
+/.idea/
+/.venv/
+/.pytest_cache/
+/.ruff_cache/
+
+# Build artifacts
+*.egg-info/
+
+# 凭据与环境变量（文献检索工具使用）
+.env
+
+# 本地工具链与依赖缓存（vendored 于 sub_root/，本机专属，永不入库）
+/sub_root/
+
+# 运行日志（使用痕迹，本地保留不上传）
+*.log
+
+# WPS/Office 锁文件（临时件，绝不入库）
+~\$*
+
+# 图像类数据不入库（用户裁决 2026-10-17：避免 LFS 超限，图像一律本地保留不上传）
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+*.tif
+*.tiff
+*.svg
+
+# ===== 骨架修剪（2026-10-30 用户裁决）=====
+# 研究内容（研究线代码/数据/测试）与一切使用痕迹只在本地保留、永不上传；
+# 仓库只含可开展任意新研究的核心骨架。新增内容时对照本节判断归属。
+
+# 研究树
+/src/pysci/research/
+/scripts/research/
+/tests/research/
+
+# data/ 白名单制：只放行 data/skills 骨架面与用户自管配置真源，其余全部本地保留
+/data/*
+!/data/skills/
+!/data/用户的inbox/
+/data/用户的inbox/*
+!/data/用户的inbox/pysci_settings.toml
+
+# data/skills 使用痕迹（骨架面是 templates/recipes/knowledge/docs 与各技能 .gitignore）
+/data/skills/*/cache/
+/data/skills/*/runs/
+/data/skills/*/papers/
+/data/skills/*/bilingual/
+/data/skills/*/gallery/
+/data/skills/*/assets/
+/data/skills/*/projects/
+/data/skills/*/trash/
+/data/skills/*/ingest/
+/data/skills/*/reviews/
+/data/skills/*/shortlists/
+/data/skills/*/prompts/
+/data/skills/*/INDEX.md
+/data/skills/*/LEDGER.md
+/data/skills/*/manifest.jsonl
+/data/skills/*/README.md
+
+# 编排运行状态：只保留最小配置面（registry 配置、失败词表、lint 规则、部署台账）
+# 与 backlog 空种子；其余（plans/deliveries/replies/suggestions/evals/ledger/
+# preference-journal 等任务史与台账流水）全是使用痕迹，本地保留不上传。
+/orchestration/state/*
+!/orchestration/state/registry.json
+!/orchestration/state/skills-deployed.json
+!/orchestration/state/failure-classes.json
+!/orchestration/state/failure-tags.json
+!/orchestration/state/taskbook-lint.json
+!/orchestration/state/backlog.json
+
+# 组员 pod 只保留初始 harnessing（AGENTS.md/charter、settings/mcp 配置面、各 pod
+# .gitignore）；部署技能副本由 orch sync 再生，工作文件与组员自建 rules/rubrics/
+# 咨询产物等一律本地保留不上传。
+/orchestration/pods/*/bench/
+/orchestration/pods/*/inbox/
+/orchestration/pods/*/outbox/
+/orchestration/pods/*/rubrics/
+/orchestration/pods/twin/PREFERENCE*.md
+/orchestration/pods/*/.qoder/skills/
+/orchestration/pods/*/.qoder/rules/*
+!/orchestration/pods/*/.qoder/rules/charter.md
+
+# 技能部署副本（真本在 orchestration/skills/，orch sync 再生）
+/.qoder/skills/
+
+# 组长 Stop 钩子（watch 自动挂载）的运行态文件：运行日志 + 「最新在听者」token
+/.qoder/hooks/watch-arm.log
+/.qoder/hooks/watch-holder.token
+
+# 瞬时工作区（每个 worktree 是一次任务的全量检出，数万文件；用后即弃、可再生）
+/.qoder/worktrees/

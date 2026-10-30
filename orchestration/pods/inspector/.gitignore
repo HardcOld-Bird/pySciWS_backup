@@ -1,0 +1,6 @@
+# 可再生物与草稿区不入库（README §2 git 策略）
+outbox/
+.qoder/skills/
+# 任务书运行态：正文已被巡检队列（state/inspector/queue.json）与发现台账
+# （state/inspector/findings.jsonl）记录，再入库只会污染 git status。
+inbox/task-*.md

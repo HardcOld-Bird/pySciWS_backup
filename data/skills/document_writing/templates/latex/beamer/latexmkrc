@@ -1,0 +1,6 @@
+# latexmk 配置：Beamer 幻灯片用 pdflatex + bibtex
+$pdf_mode = 1;              # 1 = pdflatex；需中文（ctex）时改 5 = xelatex
+$bibtex_use = 2;            # 自动跑 bibtex（\bibliography{refs}）
+$out_dir = 'build';
+$clean_ext = 'synctex.gz nav snm vrb toc';
+@default_files = ('main.tex');

@@ -1,0 +1,302 @@
+[project]
+name = "pysci"
+version = "0.1.0"
+description = "N/A"
+readme = "README.md"
+# 锁定 Python 精确版本（与项目根目录 .python-version 保持一致）
+# uv sync 会自动下载/使用该解释器
+requires-python = "==3.13.15"
+license = {text = "MIT"}
+authors = [
+    {name = "HardcOld-Bird", email = "antarcticbird@163.com"}
+]
+
+# ------------------------------------------------------------
+# 运行时依赖（由 environment.yml 迁移而来）
+# ------------------------------------------------------------
+dependencies = [
+    # 科学计算核心
+    "numpy",
+    "scipy",
+    "sympy",
+    # 绘图
+    "matplotlib",
+    "scienceplots",
+    "ultraplot",
+    "pyvista",
+    # 数据处理 / 校验
+    "pandas",
+    "pydantic",
+    # COMSOL 仿真接口
+    "mph",
+    # 文献检索与知识库（代码：src/pysci/skills/literature_research/；数据：data/skills/literature_research/，详见其 README.md）
+    "requests",         # HTTP 客户端（OpenAlex / arXiv / WoS）
+    "python-dotenv",    # 加载项目根 .env
+    # Zotero 文献库层：委托社区 zotero-mcp 的 `zotero-cli`（经 `uv tool install "zotero-mcp-server[pdf,scite]"`
+    # 独立安装于隔离工具环境，见 scripts/zotero_mcp/）；本项目仅 subprocess 调用它，故原 pyzotero / markdown
+    # （zotero_bridge.py 手写 API 回退与 md→html 所需）已随该模块删除而移除，不再是项目依赖。
+    # PDF → Markdown 抽取 + 付费墙全文（src/pysci/skills/literature_research/tools/）：
+    # pdf_extract.py 公式精读首选云端 MinerU（mineru-open-sdk 封装鉴权/上传/轮询/取结果，
+    # 仅依赖 httpx，无本地重型依赖）；marker-pdf / magic-pdf 实测本机不可用且云端可替代，已移除。
+    "mineru-open-sdk>=0.2.5",  # 云端 MinerU Open API SDK：PDF→MD、公式→LaTeX（需 .env 配 MINERU_TOKEN）
+    "pymupdf4llm",      # 本地兜底后端：纯 CPU，快，但公式会丢失
+    # bilingual 中英对照生产线（src/pysci/skills/literature_research/tools/bilingual.py）的句切分：
+    # pysbd——社区 SBD 标准实现、纯 Python 零传递依赖、自带学术缩写规则（Fig./Eq./et al./e.g. 不误切）；
+    # 弃 nltk punkt（需联网下载模型数据）与自研正则规则（缩写表维护成本高、回归风险大）。
+    "pysbd>=0.3.4",
+    "playwright>=1.63.0",  # 付费墙论文抓取：HTML 全文 / 正文 PDF / 补充材料
+    # browser_fetch.py 正文抽取：从 Playwright 抓取的 HTML 提取结构化 markdown 正文（替代手写 innerText JS）。
+    "trafilatura>=2.2.0",
+    # 文档写作 skill（src/pysci/skills/document_writing/；数据：data/skills/document_writing/）：
+    # markitdown 会带入 onnxruntime/magika 做文件类型识别；LaTeX 编译另需外部 TeX 发行版
+    # （TeX Live），非 pip 依赖，须另行安装并加入 PATH。
+    "markitdown[pptx]>=0.1.8",
+    "python-docx>=1.2.0",
+    "python-pptx>=1.0.2",
+    # Pandoc（社区文档转换标准）承担 Markdown↔Office 写转换（from-markdown 命令）；
+    # pypandoc-binary 自带 pandoc 二进制，uv sync 即可用，无需手动装 pandoc。
+    # 如需改用系统 pandoc，在 .env 设 DOCWRITING_PANDOC 指向其绝对路径（见 config.find_pandoc）。
+    "pypandoc-binary>=1.15",
+    # 实验平台数据采集：绑定 NI 数据采集硬件，仅 Windows + 装 NI-DAQmx 驱动后可运行；
+    # 包本身跨平台可安装，无驱动时相关用例由 tests/…/conftest.py 守卫自动跳过收集。
+    "nidaqmx",
+    # 编排体系路由 v3（src/pysci/skills/orchestration/tools/routing.py）：DeepSeek 官方峰谷
+    # 价差 2 倍，谷时（周末全天 / 法定节假日全天 / 工作日峰段之外）把 qwen·mimo 预设的主席与
+    # 仲裁团隐性换到 DeepSeek 席。**法定节假日判定必须有库**——星期几能自己算，假日不能。
+    # 选型：chinesecalendar 零传递依赖、内嵌国务院 2004–2026 公告（含调休），判不出年份抛
+    # NotImplementedError，由 routing 转成「保守不切换 + 出声告警」。
+    "chinesecalendar>=1.10",
+    # 科研绘图 skill（src/pysci/skills/scientific_plotting/；数据：data/skills/scientific_plotting/）：
+    # 出版规范层 + 图生产管线骨架。绘图后端复用已声明的 matplotlib/scienceplots/ultraplot/pyvista；
+    # pyyaml 用于读取 figures 目录下的 STYLE.yaml 风格绑定（此前仅作为传递依赖存在，此处显式声明）。
+    "pyyaml",
+    # 理论计算 skill（src/pysci/skills/theoretical_computation/；数据：data/skills/theoretical_computation/）：
+    # plotly 提供交互式 HTML 图表（参数空间探索时旋转/缩放/悬停），与 matplotlib 静态 PNG 互补。
+    "plotly",
+    # AI 绘图 skill（src/pysci/skills/ai_drawing/；数据：data/skills/ai_drawing/）：
+    # pillow 用于生成图的后处理（裁剪/缩放/旋转/格式转换/拼合）、主色板抽取、
+    # 以及 `imagine mark` 在图上画编辑标记（框/箭头/点）。
+    # 图像生成本身**直连火山方舟（即梦 Seedream）的 OpenAI 兼容 API**，只用已声明的
+    # requests，零新增核心依赖。（历史上曾绕道无头 ComfyUI 做编排，因本机无 CUDA GPU
+    # 且方舟 API 能力面更宽，已于重构中整层移除。）
+    "pillow",
+    "paper-qa>=5",
+    # 3D 建模 skill（src/pysci/skills/modeling3d/；数据：data/skills/modeling3d/）：
+    # build123d —— 3D 打印件的参数化 CAD（OCCT B-rep 内核），尺寸精确、流形闭合由构造保证，
+    #   直接导出 STL/STEP。选型时与 CadQuery 2.7.0 实测对决（同一测试件：体积/网格/包围盒
+    #   完全一致），弃 CadQuery 的原因：内核更旧（OCCT 7.8 vs 8.0）、其 cadquery-ocp 捆绑
+    #   VTK 与既有 pyvista 依赖面冲突，且 build123d 是 CadQuery 作者的后继项目、维护更活跃。
+    # trimesh —— 网格验收门（watertight/体积/包围盒/壁厚），STL 交付前必过 `model3d check`。
+    # 渲染不经 Python 依赖：直接 subprocess 驱动本机 Blender headless（路径见 .env 的
+    #   MODELING3D_BLENDER；交互通道为 blender-mcp addon + MCP server，均社区维护）。
+    "build123d>=0.13",
+    "trimesh>=5",
+    # 交互式控制台（README §12，2026-10-14 用户批准）：`pysci` 裸名 TUI 的 TUI 栈。
+    # ADR（选什么/弃什么/为什么，决策记录写在决策发生的文件里）：
+    #   选 **textual**——Textualize 出品（rich 作者的社区标准 TUI 框架），自带
+    #   Pilot 无头键盘测试驱动、焦点/视图模型与主题，免手搓终端渲染与事件循环（§2 不手搓框架）。
+    #   弃 **rich + prompt_toolkit**——能画静态富文本/取输入，但没有组件与视图栈，「主菜单↔详情」
+    #   的状态机得自己写，与 §2.5 的模块化详情视图走向相悖；仅作 M1 spike 不兼容时的退路。
+    #   M1 已本地实测（复现与结论见 README §12）。
+    "textual",
+    # TDA/高维可视化（高维流形形态学——Mapper/持续同调/降维投影）。
+    # ADR（选什么/弃什么/为什么；组长裁决 2026-10-29 选项 a）：
+    #   选 **kmapper**（Mapper 图）+ **ripser.py**（持续同调 H0–H2，包名 ripser）——分掌两职；
+    #   **umap-learn**——降维投影。三者 py3.13 均实测可用（冒烟：Mapper 图 / H0-H1 条形码 / 投影）。
+    #   弃 **giotto-tda**——平台不可装：0.6.x 只出 cp38–cp312 wheel、无 py3.13 制品，0.1.4
+    #   回落源码构建需缺失的 CMake+C++ 工具链（uv 实测报错；Python 3.13.15 为锁定工具链）。
+    #   备 **gudhi**（witness complex）——按需后备，点云规模确需时另行小单添加（3.13.0 已冒烟）。
+    "kmapper>=2.1.0",
+    "ripser>=0.6.15",
+    "umap-learn>=0.5.12",
+]
+
+# ------------------------------------------------------------
+# 可选 extra：AI 绘图 skill 的进阶位图算子（`imagine img …`）。
+# scikit-image 提供形态学/连通域测量/相位相关配准，opencv-python-headless 提供
+# 泊松融合（seamlessClone）与算法级 inpaint —— 二者均为**纯 CPU**，无需 GPU。
+# 未安装时 imaging.py 惰性导入失败并给出安装提示，其余子命令不受影响。
+# 安装：uv pip install -e ".[imaging]"
+# ------------------------------------------------------------
+[project.optional-dependencies]
+imaging = ["scikit-image", "opencv-python-headless"]
+
+# ------------------------------------------------------------
+# 控制台脚本：各 skill 的统一 CLI 门面（均为 module:main 形态，main(argv=None)->int）。
+# 惯例是加前缀 pysci- 避免与全局工具重名；`uv sync` 后在 .venv/Scripts 生成 pysci-*.exe。
+# **例外（README §12，2026-10-14 用户批准）**：`pysci` 裸名留给**用户交互式控制台**
+# （tty→TUI / 非 tty→status 静态输出），面向人而非 agent，裸名即产品名；本机无同名全局
+# 工具故不冲突。旧控制台入口于 M7 **硬改名不留别名**并入裸 `pysci`（§2.1 裁决⑤）。
+# 等价兜底调用：`uv run --no-sync python -m <入口模块>`（模块路径见各 SKILL.md 的 Invocation）。
+# ------------------------------------------------------------
+[project.scripts]
+pysci-research = "pysci.skills.literature_research.tools.research:main"
+pysci-compose = "pysci.skills.document_writing.tools.compose:main"
+pysci-simulation = "pysci.skills.comsol_simulation.tools.simulation:main"
+pysci-figures = "pysci.skills.scientific_plotting.tools.figures:main"
+pysci-theory = "pysci.skills.theoretical_computation.tools.theory:main"
+pysci-imagine = "pysci.skills.ai_drawing.tools.imagine:main"
+pysci-model3d = "pysci.skills.modeling3d.tools.model3d:main"
+# 编排 CLI：组长专属工作通道（派发/会话池/台账/技能部署；设计见 orchestration/README.md）。
+# 与前 7 个「末端技能 CLI」不同，这是管理设施——服务对象是组长（TUI 主会话）而非组员。
+pysci-orch = "pysci.skills.orchestration.tools.orch:main"
+# devops 组员工具（worktree/部署/巡检）：与 orch 严格分离——orch 服务组长，dev 服务 devops 组员。
+pysci-dev = "pysci.skills.devops.tools.dev:main"
+# 用户控制台（README §4.1/§6）：mirror 是**用户**侧入口（全景概览 + 口述分流），
+# 与 orch（组长）/dev（devops）分离；实现复用 orchestration 包内库（§0.9 共享逻辑做库）。
+# README §12：裸 `pysci` = 用户交互式控制台（tty→TUI / 非 tty→status 静态输出）；
+# 子命令 `pysci status|journal|decisions …` 保持静态、作 **LLM 专用通道**。
+pysci = "pysci.skills.orchestration.tools.tui.app:main"
+# bencher 组员工具（README §5.5，E4）：harness 测量面——跑案/捕获基线/副本 A/B/读数表。
+# 与 dev 一样是「组员自己的 CLI」，复用 orchestration 的 eval/replica 库，不复制判据。
+pysci-bench = "pysci.skills.bencher.tools.bench:main"
+# inspector 组员工具（README §6，E5a）：发现登记与分流面——findings 台账读写、
+# 机械证据类免判决晋升、判断类必经 J 仲裁。**没有 override 参数**（§5.2 无自裁面的
+# 代码事实）。队列/预算/让路/迟滞等生命周期闸门在 orch 侧（inspectd），组员碰不到。
+pysci-inspect = "pysci.skills.inspector.tools.inspect:main"
+
+# ------------------------------------------------------------
+# 开发依赖组（PEP 735）：uv sync 默认会安装，无需 --extra
+# ------------------------------------------------------------
+[dependency-groups]
+dev = [
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "commitizen",
+    "scipy-stubs",   # scipy 类型存根（experiment/analyze 等类型检查用）
+]
+
+# ------------------------------------------------------------
+# 构建后端：src-layout 单包 pysci（uv sync 以 editable 方式装入 .venv）
+# ------------------------------------------------------------
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pysci"]
+
+[tool.uv]
+# 默认索引指向清华 TUNA 镜像，加速国内下载（如需换回官方源，删除 default = true 即可）
+[[tool.uv.index]]
+name = "tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[project.urls]
+Homepage = "https://github.com/HardcOld-Bird/pySciWS_backup"
+Repository = "https://github.com/HardcOld-Bird/pySciWS_backup.git"
+Issues = "https://github.com/HardcOld-Bird/pySciWS_backup/issues"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+exclude = [
+    ".git/**",
+    ".idea/**",
+    ".venv/**",
+    # 平行资产树 data/：非代码资产（.mph / storage / 参考资料 / 文献缓存与 PDF），
+    # 与 src/pysci 代码树镜像（data/research ↔ research、data/skills ↔ skills），不参与 lint / format
+    "data/**",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort (import sorting)
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+]
+
+# ------------------------------------------------------------
+# per-file-ignores：本次重构是“结构迁移”，对迁移进来的既有代码只改包结构与
+# import，不重写其代码逻辑与命名风格（camelCase 物理量、既有异常/简化写法等）。
+# 故对这些子树豁免“纯风格类”规则；正确性规则（F401/F811/E9 等）与新增代码
+# （common/paths）仍保持严格。后续可按子树逐步收紧。
+# ------------------------------------------------------------
+[tool.ruff.lint.per-file-ignores]
+"src/pysci/research/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
+"src/pysci/skills/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
+# build123d builder 模式的官方写法即星号导入（算子由上下文管理器注入命名空间），
+# F403/F405 误报不可避免；豁免各研究线的 3D 建模脚本（模板在 data/ 下本就不参与 lint）。
+"src/pysci/research/*/models/**" = ["F403", "F405"]
+"scripts/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
+"tests/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731", "F841"]
+# 既有硬件脚本 exp/ 下含未定义名（历史遗留 bug，待后续单独修复）；
+# 注意 glob 须含 research/ 段方能命中 scripts/research/<line>/experiment/exp/。
+"scripts/research/**/experiment/exp/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731", "F821"]
+# data/research/ 是研究脚本平行资产树（与 src/pysci/research 镜像，混有 pdf/mph 等非代码资产）。
+# 整树在 ruff exclude 内、提交门禁由钩子 --force-exclude 兜住；但**显式路径**跑
+# `ruff check data/research/.../x.py` 时 exclude 不生效（ruff 语义），研究脚本的物理符号
+# 命名（S/A/B）、zip() 写法会被当违规报出（backlog 20261028-215208-theory 实测 12 条
+# N803/N806/B905）。故按与 src 研究线**同一口径**豁免纯风格规则；正确性规则仍严格。
+"data/research/**" = ["N", "SIM", "B", "C4", "E722", "E402", "E731"]
+
+[tool.ruff.lint.isort]
+# Configure import sorting
+known-first-party = ["pysci"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "0.1.0"
+version_scheme = "pep440"
+version_provider = "pep621"
+update_changelog_on_bump = true
+major_version_zero = true
+
+# ------------------------------------------------------------
+# pytest：测试根为 tests/（合并原 legacy_exp 的 pytest 配置）
+# addopts 默认 `-m "not hardware"`：无硬件环境（nidaqmx 已装但 PXI/步进电机/COMSOL Server
+# 不可用）下 `uv run --no-sync pytest tests` 全绿，硬件用例（@pytest.mark.hardware）默认跳过而非报错。
+# 需要跑硬件用例时显式覆盖：`uv run --no-sync pytest -m hardware`（或 `-m ""` 跑全部）。
+# 无 nidaqmx / 无 COMSOL Server 时，相关目录仍由各自 conftest.py 守卫自动跳过收集。
+# 覆盖率不写入 addopts（保持 `uv run --no-sync pytest` 轻快），需要时显式 `uv run --no-sync pytest --cov`。
+# ------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "-m",
+    "not hardware",
+]
+markers = [
+    "hardware: 需要 NI 数据采集硬件 / 步进电机 / COMSOL Server 等外部设备的用例",
+    "slow: 运行耗时较长的用例",
+]
+
+# ------------------------------------------------------------
+# coverage：统计 pysci 包源码覆盖率（原 legacy_exp 的 src/legacy_exp → src/pysci）
+# ------------------------------------------------------------
+[tool.coverage.run]
+source = ["src/pysci"]
+omit = [
+    "*/tests/*",
+    "*/scripts/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

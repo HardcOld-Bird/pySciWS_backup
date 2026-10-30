@@ -1,0 +1,735 @@
+"""PDF → Markdown 抽取封装。
+
+策略（默认 auto 模式，面向“精读需看公式”的场景）：
+
+**后端优先级**：
+1. **mineru-cloud** — MinerU 云端 Open API（vlm 模型，公式→LaTeX、表格质量最好，
+   无需本地 GPU）。走 PDF 路径通常就是为了精读看公式，故云端为**首选**。
+2. **pymupdf4llm** — 纯本地、极快（<10s/篇），但**公式会乱码**，仅在云端不可用时
+   兜底，且会**显式打印 WARNING**（绝不静默回退）。
+3. **arXiv LaTeX source** — 若能拿到源码，直接从 .tex 提取（最准，公式原生 LaTeX）。
+
+调用方式::
+
+    from pysci.skills.literature_research.tools.pdf_extract import extract_pdf
+
+    md = extract_pdf(Path("path/to/paper.pdf"))                   # auto：云端优先
+    md = extract_pdf(pdf_path, backend="mineru-cloud")            # 强制云端
+    md = extract_pdf(pdf_path, backend="pymupdf4llm")             # 强制本地兜底
+    md = extract_pdf(pdf_path, prefer_latex_source="2606.12345")  # 优先 arXiv 源码
+
+结果会缓存到 ``data/skills/literature_research/cache/extracted/{stem}.{backend}.md``，重复调用直接命中缓存。
+
+云端 MinerU 需在项目根 ``.env`` 配置 ``MINERU_TOKEN=``（在 https://mineru.net/apiManage/token
+免费申请，Token 有效期约 90 天）。未配置时 auto 会回退 pymupdf4llm 并告警。
+
+依赖：``mineru-open-sdk``（云端调用，仅依赖 httpx）+ ``pymupdf4llm``（本地兜底）。
+已移除 marker / 本地 magic-pdf（实测本机不可用，云端可完全替代）。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import re
+import sys
+import time
+from collections.abc import Callable
+from pathlib import Path
+
+from .cache_manager import bump_mtime
+from .config import settings
+
+
+# ---------------------------------------------------------------------------
+# 异常
+# ---------------------------------------------------------------------------
+class NoBackendAvailable(RuntimeError):
+    pass
+
+
+class ExtractionFailed(RuntimeError):
+    pass
+
+
+# ---------------------------------------------------------------------------
+# 后端探测
+# ---------------------------------------------------------------------------
+def _has_module(name: str) -> bool:
+    try:
+        __import__(name)
+        return True
+    except ImportError:
+        return False
+
+
+# auto 模式的后端优先级：云端优先（公式质量最好），本地 pymupdf4llm 兜底
+PREFERRED_ORDER: tuple[str, ...] = ("mineru-cloud", "pymupdf4llm")
+
+
+def _mineru_cloud_ready() -> bool:
+    """云端 MinerU 是否可用：需配置 MINERU_TOKEN 且 mineru SDK 可导入。"""
+    return bool(settings.mineru_token) and _has_module("mineru")
+
+
+def available_backends() -> list[str]:
+    """列出当前环境实际可用的后端。"""
+    backends: list[str] = []
+    if _mineru_cloud_ready():
+        backends.append("mineru-cloud")
+    if _has_module("pymupdf4llm") or _has_module("fitz"):
+        backends.append("pymupdf4llm")
+    return backends
+
+
+def _pick_backend(requested: str) -> str:
+    """根据用户请求与实际可用性选择后端。"""
+    avail = available_backends()
+    if not avail:
+        raise NoBackendAvailable(
+            "No PDF extraction backend available.\n"
+            "  - 云端 MinerU：在 .env 配置 MINERU_TOKEN（https://mineru.net/apiManage/token 免费申请）\n"
+            "  - 本地兜底：uv add pymupdf4llm"
+        )
+
+    if requested == "auto":
+        for pref in PREFERRED_ORDER:
+            if pref in avail:
+                return pref
+        return avail[0]
+
+    if requested not in avail:
+        print(
+            f"[pdf_extract] 请求的后端 '{requested}' 不可用，回退到 auto",
+            file=sys.stderr,
+        )
+        return _pick_backend("auto")
+
+    return requested
+
+
+# ---------------------------------------------------------------------------
+# 缓存工具
+# ---------------------------------------------------------------------------
+def _cache_path(pdf_path: Path, backend: str) -> Path:
+    """缓存文件名 = PDF 的 sha1 前 12 位 + backend + .md"""
+    h = hashlib.sha1()
+    h.update(str(pdf_path.resolve()).encode("utf-8"))
+    try:
+        h.update(str(pdf_path.stat().st_size).encode())
+        h.update(str(int(pdf_path.stat().st_mtime)).encode())
+    except OSError:
+        pass
+    key = h.hexdigest()[:12]
+    return settings.cache_extracted / f"{pdf_path.stem}_{key}.{backend}.md"
+
+
+def _read_cache(path: Path) -> str | None:
+    if path.exists():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        bump_mtime(path)  # 命中 touch，使 mtime≈最近访问（供 prune LRU）
+        return text
+    return None
+
+
+def _write_cache(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# 后端实现
+# ---------------------------------------------------------------------------
+# MinerU 云端（mineru-open-sdk 封装鉴权/上传/轮询/取结果，仅依赖 httpx，无本地 GPU）。
+# Precision Extract（需 token）单文件上限 200MB / 600 页；超限的大文件用 SDK 的 pages=
+# 参数按页区间分段转换再拼接（不再用 fitz 物理切分临时文件）。
+MINERU_MODEL = "vlm"  # vlm：公式→LaTeX、表格质量最好（推荐）
+MINERU_LANGUAGE = "en"  # 物理文献以英文为主（SDK 默认 "ch"）
+MINERU_MAX_PAGES = 600  # SDK Precision Extract 单文件页数上限（超出抛 PageLimitError）
+MINERU_CHUNK_PAGES = 600  # 超限时每段页数（= 上限，逐段调 SDK 的 pages=）
+MINERU_TIMEOUT = 900  # 单段轮询总超时（秒）；SDK 默认仅 300s，大文件放宽
+
+
+def _mineru_extract_pages(pdf_path: Path, pages: str | None = None) -> str:
+    """用 mineru-open-sdk 精准解析一段（或整份）PDF，返回 markdown 文本。
+
+    ``pages=None`` 表示整份；``pages="a-b"``（1-based 闭区间）表示页区间，用于超上限
+    大文件的分段转换。SDK 内部完成鉴权、上传、轮询与结果打包，本函数只取 markdown。
+    """
+    from mineru import MinerU
+
+    client = MinerU(settings.mineru_token or None)
+    try:
+        result = client.extract(
+            str(pdf_path),
+            model=MINERU_MODEL,
+            ocr=True,  # 强制 OCR：扫描件/图片公式也识别
+            formula=True,  # 公式→LaTeX
+            table=True,  # 表格识别
+            language=MINERU_LANGUAGE,
+            pages=pages,
+            extra_formats=["latex"],  # 额外产出 LaTeX，便于精读公式
+            timeout=MINERU_TIMEOUT,
+        )
+    finally:
+        client.close()
+
+    state = getattr(result, "state", None)
+    if state is not None and state != "done":
+        raise ExtractionFailed(f"MinerU 解析未完成（state={state}）")
+    md = getattr(result, "markdown", "") or ""
+    if not md.strip():
+        raise ExtractionFailed("MinerU 返回空 markdown")
+    return md
+
+
+def _pdf_page_count(pdf_path: Path) -> int:
+    """用 fitz 读取 PDF 页数；失败返回 0（视为未知，按单文件直接尝试）。"""
+    try:
+        import fitz  # type: ignore
+    except ImportError:
+        return 0
+    try:
+        with fitz.open(str(pdf_path)) as doc:
+            return int(doc.page_count)
+    except Exception:
+        return 0
+
+
+def _extract_with_mineru_cloud(pdf_path: Path) -> str:
+    """MinerU 云端后端（对外入口）：>MINERU_MAX_PAGES 页时用 pages= 分段转换再拼接。
+
+    mineru-open-sdk 的 Precision Extract 单文件有 600 页上限（超出抛 PageLimitError）。
+    教材/学位论文等大文件在此按页区间分段调用 SDK，再按页序拼接为一份完整 Markdown
+    （每段前加 HTML 注释标记页范围，便于溯源）。任一段失败则整体抛错（交由上层回退
+    或重试），避免产出残缺全文。
+    """
+    n_pages = _pdf_page_count(pdf_path)
+    if n_pages <= MINERU_MAX_PAGES:
+        return _mineru_extract_pages(pdf_path)
+
+    total = (n_pages + MINERU_CHUNK_PAGES - 1) // MINERU_CHUNK_PAGES
+    print(
+        f"[pdf_extract] MinerU: {n_pages} 页 > {MINERU_MAX_PAGES} 页上限，"
+        f"分 {total} 段（每段 ≤{MINERU_CHUNK_PAGES} 页）转换 ..."
+    )
+    parts: list[str] = []
+    for i in range(total):
+        start = i * MINERU_CHUNK_PAGES + 1
+        end = min((i + 1) * MINERU_CHUNK_PAGES, n_pages)
+        print(f"[pdf_extract] MinerU 分段 {i + 1}/{total}: 页 {start}-{end} ...")
+        md = _mineru_extract_pages(pdf_path, pages=f"{start}-{end}")
+        parts.append(
+            f"\n\n<!-- ===== MinerU pages {start}-{end} ({i + 1}/{total}) ===== -->\n\n{md}"
+        )
+    return "".join(parts).strip() + "\n"
+
+
+def _extract_with_pymupdf4llm(pdf_path: Path) -> str:
+    """pymupdf4llm 后端：速度最快，公式丢失但文本准确。"""
+    try:
+        import pymupdf4llm  # type: ignore
+
+        return pymupdf4llm.to_markdown(str(pdf_path))
+    except ImportError:
+        pass
+
+    # 回退：pymupdf (fitz) + 手写 markdown 化
+    try:
+        import fitz  # type: ignore
+    except ImportError as e:
+        raise ExtractionFailed(f"pymupdf4llm/fitz not installed: {e}") from e
+
+    parts: list[str] = []
+    with fitz.open(str(pdf_path)) as doc:
+        for i, page in enumerate(doc, 1):
+            text = page.get_text("text")
+            parts.append(f"\n\n<!-- page {i} -->\n\n{text}")
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# arXiv LaTeX 源码路径（物理领域独有优势）
+# ---------------------------------------------------------------------------
+def _extract_from_arxiv_source(arxiv_id: str) -> str | None:
+    """若指定了 arxiv_id，尝试下载源码并从主 .tex 提取正文。
+
+    返回 markdown-like 字符串；失败返回 None。
+    """
+    try:
+        from . import arxiv_client
+    except ImportError:
+        return None
+
+    # 整段包在 try 里，以兑现上面那句「失败返回 None」：``download_source`` 的
+    # ``mkdir`` 在它自己的 try 之外（磁盘满 / 无写权限 → OSError），``_tex_to_markdown``
+    # 的正则也可能对畸形 LaTeX 抛。自 ``cmd_read`` 接进 ``prefer_latex_source`` 之后，
+    # 这里的异常会让整个 :func:`extract_pdf` 失败——连 PDF 抽取都不做，把「本来能抽出
+    # 正文」变成「什么都没抽到」。LaTeX 源码只是**更准**的一条路，不该有能力否决那条
+    # **能用**的路（不变量 1：降级静默、不阻塞）。
+    try:
+        tar_path = arxiv_client.download_source(arxiv_id)
+        if not tar_path:
+            return None
+        tex = arxiv_client.extract_tex_from_source(tar_path)
+        if not tex:
+            return None
+        return _tex_to_markdown(tex)
+    except Exception as e:
+        print(
+            f"[pdf_extract] arXiv LaTeX source failed for {arxiv_id} "
+            f"({type(e).__name__}: {e}); falling back to PDF extraction",
+            file=sys.stderr,
+        )
+        return None
+
+
+#: 这些环境里的 ``%`` 是**字面字符**（代码清单、ASCII 图），逐行剥注释时必须整段放行。
+_TEX_VERBATIM_ENVS = frozenset(
+    {"verbatim", "Verbatim", "lstlisting", "minted", "alltt"}
+)
+
+#: 这些环境整段丢弃，不进 markdown。两类理由：
+#:
+#: - ``comment``：LaTeX 自己就整段丢弃（``comment`` 包），与注释同类，一并剥掉——
+#:   否则被作者注掉的一整节会以正文身份进入 markdown 与 RAG 语料。
+#: - ``thebibliography``：LaTeX **会**渲染它，渲染结果是参考文献表；但源码形态对下游
+#:   只有坏处——REVTeX 的书目环境里全是 ``\bibitem``/``\citenamefont``/``\bibinfo``/
+#:   ``\BibitemShut`` 宏残渣（实测某 arXiv 产物 768 个宏、35,633 字符，占该文件 58.8%），
+#:   对语义检索零价值却占满 chunk 预算。书目信息另有权威来源（``citation_verify`` /
+#:   Zotero / OpenAlex），不必从全文里捞。
+#:
+#: 两者都受下面的配平守卫保护：``\begin``/``\end`` 数目不等时**不**启用整段丢弃。
+_TEX_DROPPED_ENVS = ("comment", "thebibliography")
+
+_TEX_BEGIN_ENV_RE = re.compile(r"\\begin\{([A-Za-z]+\*?)\}")
+
+
+def _strip_line_comment(line: str) -> str:
+    """删掉一行里第一个**未转义**的 ``%`` 及其后内容。
+
+    判据是它前面连续反斜杠的个数：偶数个 ⇒ 这个 ``%`` 是注释起始；奇数个 ⇒ 它是被
+    ``\\%`` 转义出来的字面百分号（``50\\% efficiency`` 在物理论文里很常见，删掉就丢字）。
+    """
+    i = 0
+    while True:
+        j = line.find("%", i)
+        if j < 0:
+            return line
+        k, n = j - 1, 0
+        while k >= 0 and line[k] == "\\":
+            n += 1
+            k -= 1
+        if n % 2 == 0:
+            return line[:j].rstrip()
+        i = j + 1
+
+
+def _strip_tex_comments(tex: str) -> str:
+    """逐行剥掉 LaTeX 注释；verbatim 类环境整段放行，``comment`` 环境整段丢弃。
+
+    为什么必须放在 :func:`_tex_to_markdown` 的**最前面**：arXiv 源码包里挑出的主 .tex
+    不一定含 ``\\begin{document}``（多文件工程常把它留在被 ``\\input`` 的子文件里），
+    此时「去掉 preamble」那一步整个失效，于是 ``%\\title{...}``、``%\\author{...}`` 这类
+    被作者注掉的行会以正文身份留在产物里——实测 1803.04110 的 markdown 前 500 字符
+    全是 ``%`` 注释，而它是要进 RAG 语料的。先剥注释，preamble 切不切得掉就不再决定
+    这类噪声会不会漏进去。
+    """
+    # 只在确实配平时才启用整段丢弃：不配平的 \begin{comment}（作者手改留下的）会把
+    # 此后整个文档吃掉，那比漏几行注释严重得多。
+    droppable: set[str] = set()
+    for env in _TEX_DROPPED_ENVS:
+        b = tex.count(f"\\begin{{{env}}}")
+        if b and b == tex.count(f"\\end{{{env}}}"):
+            droppable.add(env)
+
+    out: list[str] = []
+    keep_env: str | None = None  # verbatim 类：整段原样放行
+    drop_env: str | None = None  # comment 类：整段丢弃
+    for line in tex.split("\n"):
+        lead = line.lstrip()
+        if drop_env is not None:
+            if lead.startswith(f"\\end{{{drop_env}}}"):
+                drop_env = None
+            continue
+        if keep_env is not None:
+            out.append(line)
+            if lead.startswith(f"\\end{{{keep_env}}}"):
+                keep_env = None
+            continue
+        m = _TEX_BEGIN_ENV_RE.match(lead)
+        if m:
+            env = m.group(1)
+            if env in droppable:
+                drop_env = env
+                continue
+            if env in _TEX_VERBATIM_ENVS:
+                keep_env = env
+                out.append(line)
+                continue
+        out.append(_strip_line_comment(line))
+    return "\n".join(out)
+
+
+#: 一层嵌套的花括号组（`\title{The {XYZ} effect}` 这类）。`.+?` 会在内层花括号处
+#: 提前收尾，故显式写出「非花括号 或 一层嵌套」的交替。
+_TEX_BRACED = r"\{((?:[^{}]|\{[^{}]*\})*)\}"
+
+#: REVTeX / article 的前置宏。`\title` 转成一级标题（对 RAG 分块有实际价值：真正的
+#: 标题应当落在第一个分块里），`\author` 合并成一行，其余（单位、邮箱、`\maketitle`）
+#: 对阅读与检索都零贡献，直接丢掉。不处理的话产物会以二十来行 `\affiliation{...}`
+#: 开头——实测 1803.04110 正是如此。
+_TEX_TITLE_RE = re.compile(r"\\title\*?\s*(?:\[[^\]]*\])?\s*" + _TEX_BRACED, re.S)
+_TEX_AUTHOR_RE = re.compile(r"\\author\*?\s*(?:\[[^\]]*\])?\s*" + _TEX_BRACED, re.S)
+_TEX_FRONT_MATTER_DROP_RE = re.compile(
+    r"\\(?:affiliation|altaffiliation|email|onlinemail|homepage|thanks|date|address"
+    r"|maketitle|tableofcontents|keywords|preprint|fax)\*?\s*(?:\[[^\]]*\])?"
+    r"\s*(?:\{(?:[^{}]|\{[^{}]*\})*\})?"
+)
+
+#: 图片本体与浮动体包裹在 markdown 里无从渲染，但 caption 有信息量——故只删包裹与
+#: `\includegraphics`，`\caption` 留给前一步转成 `_Figure/Table caption: ..._`。
+#: **不动 table 环境**：本模块对表格的既定处置是「保留原样」（见 :func:`_tex_to_markdown`
+#: 末尾的注释），删掉包裹只会把 tabular 的 `&` 行拆散，比留着更糟。
+_TEX_GRAPHICS_DROP_RE = re.compile(
+    r"\\includegraphics\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}"
+    r"|\\begin\{(?:figure\*?|wrapfigure\*?|subfigure|subfloat)\}"
+    r"|\\end\{(?:figure\*?|wrapfigure\*?|subfigure|subfloat)\}"
+    r"|\\centering\b"
+)
+
+
+def _tex_to_markdown(tex: str) -> str:
+    """极简 LaTeX → Markdown（保留公式、章节、引用）。
+
+    对物理论文，公式应保留为原始 LaTeX，因为 markdown 渲染器（Obsidian、Typora、
+    GitHub）都支持 $...$ 与 $$...$$ 语法。
+
+    第一步必须剥注释（:func:`_strip_tex_comments`）：下面的 preamble 切割对多文件 arXiv
+    工程常常失效，指望它兜住被注掉的行是不成立的。
+    """
+    tex = _strip_tex_comments(tex)
+
+    # 去掉 preamble
+    m = re.search(r"\\begin\{document\}", tex)
+    if m:
+        body = tex[m.end() :]
+    else:
+        body = tex
+    m = re.search(r"\\end\{document\}", body)
+    if m:
+        body = body[: m.start()]
+
+    # 前置宏：先取出 title / author 的值，再把这些宏整体删掉，最后拼回开头。
+    # 顺序不能反——删除正则跑过之后 title 就没了。
+    title_m = _TEX_TITLE_RE.search(body)
+    authors = [a.strip() for a in _TEX_AUTHOR_RE.findall(body) if a.strip()]
+    body = _TEX_FRONT_MATTER_DROP_RE.sub("", body)
+    body = _TEX_AUTHOR_RE.sub("", body)
+    body = _TEX_TITLE_RE.sub("", body)
+    head = ""
+    if title_m:
+        head += f"# {title_m.group(1).strip()}\n\n"
+    if authors:
+        head += f"**Authors:** {', '.join(authors)}\n\n"
+    body = head + body
+
+    # 章节标题
+    body = re.sub(r"\\section\*?\{(.+?)\}", r"\n## \1\n", body)
+    body = re.sub(r"\\subsection\*?\{(.+?)\}", r"\n### \1\n", body)
+    body = re.sub(r"\\subsubsection\*?\{(.+?)\}", r"\n#### \1\n", body)
+    body = re.sub(r"\\paragraph\*?\{(.+?)\}", r"\n**\1** ", body)
+
+    # 摘要
+    body = re.sub(
+        r"\\begin\{abstract\}(.+?)\\end\{abstract\}",
+        r"\n> **Abstract:**\n> \1\n",
+        body,
+        flags=re.S,
+    )
+
+    # 图表 caption
+    body = re.sub(
+        r"\\caption\{(.+?)\}", r"\n_Figure/Table caption: \1_\n", body, flags=re.S
+    )
+
+    # 图片本体与浮动体包裹（caption 已在上一步转换并保留）
+    body = _TEX_GRAPHICS_DROP_RE.sub("", body)
+
+    # itemize / enumerate → markdown list
+    body = re.sub(
+        r"\\begin\{itemize\}(.+?)\\end\{itemize\}",
+        lambda m: _tex_items_to_md(m.group(1), ordered=False),
+        body,
+        flags=re.S,
+    )
+    body = re.sub(
+        r"\\begin\{enumerate\}(.+?)\\end\{enumerate\}",
+        lambda m: _tex_items_to_md(m.group(1), ordered=True),
+        body,
+        flags=re.S,
+    )
+
+    # \item → -
+    body = re.sub(r"\\item\s*", "- ", body)
+
+    # 引用与标签
+    body = re.sub(r"\\cite[tp]?\*?(?:\[[^\]]*\])?\{([^}]+)\}", r"[\1]", body)
+    body = re.sub(r"\\ref\{([^}]+)\}", r"§\1", body)
+    body = re.sub(r"\\eqref\{([^}]+)\}", r"(§\1)", body)
+    body = re.sub(r"\\label\{[^}]+\}", "", body)
+
+    # 文本样式
+    body = re.sub(r"\\textbf\{(.+?)\}", r"**\1**", body)
+    body = re.sub(
+        r"\\textit\{(.+?)\}|\\emph\{(.+?)\}",
+        lambda m: f"*{m.group(1) or m.group(2)}*",
+        body,
+    )
+    body = re.sub(r"\\texttt\{(.+?)\}", r"`\1`", body)
+
+    # 保留 display math（$$...$$ 或 \[...\]）
+    body = re.sub(
+        r"\\begin\{equation\*?\}(.+?)\\end\{equation\*?\}",
+        r"\n$$\1\n$$\n",
+        body,
+        flags=re.S,
+    )
+    body = re.sub(
+        r"\\begin\{align\*?\}(.+?)\\end\{align\*?\}",
+        r"\n$$\n\\begin{aligned}\1\\end{aligned}\n$$\n",
+        body,
+        flags=re.S,
+    )
+    body = re.sub(
+        r"\\begin\{gather\*?\}(.+?)\\end\{gather\*?\}", r"\n$$\1$$\n", body, flags=re.S
+    )
+    body = re.sub(r"\\\[(.+?)\\\]", r"\n$$\1$$\n", body, flags=re.S)
+    body = re.sub(r"\\\((.+?)\\\)", r"$\1$", body, flags=re.S)
+
+    # 移除剩余 LaTeX 命令（保守：只移除已知的排版命令）
+    body = re.sub(
+        r"\\(?:noindent|par|clearpage|newpage|medskip|smallskip|bigskip|vspace\*?\{[^}]*\}|hspace\*?\{[^}]*\})",
+        "",
+        body,
+    )
+
+    # 表格保留原样（markdown 表格与 LaTeX 表格差异太大，不做转换）
+
+    # 清理多余空行
+    body = re.sub(r"\n{3,}", "\n\n", body)
+    return body.strip()
+
+
+def _tex_items_to_md(content: str, ordered: bool) -> str:
+    items = re.split(r"\\item\s*", content)
+    items = [i.strip() for i in items if i.strip()]
+    if ordered:
+        return "\n" + "\n".join(f"{i + 1}. {it}" for i, it in enumerate(items)) + "\n"
+    return "\n" + "\n".join(f"- {it}" for it in items) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# 主入口
+# ---------------------------------------------------------------------------
+_BACKEND_IMPL: dict[str, Callable[[Path], str]] = {
+    "mineru-cloud": _extract_with_mineru_cloud,
+    "pymupdf4llm": _extract_with_pymupdf4llm,
+}
+
+
+def extract_pdf(
+    pdf_path: Path | str,
+    *,
+    backend: str | None = None,
+    use_cache: bool = True,
+    prefer_latex_source: str | None = None,
+    write_cache: bool = True,
+) -> str:
+    """抽取 PDF 为 Markdown。
+
+    Args:
+        pdf_path: PDF 文件路径
+        backend: 'mineru-cloud' | 'pymupdf4llm' | 'auto' | None
+                 None 表示读 settings.pdf_extract_backend；auto = 云端优先、本地兜底
+        use_cache: 是否复用之前的抽取结果
+        prefer_latex_source: 若给出 arXiv ID，优先尝试从 LaTeX 源码提取（比 PDF 解析更准）
+        write_cache: 是否写入缓存
+
+    Returns:
+        markdown 字符串
+
+    Raises:
+        NoBackendAvailable: 没有任何可用后端
+        ExtractionFailed: 所有尝试的后端都失败
+        FileNotFoundError: PDF 不存在
+    """
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+    # 1. 优先 arXiv LaTeX 源码
+    if prefer_latex_source:
+        print(f"[pdf_extract] Trying arXiv LaTeX source for {prefer_latex_source} ...")
+        tex_md = _extract_from_arxiv_source(prefer_latex_source)
+        if tex_md:
+            print(f"[pdf_extract] LaTeX source extracted ({len(tex_md)} chars)")
+            if write_cache:
+                _write_cache(_cache_path(pdf_path, "arxiv_tex"), tex_md)
+            return tex_md
+        print("[pdf_extract] LaTeX source unavailable, falling back to PDF extraction")
+
+    # 2. 决定后端
+    requested = backend or settings.pdf_extract_backend or "auto"
+
+    # 3. 检查缓存
+    if use_cache:
+        # 若指定 backend，只查该 backend 的缓存
+        if requested != "auto":
+            cp = _cache_path(pdf_path, requested)
+            cached = _read_cache(cp)
+            if cached:
+                print(f"[pdf_extract] Cache hit: {cp}")
+                return cached
+        else:
+            # auto 模式：按优先级查所有 backend 缓存
+            for pref in ("arxiv_tex", "mineru-cloud", "pymupdf4llm"):
+                cp = _cache_path(pdf_path, pref)
+                cached = _read_cache(cp)
+                if cached:
+                    print(f"[pdf_extract] Cache hit: {cp}")
+                    return cached
+
+    # 4. 执行抽取（auto：云端优先，本地 pymupdf4llm 兜底且显式告警）
+    backends_to_try: list[str]
+    if requested == "auto":
+        avail = available_backends()
+        backends_to_try = [b for b in PREFERRED_ORDER if b in avail]
+        if not backends_to_try:
+            raise NoBackendAvailable(
+                "No PDF extraction backend available. See install hints in module docstring."
+            )
+        if "mineru-cloud" not in avail:
+            print(
+                "[pdf_extract] WARNING: 云端 MinerU 不可用（未配置 MINERU_TOKEN 或缺 requests）；"
+                "将回退本地 pymupdf4llm，公式可能丢失/乱码。精读请在 .env 配置 MINERU_TOKEN，"
+                "或改用 arXiv LaTeX 源码。",
+                file=sys.stderr,
+            )
+    else:
+        backends_to_try = [_pick_backend(requested)]
+
+    last_err: Exception | None = None
+    for idx, b in enumerate(backends_to_try):
+        impl = _BACKEND_IMPL.get(b)
+        if not impl:
+            continue
+        print(f"[pdf_extract] Trying backend: {b} on {pdf_path.name} ...")
+        t0 = time.time()
+        try:
+            md = impl(pdf_path)
+            elapsed = time.time() - t0
+            print(f"[pdf_extract] {b} succeeded in {elapsed:.1f}s ({len(md)} chars)")
+            if write_cache:
+                _write_cache(_cache_path(pdf_path, b), md)
+            return md
+        except Exception as e:
+            elapsed = time.time() - t0
+            print(
+                f"[pdf_extract] {b} failed after {elapsed:.1f}s: {e}", file=sys.stderr
+            )
+            last_err = e
+            nxt = backends_to_try[idx + 1] if idx + 1 < len(backends_to_try) else None
+            if b == "mineru-cloud" and nxt == "pymupdf4llm":
+                print(
+                    "[pdf_extract] WARNING: 云端 MinerU 转换失败，正在**回退**到本地 pymupdf4llm；"
+                    "公式可能丢失/乱码，不适合精读。请检查 MINERU_TOKEN 是否有效/未过期，"
+                    "或改用 arXiv LaTeX 源码。",
+                    file=sys.stderr,
+                )
+            continue
+
+    raise ExtractionFailed(f"All backends failed. Last error: {last_err}")
+
+
+# ---------------------------------------------------------------------------
+# 便捷：批量抽取
+# ---------------------------------------------------------------------------
+def extract_many(
+    pdf_paths: list[Path],
+    *,
+    backend: str | None = None,
+    arxiv_ids: dict[Path, str] | None = None,
+) -> dict[Path, str | Exception]:
+    """批量抽取，返回 {path: markdown_or_exception}。单篇失败不影响其他。"""
+    out: dict[Path, str | Exception] = {}
+    for p in pdf_paths:
+        aid = (arxiv_ids or {}).get(p)
+        try:
+            out[p] = extract_pdf(p, backend=backend, prefer_latex_source=aid)
+        except Exception as e:
+            out[p] = e
+    return out
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    import argparse
+
+    print(
+        "[pdf_extract] 调试后门——抽取全文请走 `research read <id>`"
+        "（论文有 arXiv 预印本时它会自动优先 LaTeX 源码路径，公式更忠实）。"
+        "后端可用性与 MINERU_TOKEN 状态看 `research doctor` 的"
+        "【PDF → Markdown 后端】段。本入口用于把单个后端 / 单个 PDF 隔离出来排查。",
+        file=sys.stderr,
+    )
+
+    parser = argparse.ArgumentParser(description="PDF extraction CLI")
+    sub = parser.add_subparsers(dest="cmd")
+
+    sub.add_parser("backends", help="列出可用后端")
+
+    p_extract = sub.add_parser("extract", help="抽取单个 PDF")
+    p_extract.add_argument("pdf", type=Path)
+    p_extract.add_argument(
+        "--backend", default=None, help="mineru-cloud|pymupdf4llm|auto"
+    )
+    p_extract.add_argument(
+        "--arxiv-id", default=None, help="若有对应 arXiv ID，优先尝试 LaTeX 源码"
+    )
+    p_extract.add_argument(
+        "--output", type=Path, default=None, help="输出 .md 文件；默认打印到 stdout"
+    )
+    p_extract.add_argument("--no-cache", action="store_true")
+
+    args = parser.parse_args()
+
+    if args.cmd == "backends" or args.cmd is None:
+        avail = available_backends()
+        print(f"Available backends: {avail or '(none)'}")
+        print(f"Configured default : {settings.pdf_extract_backend}")
+        print(f"MINERU_TOKEN set   : {bool(settings.mineru_token)}")
+        if "mineru-cloud" not in avail:
+            print("\n云端 MinerU 未就绪：在 .env 配置 MINERU_TOKEN=")
+            print(
+                "  申请地址：https://mineru.net/apiManage/token （免费，约 90 天有效）"
+            )
+        if not avail:
+            print("\n本地兜底后端也未安装：uv add pymupdf4llm")
+
+    elif args.cmd == "extract":
+        md = extract_pdf(
+            args.pdf,
+            backend=args.backend,
+            use_cache=not args.no_cache,
+            prefer_latex_source=args.arxiv_id,
+        )
+        if args.output:
+            args.output.write_text(md, encoding="utf-8")
+            print(f"[pdf_extract] Written to {args.output} ({len(md)} chars)")
+        else:
+            print(md)

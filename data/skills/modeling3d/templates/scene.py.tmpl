@@ -1,0 +1,47 @@
+"""%TITLE% — Blender 概念渲染场景脚本。
+
+运行于 Blender 自带 Python（非项目 .venv，不能 import pysci/build123d）。
+执行：uv run pysci-model3d render 本文件
+     （等价 blender -b -P 本文件；交互式探索用 blender-mcp，成果须固化回本脚本）
+
+约定：产物一律写入会话 renders/ 目录；材质/灯光参数改动后重渲对比。
+"""
+
+from pathlib import Path
+
+import bpy
+
+SESSION_DIR = Path(r"%SESSION_DIR%")
+OUT = SESSION_DIR / "renders" / "%SLUG%.png"
+MESH = SESSION_DIR / "stl" / "%SLUG%.stl"  # 模型来源：打印管线 STL / Tripo GLB / 脚本建模
+
+# %% === 1. 清场 + 导入 ===
+bpy.ops.wm.read_factory_settings(use_empty=True)
+scene = bpy.context.scene
+if MESH.exists():
+    bpy.ops.wm.stl_import(filepath=str(MESH))
+# TODO: 需要多物体/程序化建模时在此扩展（primitive_* / mesh.from_pydata 等）
+
+# %% === 2. 材质（概念图的核心；STL 无材质须新建） ===
+# mat = bpy.data.materials.new("Body")
+# mat.use_nodes = True
+# bsdf = mat.node_tree.nodes["Principled BSDF"]
+# bsdf.inputs["Base Color"].default_value = (0.8, 0.75, 0.6, 1.0)
+# bsdf.inputs["Roughness"].default_value = 0.35
+# TODO: 按样件实物配色/质感调整；金属件 Metallic≈1、Roughness≈0.2
+
+# %% === 3. 灯光 / 世界 / 相机 ===
+# 快速出图可直接用 CLI 模板（studio 三点布光）：
+#   uv run pysci-model3d render --mesh <stl/glb> --out <png>
+# 本节仅在需要定制布光（如复现实验室光照、强调特定结构）时填写。
+# TODO
+
+# %% === 4. 渲染输出 ===
+scene.render.engine = "BLENDER_EEVEE_NEXT"  # 5.x 若报 TypeError 改 "EEVEE" 或 "CYCLES"
+scene.render.resolution_x = 1920
+scene.render.resolution_y = 1440
+scene.render.image_settings.file_format = "PNG"
+OUT.parent.mkdir(parents=True, exist_ok=True)
+scene.render.filepath = str(OUT)
+bpy.ops.render.render(write_still=True)
+print(f"[model3d] render: {OUT}")

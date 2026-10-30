@@ -1,0 +1,9 @@
+# 可再生物与草稿区不入库（README §2 git 策略）：
+# 部署技能副本由 orch skills sync 从真本再生；bench/outbox 是运行期产物。
+bench/
+outbox/
+.qoder/skills/
+# 任务书运行态：orch dispatch 每次派发到 inbox 落 task-<ts>-<slug>.md，
+# 正文已被 backlog.json + 交付 ledger 记录，无需再入库（避免污染 git status
+# 与 git add -A 误提交）。采纳 devops 建议 20261010-081857 残留 + 20261010-163347。
+inbox/task-*.md
