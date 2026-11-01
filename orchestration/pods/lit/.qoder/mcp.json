@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "arxiv": { "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\dependencies\\uv-tools\\bin\\arxiv-mcp-server.exe" },
+    "arxiv": { "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\deps_management\\deps\\uv\\bin\\arxiv-mcp-server.exe" },
     "zotero": {
-      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\dependencies\\uv-tools\\bin\\zotero-mcp.exe",
+      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\deps_management\\deps\\uv\\bin\\zotero-mcp.exe",
       "env": {
         "ZOTERO_LOCAL": "true",
         "ZOTERO_API_KEY": "",
@@ -12,7 +12,7 @@
       }
     },
     "paper-search-mcp": {
-      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\dependencies\\uv-tools\\bin\\paper-search-mcp.exe",
+      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\deps_management\\deps\\uv\\bin\\paper-search-mcp.exe",
       "env": {
         "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "2411361@tongji.edu.cn",
         "PAPER_SEARCH_MCP_CORE_API_KEY": "",

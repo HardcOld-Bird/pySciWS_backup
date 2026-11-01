@@ -1,8 +1,9 @@
-"""vendored 工具链解析（自包含依赖层，``sub_root/dependencies/``）。
+"""vendored 工具链解析（自包含依赖层，``sub_root/deps_management/``）。
 
 按与 mySimsWS2 同范式，工具链以项目级自包含方式部署在
-``sub_root/dependencies/``：``<tool>/<version>/`` 版本目录 + ``<tool>/current.txt``
-当前版本指针 + ``toolchain.json`` 唯一版本真源（url/sha256 可复现下载）。
+``sub_root/deps_management/``：``deps/<tool>/<version>/`` 版本目录 +
+``deps/<tool>/current.txt`` 当前版本指针 + ``toolchain.json`` 唯一版本真源
+（url/sha256 可复现下载），下载缓存在 ``cache/``。
 本模块把各工具的可执行文件解析为**绝对路径**，供 subprocess 调用——Windows 上
 Python ``subprocess`` 找不到 PATH 里的 ``.cmd`` shim（PATHEXT 不适用），必须给真
 ``.exe``；交互 shell 场景才走 ``D:\\XXXIIIGGG\\common\\bin`` 的共享 shim 路由层。
@@ -26,16 +27,19 @@ from pathlib import Path
 from pysci.paths import PROJECT_ROOT
 
 #: 自包含依赖根（与 mySimsWS2 布局同相对路径，共享 shim 层据此向上路由）。
-DEPS_ROOT: Path = PROJECT_ROOT / "sub_root" / "dependencies"
+DEPS_ROOT: Path = PROJECT_ROOT / "sub_root" / "deps_management" / "deps"
+
+#: 版本真源 ``toolchain.json``（``DEPS_ROOT`` 的父目录）。
+TOOLCHAIN_JSON: Path = DEPS_ROOT.parent / "toolchain.json"
 
 #: 项目内 uv tool 安装区（UV_TOOL_DIR/UV_TOOL_BIN_DIR 指向此处）。
-UV_TOOL_DIR: Path = DEPS_ROOT / "uv-tools"
+UV_TOOL_DIR: Path = DEPS_ROOT / "uv" / "tools"
 
 #: 项目内 uv tool 可执行目录（zotero-mcp / zotero-cli 等 console script 落这里）。
-UV_TOOL_BIN_DIR: Path = UV_TOOL_DIR / "bin"
+UV_TOOL_BIN_DIR: Path = DEPS_ROOT / "uv" / "bin"
 
 #: 项目内 uv 缓存（UV_CACHE_DIR 指向此处）。
-UV_CACHE_DIR: Path = DEPS_ROOT / "cache" / "packages" / "uv"
+UV_CACHE_DIR: Path = DEPS_ROOT.parent / "cache" / "packages" / "uv"
 
 
 def _current_version(tool: str) -> str | None:
@@ -150,7 +154,7 @@ def venv_pythonw_exe() -> Path:
 
 
 def uv_tool_exe(name: str) -> str:
-    """项目内 uv tool 的 console script（``uv-tools/bin/<name>.exe``）。
+    """项目内 uv tool 的 console script（``deps/uv/bin/<name>.exe``）。
 
     Args:
         name: console script 名（如 ``zotero-cli`` / ``zotero-mcp``）。
@@ -186,7 +190,7 @@ def toolchain_path_dirs() -> list[Path]:
     """vendored 工具的可执行目录清单（前插 PATH 用）。
 
     Returns:
-        依次为 git ``cmd``、git ``usr/bin``（bash/coreutils）、node、uv、uv-tools/bin
+        依次为 git ``cmd``、git ``usr/bin``（bash/coreutils）、node、uv、uv/bin
         中**已落盘**的目录。
     """
     dirs: list[Path] = []
@@ -208,7 +212,7 @@ def prepend_toolchain_path(path: str | None = None) -> str:
 
     Windows 上 ``subprocess`` 找不到 PATH 里的 ``.cmd`` shim，第三方工具（pre-commit）
     与测试里的裸 ``node``/``git``/``bash`` 调用都需要**真 .exe** 在 PATH 上——本函数把
-    ``sub_root/dependencies`` 下的真实工具目录前插，一处修复全量生效。
+    ``sub_root/deps_management/deps`` 下的真实工具目录前插，一处修复全量生效。
 
     Args:
         path: 原 PATH 字符串；缺省取 ``os.environ["PATH"]``。

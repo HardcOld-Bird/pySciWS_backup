@@ -121,7 +121,7 @@
     "config_file_mirror_note": "Qoder 派生的镜像，多一个 userConfigMD5 键用于变更检测；不要手改。",
     "server_name": "zotero",
     "active_entry": {
-      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\dependencies\\uv-tools\\bin\\zotero-mcp.exe",
+      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\deps_management\\deps\\uv\\bin\\zotero-mcp.exe",
       "env": {
         "ZOTERO_LOCAL": "true",
         "ZOTERO_API_KEY": "",

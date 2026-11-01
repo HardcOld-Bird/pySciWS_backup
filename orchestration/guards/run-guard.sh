@@ -1,6 +1,6 @@
 #!/bin/bash
 # run-guard.sh <guard.mjs> [args...] — stable guard entry (self-contained toolchain).
-# Runs orchestration/guards/<guard.mjs> with the vendored node (sub_root/dependencies/node),
+# Runs orchestration/guards/<guard.mjs> with the vendored node (sub_root/deps_management/deps/node),
 # so pod hooks never resolve bare "node" (system node removal silently disabled guards).
 # stdin/stdout/stderr passthrough; exit code reported as-is.
 # FAIL-OPEN: missing node/script -> exit 0 with a trace on stderr (guards are an
@@ -11,14 +11,14 @@
 set -u
 GUARDS_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$GUARDS_DIR/../.." && pwd)"
-NODE_HOME="$ROOT/sub_root/dependencies/node"
+NODE_HOME="$ROOT/sub_root/deps_management/deps/node"
 NODE=""
 if [ -f "$NODE_HOME/current.txt" ]; then
   NODE_VER=$(tr -d '\r\n' < "$NODE_HOME/current.txt")
   [ -f "$NODE_HOME/$NODE_VER/node.exe" ] && NODE="$NODE_HOME/$NODE_VER/node.exe"
 fi
 if [ -z "$NODE" ]; then
-  echo "[run-guard fail-open] node not found under $NODE_HOME - run sub_root/dependencies/deps_updater/init-deps.cmd" >&2
+  echo "[run-guard fail-open] node not found under $NODE_HOME - run sub_root/deps_management/deps_manager/init-deps.cmd" >&2
   exit 0
 fi
 if [ ! -f "$GUARDS_DIR/${1:-}" ]; then

@@ -40,8 +40,8 @@
   ],
   "mcpServers": {
     "zotero": {
-      "_note": "持久安装变体（推荐）：uv tool install \"zotero-mcp-server[pdf,scite]==0.13.1\" 装入项目内 sub_root/dependencies/uv-tools（自包含改造 2026-10-25），注册用绝对路径（不依赖 PATH/全局 uv tools）。",
-      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\dependencies\\uv-tools\\bin\\zotero-mcp.exe",
+      "_note": "持久安装变体（推荐）：uv tool install \"zotero-mcp-server[pdf,scite]==0.13.1\" 装入项目内 sub_root/deps_management/deps/uv（tools + bin，自包含改造 2026-10-25），注册用绝对路径（不依赖 PATH/全局 uv tools）。",
+      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\deps_management\\deps\\uv\\bin\\zotero-mcp.exe",
       "env": {
         "ZOTERO_LOCAL": "true",
         "ZOTERO_API_KEY": "",

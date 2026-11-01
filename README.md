@@ -22,10 +22,10 @@
 要求 Python **3.13.15**（由 `.python-version` 与 `pyproject.toml` 的 `requires-python = "==3.13.15"` 锁定）。
 
 ```powershell
-sub_root\dependencies\deps_updater\init-deps.cmd   # 工具链自包含引导（git/node/uv/Python + .venv）
+sub_root\deps_management\deps_manager\init-deps.cmd   # 工具链自包含引导（git/node/uv/Python + .venv）
 ```
 
-工具链（git/node/uv/Python）vendored 于 `sub_root/dependencies/`（`toolchain.json` 版本真源，
+工具链（git/node/uv/Python）vendored 于 `sub_root/deps_management/`（`toolchain.json` 版本真源，
 含 url/sha256 可复现下载），**不依赖任何系统级安装**；`init-deps` 会一并创建 `.venv`、
 安装依赖并以 editable 方式装入 pysci。此后：
 

@@ -117,7 +117,7 @@ class ZoteroNotConfigured(ZoteroCliError):
 # ---------------------------------------------------------------------------
 def zotero_cli_bin() -> str | None:
     """返回 ``zotero-cli`` 可执行文件路径；未安装返回 None。"""
-    # 项目内 uv tool 优先（自包含改造 2026-10-25）：uv-tools/bin 下的安装
+    # 项目内 uv tool 优先（自包含改造 2026-10-25）：deps/uv/bin 下的安装
     # 不依赖全局 uv tools / PATH；缺失再走 PATH 兜底（过渡期）。
     project_bin = uv_tool_exe("zotero-cli")
     if Path(project_bin).is_file():
@@ -166,7 +166,7 @@ def _run_json(args: list[str], *, timeout: int | None = None) -> Any:
             "zotero-cli 未安装（zotero-mcp-server）。请运行 "
             "scripts/zotero_mcp/setup_zotero_mcp.ps1（内部执行 "
             "uv tool install 'zotero-mcp-server[pdf,scite]' → 装入 "
-            "sub_root/dependencies/uv-tools，自包含改造 2026-10-25）。"
+            "sub_root/deps_management/deps/uv（uv tools，自包含改造 2026-10-25）。"
         )
     cmd = [bin_, "--json", *args]
     try:

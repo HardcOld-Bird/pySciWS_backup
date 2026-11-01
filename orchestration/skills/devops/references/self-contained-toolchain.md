@@ -1,24 +1,29 @@
-# 自包含工具链细则（sub_root/dependencies，2026-10-25 改造）
+# 自包含工具链细则（sub_root/deps_management，2026-10-25 改造；2026-11-01 布局迁移 deps_management）
 
 basic.md §5 只留公约数；本页是操作细节与踩坑记录（devops/组长按需读）。
 
 ## 1. 布局（与 mySimsWS2 同范式，共享 shim 免费路由）
 
 ```
-sub_root/dependencies/
+sub_root/deps_management/
   toolchain.json      # 版本唯一真源：git/node/uv = version+url+sha256；python/uvTools 记版本
-  deps_updater/       # init-deps.cmd(.ps1) 引导；update-deps.cmd(.ps1) 升级单件
-  git/<ver>/ + git/current.txt + git/config/gitconfig
-  node/<ver>/ + node/current.txt
-  uv/<ver>/ + uv/current.txt
-  python/             # UV_PYTHON_INSTALL_DIR（cpython-3.13.15/3.12 各一目录）+ current.txt
-  uv-tools/           # UV_TOOL_DIR/UV_TOOL_BIN_DIR：zotero/arxiv/paper-search/blender-mcp
-  comsol-mcp/         # 社区 COMSOL MCP 仓库（钉 commit，venv 项目内重建）
-  cache/              # UV_CACHE_DIR + archives/（下载归档缓存）
+  deps_manager/       # init-deps.cmd(.ps1) 引导；update-deps.cmd(.ps1) 升级单件
+  deps/
+    git/<ver>/ + git/current.txt
+    node/<ver>/ + node/current.txt
+    uv/<ver>/ + uv/current.txt
+    uv/tools/ + uv/bin/   # UV_TOOL_DIR/UV_TOOL_BIN_DIR：zotero/arxiv/paper-search/blender-mcp
+    python/           # UV_PYTHON_INSTALL_DIR（cpython-3.13.15/3.12 各一目录）+ current.txt
+    comsol-mcp/       # 社区 COMSOL MCP 仓库（钉 commit，venv 项目内重建）
+  cache/              # UV_CACHE_DIR（packages/uv）+ archives/（下载归档缓存）
 ```
 
 `D:\XXXIIIGGG\common\bin` 共享 shim 从 `%CD%` 向上找
-`sub_root\dependencies\toolchain.json` 路由——布局同相对路径即零改动复用。
+`sub_root\deps_management\toolchain.json` 路由到 `deps\<tool>`——布局同相对路径即零改动复用。
+**迁移注意（2026-11-01 实案）**：uv trampoline exe（venv python、uv tool console script）把
+绝对路径嵌死在二进制里，依赖树挪位后 `pyvenv.cfg` 改 home 救不回——须 `uv tool install
+--force` / 重建 venv 重生成；`deps/python/cpython-<ver>-windows-x86_64-none` 别名 symlink
+要用**相对目标**（绝对目标挪位即断）。
 
 ## 2. 调用面（三层，各有其位）
 
@@ -37,7 +42,7 @@ sub_root/dependencies/
 
 ## 3. 引导与升级
 
-- 换机/重建：`sub_root\dependencies\deps_updater\init-deps.cmd`（PowerShell 5.1 执行；
+- 换机/重建：`sub_root\deps_management\deps_manager\init-deps.cmd`（PowerShell 5.1 执行；
   下载→SHA256→解压→写 current.txt→venv→逐件 --version 对账；`-SkipVenv` 跳过 venv）。
 - 升级单件：`update-deps.cmd -Tool <名> -Version <版> -Url <url> -Sha256 <hex>`
   （改 toolchain.json 后重走 init-deps）。

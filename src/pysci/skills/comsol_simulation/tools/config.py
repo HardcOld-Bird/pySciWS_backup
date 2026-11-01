@@ -50,7 +50,7 @@ PRIORITY_MANUALS: tuple[str, ...] = (
 _BINDIR_RELPATH: str = "bin/win64"
 
 #: 社区 comsol MCP 仓库（自包含改造 2026-10-25，D4 裁决）：vendored 进
-#: ``sub_root/dependencies/comsol-mcp``（按 scripts/comsol_mcp/UPSTREAM.lock.json
+#: ``sub_root/deps_management/deps/comsol-mcp``（按 scripts/comsol_mcp/UPSTREAM.lock.json
 #: 钉 commit），venv 由项目内 uv 重建在其下。``.env`` 的 ``COMSOL_MCP_REPO`` 可覆盖。
 _MCP_VENDORED_DIR: Path = DEPS_ROOT / "comsol-mcp"
 
@@ -244,7 +244,7 @@ def _resolve_mcp_repo() -> Path | None:
     """定位社区 MCP 仓库根；找不到返回 None（由调用方给出可操作的报错）。
 
     优先 ``.env`` 的 ``COMSOL_MCP_REPO``；否则取 vendored 位置
-    ``sub_root/dependencies/comsol-mcp``（init-deps/setup 脚本的落点）。
+    ``sub_root/deps_management/deps/comsol-mcp``（init-deps/setup 脚本的落点）。
     """
     env = _get_env("COMSOL_MCP_REPO")
     if env:

@@ -17,14 +17,14 @@ import pytest
 
 from pysci import toolchain
 
-_TOOLCHAIN_JSON = toolchain.DEPS_ROOT / "toolchain.json"
+_TOOLCHAIN_JSON = toolchain.TOOLCHAIN_JSON
 _needs_vendored = pytest.mark.skipif(
     not _TOOLCHAIN_JSON.is_file(), reason="vendored 工具链未落盘（未跑 init-deps）"
 )
 
 
 def _fake_deps(root: Path) -> Path:
-    deps = root / "dependencies"
+    deps = root / "deps"
     (deps / "git" / "9.9.9" / "cmd").mkdir(parents=True)
     (deps / "git" / "current.txt").write_text("9.9.9\n", encoding="utf-8")
     (deps / "git" / "9.9.9" / "cmd" / "git.exe").write_text("", encoding="utf-8")
@@ -43,7 +43,7 @@ def _fake_deps(root: Path) -> Path:
 def fake_deps(tmp_path, monkeypatch):
     deps = _fake_deps(tmp_path)
     monkeypatch.setattr(toolchain, "DEPS_ROOT", deps)
-    monkeypatch.setattr(toolchain, "UV_TOOL_BIN_DIR", deps / "uv-tools" / "bin")
+    monkeypatch.setattr(toolchain, "UV_TOOL_BIN_DIR", deps / "uv" / "bin")
     return deps
 
 
@@ -79,7 +79,7 @@ def test_pointer_without_version_dir_falls_back(fake_deps):
 
 def test_uv_tool_exe_resolves_then_falls_back(fake_deps):
     assert toolchain.uv_tool_exe("zotero-cli") == "zotero-cli"
-    bin_dir = fake_deps / "uv-tools" / "bin"
+    bin_dir = fake_deps / "uv" / "bin"
     bin_dir.mkdir(parents=True)
     (bin_dir / "zotero-cli.exe").write_text("", encoding="utf-8")
     got = toolchain.uv_tool_exe("zotero-cli")

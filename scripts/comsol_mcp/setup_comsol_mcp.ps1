@@ -2,8 +2,8 @@
 ================================================================================
  Phase 0 setup script -- community COMSOL MCP (wjc9011/COMSOL_Multiphysics_MCP)
  2026-10-25 SELF-CONTAINED CHANGE: the repo is VENDORED at
- sub_root\dependencies\comsol-mcp (D4) with its venv rebuilt by the project uv
- (Python 3.12 in sub_root\dependencies\python). -RepoDir default updated.
+ sub_root\deps_management\deps\comsol-mcp (D4) with its venv rebuilt by the project uv
+ (Python 3.12 in sub_root\deps_management\deps\python). -RepoDir default updated.
 ================================================================================
  One-shot preparation tool for Phase 0 (validation spike) of the
  "COMSOL skill MCP refactor" plan. It sets up the COMMUNITY comsol MCP only.
@@ -213,7 +213,7 @@
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string] $RepoDir       = 'D:\XXXIIIGGG\projects\pySci\pySciWS\sub_root\dependencies\comsol-mcp',
+    [string] $RepoDir       = 'D:\XXXIIIGGG\projects\pySci\pySciWS\sub_root\deps_management\deps\comsol-mcp',
     # github.com is reachable once a global proxy is on (verified 2026-10-01: ls-remote in 0.9s, and
     # the existing clone's origin was switched to canonical). The default stays the gitclone.com
     # mirror only because it works with NO proxy -- but it LAGS canonical, and that lag is exactly

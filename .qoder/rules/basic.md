@@ -63,7 +63,7 @@ alwaysApply: true
 
 ## 5. 环境与代码约定
 
-- **工具链自包含（2026-10-25）**：git/node/uv/Python vendored 于 `sub_root/dependencies/`
+- **工具链自包含（2026-10-25）**：git/node/uv/Python vendored 于 `sub_root/deps_management/deps/`
   （`toolchain.json` 真源，系统级已删）。**Python 3.13.15**（`.python-version`/`requires-python`
   锁定），uv 管理唯一 `.venv`，pysci editable 装入；程序化调用一律走 `pysci.toolchain`
   绝对路径（`.cmd` shim 对 subprocess 不可见）。运行与 venv-sync 口径同 §3。

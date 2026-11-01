@@ -34,8 +34,8 @@
   "mcpServers": {
     "paper-search-mcp": {
       "_note": "uvx stdio 注册（同 arxiv-mcp-server 模式）：Qoder 每次拉起时 uvx 从 PyPI 解析并运行——无需常驻服务端、无 license、无 JVM。首次运行下载并缓存包及其依赖，之后走缓存秒起。",
-      "_pin_note": "自包含改造 2026-10-25：uv tool install paper-search-mcp==0.1.4 --with 'mcp<2' 装入项目内 sub_root/dependencies/uv-tools，注册用绝对路径（弃 uvx 按需，D3 裁决）。",
-      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\dependencies\\uv-tools\\bin\\paper-search-mcp.exe",
+      "_pin_note": "自包含改造 2026-10-25：uv tool install paper-search-mcp==0.1.4 --with 'mcp<2' 装入项目内 sub_root/deps_management/deps/uv（tools + bin），注册用绝对路径（弃 uvx 按需，D3 裁决）。",
+      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\deps_management\\deps\\uv\\bin\\paper-search-mcp.exe",
       "env": {
         "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "<your@email.com>",
         "PAPER_SEARCH_MCP_CORE_API_KEY": "",

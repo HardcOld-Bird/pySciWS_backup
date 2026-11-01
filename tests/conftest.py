@@ -3,7 +3,7 @@
 自包含改造（2026-10-25）后系统不再有全局 git/node/uv：测试与第三方工具
 （pre-commit 等）里裸 ``node``/``git``/``bash`` 的 subprocess 调用靠 PATH 解析
 **真 .exe**（``.cmd`` shim 对 CreateProcess 不可见，解析即 FileNotFoundError）。
-前插 ``sub_root/dependencies`` 下的真实工具目录即全量恢复，无须逐测试改写。
+前插 ``sub_root/deps_management/deps`` 下的真实工具目录即全量恢复，无须逐测试改写。
 """
 
 from __future__ import annotations

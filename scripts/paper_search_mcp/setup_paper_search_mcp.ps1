@@ -3,8 +3,8 @@
  Setup script -- community paper-search-mcp (openags/paper-search-mcp)
 ================================================================================
  2026-10-25 SELF-CONTAINED CHANGE: installed PROJECT-LOCALLY into
- sub_root\dependencies\uv-tools (pinned 0.1.4, see toolchain.json uvTools) and
- mcp.json registers ABSOLUTE exe paths (uvx ephemeral mode retired, D3).
+ sub_root\deps_management\deps\uv (tools\ + bin\, pinned 0.1.4, see toolchain.json
+ uvTools) and mcp.json registers ABSOLUTE exe paths (uvx ephemeral mode retired, D3).
  One-shot preparation tool for Phase 2 (retrieval layer) of the
  "literature_research community-infrastructure replacement" plan. It sets up the
  COMMUNITY paper-search-mcp MCP only -- the MULTI-SOURCE RETRIEVAL PRIMARY layer.

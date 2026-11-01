@@ -98,7 +98,7 @@
     "config_file_mirror_note": "Qoder 派生的镜像，多一个 userConfigMD5 键用于变更检测；不要手改。",
     "server_name": "paper-search-mcp",
     "active_entry": {
-      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\dependencies\\uv-tools\\bin\\paper-search-mcp.exe",
+      "command": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\deps_management\\deps\\uv\\bin\\paper-search-mcp.exe",
       "args": [],
       "env": {
         "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL": "<your@email.com>",

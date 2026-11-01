@@ -62,7 +62,7 @@
 
   "install": {
     "installer": "scripts/comsol_mcp/setup_comsol_mcp.ps1",
-    "repo_dir": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\dependencies\\comsol-mcp",
+    "repo_dir": "D:\\XXXIIIGGG\\projects\\pySci\\pySciWS\\sub_root\\deps_management\\deps\\comsol-mcp",
     "repo_dir_note": "setup 脚本 -RepoDir 的默认值。自包含改造（2026-10-25，D4 裁决）迁入项目内 vendored 位置；旧『项目外同级目录』决策作废。",
     "venv": {
       "path": "<repo_dir>\\.venv",

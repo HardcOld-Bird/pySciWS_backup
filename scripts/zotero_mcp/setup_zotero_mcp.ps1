@@ -3,9 +3,9 @@
  Setup script -- community zotero-mcp (54yyyu/zotero-mcp, PyPI: zotero-mcp-server)
 ================================================================================
  2026-10-25 SELF-CONTAINED CHANGE: tools are now installed PROJECT-LOCALLY into
- sub_root\dependencies\uv-tools (pinned, see toolchain.json uvTools) and mcp.json
- registers ABSOLUTE exe paths. The install/registration truth is
- sub_root\dependencies\deps_updater\init-deps.ps1 + toolchain.json; this script
+ sub_root\deps_management\deps\uv (tools\ + bin\, pinned, see toolchain.json uvTools)
+ and mcp.json registers ABSOLUTE exe paths. The install/registration truth is
+ sub_root\deps_management\deps_manager\init-deps.ps1 + toolchain.json; this script
  remains as provenance and for one-off re-registration only.
  One-shot preparation tool for Phase 3 (library layer) of the
  "literature_research community-infrastructure replacement" plan. It installs and

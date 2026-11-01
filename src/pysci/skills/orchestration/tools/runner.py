@@ -276,7 +276,7 @@ def build_env(
     scripts_dir = os.environ.get("PYSCI_VENV_SCRIPTS") or str(
         _default_venv_scripts(PROJECT_ROOT)
     )
-    # vendored 工具目录（git/node/uv，sub_root/dependencies）一并前插：组员会话里裸
+    # vendored 工具目录（git/node/uv，sub_root/deps_management/deps）一并前插：组员会话里裸
     # git/uv/node 与第三方工具（pre-commit）靠 PATH 解析真 .exe（.cmd shim 对
     # CreateProcess 不可见）——自包含改造 2026-10-25。
     env["PATH"] = os.pathsep.join(
