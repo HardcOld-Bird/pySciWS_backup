@@ -144,12 +144,17 @@ def to_pandoc_md(md_text: str) -> str:
 # ---------------------------------------------------------------------------
 #: 页内收尾脚本：KaTeX 排版（pandoc --mathjax 的语义定界符）+ 图注归组（图片段落
 #: 之后、下一个 ``---``（hr）之前的句对组 → ``.caption`` 小字；图片与其图注同包
-#: ``.figure`` 防栏/页断裂）+ 宽元素防线（超栏宽的展示公式/表格跨双栏，
-#: 不支持 ``column-span`` 的环境退化为等比缩放，禁止溢出叠字）。
+#: ``.figure`` 防栏/页断裂）+ 单栏强制（超栏宽的展示公式/表格**等比缩放至栏宽**，
+#: 只缩不放、禁跨栏——2026-11-03 用户二轮裁决：删除 column-span 跨栏特殊处理）。
 #:
 #: 栏宽判据用**打印栏宽**（``__COL_W_PX__``，由 :func:`build_html` 按 A4/页边距/栏距
-#: 算出后替换）——脚本在屏幕布局下执行，屏幕栏宽≠打印栏宽，用屏幕量宽会漏判；
-#: 公式宽度取内层 ``.katex-html``（外层 ``.katex-display`` 是整栏块，rect 宽恒等于栏宽）。
+#: 算出后替换）——脚本在屏幕布局下执行，屏幕栏宽≠打印栏宽，用屏幕量宽会漏判。
+#: 量宽口径=元素 **min-content**（临时 ``width: min-content`` 重排后读 rect）：表格
+#: 按「折行后仍放不下的最小宽度」判（不误伤可折行表格），公式配 ``nowrap`` 取自然宽
+#: （KaTeX 内联块间存在折点，nowrap 防 min-content 低估）；对打印栏宽比较。
+#: ⚠ 历史教训：早先量宽曾用 ``el.scrollWidth``——块级元素 scrollWidth 恒≥屏幕栏宽
+#: （626px > 打印栏宽 361px），**全部公式被误判超宽**而加 ``.wide`` 跨栏，即用户
+#: 「大量的公式切断了双栏」事故的根因（2026-11-03 实测 13/13 误标）。
 _INIT_JS = """
 document.addEventListener("DOMContentLoaded", function () {
   renderMathInElement(document.body, {
@@ -175,18 +180,22 @@ document.addEventListener("DOMContentLoaded", function () {
       n = next;
     }
   });
+  function measureMin(el, nowrap) {
+    var w0 = el.style.width, m0 = el.style.maxWidth, s0 = el.style.whiteSpace;
+    el.style.width = "min-content";
+    el.style.maxWidth = "none";
+    if (nowrap) el.style.whiteSpace = "nowrap";
+    var w = el.getBoundingClientRect().width;
+    el.style.width = w0; el.style.maxWidth = m0; el.style.whiteSpace = s0;
+    return w;
+  }
   var colW = __COL_W_PX__;
   Array.prototype.slice.call(
     document.querySelectorAll(".katex-display, table")
   ).forEach(function (el) {
-    var probe = el.querySelector(".katex-html") || el;
-    var w = Math.max(probe.getBoundingClientRect().width, el.scrollWidth);
+    var w = measureMin(el, el.classList.contains("katex-display"));
     if (w <= colW + 1) return;
-    if (window.CSS && CSS.supports && CSS.supports("column-span", "all")) {
-      el.classList.add("wide");
-    } else {
-      el.style.zoom = colW / w;
-    }
+    el.style.zoom = String(colW / w);
   });
 });
 """

@@ -1,6 +1,8 @@
-/* bilingual.pdf 打印样式（任务书 20261023-011225 §二.2 + 20261103 布局四项；读者=个人阅读/打印）
-   全文双栏（减少分段版面浪费；图片适应栏宽）；页边距由打印通道定（0.6cm，body margin 清零
-   防蚕食）；中文正文衬线、英文斜体行灰色略小；图注小字；表格正常显示；标题层级保留。 */
+/* bilingual.pdf 打印样式（任务书 20261023-011225 §二.2 + 20261103 布局四项 + 二轮三项；
+   读者=个人阅读/打印）
+   全文双栏（减少分段版面浪费；图片适应栏宽）；栏间细分割线；页边距由打印通道定（0.6cm，
+   body margin 清零防蚕食）；超栏宽公式/表格由页内脚本等比缩进栏（禁跨栏）；中文正文衬线、
+   英文斜体行灰色略小；图注小字；表格正常显示；标题层级保留。 */
 
 html {
   -webkit-print-color-adjust: exact;
@@ -16,6 +18,7 @@ body {
   margin: 0;
   column-count: 2;
   column-gap: 0.7cm;
+  column-rule: 1px solid #ccc;
   overflow-wrap: anywhere;
 }
 
@@ -60,15 +63,13 @@ img {
   break-inside: avoid;
 }
 
-/* 宽元素防线（页内脚本量宽后加 .wide）：超栏宽的公式/表格跨双栏，禁止溢出叠字 */
-.wide {
-  column-span: all;
-}
+/* 超栏宽的公式/表格：页内脚本量 min-content 宽后等比缩放进栏（zoom，只缩不放、禁跨栏） */
 
 table {
   border-collapse: collapse;
   font-size: 0.92em;
   margin: 0.7em auto;
+  max-width: 100%;
 }
 
 td, th {
