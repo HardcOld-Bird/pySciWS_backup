@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from pathlib import Path
 
 import pytest
@@ -133,6 +134,61 @@ def test_build_html_is_self_contained(workdir: Path) -> None:
     assert "renderMathInElement" in html
     assert 'src="images/pic.png"' in html
     assert "<script src=" not in html and '<link rel="stylesheet"' not in html
+
+
+# ---------------------------------------------------------------------------
+# 打印版式（2026-11-03 用户裁决四项）：双栏 / 窄页边距 / 页码 / 标注修复
+# ---------------------------------------------------------------------------
+def test_print_css_two_columns_and_layout_guards() -> None:
+    """样式真源：双栏、body margin 清零、图片栏宽、图组不断裂、宽元素防线、长串可断行。"""
+    css = (br.TEMPLATE_DIR / "bilingual.css").read_text(encoding="utf-8")
+    assert "column-count: 2" in css, "全文默认双栏"
+    assert "column-gap: 0.7cm" in css
+    assert re.search(r"body\s*\{[^}]*margin: 0;", css), (
+        "body margin 须清零（浏览器默认 8px 会蚕食页边距）"
+    )
+    assert "max-width: 100%" in css, "图片适应栏宽"
+    assert ".figure" in css and "break-inside: avoid" in css, "图与图注不被栏/页断裂"
+    assert "column-span: all" in css, "宽公式/表格跨双栏防线"
+    assert "overflow-wrap: anywhere" in css, "长串（DOI/URL）栏内可断行"
+    assert "column-span" in br._INIT_JS and "CSS.supports" in br._INIT_JS, (
+        "宽元素须 DOM 量宽后加 .wide（不支持列跨时退化等比缩放）"
+    )
+
+
+def test_page_margin_below_one_cm() -> None:
+    """页边距 <1cm 硬线（2026-11-03 用户裁决「1cm 以下理想」）。"""
+    assert 0 < br.PAGE_MARGIN_CM < 1.0
+
+
+def test_add_page_numbers_odd_right_even_left_in_bottom_band(tmp_path: Path) -> None:
+    """页码叠加：每页纯数字、奇右偶左、落于下页边距带内（不与正文栏相交）。"""
+    pdf = tmp_path / "blank.pdf"
+    doc = pymupdf.open()
+    for _ in range(3):
+        doc.new_page(width=595.276, height=841.89)  # A4
+    doc.save(str(pdf))
+    doc.close()
+
+    br.add_page_numbers(pdf, margin_cm=br.PAGE_MARGIN_CM)
+    doc = pymupdf.open(str(pdf))
+    try:
+        assert doc.page_count == 3
+        m_pt = br.PAGE_MARGIN_CM * 72.0 / 2.54
+        for i, page in enumerate(doc):
+            n = i + 1
+            words = [w for w in page.get_text("words") if w[4].strip()]
+            assert len(words) == 1 and words[0][4] == str(n), f"第 {n} 页页码缺失/不纯"
+            x0, y0, x1, y1 = words[0][:4]
+            assert (
+                y0 >= page.rect.height - m_pt - 0.5 and y1 <= page.rect.height + 0.5
+            ), f"第 {n} 页页码须落在下页边距带内：{(x0, y0, x1, y1)}"
+            if n % 2:
+                assert x1 > page.rect.width / 2, f"奇数页 {n} 页码须偏右下"
+            else:
+                assert x0 < page.rect.width / 2, f"偶数页 {n} 页码须偏左下"
+    finally:
+        doc.close()
 
 
 # ---------------------------------------------------------------------------

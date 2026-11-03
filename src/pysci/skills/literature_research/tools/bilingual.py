@@ -72,7 +72,8 @@ class Unit:
         section: 所属章节标题（英文原文；无标题时为空串）。
         level: 标题层级（仅 H 单元有效，渲染 ``#`` 前缀用；其余类型为 0）。
         role: 语义角色标注（``abstract``=摘要段；prepare 摘要识别所置，渲染据此插
-            「摘要/正文」标注；识别错误可手改 manifest 的该字段）。
+            「## 摘要/## 正文」中文小标题（无英文行，2026-11-03 用户裁决）；
+            识别错误可手改 manifest 的该字段）。
     """
 
     id: str
@@ -872,8 +873,9 @@ def render_bilingual_md(manifest: dict[str, Any], translations: dict[str, str]) 
     输出格式契约（环节 2 渲染依赖）：章节标题 ``## 中文标题``（保留源 ``#`` 层级）
     紧跟一行 ``*English heading*``；句对为中文行 + 斜体英文行，句对之间空一行；
     段落边界 ``---`` 单独成行；图片原位后紧跟图注句对（同 para，不隔 ``---``）；
-    公式/表格/参考文献原样原位。摘要段（role=abstract）前插 ``## 摘要``/``*Abstract*``
-    对题小标题、其后插 ``---`` + ``## 正文``/``*Main text*`` 正文起始标注（同形同渲染）。
+    公式/表格/参考文献原样原位。摘要段（role=abstract）前插 ``## 摘要`` 中文小标题、
+    其后插 ``---`` + ``## 正文`` 正文起始标注（中文独行标题、**无英文行**——2026-11-03
+    用户裁决覆盖 10-23 旧裁决：管线不得发明源文没有的英文标注）。
     """
     items: list[dict[str, Any]] = sorted(
         [dict(x, _kind="unit") for x in manifest["units"]]
@@ -889,16 +891,14 @@ def render_bilingual_md(manifest: dict[str, Any], translations: dict[str, str]) 
         if prev_para is not None and it["para"] != prev_para:
             lines.append("---")
         is_abs = it["_kind"] == "unit" and it.get("role") == "abstract"
-        # 摘要/正文起始标注（2026-10-23 用户裁决）：对题小标题与既有标题句对同形，
-        # render 契约零改动；摘要与正文之间加醒目分界（源结构首节标题可见时紧随呈现）。
+        # 摘要/正文起始标注（2026-11-03 用户裁决：只留中文小标题，去掉管线发明的
+        # *Abstract*/*Main text* 英文行——原文没有的英文标注不发明，亦不做换行兜底）。
         if is_abs and not abs_on:
             lines.append("## 摘要")
-            lines.append("*Abstract*")
             abs_on = True
         if not is_abs and abs_on and not body_marked:
             lines.append("---")
             lines.append("## 正文")
-            lines.append("*Main text*")
             body_marked = True
         if it["_kind"] == "block":
             lines.extend(str(it["content"]).split("\n"))

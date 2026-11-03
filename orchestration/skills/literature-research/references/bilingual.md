@@ -17,7 +17,7 @@ markdown（`read`/`pdf_extract` 产物，`cache/extracted/<stem>.md`）；图片
 | `prepare <源md路径\|stem> [--pdf <PDF>] [--no-images] [--reuse <旧work.md\|目录\|stem>]` | 源 minerU md → `work.md` + `manifest.json` + `images/` | stdout 打翻译指引；`--pdf <PDF>` 手工指定源 PDF；`--no-images` 跳过回补（仅调试，submit 将拒绝出稿）；`--reuse` 按英文原文（归一化空白等值）回填旧译文，未匹配保持未译；含译文工作区默认拒覆写，`--force` 放行并自动备份 `*.bak-<ts>` |
 | `status <stem>` | `work.md` 对账 → 计数 + 未译/存疑 ID 列表 | 对账按 ID 不按行号 |
 | `submit <stem> [--out-dir <目录>]` | 全译的 `work.md` → `bilingual.md`（+自动 `bilingual.pdf`）→ 交付目录 | 未译拒绝出稿（rc=1）；PDF 渲染失败仅警告、不阻塞 md 交付；`--out-dir` 自定义交付目录（须在 `data/` 内、不存在则建；**未提供时回退默认** `data/用户的inbox/bilingual/<stem>/`） |
-| `render <stem>` | 已有 `bilingual.md` → `bilingual.pdf`（同目录） | 无出稿 rc=2；`.html` 中间文件保留作调试图 |
+| `render <stem>` | 已有 `bilingual.md` → `bilingual.pdf`（同目录） | 无出稿 rc=2；`.html` 中间文件保留作调试图；PDF=双栏 A4、页边距 0.6cm、每页页码（奇右偶左） |
 | `reorder-suggest <源md路径\|stem> [--pdf <PDF>]` | 源 md + 源 PDF → 工作区 `reorder-suggested.md` + `reorder-report.md` | 文序订正**建议**（只出建议，不改源 md/cache）；缺源 PDF rc=2（`--pdf` 指定） |
 
 **切分契约**：待译单元 = 标题 `H` / 正文句 `S` / 图注 `C` / 表注 `T`，每行
@@ -46,12 +46,12 @@ markdown（`read`/`pdf_extract` 产物，`cache/extracted/<stem>.md`）；图片
   **副本按文档标题命名**（首个 `H` 单元中文译文；无 H 回退首单元；非法字符清洗、
   超长截断 60 字），md/pdf 同名成对——工作区内部名（`bilingual.md/pdf/html`）不变。
 
-## 摘要标注与译文复用（2026-10-23 用户裁决）
+## 摘要标注与译文复用（2026-10-23 裁决、2026-11-03 修订）
 
 - **摘要识别**：prepare 把「元数据/作者行（Received/DOI/链接/作者角标）之后的首个
   段落」全组标 `role="abstract"`（manifest 各单元可辨；work.md 有 `#` 注释行标注）。
-  出稿自动在摘要前插 `## 摘要`/`*Abstract*` 对题小标题、摘要与正文之间插 `---` +
-  `## 正文`/`*Main text*` 正文起始标注（与标题句对同形，render/PDF 原生渲染）。**识别
+  出稿自动在摘要前插 `## 摘要`、摘要与正文之间插 `---` + `## 正文` 中文小标题（独行、
+  **无英文行**——2026-11-03 裁决覆盖 10-23：原文没有的英文标注不发明）。**识别
   错误的人工修正**：改 `manifest.json` 各单元 `role` 字段（误标清空、漏标补
   `"abstract"`）后重新 `submit` 即生效。
 - **译文复用**：源 md 经文序订正后重跑 prepare（单元 ID/顺序会变），`--reuse <旧
@@ -63,6 +63,7 @@ markdown（`read`/`pdf_extract` 产物，`cache/extracted/<stem>.md`）；图片
   紧跟一行 `*English heading*`；句对 = 中文行 + 斜体英文行、句对间空行；段落边界 `---`
   单独成行；图片原位、图注句对紧随其后（不隔 `---`）；公式/表格/参考文献原样原位。
   **英文侧从 manifest 程序化重嵌入**，与源文档逐字一致（不取 work.md，误改英文行不伤交付物）。
+  摘要/正文标注为**中文独行标题**（`## 摘要`/`## 正文`，无英文行）。
 
 ## 文序订正（reorder-suggest，B 路径）
 

@@ -1,6 +1,6 @@
-/* bilingual.pdf 打印样式（任务书 20261023-011225 §二.2；读者=个人阅读/打印，无出版需求）
-   中文正文衬线（Windows 系统字体回退链）；英文斜体行灰色略小与中文区分；
-   图片最大宽 100% 居中；图注小字；表格正常显示；标题层级保留。 */
+/* bilingual.pdf 打印样式（任务书 20261023-011225 §二.2 + 20261103 布局四项；读者=个人阅读/打印）
+   全文双栏（减少分段版面浪费；图片适应栏宽）；页边距由打印通道定（0.6cm，body margin 清零
+   防蚕食）；中文正文衬线、英文斜体行灰色略小；图注小字；表格正常显示；标题层级保留。 */
 
 html {
   -webkit-print-color-adjust: exact;
@@ -13,6 +13,10 @@ body {
   line-height: 1.75;
   color: #1a1a1a;
   text-align: justify;
+  margin: 0;
+  column-count: 2;
+  column-gap: 0.7cm;
+  overflow-wrap: anywhere;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -21,6 +25,7 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.35;
   margin: 1.1em 0 0.45em;
   page-break-after: avoid;
+  break-inside: avoid;
 }
 
 p {
@@ -34,11 +39,16 @@ p em, em {
   font-size: 0.92em;
 }
 
-/* 图片：最大宽 100% 居中 */
+/* 图片：最大宽 100%（=栏宽）居中 */
 img {
   max-width: 100%;
   display: block;
   margin: 0.7em auto;
+}
+
+/* 图 + 图注同包（页内脚本归组）：不被栏/页断裂 */
+.figure {
+  break-inside: avoid;
 }
 
 /* 图注小字（紧跟图片的句对组，由页内脚本归组为 .caption） */
@@ -47,12 +57,12 @@ img {
   color: #444;
   line-height: 1.6;
   margin: 0.2em 0 0.8em;
+  break-inside: avoid;
 }
 
-hr {
-  border: none;
-  border-top: 1px solid #bbb;
-  margin: 1.1em 0;
+/* 宽元素防线（页内脚本量宽后加 .wide）：超栏宽的公式/表格跨双栏，禁止溢出叠字 */
+.wide {
+  column-span: all;
 }
 
 table {
@@ -69,4 +79,11 @@ td, th {
 .katex-display {
   margin: 0.7em 0;
   page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #bbb;
+  margin: 1.1em 0;
 }
