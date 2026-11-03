@@ -47,6 +47,12 @@
 ## 4G. 公式渲染
 
 - 焦点块内一切公式**必须是渲染图**，禁止用纯文本框拼公式（含 Unicode 上下标拼排）。
+- **模板口径（2026-11-03 裁决）**：LaTeX→PDF→PNG 一律用 **article+amsmath** 模板
+  （`formula_render` 管线内置）；**禁 standalone**——TeXLive 2026 standalone v1.5a
+  使 `equation*`/`\[` 不进入数学模式（报「Missing $ inserted」却仍产出 PDF）。
+- **验收口径**：编译**零 error** 才可落盘（`build_formula_pdf`/`render_formula_png`
+  内置断言），误差恢复产物（空分子分数等）**不可进 deck**；失败零产物，PNG ink 裁剪
+  后原子写出。
 - 渲染方式：matplotlib mathtext/LaTeX 学术样式，或 LaTeX→PDF→PNG；writing 工具链含
   LaTeX。输出 PNG，**≥300 dpi**、透明或纯白底、无边框、无阴影。
 - 置入：按 16 pt 正文行高对齐（公式图高 ≈0.28–0.45 in，按复杂度微调），与正文同左缘；
