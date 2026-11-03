@@ -903,6 +903,30 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         + (f"（回退 {settings.pqa_llm_fallback}）" if settings.pqa_llm_fallback else "")
     )
     print()
+    print(
+        "【缓存 PDF 题名体检】（内容题名+元数据题名；不联网，逐篇 DOI 比对用 `cache find <doi>`）"
+    )
+    pdfs = (
+        sorted(settings.cache_pdfs.rglob("*.pdf"))
+        if settings.cache_pdfs.is_dir()
+        else []
+    )
+    flagged = 0
+    for p in pdfs:
+        probe = cache_manager.pdf_content_probe(p)
+        meta = probe["meta_title"]
+        hint = ""
+        if re.search(r"manuscript|word", meta, re.I):
+            hint = "  [!] 元数据疑为稿件版（Manuscript/Word）"
+            flagged += 1
+        rel = p.relative_to(settings.cache_pdfs)
+        print(
+            f"  {rel} → {probe['title'] or '（首页无文本）'}"
+            + (f"｜元数据：{meta}" if meta else "")
+            + hint
+        )
+    print(f"  共 {len(pdfs)} 个 PDF，{flagged} 个疑似稿件版。")
+    print()
     print("=== 自检结束 ===")
     return 0
 
@@ -1258,6 +1282,17 @@ def _try_oa_pdf(url: str, dest: Path, *, force: bool = False) -> Path | None:
     return dest
 
 
+def _md_title(md: str) -> str:
+    """markdown 的题名行（一级标题优先，退回首个非空行）。"""
+    m = re.search(r"^#\s+(.+)$", md, re.M)
+    if m:
+        return m.group(1).strip().strip("*` ")
+    for ln in md.splitlines():
+        if ln.strip():
+            return ln.strip().strip("*` ")
+    return ""
+
+
 def cmd_read(args: argparse.Namespace) -> int:
     """抓全文 → 抽取 Markdown → 生成 papers/ 笔记骨架（不碰 Zotero/INDEX）。"""
     raw = args.target
@@ -1292,6 +1327,12 @@ def cmd_read(args: argparse.Namespace) -> int:
         print(
             f"[read] 命中缓存全文，跳过抓取/抽取（--refresh 强制重取）：{fulltext_path}"
         )
+        for line in cache_manager.title_consistency_note(
+            md_title=_md_title(md),
+            ref_title=str((work or {}).get("title") or ""),
+            where=f"read 命中 {fulltext_path.name}",
+        ):
+            print(line)
 
     # 2) 抓取 PDF / 全套（命中缓存则整体跳过）
     bundle = None
@@ -1469,6 +1510,17 @@ def cmd_read(args: argparse.Namespace) -> int:
                 md = oa_md
                 if fm is not None:
                     fm["oa_status"] = fm.get("oa_status") or "green"
+
+    # 3.9) 题名一致性（backlog 20261103-234914-lit）：缓存/新取 PDF 的内容题名 vs
+    # DOI 元数据题名 vs 抽取件题名——版本错配只告警不阻断（文件名 DOI ≠ 内容）。
+    if pdf_path and Path(pdf_path).exists():
+        for line in cache_manager.title_consistency_note(
+            pdf=pdf_path,
+            md_title=_md_title(md) if md else "",
+            ref_title=str((work or {}).get("title") or ""),
+            where=f"read {raw}",
+        ):
+            print(line)
 
     # 4) 组装 frontmatter（URL-only 无元数据时回退最小骨架）
     if fm is None:
@@ -3201,6 +3253,44 @@ def _print_removed(removed: list[Path], dry_run: bool) -> None:
         print(f"  ...（其余 {len(removed) - 40} 项略）")
 
 
+def _ref_doi_title(query: str) -> str:
+    """查询串若为 DOI → OpenAlex 元数据题名（fail-open：取不到返回空串）。"""
+    kind, val = _classify_id(query)
+    if kind != "doi":
+        return ""
+    try:
+        work = openalex_client.get_work(doi=val) or {}
+    except Exception:  # noqa: BLE001 - 离线/限流只降级为「未比对」
+        return ""
+    return str(work.get("title") or "")
+
+
+def _backfill_note_local_pdf(query: str, pdf: Path) -> str:
+    """台账回填（方案③，backlog 20261103-234914-lit）：``papers/`` 同 DOI 笔记的
+    ``local_pdf_path`` 为空而缓存已有 PDF → 回填，消除台账与磁盘脱节。
+
+    Returns:
+        回填说明（无事可做 → 空串）。命中多个同身份笔记时交人工（:func:
+        `_find_note_by_identity` 的唯一命中守卫），不猜。
+    """
+    kind, val = _classify_id(query)
+    if kind != "doi":
+        return ""
+    path, _hits = _find_note_by_identity({"doi": val})
+    if path is None:
+        return ""
+    try:
+        stored = notes.load_frontmatter(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return ""
+    if str(stored.get("local_pdf_path") or "").strip():
+        return ""
+    _p, _action, changed = _merge_note({"doi": val, "local_pdf_path": str(pdf)})
+    if not changed:
+        return ""
+    return f"台账回填：{path.name} local_pdf_path ← {pdf}"
+
+
 def cmd_cache(args: argparse.Namespace) -> int:
     """缓存治理：stats 概览 / clean 清 Tier B / prune 手动 LRU 淘汰 Tier A / find 查缓存 PDF。"""
     action = args.action
@@ -3211,6 +3301,27 @@ def cmd_cache(args: argparse.Namespace) -> int:
             print(f"[cache] 未找到已缓存 PDF：{query}")
             return 1
         print(f"[cache] {query} → {path}（{notes.fmt_size(path.stat().st_size)}）")
+        # 内容身份（backlog 20261103-234914-lit）：文件名按 DOI 命名 ≠ 内容就是
+        # 该 DOI 的发表版——输出首页题名/首行/元数据题名，有 DOI 元数据则比对告警。
+        probe = cache_manager.pdf_content_probe(path)
+        if probe["title"] or probe["meta_title"]:
+            print(f"[cache] 内容题名  ：{probe['title'] or '（首页无文本）'}")
+            print(f"[cache] 首行      ：{probe['first_line'] or '—'}")
+            if probe["meta_title"]:
+                print(f"[cache] 元数据题名：{probe['meta_title']}")
+        ref_title = _ref_doi_title(query)
+        notes_lines = cache_manager.title_consistency_note(
+            pdf=path, ref_title=ref_title, where=f"cache find {query}"
+        )
+        for line in notes_lines:
+            print(line)
+        if ref_title and probe["title"] and not notes_lines:
+            print("[cache] 题名比对：与 DOI 元数据一致")
+        elif not ref_title:
+            print("[cache] （无 DOI 元数据可比对：仅列内容题名）")
+        backfill = _backfill_note_local_pdf(query, path)
+        if backfill:
+            print(f"[cache] {backfill}")
         return 0
     if action == "stats":
         print(cache_manager.format_stats(cache_manager.stats()))

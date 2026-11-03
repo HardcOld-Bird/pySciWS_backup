@@ -371,6 +371,86 @@ def find_cached_pdf(identifier: str, *, slug: str = "") -> Path | None:
     return max(files, key=lambda p: p.stat().st_mtime)
 
 
+# ---------------------------------------------------------------------------
+# PDF 内容身份探针（backlog 20261103-234914-lit：文件名 DOI ≠ 内容题名的版本错配）
+# ---------------------------------------------------------------------------
+def pdf_content_probe(pdf: Path) -> dict[str, str]:
+    """读 PDF 首页题名线索（fail-open：读不开/无文本 → 空串字段）。
+
+    - ``title``：首页前 3 个非空行合并（题名常折 1–3 行）；
+    - ``first_line``：首页首行；
+    - ``meta_title``：PDF 元数据 ``Title``（稿件版常是 ``Microsoft Word - …docx``）。
+    """
+    out = {"title": "", "first_line": "", "meta_title": ""}
+    try:
+        import pymupdf
+
+        doc = pymupdf.open(str(pdf))
+    except Exception:  # noqa: BLE001 - 探针 fail-open，绝不挡主流程
+        return out
+    try:
+        out["meta_title"] = str((doc.metadata or {}).get("title") or "").strip()
+        if doc.page_count:
+            lines = [ln.strip() for ln in doc[0].get_text().splitlines() if ln.strip()]
+            if lines:
+                out["first_line"] = lines[0]
+                out["title"] = " ".join(lines[:3])
+    except Exception:  # noqa: BLE001 - 同上
+        pass
+    finally:
+        doc.close()
+    return out
+
+
+def title_match(a: str, b: str) -> bool:
+    """题名粗判等价（版本错配筛查，不做精确对齐）。
+
+    归一 token（小写词 + 单个 CJK 字）集合重叠 ≥ 0.6×较小方即视为同题——折行连字号、
+    大小写、标点不敏感；任一侧无可比 token → 视为可比性不足、**放行**（fail-open：
+    只在确有把握时告警）。
+    """
+    tok = lambda s: set(re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]", s.lower()))  # noqa: E731
+    ta, tb = tok(a), tok(b)
+    if not ta or not tb:
+        return True
+    return len(ta & tb) >= 0.6 * min(len(ta), len(tb))
+
+
+def title_consistency_note(
+    *, pdf: Path | None = None, md_title: str = "", ref_title: str = "", where: str = ""
+) -> list[str]:
+    """三方题名一致性（PDF 内容题名 / 抽取件题名 / DOI 元数据题名）→ 告警行。
+
+    任一对不等价即产出一行 ``[!] 题名不一致``（backlog 20261103-234914-lit：文件名
+    按 DOI 命名即被下游默认为发表版，无环节比对内容——静默版本错配）。只报告不阻断。
+    """
+    pt = pdf_content_probe(pdf)["title"] if pdf is not None else ""
+    pairs: list[tuple[str, str, str, str]] = []
+    if ref_title and pt:
+        pairs.append(
+            (f"DOI 元数据《{ref_title}》", ref_title, f"PDF 内容题名《{pt}》", pt)
+        )
+    if ref_title and md_title:
+        pairs.append(
+            (
+                f"DOI 元数据《{ref_title}》",
+                ref_title,
+                f"抽取件题名《{md_title}》",
+                md_title,
+            )
+        )
+    if pt and md_title:
+        pairs.append(
+            (f"PDF 内容题名《{pt}》", pt, f"抽取件题名《{md_title}》", md_title)
+        )
+    return [
+        f"[!] 题名不一致（{where}）：{la} ≠ {lb}——疑同名异文/版本错配，请人工确认"
+        "（backlog 20261103-234914-lit）"
+        for la, ta, lb, tb in pairs
+        if not title_match(ta, tb)
+    ]
+
+
 def _expired_tier_b(max_age_days: int) -> list[Path]:
     cutoff = time.time() - max_age_days * 86400
     out: list[Path] = []

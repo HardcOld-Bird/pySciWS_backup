@@ -1170,6 +1170,38 @@ def cmd_prepare(
         src_pdf = src_pdf.resolve()
     else:
         src_pdf = _find_source_pdf(stem, source_md=source_md)
+    if src_pdf is not None:
+        # 题名一致性（backlog 20261103-234914-lit）：源 PDF 内容题名 vs 抽取件题名 vs
+        # DOI 元数据题名——文件名 DOI ≠ 内容的版本错配只告警不阻断。
+        ref_title = ""
+        doi = next(
+            (
+                i
+                for i in extract_pdf_identifiers(md_text[:_MD_HEAD_CHARS])
+                if i.startswith("10.")
+            ),
+            "",
+        )
+        if doi:
+            try:
+                from . import openalex_client
+
+                ref_title = str(
+                    (openalex_client.get_work(doi=doi) or {}).get("title") or ""
+                )
+            except Exception:  # noqa: BLE001 - 离线只降级为「未比对」
+                ref_title = ""
+        md_title = ""
+        m = re.search(r"^#\s+(.+)$", md_text, re.M)
+        if m:
+            md_title = m.group(1).strip().strip("*` ")
+        for line in cache_manager.title_consistency_note(
+            pdf=src_pdf,
+            md_title=md_title,
+            ref_title=ref_title,
+            where=f"prepare {stem}",
+        ):
+            print(line, flush=True)
     workdir = workdir_for(stem)
     workdir.mkdir(parents=True, exist_ok=True)
     rc, note = guard_translated_workspace(workdir, force=force)
