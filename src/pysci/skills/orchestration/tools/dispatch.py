@@ -1146,6 +1146,169 @@ def taskbook_conflict_block(conflicts: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ── 素材存在性校验（backlog 20261103-114141-writing）────────────────────────
+#
+# 场景实锤：任务书引用的图像资产（`data/research/…/images/….jpg`）磁盘缺失、只存在于
+# md 引用，组员按任务书路径直取即 FileNotFound，只能现场回退「权威 PDF 提取＋人工分割」。
+# 判据：**任务书声明的输入素材路径 100% 可解析，或显式给出兜底获取方式**。
+
+#: 任务书里的**仓库路径**（收中文目录名——``data/用户的inbox/…`` 是合法路径，不得从
+#: 中文处截断；停在空白/引号/括号/中英标点处）。行内反斜杠先归一成 ``/`` 再匹配。
+_MATERIAL_PATH_RE = re.compile(
+    r"(?<![\w/.\-])((?:src|tests|orchestration|data|scripts|outbox|\.qoder)/"
+    r"[^\s`'\"“”「」『』（）()【】\[\]{}<>，,。；;：:、！!？?|*？]+)"
+)
+
+#: 素材（图/PDF/office/媒体）扩展名：非「输入/证据」语境里只有这类文件按素材校验——
+#: 代码/文本面（.py/.md/…）多是改动目标或产出，不按素材判。
+_ASSET_EXTS = (
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".pdf",
+    ".pptx",
+    ".ppt",
+    ".docx",
+    ".doc",
+    ".xlsx",
+    ".xls",
+    ".mph",
+    ".mp4",
+    ".mp3",
+    ".wav",
+    ".zip",
+    ".mat",
+    ".npz",
+    ".h5",
+)
+
+#: 输出语境动词：同线命中即「这是产出/改动路径」——产出缺失是正常的（还没造出来）。
+_OUTPUT_VERBS = (
+    "产出",
+    "输出",
+    "生成",
+    "写出",
+    "覆盖",
+    "新建",
+    "创建",
+    "落盘",
+    "交付",
+    "重出",
+    "写入",
+    "保存为",
+    "拷贝",
+    "复制到",
+    "补图",
+    "重建为",
+)
+
+#: 兜底标注词：缺失但显式给出获取方式 → 判据已满足（「或显式给出兜底获取方式」）。
+_FALLBACK_WORDS = (
+    "兜底",
+    "回退",
+    "fallback",
+    "获取方式",
+    "若缺",
+    "缺图",
+    "缺失时",
+    "重抽",
+    "提取",
+)
+
+_INPUT_HEAD_RE = re.compile(r"^#{1,6}\s*.*输入")
+_EVIDENCE_LINE_RE = re.compile(r"^\s*证据\s*[:：]")
+_FILE_EXT_RE = re.compile(r"\.[A-Za-z0-9]{1,5}$")
+
+
+def _material_entries(body: str) -> list[tuple[str, int]]:
+    """任务书正文 → 「声明为输入的素材路径」清单 ``(路径, 行号)``（0 起）。
+
+    输入语境三类，其余路径一律不算素材（白名单/产出/背景引用不触发存在性校验）：
+
+    1. 「输入」标题段内的路径（含无扩展名的目录/工作区）；
+    2. 「证据：」行的路径；
+    3. 素材扩展名路径且所在行**无输出动词**（且不在「白名单」段）。
+
+    带 glob（``*``/``?``）的路径不校验（无从展开）。fail-open：宁可少报不误报。
+    """
+    lines = body.splitlines()
+    out: list[tuple[str, int]] = []
+    in_input = False
+    in_whitelist = False
+    for i, raw in enumerate(lines):
+        if _ANY_HEAD_RE.match(raw):
+            in_input = bool(_INPUT_HEAD_RE.match(raw))
+            in_whitelist = bool(_WHITELIST_HEAD_RE.match(raw))
+            if in_whitelist:
+                in_input = False
+            continue
+        if in_whitelist:
+            continue
+        ln = raw.replace("\\", "/")
+        evidence = bool(_EVIDENCE_LINE_RE.match(ln))
+        outputish = any(v in ln for v in _OUTPUT_VERBS)
+        if outputish and not (in_input or evidence):
+            continue
+        for m in _MATERIAL_PATH_RE.finditer(ln):
+            if ln[m.end() : m.end() + 1] in ("*", "?", "{"):
+                continue  # glob/花括号展开（…writing-20261103-*.md、…test_tui_{a,b}.py），无从校验
+            path = m.group(1).rstrip("/")
+            if not path or path[-1] in "_-.":
+                continue  # 截断样（词中被排除字符咬断），非完整路径
+            if in_input or evidence:
+                out.append((path, i))
+            elif (
+                not outputish
+                and _FILE_EXT_RE.search(path)
+                and path.lower().endswith(_ASSET_EXTS)
+            ):
+                out.append((path, i))
+    return out
+
+
+def missing_materials(body: str) -> list[str]:
+    """任务书声明的输入素材里**磁盘缺失且无兜底标注**的路径（升序去重；fail-open）。
+
+    判据（backlog 20261103-114141-writing）：输入素材路径 100% 可解析，或显式给出兜底
+    获取方式。存在 → 不报；缺失但同线/续行带兜底词（兜底/回退/提取/…）→ 不报；其余报出。
+    """
+    lines = body.splitlines()
+    missing: set[str] = set()
+    for path, i in _material_entries(body):
+        try:
+            if (PROJECT_ROOT / path).exists():
+                continue
+        except OSError:
+            continue
+        ctx = lines[i] + " " + (lines[i + 1] if i + 1 < len(lines) else "")
+        if any(w in ctx for w in _FALLBACK_WORDS):
+            continue
+        missing.add(path)
+    return sorted(missing)
+
+
+def taskbook_material_block(missing: list[str]) -> str:
+    """素材缺失提示写进任务书正文——**组员侧可见**（同判据矛盾块的处置：派发 stdout
+    只有组长读到，执行者撞 FileNotFound 时才知道就晚了）。"""
+    lines = [
+        "",
+        "> ⚠ **输入素材缺失（不阻断派发）**——下列任务书声明的输入路径磁盘上不存在：",
+    ]
+    for p in missing:
+        lines.append(f"> - `{p}`")
+    lines.append(
+        "> 处置：派发前补图/改路径，或在任务书中**显式标注兜底获取方式**"
+        "（如「权威 PDF 提取＋人工分割」）；两者皆无则组员只能现场自行回退。"
+    )
+    return "\n".join(lines) + "\n"
+
+
 def write_taskbook(
     pod: Path, *, text: str | None, task_file: str | None, slug: str
 ) -> Path:
@@ -1172,6 +1335,13 @@ def write_taskbook(
         print(f"[!] 任务书 lint：{conflict_notice(c)}")
     if conflicts:
         body = body.rstrip("\n") + "\n\n" + taskbook_conflict_block(conflicts)
+    # 素材存在性校验（backlog 20261103-114141-writing）：声明的输入素材须可解析或显式
+    # 标注兜底获取方式；缺失即告警并把提示落进任务书（组员侧可见），不阻断派发。
+    missing = missing_materials(body)
+    for p in missing:
+        print(f"[!] 任务书 lint：[素材缺失] {p}（补图/改路径，或标注兜底获取方式）")
+    if missing:
+        body = body.rstrip("\n") + "\n\n" + taskbook_material_block(missing)
     # 要求与历史总览**自动附送**（用户 2026-10-17：组长遗忘不得传递给组员——凡大任务
     # 派单一律附送，组员可见面不再依赖组长记得抄；计划外单件（adhoc）无归属任务书，不附）。
     try:
