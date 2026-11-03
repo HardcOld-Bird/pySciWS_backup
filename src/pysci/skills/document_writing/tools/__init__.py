@@ -3,6 +3,8 @@
 包含以下模块：
 - config: 统一配置加载（读取项目根 .env）+ 外部工具链探测（TeX / LibreOffice / Python 库）
 - latex_build: latexmk 编译驱动 + .log 报错解析（错误/警告定位到行号）
+- formula_render: 公式渲染管线（article+amsmath → PDF → ink 裁剪 RGBA PNG；编译零
+  error 验收、失败不落盘；禁 standalone——TeXLive 2026 standalone 破坏数学定界符）
 - pdf_render: PDF → PNG（pymupdf），供 LLM「看图」校对版式
 - refs_bridge: 复用 literature_research.zotero_cli（委托社区 zotero-mcp），把 Zotero 库导出为 refs.bib
 - pptx_io: python-pptx 结构化读取（逐页文本/备注/表格/图片清单）
