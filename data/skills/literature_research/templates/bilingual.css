@@ -49,17 +49,22 @@ img {
   margin: 0.7em auto;
 }
 
-/* 图 + 图注同包（页内脚本归组）：不被栏/页断裂 */
+/* 图 + 图注首对同包（页内脚本归组）：不被栏/页断裂 */
 .figure {
   break-inside: avoid;
 }
 
-/* 图注小字（紧跟图片的句对组，由页内脚本归组为 .caption） */
-.caption {
+/* 图注小字（首对在 .caption；余对在 .caption-cont——同款式、自由流布可跨栏/页，
+   2026-11-03 三轮粒度修复：长图注整组原子会跳栏首留洞） */
+.caption,
+.caption-cont {
   font-size: 0.86em;
   color: #444;
   line-height: 1.6;
   margin: 0.2em 0 0.8em;
+}
+
+.caption {
   break-inside: avoid;
 }
 

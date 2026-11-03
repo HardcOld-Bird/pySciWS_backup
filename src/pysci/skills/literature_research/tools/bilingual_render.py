@@ -143,9 +143,11 @@ def to_pandoc_md(md_text: str) -> str:
 # 自包含 HTML 组装（内联样式 + KaTeX 本地化 bundle）
 # ---------------------------------------------------------------------------
 #: 页内收尾脚本：KaTeX 排版（pandoc --mathjax 的语义定界符）+ 图注归组（图片段落
-#: 之后、下一个 ``---``（hr）之前的句对组 → ``.caption`` 小字；图片与其图注同包
-#: ``.figure`` 防栏/页断裂）+ 单栏强制（超栏宽的展示公式/表格**等比缩放至栏宽**，
-#: 只缩不放、禁跨栏——2026-11-03 用户二轮裁决：删除 column-span 跨栏特殊处理）。
+#: 之后、下一个 ``---``（hr）之前的句对组：**首对**并入 ``.figure`` 与图同包原子防
+#: 栏/页断裂，**余对**包 ``.caption-cont`` 同图注样式自由流布——2026-11-03 三轮粒度
+#: 修复：长图注整组原子>栏尾会跳栏首留洞，图＋首对原子即可接续）+ 单栏强制（超栏宽
+#: 的展示公式/表格**等比缩放至栏宽**，只缩不放、禁跨栏——2026-11-03 用户二轮裁决：
+#: 删除 column-span 跨栏特殊处理）。
 #:
 #: 栏宽判据用**打印栏宽**（``__COL_W_PX__``，由 :func:`build_html` 按 A4/页边距/栏距
 #: 算出后替换）——脚本在屏幕布局下执行，屏幕栏宽≠打印栏宽，用屏幕量宽会漏判。
@@ -174,11 +176,21 @@ document.addEventListener("DOMContentLoaded", function () {
     p.parentNode.insertBefore(fig, p);
     fig.appendChild(p);
     fig.appendChild(wrap);
+    var cont = null;
     while (n && n.tagName !== "HR" && !n.querySelector("img") && !n.querySelector(".math.display")) {
       var next = n.nextElementSibling;
-      wrap.appendChild(n);
+      if (!wrap.children.length) {
+        wrap.appendChild(n);
+      } else {
+        if (!cont) {
+          cont = document.createElement("div");
+          cont.className = "caption-cont";
+        }
+        cont.appendChild(n);
+      }
       n = next;
     }
+    if (cont) fig.parentNode.insertBefore(cont, fig.nextSibling);
   });
   function measureMin(el, nowrap) {
     var w0 = el.style.width, m0 = el.style.maxWidth, s0 = el.style.whiteSpace;

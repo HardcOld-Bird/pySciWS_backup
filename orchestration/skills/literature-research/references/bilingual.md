@@ -16,8 +16,8 @@ markdown（`read`/`pdf_extract` 产物，`cache/extracted/<stem>.md`）；图片
 |---|---|---|
 | `prepare <源md路径\|stem> [--pdf <PDF>] [--no-images] [--reuse <旧work.md\|目录\|stem>]` | 源 minerU md → `work.md` + `manifest.json` + `images/` | stdout 打翻译指引；`--pdf <PDF>` 手工指定源 PDF；`--no-images` 跳过回补（仅调试，submit 将拒绝出稿）；`--reuse` 按英文原文（归一化空白等值）回填旧译文，未匹配保持未译；含译文工作区默认拒覆写，`--force` 放行并自动备份 `*.bak-<ts>` |
 | `status <stem>` | `work.md` 对账 → 计数 + 未译/存疑 ID 列表 | 对账按 ID 不按行号 |
-| `submit <stem> [--out-dir <目录>]` | 全译的 `work.md` → `bilingual.md`（+自动 `bilingual.pdf`）→ 交付目录 | 未译拒绝出稿（rc=1）；PDF 渲染失败仅警告、不阻塞 md 交付；`--out-dir` 自定义交付目录（须在 `data/` 内、不存在则建；**未提供时回退默认** `data/用户的inbox/bilingual/<stem>/`） |
-| `render <stem>` | 已有 `bilingual.md` → `bilingual.pdf`（同目录） | 无出稿 rc=2；`.html` 中间文件保留作调试图；PDF=双栏 A4、0.6cm 页边距、页码奇右偶左、栏间细分割线；超宽公式/表格等比缩放进栏（禁跨栏） |
+| `submit <stem> [--out-dir <目录>]` | 全译的 `work.md` → `bilingual.md`（+自动 `bilingual.pdf`）→ 交付目录 | 未译拒绝出稿（rc=1）；PDF 渲染失败仅警告、不阻塞 md 交付；`--out-dir` 自定义交付目录（须在 `data/` 内、不存在则建；**缺省回退** `data/用户的inbox/bilingual/<stem>/`） |
+| `render <stem>` | 已有 `bilingual.md` → `bilingual.pdf`（同目录） | 无出稿 rc=2；`.html` 留作调试图；PDF=双栏 A4、0.6cm 页边距、页码奇右偶左、栏间细线；超宽公式/表格缩放进栏（禁跨栏）；图＋图注首对原子、余对自由流布 |
 | `reorder-suggest <源md路径\|stem> [--pdf <PDF>]` | 源 md + 源 PDF → 工作区 `reorder-suggested.md` + `reorder-report.md` | 文序订正**建议**（只出建议，不改源 md/cache）；缺源 PDF rc=2（`--pdf` 指定） |
 
 **切分契约**：待译单元 = 标题 `H` / 正文句 `S` / 图注 `C` / 表注 `T`，每行

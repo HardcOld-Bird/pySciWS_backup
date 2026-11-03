@@ -151,7 +151,13 @@ def test_print_css_two_columns_and_layout_guards() -> None:
         "body margin 须清零（浏览器默认 8px 会蚕食页边距）"
     )
     assert "max-width: 100%" in css, "图片/表格适应栏宽"
-    assert ".figure" in css and "break-inside: avoid" in css, "图与图注不被栏/页断裂"
+    assert ".figure" in css and "break-inside: avoid" in css, (
+        "图＋图注首对不被栏/页断裂"
+    )
+    assert ".caption-cont" in css, "图注余对容器（自由流布）"
+    assert not re.search(r"\.caption-cont\s*\{[^}]*break-inside", css), (
+        "图注余对不得钉死不断裂（长图注整组原子会跳栏首留洞）"
+    )
     assert "overflow-wrap: anywhere" in css, "长串（DOI/URL）栏内可断行"
     assert "column-span" not in css and ".wide" not in css, "禁跨栏（CSS 侧）"
     assert "column-span" not in br._INIT_JS and ".wide" not in br._INIT_JS, (
@@ -380,3 +386,97 @@ def test_print_smoke_no_cross_column_ink_and_rule_visible(
             assert rules, f"第 {pn} 页缺栏间分割线"
     finally:
         doc.close()
+
+
+# ---------------------------------------------------------------------------
+# 图注粒度（2026-11-03 三轮）：图＋图注首对原子（.figure 不断裂），余对
+# .caption-cont 自由流布；短图注组（无余对）行为不变
+# ---------------------------------------------------------------------------
+# 图片行须用**空 alt**（`![](...)`，与 bilingual.md 契约一致）：带 alt 的独图会被
+# pandoc implicit_figures 转成 <figure>（不入 <p>），归组 JS 不生效——夹具曾因
+# `![x](…)` 静默测空。
+CAPTION_GRANULARITY = """# 图注粒度夹具
+*Caption granularity fixture*
+
+---
+![](images/pic.png)
+
+首对句对。
+*First pair.*
+
+余对一句对。
+*Second pair.*
+
+余对二句对。
+*Third pair.*
+
+---
+![](images/pic.png)
+
+唯一句对。
+*Only pair.*
+
+---
+尾段。
+*Tail.*
+"""
+
+
+def test_caption_granularity_first_pair_atomic_rest_flows(
+    tmp_path: Path, browser_available: bool
+) -> None:
+    """多对图注：首对在 .caption（.figure 内、原子），余对在 .caption-cont（.figure
+    外、可断）；短图注组无 .caption-cont、行为不变。"""
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images" / "pic.png").write_bytes(_PNG)
+    (tmp_path / "bilingual.md").write_text(CAPTION_GRANULARITY, encoding="utf-8")
+    html = br.build_html(CAPTION_GRANULARITY, title="cap")
+    (tmp_path / "cap.html").write_text(html, encoding="utf-8")
+
+    from playwright.sync_api import sync_playwright
+
+    from pysci.skills.literature_research.tools.browser_fetch import _launch
+
+    with sync_playwright() as p:
+        b, _ch = _launch(p, "auto", True)
+        try:
+            pg = b.new_page()
+            pg.goto(
+                (tmp_path / "cap.html").resolve().as_uri(), wait_until="networkidle"
+            )
+            pg.wait_for_function(
+                "document.fonts ? document.fonts.status === 'loaded' : true"
+            )
+            got = pg.evaluate(
+                """() => Array.from(document.querySelectorAll(".figure")).map(f => {
+                    const cap = f.querySelector(".caption");
+                    const nxt = f.nextElementSibling;
+                    return {
+                        figKids: Array.from(f.children).map(
+                            k => k.className || k.tagName
+                        ),
+                        capKids: cap ? cap.children.length : 0,
+                        contInFig: !!f.querySelector(".caption-cont"),
+                        contKids: nxt && nxt.classList.contains("caption-cont")
+                            ? nxt.children.length : 0
+                    };
+                })"""
+            )
+        finally:
+            b.close()
+
+    assert len(got) == 2, got
+    multi, short = got
+    assert multi["figKids"] == ["P", "caption"], (
+        f"图＋首对原子：余对不得并入 .figure：{multi}"
+    )
+    assert multi["capKids"] == 1, f"首对恰好一对：{multi}"
+    assert multi["contKids"] == 2 and not multi["contInFig"], (
+        f"余对入 .caption-cont 且在 .figure 外自由流布：{multi}"
+    )
+    assert short["figKids"] == ["P", "caption"] and short["capKids"] == 1, (
+        f"短图注组（无余对）行为不变：{short}"
+    )
+    assert short["contKids"] == 0 and not short["contInFig"], (
+        f"短图注组不生成 .caption-cont：{short}"
+    )
