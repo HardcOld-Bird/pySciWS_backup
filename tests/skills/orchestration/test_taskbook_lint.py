@@ -649,3 +649,120 @@ def test_repo_rule_geometry_engages_and_silences():
         "geometry-needs-source" in w
         for w in dispatch.lint_taskbook("近边 0.30 m（源：SCAN_NEAR_EDGE_M）")
     )
+
+
+# ---------------------------------------------------------------------------
+# 素材存在性校验（backlog 20261103-114141-writing）：任务书声明的输入素材路径 100%
+# 可解析，或显式给出兜底获取方式；缺失无兜底 → 告警＋任务书内提示块（组员侧可见）
+# ---------------------------------------------------------------------------
+def _root(tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatch, "PROJECT_ROOT", tmp_path)
+    return tmp_path
+
+
+def test_material_missing_input_without_fallback_is_flagged(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    body = "## 输入（只读）\n- 样图：data/research/1_example/images/64b425.jpg\n"
+    assert dispatch.missing_materials(body) == [
+        "data/research/1_example/images/64b425.jpg"
+    ]
+
+
+def test_material_existing_input_is_silent(tmp_path, monkeypatch):
+    root = _root(tmp_path, monkeypatch)
+    (root / "data" / "x").mkdir(parents=True)
+    (root / "data" / "x" / "a.jpg").write_bytes(b"x")
+    body = "## 输入（只读）\n- 样图：`data/x/a.jpg`\n"
+    assert dispatch.missing_materials(body) == []
+
+
+def test_material_fallback_annotation_silences(tmp_path, monkeypatch):
+    """判据「或显式给出兜底获取方式」：缺失但标注兜底 → 不报。"""
+    _root(tmp_path, monkeypatch)
+    body = (
+        "## 输入（只读）\n"
+        "- 样图 `data/research/1_example/images/64b425.jpg` 若缺则兜底：权威 PDF 提取＋人工分割\n"
+    )
+    assert dispatch.missing_materials(body) == []
+
+
+def test_material_cjk_and_backslash_paths_checked(tmp_path, monkeypatch):
+    """中文目录名不得截断；Windows 反斜杠路径归一后照查。"""
+    _root(tmp_path, monkeypatch)
+    body = (
+        "## 输入（只读）\n"
+        "- 样例：data/用户的inbox/大任务/7_开题PPT完善/6-组合初稿v2.pptx\n"
+        "- 另一：data\\research\\1_example\\slides\\missing_deck_zz.pptx\n"
+    )
+    assert dispatch.missing_materials(body) == [
+        "data/research/1_example/slides/missing_deck_zz.pptx",
+        "data/用户的inbox/大任务/7_开题PPT完善/6-组合初稿v2.pptx",
+    ]
+
+
+def test_material_output_context_not_input(tmp_path, monkeypatch):
+    """产出/覆盖目标缺失是正常的（还没造出来）——不算素材。"""
+    _root(tmp_path, monkeypatch)
+    body = "## 交付\n- 重出 PDF 并覆盖 data/out/report_v2.pdf（用户授权原位覆盖）\n"
+    assert dispatch.missing_materials(body) == []
+
+
+def test_material_whitelist_section_skipped(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    body = "## 白名单（写权限）\n- data/others/tmp/new_chart_zz.pdf\n"
+    assert dispatch.missing_materials(body) == []
+
+
+def test_material_glob_paths_skipped(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    body = (
+        "## 输入（只读）\n"
+        "- 历史读数 orchestration/state/deliveries/writing-20261103-*.md\n"
+        "- 测试面 tests/skills/orchestration/test_tui_{a,b}.py\n"
+        "- 截断样 tests/skills/orchestration/test_tui_ 系列\n"
+    )
+    assert dispatch.missing_materials(body) == []
+
+
+def test_material_asset_ext_outside_input_checked(tmp_path, monkeypatch):
+    """散在正文里的素材扩展名路径（当年事故形态：md 引用的图像资产）照查。"""
+    _root(tmp_path, monkeypatch)
+    body = "图像资产 data/research/1_example/images/0ee1aecb.jpg 只存在于 md 引用。\n"
+    assert dispatch.missing_materials(body) == [
+        "data/research/1_example/images/0ee1aecb.jpg"
+    ]
+
+
+def test_material_code_path_outside_input_not_checked(tmp_path, monkeypatch):
+    """代码/文本面非素材扩展名，输入语境外不查（多是改动目标/产出）。"""
+    _root(tmp_path, monkeypatch)
+    body = "改 src/pysci/skills/x/tools/fake_module_zz.py 的判定。\n"
+    assert dispatch.missing_materials(body) == []
+
+
+def test_write_taskbook_appends_material_block_and_warns(tmp_path, monkeypatch, capsys):
+    """缺失素材：stdout 告警＋提示块落进任务书（组员侧可见），且不阻断落盘。"""
+    _root(tmp_path, monkeypatch)
+    body = "## 输入（只读）\n- 样图：data/research/1_example/images/64b425.jpg\n"
+    dest = dispatch.write_taskbook(
+        tmp_path / "pod", text=body, task_file=None, slug="t"
+    )
+    out = capsys.readouterr().out
+    assert "素材缺失" in out and "64b425.jpg" in out
+    raw = dest.read_text(encoding="utf-8")
+    assert "输入素材缺失" in raw and "64b425.jpg" in raw
+    assert "兜底获取方式" in raw
+    assert raw.endswith("\n") and not raw.endswith("\n\n")
+
+
+def test_write_taskbook_no_block_when_materials_ok(tmp_path, monkeypatch):
+    root = _root(tmp_path, monkeypatch)
+    (root / "data" / "x").mkdir(parents=True)
+    (root / "data" / "x" / "a.jpg").write_bytes(b"x")
+    dest = dispatch.write_taskbook(
+        tmp_path / "pod",
+        text="## 输入（只读）\n- 样图：data/x/a.jpg\n",
+        task_file=None,
+        slug="t",
+    )
+    assert "输入素材缺失" not in dest.read_text(encoding="utf-8")
