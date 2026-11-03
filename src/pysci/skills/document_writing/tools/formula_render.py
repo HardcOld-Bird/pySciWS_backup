@@ -10,7 +10,11 @@ deck 公式图的唯一渲染入口（backlog 20261103-134217-writing）：
 2. 产物验收 = **编译零 error**（``latex_build`` 的 ``ok`` ＝ PDF 存在 ∧ rc==0 ∧ log 无
    error），不满足即 :class:`FormulaCompileError`——PDF 即便存在也不可用；
 3. 失败**不落盘**：PNG 最终原子写出（``tmp`` + ``os.replace``），编译/裁剪任一失败即
-   零产物，误差恢复产物不可进 deck。
+   零产物，误差恢复产物不可进 deck；
+4. **渲染图↔源串机械结构自检**（backlog 20261103-131952-reviewer，:func:
+   `verify_formula_structure`）：字形层（内容字符不缺不截）＋分数层（分数杠上下
+   墨迹、单杠 A/B 绑定）——空分子/错位分组/截断在**产出时**即拦（:
+   :class:`FormulaStructureError`），不再依赖终检像素取证。
 
 PDF→PNG 按 **ink 裁剪**（仅墨迹 bbox，白边剔除），RGBA 透明底、零描边；dpi 默认 600
 （deck 口径 ≥300）。公式源串（``equation*``/``\\[\\]``/多式同页均可）**原样**进模板。
@@ -19,8 +23,10 @@ PDF→PNG 按 **ink 裁剪**（仅墨迹 bbox，白边剔除），RGBA 透明底
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
+from collections import Counter
 from pathlib import Path
 
 from .latex_build import build
@@ -46,6 +52,186 @@ class FormulaRenderError(RuntimeError):
 
 class FormulaCompileError(FormulaRenderError):
     """编译未过**零 error** 验收——产物（即便存在 PDF）一律不可用。"""
+
+
+class FormulaStructureError(FormulaRenderError):
+    """渲染产物与源串**结构不符**（空分子/错位分组/截断丢字）——不落盘。
+
+    backlog 20261103-131952-reviewer：p14_f4_t.png 曾与源串 ``\\frac{1}{n_{0}}k_{x}``
+    结构不符（空分子、分母吞并 k_x）却混进成品——渲染产出时即须机械拦截。
+    """
+
+
+#: 源串里的 LaTeX 命令（``\frac`` 等名）与转义符（``\%`` 等）——其中字母不算内容字符。
+_CMD_RE = re.compile(r"\\(?:[A-Za-z]+|.)")
+
+#: 环境定界与不可见参数（``\begin{equation*}``/``\label{...}`` 的名字不渲染）。
+_ENV_RE = re.compile(r"\\(?:begin|end)\{[^}]*\}")
+_LABEL_RE = re.compile(r"\\label\{[^}]*\}")
+
+#: 会在版面里画**横线**的命令族（分数杠的几何混淆源）：源串含它们时分数结构层整体
+#: 跳过（降级到字形层）——否则 \sqrt 上划线 / \overline 会被误判成「空分子分数杠」。
+_RULE_COMMANDS_RE = re.compile(
+    r"\\(?:sqrt|overline|underline|widehat|widetilde|widecheck|utilde|widebar"
+    r"|overrightarrow|overleftarrow|overleftrightarrow|overbrace|underbrace)\b"
+)
+
+#: 分数命令族（每实例画一条分数杠）。
+_FRAC_COMMANDS_RE = re.compile(r"\\(?:d|t|c)?frac\b")
+
+#: 分数杠窗口：杠上方/下方该范围内才算分子/分母区（12 pt 基准字号的堆叠极限）。
+_BAR_WINDOW_PT = 24.0
+
+
+def _required_chars(body: str) -> dict[str, int]:
+    """源串 → **内容字符**计数（字母数字与 CJK；命令名/转义符/结构符不算）。
+
+    ``\\frac{1}{n_{0}}k_{x}`` → ``{1:1, n:1, 0:1, k:1, x:1}``；``\alpha`` 的
+    ``alpha`` 是命令名不计（渲染为 α 字形，抽取侧同样放行）。
+    """
+    s = _ENV_RE.sub(" ", body)
+    s = _LABEL_RE.sub(" ", s)
+    s = _CMD_RE.sub(" ", s)
+    s = re.sub(r"[{}$ \t\r\n_^&]", "", s)
+    return dict(Counter(c for c in s if c.isalnum()))
+
+
+#: 数学表达式开界（多式同页时严格绑定层跳过——防跨式串扰误报）。
+_CHUNK_OPEN_RE = re.compile(r"\\\[|\\\(|\\begin\{equation\*?\}|\$\$")
+
+
+def _frac_arg_chars(body: str) -> tuple[frozenset, frozenset] | None:
+    """源串恰含**一个** ``\\frac{A}{B}``（单式页）时返回 (A, B) 内容字符集。
+
+    有第二个 ``\\frac``、含横线命令、或多式同页（跨式串扰不可控）→ ``None``
+    （降级宽松层）。frac 之后的后继记号（如 ``…k_{x}``）**留在宇宙里**——它若被
+    吞进分母区，正是「错位分组」要抓的形态。
+    """
+    if len(_CHUNK_OPEN_RE.findall(body)) > 1:
+        return None
+    m = _FRAC_COMMANDS_RE.search(body)
+    if not m:
+        return None
+    if _FRAC_COMMANDS_RE.search(body, m.end()) or _RULE_COMMANDS_RE.search(body):
+        return None
+    i = m.end()
+    args: list[str] = []
+    for _ in range(2):
+        while i < len(body) and body[i] in " \t\r\n":
+            i += 1
+        if i >= len(body) or body[i] != "{":
+            return None
+        depth, j = 0, i
+        while j < len(body):
+            if body[j] == "{":
+                depth += 1
+            elif body[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        if depth != 0:
+            return None
+        args.append(body[i + 1 : j])
+        i = j + 1
+    a = frozenset(c for c in _required_chars(args[0]))
+    b = frozenset(c for c in _required_chars(args[1]))
+    return (a, b) if (a or b) else None
+
+
+def verify_formula_structure(body: str, pdf: str | Path) -> None:
+    """渲染产物 ↔ 源串**机械结构自检**（产出即校验、失败即报）。
+
+    两层判据（backlog 20261103-131952-reviewer）：
+
+    1. **字形层（总是）**：源串的内容字符在 PDF 文本层的出现次数不得少于源串——
+       空分子/截断丢字即 :class:`FormulaStructureError`；
+    2. **分数层**（源串含 ``\\frac`` 族且无 ``\\sqrt``/``\\overline`` 族横线命令时）：
+       分数杠数＝``\\frac`` 数（错位分组丢杠即 FAIL）；每杠上下 24 pt 窗内皆有字形
+       （分子区墨迹空洞即 FAIL）；单杠时按源串 ``\\frac{A}{B}`` 严格绑定上下区字符集
+       （分母吞并后继记号即 FAIL）。
+
+    Args:
+        body: 公式源串（与渲染时同一份）。
+        pdf: 渲染产物 PDF 路径。
+
+    Raises:
+        FormulaStructureError: 结构不符（附层名与差集）；PDF 读不开同判。
+    """
+    import pymupdf
+
+    try:
+        doc = pymupdf.open(str(pdf))
+    except Exception as exc:  # noqa: BLE001 - 产物读不开＝结构不可信
+        raise FormulaStructureError(f"渲染产物 PDF 读不开（{exc}）——不落盘") from exc
+    try:
+        word_boxes = [(w[4], w[:4]) for page in doc for w in page.get_text("words")]
+        bars = [
+            d["rect"]
+            for page in doc
+            for d in page.get_drawings()
+            if d["rect"].y1 - d["rect"].y0 <= 2 and d["rect"].x1 - d["rect"].x0 >= 3
+        ]
+    finally:
+        doc.close()
+
+    have = Counter(c for w, _ in word_boxes for c in w if c.isalnum())
+    need = _required_chars(body)
+    lack = {c: (n - have.get(c, 0)) for c, n in need.items() if have.get(c, 0) < n}
+    if lack:
+        raise FormulaStructureError(
+            f"字形层：源串内容字符在产物中缺失/不足 {lack}（截断或空分子丢字）——不落盘"
+        )
+
+    if not _FRAC_COMMANDS_RE.search(body) or _RULE_COMMANDS_RE.search(body):
+        return  # 无分数 / 含横线命令（杠不可辨）→ 分数层跳过
+    n_frac = len(_FRAC_COMMANDS_RE.findall(body))
+    if len(bars) != n_frac:
+        raise FormulaStructureError(
+            f"分数层：分数杠 {len(bars)} 条 ≠ \\frac 族 {n_frac} 个（错位分组/丢杠）——不落盘"
+        )
+    # 每杠上下窗内皆有字形（分子/分母区墨迹空洞检测）
+    for r in bars:
+        above = below = False
+        for w, (x0, y0, x1, y1) in word_boxes:
+            if x1 < r.x0 - 1 or x0 > r.x1 + 1:
+                continue
+            if r.y0 - _BAR_WINDOW_PT <= y1 <= r.y0 + 0.5:
+                above = True
+            if r.y1 - 0.5 <= y0 <= r.y1 + _BAR_WINDOW_PT:
+                below = True
+        if not (above and below):
+            which = "分子" if not above else "分母"
+            raise FormulaStructureError(
+                f"分数层：分数杠 {r} 的{which}区窗内无字形（墨迹空洞）——不落盘"
+            )
+    # 单杠严格绑定：上下区内容字符须恰为 \\frac{A}/{B} 的字符集（后继记号不得被吞进分母）
+    if n_frac == 1 and len(bars) == 1:
+        bound = _frac_arg_chars(body)
+        if bound is not None:
+            a_chars, b_chars = bound
+            r = bars[0]
+            above: set[str] = set()
+            below: set[str] = set()
+            for w, (x0, y0, x1, y1) in word_boxes:
+                if x1 < r.x0 - 1 or x0 > r.x1 + 1:
+                    continue
+                cs = {c for c in w if c.isalnum()}
+                if r.y0 - _BAR_WINDOW_PT <= y1 <= r.y0 + 0.5:
+                    above |= cs
+                if r.y1 - 0.5 <= y0 <= r.y1 + _BAR_WINDOW_PT:
+                    below |= cs
+            universe = set(need)
+            if not a_chars <= above or (above & universe) - a_chars:
+                raise FormulaStructureError(
+                    f"分数层：分子区字符 {sorted(above)} 与源串 A={sorted(a_chars)} 不符"
+                    "（错位分组）——不落盘"
+                )
+            if not b_chars <= below or (below & universe) - b_chars:
+                raise FormulaStructureError(
+                    f"分数层：分母区字符 {sorted(below)} 与源串 B={sorted(b_chars)} 不符"
+                    "（分母吞并后继记号）——不落盘"
+                )
 
 
 def formula_tex(body: str) -> str:
@@ -96,6 +282,7 @@ def build_formula_pdf(
             raise FormulaCompileError(
                 f"公式编译未过零 error 验收（{detail}）——产物不落盘"
             )
+        verify_formula_structure(body, res.pdf_path)
         out_pdf.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(res.pdf_path, out_pdf)
     return out_pdf
