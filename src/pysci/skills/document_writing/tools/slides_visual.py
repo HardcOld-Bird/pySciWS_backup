@@ -410,6 +410,8 @@ class SlideGeometry:
     picture_border_issues: list[str] = field(default_factory=list)
     #: 透明装饰图（水印）名称——只作读数，不计违规。
     decorative_pics: list[str] = field(default_factory=list)
+    #: 公式渲染图（预设豁免类）名称——豁免描边判定，只作读数，不计违规。
+    formula_pics: list[str] = field(default_factory=list)
 
     @property
     def violations(self) -> int:
@@ -492,6 +494,10 @@ class GeometryReport:
                 lines.append(
                     f"      装饰水印（豁免互叠/描边/外框判定）: {'、'.join(s.decorative_pics)}"
                 )
+            if s.formula_pics:
+                lines.append(
+                    f"      公式渲染图（豁免描边判定，预设要求零描边）: {'、'.join(s.formula_pics)}"
+                )
         for d in self.title_diffs:
             lines.append(f"      标题不一致: {d}")
         if self.ext_missing_total:
@@ -542,6 +548,7 @@ class GeometryReport:
                     "title_width_issues": s.title_width_issues,
                     "picture_border_issues": s.picture_border_issues,
                     "decorative_pics": s.decorative_pics,
+                    "formula_pics": s.formula_pics,
                 }
                 for s in self.slides
             ],
@@ -1000,6 +1007,79 @@ def _preset_title_issues(
     return form, width
 
 
+#: 公式渲染图的显式标记词（形状名 / alt 文本 ``descr``·``title``，大小写不敏感）。
+_FORMULA_MARKERS = ("formula", "equation", "latex", "公式")
+
+#: 墨迹透明底启发式阈值：不透明像素中「近灰」（通道差 < 40）占比下限、「暗色」
+#: （亮度 < 128）占比下限。与 :mod:`formula_render` 的 ink 裁剪产物形态一致
+#: （透明底 + 灰度墨迹）。样本 deck 91 图实测：命中 10/10 公式渲染图、0 误伤。
+_INK_GRAYISH_MIN = 0.95
+_INK_DARK_MIN = 0.60
+
+
+def _formula_marked(shape: Any) -> bool:
+    """形状名或 alt 文本（``cNvPr/@descr``·``@title``）是否带公式显式标记。"""
+    texts = [getattr(shape, "name", "") or ""]
+    el = getattr(shape, "_element", None)
+    if el is not None:
+        for node in el.iter():
+            if str(getattr(node, "tag", "")).split("}")[-1] != "cNvPr":
+                continue
+            for attr in ("descr", "title"):
+                val = node.get(attr)
+                if val:
+                    texts.append(val)
+    joined = " ".join(texts).casefold()
+    return any(marker in joined for marker in _FORMULA_MARKERS)
+
+
+def _is_ink_render(blob: bytes) -> bool:
+    """图片是否为**墨迹透明底**类（公式渲染图的像素形态）：四角全透明，且不透明
+    像素近灰占比 ≥ :data:`_INK_GRAYISH_MIN`、暗色占比 ≥ :data:`_INK_DARK_MIN`。
+
+    该形态与 :func:`formula_render.render_formula_png` 的产物一致（RGBA、ink 裁剪、
+    透明底 + 灰度墨迹）；彩色透明图（徽标）与不透明照片均不命中，既有无标记公式图
+    由本启发式覆盖、无需重跑补标记。
+    """
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    try:
+        arr = np.asarray(Image.open(io.BytesIO(blob)).convert("RGBA"))
+    except Exception:  # noqa: BLE001 - 非位图（如 WMF）读不出像素，不按公式处理
+        return False
+    alpha = arr[..., 3]
+    for y, x in ((0, 0), (0, -1), (-1, 0), (-1, -1)):
+        if int(alpha[y, x]) != 0:
+            return False
+    opaque = alpha > 0
+    if not opaque.any():
+        return False
+    px = arr[..., :3][opaque]
+    lum = px.mean(axis=1)
+    sat = px.max(axis=1) - px.min(axis=1)
+    grayish = float((sat < 40).mean())
+    dark = float((lum < 128).mean())
+    return grayish >= _INK_GRAYISH_MIN and dark >= _INK_DARK_MIN
+
+
+def _is_formula_picture(shape: Any) -> bool:
+    """图片是否为**公式渲染图**（预设豁免类）：显式标记或墨迹透明底启发式命中。
+
+    命中者豁免「非整页图加黑色描边」判定（预设公式行要求零描边，报「无描边」是
+    误报）；互叠/越界/外框等其余判定不受影响。
+    """
+    if _formula_marked(shape):
+        return True
+    try:
+        blob = shape.image.blob
+    except Exception:  # noqa: BLE001 - 无位图数据的图片形状
+        return False
+    return _is_ink_render(blob)
+
+
 def _picture_border_issue(shape: Any) -> str | None:
     """非整页图的描边检查：``<a:ln>`` 缺失或显式 noFill 即报（有描边不究粗细）。"""
     el = getattr(shape, "_element", None)
@@ -1142,11 +1222,17 @@ def geometry_report(
       含字距与内边距的所需框宽（:func:`estimate_title_width_in`）``(1 + title_width_tol)``；
       实际框宽出区间即报——不得把全篇标题框统一成同一宽度，也不得过窄折行；
     - **非整页图黑描边**：图片缺 ``<a:ln>``（或显式 noFill）即报；面积 ≥ 画布 95% 的整页
-      满幅图豁免。
+      满幅图豁免；**公式渲染图豁免**（预设公式行要求零描边，报「无描边」是误报）。
 
     **透明装饰图**（水印，blip 不透明度 ≤ :data:`DECORATIVE_ALPHA_MAX`，如学院预设的 8%
     左侧水印）不是内容图：不参与图片互叠、描边与外框判定，只在
     :attr:`SlideGeometry.decorative_pics` 里作读数列出（不计违规）。
+
+    **公式渲染图**（预设豁免类，零描边）识别口径：形状名 / alt 文本含
+    :data:`_FORMULA_MARKERS` 显式标记，或启发式命中「墨迹透明底」形态（四角全透明 +
+    不透明像素近灰 ≥ 95% 且暗色 ≥ 60%，见 :func:`_is_ink_render`）。命中者只豁免描边
+    判定，互叠/越界/外框等照常；既有无标记公式图由启发式覆盖、无需重跑补标记，只在
+    :attr:`SlideGeometry.formula_pics` 里作读数列出（不计违规）。
 
     Args:
         pptx: 源 .pptx。
@@ -1229,9 +1315,14 @@ def geometry_report(
                 )
 
         border: list[str] = []
+        formula_pics: list[str] = []
         full_page_area = FULL_PAGE_PIC_FRAC * cw * ch
         for sh in slide.shapes:
             if _shape_kind(sh) != "pic" or _is_decorative_picture(sh):
+                continue
+            if _is_formula_picture(sh):
+                # 公式渲染图（预设豁免类，要求零描边）：不报「无描边」，只作读数。
+                formula_pics.append(getattr(sh, "name", "") or "?")
                 continue
             try:
                 area = (sh.width or 0) * (sh.height or 0) / (_EMU_IN**2)
@@ -1262,6 +1353,7 @@ def geometry_report(
             title_width_issues=title_width,
             picture_border_issues=border,
             decorative_pics=decorative_pics,
+            formula_pics=formula_pics,
         )
         if fr is not None and not frame_note:
             sg.edges = _edge_coverage(fr, [b for b in pics if b.z > fr.z])

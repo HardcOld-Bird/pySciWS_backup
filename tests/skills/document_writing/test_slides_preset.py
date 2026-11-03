@@ -99,12 +99,13 @@ def _pic(
     width: float = 2.0,
     height: float = 1.5,
     border: bool = False,
-) -> None:
+):
     pic = slide.shapes.add_picture(
         str(img), Inches(left), Inches(top), Inches(width), Inches(height)
     )
     if border:
         pic.line.color.rgb = RGBColor(0, 0, 0)
+    return pic
 
 
 def _save(prs: Presentation, tmp_path: Path, name: str = "deck.pptx") -> Path:
@@ -291,6 +292,64 @@ def test_full_page_picture_is_border_exempt(tmp_path):
     )
     deck = _save(prs, tmp_path)
     assert slides_visual.geometry_report(deck).slides[1].picture_border_issues == []
+
+
+def _ink_png(path: Path) -> Path:
+    """公式渲染图形态：透明底 + 灰度墨迹（formula_render ink 裁剪产物的最小等价样例）。"""
+    im = Image.new("RGBA", (60, 40), (0, 0, 0, 0))
+    for x in range(5, 55):
+        for y in range(18, 23):
+            im.putpixel((x, y), (20, 20, 20, 255))
+    im.save(path)
+    return path
+
+
+def _color_transparent_png(path: Path) -> Path:
+    """彩色透明底图（徽标类）：饱和色块，不应命中墨迹启发式。"""
+    im = Image.new("RGBA", (60, 40), (0, 0, 0, 0))
+    for x in range(10, 50):
+        for y in range(10, 30):
+            im.putpixel((x, y), (200, 40, 30, 255))
+    im.save(path)
+    return path
+
+
+def test_formula_ink_picture_is_border_exempt(tmp_path):
+    """豁免样例：公式渲染图（透明底灰度墨迹）不报「无描边」，只入 formula_pics 读数。"""
+    prs = Presentation()
+    _blank(prs)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _pic(slide, _ink_png(tmp_path / "f.png"), border=False)
+    deck = _save(prs, tmp_path)
+    sg = slides_visual.geometry_report(deck).slides[1]
+    assert sg.picture_border_issues == []
+    assert len(sg.formula_pics) == 1
+    assert sg.violations == 0
+
+
+def test_formula_marker_name_is_border_exempt(tmp_path):
+    """豁免样例：显式标记（形状名含 formula）走标记通道豁免，无需像素形态命中。"""
+    prs = Presentation()
+    _blank(prs)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    pic = _pic(slide, _png(tmp_path / "m.png"), border=False)
+    pic.name = "formula-render-1"
+    deck = _save(prs, tmp_path)
+    sg = slides_visual.geometry_report(deck).slides[1]
+    assert sg.picture_border_issues == []
+    assert sg.formula_pics == ["formula-render-1"]
+
+
+def test_colored_transparent_picture_still_flagged(tmp_path):
+    """照报样例：彩色透明底图（徽标类）缺描边仍报——启发式只认灰度墨迹。"""
+    prs = Presentation()
+    _blank(prs)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _pic(slide, _color_transparent_png(tmp_path / "c.png"), border=False)
+    deck = _save(prs, tmp_path)
+    sg = slides_visual.geometry_report(deck).slides[1]
+    assert sg.picture_border_issues and "无描边" in sg.picture_border_issues[0]
+    assert sg.formula_pics == []
 
 
 def test_first_page_and_explicit_exemption(tmp_path):
