@@ -14,6 +14,7 @@ Backend package: `src/pysci/skills/document_writing/`. Data root: `data/skills/d
 |---|---|
 | `config.py` | `Settings` (all paths), toolchain discovery (`which` + fallback bin-dir scan), `tex_ready`, `python_libs`, `summary()` |
 | `latex_build.py` | latexmk driver, `.log` → `file:line` diagnostics (`parse_log`), chktex `lint`, `TeXNotInstalled` |
+| `formula_render.py` | 公式渲染管线：article+amsmath → PDF → ink 裁剪 RGBA PNG（`render_formula_png`）；**编译零 error 验收**、失败不落盘（误差恢复产物不可进 deck）；**禁 standalone**（TeXLive 2026 破坏 equation*/`\[` 数学定界符） |
 | `pdf_render.py` | PDF → PNG via pymupdf (`render_pdf_pages`, `page_count`) |
 | `pptx_io.py` | Structured PPTX read (`read_pptx`, `slides_to_markdown`) **and** structured write (`build_pptx`, `add_slide_to`) — python-pptx |
 | `docx_io.py` | Structured DOCX read (`read_docx`, `docx_to_markdown`) and append/build (`build_docx`, `add_block_to`) — python-docx |
