@@ -3,7 +3,8 @@
 管线：``bilingual.md``（格式契约见 cli 任务书 §二.5，形态已由 pipeline 测试锁死）→
 契约预处理 → pandoc HTML 片段（``--mathjax`` 出 ``\\(..\\)``/``\\[..\\]`` 数学语义定界）
 → 自包含 HTML（内联样式与 KaTeX 本地化 bundle）→ playwright 系统 Chrome headless
-打印 PDF（A4、常规页边距、printBackground）。
+打印 PDF（A4、0.6cm 四边页边距、双栏、printBackground）→ PyMuPDF 逐页叠加页码
+（奇数页右下、偶数页左下，落于下页边距带内）。
 
 预处理三件事（其余逐行透传）：
 
@@ -29,6 +30,18 @@ from .config import settings
 
 #: 模板区（bilingual.css + katex/ 本地化 bundle，见其中 SOURCE.txt）。
 TEMPLATE_DIR: Path = settings.module_dir / "templates"
+
+#: 页边距（cm，四边；**<1cm 硬线**，2026-11-03 用户裁决「1cm 以下理想」）。
+PAGE_MARGIN_CM: float = 0.6
+
+#: 栏距（cm；bilingual.css 的 ``column-gap`` 同值——宽元素判据用）。
+COLUMN_GAP_CM: float = 0.7
+
+#: 页码字号（pt，纯阿拉伯数字）。
+_PAGE_NUM_PT: float = 8.0
+
+#: A4 纸宽（cm）。
+_PAGE_W_CM: float = 21.0
 
 #: KaTeX 本地化 bundle 目录（katex.min.js / katex.min.css / auto-render.min.js / fonts/）。
 KATEX_DIR: Path = TEMPLATE_DIR / "katex"
@@ -130,7 +143,13 @@ def to_pandoc_md(md_text: str) -> str:
 # 自包含 HTML 组装（内联样式 + KaTeX 本地化 bundle）
 # ---------------------------------------------------------------------------
 #: 页内收尾脚本：KaTeX 排版（pandoc --mathjax 的语义定界符）+ 图注归组（图片段落
-#: 之后、下一个 ``---``（hr）之前的句对组 → ``.caption`` 小字）。
+#: 之后、下一个 ``---``（hr）之前的句对组 → ``.caption`` 小字；图片与其图注同包
+#: ``.figure`` 防栏/页断裂）+ 宽元素防线（超栏宽的展示公式/表格跨双栏，
+#: 不支持 ``column-span`` 的环境退化为等比缩放，禁止溢出叠字）。
+#:
+#: 栏宽判据用**打印栏宽**（``__COL_W_PX__``，由 :func:`build_html` 按 A4/页边距/栏距
+#: 算出后替换）——脚本在屏幕布局下执行，屏幕栏宽≠打印栏宽，用屏幕量宽会漏判；
+#: 公式宽度取内层 ``.katex-html``（外层 ``.katex-display`` 是整栏块，rect 宽恒等于栏宽）。
 _INIT_JS = """
 document.addEventListener("DOMContentLoaded", function () {
   renderMathInElement(document.body, {
@@ -143,13 +162,30 @@ document.addEventListener("DOMContentLoaded", function () {
   Array.prototype.slice.call(document.querySelectorAll("p")).forEach(function (p) {
     if (!p.querySelector("img")) return;
     var n = p.nextElementSibling;
+    var fig = document.createElement("div");
+    fig.className = "figure";
     var wrap = document.createElement("div");
     wrap.className = "caption";
-    p.after(wrap);
+    p.parentNode.insertBefore(fig, p);
+    fig.appendChild(p);
+    fig.appendChild(wrap);
     while (n && n.tagName !== "HR" && !n.querySelector("img") && !n.querySelector(".math.display")) {
       var next = n.nextElementSibling;
       wrap.appendChild(n);
       n = next;
+    }
+  });
+  var colW = __COL_W_PX__;
+  Array.prototype.slice.call(
+    document.querySelectorAll(".katex-display, table")
+  ).forEach(function (el) {
+    var probe = el.querySelector(".katex-html") || el;
+    var w = Math.max(probe.getBoundingClientRect().width, el.scrollWidth);
+    if (w <= colW + 1) return;
+    if (window.CSS && CSS.supports && CSS.supports("column-span", "all")) {
+      el.classList.add("wide");
+    } else {
+      el.style.zoom = colW / w;
     }
   });
 });
@@ -197,22 +233,76 @@ def build_html(md_text: str, *, title: str = "bilingual") -> str:
     auto_js = (KATEX_DIR / "auto-render.min.js").read_text(encoding="utf-8")
     # </script 字面量只可能出现在 JS 字符串里，转义防止提前闭合脚本标签。
     esc = lambda s: s.replace("</script", "<\\/script")  # noqa: E731
+    # 打印栏宽（px）：(A4 宽 - 2×页边距 - 栏距) / 2——宽元素判据的唯一真源。
+    col_w_px = (_PAGE_W_CM - 2 * PAGE_MARGIN_CM - COLUMN_GAP_CM) / 2 / 2.54 * 96.0
+    init_js = _INIT_JS.replace("__COL_W_PX__", f"{col_w_px:.2f}")
     return (
         '<!DOCTYPE html>\n<html lang="zh">\n<head>\n<meta charset="utf-8">\n'
         f"<title>{title}</title>\n<style>\n{css}\n</style>\n"
         f"<style>\n{_inline_katex_css()}\n</style>\n</head>\n<body>\n{body}\n"
         f"<script>{esc(katex_js)}</script>\n<script>{esc(auto_js)}</script>\n"
-        f"<script>{_INIT_JS}</script>\n</body>\n</html>\n"
+        f"<script>{init_js}</script>\n</body>\n</html>\n"
     )
 
 
 # ---------------------------------------------------------------------------
 # PDF 打印（playwright 系统 Chrome headless）
 # ---------------------------------------------------------------------------
+def add_page_numbers(
+    pdf_path: str | Path, *, margin_cm: float = PAGE_MARGIN_CM
+) -> Path:
+    """给 PDF 逐页叠加页码：**奇数页右下、偶数页左下**（1 起算、每页、纯数字）。
+
+    页码约 8pt，落于下页边距带内（``[页高-margin, 页高]``）——不与正文/图片重叠。
+    PyMuPDF 后处理，不占 Chrome 打印正文栏。
+
+    Args:
+        pdf_path: 目标 PDF（原地覆盖）。
+        margin_cm: 页边距（cm），页码带据此定位。
+
+    Returns:
+        同一 PDF 路径（便于链式调用）。
+
+    Raises:
+        FileNotFoundError: PDF 不存在。
+    """
+    import fitz
+
+    pdf_path = Path(pdf_path)
+    if not pdf_path.is_file():
+        raise FileNotFoundError(f"PDF 不存在：{pdf_path}")
+    m_pt = margin_cm * 72.0 / 2.54
+    doc = fitz.open(str(pdf_path))
+    tmp = pdf_path.with_suffix(".numbered.pdf")
+    try:
+        for i, page in enumerate(doc):
+            n = i + 1
+            text = str(n)
+            tw = fitz.get_text_length(text, fontname="helv", fontsize=_PAGE_NUM_PT)
+            # 竖向居中于下页边距带（带顶留 2pt 余量不贴正文边界）；横按奇偶右下/左下。
+            baseline_y = page.rect.height - m_pt / 2.0 + _PAGE_NUM_PT * 0.3
+            x = page.rect.width - m_pt - tw if n % 2 else m_pt
+            page.insert_text(
+                (x, baseline_y),
+                text,
+                fontsize=_PAGE_NUM_PT,
+                fontname="helv",
+                color=(0, 0, 0),
+            )
+        doc.save(str(tmp))
+    finally:
+        doc.close()
+    tmp.replace(pdf_path)
+    return pdf_path
+
+
 def render_pdf(
     md_path: str | Path, pdf_path: str | Path, *, keep_html: bool = True
 ) -> Path:
-    """把契约形态的 ``bilingual.md`` 渲染为可打印 PDF（A4、2cm 页边距、printBackground）。
+    """把契约形态的 ``bilingual.md`` 渲染为可打印 PDF。
+
+    A4、:data:`PAGE_MARGIN_CM` 四边页边距（<1cm）、双栏（样式真源 bilingual.css）、
+    printBackground；渲染后 :func:`add_page_numbers` 逐页叠加奇偶页码。
 
     浏览器通道回落复用 :func:`browser_fetch._launch`（系统 chrome → msedge →
     bundled chromium）；HTML 中间文件默认保留在 md 同目录作调试图。
@@ -256,10 +346,10 @@ def render_pdf(
                     format="A4",
                     print_background=True,
                     margin={
-                        "top": "2cm",
-                        "bottom": "2cm",
-                        "left": "2cm",
-                        "right": "2cm",
+                        "top": f"{PAGE_MARGIN_CM}cm",
+                        "bottom": f"{PAGE_MARGIN_CM}cm",
+                        "left": f"{PAGE_MARGIN_CM}cm",
+                        "right": f"{PAGE_MARGIN_CM}cm",
                     },
                 )
             finally:
@@ -268,4 +358,4 @@ def render_pdf(
         raise RuntimeError(f"浏览器不可用，无法打印 PDF：{exc}") from exc
     if not keep_html:
         html_path.unlink(missing_ok=True)
-    return pdf_path
+    return add_page_numbers(pdf_path)

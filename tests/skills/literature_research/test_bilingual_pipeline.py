@@ -561,10 +561,11 @@ def test_prepare_marks_abstract_in_manifest_and_work(
     assert "摘要段已标注" in capsys.readouterr().out
 
 
-def test_submit_and_render_show_abstract_and_body_markers(
+def test_submit_and_render_show_cn_markers_only(
     ws: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """出稿含「摘要」对题小标题与正文起始标注；render 层（pandoc 预处理）同步呈现。"""
+    """出稿只插中文小标题（`## 摘要`/`## 正文`），无管线发明英文行（2026-11-03
+    用户裁决覆盖 10-23 旧裁决：删 `*Abstract*`/`*Main text*`，不做换行兜底）。"""
     from pysci.skills.literature_research.tools import bilingual_render as brr
 
     src = make_source(ws, md=ABS_MD, name="abs.md")
@@ -572,12 +573,12 @@ def test_submit_and_render_show_abstract_and_body_markers(
     fake_translations(ws / "bilingual" / "abs")
     assert bl.cmd_submit("abs") == 0
     text = (ws / "bilingual" / "abs" / "bilingual.md").read_text(encoding="utf-8")
-    assert "## 摘要\n*Abstract*" in text
-    assert "---\n## 正文\n*Main text*" in text
-    assert text.index("*Abstract*") < text.index("*Main text*")
+    assert "## 摘要" in text and "## 正文" in text
+    assert "*Abstract*" not in text and "*Main text*" not in text
+    assert "## 摘要" in text.splitlines() and "## 正文" in text.splitlines()
     pandoc_md = brr.to_pandoc_md(text)
-    assert "## 摘要" in pandoc_md
-    assert "<em>Abstract</em>" in pandoc_md and "<em>Main text</em>" in pandoc_md
+    assert "## 摘要" in pandoc_md and "## 正文" in pandoc_md
+    assert "Abstract" not in pandoc_md and "Main text" not in pandoc_md
 
 
 def test_prepare_reuse_backfills_and_keeps_unmatched(
