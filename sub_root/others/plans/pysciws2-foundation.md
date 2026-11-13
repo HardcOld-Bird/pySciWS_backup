@@ -2,7 +2,7 @@
 
 > **状态**：v2.0（2026-11-13，用户已批准；含技能重建政策增补）。开始实施。
 >
-> **实施进度（2026-11-13）**：P0 ✔；P1 ✔（项目内工具链 + DSH 0.2.1-rc.5 + web/headless profile）；P2 ✔（蓝图 v1，待用户复核措辞）；P3 ✔（静态接线：三 preset + registry + 子代理白名单 + leader fork/workflow 禁用；GUI 会话冒烟待用户）；P4 ✔（核心框架 + 最小 pyproject + 27 测试）；P5 ✔（tests.cmd + harness 契约 + eval smoke）；P6 交接待 GUI 冒烟；P7 未开始。
+> **实施进度（2026-11-13）**：P0 ✔；P1 ✔（项目内工具链 + DSH 0.2.1-rc.5 + web/headless profile）；P2 ✔（蓝图 v1，待用户复核措辞）；P3 ✔（静态接线：三 preset + registry + 子代理白名单 + leader fork/workflow 禁用；项目 DSH 已在 3081 启动，待 meta 会话验收）；P4 ✔（核心框架 + 最小 pyproject + 27 测试）；P5 ✔（tests.cmd + harness 契约 + eval smoke）；P6 交接：`HANDOFF.md` 已写，待 meta 验收；P7 未开始。
 > **执行人**：当前会话（项目专属 DSH 正常运转前的“助产士”）。
 > **范围**：pySciWS2 的顶层设计、项目专属 DSH、三 preset、蓝图、依赖管理、分层测试与框架迁移（不含研究内容迁移）。
 > **非目标**：不在本阶段搬运 `src/pysci/research/`、`data/research/`、`scripts/research/`、`tests/research/` 中的研究内容；不立即替换远端仓库。
