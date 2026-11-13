@@ -44,8 +44,12 @@ def test_presets_declared():
 
 def test_subagent_allowlists():
     text = _patch_text()
-    assert "allowedAgentPresets: [pysci-worker]" in text
-    assert "allowedAgentPresets: [pysci-worker, pysci-leader, pysci-meta]" in text
+    # The Web app may rewrite YAML flow lists with spaces (`[ a, b ]`).
+    normalized = (
+        text.replace("[ ", "[").replace(" ]", "]").replace(", ", ",")
+    )
+    assert "allowedAgentPresets: [pysci-worker]" in normalized
+    assert "allowedAgentPresets: [pysci-worker,pysci-leader,pysci-meta]" in normalized
 
 
 def test_leader_fork_and_workflow_disabled():
