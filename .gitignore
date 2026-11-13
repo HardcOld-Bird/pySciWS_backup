@@ -1,0 +1,75 @@
+# =============================================================================
+#  pySciWS2 .gitignore
+#  原则：跟踪“可重建骨架 + 清单 + 管理器 + 测试/评估定义”；忽略安装物、缓存、
+#  凭据、会话、研究内容与一切使用痕迹。
+# =============================================================================
+
+# ---- Python / 缓存 ---------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+
+# ---- 本地凭据 / 覆盖层 -----------------------------------------------------
+.env
+*.log
+AGENTS.local.md
+AGENTS.leader.local.md
+AGENTS.meta.local.md
+
+# ---- 项目内工具链 -----------------------------------------------------------
+# 跟踪：toolchain.json、deps_manager/、deps/node/modules/{package.json,package-lock.json}
+# 忽略：安装物、缓存、npm 包、项目 DSH 状态
+/sub_root/deps_management/deps/git/
+/sub_root/deps_management/deps/uv/
+/sub_root/deps_management/deps/python/
+/sub_root/deps_management/deps/node/runtime/
+/sub_root/deps_management/deps/node/modules/node_modules/
+/sub_root/deps_management/deps/node/modules/dsh_home/
+/sub_root/deps_management/cache/
+
+# ---- 测试 / 评估产物 -------------------------------------------------------
+/sub_root/tests/artifacts/
+/sub_root/evals/runs/
+/sub_root/evals/reports/*.tmp
+/sub_root/evals/overlays/*.tmp
+
+# ---- 研究内容（只留本地，永不入库） ---------------------------------------
+/src/pysci/research/
+/scripts/research/
+/tests/research/
+/data/research/
+
+# ---- data/ 白名单制 -------------------------------------------------------
+# 只放行 data/skills 骨架面与用户自管配置；其余本地保留
+/data/*
+!/data/skills/
+!/data/用户的inbox/
+/data/用户的inbox/*
+!/data/用户的inbox/pysci_settings.toml
+
+# data/skills 的使用痕迹 / 本地缓存
+/data/skills/*/cache/
+/data/skills/*/runs/
+/data/skills/*/papers/
+/data/skills/*/bilingual/
+/data/skills/*/gallery/
+/data/skills/*/assets/
+/data/skills/*/projects/
+/data/skills/*/trash/
+/data/skills/*/ingest/
+/data/skills/*/reviews/
+/data/skills/*/shortlists/
+/data/skills/*/prompts/
+/data/skills/*/INDEX.md
+/data/skills/*/LEDGER.md
+/data/skills/*/manifest.jsonl
+/data/skills/*/README.md
+
+# ---- IDE / OS --------------------------------------------------------------
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
