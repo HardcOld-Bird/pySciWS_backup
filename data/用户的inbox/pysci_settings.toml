@@ -1,0 +1,126 @@
+# ═══════════════════════════════════════════════════════════════
+# data/pysci_settings.toml —— pySci 人工运行时配置（手改面）
+# ═══════════════════════════════════════════════════════════════
+# 规则：
+#   1. 保存即生效于「下一次派发」，在途会话不受影响；
+#   2. 验证生效：uv run pysci-orch status（显示当前预设与各席解析值）；
+#   3. TOML 格式，注释用 #；选项请用注释里的精确字符串（大小写敏感）。
+
+[model]
+# ── 主力模型预设，四选一（精确字符串，全小写）─────────────────
+#
+#   "qwen"
+#       主力  = BYOK "Qwen-3.8-Flash"        （大部分成员默认）
+#       pro席 = BYOK "Qwen-3.8-Max"          （仅 twin）
+#       仲裁团 = GLM + KIMI + MIMO 三族旗舰（官网按量直调，非 Qoder 渠道）
+#
+#   "mimo"
+#       主力  = BYOK "Mimo-V2.6-Flash"       （大部分成员默认）
+#       pro席 = BYOK "Mimo-V2.6-Pro"         （reviewer / deputy / inspector / twin）
+#       仲裁团 = GLM + KIMI + Qwen 三族旗舰
+#
+#   "mimomax"
+#       主力  = BYOK "Mimo-V2.6-Pro"         （所有组员同席）
+#       pro席 = 同上（reviewer / deputy / inspector / twin 四人组，与 mimo 一致——
+#               谷时隐性切换只覆盖 main，四人免疫）
+#       仲裁团 = GLM + KIMI + Qwen 三族旗舰（与 mimo 预设一致）
+#       单席无回退（2026-10-22 用户裁决：简单粗暴，故障即告警、不落他席）；
+#       谷时隐性 DeepSeek 照旧覆盖 main（2026-10-22 用户裁决）
+#
+#   "deepseek"
+#       主力  = BYOK "DeepSeek-Flash"（UUID 1a54cc57-e614-4521-80cc-447de31dc896，
+#               用户 2026-10-13 供 Key；BYOK 与内置同名 → UUID 首席消歧）
+#              → 内置 "DeepSeek-Flash" 回退席     （全员同一档，无 pro 席）
+#       仲裁团 = GLM + KIMI + MIMO 三族旗舰
+#
+#   共通语义：席位不可用时短窗粘滞降级（跳过故障席→内置默认，双面告警）；
+#   仲裁团固定排除预设同族（同族偏差防线）。
+#   组长默认模型 = 本预设主力模型（与大部分组员同源；现场 /model 管理优先）。
+#   注意：qwen 预设 pro 席仅 twin（Qwen pro 贵，刻意不规模化）；mimo 预设
+#   pro 席四人组——两预设不对称为有意设计（用户 2026-10-12 确认）；mimomax
+#   全员同席、pro 四人组谷时免疫（2026-10-22）。
+preset = "deepseek"
+
+# ── 谷时隐性 DeepSeek（路由 v3，用户设计 2026-10-13）────────────────
+# 路由键原住 [routing] 节；用户 2026-10-13「模型类设置集中一处」→ 并入本节
+# （旧位置仍逐键兼容读一次，并在 `orch status` 路由段出声提醒迁移）。
+# DeepSeek 官方价分峰谷：工作日 9:00–12:00、14:00–18:00 为峰（2 倍价），其余
+# 时刻为谷（周六日全天=含调休上班的周末、法定节假日全天、工作日其余时段）。
+# **谷时把上面 preset 的 main 席链换成 DeepSeek、入峰切回**——preset 那一行不动，
+# 不新增预设，这就是「隐性」。pro 席保持原预设升档席（用户终裁），minimum 不参与。
+# 切换只作用于**下一次派发**（在途单跳不换模型）：入谷即切，入峰提前 15 分钟
+#   ——15 分钟 = 下面 `leadtime_s` 生效值 900s。**用户口述目标 900s**；其工作区手改曾写
+#   600s（=10 分钟，两个旧注释也分别写过「1 小时」「10 分钟」），两值差异**待用户终确认**，
+#   现按 900 落生效键。
+# 节假日用 chinesecalendar 离线判定（2004–2026 含调休）；覆盖外年份/库缺席
+# 一律保守不切换并在 orch status 与 mirror 出声告警。
+enabled = true
+valley_preset = "deepseek"           # 谷时席链取哪个预设（qwen/mimo/mimomax/deepseek）
+leadtime_s = 600                     # 入峰提前量（秒；0 = 踩点才切）——生效键，改值即生效
+                                     #   （代码 DEFAULT_LEADTIME_S=3600 只是键缺失/非法时的回落值）
+peak = [[9, 12], [14, 18]]           # 峰段，半开区间 [起, 止)，24 小时制
+boundary_hold_s = 300                # 边界避让窗口（秒；0=关闭，上限 300）——生效键
+                                     #   （原 [routing].boundary_hold_s，2026-10-14 迁本节）
+jury_panel = ["glm", "kimi", "mimo"] # 谷时仲裁团固定面板（三席一律按量付费直调）
+# 非法值逐键回落出厂并告警——`orch status` 路由段会把警告逐条列出来。
+
+[priority]
+# ── 会话优先级表（带宽治理，用户裁决 2026-10-13）──────────────────
+# 用途：带宽不足时决定谁该让路/谁该延期（背压优先于付费改道）。
+# 形制：**数组的数组**——外层顺序＝优先级（前＝高），内层同数组＝**同档**。
+# 列表项是「档名」（活跃会话注册表 state/active-sessions.json 的 tier 字段），
+# 不是成员 id：「research」一档覆盖 7 位专职 + reviewer + deputy。
+# 未登记的档名一律取最低档（新档没进表就不插队）；仲裁团走独立按量渠道，不入表。
+order = [
+  ["leader"],               # 1 TUI 会话——不管，用户手动
+  ["research"],             # 2 7 专职 + reviewer + deputy
+  ["devops"],               # 3
+  ["bench-pressure"],       # 4 bencher 派生的 minimum 压测会话（产生更多会话，故高于本体）
+  ["bencher", "twin"],      # 5 同档
+  ["inspector"],            # 6
+]
+
+[inspector]
+# inspector 巡检引擎全局开关 —— true / false（原 state/inspector.enabled 迁至本文件）
+enabled = false
+
+[night]
+# ── 夜航模式（PSEP_2 §3.1，实施单 task-20261014-psep2-n1）────────────
+# 夜航总开关（手动）：true = 政策注入 + 判据拦截生效。钩子**每回合现读本文件**——
+# 改这一行即热切换，无需重启会话；读取失败 / 键缺席 / 非法值一律回落 false 并出声。
+# 本单只做政策注入层（SessionStart/PostCompact 钩子注入政策全文）；判据层（
+# AskUserQuestion 拦截 / queue_pressure 夜航判据）是 n2。
+enabled = false         # 夜航总开关 —— true / false（真源；只归用户手动拨动）：改这一行即下一轮生效（Stop 钩子差分注入）；true=政策注入+判据拦截生效
+# periodic_wake_s = 3600 # 保险丝打回间隔（预留；未实施前勿设——见 §3.4）
+# ── 保险丝层缓行（PSEP_2 §3.4）：仅当「有未竟事项（计划/队列/任务书）且组长无活动」的
+#    停滞才打回；**全部完成 / 严重阻碍两个终态一律静默**。鉴于 PENDING-WORK 已覆盖大部分
+#    停滞面，本层残余价值薄——规格只预留此键、**实施前勿设**（设了会被读到却无人消费），
+#    观察一期后再决定是否加装（实施单另立）。
+
+[taskbooks]
+# ── 大任务（任务书）执行模式 + 控制台表单默认值（用户 2026-10-17 裁决）────
+#
+# 执行模式（**热切换**：读数每命令现算、无缓存，手改保存即生效于下一次派发 /
+# 组长下一回合首个命令，无需重启）：
+#   "parallel" = 多大任务并行交替推进（默认，既有行为）
+#   "serial"   = 按任务书产生时序严格排队、一次只允许一个大任务进行：
+#                前一件到达 delivered/failed/accepted/rejected（离开
+#                new/planning/active）才解锁下一件；orch 自动抑制排队件的待办
+#                推送与推进（组长侧无需任何额外规程），队列状态随路由卡片推送。
+# 非法值回落 "parallel" 并在 orch status 出声。
+execution_mode = "serial"
+
+# ── pysci 控制台表单默认值（新建/驳回面板装载；非法值逐键回落出厂并告警）──
+new_default_priority = "low"     # 新建任务书默认优先级：high | normal | low
+new_default_leader = true          # 新建「包含组长改进」复选框默认
+reject_default_priority = "low"  # 驳回生成返工任务书默认优先级
+reject_default_infra = true         # 驳回「基础设施改进（A 组）」默认（≡旧默认 full）
+reject_default_leader = true       # 驳回「组长改进（L 环节）」默认
+reject_default_inspector = false     # 驳回「监察改进（C 组）」默认
+
+# ── 预留节（暂不使用）────────────────────────────────────────
+# [bencher]
+#   压测 minimum 档（用户 2026-10-12 裁决，P-25 关闭火山调查）：
+#   BYOK Mimo-V2.6-Flash → 内置回退，不随预设走（规格 5，路由 v3 同单改定）。
+# [jury]
+#   席位覆盖：如需指定具体旗舰型号在此列

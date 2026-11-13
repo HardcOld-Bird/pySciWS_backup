@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "git": {
+    "version": "2.56.0.3",
+    "url": "https://mirrors.tuna.tsinghua.edu.cn/github-release/git-for-windows/git/Git%20for%20Windows%202.56.0%283%29/Git-2.56.0.3-64-bit.tar.bz2",
+    "sha256": "2460cdc329f9061e0682672eb9995da9da1da0ffb9761494c7abb3559ecbc40e"
+  },
+  "node": {
+    "version": "26.12.1",
+    "url": "https://npmmirror.com/mirrors/node/v{version}/node-v{version}-win-x64.zip",
+    "sha256": "b3efd5c70cba3308ed46e7e699a9b8aac075bbc6b027fcb39c84c31acc25e2b4"
+  },
+  "uv": {
+    "version": "0.13.5",
+    "url": "https://releases.astral.sh/github/uv/releases/download/{version}/uv-x86_64-pc-windows-msvc.zip",
+    "sha256": "a38b8d1902b7cfbc76b423ba1bb456f623f42064cdc72628b6075b89afd1019a"
+  },
+  "python": {
+    "version": "3.13.15"
+  },
+  "dsh": {
+    "version": "0.2.1-rc.5"
+  }
+}
