@@ -11,6 +11,9 @@ authors = [
 # 运行时依赖从最小集开始；7 个科研技能按三段式选型后逐项添加。
 dependencies = []
 
+[project.scripts]
+pysci-eval = "pysci.support.evals.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

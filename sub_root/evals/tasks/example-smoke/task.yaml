@@ -1,0 +1,8 @@
+id: example-smoke
+kind: smoke
+prompt: prompt.md
+timeout_min: 5
+judges:
+  - kind: mechanical
+    command: "true"
+    note: "MVP smoke: run completion is the only mechanical gate; replace with a real task after handoff."
