@@ -1,5 +1,5 @@
 # init-deps.ps1 - bootstrap the project-local toolchain for pySciWS2.
-# Layout follows the shared shim layer (D:\XXXIIIGGG\common\bin):
+# Layout follows the shared shim layer (<workspace drive>:\XXXIIIGGG\common\bin):
 #   deps/git/<ver>/cmd/git.exe
 #   deps/node/runtime/<ver>/node.exe
 #   deps/node/modules/{package.json,package-lock.json,node_modules,dsh_home}
@@ -235,8 +235,10 @@ if ($havePy) {
 }
 
 # --- shared shim layer (project-external routing only) ----------------------
-$commonRoot = Split-Path (Split-Path $WsRoot -Parent) -Parent
-$shimDir = Join-Path $commonRoot "common\bin"
+# Convention: the shared shim lives at <workspace drive>:\XXXIIIGGG\common\bin,
+# i.e. at the drive root, so it stays put when the workspace moves inside the
+# drive. Do not derive it from the workspace depth.
+$shimDir = "$(Split-Path -Qualifier $WsRoot)\XXXIIIGGG\common\bin"
 if (Test-Path -LiteralPath (Join-Path $shimDir "_find_project.cmd")) {
     Say "shared shim layer present: $shimDir"
 } else {

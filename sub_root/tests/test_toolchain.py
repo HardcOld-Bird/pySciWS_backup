@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from pysci import toolchain
+from pysci.paths import WORKSPACE_ROOT
 
 _TOOLCHAIN_JSON = toolchain.TOOLCHAIN_JSON
 _needs_vendored = pytest.mark.skipif(
@@ -145,3 +146,17 @@ def test_project_git_global_config_carries_identity_and_helper():
     assert parsed.get("credential", "helper", fallback="") == "manager"
     assert parsed.get("user", "name", fallback="").strip()
     assert parsed.get("user", "email", fallback="").strip()
+
+
+def test_shared_shim_lives_at_workspace_drive_root():
+    """共享 shim 约定：``<工作区所在盘>:\\XXXIIIGGG\\common\\bin``（项目外唯一路由层）。
+
+    init-deps 曾按工作区深度上推两级拼 ``common\\bin``，算得
+    ``<盘>:\\XXXIIIGGG\\projects\\common\\bin`` 并误报缺失；约定改为按盘根定位，
+    工作区在盘内任意深度移动都不用改。
+    """
+    shim = Path(f"{WORKSPACE_ROOT.drive}\\XXXIIIGGG\\common\\bin")
+    if not (shim / "git.cmd").is_file():
+        pytest.skip(f"共享 shim 未部署：{shim}")
+    for name in ("_find_project.cmd", "git.cmd", "node.cmd", "uv.cmd", "dsh.cmd"):
+        assert (shim / name).is_file(), name

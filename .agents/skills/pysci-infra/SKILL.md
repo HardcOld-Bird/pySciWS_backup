@@ -11,6 +11,7 @@ description: PySci 项目支撑系统操作面：项目内依赖管理（init/up
 
 - **工作区根**（git 根 = DSH workspace 根）：`AGENTS*.md`、`.agents/`、`sub_root/`。
 - **Python 项目根**：`sub_root/`——`pyproject.toml`、`.python-version`、`uv.lock`、`.venv/`、`.env`、`src/pysci/`、`data/`、`tests/`、`evals/`、`deps_management/`。
+- **共享 shim**（项目外唯一路由层）：磁盘根约定 `<工作区所在盘>:\XXXIIIGGG\common\bin`（如 `D:\XXXIIIGGG\common\bin`），按 cwd 找 `toolchain.json` 路由；与工作区深度无关。
 - 代码里用 `pysci.paths`：`WORKSPACE_ROOT`（工作区根）与 `PROJECT_ROOT`（= `sub_root/`，Python 项目根）；不要手写 `Path(__file__).parents[N]`。
 - uv / pytest / ruff 的命令都在 `sub_root/` 下执行（那里才是 pyproject 所在处）；`tests.cmd` 已代为切目录。
 
@@ -36,7 +37,7 @@ sub_root\deps_management\deps_manager\update-deps.cmd rollback <ref>
 - 工具安装物在 `deps/{git,node/runtime,uv,python}`；项目 DSH 在 `deps/node/modules`；`dsh_home` 也在那里。
 - `init-deps` 还会生成项目内 **git 全局配置** `deps/git/config/gitconfig`：共享 shim 的 `GIT_CONFIG_GLOBAL` 指向它，vendored git 又不带 system config，所以 `user.name`/`user.email` 与 `credential.helper=manager` 只能待在这里。identity 仅首次从 `~/.gitconfig` 播种，之后保留文件里的现值（可手改，改后不必重跑）。
 - **不要**把依赖装到系统/用户级；不要 `pip install --user`、`npm install -g`。
-- 程序化调用用 `pysci.toolchain` 的绝对路径，不依赖 PATH 上的 `.cmd`；交互 shell 才走 `common\bin` shim。
+- 程序化调用用 `pysci.toolchain` 的绝对路径，不依赖 PATH 上的 `.cmd`；交互 shell 才走共享 shim（盘根 `XXXIIIGGG\common\bin`）。
 - `.env` 只放本地密钥；不入库。
 
 ## 测试

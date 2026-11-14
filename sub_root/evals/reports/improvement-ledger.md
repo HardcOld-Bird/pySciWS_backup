@@ -5,6 +5,20 @@
 
 ## 条目
 
+### 2026-11-14 / shim-01：共享 shim 路径按「盘根约定」定位
+
+- **问题来源**：用户确认约定——shim 恒位于 `<工作区所在盘>:\XXXIIIGGG\common\bin`（如 `D:\XXXIIIGGG\common\bin`），与工作区在盘内的深度无关，用户会遵守该约定。而 `init-deps.ps1` 当时按 `$WsRoot` 上推两级再拼 `common\bin`，算得 `D:\XXXIIIGGG\projects\common\bin`，每次 init 都误报 `shared shim layer missing`（上一轮 `git-cfg-01` 遗留项 ②）。
+- **改动**：
+  - `sub_root/deps_management/deps_manager/init-deps.ps1`：`$shimDir = "$(Split-Path -Qualifier $WsRoot)\XXXIIIGGG\common\bin"`，删除按深度推导的 `$commonRoot`，注释写明约定「不要按工作区深度推导」；文件首部布局注释同步去掉机器绝对路径。
+  - `sub_root/src/pysci/toolchain.py`：模块 docstring 的硬编码 `D:\XXXIIIGGG\common\bin` 改为盘根约定表述。
+  - `sub_root/tests/test_toolchain.py`：新增 `test_shared_shim_lives_at_workspace_drive_root`——按 `WORKSPACE_ROOT.drive` 拼盘根 shim 路径，未部署则 skip，部署则断言 `_find_project.cmd`/`git`/`node`/`uv`/`dsh` 五个入口在位。
+  - 文档：`pysci-infra` 目录锚点新增共享 shim 约定位置，依赖管理一节点明「盘根」。
+- **基准结果**：`init-deps.ps1 -CheckOnly` → `shared shim layer present: D:\XXXIIIGGG\common\bin`（修复前同一命令为 `[warn] shared shim layer missing at D:\XXXIIIGGG\projects\common\bin`）；`sub_root\tests\tests.cmd all` → **29 passed**。
+- **成本**：约 8 轮工具调用、~10 分钟墙钟；无 eval token 消耗。
+- **是否实装**：是。
+- **回滚点**：`63d7bf7`。
+- **风险备忘**：约定假设工作区所在盘根有 `XXXIIIGGG\common\bin`；若工作区被放到另一块盘而 shim 不在该盘根，init 会如实报 missing——这是预期行为，不是误报。
+
 ### 2026-11-14 / git-cfg-01：init-deps 生成项目内 git 全局配置（identity + credential helper）
 
 - **问题来源**：本次会话收尾推送时暴露：共享 shim `D:\XXXIIIGGG\common\bin\git.cmd` 把 `GIT_CONFIG_GLOBAL` 指向 `sub_root/deps_management/deps/git/config/gitconfig`，同时把 `GIT_CONFIG_SYSTEM` 指向 `<git>/mingw64/etc/gitconfig`，而 vendored git 的 tar.bz2 两者都不提供，`init-deps.ps1` 也不生成。后果：`git config --global` 直接 fatal；`git commit` 无身份；`git push` 无凭据，只能靠 `git -c credential.helper=manager` 临时绕过；用户要求把该缺口作为支撑系统修复补上。
@@ -20,7 +34,7 @@
 - **成本**：约 22 轮工具调用、~25 分钟墙钟；无 eval token 消耗。
 - **是否实装**：是。
 - **回滚点**：`05c5926`（`git checkout 05c5926 -- sub_root/deps_management/deps_manager/init-deps.ps1 sub_root/tests/test_toolchain.py .agents/skills/pysci-infra/SKILL.md`）。
-- **风险备忘 / 待办（交用户）**：① 该修复依赖项目外 shim 的 `GIT_CONFIG_GLOBAL` 约定，若 shim 改路由此处需同步；② **未修**：同文件里共享 shim 探测路径由 `$WsRoot` 上推两级再拼 `common\bin`，算得 `D:\XXXIIIGGG\projects\common\bin`，实际为 `D:\XXXIIIGGG\common\bin`，故每次 init 都误报 `shared shim layer missing`（本次未动，等用户决定）；③ 该生成文件在 `deps/` 内被 `.gitignore` 覆盖，不入库，换机重跑 `init-deps` 即重建。
+- **风险备忘 / 待办（交用户）**：① 该修复依赖项目外 shim 的 `GIT_CONFIG_GLOBAL` 约定，若 shim 改路由此处需同步；② 同文件里共享 shim 探测路径的「按深度上推」已改为盘根约定，见 `shim-01`；③ 该生成文件在 `deps/` 内被 `.gitignore` 覆盖，不入库，换机重跑 `init-deps` 即重建。
 
 ### 2026-11-14 / layout-02：`.env` 下沉 `sub_root/`，删除未启用的 `.pre-commit-config.yaml`
 

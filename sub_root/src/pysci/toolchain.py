@@ -6,7 +6,8 @@
 （url/sha256 可复现下载），下载缓存在 ``cache/``。
 本模块把各工具的可执行文件解析为**绝对路径**，供 subprocess 调用——Windows 上
 Python ``subprocess`` 找不到 PATH 里的 ``.cmd`` shim（PATHEXT 不适用），必须给真
-``.exe``；交互 shell 场景才走 ``D:\\XXXIIIGGG\\common\\bin`` 的共享 shim 路由层。
+``.exe``；交互 shell 场景才走共享 shim 路由层，约定位置为
+``<工作区所在盘>:\\XXXIIIGGG\\common\\bin``（如 ``D:\\XXXIIIGGG\\common\\bin``）。
 
 解析规则（fail-open 降级）：vendored 目录缺失时回退裸命令名（``"git"``/``"uv"``…，
 交 PATH 解析）——冷启动/换机尚未跑 ``init-deps`` 时不废掉调用方；缺失状态由
