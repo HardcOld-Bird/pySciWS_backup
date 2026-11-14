@@ -108,6 +108,94 @@ function Install-Tool([string]$tool, [string]$homeRel) {
     Say "$tool $ver installed at $dest"
 }
 
+# Reads one key from a git config file and returns "" when it is absent.
+# git config --get exits 1 on a missing key (and PowerShell drops empty-string
+# arguments to native commands, so --default "" is not usable here).
+function Get-GitKey([string]$exe, [string]$file, [string]$key) {
+    $val = ""
+    try {
+        $out = & $exe config --file $file --get $key 2>$null
+        if ($LASTEXITCODE -eq 0 -and $out) {
+            $val = ([string]($out | Select-Object -First 1)).Trim()
+        }
+    } catch {
+        $val = ""
+    }
+    return $val
+}
+
+# Project-local git global config. The shared shim (common\bin\git.cmd) points
+# GIT_CONFIG_GLOBAL at <deps>/git/config/gitconfig and GIT_CONFIG_SYSTEM at a
+# file the vendored tarball does not ship, so this generated file is the only
+# carrier of git identity and the credential helper inside the project.
+# Existing keys are never overwritten: identity is filled in on first init only,
+# so later project-specific edits survive update/rollback runs.
+function Set-ProjectGitConfig {
+    $gitHome = Join-Path $ToolsRoot "git"
+    $gitExe = Join-Path $gitHome ($tc.git.version + "\cmd\git.exe")
+    $cfgPath = Join-Path (Join-Path $gitHome "config") "gitconfig"
+    if (-not (Test-Path -LiteralPath $gitExe)) {
+        Warn "project git $($tc.git.version) not installed; git global config skipped"
+        return
+    }
+    if ($CheckOnly) {
+        if (Test-Path -LiteralPath $cfgPath) {
+            $curName = Get-GitKey $gitExe $cfgPath "user.name"
+            $curEmail = Get-GitKey $gitExe $cfgPath "user.email"
+            $curHelper = Get-GitKey $gitExe $cfgPath "credential.helper"
+            Say "git global config ok: user=$curName <$curEmail> credential.helper=$curHelper"
+        } else {
+            Warn "git global config missing: $cfgPath"
+        }
+        return
+    }
+    $cfgDir = Split-Path -Parent $cfgPath
+    if (-not (Test-Path -LiteralPath $cfgDir)) {
+        New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
+    }
+    if (-not (Test-Path -LiteralPath $cfgPath)) {
+        $header = "# pySci project-local git global config (target of GIT_CONFIG_GLOBAL`r`n" +
+                  "# in the shared shim). Written by init-deps.ps1. Git identity and the`r`n" +
+                  "# credential helper live here because the vendored git ships no system`r`n" +
+                  "# config. Edit freely: init only fills keys that are still missing.`r`n"
+        [IO.File]::WriteAllText($cfgPath, $header, (New-Object Text.UTF8Encoding($false)))
+    }
+    $hostCfg = ""
+    if ($env:USERPROFILE) { $hostCfg = Join-Path $env:USERPROFILE ".gitconfig" }
+    $hostName = ""
+    $hostEmail = ""
+    if ($hostCfg -ne "" -and (Test-Path -LiteralPath $hostCfg)) {
+        $hostName = Get-GitKey $gitExe $hostCfg "user.name"
+        $hostEmail = Get-GitKey $gitExe $hostCfg "user.email"
+    }
+    $curName = Get-GitKey $gitExe $cfgPath "user.name"
+    if ($curName -eq "") {
+        if ($hostName -ne "" -and $hostEmail -ne "") {
+            & $gitExe config --file $cfgPath user.name $hostName
+            & $gitExe config --file $cfgPath user.email $hostEmail
+            Say "git identity seeded from ${hostCfg}: $hostName <$hostEmail>"
+        } else {
+            Warn "no user.name/user.email in $hostCfg; set them with:"
+            Warn "  git config --global user.name `"Your Name`""
+            Warn "  git config --global user.email `"you@example.com`""
+        }
+    } else {
+        Say "git identity kept: $curName"
+    }
+    & $gitExe config --file $cfgPath credential.helper manager
+    $gcmOk = $false
+    try {
+        $null = & $gitExe credential-manager --version 2>&1
+        $gcmOk = ($LASTEXITCODE -eq 0)
+    } catch {
+        $gcmOk = $false
+    }
+    if (-not $gcmOk) {
+        Warn "credential.helper=manager set, but git-credential-manager did not answer; pushes will need credentials"
+    }
+    Say "git global config: $cfgPath"
+}
+
 Say "project root: $ProjRoot"
 Say "tools root  : $ToolsRoot"
 if ($CheckOnly) { Say "mode        : check only" }
@@ -116,6 +204,9 @@ if ($CheckOnly) { Say "mode        : check only" }
 Install-Tool "git" "git"
 Install-Tool "node" "node\runtime"
 Install-Tool "uv" "uv"
+
+# --- project-local git global config (identity + credential helper) ----------
+Set-ProjectGitConfig
 
 # --- Python via project uv --------------------------------------------------
 $pyVer = $tc.python.version

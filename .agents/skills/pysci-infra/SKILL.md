@@ -34,6 +34,7 @@ sub_root\deps_management\deps_manager\update-deps.cmd rollback <ref>
 ```
 
 - 工具安装物在 `deps/{git,node/runtime,uv,python}`；项目 DSH 在 `deps/node/modules`；`dsh_home` 也在那里。
+- `init-deps` 还会生成项目内 **git 全局配置** `deps/git/config/gitconfig`：共享 shim 的 `GIT_CONFIG_GLOBAL` 指向它，vendored git 又不带 system config，所以 `user.name`/`user.email` 与 `credential.helper=manager` 只能待在这里。identity 仅首次从 `~/.gitconfig` 播种，之后保留文件里的现值（可手改，改后不必重跑）。
 - **不要**把依赖装到系统/用户级；不要 `pip install --user`、`npm install -g`。
 - 程序化调用用 `pysci.toolchain` 的绝对路径，不依赖 PATH 上的 `.cmd`；交互 shell 才走 `common\bin` shim。
 - `.env` 只放本地密钥；不入库。
@@ -74,7 +75,8 @@ sub_root\tests\tests.cmd hardware  # 外部设备用例
 ## 排障顺序
 
 1. `update-deps.cmd status` 看工具是否就位。
-2. `dsh --dsh-router-info` 看路由到的项目/DSH_HOME 是否正确。
-3. 看 `dsh_home/profiles/web/cordis.patch.yml` 是否有 patch 警告（entry not found）。
-4. 运行 `dsh --profile web --dump-config` 看组合树；不要在不清楚的情况下热改 preset。
-5. 仍失败：保留命令、输出、版本，交给用户/leader。
+2. `git config --global --list` 应当有 `user.name`/`user.email`/`credential.helper=manager`；缺则重跑 `init-deps.cmd`（该文件在 `deps/` 内，不入库，随机器生成）。
+3. `dsh --dsh-router-info` 看路由到的项目/DSH_HOME 是否正确。
+4. 看 `dsh_home/profiles/web/cordis.patch.yml` 是否有 patch 警告（entry not found）。
+5. 运行 `dsh --profile web --dump-config` 看组合树；不要在不清楚的情况下热改 preset。
+6. 仍失败：保留命令、输出、版本，交给用户/leader。

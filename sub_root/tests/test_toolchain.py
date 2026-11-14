@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import configparser
 import json
 import os
 from pathlib import Path
@@ -126,3 +127,21 @@ def test_resolved_executables_exist_on_disk():
         toolchain.base_python_exe(),
     ):
         assert Path(exe).is_file(), exe
+
+
+@_needs_vendored
+def test_project_git_global_config_carries_identity_and_helper():
+    """init-deps 生成的 git 全局配置必须带 identity 与 credential.helper。
+
+    共享 shim 把 ``GIT_CONFIG_GLOBAL`` 指向 ``<deps>/git/config/gitconfig``，而
+    vendored git 的 tarball 不带 system config；该文件缺失时 ``git commit`` /
+    ``git push`` 在任何仓库里都拿不到身份与凭据。
+    """
+    cfg = Path(toolchain.DEPS_ROOT) / "git" / "config" / "gitconfig"
+    assert cfg.is_file(), f"missing {cfg}; run deps_manager/init-deps.cmd"
+
+    parsed = configparser.ConfigParser()
+    parsed.read_string(cfg.read_text(encoding="utf-8"))
+    assert parsed.get("credential", "helper", fallback="") == "manager"
+    assert parsed.get("user", "name", fallback="").strip()
+    assert parsed.get("user", "email", fallback="").strip()

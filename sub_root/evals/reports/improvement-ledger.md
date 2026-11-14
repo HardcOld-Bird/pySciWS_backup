@@ -5,6 +5,23 @@
 
 ## 条目
 
+### 2026-11-14 / git-cfg-01：init-deps 生成项目内 git 全局配置（identity + credential helper）
+
+- **问题来源**：本次会话收尾推送时暴露：共享 shim `D:\XXXIIIGGG\common\bin\git.cmd` 把 `GIT_CONFIG_GLOBAL` 指向 `sub_root/deps_management/deps/git/config/gitconfig`，同时把 `GIT_CONFIG_SYSTEM` 指向 `<git>/mingw64/etc/gitconfig`，而 vendored git 的 tar.bz2 两者都不提供，`init-deps.ps1` 也不生成。后果：`git config --global` 直接 fatal；`git commit` 无身份；`git push` 无凭据，只能靠 `git -c credential.helper=manager` 临时绕过；用户要求把该缺口作为支撑系统修复补上。
+- **改动**：
+  - `sub_root/deps_management/deps_manager/init-deps.ps1`：新增 `Get-GitKey`（读单个键，避免 PowerShell 丢空参数导致 `--default ""` 报错）与 `Set-ProjectGitConfig`（在 vendored git 安装后调用）。生成 `<deps>/git/config/gitconfig`：首次写 ASCII 头注释；`user.name`/`user.email` **仅在该文件缺键时**从 `%USERPROFILE%\.gitconfig` 播种，已有值保留（重跑 init/update/rollback 不覆盖项目内自定义）；`credential.helper` 恒设 `manager`；用 `git credential-manager --version` 探测 GCM，失败则告警。`-CheckOnly` 只报告现状，不落盘。
+  - `sub_root/tests/test_toolchain.py`：新增 `test_project_git_global_config_carries_identity_and_helper`（沿用 `_needs_vendored` 跳过未装依赖场景，解析生成文件断言三键）。
+  - 文档：`pysci-infra` 技能——依赖管理补该文件说明，排障顺序新增 `git config --global --list` 一步。
+- **基准结果**：
+  - 修复前 `init-deps.ps1 -CheckOnly` → `[warn] git global config missing: ...deps\git\config\gitconfig`。
+  - 修复后实跑（`-SkipDsh`）→ `git identity seeded from C:\Users\antar\.gitconfig: HardcOld-Bird <antarcticbird@163.com>`，文件落盘。
+  - 消费面（走 shim）：`git config --global --list` → `user.name`/`user.email`/`credential.helper=manager`；`git var GIT_COMMITTER_IDENT` → `HardcOld-Bird <antarcticbird@163.com>`（仓库 `.git/config` 的本地 identity 已删除，证明走的是项目内全局配置）；`git push --dry-run origin main` → `Everything up-to-date`（未加 `-c credential.helper`，证明凭据链路自动可用）。
+  - `sub_root\tests\tests.cmd all` → **28 passed**。
+- **成本**：约 22 轮工具调用、~25 分钟墙钟；无 eval token 消耗。
+- **是否实装**：是。
+- **回滚点**：`05c5926`（`git checkout 05c5926 -- sub_root/deps_management/deps_manager/init-deps.ps1 sub_root/tests/test_toolchain.py .agents/skills/pysci-infra/SKILL.md`）。
+- **风险备忘 / 待办（交用户）**：① 该修复依赖项目外 shim 的 `GIT_CONFIG_GLOBAL` 约定，若 shim 改路由此处需同步；② **未修**：同文件里共享 shim 探测路径由 `$WsRoot` 上推两级再拼 `common\bin`，算得 `D:\XXXIIIGGG\projects\common\bin`，实际为 `D:\XXXIIIGGG\common\bin`，故每次 init 都误报 `shared shim layer missing`（本次未动，等用户决定）；③ 该生成文件在 `deps/` 内被 `.gitignore` 覆盖，不入库，换机重跑 `init-deps` 即重建。
+
 ### 2026-11-14 / layout-02：`.env` 下沉 `sub_root/`，删除未启用的 `.pre-commit-config.yaml`
 
 - **问题来源**：用户追问「`.env` 与 `.pre-commit-config.yaml` 能否也进 `sub_root`，额外维护面多大」。先核实事实再决定，用户选择「移 `.env` + 删 pre-commit 配置」。
