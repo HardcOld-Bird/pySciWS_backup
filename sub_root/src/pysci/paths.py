@@ -14,18 +14,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# 项目根标记：同时包含 pyproject.toml 与 .python-version 的目录即为项目根。
+# Python 项目根标记：同时包含 pyproject.toml 与 .python-version 的目录即为 Python 项目根
+# （本仓库中是 ``<工作区根>/sub_root``）。
 _ROOT_MARKERS = ("pyproject.toml", ".python-version")
+
+# 工作区根标记：同时包含 ``.agents/`` 与 ``sub_root/`` 的目录即工作区根
+# （git 根 = DSH workspace 根 = 工作说明文件所在目录）。
+_WORKSPACE_MARKERS = (".agents", "sub_root")
 
 
 def _find_project_root(start: Path) -> Path:
-    """从 ``start`` 向上查找项目根目录。
+    """从 ``start`` 向上查找 Python 项目根目录。
 
     Args:
         start: 起始目录（通常为本文件所在包目录）。
 
     Returns:
-        项目根路径。若未找到标记（例如被以非 editable 方式安装进 site-packages），
+        Python 项目根路径（含 ``pyproject.toml`` / ``.venv`` / ``src`` / ``data``）。
+        若未找到标记（例如被以非 editable 方式安装进 site-packages），
         回退到 ``<site-packages>/pysci/paths.py`` 的上两级，尽力而为。
     """
     for candidate in (start, *start.parents):
@@ -36,10 +42,34 @@ def _find_project_root(start: Path) -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-# 本文件位于 <root>/src/pysci/paths.py
+def _find_workspace_root(python_root: Path) -> Path:
+    """从 Python 项目根向上查找工作区根。
+
+    工作区根是 git 根，也是 DSH 的 workspace 根：``.agents/``、``AGENTS*.md``
+    与 ``sub_root/`` 都在这里。它不是 Python 项目根——后者（``sub_root/``）装
+    pyproject、虚拟环境、源码、资产，以及本地 ``.env``。
+
+    Args:
+        python_root: Python 项目根（:data:`PROJECT_ROOT`）。
+
+    Returns:
+        工作区根路径。找不到标记时回退到 Python 项目根的上一级。
+    """
+    for candidate in (python_root, *python_root.parents):
+        if all((candidate / marker).exists() for marker in _WORKSPACE_MARKERS):
+            return candidate
+    return python_root.parent
+
+
+# 本文件位于 <python root>/src/pysci/paths.py
 _THIS_FILE = Path(__file__).resolve()
 
-#: 项目根目录（含 pyproject.toml / .venv / src 等）。
+#: 工作区根目录（git 根 / DSH workspace 根：``.agents/``、``AGENTS*.md``、``sub_root/``）。
+WORKSPACE_ROOT: Path = _find_workspace_root(
+    _find_project_root(_THIS_FILE.parent)
+)
+
+#: Python 项目根目录（含 pyproject.toml / .venv / src / data；本仓库中为 ``WORKSPACE_ROOT/sub_root``）。
 PROJECT_ROOT: Path = _find_project_root(_THIS_FILE.parent)
 
 #: 研究资产根：各研究线的非代码资产（笔记/PDF/.mph/storage/参考资料）按研究存放于此。
@@ -84,8 +114,8 @@ AI_DRAWING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "ai_drawing"
 MODELING3D_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "modeling3d"
 
 #: 分层测试根：可机械断言层（tests）与可基准测试层（evals）。
-TESTS_ROOT: Path = PROJECT_ROOT / "sub_root" / "tests"
-EVALS_ROOT: Path = PROJECT_ROOT / "sub_root" / "evals"
+TESTS_ROOT: Path = PROJECT_ROOT / "tests"
+EVALS_ROOT: Path = PROJECT_ROOT / "evals"
 
 #: 项目支撑代码根（eval runner、通用薄工具）。
 SUPPORT_ROOT: Path = PROJECT_ROOT / "src" / "pysci" / "support"

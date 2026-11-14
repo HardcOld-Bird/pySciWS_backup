@@ -8,8 +8,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SubRoot = Split-Path -Parent $PSScriptRoot
-$ProjRoot = Split-Path -Parent $SubRoot
+# This script lives in <python root>/tests; the python project root (pyproject.toml,
+# .venv, src, data) is its parent, and the workspace root is one level above that.
+$ProjRoot = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $ProjRoot '.venv\Scripts\python.exe'
 $Ruff = Join-Path $ProjRoot '.venv\Scripts\ruff.exe'
 if (-not (Test-Path -LiteralPath $Python)) {
@@ -32,7 +33,7 @@ try {
             exit $LASTEXITCODE
         }
         'harness' {
-            & $Python -m pytest sub_root/tests/harness
+            & $Python -m pytest tests/harness
             exit $LASTEXITCODE
         }
         'hardware' {

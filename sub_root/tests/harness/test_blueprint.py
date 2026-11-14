@@ -5,16 +5,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from pysci.paths import PROJECT_ROOT
+from pysci.paths import PROJECT_ROOT, WORKSPACE_ROOT
 
 BUDGET_BYTES = 8192
 SKILL_ROOTS = (
-    PROJECT_ROOT / ".agents" / "skills",
-    PROJECT_ROOT / ".agents" / "leader-skills",
-    PROJECT_ROOT / ".agents" / "meta-skills",
+    WORKSPACE_ROOT / ".agents" / "skills",
+    WORKSPACE_ROOT / ".agents" / "leader-skills",
+    WORKSPACE_ROOT / ".agents" / "meta-skills",
 )
-SHARED = PROJECT_ROOT / ".agents" / "shared-skills" / "blueprint-canon"
-META_VIEW = PROJECT_ROOT / ".agents" / "meta-skills" / "blueprint-canon" / "SKILL.md"
+SHARED = WORKSPACE_ROOT / ".agents" / "shared-skills" / "blueprint-canon"
+META_VIEW = WORKSPACE_ROOT / ".agents" / "meta-skills" / "blueprint-canon" / "SKILL.md"
 
 _NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -37,7 +37,7 @@ def _frontmatter(path: Path) -> dict[str, str]:
 
 def test_agents_budget():
     for name in ("AGENTS.md", "AGENTS.leader.md", "AGENTS.meta.md"):
-        size = (PROJECT_ROOT / name).stat().st_size
+        size = (WORKSPACE_ROOT / name).stat().st_size
         assert size <= BUDGET_BYTES, f"{name} = {size} > {BUDGET_BYTES}"
 
 
@@ -78,7 +78,7 @@ def test_meta_view_points_to_shared_canon():
 
 def test_no_dead_qoder_orchestration_paths():
     forbidden = (".qoder/", "pysci.skills.orchestration", "pysci-orch")
-    roots = [*SKILL_ROOTS, PROJECT_ROOT / "src" / "pysci", PROJECT_ROOT / "sub_root" / "tests"]
+    roots = [*SKILL_ROOTS, PROJECT_ROOT / "src" / "pysci", PROJECT_ROOT / "tests"]
     for root in roots:
         for path in root.rglob("*"):
             if not path.is_file() or path.suffix not in {".md", ".py", ".toml", ".ps1", ".mjs"}:

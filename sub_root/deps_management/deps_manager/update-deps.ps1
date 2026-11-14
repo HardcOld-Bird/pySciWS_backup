@@ -12,7 +12,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $DepsRoot = Split-Path -Parent $PSScriptRoot
-$ProjRoot = Split-Path -Parent (Split-Path -Parent $DepsRoot)
+# $ProjRoot: python project root (<ws>/sub_root). $WsRoot: workspace/git root.
+$ProjRoot = Split-Path -Parent $DepsRoot
+$WsRoot = Split-Path -Parent $ProjRoot
 $ToolsRoot = Join-Path $DepsRoot "deps"
 $ToolchainPath = Join-Path $DepsRoot "toolchain.json"
 $tc = Get-Content -LiteralPath $ToolchainPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -46,7 +48,7 @@ if ($Action -eq 'status') {
 
 if ($Action -eq 'log') {
     if (-not (Test-Path -LiteralPath $gitExe)) { throw "project git not installed" }
-    & $gitExe -C $ProjRoot log --oneline -20 -- sub_root/deps_management/toolchain.json sub_root/deps_management/deps/node/modules/package.json
+    & $gitExe -C $WsRoot log --oneline -20 -- sub_root/deps_management/toolchain.json sub_root/deps_management/deps/node/modules/package.json
     exit $LASTEXITCODE
 }
 
@@ -56,7 +58,7 @@ if ($Action -eq 'rollback') {
     }
     if (-not (Test-Path -LiteralPath $gitExe)) { throw "project git not installed" }
     Say "restoring toolchain.json and package.json from $Ref"
-    & $gitExe -C $ProjRoot checkout $Ref -- sub_root/deps_management/toolchain.json sub_root/deps_management/deps/node/modules/package.json
+    & $gitExe -C $WsRoot checkout $Ref -- sub_root/deps_management/toolchain.json sub_root/deps_management/deps/node/modules/package.json
     if ($LASTEXITCODE -ne 0) { throw "git checkout failed" }
     Say "reconciling from restored manifests"
     & (Join-Path $PSScriptRoot "init-deps.ps1")

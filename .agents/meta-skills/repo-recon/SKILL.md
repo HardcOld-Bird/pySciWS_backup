@@ -9,6 +9,12 @@ description: meta 用仓库结构元数据定位 harness 配置、技能目录�
 
 一句话：`git ls-tree` 看骨架 → 读边界文件 → 再搜内容。
 
+## 0. 两个根（先记住）
+
+- **工作区根** = git 根 = DSH workspace 根：`AGENTS*.md`、`.agents/`、`sub_root/`。
+- **Python 项目根** = `sub_root/`：`pyproject.toml`、`.python-version`、`uv.lock`、`.venv/`、`.env`、`src/`、`data/`、`tests/`、`evals/`、`deps_management/`。
+- 代码里对应 `pysci.paths.WORKSPACE_ROOT` 与 `PROJECT_ROOT`；凡是路径问题先看这两个常量，别数 `parents[N]`。
+
 ## 1. 先拿骨架
 
 ```powershell
@@ -26,6 +32,8 @@ git ls-tree -d -r --name-only HEAD |
 - `AGENTS.md` / `AGENTS.leader.md` / `AGENTS.meta.md`：三 preset 的工作说明。
 - `.agents/shared-skills/blueprint-canon/`：共享蓝图（只读）。
 - `.agents/skills/`、`.agents/leader-skills/`、`.agents/meta-skills/`：三套技能面。
+- `sub_root/pyproject.toml`：Python 项目根标记（pytest/ruff/hatch/coverage 配置都在这里）。
+- `sub_root/src/pysci/`、`sub_root/data/`：代码树与资产树（镜像关系）。
 - `sub_root/deps_management/toolchain.json`：依赖版本真源。
 - `sub_root/deps_management/deps/node/modules/dsh_home/profiles/web/cordis.patch.yml`：preset 真源。
 - `sub_root/deps_management/deps/node/modules/dsh_home/profiles/web/pysci/*.plugins.yml`：上游片段（生成物）。

@@ -9,8 +9,8 @@
 ## 二、三不碰
 
 1. **不改蓝图**：`.agents/shared-skills/blueprint-canon`、`AGENTS.md`、`AGENTS.leader.md`、`AGENTS.meta.md` 属于人类维护面；你可以读，不能改。需要改蓝图时，向用户提出请求。
-2. **不改项目代码与测试判据**：`src/`、`scripts/`、`data/`、`sub_root/tests`、`sub_root/evals` 的判定逻辑归 worker/用户；你可以读、可以跑，不能为了让结果通过而改判据。发现漏测/误拦，记入台账，由用户转交 worker。
-3. **不碰研究内容**：`src/pysci/research/`、`data/research/`、`scripts/research/`、`tests/research/` 是用户研究线，不读改。
+2. **不改项目代码与测试判据**：`sub_root/src/`、`sub_root/scripts/`、`sub_root/data/`、`sub_root/tests`、`sub_root/evals` 的判定逻辑归 worker/用户；你可以读、可以跑，不能为了让结果通过而改判据。发现漏测/误拦，记入台账，由用户转交 worker。
+3. **不碰研究内容**：`sub_root/src/pysci/research/`、`sub_root/data/research/`、`sub_root/scripts/research/`、`sub_root/tests/research/` 是用户研究线，不读改。
 
 ## 三、工作方式
 

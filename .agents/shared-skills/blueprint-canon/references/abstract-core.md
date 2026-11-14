@@ -10,7 +10,7 @@ PySci 在顶层分为三部分：**项目支撑系统**、**科研生产能力**
 
 ## 项目支撑系统
 
-分册：[项目支撑系统](abstract-support-systems.md)、[三 preset](abstract-harness.md)
+分册：[项目支撑系统](abstract-support-systems.md)
 
 项目支撑系统由三部分组成：
 
@@ -25,7 +25,7 @@ PySci 在顶层分为三部分：**项目支撑系统**、**科研生产能力**
 每个能力域的交付形态是“**技能文档 + 社区工具/薄胶水**”：
 
 - 技能文档在 `.agents/skills/<name>/`，只写领域决策、调用面与索引；细节进 `references/` 或源码。
-- 后端优先由社区依赖承担；自研只写社区表达不了的薄胶水，放在 `src/pysci/skills/<name>/` 或 `src/pysci/support/`。
+- 后端优先由社区依赖承担；自研只写社区表达不了的薄胶水，放在 `sub_root/src/pysci/skills/<name>/` 或 `sub_root/src/pysci/support/`。
 - 每个能力域按“新需求三段式”重建：选型（社区调研，用户在位）→ 计划与实施 → QA 同步。**不直接复制旧 pySciWS 实现**；允许一个能力域由多个社区依赖组合替代。
 
 能力域之间不强制统一 CLI 形状；对外入口以该技能 `SKILL.md` 的 Invocation 为准。
@@ -34,22 +34,9 @@ PySci 在顶层分为三部分：**项目支撑系统**、**科研生产能力**
 
 研究线是用户的具体科研内容：
 
-- 代码：`src/pysci/research/<line>/`
-- 脚本：`scripts/research/<line>/`
-- 资产与产物：`data/research/<n>_<line>/`
+- 代码：`sub_root/src/pysci/research/<line>/`
+- 脚本：`sub_root/scripts/research/<line>/`
+- 资产与产物：`sub_root/data/research/<n>_<line>/`
 - 测试：`sub_root/tests/research/<line>/`（本地）
 
 研究线只在本地保留，不入仓库。仓库只含框架、技能文档、支撑系统与最小资产骨架。用户的研究判断、真实实验与最终验收不进入 Agent 的自动化范围。
-
-## 人的位置
-
-- **用户维护蓝图**：设计哲学、设计摘要与角色工作说明由用户维护；Agent 可提出修改请求，不自行改写。
-- **用户参加选型**：技能重建的每轮社区调研必须由用户审核或补充。
-- **用户保留真实实验与最终验收**：Agent 不替代物理实验、研究判断与成果署名。
-- **用户决定重大风险动作**：远端替换、删除旧仓库、跨项目迁移等，须用户明确授权。
-
-## 分册入口
-
-- [abstract-harness.md](abstract-harness.md) — 三 preset、会话模型、子代理规则、DSH 接线。
-- [abstract-support-systems.md](abstract-support-systems.md) — 依赖管理与分层测试。
-- [abstract-workspace.md](abstract-workspace.md) — 目录布局、镜像关系、入库边界。

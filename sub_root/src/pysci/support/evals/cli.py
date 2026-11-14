@@ -15,13 +15,12 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pysci.paths import EVALS_ROOT, PROJECT_ROOT
+from pysci.paths import EVALS_ROOT, PROJECT_ROOT, WORKSPACE_ROOT
 
 
 def _dsh_cmd() -> Path:
     return (
         PROJECT_ROOT
-        / "sub_root"
         / "deps_management"
         / "deps"
         / "node"
@@ -35,7 +34,6 @@ def _dsh_cmd() -> Path:
 def _dsh_home() -> Path:
     return (
         PROJECT_ROOT
-        / "sub_root"
         / "deps_management"
         / "deps"
         / "node"
@@ -47,7 +45,6 @@ def _dsh_home() -> Path:
 def _node_dir() -> Path:
     runtime = (
         PROJECT_ROOT
-        / "sub_root"
         / "deps_management"
         / "deps"
         / "node"
@@ -96,7 +93,7 @@ def run_task(task_dir: Path, timeout_min: int = 10) -> int:
     try:
         result = subprocess.run(
             [str(dsh), "--profile", "headless", prompt],
-            cwd=PROJECT_ROOT,
+            cwd=WORKSPACE_ROOT,
             env=env,
             capture_output=True,
             text=True,

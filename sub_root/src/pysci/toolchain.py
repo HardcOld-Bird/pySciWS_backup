@@ -26,8 +26,8 @@ from pathlib import Path
 
 from pysci.paths import PROJECT_ROOT
 
-#: 自包含依赖根（与 mySimsWS2 布局同相对路径，共享 shim 层据此向上路由）。
-DEPS_ROOT: Path = PROJECT_ROOT / "sub_root" / "deps_management" / "deps"
+#: 自包含依赖根（位于 Python 项目根之下：``<python root>/deps_management/deps``）。
+DEPS_ROOT: Path = PROJECT_ROOT / "deps_management" / "deps"
 
 #: 版本真源 ``toolchain.json``（``DEPS_ROOT`` 的父目录）。
 TOOLCHAIN_JSON: Path = DEPS_ROOT.parent / "toolchain.json"

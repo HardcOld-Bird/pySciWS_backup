@@ -66,7 +66,7 @@
 
 - **被测物**：worker/leader 的 harness 版本（preset 组合 + 技能 + 工作说明 + 规程），以 patch 文件标识。
 - **黄金任务**：直接照搬真实摩擦（例如“按三段式新增一个技能选型记录”“修复路径迁移后的测试失败”）；任务包含 `prompt.md`、`task.yaml`（快照、模型路由、预算、判据）、`checks/`（机械判据）。
-- **运行器**：`src/pysci/support/evals/` + `pysci-eval` CLI；优先用项目 `dsh --profile headless` 跑一次隔离会话，需要细粒度事件时回退到 SDK；记录 token、墙钟、轮次。
+- **运行器**：`sub_root/src/pysci/support/evals/` + `pysci-eval` CLI；优先用项目 `dsh --profile headless` 跑一次隔离会话，需要细粒度事件时回退到 SDK；记录 token、墙钟、轮次。
 - **前后对比**：同一任务、同一项目快照、同一模型路由，对比“改进前/后”；先跑聚焦任务，默认再跑全部有效黄金任务做不劣化回归。
 - **产物**：`sub_root/evals/{tasks,runs,reports,overlays}`；`reports/improvement-ledger.md` 记录改进台账；每次对比产出预审表（初判 + 证据引用）交人类复核。
 

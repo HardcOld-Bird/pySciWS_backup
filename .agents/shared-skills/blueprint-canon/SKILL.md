@@ -27,7 +27,7 @@ PySci 是一个**个人科研工作区**：把科研全流程中可自动化的�
 
 ## 蓝图目录
 
-蓝图由 `AGENTS.md`（设计哲学·简版）、`AGENTS.leader.md`、`AGENTS.meta.md`、本页与设计摘要分册组成。需要全局理解时先读总纲；只需要某部分细节时可直接打开对应分册。
+蓝图由 `AGENTS.md`（设计哲学·简版）、项目哲学详版分册与设计摘要分册组成。需要全局理解时先读总纲；只需要某部分细节时可直接打开对应分册。
 
 ### 设计哲学（详版）
 
@@ -36,10 +36,8 @@ PySci 是一个**个人科研工作区**：把科研全流程中可自动化的�
 
 ### 设计摘要
 
-- [abstract-core.md](references/abstract-core.md) — **总纲**：项目支撑系统、科研生产能力、研究线的顶层关系与分册入口。
-- [abstract-harness.md](references/abstract-harness.md) — **三 preset**：worker（默认）/ leader（可选）/ meta（仅 harness）、会话模型、子代理规则与 DSH 接线。
+- [abstract-core.md](references/abstract-core.md) — **总纲**：项目支撑系统（依赖管理 / 分层测试 / 三 preset 的 DSH harness）、科研生产能力、研究线的顶层关系与分册入口。
 - [abstract-support-systems.md](references/abstract-support-systems.md) — **项目支撑系统**：依赖管理（项目内自包含、统一更新器）与分层测试（三层）。
-- [abstract-workspace.md](references/abstract-workspace.md) — **工作区布局**：`src/`、`scripts/`、`data/`、`sub_root/`、`.agents/` 的职责、镜像关系与入库边界。
 
 ## 协议
 

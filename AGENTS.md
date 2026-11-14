@@ -24,41 +24,36 @@
    每个功能只保留唯一的最新正确实现，默认不向后兼容、不设回退，废弃路径直接报错；确需兼容或回退时必须先请示用户，并显式标注“已弃用”。
    *（详见：详版 5.1）*
 
-## 二、PySci 特有约束
+## 二、其他内容
+（本章节用于记录除设计哲学外的项目信息、环境配置说明或临时性约定。）
+
+### 2.1 新需求开发三段式
+面对任何新需求（需要开发新功能）时，依次完成以下三段，不得跳步。
+
+  1. **选型**：遵守“社区优先与薄胶水原则”，查阅[全生态扩展点地图](.agents/skills/blueprint-canon/references/philosophy-community-first.md)，调研社区基础设施，并与用户讨论、确认选型。
+  2. **计划与实施**：根据确定的选型，在 `sub_root\others\plans` 创建计划并实施；全部完成后归档。
+  3. **QA 同步**：若新功能涉及 QA 系统（`sub_root\qa`）已覆盖的部分（如游戏本体 `sub_root\godot_root`），或应被纳入 QA 覆盖（拿不准时咨询用户），则同步更新 QA 系统并执行全量测试，确保新功能与原有代码良好协作。
+
+### 2.2 代理端口
+GitHub 直连不可达时，可尝试本机代理 `http://127.0.0.1:12450`（代理不一定开启；失败就回退直连或询问用户）。
+
+### 2.3 推荐工作方式
+每当收到用户消息：
+- 请积极使用 create/get/update_goal 等 tools 创建 goal（除非已经存在）
+- 请积极使用 todo_write 等 tools 将任务拆解为 todo lists（除非已经存在）
+- 请积极使用 subagent 系统派发子代理
+这是推荐的工作方式。如果你认为当前任务比较简单而无需使用它们，请在回复中显式声明这一点。
+
+### 2.4 视觉策略
+当在回复中交付图片等视觉内容之前，**必须**先使用VLM能力查看该图片，以检查内容正确性。
+在涉及视觉的工作中，应更积极地查看图片，切勿由于认为这是昂贵操作就避免使用。
+
+### 2.5 会话检索提示
+- 读取指定会话时 ID 用完整形式（根会话带 session- 前缀，如 session-xxxx；子代理会话为裸 uuid），否则会误报“outside the caller workspace”。
+- session_search 是字面词段匹配，中文查询须取标点/空白之间的完整词段——例如搜“黄金基准”不会匹配“黄金基准任务”。
+
+## 三、PySci 特有约束
 
 ### 2.1 技能重建，而非搬迁
 
-pySci 的 7 个科研能力域（文献研究、有限元仿真、文档写作、科研绘图、理论计算、AI 绘图、3D 建模）**不直接复制旧 pySciWS 的实现**。每个能力域各自重走“新需求三段式”，重点重做社区调研，最大化减少自研代码；允许一个能力域由多个社区依赖组合替代。每次社区调研的候选与取舍必须交用户审核或补充，用户在每轮调研在位。技能重建由项目专属 DSH 接手后逐项执行。
-
-### 2.2 研究内容边界
-
-仓库只含可重建的框架、技能文档、支撑系统与最小资产骨架。研究线代码/数据/脚本/测试（`src/pysci/research/`、`data/research/`、`scripts/research/`、`tests/research/`）只在本地保留，永不上传；具体研究内容由用户自行管理。`data/用户的inbox/` 是用户专属区，基建不得依赖其中文件。
-
-### 2.3 项目专属 DSH
-
-本项目使用项目内自包含的 DSH（`sub_root/deps_management/deps/node/modules`），`DSH_HOME` 在项目内，不依赖全局 DSH。交互面为 Web GUI（`dsh web`）；自动化/eval 可用 `dsh --profile headless`。三个 preset：`pysci-worker`（默认）、`pysci-leader`（可选）、`pysci-meta`（仅 harness）。不保留 Qoder、`pysci-orch`、pods、taskbooks、watchdog 或夜航机制。
-
-## 三、新需求开发三段式
-
-面对任何新需求（需要开发新功能）时，依次完成以下三段，不得跳步。
-
-1. **选型**：遵守“社区优先与薄胶水原则”，查阅[全生态扩展点地图](.agents/shared-skills/blueprint-canon/references/philosophy-community-first.md)，调研社区基础设施，并与用户讨论、确认选型。技能重建必须逐项执行本段，用户参加每轮调研。
-2. **计划与实施**：根据确定的选型，在 `sub_root/others/plans` 创建计划并实施；全部完成后归档。计划不是蓝图，允许漂移。
-3. **QA 同步**：若新功能涉及分层测试（`sub_root/tests`、`sub_root/evals`），或应被纳入测试覆盖（拿不准时咨询用户），则同步更新测试并执行全量测试，确保新功能与原有代码良好协作。
-
-## 四、工作方式
-
-- 收到用户消息时，积极使用 `create_goal` / `todo_write` / `subagent`；简单任务可显式声明省略。
-- 默认由 worker 直接执行；大型任务可由用户选择 leader 模式，由 leader 拆解并派发给 worker 子代理。用户只与 leader 沟通，不直接指挥其 worker。
-- meta 只改 harness，不碰项目代码、测试判据与研究内容；详见 `AGENTS.meta.md`。
-- **视觉策略**：交付图片等视觉内容前，必须先使用 VLM 能力查看该图片，检查内容正确性；涉及视觉的工作应更积极地查看图片，不要因成本而回避。
-- **会话检索**：读取指定会话时使用完整 ID（根会话带 `session-` 前缀，子代理会话为裸 uuid）；`session_search` 是字面词段匹配，中文查询取标点/空白之间的完整词段。
-
-## 五、环境与常用命令
-
-- 首次/换机：`sub_root\deps_management\deps_manager\init-deps.cmd`
-- 依赖状态：`sub_root\deps_management\deps_manager\update-deps.cmd status`
-- 依赖更新：`sub_root\deps_management\deps_manager\update-deps.cmd update`（版本真源为 `toolchain.json`）
-- 测试入口：`sub_root\tests\tests.cmd all`（P5 交付后可用）
-- 模型服务：项目 DSH 使用 `DEEPSEEK_API_KEY` / 账户凭据；密钥只放 `.env` 或 DSH 凭据库，不入库。
-- GitHub 直连不可达时，可尝试本机代理 `http://127.0.0.1:12450`（代理不一定开启；失败就回退直连或询问用户）。
+pySci 的 7 个科研能力域（文献研究、有限元仿真、文档写作、科研绘图、理论计算、AI 绘图、3D 建模）**不直接复制旧 pySciWS 的实现**。每个能力域各自重走“新需求三段式”，重点重做社区调研，最大化减少自研代码；允许一个能力域由多个社区依赖组合替代。每次社区调研的候选与取舍必须交用户审核或补充，用户在每轮调研在位。

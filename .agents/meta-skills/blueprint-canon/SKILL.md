@@ -20,9 +20,7 @@ whenToUse: meta 改进 harness 前需要理解系统设计（分层测试、社�
 - [philosophy-detailed.md](../../shared-skills/blueprint-canon/references/philosophy-detailed.md) — 设计哲学详版：`AGENTS.md` 各条原则的细微差别，用于设计权衡与冲突裁决。
 - [philosophy-community-first.md](../../shared-skills/blueprint-canon/references/philosophy-community-first.md) — **社区优先与薄胶水（分册）**：完整正文、社区引入判定标准、全生态扩展点地图；harness 扩展选型（工具/技能/MCP/插件/preset）“自研 vs 社区”判断前先读。
 - [abstract-support-systems.md](../../shared-skills/blueprint-canon/references/abstract-support-systems.md) — **项目支撑系统**：依赖管理、**分层测试系统**（可机械断言层 / 可基准测试层 / 主观层，meta 即第 3 层）。
-- [abstract-harness.md](../../shared-skills/blueprint-canon/references/abstract-harness.md) — 三 preset、会话模型、子代理规则、DSH 接线；meta 改进 worker/leader harness 时的目标面。
-- [abstract-core.md](../../shared-skills/blueprint-canon/references/abstract-core.md) — 总纲与目录（跨模块架构联系）。
-- [abstract-workspace.md](../../shared-skills/blueprint-canon/references/abstract-workspace.md) — 工作区布局与入库边界；定位 harness 配置、技能目录、eval 产物时参考。
+- [abstract-core.md](../../shared-skills/blueprint-canon/references/abstract-core.md) — 总纲与目录（跨模块架构联系）：三 preset 的 DSH harness（会话模型、子代理规则、接线）、工作区布局与入库边界。
 
 ## 协议
 

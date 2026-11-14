@@ -7,6 +7,13 @@ description: PySci 项目支撑系统操作面：项目内依赖管理（init/up
 
 项目支撑系统的操作面。设计目标见蓝图 `abstract-support-systems.md`；本技能只放“怎么用”。
 
+## 目录锚点
+
+- **工作区根**（git 根 = DSH workspace 根）：`AGENTS*.md`、`.agents/`、`sub_root/`。
+- **Python 项目根**：`sub_root/`——`pyproject.toml`、`.python-version`、`uv.lock`、`.venv/`、`.env`、`src/pysci/`、`data/`、`tests/`、`evals/`、`deps_management/`。
+- 代码里用 `pysci.paths`：`WORKSPACE_ROOT`（工作区根）与 `PROJECT_ROOT`（= `sub_root/`，Python 项目根）；不要手写 `Path(__file__).parents[N]`。
+- uv / pytest / ruff 的命令都在 `sub_root/` 下执行（那里才是 pyproject 所在处）；`tests.cmd` 已代为切目录。
+
 ## 依赖管理
 
 项目内工具链在 `sub_root/deps_management/`，版本真源是 `toolchain.json`。
@@ -41,7 +48,7 @@ sub_root\tests\tests.cmd fast      # 快速子集
 sub_root\tests\tests.cmd hardware  # 外部设备用例
 ```
 
-- `testpaths = ["sub_root/tests"]`；默认 `-m "not hardware"`。
+- `testpaths = ["tests"]`（pytest rootdir 是 Python 项目根 `sub_root/`）；默认 `-m "not hardware"`。
 - 产物在 `sub_root/tests/artifacts/`，不入库。
 - 新技能必须在 `sub_root/tests/skills/<skill>/` 补机械断言，并跑 `all`。
 
@@ -54,7 +61,7 @@ sub_root\tests\tests.cmd hardware  # 外部设备用例
 - `reports/improvement-ledger.md`：改进台账。
 - `overlays/`：harness 改进 patch。
 
-运行器在 `src/pysci/support/evals/`；优先 `dsh --profile headless`，需要细粒度事件时用 SDK。
+运行器在 `sub_root/src/pysci/support/evals/`；优先 `dsh --profile headless`，需要细粒度事件时用 SDK。eval 会话的 cwd 是**工作区根**（`.env` 与 `.agents/` 所在处），不是 `sub_root/`。
 
 ## 项目 DSH 配置定位
 

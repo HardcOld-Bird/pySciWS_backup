@@ -19,7 +19,10 @@ $ErrorActionPreference = "Stop"
 
 $DepsRoot = Split-Path -Parent $PSScriptRoot
 $ToolsRoot = Join-Path $DepsRoot "deps"
-$ProjRoot = Split-Path -Parent (Split-Path -Parent $DepsRoot)
+# Layout: <workspace>/sub_root/{pyproject.toml,.venv,src,data} + deps_management/.
+# $ProjRoot is the python project root (sub_root); $WsRoot is the workspace/git root.
+$ProjRoot = Split-Path -Parent $DepsRoot
+$WsRoot = Split-Path -Parent $ProjRoot
 $ToolchainPath = Join-Path $DepsRoot "toolchain.json"
 if (-not (Test-Path -LiteralPath $ToolchainPath)) {
     throw "toolchain.json not found: $ToolchainPath"
@@ -141,7 +144,7 @@ if ($havePy) {
 }
 
 # --- shared shim layer (project-external routing only) ----------------------
-$commonRoot = Split-Path (Split-Path (Split-Path $ProjRoot -Parent) -Parent) -Parent
+$commonRoot = Split-Path (Split-Path $WsRoot -Parent) -Parent
 $shimDir = Join-Path $commonRoot "common\bin"
 if (Test-Path -LiteralPath (Join-Path $shimDir "_find_project.cmd")) {
     Say "shared shim layer present: $shimDir"

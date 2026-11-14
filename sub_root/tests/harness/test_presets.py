@@ -6,12 +6,11 @@ import subprocess
 
 import pytest
 
-from pysci.paths import PROJECT_ROOT
+from pysci.paths import PROJECT_ROOT, WORKSPACE_ROOT
 from pysci.toolchain import node_exe
 
 PROFILE_PATCH = (
     PROJECT_ROOT
-    / "sub_root"
     / "deps_management"
     / "deps"
     / "node"
@@ -23,7 +22,6 @@ PROFILE_PATCH = (
 )
 EXTRACT = (
     PROJECT_ROOT
-    / "sub_root"
     / "deps_management"
     / "deps_manager"
     / "scripts"
@@ -74,7 +72,7 @@ def test_extract_presets_in_sync():
         pytest.skip("extract_presets.mjs missing")
     result = subprocess.run(
         [node_exe(), str(EXTRACT), "--check"],
-        cwd=PROJECT_ROOT,
+        cwd=WORKSPACE_ROOT,
         capture_output=True,
         text=True,
         encoding="utf-8",

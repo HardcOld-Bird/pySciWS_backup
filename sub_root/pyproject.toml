@@ -63,7 +63,7 @@ update_changelog_on_bump = true
 major_version_zero = true
 
 [tool.pytest.ini_options]
-testpaths = ["sub_root/tests"]
+testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

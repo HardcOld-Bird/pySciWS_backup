@@ -35,38 +35,43 @@ AGENTS.meta.local.md
 /sub_root/evals/runs/
 /sub_root/evals/reports/*.tmp
 /sub_root/evals/overlays/*.tmp
+# 本机 ACL 修复备份与回滚脚本（含本机绝对路径，换机器无意义）
+/sub_root/evals/acl-recovery/
 
 # ---- 研究内容（只留本地，永不入库） ---------------------------------------
-/src/pysci/research/
-/scripts/research/
-/tests/research/
-/data/research/
+# 源码与资产树都在 sub_root/ 下（Python 项目根 = sub_root）。
+/sub_root/src/pysci/research/
+/sub_root/scripts/research/
+/sub_root/tests/research/
+/sub_root/data/research/
 
 # ---- data/ 白名单制 -------------------------------------------------------
-# 只放行 data/skills 骨架面与用户自管配置；其余本地保留
-/data/*
-!/data/skills/
-!/data/用户的inbox/
-/data/用户的inbox/*
-!/data/用户的inbox/pysci_settings.toml
+# 只放行 data/skills 骨架面；其余本地保留
+/sub_root/data/*
+!/sub_root/data/skills/
+
+# ---- 用户的inbox -----------------------------------------------------------
+# 位置在 sub_root/ 顶层；只放行用户自管配置，其余本地保留
+/sub_root/用户的inbox/*
+!/sub_root/用户的inbox/pysci_settings.toml
 
 # data/skills 的使用痕迹 / 本地缓存
-/data/skills/*/cache/
-/data/skills/*/runs/
-/data/skills/*/papers/
-/data/skills/*/bilingual/
-/data/skills/*/gallery/
-/data/skills/*/assets/
-/data/skills/*/projects/
-/data/skills/*/trash/
-/data/skills/*/ingest/
-/data/skills/*/reviews/
-/data/skills/*/shortlists/
-/data/skills/*/prompts/
-/data/skills/*/INDEX.md
-/data/skills/*/LEDGER.md
-/data/skills/*/manifest.jsonl
-/data/skills/*/README.md
+/sub_root/data/skills/*/cache/
+/sub_root/data/skills/*/runs/
+/sub_root/data/skills/*/papers/
+/sub_root/data/skills/*/bilingual/
+/sub_root/data/skills/*/gallery/
+/sub_root/data/skills/*/assets/
+/sub_root/data/skills/*/projects/
+/sub_root/data/skills/*/trash/
+/sub_root/data/skills/*/ingest/
+/sub_root/data/skills/*/reviews/
+/sub_root/data/skills/*/shortlists/
+/sub_root/data/skills/*/prompts/
+/sub_root/data/skills/*/INDEX.md
+/sub_root/data/skills/*/LEDGER.md
+/sub_root/data/skills/*/manifest.jsonl
+/sub_root/data/skills/*/README.md
 
 # ---- IDE / OS --------------------------------------------------------------
 .idea/
