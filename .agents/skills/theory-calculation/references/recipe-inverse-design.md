@@ -1,7 +1,7 @@
 # Recipe: 逆设计协议（目标函数协议 + scipy DE + 每代 checkpoint）
 
-> ④理论计算域方法配方（新 API 形态：scipy 直调 + 本域薄胶水
-> `pysci.skills.theory_calculation.inverse_design`）。
+> ④理论计算域方法配方（新 API 形态：scipy 直调 + 薄胶水 `pysci.research.gain_ep.inverse_design`
+> ——2026-11-18 用户裁决：逆设计仅适用 gain_ep 研究，代码属研究线专用）。
 > 语义提取自旧 pySciWS 研究线 `pysci.research.gain_ep.theory.inverse_design.py`
 > （目标项协议/断点续算形态；⭐几何约束研究线不入仓），按新 API 重写。
 > **用户裁决（2026-11-17）：自研 DE 不迁移**，统一换
@@ -28,7 +28,7 @@
 
 ```python
 import numpy as np
-from pysci.skills.theory_calculation.inverse_design import run_inverse_design
+from pysci.research.gain_ep.inverse_design import run_inverse_design
 
 def objective(x: np.ndarray) -> float:
     return float((x[0] - 0.5) ** 2 + (x[1] + 0.3) ** 2)
@@ -79,7 +79,7 @@ checkpoint 是运行产物，写入限 `data/` 内（`pysci.paths.assert_within_
 ## 5. 组合约束的调用形态
 
 ```python
-from pysci.skills.theory_calculation.inverse_design import run_inverse_design
+from pysci.research.gain_ep.inverse_design import run_inverse_design
 
 def gap_ok(x):        # 约束协议：≤0 可行
     return 0.1 - x[0]          # 要求 x[0] ≥ 0.1
@@ -94,5 +94,5 @@ res = run_inverse_design(objective, bounds=[(0.0, 1.0), (0.0, 1.0)],
 技巧）与断点续算纪律提取自旧 pySciWS `src/pysci/research/gain_ep/theory/
 inverse_design.py`（2026-11-17 解剖 `others/community_research/2026-11-17/
 legacy-02-cmt-gain-ep.md` §3.4，含用户裁决记录）；DE 实现整体换 scipy，薄胶水
-`sub_root/src/pysci/skills/theory_calculation/inverse_design.py` 为按新 API 重写，
-未复制旧代码。⭐研究线的管槽几何修复式解码（min_gap=2mm 等绝对物理约束）不入仓。
+`sub_root/src/pysci/research/gain_ep/inverse_design.py`（2026-11-18 用户裁决移入研究线）
+为按新 API 重写，未复制旧代码。⭐研究线的管槽几何修复式解码（min_gap=2mm 等绝对物理约束）不入仓。

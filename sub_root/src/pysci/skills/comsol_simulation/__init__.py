@@ -8,8 +8,6 @@
 - :mod:`features` —— feature-types 试建探测 + node set 提取/批量写属性；
 - :mod:`plotgroup` —— 求解后绘图组数据集自动重绑（空白 PNG 防复发）；
 - :mod:`validate` —— 验证函数族（能量守恒/收敛阶/参考比对，纯函数）；
-- :mod:`reconcile` —— 理论↔仿真 S 矩阵对账契约（同入同出校验 + compare_s_matrix
-  幅度对账 + 主导元 |Δ|≤0.02 冻结判据，纯函数）；
 - :mod:`session` —— 会话/许可证探测 + domain-check 机械检查。
 
 全部 mph 触碰点为**鸭子类型驱动 + 懒导入**：mock mph 的机械断言恒跑，真实 COMSOL
@@ -22,7 +20,6 @@ from pysci.skills.comsol_simulation import (
     export,
     features,
     plotgroup,
-    reconcile,
     session,
     sidecar,
     validate,
@@ -32,7 +29,6 @@ __all__ = [
     "export",
     "features",
     "plotgroup",
-    "reconcile",
     "session",
     "sidecar",
     "validate",

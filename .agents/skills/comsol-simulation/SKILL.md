@@ -1,6 +1,6 @@
 ---
 name: comsol-simulation
-description: ②COMSOL 仿真域操作面：mph/COMSOL-MCP 双入口工作流——建模→求解→后处理→出版级出图（尺寸/DPI/背景/品牌剥离 logo*d=off）→sidecar（data↔pixel 变换元数据）→验证（守恒/收敛/domain-check）→S 矩阵对账（同入同出/冻结判据）；单证会话约定与 Java/mph 坑点速查。需要建/改 COMSOL 模型、跑求解/参数扫掠、出出版级结果图、产 sidecar 供③域叠加、做物理验证、理论↔仿真 S 矩阵对账或查 COMSOL API 坑点时使用。
+description: ②COMSOL 仿真域操作面：mph/COMSOL-MCP 双入口工作流——建模→求解→后处理→出版级出图（尺寸/DPI/背景/品牌剥离 logo*d=off）→sidecar（data↔pixel 变换元数据）→验证（守恒/收敛/domain-check）；单证会话约定与 Java/mph 坑点速查。需要建/改 COMSOL 模型、跑求解/参数扫掠、出出版级结果图、产 sidecar 供③域叠加、做物理验证或查 COMSOL API 坑点时使用。
 ---
 
 # COMSOL Simulation（②仿真）
@@ -28,16 +28,14 @@ Python 通道是 **mph==1.4.0 + JPype1==1.7.1**（豁免 pin，官方无 Python 
    - `features` —— feature-types 试建探测（COMSOL 无枚举 API）+ node set 提取/批量写属性；
    - `plotgroup` —— 求解后绘图组数据集自动重绑（空白 PNG 防复发）；
    - `validate` —— 验证函数族（能量守恒/收敛阶/参考比对，纯函数）；
-   - `reconcile` —— 理论↔仿真 S 矩阵对账契约（同入同出校验 `check_same_in_same_out`
-     + `compare_s_matrix` 幅度对账 + 主导元 |Δ|≤0.02 冻结判据，纯函数）；
    - `session` —— 会话/许可证探测 + domain-check 机械检查。
 
 **能力边界（裁决注记）**：imgcheck 像素擦除**不建**（品牌剥离走 COMSOL 原生
 `logo*d=off`）；pyvista 3D/场渲染归③域；手册知识检索走 COMSOL-MCP RAG（另一代理）；
 export polar（参数化弧线扫角）远场特有、按需在研究树实现；④域 S 矩阵验证以
-`validate.compare_to_reference` 同入同出比对形态衔接；理论↔仿真 S 矩阵**对账**
-（CMT 管线吸收产物，2026-11-17）走 `reconcile`——同入同出契约先拦、幅度口径
-（只比 |S|，相位不入账）后对，冻结判据主导元 |Δ|≤0.02（改动须用户裁决）。
+`validate.compare_to_reference` 同入同出比对形态衔接。**CMT 理论↔仿真 S 矩阵对账属
+研究线专用**（2026-11-18 用户裁决：仅适用 gain_ep 研究）——代码与冻结判据在
+`src/pysci/research/gain_ep/reconcile.py`，不在本技能内。
 
 ## 工作流（六步）
 
@@ -48,7 +46,7 @@ export polar（参数化弧线扫角）远场特有、按需在研究树实现�
 | 3 | 后处理 + 重绑 | `model.evaluate(...)` / `model.export('Data')`；**solve 后必 `plotgroup.rebind_plot_groups(model)`** |
 | 4 | 出版级出图 | `export.export_image(model, '<绘图组名>', png, width_mm=…, clean=True, geom_bbox=…)`；契约 → [references/export-contract.md](references/export-contract.md) |
 | 5 | sidecar | 随第 4 步自动产出 `<png>.sidecar.json`；下游 `sidecar.imshow_sidecar(ax, sc)` 叠加 |
-| 6 | 验证 | `validate.check_energy_conservation / check_convergence / compare_to_reference`；理论↔仿真 S 矩阵**对账**（验证步内衔接）：`reconcile.check_same_in_same_out`（同入同出契约，不成立 compare 直接拒）→ `reconcile.compare_s_matrix`（max_abs/rel/rms 三指标 + 主导元 \|Δ\|≤0.02 冻结判据）；开工/交付 `session.check_declaration`（四问）→ [references/domain-declaration.md](references/domain-declaration.md) |
+| 6 | 验证 | `validate.check_energy_conservation / check_convergence / compare_to_reference`；开工/交付 `session.check_declaration`（四问）→ [references/domain-declaration.md](references/domain-declaration.md) |
 
 **交付前必读图**：`export_image` 的产物 PNG 用 read_image 目检（视觉策略 2.4）——
 「能导出 ≠ 是对的」；空白自检只兜「只剩轴框」一类硬伤。
@@ -67,9 +65,9 @@ export polar（参数化弧线扫角）远场特有、按需在研究树实现�
 
 ## 机械断言
 
-`sub_root/tests/skills/comsol_simulation/`：mock mph 纯函数单测 153 项**恒跑**
-（sidecar 变换数学/出图参数拼装/domain-check 判定/feature 探测解析/验证函数/
-S 矩阵对账契约与冻结判据贴边）；
+`sub_root/tests/skills/comsol_simulation/`：mock mph 纯函数单测 109 项**恒跑**
+（sidecar 变换数学/出图参数拼装/domain-check 判定/feature 探测解析/验证函数）；
+CMT 对账测试随代码移入 `tests/research/gain_ep/`（研究线不入库）；
 真实 COMSOL 冒烟（建模→solve→出图→sidecar→domain-check）标 `-m hardware`
 （`tests.cmd hardware`；跑前守卫：无 `comsol*` 进程、许可证可得，否则 skip 不红）。
 

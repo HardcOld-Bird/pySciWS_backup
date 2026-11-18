@@ -54,7 +54,6 @@ description: ④理论计算能力域操作面：符号建模/化简/求解（Sy
 | `divergence_safety` | `mask_divergent(y, window)` | 发散遮断（窗外/NaN/Inf→NaN，复数取实部） |
 | `divergence_safety` | `quick_plot_divergent(x, y, *, ylim, title, ax)` | 发散安全探索绘图（返回 Figure） |
 | `session` | `ensure_session / save_results / append_note` | 会话骨架 / npz 落盘 / 时间线日志 |
-| `inverse_design` | `run_inverse_design / CheckpointCallback / load_checkpoint` | 逆设计 scipy DE + 每代 checkpoint/续跑（见 recipe-inverse-design.md） |
 
 行为合同与验收以旧项目 7 项发散安全测试期望为准绳（对照期望值重写，代码未迁移）；
 使用须知见 [references/divergence-safety.md](references/divergence-safety.md)（含积分/级数发散
@@ -82,8 +81,9 @@ description: ④理论计算能力域操作面：符号建模/化简/求解（Sy
 - **scipy.integrate 超纲**（DAE/多尺度/极端刚性）：临时外跑 Julia 或 sundials 绑定，不入主栈
   ——见 [references/scipy-boundaries.md](references/scipy-boundaries.md)。
 - 3D 离屏渲染（pyvista）移交③/⑥域；ParamSpace 封装、simplify strategy 路由器、doctor、
-  theory CLI 全集、CMT 研究线管线整体**不保留**（⭐ 研究线留本地不入仓；☆ 方法论拆为
-  recipe/薄胶水吸收——EP n×n 判据、逆设计协议，用户裁决 2026-11-17）。
+  theory CLI 全集、CMT 研究线管线整体**不保留**（⭐ 研究线留本地不入库；☆ 方法论拆为
+  recipe 吸收——EP n×n 判据、逆设计协议；**2026-11-18 用户裁决：逆设计代码亦属研究线
+  专用**，移入 `src/pysci/research/gain_ep/inverse_design.py`）。
 
 ## 验收
 
