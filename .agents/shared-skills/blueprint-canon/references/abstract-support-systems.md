@@ -12,20 +12,22 @@
 
 **设计目标**。
 
-- **唯一外部前提**：Windows + PowerShell；除把路由层加入系统 PATH 这类一次性显式操作外，不要求机器级安装；不依赖预装的 git、node、uv 或 Python。
-- **项目内自足**：工具本体、解释器、DSH、npm 包根、Python 包与环境、下载缓存全部位于项目目录内；项目外只保留一层只做路由的 shim。
+- **唯一外部前提**：Windows + PowerShell；除把路由层加入系统 PATH 这类一次性显式操作外，不要求机器级安装；不依赖预装的 git、node、uv 或 Python。**已知例外**：少数以系统注册表发现安装位置的软件（COMSOL 经 `COMSOLROOT`、Zotero 经 App Paths）在项目内自包含迁移后，需**一次管理员级注册表同步**（记录于各自迁移动机与坑点册）；这是迁移动作而非持续依赖。
+- **项目内自足**：工具本体、解释器、DSH、npm 包根、Python 包与环境、下载缓存全部位于项目目录内；项目外只保留一层只做路由的 shim。大型第三方软件按需迁入 `deps/`（体量不入库、不随仓库分发）。
 - **shim 只路由**：全局 shim 目录按“当前所在项目”把命令转发给项目内实现，不承载工具本体、不复制逻辑；项目命令不得回退到系统同名工具。
 - **两段式生命周期**：init 负责首次、换机与迁移（补齐工具、部署/核验 shim、创建环境）；update 负责日常（只在依赖已就绪时工作，未就绪则明确拒绝并指出修复方式，绝不“半套成功”）。
 - **可复现**：版本由 `toolchain.json`（版本、下载地址、校验和）与锁文件固定；下载默认使用可用镜像；同一工具只保留一份实现。
-- **单一真源与分层**：`toolchain.json` 是版本与下载地址的唯一真源；工具、缓存、上游源码、构建产物分层存放。
+- **单一真源与分层**：自动管理工具的版本与下载地址以 `toolchain.json` 为唯一真源；**手动迁移的大型软件以项目内目录 + 原地 ADR 为真源**，由代码内工具路径常量统一解析（工具链清单的消费者只覆盖其建模的那些工具，不强行登记无消费者的条目）。工具、缓存、上游源码、模型资产、构建产物分层存放。
+- **凭据**：第三方 API key 等本地密钥集中在项目根 `.env`（gitignore 排除，不入库、不进缓存），按能力域按需迁移；管线从环境读取，不硬编码。
 - **可观测与可回退**：依赖变更留下记录；有锁文件的依赖可回退；失败能定位到“哪个工具、哪个版本、哪一步”。
 
 **依赖分类**（按“有没有可回退的版本记录”，而非按生态划分）：
 
 - **managed**：有锁文件、被 git 跟踪 → 自动更新、自动回退（DSH 的 npm 包、Python 包）。
 - **vendored**：项目内二进制、有版本清单与 current 指针 → 修复/对齐到清单版本（git、node/npm、uv、Python 解释器）。
-- **detected**：机器或项目内已有、无锁文件、无自动降级 → 只比对版本并提示手动处理（COMSOL、Blender、TeX Live、LibreOffice、NI-DAQmx 驱动等）。
-- **tool**：项目内 uv tool（如后续引入的 MCP server），单独钉版本、单独更新。
+- **手动 vendor**：项目内二进制或资产、**无清单指针、无自动对齐** → 只做存在性/版本探测；升级即重走迁移（大型第三方软件、模型权重、上游源码浅克隆）。
+- **detected**：机器或项目内已有、无锁文件、无自动降级 → 只比对版本并提示手动处理（未迁入项目的大型软件与驱动）。
+- **tool**：项目内 uv tool（如后续引入的 MCP server），单独钉版本、单独更新；亦可为“项目 venv 包 + DSH profile 挂载（link 或 stdio 条目）”的混合形态。
 
 **运行方式**。总更新器不实现各生态的更新细节，只做预检、编排、汇总与回退。
 
@@ -33,7 +35,7 @@
 - **update**：统一入口，先预检（git 仓库、工作区干净、项目内工具就绪、DSH 未运行），再按顺序调用子更新器并汇总，最后尝试推送已提交的变更；另提供 status、rollback、log。
 - **硬规则**：没有 git 不更新；工作区脏不更新；DSH 运行中不更新；非项目内工具不更新。
 
-**目前自动化管理的依赖**：
+**目前纳入项目依赖面的条目**（自动化管理 + 手动 vendor）：
 
 | 依赖 | 类别 | 管理方式 |
 |---|---|---|
@@ -42,12 +44,15 @@
 | uv / uvx | vendored | 按清单安装；shim 路由 |
 | Python 解释器 | vendored | 由项目 uv 安装 standalone CPython 3.13.15 到 `deps/python/` |
 | DSH | managed | 作为 npm 依赖装入 `deps/node/modules`，`package-lock` 锁定；shim 路由；可升级/回退 |
-| Python 包 | managed | uv 依 `pyproject.toml` 解析到项目 `.venv`；技能重建时逐项添加 |
-| COMSOL / Blender / TeX Live / LibreOffice / NI-DAQmx | detected | 只比对版本并提示；不自动安装 |
+| Python 包 | managed | uv 依 `pyproject.toml` 解析到项目 `.venv`；技能重建时逐项添加；网络受限工具按域以可选件/豁免 pin 引入 |
+| **COMSOL / TeX Live / Blender / Zotero** | **手动 vendor**（2026-11 起迁入 `deps/`） | 整体目录复制进项目；升级=人工迁移 + 一次注册表同步（COMSOLROOT / App Paths）；许可证与数据目录随行 |
+| **pandoc、wtpsplit 等模型权重、rembg 缓存、MCP 上游源仓** | **手动 vendor** | 分别落 `deps/tools`、`deps/models`、`deps/cache`、`deps/repos`（浅克隆 pin commit）；路径由代码常量解析，不入库 |
+| **MCP server（paper-search / zotero / comsol / blender）** | **tool（混合形态）** | 项目 venv 包或源仓 link 挂 DSH profile（`cordis.patch.yml` 以 insert 条目 + env 注入），stdio 冒烟校验 |
+| LibreOffice / NI-DAQmx | detected | 只比对版本并提示；不自动安装（LibreOffice 转换另有随 DSH 捆绑的 Kit 可用） |
 
 **验收标准**：
 
-- **新机器**：安装 PowerShell → 复制完整项目目录 → 运行一次 init → 能启动项目 DSH；除 detected 项外无需安装。
+- **新机器**：安装 PowerShell → 复制完整项目目录（含本地 `deps/`）→ 运行一次 init → 能启动项目 DSH；手动 vendor 的大型软件随目录复制即可用，唯一附加动作为一次管理员级注册表同步（仅限以注册表发现的软件）。
 - **日常**：一条 update 检查并更新全部依赖；任一项未就绪时明确拒绝，并给出修复方式。
 - **诊断与回退**：失败可定位到工具、版本与步骤；managed 依赖可回退；依赖变更史可查。
 
@@ -59,10 +64,13 @@
 
 - **一个入口**：`sub_root/tests/tests.cmd all` 依次跑 ruff、pytest（默认排除 hardware）与 harness 契约测试；`fast` 只跑快速子集，`hardware` 只跑外部设备用例，`cov` 附带覆盖率。
 - **技能契约**：每个技能的 `SKILL.md` 有合法 frontmatter（kebab-case、description 非空）、名称唯一、引用文件存在、预算达标。
+- **技能胶水断言**：每个能力域的薄胶水在 `tests/skills/<domain>/` 有配套机械断言（与技能文档同源维护）；外部重型依赖（COMSOL/Blender/浏览器打印等）标 `hardware` 分离。
 - **harness 契约**：`AGENTS*.md` 预算、preset YAML 可解析、三 preset 的技能根/工作说明/子代理白名单与蓝图矩阵一致、leader 技能目录不含生产技能名、meta 技能目录与 worker/leader 隔离、上游 `standard/cordis` 片段 `--check` 通过。
 - **确定性**：固定 seed；网络/LLM/COMSOL/Zotero 用 mock/cassette；`hardware`、`network`、`slow` 标记；默认不联网。
 
 ### 第 2 层：可基准测试层（`sub_root/evals`）
+
+> **当前状态**（2026-11-18 用户裁决）：七域重建期间**暂缓建设**——第 1 层机械断言已覆盖技能契约与胶水，基准任务待需要时统一补建（素材与冒烟脚本已留存可复用）。本节为设计目标，非当前待办。
 
 - **被测物**：worker/leader 的 harness 版本（preset 组合 + 技能 + 工作说明 + 规程），以 patch 文件标识。
 - **黄金任务**：直接照搬真实摩擦（例如“按三段式新增一个技能选型记录”“修复路径迁移后的测试失败”）；任务包含 `prompt.md`、`task.yaml`（快照、模型路由、预算、判据）、`checks/`（机械判据）。
