@@ -11,6 +11,13 @@ description: ⑥3D 建模能力域操作面：bpy 无头全链（脚本即模型
 
 ## 能力边界注记（裁决即边界）
 
+- **主力与 MCP 通道的分工（先读这条）**：**bpy 无头脚本是唯一生产主力**——交付物必须由版本化脚本
+  在 `blender -b -P` 下重跑得到，才能过验收门、冻结对账、进测试（确定性/可复现）。**blender-mcp**
+  是已装好的**交互辅助通道**（GUI 里的 Blender + addon，`BLENDER_HOST/PORT`=9876）：适合探索造型、
+  看场景、调材质、搜索/导入资产库（search_assets/import_asset）、云生成入口（generate_3d）。
+  它的产物是**会话态**（活 GUI 里的一次性改动），不可 diff/复现——**交互得到的成果必须先冻结回
+  脚本**才算交付（红线 3）。两者不是替代关系：MCP 无 GUI 时可不连（server 会告警但工具面仍在），
+  主力始终不依赖 GUI。
 - **STEP 不做**：纯 Blender 裁决下无 B-rep 通道；CAD→STEP→COMSOL（②域）需求出现时
   **再立项**（届时评估 build123d），勿在本域临时补 CAD。
 - **渲染边界**：概念渲染管线（Blender 无头→PNG）**留⑥**；③科研绘图域只收 PNG 媒体做
