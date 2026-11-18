@@ -5,7 +5,7 @@
   ``experiment``（实验平台）与 ``article``（论文插图生产模块）。
 - ``pysci.skills``：LLM skill 后端，每个技能一个子包（代码在其 ``tools/`` 下）——
   literature_research / comsol_simulation / document_writing / scientific_plotting /
-  theoretical_computation / ai_drawing。
+  theory_calculation / ai_drawing。
 
 ``pysci.paths`` 是路径锚点与产物落盘规范的**权威索引**（各 ``*_ROOT`` 常量与
 ``research_*_dir()`` 的注释逐条写明了目录用途）。共享绘图配置在研究线根（如

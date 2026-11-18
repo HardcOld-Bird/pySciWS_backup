@@ -9,10 +9,158 @@ authors = [
 ]
 
 # 运行时依赖从最小集开始；7 个科研技能按三段式选型后逐项添加。
-dependencies = []
+# 首批（2026-11-17，①文献域 + ⑤写作域，选型见
+# others/community_research/2026-11-17/ 与 others/plans/domains-01-05-text-chain.md）；
+# 次批（2026-11-17，③绘图域 + ④理论计算域，选型见
+# others/community_research/2026-11-17/domain-03-plotting-selection.md 与
+# domain-04-theory-selection.md，计划见 others/plans/domains-03-04-plotting-theory.md）：
+dependencies = [
+    # ── ⑤写作域 Office 创作（python-docx/pptx 已停更，pin 豁免见计划 §4）──
+    "python-docx==1.2.0",
+    "python-pptx==1.0.2",
+    "openpyxl==3.1.5",
+    "pandas==3.1.1",  # 2026-11-17 时点 PyPI 最新稳定版
+    # ── ①文献域 PDF→MD 兜底（AGPL-3.0，用户已接受；个人不分发）──
+    # ADR：pymupdf4llm 自 2.x 起为“空壳兼容包”（4llm 代码已并入 pymupdf 2.x），
+    # pin 本包 == 传递 pin pymupdf==2.1 / pymupdf_layout==2.1，import pymupdf4llm 不变。
+    "pymupdf4llm==2.1",
+    # ── MCP server 两枚（stdio；同时是项目 DSH 接入的运行时，见 dsh_home/profiles/web）──
+    # zotero-mcp-server==0.17.2 为 2026-11-15 发布的 PyPI 最新版；语义检索 [semantic]
+    # extra（chromadb+sentence-transformers）留待 RAG 链路实施时按需加装。
+    "zotero-mcp-server==0.17.2",
+    # paper-search-mcp 0.1.4 为 PyPI 最新版（2026-07-02）；口径②豁免 + pin 记风险。
+    # 注意 0.1.4 不含 main 分支未发版的 WoS/Scopus/OpenReview 连接器（ADR 见报告）。
+    "paper-search-mcp==0.1.4",
+    # ADR（2026-11-17）：paper-search-mcp 0.1.4 使用 mcp v1 API（mcp.server.fastmcp），
+    # 与 mcp 2.x 不兼容；而 zotero-mcp-server 走 fastmcp 4.x（自带 mcp_types，不依赖
+    # mcp 包）。故把 mcp 锁在 1.x 使两 server 共存于同一 venv，exact 版本由 uv.lock 固定。
+    "mcp[cli]>=1.6,<2",
+    # ── ③绘图域（2026-11-17；③④共用同一批次选型/计划，出处见文件头）──
+    # ADR（matplotlib 约束对齐）：ultraplot 2.7.5 要求 matplotlib>=3.9,<3.12，故
+    # matplotlib 不取最新 3.12+ 而 pin 3.11.2（约束区间内最新补丁版，uv 解析确认）。
+    # 升级 matplotlib / ultraplot 前先核对方上限与 changelog（可用 ultraplot 自带
+    # MCP 查文档——注意其 [mcp] extra 与本文件 mcp<2 冲突，见下方 ADR）。
+    "ultraplot==2.7.5",
+    "matplotlib==3.11.2",
+    # ADR（口径②豁免 pin）：SciencePlots 为纯 .mplstyle 零代码样式资产，无可替代的
+    # 期刊样式积累，依赖维护面≈0；豁免“全 pin 精确版本”约定，不设 ==（2026-11-17
+    # 时点最新 2.2.2，exact 版本由 uv.lock 固定）。
+    "SciencePlots",
+    # vtk 为传递依赖不单列 pin：cp313-win_amd64 wheel 已确认存在（9.7.2，uv.lock
+    # 固定）；体积大，按需 import，不入最小路径（计划 §4）。
+    "pyvista==0.49.2",
+    # ── ④理论计算域（2026-11-17；NumPy 为既有基座，不重复声明）──
+    # ADR（mpmath 降级 pin）：“全 pin 最新稳定”下 mpmath 1.4.1 与 sympy 1.14.0 的
+    # 硬约束 mpmath<1.4 冲突（uv 解析失败）。mpmath 作为 sympy 高精度后端，随上游
+    # 约束降级 pin 1.3.0（<1.4 稳定版序列最新；1.4.0 无稳定终版），sympy 保最新。
+    "sympy==1.14.0",
+    "scipy==1.18.1",
+    "mpmath==1.3.0",
+    "pint==0.26.2",
+    # ADR（ultraplot MCP server 暂不挂）：ultraplot[mcp] 要求 mcp>=2.1,<3，与本文件
+    # mcp[cli]>=1.6,<2（paper-search-mcp 兼容性 ADR）同 venv 硬冲突，不装 [mcp] extra、
+    # 暂不挂 DSH profile。文档查询由③域技能文档“查文档配方”覆盖；若日后确需，后备
+    # 路线：UV_TOOL_DIR=deps_management/deps/uv/tools 下 uv tool 隔离安装
+    # "ultraplot[mcp]==2.7.5"（与 deps/uv/bin 既有惯例一致）再议挂载。
+    # 可选件按裁决不首发（按需加装）：plotly、Kaleido、plotnine、JAX、ParaView。
+    # ── ①文献域 中英对照生产线（2026-11-17；选型见
+    # others/community_research/2026-11-17/bilingual-absorption-survey.md，
+    # 计划见 others/plans/bilingual-absorption.md）──
+    # DeepL 官方 SDK（MIT；PyPI 项目名 deepl，仓库名 deepl-python，import deepl）：
+    # 在线自动填充适配器，需 DEEPL_AUTH_KEY，按需启用。
+    "deepl==1.33.0",
+    # translate-toolkit（GPL-3.0，用户已接受，同 pymupdf4llm 先例：个人不分发）：
+    # TMX/TBX 读写 + pofilter 质检过滤器（格式层）。ADR（2026-11-17，用户裁决方案 B）：
+    # ``translate.storage.tmdb`` 自上游 3.19 移除（"tmserver and related code was
+    # removed"），不再 pin ≤3.18，升级 3.20.6；TM 存储层自研薄胶水（stdlib SQLite +
+    # RapidFuzz，~100 行），见 bilingual/tm.py 原地 ADR。TMX/TBX 格式模块仍可用作
+    # 将来 TM 导入导出。
+    "translate-toolkit==3.20.6",
+    # rapidfuzz（MIT）：TM 模糊匹配引擎。虽已随 translate-toolkit 3.20.6 传递装入，
+    # 但我们直接 import，按"直用直声明"显式 pin（2026-11-17 时点 PyPI 最新稳定）。
+    "rapidfuzz==3.14.6",
+    # markdown-it-py（MIT）：CommonMark token 流，替换旧 parse_markdown 正则状态机。
+    "markdown-it-py==4.3.0",
+    # ADR（2026-11-17，口径②豁免引入 + pin）：wtpsplit 主干窗口内仅 2026-09 一次提交，
+    # 差②活跃度口径；但为唯一活跃现代 SBD（备选 spaCy 重、学术缩写句切弱），豁免引入并 pin。
+    # [onnx-cpu] 显式拉 onnxruntime（CPU 推理路径；勿依赖传递装入）。SaT 小模型 sat-3l
+    # vendor 于 deps_management/deps/models/wtpsplit/（安装物可重建不入仓，见其 SOURCE.md）。
+    "wtpsplit[onnx-cpu]==2.2.2",
+    # ADR（2026-11-17，口径②豁免引入 + pin，可选件）：argostranslate 离线 NMT 无可替代，
+    # 上游 6/8/11 月有提交差②。注明按需：传递 spacy/stanza/torch 体积大、推理慢，
+    # 仅离线自动填充路径 import，不入最小路径。
+    "argostranslate==1.11.0",
+    # ADR（2026-11-17，口径②豁免引入 + pin，可选件）：sacrebleu（Apache-2.0）为 BLEU/chrF
+    # 参考实现、QE 指标事实标准，窗口内仅 7/8 月有提交差②。注明按需：仅质量评估路径 import。
+    "sacrebleu==2.6.0",
+    # ── 浏览器打印链（pandoc→HTML→Chrome 打印→PyMuPDF 叠页码；HTML 双栏链，用户已裁决）──
+    # playwright 驱动系统 Chrome headless 打印（2026-11-17 本机探测：Google Chrome
+    # 157.0.8103.52，C:\Program Files\Google\Chrome\Application\chrome.exe，注册表+
+    # 常见路径双命中）。无 Chrome 的机器改用 playwright 自带 Chromium（官方渠道
+    # playwright install chromium，PLAYWRIGHT_BROWSERS_PATH 指向
+    # deps_management/deps/browsers，与 deps/ 安装物自包含惯例一致）。
+    "playwright==1.65.2",
+    # ── ②COMSOL 仿真域（2026-11-17；选型见
+    # others/community_research/2026-11-17/domain-02-comsol-selection.md，
+    # 计划见 others/plans/domain-02-comsol.md）──
+    # ADR（mph 差②无可替代豁免 + pin，用户 2026-11-17 裁决）：COMSOL 官方无 Python API，
+    # mph 为唯一活跃社区 Python 通道，豁免引入并 pin 1.4.0（2026-11-17 时点最新稳定，
+    # 与任务 pin 一致）；升级前跑真实冒烟（registry 发现→启动→models()）。
+    # 实测冒烟实录（2026-11-17）：mph 1.4 **无 mph.stop()**（dir 实测）——会话终止 =
+    # 进程退出（atexit→jpype JVM Runtime.exit，JVM 不可卸载）；client.disconnect()
+    # 只清会话不放许可证。mph 1.4 默认 session=client-server（spawn comsolmphserver +
+    # 自动端口扫描），本机该路径实测坏（Invalid port: 65536，详见 comsol-simulation
+    # 技能 references/java-mph-pitfalls.md）→ 用 mph.option('session','stand-alone')
+    # 进程内 JVM 直载；实测 stand-alone 启动 + registry 发现 deps\comsol\6.4\base +
+    # models() 全通。
+    "mph==1.4.0",
+    # JPype1（Apache-2.0）：mph 的 JVM 桥。虽传递装入但 mph 全程经其建 JVM，
+    # 按"直用直声明"显式 pin（2026-11-17 时点最新稳定，与任务 pin 一致）。
+    "JPype1==1.7.1",
+    # COMSOL-MCP（wjc9011/COMSOL_Multiphysics_MCP，MIT，Neurocomputing 2026）：
+    # 源仓浅克隆 pin commit 53c9ca4 于 deps_management/deps/repos/comsol-mcp，
+    # 差②临界豁免引入（用户 2026-11-17 裁决），经 stdio MCP 挂 DSH（见
+    # dsh_home/profiles/web/cordis.patch.yml mcp-comsol 条目），不发版不装包。
+    # 其依赖口径：mcp>=1,<2（本文件 mcp[cli]>=1.6,<2 满足）、pymupdf>=1.24
+    # （pymupdf4llm==2.1→pymupdf==2.1 满足）、pydantic>=2（随 mcp 传递，
+    # exact 由 uv.lock 固定）；以下两项为其 pdf_search RAG（ChromaDB 向量库 +
+    # sentence-transformers 嵌入 all-MiniLM-L6-v2）显式补装（2026-11-17 时点最新稳定）。
+    "chromadb==1.5.9",
+    "sentence-transformers==6.3.0",
+    # ── ⑥3D建模域 + ⑦AI生图域（2026-11-17；选型见
+    # others/community_research/2026-11-17/domain-06-3d-selection.md 与
+    # domain-07-imagegen-selection.md，计划见 others/plans/domains-06-07-3d-imagegen.md）──
+    # ADR（mcp-for-blender 差②豁免引入 + pin，用户 2026-11-17 裁决）：blender-mcp
+    # （35k★ MIT，ahujasid/blender-mcp）是 agent↔Blender 唯一活跃社区通道（窗口内
+    # 5 月无提交差②），豁免引入。PyPI 项目已更名 mcp-for-blender（blender-mcp==2.0.0
+    # 仅为重定向空壳）；按官方推荐以 MCP server 形态装入项目 venv（同 paper-search-mcp
+    # 先例，弃 uvx——其每次解析最新版）。pin 2.3.0（2026-11-17 时点最新稳定，
+    # 2026-11-15 发布）；其 mcp>=1.26,<2 与本文件 mcp[cli]>=1.6,<2 同树兼容。
+    # Blender 侧 addon 同步为 2.3.0 配对（官方 install-addon + BLENDERMCP_ADDONS_DIR
+    # 指向 vendor 的 deps\blender\user_scripts\addons）；vendor Blender 5.2.3 LTS
+    # （mySimsWS2 同版本复制，2026-11-17）。遥测关闭见 DSH 条目 DISABLE_TELEMETRY。
+    "mcp-for-blender==2.3.0",
+    # ADR（tripo3d 差①豁免引入 + pin，用户 2026-11-17 裁决）：Tripo 官方 v3 API
+    # Python SDK（MIT，github star 61 差①活跃度），官方出品豁免；定位⑥域云生成
+    # 原型/示意口径。Tripo v2 API 已关停——只接 v3，旧客户端不迁移。base 零第三方
+    # 依赖（aiohttp 仅 [async] extra，异步路径暂不装、后删无忧）。
+    "tripo3d==1.0.0",
+    # rembg（26k★，MIT）：⑦域透明底兜底抠图（任意图抠图）。[cpu] extra 显式拉
+    # onnxruntime（勿依赖传递装入）。模型自包含化：首跑缓存重定向 U2NET_HOME=
+    # deps_management\deps\cache\rembg\（默认 u2net 已预下载入缓存）；HF 系模型
+    # （birefnet 等）走 HF_HOME=deps\cache\huggingface + HF_HUB_DISABLE_XET=1
+    # （同 mcp-comsol 条目先例），由⑦薄胶水 import 前设置、不入全局。
+    "rembg[cpu]==2.0.87",
+    # ⑦ imaging（measure/align）按⑦实施者口径改走 scipy.ndimage + numpy.fft（scipy
+    # 既有基座），不引入 skimage/opencv 直依赖（2026-11-17 两实施者协调，撤回首发
+    # 版“宁多勿缺”两项）。scikit-image 仍随 rembg 传递装入（rembg 硬依赖
+    # >=0.26,<0.27，exact 由 uv.lock 固定）；opencv 完全不入树。
+]
 
 [project.scripts]
 pysci-eval = "pysci.support.evals.cli:main"
+pysci-doc = "pysci.skills.document_writing.cli:main"
+pysci-figures = "pysci.skills.scientific_plotting.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -45,6 +193,7 @@ exclude = [
     ".idea/**",
     ".venv/**",
     "data/**",
+    "deps_management/**",
 ]
 
 [tool.ruff.lint]

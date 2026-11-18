@@ -94,11 +94,13 @@ COMSOL_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "comsol_simulation"
 #: 具体论文插图的产物落在各研究资产目录 ``data/research/<n>_<name>/article/figures/``。
 PLOTTING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "scientific_plotting"
 
-#: 理论计算数据区（templates/cache/recipes）。
-#: 与代码树 ``src/pysci/skills/theoretical_computation/`` 镜像：``data/skills/theoretical_computation/``。
-#: 注意：本目录只放技能级资产（脚手架模板、计算缓存、可复用配方）；
+#: 理论计算数据区（templates/cache）。
+#: 与代码树 ``src/pysci/skills/theory_calculation/`` 镜像：``data/skills/theory_calculation/``
+#: （2026-11-17 ④域落地时随代码包名对齐旧名 theoretical_computation；配方文档在技能
+#: references/ 下，不在此目录）。
+#: 注意：本目录只放技能级资产（脚手架模板、计算缓存）；
 #: 具体研究线的计算产物落在各研究资产目录 ``data/research/<n>_<name>/theory/<slug>/``。
-THEORY_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "theoretical_computation"
+THEORY_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "theory_calculation"
 
 #: AI 绘图数据区（assets/gallery/workflows/prompts/cache/runs + LEDGER.md）。
 #: 与代码树 ``src/pysci/skills/ai_drawing/`` 镜像：``data/skills/ai_drawing/``。
@@ -106,6 +108,14 @@ THEORY_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "theoretical_computation"
 #: 服务器状态与缓存）；具体研究线的效果图（封面 / graphical abstract / 示意图）落在
 #: 各研究资产目录 ``data/research/<n>_<name>/article/artwork/``。
 AI_DRAWING_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "ai_drawing"
+
+#: AI 生图（⑦域）数据区（gallery/prompts/runs/cache + manifest.jsonl 生成账本）。
+#: 与代码树 ``src/pysci/skills/image_generation/`` 镜像：``data/skills/image_generation/``
+#: （2026-11-17 ⑦域重建；旧 pySciWS 的 ai_drawing 数据区不迁移）。
+#: 注意：本目录只放技能级资产（审美画廊、prompt 配方、请求快照、账本）；具体研究线的
+#: 生成式图（封面 / graphical abstract / 示意图）落在
+#: 各研究资产目录 ``data/research/<n>_<name>/article/artwork/``（:func:`research_artwork_dir`）。
+IMAGEGEN_ROOT: Path = PROJECT_ROOT / "data" / "skills" / "image_generation"
 
 #: 3D 建模数据区（templates/cache/recipes）。
 #: 与代码树 ``src/pysci/skills/modeling3d/`` 镜像：``data/skills/modeling3d/``。
@@ -150,6 +160,12 @@ def research_asset_dir(name: str) -> Path:
 
 #: 项目数据根：所有技能/研究的非代码产物都应落在此目录内（护栏基准）。
 DATA_ROOT: Path = PROJECT_ROOT / "data"
+
+#: 用户 inbox 根（``sub_root/用户的inbox``）：用户全权管理区，Agent 原则只读。
+#: 仅允许写入每项任务的**最终交付物**（只增不删）；中间产物严禁落入；自动化
+#: 管线不得依赖本目录内容（用户可随时移动/重命名）——确需使用先复制到 data/。
+#: 详见 AGENTS.md「内容目录与用户 inbox 政策」。
+INBOX_ROOT: Path = PROJECT_ROOT / "用户的inbox"
 
 
 def research_fig_dir(name: str, *, slug: str | None = None) -> Path:
@@ -233,3 +249,30 @@ def assert_within_data(path: str | Path, *, what: str = "产物") -> Path:
             f"{what}路径不在 data/ 根内（防 stray 护栏）：{p}\n  data 根 = {root}"
         )
     return p
+
+
+def assert_deliverable_dir(path: str | Path, *, what: str = "交付目录") -> Path:
+    """断言交付目录落在 ``data/`` 或 ``用户的inbox/`` 根内（交付双根护栏）。
+
+    ``--out-dir`` 与默认交付根共用本护栏：``data/`` 为 Agent 管理区可自由写入；
+    ``用户的inbox/`` 为用户全权管理区，仅允许最终交付物的**只增**写入（严禁删改
+    既有内容，中间产物不得落入；管线不得依赖其内容）。
+
+    Args:
+        path: 待校验的交付目录路径。
+        what: 报错信息里的类别描述。
+
+    Returns:
+        解析后的绝对路径。
+
+    Raises:
+        ValueError: 当路径不在两个交付根的任何一个之内时。
+    """
+    p = Path(path).resolve()
+    for _root in (DATA_ROOT.resolve(), INBOX_ROOT.resolve()):
+        if p == _root or _root in p.parents:
+            return p
+    raise ValueError(
+        f"{what}路径不在 data/ 或 用户的inbox/ 根内（交付双根护栏）：{p}\n"
+        f"  data 根 = {DATA_ROOT.resolve()}\n  inbox 根 = {INBOX_ROOT.resolve()}"
+    )

@@ -1,0 +1,8 @@
+报告：sub_root\others\community_research\2026-11-17\per-domain-flagships.md（指标表+来源URL）。
+① 首选 marker（40.9k★，3/3直装）；次选 GROBID（5.2k★，Java/Docker）、zotero-mcp（5.9k★）；paper-qa 差口径2（缺05/07/09/11）。
+② 首选 mph（609★，直装驱COMSOL，差口径2：5个月零提交）；COMSOL-MCP 944★ 差口径2临界（11月无提交）；FEniCSx 3/3但非pip；FEATool 商业+MATLAB，弃。
+③ 首选 matplotlib、plotly（3/3）；seaborn 差口径2（2024起未发版）、plotnine 差口径2临界；pyqtgraph 3/3备选。
+④ SymPy/SciPy/JAX/SageMath 全3/3；SciPy、JAX cp313-win直装；SageMath 非pip；Octave ★677贴线。
+⑤ 首选 pandoc（46.9k★，3/3，CLI利agent）；python-docx、python-pptx 差口径2（2025/2024起停更）；openpyxl 主仓Heptapod、口径1不适用+口径2未核实；可升 Typst（57k★，直装）。
+⑥ 首选 build123d（3/3，OCP带cp313-win）、FreeCAD（3/3，外部安装）；trimesh、gmsh 3/3（gmsh 135★贴线、GPL）；OpenSCAD 差口径2。
+⑦ 首选 diffusers（3/3直装）、ComfyUI（147k★，源码装+HTTP API）；InvokeAI 3/3但 requires<3.13 装不上；A1111、Fooocus 差口径2。

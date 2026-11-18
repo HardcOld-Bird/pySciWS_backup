@@ -1,0 +1,21 @@
+# 期刊契约层：Nature——内容资产（ADR 2026-11-17）。
+# 尺寸契约 89/183mm（宽度由 export 层按 JOURNAL_WIDTHS 施加，不在 rcParams）；
+# 字体 Helvetica 7pt 主链（回退 Arial → DejaVu Sans）；可编辑矢量：fonttype=42 /
+# svg 文字保留 <text> 节点。叠加顺序：审美层（house / scienceplots）在前，本层最后覆盖。
+#
+# 契约层只写**与审美层冲突时必须赢**的键（字体链/字号/导出字体类型），其余从 house。
+
+font.family : sans-serif
+font.sans-serif : Helvetica, Arial, DejaVu Sans
+font.size : 7
+axes.titlesize : 7
+axes.labelsize : 7
+xtick.labelsize : 6
+ytick.labelsize : 6
+legend.fontsize : 6
+figure.titlesize : 8
+mathtext.default : it
+mathtext.fontset : dejavusans
+pdf.fonttype : 42
+ps.fonttype : 42
+svg.fonttype : none

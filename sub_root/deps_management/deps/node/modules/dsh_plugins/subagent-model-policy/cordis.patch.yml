@@ -1,0 +1,11 @@
+# 本 bundle 只插入策略行（子代理模型路由的动态裁剪层）。
+#
+# 授权行 `subagent-model-selection-settings`（「这个会话能用哪些模型」）仍由 GUI
+# 写入 profile 的 cordis.patch.yml，本 bundle 不插入同名行：GUI 的改动会写回
+# profile 层，两个真源会互相覆盖。策略层在运行时读宿主内置服务盖在某会话上的
+# `subagent/model-selection-policy` 事件，只负责「此刻应当用哪些」。
+- insert:
+    - id: subagent-model-policy
+      name: 'dsh-subagent-model-policy'
+      # 配置不来自本行：插件按 sub_root/subagent-model-policy.yaml 热读（见 config.js）。
+      config: {}

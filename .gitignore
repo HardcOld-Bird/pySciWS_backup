@@ -57,6 +57,9 @@ AGENTS.meta.local.md
 
 # data/skills 的使用痕迹 / 本地缓存
 /sub_root/data/skills/*/cache/
+/sub_root/data/skills/*/manual/*
+!/sub_root/data/skills/*/manual/SOURCE.md
+/sub_root/data/skills/*/_smoke_*/
 /sub_root/data/skills/*/runs/
 /sub_root/data/skills/*/papers/
 /sub_root/data/skills/*/bilingual/
@@ -78,3 +81,54 @@ AGENTS.meta.local.md
 .vscode/
 Thumbs.db
 Desktop.ini
+
+# ---- vendored 工具链安装物（2026-11-18 自包含迁移） ---------------------------
+/sub_root/deps_management/deps/blender/
+/sub_root/deps_management/deps/comsol/
+/sub_root/deps_management/deps/tex/
+/sub_root/deps_management/deps/models/
+/sub_root/deps_management/deps/repos/
+/sub_root/deps_management/deps/tools/
+
+# ---- 二进制一律不入仓（仅项目代码/文本入库，2026-11-18） -----------------------
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.pdf
+*.eps
+*.tif
+*.tiff
+*.psd
+*.mp4
+*.woff
+*.woff2
+*.ttf
+*.otf
+*.eot
+*.zip
+*.gz
+*.7z
+*.whl
+*.onnx
+*.exe
+*.dll
+*.pyd
+*.so
+*.mph
+*.stl
+*.obj
+*.glb
+*.gltf
+*.blend
+*.fig
+*.mat
+*.npz
+*.docx
+*.pptx
+*.xlsx
+*.doc
+*.ppt
+*.xls

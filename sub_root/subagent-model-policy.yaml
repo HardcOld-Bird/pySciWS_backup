@@ -1,0 +1,28 @@
+# 子代理动态模型策略（插件 dsh-subagent-model-policy 的唯一用户配置点）。
+#
+# 日常只改 `plan` 一行：mimo / qwen / deepseek。插件按 mtime 热读本文件，
+# 改完下一次派发即生效，不必重启 dsh web，也不必改插件包。
+#
+# 判定口径见 sub_root/others/plans/archived/subagent-model-policy.md
+# 「判定表」；实现见 sub_root/deps_management/deps/node/modules/dsh_plugins/subagent-model-policy/。
+# 峰谷：工作日 [09:00,12:00) 与 [14:00,18:00) 为峰，周六日与法定节假日全天为谷
+# （调休上班的周六日仍按谷）；年份缺节假日数据时按峰保守并告警。
+#
+# 当前 plan=mimo（2026-11-16 用户确认）：峰段用 MiMo，谷段自动落 deepseek-flash。
+# 小米套餐到期时把 plan 改成 deepseek 即可（mimo 路由仅作占位保留），续费后改回。
+plan: mimo
+plans:
+  mimo:
+    flash: { provider: xiaomi-token-plan-cn, model: mimo-v2.6-flash }
+    pro:   { provider: xiaomi-token-plan-cn, model: mimo-v2.6-pro }
+  qwen:
+    # 占位：qwen provider 落地前，plan=qwen 会被 guard 直接拒绝（fail-loud）。
+    flash: { provider: qwen-token-plan-cn, model: qwen-flash }
+    pro:   { provider: qwen-token-plan-cn, model: qwen-max }
+  deepseek:
+    flash: { provider: deepseek-account, model: deepseek-flash }
+peak: [[9, 12], [14, 18]]
+leadtimeSeconds: 600
+unknownYear: peak
+guardFork: true
+forcePhase: auto

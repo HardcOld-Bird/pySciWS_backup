@@ -1,0 +1,27 @@
+{
+  "name": "dsh-subagent-model-policy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Picks each subagent's model route from the DeepSeek peak/valley phase and the token plan.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "config.js",
+    "calendar.js",
+    "policy.js",
+    "cordis.patch.yml",
+    "data/*",
+    "scripts/*",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" }
+  }
+}

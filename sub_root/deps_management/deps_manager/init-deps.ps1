@@ -317,11 +317,24 @@ if (Test-Path -LiteralPath $pyProject) {
     if ($CheckOnly) {
         Say "pyproject.toml present; venv sync skipped in check-only"
     } else {
-        Say "(re)building .venv from pyproject.toml"
+        Say "aligning .venv with pyproject.toml (python $pyVer)"
         Push-Location $ProjRoot
         try {
-            & $uvExe venv --python $pyVer
-            if ($LASTEXITCODE -ne 0) { throw "uv venv failed" }
+            # uv venv refuses an existing venv; rebuild only when it is missing
+            # or was built with a different interpreter than toolchain.json pins,
+            # so repeated update-deps runs stay idempotent. uv writes its version
+            # as `version_info` (older tooling wrote `version`); accept both.
+            $venvCfg = Join-Path $ProjRoot ".venv\pyvenv.cfg"
+            $venvVer = ""
+            if (Test-Path -LiteralPath $venvCfg) {
+                $verLine = Select-String -LiteralPath $venvCfg -Pattern '^version(?:_info)?\s*=\s*(\S+)' | Select-Object -First 1
+                if ($verLine) { $venvVer = $verLine.Matches[0].Groups[1].Value }
+            }
+            if ($venvVer -ne $pyVer) {
+                Say "(re)building .venv (found: $(if ($venvVer) { $venvVer } else { 'none' }), want: $pyVer)"
+                & $uvExe venv --python $pyVer --clear
+                if ($LASTEXITCODE -ne 0) { throw "uv venv failed" }
+            }
             & $uvExe sync
             if ($LASTEXITCODE -ne 0) { throw "uv sync failed" }
         } finally {

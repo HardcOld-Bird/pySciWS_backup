@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Subagent model policy",
+    "description": "Computes each subagent dispatch's allowed routes and default from the DeepSeek peak/valley phase and the token plan, and denies routes outside them."
+  }
+}
