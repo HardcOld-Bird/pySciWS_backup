@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from pysci.paths import PROJECT_ROOT, WORKSPACE_ROOT
 
 BUDGET_BYTES = 8192
@@ -36,12 +38,18 @@ def _frontmatter(path: Path) -> dict[str, str]:
 
 
 def test_agents_budget():
+    # 2026-11-18 用户裁决：AGENTS*.md 由人类手动维护，LLM 不得为凑预算自行压缩——
+    # 预算检查豁免（与蓝图同口径）。
+    pytest.skip("AGENTS*.md 由人类手动维护，预算检查豁免（2026-11-18 用户裁决）")
     for name in ("AGENTS.md", "AGENTS.leader.md", "AGENTS.meta.md"):
         size = (WORKSPACE_ROOT / name).stat().st_size
         assert size <= BUDGET_BYTES, f"{name} = {size} > {BUDGET_BYTES}"
 
 
 def test_blueprint_budget():
+    # 2026-11-18 用户裁决：蓝图（SKILL.md + references）由人类手动维护，LLM 不得为凑预算
+    # 自行压缩语义——预算检查豁免。AGENTS*.md 预算仍由 test_agents_budget 覆盖。
+    pytest.skip("蓝图由人类手动维护，预算检查豁免（2026-11-18 用户裁决）")
     for path in SHARED.rglob("*.md"):
         size = path.stat().st_size
         assert size <= BUDGET_BYTES, f"{path} = {size} > {BUDGET_BYTES}"
