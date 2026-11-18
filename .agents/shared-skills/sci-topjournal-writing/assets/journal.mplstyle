@@ -1,0 +1,50 @@
+# Journal-grade matplotlib style for sci-topjournal-writing skill
+# Load with: plt.style.use(r"<skill_dir>/assets/journal.mplstyle")
+# Defaults target a Nature-style single column (89 mm ~= 3.5 in) figure.
+
+# --- Fonts ---
+font.family         : sans-serif
+font.sans-serif     : Arial, Helvetica, DejaVu Sans
+font.size           : 7
+axes.titlesize      : 7
+axes.labelsize      : 7
+xtick.labelsize     : 6
+ytick.labelsize     : 6
+legend.fontsize     : 6
+mathtext.fontset    : dejavusans
+
+# --- Figure ---
+figure.figsize      : 3.5, 2.6
+figure.dpi          : 150
+savefig.dpi         : 300
+savefig.bbox        : tight
+savefig.pad_inches  : 0.02
+
+# --- Axes / spines (no chartjunk) ---
+axes.linewidth      : 0.5
+axes.spines.top     : False
+axes.spines.right   : False
+axes.grid           : False
+axes.axisbelow      : True
+
+# --- Okabe-Ito colorblind-safe palette ---
+# black, orange, sky blue, bluish green, yellow, blue, vermillion, reddish purple
+axes.prop_cycle     : cycler('color', ['000000', 'E69F00', '56B4E9', '009E73', 'F0E442', '0072B2', 'D55E00', 'CC79A7'])
+
+# --- Lines & markers ---
+lines.linewidth     : 1.0
+lines.markersize    : 3.5
+errorbar.capsize    : 2
+
+# --- Ticks (inward, minor off by default) ---
+xtick.direction     : in
+ytick.direction     : in
+xtick.major.size    : 2.5
+ytick.major.size    : 2.5
+xtick.major.width   : 0.5
+ytick.major.width   : 0.5
+
+# --- Legend (frameless) ---
+legend.frameon      : False
+legend.handlelength : 1.2
+legend.borderaxespad: 0.3
